@@ -1,20 +1,14 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { reservationsTable, passengersTable, tripsTable, clientsTable, usersTable } from "@workspace/db";
-import { eq, and, ilike, or, sql, desc } from "drizzle-orm";
+import { reservationsTable, passengersTable, tripsTable, clientsTable } from "@workspace/db";
+import { eq, and, sql, desc } from "drizzle-orm";
 import { generateId, generateVoucherCode } from "../lib/id";
+import { requireAuth, getTenantUser } from "../lib/tenant";
 import { CreateReservationBody, UpdateReservationBody, CreatePassengerBody, UpdatePassengerBody } from "@workspace/api-zod";
 
 const router = Router();
 
-async function getTenantInfo(req: any) {
-  const auth = req.auth;
-  if (!auth?.userId) return null;
-  const [me] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.userId)).limit(1);
-  return me;
-}
-
-async function formatReservation(r: any) {
+async function formatReservation(r: typeof reservationsTable.$inferSelect) {
   const [trip] = await db.select().from(tripsTable).where(eq(tripsTable.id, r.tripId)).limit(1);
   const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, r.clientId)).limit(1);
   return {
@@ -57,17 +51,25 @@ async function formatReservation(r: any) {
   };
 }
 
+function formatPassenger(p: typeof passengersTable.$inferSelect) {
+  return {
+    id: p.id, reservationId: p.reservationId, name: p.name, cpf: p.cpf, rg: p.rg,
+    birthDate: p.birthDate?.toISOString() ?? null, ageCategory: p.ageCategory,
+    seatNumber: p.seatNumber, isChildUnder7: p.isChildUnder7,
+  };
+}
+
 router.get("/reservations", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.json({ data: [], total: 0, page: 1, limit: 20 }); return; }
+    const me = await getTenantUser(req);
+    if (!me) { res.json({ data: [], total: 0, page: 1, limit: 20 }); return; }
 
     const { tripId, clientId, status, page = "1", limit = "20" } = req.query as Record<string, string>;
     const pageNum = parseInt(page) || 1;
-    const limitNum = parseInt(limit) || 20;
+    const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (pageNum - 1) * limitNum;
 
-    let conditions: any[] = [eq(reservationsTable.tenantId, me.tenantId)];
+    const conditions: ReturnType<typeof eq>[] = [eq(reservationsTable.tenantId, me.tenantId)];
     if (tripId) conditions.push(eq(reservationsTable.tripId, tripId));
     if (clientId) conditions.push(eq(reservationsTable.clientId, clientId));
     if (status) conditions.push(eq(reservationsTable.status, status));
@@ -90,10 +92,20 @@ router.get("/reservations", async (req, res): Promise<void> => {
 
 router.post("/reservations", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = CreateReservationBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const [trip] = await db.select().from(tripsTable)
+      .where(and(eq(tripsTable.id, parsed.data.tripId), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!trip) { res.status(400).json({ error: "Trip not found or not in tenant" }); return; }
+
+    const [client] = await db.select().from(clientsTable)
+      .where(and(eq(clientsTable.id, parsed.data.clientId), eq(clientsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!client) { res.status(400).json({ error: "Client not found or not in tenant" }); return; }
 
     const id = generateId();
     const voucherCode = generateVoucherCode();
@@ -127,7 +139,10 @@ router.post("/reservations", async (req, res): Promise<void> => {
       availableSeats: sql`available_seats - ${seatsCount}`,
     }).where(and(eq(tripsTable.id, parsed.data.tripId), eq(tripsTable.tenantId, me.tenantId)));
 
-    const [reservation] = await db.select().from(reservationsTable).where(eq(reservationsTable.id, id)).limit(1);
+    const [reservation] = await db.select().from(reservationsTable)
+      .where(and(eq(reservationsTable.id, id), eq(reservationsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!reservation) { res.status(500).json({ error: "Failed to create reservation" }); return; }
     const formatted = await formatReservation(reservation);
     res.status(201).json(formatted);
   } catch (err) {
@@ -138,8 +153,8 @@ router.post("/reservations", async (req, res): Promise<void> => {
 
 router.get("/reservations/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const [reservation] = await db.select().from(reservationsTable)
       .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)))
       .limit(1);
@@ -154,15 +169,15 @@ router.get("/reservations/:id", async (req, res): Promise<void> => {
 
 router.patch("/reservations/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = UpdateReservationBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-    const updates: any = {};
+    const updates: Partial<typeof reservationsTable.$inferInsert> = {};
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.paymentMethod != null) updates.paymentMethod = parsed.data.paymentMethod;
-    if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes;
+    if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
     if (parsed.data.seats != null) updates.seats = parsed.data.seats;
 
     await db.update(reservationsTable).set(updates)
@@ -181,8 +196,8 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
 
 router.post("/reservations/:id/check-in", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     await db.update(reservationsTable).set({
       checkedInAt: new Date(),
       status: "completed",
@@ -201,19 +216,15 @@ router.post("/reservations/:id/check-in", async (req, res): Promise<void> => {
 
 router.get("/reservations/:reservationId/passengers", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const [reservation] = await db.select().from(reservationsTable)
       .where(and(eq(reservationsTable.id, req.params.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
       .limit(1);
     if (!reservation) { res.status(404).json({ error: "Not found" }); return; }
     const passengers = await db.select().from(passengersTable)
       .where(eq(passengersTable.reservationId, req.params.reservationId));
-    res.json(passengers.map(p => ({
-      id: p.id, reservationId: p.reservationId, name: p.name, cpf: p.cpf, rg: p.rg,
-      birthDate: p.birthDate?.toISOString() ?? null, ageCategory: p.ageCategory,
-      seatNumber: p.seatNumber, isChildUnder7: p.isChildUnder7,
-    })));
+    res.json(passengers.map(formatPassenger));
   } catch (err) {
     req.log.error({ err }, "Error listing passengers");
     res.status(500).json({ error: "Internal server error" });
@@ -222,8 +233,8 @@ router.get("/reservations/:reservationId/passengers", async (req, res): Promise<
 
 router.post("/reservations/:reservationId/passengers", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const [reservation] = await db.select().from(reservationsTable)
       .where(and(eq(reservationsTable.id, req.params.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
       .limit(1);
@@ -242,14 +253,11 @@ router.post("/reservations/:reservationId/passengers", async (req, res): Promise
       seatNumber: parsed.data.seatNumber ?? null,
       isChildUnder7: parsed.data.isChildUnder7 ?? false,
     });
-    const [passenger] = await db.select().from(passengersTable).where(eq(passengersTable.id, id)).limit(1);
-    res.status(201).json({
-      id: passenger.id, reservationId: passenger.reservationId, name: passenger.name,
-      cpf: passenger.cpf, rg: passenger.rg,
-      birthDate: passenger.birthDate?.toISOString() ?? null,
-      ageCategory: passenger.ageCategory, seatNumber: passenger.seatNumber,
-      isChildUnder7: passenger.isChildUnder7,
-    });
+    const [passenger] = await db.select().from(passengersTable)
+      .where(and(eq(passengersTable.id, id), eq(passengersTable.reservationId, req.params.reservationId)))
+      .limit(1);
+    if (!passenger) { res.status(500).json({ error: "Failed to create passenger" }); return; }
+    res.status(201).json(formatPassenger(passenger));
   } catch (err) {
     req.log.error({ err }, "Error creating passenger");
     res.status(500).json({ error: "Internal server error" });
@@ -258,26 +266,26 @@ router.post("/reservations/:reservationId/passengers", async (req, res): Promise
 
 router.patch("/reservations/:reservationId/passengers/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const [reservation] = await db.select().from(reservationsTable)
       .where(and(eq(reservationsTable.id, req.params.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
       .limit(1);
     if (!reservation) { res.status(403).json({ error: "Forbidden" }); return; }
     const parsed = UpdatePassengerBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const updates: any = {};
+    const updates: Partial<typeof passengersTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
-    if (parsed.data.cpf !== undefined) updates.cpf = parsed.data.cpf;
-    if (parsed.data.seatNumber !== undefined) updates.seatNumber = parsed.data.seatNumber;
+    if (parsed.data.cpf !== undefined) updates.cpf = parsed.data.cpf ?? null;
+    if (parsed.data.seatNumber !== undefined) updates.seatNumber = parsed.data.seatNumber ?? null;
     if (parsed.data.ageCategory != null) updates.ageCategory = parsed.data.ageCategory;
     await db.update(passengersTable).set(updates)
       .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)));
-    const [passenger] = await db.select().from(passengersTable).where(eq(passengersTable.id, req.params.id)).limit(1);
+    const [passenger] = await db.select().from(passengersTable)
+      .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)))
+      .limit(1);
     if (!passenger) { res.status(404).json({ error: "Not found" }); return; }
-    res.json({ id: passenger.id, reservationId: passenger.reservationId, name: passenger.name,
-      cpf: passenger.cpf, rg: passenger.rg, birthDate: passenger.birthDate?.toISOString() ?? null,
-      ageCategory: passenger.ageCategory, seatNumber: passenger.seatNumber, isChildUnder7: passenger.isChildUnder7 });
+    res.json(formatPassenger(passenger));
   } catch (err) {
     req.log.error({ err }, "Error updating passenger");
     res.status(500).json({ error: "Internal server error" });
@@ -286,8 +294,8 @@ router.patch("/reservations/:reservationId/passengers/:id", async (req, res): Pr
 
 router.delete("/reservations/:reservationId/passengers/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const [reservation] = await db.select().from(reservationsTable)
       .where(and(eq(reservationsTable.id, req.params.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
       .limit(1);

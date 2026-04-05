@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { suppliersTable, vehiclesTable, accommodationsTable, destinationsTable, usersTable } from "@workspace/db";
+import { suppliersTable, vehiclesTable, accommodationsTable, destinationsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
+import { requireAuth, getTenantUser } from "../lib/tenant";
 import {
   CreateSupplierBody, UpdateSupplierBody,
   CreateVehicleBody, UpdateVehicleBody,
@@ -12,291 +13,373 @@ import {
 
 const router = Router();
 
-async function getTenantInfo(req: any) {
-  const auth = req.auth;
-  if (!auth?.userId) return null;
-  const [me] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.userId)).limit(1);
-  return me;
+function formatSupplier(s: typeof suppliersTable.$inferSelect) {
+  return {
+    id: s.id, tenantId: s.tenantId, name: s.name, type: s.type,
+    cnpj: s.cnpj, email: s.email, phone: s.phone, whatsapp: s.whatsapp,
+    contactName: s.contactName, address: s.address,
+    bankDetails: s.bankDetails ?? {}, isActive: s.isActive, notes: s.notes,
+    createdAt: s.createdAt.toISOString(), updatedAt: s.updatedAt.toISOString(),
+  };
 }
 
-function formatSupplier(s: any) {
-  return { id: s.id, name: s.name, type: s.type, cnpj: s.cnpj, contactName: s.contactName,
-    email: s.email, whatsapp: s.whatsapp, phone: s.phone,
-    addressCity: s.addressCity, addressState: s.addressState, pixKey: s.pixKey,
-    status: s.status, createdAt: s.createdAt.toISOString() };
+function formatVehicle(v: typeof vehiclesTable.$inferSelect) {
+  return {
+    id: v.id, tenantId: v.tenantId, type: v.type, model: v.model,
+    licensePlate: v.licensePlate, capacity: v.capacity, year: v.year,
+    color: v.color, supplierId: v.supplierId, driverName: v.driverName,
+    driverPhone: v.driverPhone, status: v.status, notes: v.notes,
+    features: v.features ?? [], amenities: v.amenities ?? [],
+    createdAt: v.createdAt.toISOString(), updatedAt: v.updatedAt.toISOString(),
+  };
 }
 
-function formatVehicle(v: any) {
-  return { id: v.id, name: v.name, type: v.type, plate: v.plate, capacity: v.capacity,
-    model: v.model, year: v.year, amenities: v.amenities ?? [],
-    dailyRate: v.dailyRate ? Number(v.dailyRate) : null, photoUrl: v.photoUrl,
-    status: v.status, createdAt: v.createdAt.toISOString() };
+function formatAccommodation(a: typeof accommodationsTable.$inferSelect) {
+  return {
+    id: a.id, tenantId: a.tenantId, name: a.name, type: a.type,
+    address: a.address, city: a.city, state: a.state,
+    stars: a.stars, totalRooms: a.totalRooms,
+    pricePerNight: Number(a.pricePerNight),
+    checkInTime: a.checkInTime, checkOutTime: a.checkOutTime,
+    amenities: a.amenities ?? [], contactName: a.contactName,
+    contactPhone: a.contactPhone, email: a.email, website: a.website,
+    isActive: a.isActive, notes: a.notes,
+    createdAt: a.createdAt.toISOString(), updatedAt: a.updatedAt.toISOString(),
+  };
 }
 
-function formatAccommodation(a: any) {
-  return { id: a.id, name: a.name, type: a.type, address: a.address, city: a.city, state: a.state,
-    contactName: a.contactName, phone: a.phone, email: a.email, totalRooms: a.totalRooms,
-    amenities: a.amenities ?? [], pricePerNight: a.pricePerNight ? Number(a.pricePerNight) : null,
-    coverImage: a.coverImage, rating: a.rating ? Number(a.rating) : null,
-    status: a.status, createdAt: a.createdAt.toISOString() };
+function formatDestination(d: typeof destinationsTable.$inferSelect) {
+  return {
+    id: d.id, tenantId: d.tenantId, name: d.name, country: d.country,
+    state: d.state, city: d.city, description: d.description,
+    highlights: d.highlights ?? [], images: d.images ?? [],
+    isActive: d.isActive,
+    createdAt: d.createdAt.toISOString(), updatedAt: d.updatedAt.toISOString(),
+  };
 }
 
-function formatDestination(d: any) {
-  return { id: d.id, name: d.name, city: d.city, state: d.state, country: d.country,
-    description: d.description, mainAttractions: d.mainAttractions ?? [],
-    bestSeason: d.bestSeason, coverImage: d.coverImage, rating: d.rating ? Number(d.rating) : null,
-    createdAt: d.createdAt.toISOString() };
-}
-
-// Suppliers
 router.get("/suppliers", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.json([]); return; }
+    const me = await getTenantUser(req);
+    if (!me) { res.json([]); return; }
     const suppliers = await db.select().from(suppliersTable)
-      .where(eq(suppliersTable.tenantId, me.tenantId)).orderBy(desc(suppliersTable.createdAt));
+      .where(eq(suppliersTable.tenantId, me.tenantId))
+      .orderBy(desc(suppliersTable.createdAt));
     res.json(suppliers.map(formatSupplier));
-  } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
+  } catch (err) {
+    req.log.error({ err }, "Error listing suppliers");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 router.post("/suppliers", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = CreateSupplierBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const id = generateId();
     await db.insert(suppliersTable).values({
       id, tenantId: me.tenantId,
       name: parsed.data.name, type: parsed.data.type,
-      cnpj: parsed.data.cnpj ?? null, contactName: parsed.data.contactName ?? null,
-      email: parsed.data.email ?? null, whatsapp: parsed.data.whatsapp ?? null,
-      addressCity: parsed.data.addressCity ?? null, addressState: parsed.data.addressState ?? null,
-      pixKey: parsed.data.pixKey ?? null,
+      cnpj: parsed.data.cnpj ?? null, email: parsed.data.email ?? null,
+      phone: parsed.data.phone ?? null, whatsapp: parsed.data.whatsapp ?? null,
+      contactName: parsed.data.contactName ?? null,
+      address: parsed.data.address ?? null,
+      bankDetails: parsed.data.bankDetails ?? {},
+      notes: parsed.data.notes ?? null,
+      createdById: me.id,
     });
-    const [s] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, id)).limit(1);
-    res.status(201).json(formatSupplier(s));
-  } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
+    const [supplier] = await db.select().from(suppliersTable)
+      .where(and(eq(suppliersTable.id, id), eq(suppliersTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!supplier) { res.status(500).json({ error: "Failed to create supplier" }); return; }
+    res.status(201).json(formatSupplier(supplier));
+  } catch (err) {
+    req.log.error({ err }, "Error creating supplier");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 router.patch("/suppliers/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = UpdateSupplierBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const updates: any = {};
+    const updates: Partial<typeof suppliersTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
-    if (parsed.data.status != null) updates.status = parsed.data.status;
-    if (parsed.data.contactName !== undefined) updates.contactName = parsed.data.contactName;
-    if (parsed.data.email !== undefined) updates.email = parsed.data.email;
-    if (parsed.data.pixKey !== undefined) updates.pixKey = parsed.data.pixKey;
+    if (parsed.data.type != null) updates.type = parsed.data.type;
+    if (parsed.data.email !== undefined) updates.email = parsed.data.email ?? null;
+    if (parsed.data.phone !== undefined) updates.phone = parsed.data.phone ?? null;
+    if (parsed.data.isActive != null) updates.isActive = parsed.data.isActive;
+    if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
     await db.update(suppliersTable).set(updates)
       .where(and(eq(suppliersTable.id, req.params.id), eq(suppliersTable.tenantId, me.tenantId)));
-    const [s] = await db.select().from(suppliersTable)
+    const [supplier] = await db.select().from(suppliersTable)
       .where(and(eq(suppliersTable.id, req.params.id), eq(suppliersTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!s) { res.status(404).json({ error: "Not found" }); return; }
-    res.json(formatSupplier(s));
-  } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
+    if (!supplier) { res.status(404).json({ error: "Not found" }); return; }
+    res.json(formatSupplier(supplier));
+  } catch (err) {
+    req.log.error({ err }, "Error updating supplier");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 router.delete("/suppliers/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     await db.delete(suppliersTable)
       .where(and(eq(suppliersTable.id, req.params.id), eq(suppliersTable.tenantId, me.tenantId)));
     res.json({ success: true });
-  } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
+  } catch (err) {
+    req.log.error({ err }, "Error deleting supplier");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
-// Vehicles
 router.get("/vehicles", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.json([]); return; }
+    const me = await getTenantUser(req);
+    if (!me) { res.json([]); return; }
     const vehicles = await db.select().from(vehiclesTable)
-      .where(eq(vehiclesTable.tenantId, me.tenantId)).orderBy(desc(vehiclesTable.createdAt));
+      .where(eq(vehiclesTable.tenantId, me.tenantId))
+      .orderBy(desc(vehiclesTable.createdAt));
     res.json(vehicles.map(formatVehicle));
-  } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
+  } catch (err) {
+    req.log.error({ err }, "Error listing vehicles");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 router.post("/vehicles", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = CreateVehicleBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const id = generateId();
     await db.insert(vehiclesTable).values({
       id, tenantId: me.tenantId,
-      name: parsed.data.name, type: parsed.data.type, plate: parsed.data.plate,
-      capacity: parsed.data.capacity, model: parsed.data.model ?? null,
-      year: parsed.data.year ?? null, amenities: parsed.data.amenities ?? [],
-      dailyRate: parsed.data.dailyRate ? String(parsed.data.dailyRate) : null,
-      photoUrl: parsed.data.photoUrl ?? null,
+      type: parsed.data.type, model: parsed.data.model,
+      licensePlate: parsed.data.licensePlate, capacity: parsed.data.capacity,
+      year: parsed.data.year ?? null, color: parsed.data.color ?? null,
+      supplierId: parsed.data.supplierId ?? null,
+      driverName: parsed.data.driverName ?? null, driverPhone: parsed.data.driverPhone ?? null,
+      features: parsed.data.features ?? [], amenities: parsed.data.amenities ?? [],
+      notes: parsed.data.notes ?? null,
+      createdById: me.id,
     });
-    const [v] = await db.select().from(vehiclesTable).where(eq(vehiclesTable.id, id)).limit(1);
-    res.status(201).json(formatVehicle(v));
-  } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
+    const [vehicle] = await db.select().from(vehiclesTable)
+      .where(and(eq(vehiclesTable.id, id), eq(vehiclesTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!vehicle) { res.status(500).json({ error: "Failed to create vehicle" }); return; }
+    res.status(201).json(formatVehicle(vehicle));
+  } catch (err) {
+    req.log.error({ err }, "Error creating vehicle");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 router.patch("/vehicles/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = UpdateVehicleBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const updates: any = {};
-    if (parsed.data.name != null) updates.name = parsed.data.name;
+    const updates: Partial<typeof vehiclesTable.$inferInsert> = {};
     if (parsed.data.status != null) updates.status = parsed.data.status;
-    if (parsed.data.capacity != null) updates.capacity = parsed.data.capacity;
-    if (parsed.data.dailyRate !== undefined) updates.dailyRate = parsed.data.dailyRate ? String(parsed.data.dailyRate) : null;
+    if (parsed.data.driverName !== undefined) updates.driverName = parsed.data.driverName ?? null;
+    if (parsed.data.driverPhone !== undefined) updates.driverPhone = parsed.data.driverPhone ?? null;
+    if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
     await db.update(vehiclesTable).set(updates)
       .where(and(eq(vehiclesTable.id, req.params.id), eq(vehiclesTable.tenantId, me.tenantId)));
-    const [v] = await db.select().from(vehiclesTable)
+    const [vehicle] = await db.select().from(vehiclesTable)
       .where(and(eq(vehiclesTable.id, req.params.id), eq(vehiclesTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!v) { res.status(404).json({ error: "Not found" }); return; }
-    res.json(formatVehicle(v));
-  } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
+    if (!vehicle) { res.status(404).json({ error: "Not found" }); return; }
+    res.json(formatVehicle(vehicle));
+  } catch (err) {
+    req.log.error({ err }, "Error updating vehicle");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 router.delete("/vehicles/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     await db.delete(vehiclesTable)
       .where(and(eq(vehiclesTable.id, req.params.id), eq(vehiclesTable.tenantId, me.tenantId)));
     res.json({ success: true });
-  } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
+  } catch (err) {
+    req.log.error({ err }, "Error deleting vehicle");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
-// Accommodations
 router.get("/accommodations", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.json([]); return; }
-    const accs = await db.select().from(accommodationsTable)
-      .where(eq(accommodationsTable.tenantId, me.tenantId)).orderBy(desc(accommodationsTable.createdAt));
-    res.json(accs.map(formatAccommodation));
-  } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
+    const me = await getTenantUser(req);
+    if (!me) { res.json([]); return; }
+    const accommodations = await db.select().from(accommodationsTable)
+      .where(eq(accommodationsTable.tenantId, me.tenantId))
+      .orderBy(desc(accommodationsTable.createdAt));
+    res.json(accommodations.map(formatAccommodation));
+  } catch (err) {
+    req.log.error({ err }, "Error listing accommodations");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 router.post("/accommodations", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = CreateAccommodationBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const id = generateId();
     await db.insert(accommodationsTable).values({
       id, tenantId: me.tenantId,
       name: parsed.data.name, type: parsed.data.type,
-      address: parsed.data.address ?? null, city: parsed.data.city ?? null, state: parsed.data.state ?? null,
-      contactName: parsed.data.contactName ?? null, phone: parsed.data.phone ?? null, email: parsed.data.email ?? null,
-      totalRooms: parsed.data.totalRooms ?? null, amenities: parsed.data.amenities ?? [],
-      pricePerNight: parsed.data.pricePerNight ? String(parsed.data.pricePerNight) : null,
+      address: parsed.data.address ?? null,
+      city: parsed.data.city, state: parsed.data.state,
+      stars: parsed.data.stars ?? null, totalRooms: parsed.data.totalRooms ?? null,
+      pricePerNight: String(parsed.data.pricePerNight ?? 0),
+      checkInTime: parsed.data.checkInTime ?? null, checkOutTime: parsed.data.checkOutTime ?? null,
+      amenities: parsed.data.amenities ?? [],
+      contactName: parsed.data.contactName ?? null, contactPhone: parsed.data.contactPhone ?? null,
+      email: parsed.data.email ?? null, website: parsed.data.website ?? null,
+      notes: parsed.data.notes ?? null,
+      createdById: me.id,
     });
-    const [a] = await db.select().from(accommodationsTable).where(eq(accommodationsTable.id, id)).limit(1);
-    res.status(201).json(formatAccommodation(a));
-  } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
+    const [accommodation] = await db.select().from(accommodationsTable)
+      .where(and(eq(accommodationsTable.id, id), eq(accommodationsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!accommodation) { res.status(500).json({ error: "Failed to create accommodation" }); return; }
+    res.status(201).json(formatAccommodation(accommodation));
+  } catch (err) {
+    req.log.error({ err }, "Error creating accommodation");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 router.patch("/accommodations/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = UpdateAccommodationBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const updates: any = {};
+    const updates: Partial<typeof accommodationsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
-    if (parsed.data.status != null) updates.status = parsed.data.status;
-    if (parsed.data.pricePerNight !== undefined) updates.pricePerNight = parsed.data.pricePerNight ? String(parsed.data.pricePerNight) : null;
-    if (parsed.data.totalRooms !== undefined) updates.totalRooms = parsed.data.totalRooms;
+    if (parsed.data.pricePerNight != null) updates.pricePerNight = String(parsed.data.pricePerNight);
+    if (parsed.data.isActive != null) updates.isActive = parsed.data.isActive;
+    if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
     await db.update(accommodationsTable).set(updates)
       .where(and(eq(accommodationsTable.id, req.params.id), eq(accommodationsTable.tenantId, me.tenantId)));
-    const [a] = await db.select().from(accommodationsTable)
+    const [accommodation] = await db.select().from(accommodationsTable)
       .where(and(eq(accommodationsTable.id, req.params.id), eq(accommodationsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!a) { res.status(404).json({ error: "Not found" }); return; }
-    res.json(formatAccommodation(a));
-  } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
+    if (!accommodation) { res.status(404).json({ error: "Not found" }); return; }
+    res.json(formatAccommodation(accommodation));
+  } catch (err) {
+    req.log.error({ err }, "Error updating accommodation");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 router.delete("/accommodations/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     await db.delete(accommodationsTable)
       .where(and(eq(accommodationsTable.id, req.params.id), eq(accommodationsTable.tenantId, me.tenantId)));
     res.json({ success: true });
-  } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
+  } catch (err) {
+    req.log.error({ err }, "Error deleting accommodation");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
-// Destinations
 router.get("/destinations", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.json([]); return; }
-    const dests = await db.select().from(destinationsTable)
-      .where(eq(destinationsTable.tenantId, me.tenantId)).orderBy(desc(destinationsTable.createdAt));
-    res.json(dests.map(formatDestination));
-  } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
+    const me = await getTenantUser(req);
+    if (!me) { res.json([]); return; }
+    const destinations = await db.select().from(destinationsTable)
+      .where(eq(destinationsTable.tenantId, me.tenantId))
+      .orderBy(desc(destinationsTable.createdAt));
+    res.json(destinations.map(formatDestination));
+  } catch (err) {
+    req.log.error({ err }, "Error listing destinations");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 router.post("/destinations", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = CreateDestinationBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const id = generateId();
     await db.insert(destinationsTable).values({
       id, tenantId: me.tenantId,
-      name: parsed.data.name, city: parsed.data.city, state: parsed.data.state,
-      country: parsed.data.country ?? "Brasil",
+      name: parsed.data.name, country: parsed.data.country ?? "Brasil",
+      state: parsed.data.state ?? null, city: parsed.data.city ?? null,
       description: parsed.data.description ?? null,
-      mainAttractions: parsed.data.mainAttractions ?? [],
-      bestSeason: parsed.data.bestSeason ?? null, coverImage: parsed.data.coverImage ?? null,
+      highlights: parsed.data.highlights ?? [],
+      images: parsed.data.images ?? [],
+      createdById: me.id,
     });
-    const [d] = await db.select().from(destinationsTable).where(eq(destinationsTable.id, id)).limit(1);
-    res.status(201).json(formatDestination(d));
-  } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
+    const [destination] = await db.select().from(destinationsTable)
+      .where(and(eq(destinationsTable.id, id), eq(destinationsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!destination) { res.status(500).json({ error: "Failed to create destination" }); return; }
+    res.status(201).json(formatDestination(destination));
+  } catch (err) {
+    req.log.error({ err }, "Error creating destination");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 router.patch("/destinations/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = UpdateDestinationBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const updates: any = {};
+    const updates: Partial<typeof destinationsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
-    if (parsed.data.description !== undefined) updates.description = parsed.data.description;
-    if (parsed.data.mainAttractions != null) updates.mainAttractions = parsed.data.mainAttractions;
-    if (parsed.data.bestSeason !== undefined) updates.bestSeason = parsed.data.bestSeason;
-    if (parsed.data.coverImage !== undefined) updates.coverImage = parsed.data.coverImage;
-    if (parsed.data.rating !== undefined) updates.rating = parsed.data.rating ? String(parsed.data.rating) : null;
+    if (parsed.data.description !== undefined) updates.description = parsed.data.description ?? null;
+    if (parsed.data.highlights != null) updates.highlights = parsed.data.highlights;
+    if (parsed.data.images != null) updates.images = parsed.data.images;
+    if (parsed.data.isActive != null) updates.isActive = parsed.data.isActive;
     await db.update(destinationsTable).set(updates)
       .where(and(eq(destinationsTable.id, req.params.id), eq(destinationsTable.tenantId, me.tenantId)));
-    const [d] = await db.select().from(destinationsTable)
+    const [destination] = await db.select().from(destinationsTable)
       .where(and(eq(destinationsTable.id, req.params.id), eq(destinationsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!d) { res.status(404).json({ error: "Not found" }); return; }
-    res.json(formatDestination(d));
-  } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
+    if (!destination) { res.status(404).json({ error: "Not found" }); return; }
+    res.json(formatDestination(destination));
+  } catch (err) {
+    req.log.error({ err }, "Error updating destination");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 router.delete("/destinations/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     await db.delete(destinationsTable)
       .where(and(eq(destinationsTable.id, req.params.id), eq(destinationsTable.tenantId, me.tenantId)));
     res.json({ success: true });
-  } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
+  } catch (err) {
+    req.log.error({ err }, "Error deleting destination");
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 export default router;

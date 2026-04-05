@@ -1,20 +1,14 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { tripsTable, reservationsTable, passengersTable, usersTable } from "@workspace/db";
+import { tripsTable, reservationsTable } from "@workspace/db";
 import { eq, and, ilike, sql, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
+import { requireAuth, getTenantUser } from "../lib/tenant";
 import { CreateTripBody, UpdateTripBody } from "@workspace/api-zod";
 
 const router = Router();
 
-async function getTenantInfo(req: any) {
-  const auth = req.auth;
-  if (!auth?.userId) return null;
-  const [me] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.userId)).limit(1);
-  return me;
-}
-
-function formatTrip(t: any) {
+function formatTrip(t: typeof tripsTable.$inferSelect) {
   return {
     id: t.id,
     name: t.name,
@@ -52,16 +46,16 @@ function formatTrip(t: any) {
 
 router.get("/trips", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.json({ data: [], total: 0, page: 1, limit: 20 }); return; }
+    const me = await getTenantUser(req);
+    if (!me) { res.json({ data: [], total: 0, page: 1, limit: 20 }); return; }
 
     const { search, status, page = "1", limit = "20" } = req.query as Record<string, string>;
     const pageNum = parseInt(page) || 1;
-    const limitNum = parseInt(limit) || 20;
+    const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (pageNum - 1) * limitNum;
 
-    let conditions: any[] = [eq(tripsTable.tenantId, me.tenantId)];
-    if (search) conditions.push(ilike(tripsTable.name, `%${search}%`));
+    const conditions: ReturnType<typeof eq>[] = [eq(tripsTable.tenantId, me.tenantId)];
+    if (search) conditions.push(ilike(tripsTable.name, `%${search}%`) as ReturnType<typeof eq>);
     if (status) conditions.push(eq(tripsTable.status, status));
 
     const trips = await db.select().from(tripsTable)
@@ -81,8 +75,8 @@ router.get("/trips", async (req, res): Promise<void> => {
 
 router.post("/trips", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = CreateTripBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -132,7 +126,10 @@ router.post("/trips", async (req, res): Promise<void> => {
       createdById: me.id,
     });
 
-    const [trip] = await db.select().from(tripsTable).where(eq(tripsTable.id, id)).limit(1);
+    const [trip] = await db.select().from(tripsTable)
+      .where(and(eq(tripsTable.id, id), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!trip) { res.status(500).json({ error: "Failed to create trip" }); return; }
     res.status(201).json(formatTrip(trip));
   } catch (err) {
     req.log.error({ err }, "Error creating trip");
@@ -142,8 +139,8 @@ router.post("/trips", async (req, res): Promise<void> => {
 
 router.get("/trips/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const [trip] = await db.select().from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);
@@ -157,14 +154,14 @@ router.get("/trips/:id", async (req, res): Promise<void> => {
 
 router.patch("/trips/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = UpdateTripBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-    const updates: any = {};
+    const updates: Partial<typeof tripsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
-    if (parsed.data.description !== undefined) updates.description = parsed.data.description;
+    if (parsed.data.description !== undefined) updates.description = parsed.data.description ?? null;
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.isPublic != null) updates.isPublic = parsed.data.isPublic;
     if (parsed.data.isFeatured != null) updates.isFeatured = parsed.data.isFeatured;
@@ -174,12 +171,12 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
     if (parsed.data.priceChild !== undefined) updates.priceChild = parsed.data.priceChild ? String(parsed.data.priceChild) : null;
     if (parsed.data.priceSenior !== undefined) updates.priceSenior = parsed.data.priceSenior ? String(parsed.data.priceSenior) : null;
     if (parsed.data.totalCapacity != null) updates.totalCapacity = parsed.data.totalCapacity;
-    if (parsed.data.coverImage !== undefined) updates.coverImage = parsed.data.coverImage;
+    if (parsed.data.coverImage !== undefined) updates.coverImage = parsed.data.coverImage ?? null;
     if (parsed.data.inclusions != null) updates.inclusions = parsed.data.inclusions;
     if (parsed.data.exclusions != null) updates.exclusions = parsed.data.exclusions;
-    if (parsed.data.vehiclePlate !== undefined) updates.vehiclePlate = parsed.data.vehiclePlate;
-    if (parsed.data.vehicleType !== undefined) updates.vehicleType = parsed.data.vehicleType;
-    if (parsed.data.driverName !== undefined) updates.driverName = parsed.data.driverName;
+    if (parsed.data.vehiclePlate !== undefined) updates.vehiclePlate = parsed.data.vehiclePlate ?? null;
+    if (parsed.data.vehicleType !== undefined) updates.vehicleType = parsed.data.vehicleType ?? null;
+    if (parsed.data.driverName !== undefined) updates.driverName = parsed.data.driverName ?? null;
 
     await db.update(tripsTable).set(updates)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)));
@@ -196,8 +193,8 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
 
 router.delete("/trips/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     await db.delete(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)));
     res.json({ success: true });
@@ -209,8 +206,8 @@ router.delete("/trips/:id", async (req, res): Promise<void> => {
 
 router.get("/trips/:id/seat-map", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const [trip] = await db.select().from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);
@@ -220,9 +217,9 @@ router.get("/trips/:id/seat-map", async (req, res): Promise<void> => {
       .where(and(eq(reservationsTable.tripId, req.params.id), eq(reservationsTable.tenantId, me.tenantId)));
 
     const occupiedSeats: Record<string, { reservationId: string; passengerName: string }> = {};
-    for (const res_r of reservations) {
-      for (const seat of res_r.seats) {
-        occupiedSeats[seat] = { reservationId: res_r.id, passengerName: "" };
+    for (const r of reservations) {
+      for (const seat of r.seats) {
+        occupiedSeats[seat] = { reservationId: r.id, passengerName: "" };
       }
     }
 

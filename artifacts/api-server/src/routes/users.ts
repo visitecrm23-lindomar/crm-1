@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { usersTable, tenantsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { generateId } from "../lib/id";
+import { requireAuth, getTenantUser } from "../lib/tenant";
 import {
   SyncMeBody,
   CreateUserBody,
@@ -10,33 +11,35 @@ import {
   GetMeResponse,
   SyncMeResponse,
 } from "@workspace/api-zod";
+import type { Request } from "express";
 
 const router = Router();
 
+function getClerkUserId(req: Request): string | null {
+  const auth = (req as Request & { auth?: { userId?: string } }).auth;
+  return auth?.userId ?? null;
+}
+
+function formatUser(u: typeof usersTable.$inferSelect) {
+  return {
+    id: u.id, clerkId: u.clerkId, name: u.name, email: u.email, role: u.role,
+    avatarUrl: u.avatarUrl, isActive: u.isActive, tenantId: u.tenantId,
+    referralCode: u.referralCode, referralBalance: Number(u.referralBalance),
+    createdAt: u.createdAt.toISOString(),
+  };
+}
+
 router.get("/users/me", async (req, res): Promise<void> => {
   try {
-    const auth = (req as any).auth;
-    if (!auth?.userId) {
-      res.status(401).json({ error: "Not authenticated" });
-      return;
-    }
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.userId)).limit(1);
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
+    const clerkId = getClerkUserId(req);
+    if (!clerkId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId)).limit(1);
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
     res.json(GetMeResponse.parse({
-      id: user.id,
-      clerkId: user.clerkId,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      avatarUrl: user.avatarUrl,
-      isActive: user.isActive,
-      tenantId: user.tenantId,
-      referralCode: user.referralCode,
-      referralBalance: Number(user.referralBalance),
-      createdAt: user.createdAt.toISOString(),
+      id: user.id, clerkId: user.clerkId, name: user.name, email: user.email,
+      role: user.role, avatarUrl: user.avatarUrl, isActive: user.isActive,
+      tenantId: user.tenantId, referralCode: user.referralCode,
+      referralBalance: Number(user.referralBalance), createdAt: user.createdAt.toISOString(),
     }));
   } catch (err) {
     req.log.error({ err }, "Error fetching user");
@@ -46,88 +49,61 @@ router.get("/users/me", async (req, res): Promise<void> => {
 
 router.post("/users/me/sync", async (req, res): Promise<void> => {
   try {
-    const auth = (req as any).auth;
-    if (!auth?.userId) {
-      res.status(401).json({ error: "Not authenticated" });
-      return;
-    }
+    const clerkId = getClerkUserId(req);
+    if (!clerkId) { res.status(401).json({ error: "Not authenticated" }); return; }
 
     const parsed = SyncMeBody.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: parsed.error.message });
-      return;
-    }
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
     const { name, email, avatarUrl } = parsed.data;
-    const clerkId = auth.userId;
 
-    const existing = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId)).limit(1);
+    const [existing] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId)).limit(1);
 
-    let tenant = await db.select().from(tenantsTable).limit(1);
     let tenantId: string;
-    if (!tenant[0]) {
+    const [tenant] = await db.select().from(tenantsTable).limit(1);
+    if (!tenant) {
       tenantId = generateId();
       await db.insert(tenantsTable).values({
         id: tenantId,
         name: name + "'s Agency",
         slug: tenantId,
-        email: email,
+        email,
         planId: "starter",
         status: "trial",
         limits: { users: 10, clients: 1000, trips: 50 },
       });
     } else {
-      tenantId = tenant[0].id;
+      tenantId = tenant.id;
     }
 
-    if (!existing[0]) {
+    if (!existing) {
       const userId = generateId();
       const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
       await db.insert(usersTable).values({
-        id: userId,
-        clerkId,
-        tenantId,
-        name,
-        email,
-        avatarUrl: avatarUrl ?? null,
-        role: "agencia",
-        referralCode,
-        referralBalance: "0",
+        id: userId, clerkId, tenantId, name, email,
+        avatarUrl: avatarUrl ?? null, role: "agencia",
+        referralCode, referralBalance: "0",
       });
-      const [newUser] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+      const [newUser] = await db.select().from(usersTable)
+        .where(and(eq(usersTable.id, userId), eq(usersTable.tenantId, tenantId)))
+        .limit(1);
+      if (!newUser) { res.status(500).json({ error: "Failed to create user" }); return; }
       res.json(SyncMeResponse.parse({
-        id: newUser.id,
-        clerkId: newUser.clerkId,
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-        avatarUrl: newUser.avatarUrl,
-        isActive: newUser.isActive,
-        tenantId: newUser.tenantId,
-        referralCode: newUser.referralCode,
-        referralBalance: Number(newUser.referralBalance),
-        createdAt: newUser.createdAt.toISOString(),
+        id: newUser.id, clerkId: newUser.clerkId, name: newUser.name, email: newUser.email,
+        role: newUser.role, avatarUrl: newUser.avatarUrl, isActive: newUser.isActive,
+        tenantId: newUser.tenantId, referralCode: newUser.referralCode,
+        referralBalance: Number(newUser.referralBalance), createdAt: newUser.createdAt.toISOString(),
       }));
     } else {
-      await db.update(usersTable).set({
-        name,
-        email,
-        avatarUrl: avatarUrl ?? null,
-        lastLoginAt: new Date(),
-      }).where(eq(usersTable.clerkId, clerkId));
+      await db.update(usersTable).set({ name, email, avatarUrl: avatarUrl ?? null, lastLoginAt: new Date() })
+        .where(eq(usersTable.clerkId, clerkId));
       const [updatedUser] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId)).limit(1);
+      if (!updatedUser) { res.status(500).json({ error: "User not found after update" }); return; }
       res.json(SyncMeResponse.parse({
-        id: updatedUser.id,
-        clerkId: updatedUser.clerkId,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        role: updatedUser.role,
-        avatarUrl: updatedUser.avatarUrl,
-        isActive: updatedUser.isActive,
-        tenantId: updatedUser.tenantId,
-        referralCode: updatedUser.referralCode,
-        referralBalance: Number(updatedUser.referralBalance),
-        createdAt: updatedUser.createdAt.toISOString(),
+        id: updatedUser.id, clerkId: updatedUser.clerkId, name: updatedUser.name, email: updatedUser.email,
+        role: updatedUser.role, avatarUrl: updatedUser.avatarUrl, isActive: updatedUser.isActive,
+        tenantId: updatedUser.tenantId, referralCode: updatedUser.referralCode,
+        referralBalance: Number(updatedUser.referralBalance), createdAt: updatedUser.createdAt.toISOString(),
       }));
     }
   } catch (err) {
@@ -138,17 +114,10 @@ router.post("/users/me/sync", async (req, res): Promise<void> => {
 
 router.get("/users", async (req, res): Promise<void> => {
   try {
-    const auth = (req as any).auth;
-    if (!auth?.userId) { res.status(401).json({ error: "Not authenticated" }); return; }
-    const [me] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.userId)).limit(1);
-    if (!me?.tenantId) { res.json([]); return; }
+    const me = await getTenantUser(req);
+    if (!me) { res.json([]); return; }
     const users = await db.select().from(usersTable).where(eq(usersTable.tenantId, me.tenantId));
-    res.json(users.map(u => ({
-      id: u.id, clerkId: u.clerkId, name: u.name, email: u.email, role: u.role,
-      avatarUrl: u.avatarUrl, isActive: u.isActive, tenantId: u.tenantId,
-      referralCode: u.referralCode, referralBalance: Number(u.referralBalance),
-      createdAt: u.createdAt.toISOString(),
-    })));
+    res.json(users.map(formatUser));
   } catch (err) {
     req.log.error({ err }, "Error listing users");
     res.status(500).json({ error: "Internal server error" });
@@ -157,12 +126,10 @@ router.get("/users", async (req, res): Promise<void> => {
 
 router.post("/users", async (req, res): Promise<void> => {
   try {
-    const auth = (req as any).auth;
-    if (!auth?.userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = CreateUserBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const [me] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.userId)).limit(1);
-    if (!me?.tenantId) { res.status(403).json({ error: "User not in a tenant" }); return; }
     const userId = generateId();
     const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     await db.insert(usersTable).values({
@@ -175,13 +142,11 @@ router.post("/users", async (req, res): Promise<void> => {
       referralCode,
       referralBalance: "0",
     });
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
-    res.status(201).json({
-      id: user.id, clerkId: user.clerkId, name: user.name, email: user.email, role: user.role,
-      avatarUrl: user.avatarUrl, isActive: user.isActive, tenantId: user.tenantId,
-      referralCode: user.referralCode, referralBalance: Number(user.referralBalance),
-      createdAt: user.createdAt.toISOString(),
-    });
+    const [user] = await db.select().from(usersTable)
+      .where(and(eq(usersTable.id, userId), eq(usersTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!user) { res.status(500).json({ error: "Failed to create user" }); return; }
+    res.status(201).json(formatUser(user));
   } catch (err) {
     req.log.error({ err }, "Error creating user");
     res.status(500).json({ error: "Internal server error" });
@@ -190,29 +155,21 @@ router.post("/users", async (req, res): Promise<void> => {
 
 router.patch("/users/:id", async (req, res): Promise<void> => {
   try {
-    const auth = (req as any).auth;
-    if (!auth?.userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = UpdateUserBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const [me] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.userId)).limit(1);
-    if (!me?.tenantId) { res.status(403).json({ error: "Forbidden" }); return; }
     const updates: Partial<typeof usersTable.$inferInsert> = {};
-    if (parsed.data.name) updates.name = parsed.data.name;
-    if (parsed.data.role) updates.role = parsed.data.role;
-    if (parsed.data.isActive !== null && parsed.data.isActive !== undefined) updates.isActive = parsed.data.isActive;
-    await db.update(usersTable).set(updates).where(
-      and(eq(usersTable.id, req.params.id), eq(usersTable.tenantId, me.tenantId))
-    );
-    const [user] = await db.select().from(usersTable).where(
-      and(eq(usersTable.id, req.params.id), eq(usersTable.tenantId, me.tenantId))
-    ).limit(1);
+    if (parsed.data.name != null) updates.name = parsed.data.name;
+    if (parsed.data.role != null) updates.role = parsed.data.role;
+    if (parsed.data.isActive != null) updates.isActive = parsed.data.isActive;
+    await db.update(usersTable).set(updates)
+      .where(and(eq(usersTable.id, req.params.id), eq(usersTable.tenantId, me.tenantId)));
+    const [user] = await db.select().from(usersTable)
+      .where(and(eq(usersTable.id, req.params.id), eq(usersTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!user) { res.status(404).json({ error: "Not found" }); return; }
-    res.json({
-      id: user.id, clerkId: user.clerkId, name: user.name, email: user.email, role: user.role,
-      avatarUrl: user.avatarUrl, isActive: user.isActive, tenantId: user.tenantId,
-      referralCode: user.referralCode, referralBalance: Number(user.referralBalance),
-      createdAt: user.createdAt.toISOString(),
-    });
+    res.json(formatUser(user));
   } catch (err) {
     req.log.error({ err }, "Error updating user");
     res.status(500).json({ error: "Internal server error" });

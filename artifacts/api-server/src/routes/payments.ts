@@ -1,20 +1,14 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { paymentsTable, expensesTable, usersTable } from "@workspace/db";
+import { paymentsTable, expensesTable, reservationsTable, clientsTable } from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
+import { requireAuth, getTenantUser } from "../lib/tenant";
 import { CreatePaymentBody, UpdatePaymentBody, CreateExpenseBody, UpdateExpenseBody } from "@workspace/api-zod";
 
 const router = Router();
 
-async function getTenantInfo(req: any) {
-  const auth = req.auth;
-  if (!auth?.userId) return null;
-  const [me] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.userId)).limit(1);
-  return me;
-}
-
-function formatPayment(p: any) {
+function formatPayment(p: typeof paymentsTable.$inferSelect) {
   return {
     id: p.id, reservationId: p.reservationId, clientId: p.clientId,
     type: p.type, category: p.category, amount: Number(p.amount),
@@ -26,7 +20,7 @@ function formatPayment(p: any) {
   };
 }
 
-function formatExpense(e: any) {
+function formatExpense(e: typeof expensesTable.$inferSelect) {
   return {
     id: e.id, tripId: e.tripId, category: e.category, description: e.description,
     amount: Number(e.amount), supplierId: e.supplierId, paymentMethod: e.paymentMethod,
@@ -37,8 +31,8 @@ function formatExpense(e: any) {
 
 router.get("/payments/summary", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) {
+    const me = await getTenantUser(req);
+    if (!me) {
       res.json({ totalReceivable: 0, totalPayable: 0, overdueReceivable: 0, overduePayable: 0, collectedThisMonth: 0, paidThisMonth: 0 });
       return;
     }
@@ -75,15 +69,15 @@ router.get("/payments/summary", async (req, res): Promise<void> => {
 
 router.get("/payments", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.json({ data: [], total: 0, page: 1, limit: 20 }); return; }
+    const me = await getTenantUser(req);
+    if (!me) { res.json({ data: [], total: 0, page: 1, limit: 20 }); return; }
 
     const { reservationId, clientId, status, type, page = "1", limit = "20" } = req.query as Record<string, string>;
     const pageNum = parseInt(page) || 1;
-    const limitNum = parseInt(limit) || 20;
+    const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (pageNum - 1) * limitNum;
 
-    let conditions: any[] = [eq(paymentsTable.tenantId, me.tenantId)];
+    const conditions: ReturnType<typeof eq>[] = [eq(paymentsTable.tenantId, me.tenantId)];
     if (reservationId) conditions.push(eq(paymentsTable.reservationId, reservationId));
     if (clientId) conditions.push(eq(paymentsTable.clientId, clientId));
     if (status) conditions.push(eq(paymentsTable.status, status));
@@ -105,10 +99,23 @@ router.get("/payments", async (req, res): Promise<void> => {
 
 router.post("/payments", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = CreatePaymentBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    if (parsed.data.reservationId) {
+      const [reservation] = await db.select().from(reservationsTable)
+        .where(and(eq(reservationsTable.id, parsed.data.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
+        .limit(1);
+      if (!reservation) { res.status(400).json({ error: "Reservation not found or not in tenant" }); return; }
+    }
+    if (parsed.data.clientId) {
+      const [client] = await db.select().from(clientsTable)
+        .where(and(eq(clientsTable.id, parsed.data.clientId), eq(clientsTable.tenantId, me.tenantId)))
+        .limit(1);
+      if (!client) { res.status(400).json({ error: "Client not found or not in tenant" }); return; }
+    }
 
     const id = generateId();
     const installments = parsed.data.installments ?? 1;
@@ -133,7 +140,10 @@ router.post("/payments", async (req, res): Promise<void> => {
       });
     }
 
-    const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id)).limit(1);
+    const [payment] = await db.select().from(paymentsTable)
+      .where(and(eq(paymentsTable.id, id), eq(paymentsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!payment) { res.status(500).json({ error: "Failed to create payment" }); return; }
     res.status(201).json(formatPayment(payment));
   } catch (err) {
     req.log.error({ err }, "Error creating payment");
@@ -143,8 +153,8 @@ router.post("/payments", async (req, res): Promise<void> => {
 
 router.get("/payments/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const [payment] = await db.select().from(paymentsTable)
       .where(and(eq(paymentsTable.id, req.params.id), eq(paymentsTable.tenantId, me.tenantId)))
       .limit(1);
@@ -158,14 +168,14 @@ router.get("/payments/:id", async (req, res): Promise<void> => {
 
 router.patch("/payments/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = UpdatePaymentBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const updates: any = {};
+    const updates: Partial<typeof paymentsTable.$inferInsert> = {};
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.paidAt !== undefined) updates.paidAt = parsed.data.paidAt ? new Date(parsed.data.paidAt) : null;
-    if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes;
+    if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
     await db.update(paymentsTable).set(updates)
       .where(and(eq(paymentsTable.id, req.params.id), eq(paymentsTable.tenantId, me.tenantId)));
     const [payment] = await db.select().from(paymentsTable)
@@ -181,15 +191,15 @@ router.patch("/payments/:id", async (req, res): Promise<void> => {
 
 router.get("/expenses", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.json({ data: [], total: 0, page: 1, limit: 20 }); return; }
+    const me = await getTenantUser(req);
+    if (!me) { res.json({ data: [], total: 0, page: 1, limit: 20 }); return; }
 
     const { tripId, status, page = "1", limit = "20" } = req.query as Record<string, string>;
     const pageNum = parseInt(page) || 1;
-    const limitNum = parseInt(limit) || 20;
+    const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (pageNum - 1) * limitNum;
 
-    let conditions: any[] = [eq(expensesTable.tenantId, me.tenantId)];
+    const conditions: ReturnType<typeof eq>[] = [eq(expensesTable.tenantId, me.tenantId)];
     if (tripId) conditions.push(eq(expensesTable.tripId, tripId));
     if (status) conditions.push(eq(expensesTable.status, status));
 
@@ -209,8 +219,8 @@ router.get("/expenses", async (req, res): Promise<void> => {
 
 router.post("/expenses", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = CreateExpenseBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -229,7 +239,10 @@ router.post("/expenses", async (req, res): Promise<void> => {
       createdById: me.id,
     });
 
-    const [expense] = await db.select().from(expensesTable).where(eq(expensesTable.id, id)).limit(1);
+    const [expense] = await db.select().from(expensesTable)
+      .where(and(eq(expensesTable.id, id), eq(expensesTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!expense) { res.status(500).json({ error: "Failed to create expense" }); return; }
     res.status(201).json(formatExpense(expense));
   } catch (err) {
     req.log.error({ err }, "Error creating expense");
@@ -239,14 +252,14 @@ router.post("/expenses", async (req, res): Promise<void> => {
 
 router.patch("/expenses/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = UpdateExpenseBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const updates: any = {};
+    const updates: Partial<typeof expensesTable.$inferInsert> = {};
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.paymentDate !== undefined) updates.paymentDate = parsed.data.paymentDate ? new Date(parsed.data.paymentDate) : null;
-    if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes;
+    if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
     if (parsed.data.amount != null) updates.amount = String(parsed.data.amount);
     await db.update(expensesTable).set(updates)
       .where(and(eq(expensesTable.id, req.params.id), eq(expensesTable.tenantId, me.tenantId)));
@@ -263,8 +276,8 @@ router.patch("/expenses/:id", async (req, res): Promise<void> => {
 
 router.delete("/expenses/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     await db.delete(expensesTable)
       .where(and(eq(expensesTable.id, req.params.id), eq(expensesTable.tenantId, me.tenantId)));
     res.json({ success: true });

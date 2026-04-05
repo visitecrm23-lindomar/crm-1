@@ -1,156 +1,129 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { pipelineStagesTable, dealsTable, clientsTable, tripsTable, usersTable } from "@workspace/db";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { pipelineStagesTable, dealsTable, clientsTable } from "@workspace/db";
+import { eq, and, asc, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
-import { CreateDealBody, UpdateDealBody } from "@workspace/api-zod";
+import { requireAuth, getTenantUser } from "../lib/tenant";
+import { CreateDealBody, UpdateDealBody, MoveDealBody } from "@workspace/api-zod";
 
 const router = Router();
 
-async function getTenantInfo(req: any) {
-  const auth = req.auth;
-  if (!auth?.userId) return null;
-  const [me] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.userId)).limit(1);
-  return me;
-}
+const DEFAULT_STAGES = [
+  { name: "Novo Lead", order: 1, color: "#6366F1" },
+  { name: "Qualificado", order: 2, color: "#8B5CF6" },
+  { name: "Proposta Enviada", order: 3, color: "#F59E0B" },
+  { name: "Negociação", order: 4, color: "#EF4444" },
+  { name: "Reserva Feita", order: 5, color: "#10B981" },
+  { name: "Pago", order: 6, color: "#06B6D4" },
+  { name: "Pós-Venda", order: 7, color: "#6B7280" },
+];
 
 async function ensureDefaultPipeline(tenantId: string): Promise<void> {
-  const existing = await db.select().from(pipelineStagesTable).where(eq(pipelineStagesTable.tenantId, tenantId)).limit(1);
-  if (existing.length > 0) return;
-
-  const pipelineId = generateId();
-  const stages = [
-    { name: "Novo Lead", color: "#6366f1", order: 1 },
-    { name: "Contato Feito", color: "#3b82f6", order: 2 },
-    { name: "Proposta Enviada", color: "#f59e0b", order: 3 },
-    { name: "Negociação", color: "#ec4899", order: 4 },
-    { name: "Reserva Confirmada", color: "#10b981", order: 5 },
-    { name: "Pagamento Concluído", color: "#22c55e", order: 6, isFinal: true },
-    { name: "Pós-Venda", color: "#8b5cf6", order: 7, isFinal: true },
-  ];
-
-  for (const stage of stages) {
-    await db.insert(pipelineStagesTable).values({
-      id: generateId(),
-      tenantId,
-      pipelineId,
-      name: stage.name,
-      color: stage.color,
-      order: stage.order,
-      isFinal: (stage as any).isFinal ?? false,
-    });
+  const existing = await db.select().from(pipelineStagesTable)
+    .where(eq(pipelineStagesTable.tenantId, tenantId));
+  if (existing.length === 0) {
+    for (const stage of DEFAULT_STAGES) {
+      await db.insert(pipelineStagesTable).values({
+        id: generateId(),
+        tenantId,
+        name: stage.name,
+        order: stage.order,
+        color: stage.color,
+        isDefault: stage.order === 1,
+      });
+    }
   }
 }
 
-function formatDeal(d: any, extra?: { stageName?: string; stageColor?: string; clientName?: string; ownerName?: string }) {
+function formatStage(s: typeof pipelineStagesTable.$inferSelect) {
   return {
-    id: d.id, stageId: d.stageId, title: d.title, description: d.description,
-    value: Number(d.value), clientId: d.clientId, leadName: d.leadName,
-    leadEmail: d.leadEmail, leadWhatsapp: d.leadWhatsapp, tripId: d.tripId,
-    ownerId: d.ownerId, expectedCloseDate: d.expectedCloseDate?.toISOString() ?? null,
-    status: d.status, lostReason: d.lostReason,
+    id: s.id, name: s.name, order: s.order, color: s.color,
+    isDefault: s.isDefault, tenantId: s.tenantId,
+    createdAt: s.createdAt.toISOString(),
+  };
+}
+
+function formatDeal(d: typeof dealsTable.$inferSelect) {
+  return {
+    id: d.id, tenantId: d.tenantId, clientId: d.clientId, stageId: d.stageId,
+    title: d.title, value: Number(d.value), status: d.status,
+    priority: d.priority, assignedTo: d.assignedTo,
+    expectedCloseDate: d.expectedCloseDate?.toISOString() ?? null,
+    notes: d.notes, tags: d.tags ?? [],
     createdAt: d.createdAt.toISOString(), updatedAt: d.updatedAt.toISOString(),
-    stageName: extra?.stageName ?? null, stageColor: extra?.stageColor ?? null,
-    clientName: extra?.clientName ?? null, ownerName: extra?.ownerName ?? null,
   };
 }
 
 router.get("/pipeline/stages", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.json([]); return; }
-
+    const me = await getTenantUser(req);
+    if (!me) { res.json([]); return; }
     await ensureDefaultPipeline(me.tenantId);
-
     const stages = await db.select().from(pipelineStagesTable)
       .where(eq(pipelineStagesTable.tenantId, me.tenantId))
-      .orderBy(pipelineStagesTable.order);
-
-    const dealsAgg = await db.select({
-      stageId: dealsTable.stageId,
-      count: sql<number>`count(*)`,
-      value: sql<number>`sum(cast(value as numeric))`,
-    }).from(dealsTable)
-      .where(and(eq(dealsTable.tenantId, me.tenantId), eq(dealsTable.status, "open")))
-      .groupBy(dealsTable.stageId);
-
-    const agg = Object.fromEntries(dealsAgg.map(a => [a.stageId, { count: Number(a.count), value: Number(a.value ?? 0) }]));
-
-    res.json(stages.map(s => ({
-      id: s.id, name: s.name, color: s.color, order: s.order, isFinal: s.isFinal,
-      dealsCount: agg[s.id]?.count ?? 0,
-      dealsValue: agg[s.id]?.value ?? 0,
-    })));
+      .orderBy(asc(pipelineStagesTable.order));
+    res.json(stages.map(formatStage));
   } catch (err) {
     req.log.error({ err }, "Error listing pipeline stages");
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-router.get("/deals", async (req, res): Promise<void> => {
+router.get("/pipeline/deals", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.json([]); return; }
-
-    const { stageId, status, ownerId } = req.query as Record<string, string>;
-
-    let conditions: any[] = [eq(dealsTable.tenantId, me.tenantId)];
+    const me = await getTenantUser(req);
+    if (!me) { res.json([]); return; }
+    const { stageId, clientId } = req.query as Record<string, string>;
+    const conditions: ReturnType<typeof eq>[] = [eq(dealsTable.tenantId, me.tenantId)];
     if (stageId) conditions.push(eq(dealsTable.stageId, stageId));
-    if (status) conditions.push(eq(dealsTable.status, status));
-    if (ownerId) conditions.push(eq(dealsTable.ownerId, ownerId));
-
+    if (clientId) conditions.push(eq(dealsTable.clientId, clientId));
     const deals = await db.select().from(dealsTable)
       .where(and(...conditions)).orderBy(desc(dealsTable.createdAt));
-
-    const stagesMap: Record<string, any> = {};
-    const stages = await db.select().from(pipelineStagesTable).where(eq(pipelineStagesTable.tenantId, me.tenantId));
-    stages.forEach(s => { stagesMap[s.id] = s; });
-
-    const usersMap: Record<string, any> = {};
-    const users = await db.select().from(usersTable).where(eq(usersTable.tenantId, me.tenantId));
-    users.forEach(u => { usersMap[u.id] = u; });
-
-    const clientsMap: Record<string, any> = {};
-    const clients = await db.select().from(clientsTable).where(eq(clientsTable.tenantId, me.tenantId));
-    clients.forEach(c => { clientsMap[c.id] = c; });
-
-    res.json(deals.map(d => formatDeal(d, {
-      stageName: stagesMap[d.stageId]?.name,
-      stageColor: stagesMap[d.stageId]?.color,
-      clientName: d.clientId ? clientsMap[d.clientId]?.name : null,
-      ownerName: usersMap[d.ownerId]?.name,
-    })));
+    res.json(deals.map(formatDeal));
   } catch (err) {
     req.log.error({ err }, "Error listing deals");
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-router.post("/deals", async (req, res): Promise<void> => {
+router.post("/pipeline/deals", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = CreateDealBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    if (parsed.data.clientId) {
+      const [client] = await db.select().from(clientsTable)
+        .where(and(eq(clientsTable.id, parsed.data.clientId), eq(clientsTable.tenantId, me.tenantId)))
+        .limit(1);
+      if (!client) { res.status(400).json({ error: "Client not found or not in tenant" }); return; }
+    }
+
+    const [stage] = await db.select().from(pipelineStagesTable)
+      .where(and(eq(pipelineStagesTable.id, parsed.data.stageId), eq(pipelineStagesTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!stage) { res.status(400).json({ error: "Stage not found or not in tenant" }); return; }
 
     const id = generateId();
     await db.insert(dealsTable).values({
       id,
       tenantId: me.tenantId,
+      clientId: parsed.data.clientId ?? null,
       stageId: parsed.data.stageId,
       title: parsed.data.title,
-      description: parsed.data.description ?? null,
-      value: String(parsed.data.value),
-      clientId: parsed.data.clientId ?? null,
-      leadName: parsed.data.leadName ?? null,
-      leadEmail: parsed.data.leadEmail ?? null,
-      leadWhatsapp: parsed.data.leadWhatsapp ?? null,
-      tripId: parsed.data.tripId ?? null,
-      ownerId: me.id,
+      value: String(parsed.data.value ?? 0),
+      priority: parsed.data.priority ?? "medium",
+      status: "open",
       expectedCloseDate: parsed.data.expectedCloseDate ? new Date(parsed.data.expectedCloseDate) : null,
+      notes: parsed.data.notes ?? null,
+      tags: parsed.data.tags ?? [],
     });
 
-    const [deal] = await db.select().from(dealsTable).where(eq(dealsTable.id, id)).limit(1);
+    const [deal] = await db.select().from(dealsTable)
+      .where(and(eq(dealsTable.id, id), eq(dealsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!deal) { res.status(500).json({ error: "Failed to create deal" }); return; }
     res.status(201).json(formatDeal(deal));
   } catch (err) {
     req.log.error({ err }, "Error creating deal");
@@ -158,10 +131,10 @@ router.post("/deals", async (req, res): Promise<void> => {
   }
 });
 
-router.get("/deals/:id", async (req, res): Promise<void> => {
+router.get("/pipeline/deals/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const [deal] = await db.select().from(dealsTable)
       .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)))
       .limit(1);
@@ -173,23 +146,30 @@ router.get("/deals/:id", async (req, res): Promise<void> => {
   }
 });
 
-router.patch("/deals/:id", async (req, res): Promise<void> => {
+router.patch("/pipeline/deals/:id", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const parsed = UpdateDealBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const updates: any = {};
-    if (parsed.data.stageId != null) updates.stageId = parsed.data.stageId;
+
+    const updates: Partial<typeof dealsTable.$inferInsert> = {};
     if (parsed.data.title != null) updates.title = parsed.data.title;
     if (parsed.data.value != null) updates.value = String(parsed.data.value);
-    if (parsed.data.status != null) {
-      updates.status = parsed.data.status;
-      if (parsed.data.status === "won" || parsed.data.status === "lost") updates.closedAt = new Date();
+    if (parsed.data.status != null) updates.status = parsed.data.status;
+    if (parsed.data.priority != null) updates.priority = parsed.data.priority;
+    if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
+    if (parsed.data.tags != null) updates.tags = parsed.data.tags;
+    if (parsed.data.expectedCloseDate !== undefined) {
+      updates.expectedCloseDate = parsed.data.expectedCloseDate ? new Date(parsed.data.expectedCloseDate) : null;
     }
-    if (parsed.data.lostReason !== undefined) updates.lostReason = parsed.data.lostReason;
-    if (parsed.data.description !== undefined) updates.description = parsed.data.description;
-    if (parsed.data.expectedCloseDate !== undefined) updates.expectedCloseDate = parsed.data.expectedCloseDate ? new Date(parsed.data.expectedCloseDate) : null;
+    if (parsed.data.stageId != null) {
+      const [stage] = await db.select().from(pipelineStagesTable)
+        .where(and(eq(pipelineStagesTable.id, parsed.data.stageId), eq(pipelineStagesTable.tenantId, me.tenantId)))
+        .limit(1);
+      if (!stage) { res.status(400).json({ error: "Stage not found or not in tenant" }); return; }
+      updates.stageId = parsed.data.stageId;
+    }
 
     await db.update(dealsTable).set(updates)
       .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)));
@@ -204,30 +184,17 @@ router.patch("/deals/:id", async (req, res): Promise<void> => {
   }
 });
 
-router.delete("/deals/:id", async (req, res): Promise<void> => {
+router.post("/pipeline/deals/:id/move", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
-    await db.delete(dealsTable)
-      .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)));
-    res.json({ success: true });
-  } catch (err) {
-    req.log.error({ err }, "Error deleting deal");
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-router.patch("/deals/:id/move", async (req, res): Promise<void> => {
-  try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
-    const { stageId } = req.body;
-    if (!stageId) { res.status(400).json({ error: "stageId required" }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const parsed = MoveDealBody.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const [stage] = await db.select().from(pipelineStagesTable)
-      .where(and(eq(pipelineStagesTable.id, stageId), eq(pipelineStagesTable.tenantId, me.tenantId)))
+      .where(and(eq(pipelineStagesTable.id, parsed.data.stageId), eq(pipelineStagesTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!stage) { res.status(403).json({ error: "Stage not in tenant" }); return; }
-    await db.update(dealsTable).set({ stageId })
+    if (!stage) { res.status(400).json({ error: "Stage not found or not in tenant" }); return; }
+    await db.update(dealsTable).set({ stageId: parsed.data.stageId })
       .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)));
     const [deal] = await db.select().from(dealsTable)
       .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)))
@@ -236,6 +203,19 @@ router.patch("/deals/:id/move", async (req, res): Promise<void> => {
     res.json(formatDeal(deal));
   } catch (err) {
     req.log.error({ err }, "Error moving deal");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/pipeline/deals/:id", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    await db.delete(dealsTable)
+      .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)));
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Error deleting deal");
     res.status(500).json({ error: "Internal server error" });
   }
 });
