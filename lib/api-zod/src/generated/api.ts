@@ -2109,3 +2109,668 @@ export const UpdateUserResponse = zod.object({
   referralBalance: zod.number(),
   createdAt: zod.string(),
 });
+
+/**
+ * @summary List all tenants (superadmin only)
+ */
+export const ListTenantsResponseItem = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  slug: zod.string(),
+  email: zod.string(),
+  plan: zod.string().nullish(),
+  logoUrl: zod.string().nullish(),
+  primaryColor: zod.string().nullish(),
+  customDomain: zod.string().nullish(),
+  isActive: zod.boolean(),
+  createdAt: zod.string(),
+});
+export const ListTenantsResponse = zod.array(ListTenantsResponseItem);
+
+/**
+ * @summary Create a tenant (superadmin only)
+ */
+export const CreateTenantBody = zod.object({
+  name: zod.string(),
+  slug: zod.string(),
+  email: zod.string(),
+  plan: zod.string().optional(),
+});
+
+/**
+ * @summary Get tenant by id
+ */
+export const GetTenantParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetTenantResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  slug: zod.string(),
+  email: zod.string(),
+  plan: zod.string().nullish(),
+  logoUrl: zod.string().nullish(),
+  primaryColor: zod.string().nullish(),
+  customDomain: zod.string().nullish(),
+  isActive: zod.boolean(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Update tenant
+ */
+export const UpdateTenantParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateTenantBody = zod.object({
+  name: zod.string().optional(),
+  plan: zod.string().optional(),
+  logoUrl: zod.string().optional(),
+  primaryColor: zod.string().optional(),
+  customDomain: zod.string().optional(),
+  isActive: zod.boolean().optional(),
+});
+
+export const UpdateTenantResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  slug: zod.string(),
+  email: zod.string(),
+  plan: zod.string().nullish(),
+  logoUrl: zod.string().nullish(),
+  primaryColor: zod.string().nullish(),
+  customDomain: zod.string().nullish(),
+  isActive: zod.boolean(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary List boarding locations
+ */
+export const ListBoardingLocationsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  address: zod.string(),
+  city: zod.string(),
+  state: zod.string(),
+  reference: zod.string().nullish(),
+  departureTime: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListBoardingLocationsResponse = zod.array(
+  ListBoardingLocationsResponseItem,
+);
+
+/**
+ * @summary Create a boarding location
+ */
+export const CreateBoardingLocationBody = zod.object({
+  name: zod.string(),
+  address: zod.string(),
+  city: zod.string(),
+  state: zod.string(),
+  reference: zod.string().optional(),
+  departureTime: zod.string().optional(),
+});
+
+/**
+ * @summary Update a boarding location
+ */
+export const UpdateBoardingLocationParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateBoardingLocationBody = zod.object({
+  name: zod.string(),
+  address: zod.string(),
+  city: zod.string(),
+  state: zod.string(),
+  reference: zod.string().optional(),
+  departureTime: zod.string().optional(),
+});
+
+export const UpdateBoardingLocationResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  address: zod.string(),
+  city: zod.string(),
+  state: zod.string(),
+  reference: zod.string().nullish(),
+  departureTime: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Delete a boarding location
+ */
+export const DeleteBoardingLocationParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary List commission rules
+ */
+export const ListCommissionRulesResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  type: zod.string(),
+  value: zod.string(),
+  appliesTo: zod.string(),
+  tripId: zod.string().nullish(),
+  isActive: zod.boolean(),
+  createdAt: zod.string(),
+});
+export const ListCommissionRulesResponse = zod.array(
+  ListCommissionRulesResponseItem,
+);
+
+/**
+ * @summary Create a commission rule
+ */
+export const CreateCommissionRuleBody = zod.object({
+  name: zod.string(),
+  type: zod.enum(["percentage", "fixed"]).optional(),
+  value: zod.string(),
+  appliesTo: zod.string().optional(),
+  tripId: zod.string().optional(),
+  isActive: zod.boolean().optional(),
+});
+
+/**
+ * @summary Update a commission rule
+ */
+export const UpdateCommissionRuleParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateCommissionRuleBody = zod.object({
+  name: zod.string(),
+  type: zod.enum(["percentage", "fixed"]).optional(),
+  value: zod.string(),
+  appliesTo: zod.string().optional(),
+  tripId: zod.string().optional(),
+  isActive: zod.boolean().optional(),
+});
+
+export const UpdateCommissionRuleResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  type: zod.string(),
+  value: zod.string(),
+  appliesTo: zod.string(),
+  tripId: zod.string().nullish(),
+  isActive: zod.boolean(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Delete a commission rule
+ */
+export const DeleteCommissionRuleParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary List commissions
+ */
+export const ListCommissionsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  ruleId: zod.string().nullish(),
+  userId: zod.string(),
+  reservationId: zod.string().nullish(),
+  baseAmount: zod.string(),
+  commissionAmount: zod.string(),
+  status: zod.string(),
+  paidAt: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListCommissionsResponse = zod.array(ListCommissionsResponseItem);
+
+/**
+ * @summary Update commission status
+ */
+export const UpdateCommissionParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateCommissionBody = zod.object({
+  status: zod.string().optional(),
+  paidAt: zod.string().optional(),
+});
+
+export const UpdateCommissionResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  ruleId: zod.string().nullish(),
+  userId: zod.string(),
+  reservationId: zod.string().nullish(),
+  baseAmount: zod.string(),
+  commissionAmount: zod.string(),
+  status: zod.string(),
+  paidAt: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary List referrals
+ */
+export const ListReferralsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  referrerId: zod.string(),
+  referredId: zod.string().nullish(),
+  referredEmail: zod.string().nullish(),
+  code: zod.string(),
+  status: zod.string(),
+  bonusAmount: zod.string(),
+  bonusPaid: zod.boolean(),
+  convertedAt: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListReferralsResponse = zod.array(ListReferralsResponseItem);
+
+/**
+ * @summary Create a referral
+ */
+export const CreateReferralBody = zod.object({
+  referrerId: zod.string(),
+  referredId: zod.string().optional(),
+  referredEmail: zod.string().email().optional(),
+  code: zod.string(),
+  bonusAmount: zod.string().optional(),
+});
+
+/**
+ * @summary Update referral status
+ */
+export const UpdateReferralParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateReferralBody = zod.object({
+  status: zod.string().optional(),
+  bonusPaid: zod.boolean().optional(),
+  convertedAt: zod.string().optional(),
+});
+
+export const UpdateReferralResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  referrerId: zod.string(),
+  referredId: zod.string().nullish(),
+  referredEmail: zod.string().nullish(),
+  code: zod.string(),
+  status: zod.string(),
+  bonusAmount: zod.string(),
+  bonusPaid: zod.boolean(),
+  convertedAt: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary List coupons
+ */
+export const ListCouponsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  code: zod.string(),
+  type: zod.string(),
+  value: zod.string(),
+  minOrderValue: zod.string().nullish(),
+  maxUses: zod.number().nullish(),
+  usedCount: zod.number(),
+  isActive: zod.boolean(),
+  validFrom: zod.string().nullish(),
+  validUntil: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListCouponsResponse = zod.array(ListCouponsResponseItem);
+
+/**
+ * @summary Create a coupon
+ */
+export const CreateCouponBody = zod.object({
+  code: zod.string(),
+  type: zod.enum(["percentage", "fixed"]).optional(),
+  value: zod.string(),
+  minOrderValue: zod.string().optional(),
+  maxUses: zod.number().optional(),
+  isActive: zod.boolean().optional(),
+  validFrom: zod.string().optional(),
+  validUntil: zod.string().optional(),
+});
+
+/**
+ * @summary Update a coupon
+ */
+export const UpdateCouponParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateCouponBody = zod.object({
+  code: zod.string(),
+  type: zod.enum(["percentage", "fixed"]).optional(),
+  value: zod.string(),
+  minOrderValue: zod.string().optional(),
+  maxUses: zod.number().optional(),
+  isActive: zod.boolean().optional(),
+  validFrom: zod.string().optional(),
+  validUntil: zod.string().optional(),
+});
+
+export const UpdateCouponResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  code: zod.string(),
+  type: zod.string(),
+  value: zod.string(),
+  minOrderValue: zod.string().nullish(),
+  maxUses: zod.number().nullish(),
+  usedCount: zod.number(),
+  isActive: zod.boolean(),
+  validFrom: zod.string().nullish(),
+  validUntil: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Delete a coupon
+ */
+export const DeleteCouponParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary List documents
+ */
+export const ListDocumentsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  type: zod.string(),
+  url: zod.string(),
+  mimeType: zod.string().nullish(),
+  sizeBytes: zod.number().nullish(),
+  entityType: zod.string().nullish(),
+  entityId: zod.string().nullish(),
+  uploadedById: zod.string(),
+  createdAt: zod.string(),
+});
+export const ListDocumentsResponse = zod.array(ListDocumentsResponseItem);
+
+/**
+ * @summary Upload/register a document
+ */
+export const CreateDocumentBody = zod.object({
+  name: zod.string(),
+  type: zod.string(),
+  url: zod.string().url(),
+  mimeType: zod.string().optional(),
+  sizeBytes: zod.number().optional(),
+  entityType: zod.string().optional(),
+  entityId: zod.string().optional(),
+});
+
+/**
+ * @summary Delete a document
+ */
+export const DeleteDocumentParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary List loyalty programs
+ */
+export const ListLoyaltyProgramsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  pointsPerReal: zod.string(),
+  realPerPoint: zod.string(),
+  minRedeemPoints: zod.number(),
+  isActive: zod.boolean(),
+  createdAt: zod.string(),
+});
+export const ListLoyaltyProgramsResponse = zod.array(
+  ListLoyaltyProgramsResponseItem,
+);
+
+/**
+ * @summary Create a loyalty program
+ */
+export const CreateLoyaltyProgramBody = zod.object({
+  name: zod.string(),
+  description: zod.string().optional(),
+  pointsPerReal: zod.string().optional(),
+  realPerPoint: zod.string().optional(),
+  minRedeemPoints: zod.number().optional(),
+});
+
+/**
+ * @summary Update a loyalty program
+ */
+export const UpdateLoyaltyProgramParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateLoyaltyProgramBody = zod.object({
+  name: zod.string(),
+  description: zod.string().optional(),
+  pointsPerReal: zod.string().optional(),
+  realPerPoint: zod.string().optional(),
+  minRedeemPoints: zod.number().optional(),
+});
+
+export const UpdateLoyaltyProgramResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  pointsPerReal: zod.string(),
+  realPerPoint: zod.string(),
+  minRedeemPoints: zod.number(),
+  isActive: zod.boolean(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary List loyalty members
+ */
+export const ListLoyaltyMembersResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  programId: zod.string(),
+  clientId: zod.string(),
+  totalPoints: zod.number(),
+  availablePoints: zod.number(),
+  tier: zod.string(),
+  joinedAt: zod.string(),
+});
+export const ListLoyaltyMembersResponse = zod.array(
+  ListLoyaltyMembersResponseItem,
+);
+
+/**
+ * @summary Enroll a client in loyalty program
+ */
+export const CreateLoyaltyMemberBody = zod.object({
+  programId: zod.string(),
+  clientId: zod.string(),
+  tier: zod.string().optional(),
+});
+
+/**
+ * @summary List loyalty transactions
+ */
+export const ListLoyaltyTransactionsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  memberId: zod.string(),
+  programId: zod.string(),
+  type: zod.string(),
+  points: zod.number(),
+  description: zod.string(),
+  referenceId: zod.string().nullish(),
+  referenceType: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListLoyaltyTransactionsResponse = zod.array(
+  ListLoyaltyTransactionsResponseItem,
+);
+
+/**
+ * @summary Create a loyalty transaction
+ */
+export const CreateLoyaltyTransactionBody = zod.object({
+  memberId: zod.string(),
+  programId: zod.string(),
+  type: zod.enum(["earn", "redeem", "expire", "bonus"]),
+  points: zod.number(),
+  description: zod.string().optional(),
+  referenceId: zod.string().optional(),
+  referenceType: zod.string().optional(),
+});
+
+/**
+ * @summary List chatbot conversations
+ */
+export const ListChatbotConversationsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  clientId: zod.string().nullish(),
+  channel: zod.string(),
+  status: zod.string(),
+  assignedUserId: zod.string().nullish(),
+  sessionId: zod.string().nullish(),
+  startedAt: zod.string(),
+  endedAt: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListChatbotConversationsResponse = zod.array(
+  ListChatbotConversationsResponseItem,
+);
+
+/**
+ * @summary Start a chatbot conversation
+ */
+export const CreateChatbotConversationBody = zod.object({
+  clientId: zod.string().optional(),
+  channel: zod.enum(["webchat", "whatsapp", "email"]).optional(),
+  sessionId: zod.string().optional(),
+});
+
+/**
+ * @summary Update a chatbot conversation
+ */
+export const UpdateChatbotConversationParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateChatbotConversationBody = zod.object({
+  status: zod.string().optional(),
+  assignedUserId: zod.string().optional(),
+  endedAt: zod.string().optional(),
+});
+
+export const UpdateChatbotConversationResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  clientId: zod.string().nullish(),
+  channel: zod.string(),
+  status: zod.string(),
+  assignedUserId: zod.string().nullish(),
+  sessionId: zod.string().nullish(),
+  startedAt: zod.string(),
+  endedAt: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary List messages for a conversation
+ */
+export const ListChatbotMessagesParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListChatbotMessagesResponseItem = zod.object({
+  id: zod.string(),
+  conversationId: zod.string(),
+  tenantId: zod.string(),
+  role: zod.string(),
+  content: zod.string(),
+  mediaUrl: zod.string().nullish(),
+  isBot: zod.boolean(),
+  sentAt: zod.string(),
+});
+export const ListChatbotMessagesResponse = zod.array(
+  ListChatbotMessagesResponseItem,
+);
+
+/**
+ * @summary Send a chatbot message
+ */
+export const CreateChatbotMessageBody = zod.object({
+  conversationId: zod.string(),
+  role: zod.enum(["user", "assistant", "system"]).optional(),
+  content: zod.string(),
+  mediaUrl: zod.string().optional(),
+  isBot: zod.boolean().optional(),
+});
+
+/**
+ * @summary List audit logs
+ */
+export const ListAuditLogsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  userId: zod.string().nullish(),
+  action: zod.string(),
+  entityType: zod.string(),
+  entityId: zod.string(),
+  before: zod.object({}).passthrough().nullish(),
+  after: zod.object({}).passthrough().nullish(),
+  ipAddress: zod.string().nullish(),
+  userAgent: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListAuditLogsResponse = zod.array(ListAuditLogsResponseItem);
+
+/**
+ * @summary List system configs
+ */
+export const ListSystemConfigsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  key: zod.string(),
+  value: zod.object({}).passthrough().nullish(),
+  updatedById: zod.string().nullish(),
+  updatedAt: zod.string(),
+});
+export const ListSystemConfigsResponse = zod.array(
+  ListSystemConfigsResponseItem,
+);
+
+/**
+ * @summary Upsert a system config
+ */
+export const UpsertSystemConfigBody = zod.object({
+  key: zod.string(),
+  value: zod.unknown().optional(),
+});
+
+export const UpsertSystemConfigResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  key: zod.string(),
+  value: zod.object({}).passthrough().nullish(),
+  updatedById: zod.string().nullish(),
+  updatedAt: zod.string(),
+});

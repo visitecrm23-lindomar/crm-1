@@ -1942,6 +1942,709 @@ paths:
               schema:
                 $ref: "#/components/schemas/UserProfile"
 
+  # ─── TENANTS ───────────────────────────────────────────────────
+  /tenants:
+    get:
+      operationId: listTenants
+      summary: List all tenants (superadmin only)
+      tags: [Tenants]
+      responses:
+        "200":
+          description: List of tenants
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tenant"
+    post:
+      operationId: createTenant
+      summary: Create a tenant (superadmin only)
+      tags: [Tenants]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTenantBody"
+      responses:
+        "201":
+          description: Created tenant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tenant"
+
+  /tenants/{id}:
+    get:
+      operationId: getTenant
+      summary: Get tenant by id
+      tags: [Tenants]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tenant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tenant"
+    patch:
+      operationId: updateTenant
+      summary: Update tenant
+      tags: [Tenants]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTenantBody"
+      responses:
+        "200":
+          description: Updated tenant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tenant"
+
+  # ─── BOARDING LOCATIONS ─────────────────────────────────────────
+  /boarding-locations:
+    get:
+      operationId: listBoardingLocations
+      summary: List boarding locations
+      tags: [Boarding]
+      responses:
+        "200":
+          description: List of boarding locations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BoardingLocation"
+    post:
+      operationId: createBoardingLocation
+      summary: Create a boarding location
+      tags: [Boarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBoardingLocationBody"
+      responses:
+        "201":
+          description: Created boarding location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardingLocation"
+
+  /boarding-locations/{id}:
+    patch:
+      operationId: updateBoardingLocation
+      summary: Update a boarding location
+      tags: [Boarding]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBoardingLocationBody"
+      responses:
+        "200":
+          description: Updated boarding location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardingLocation"
+    delete:
+      operationId: deleteBoardingLocation
+      summary: Delete a boarding location
+      tags: [Boarding]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── COMMISSION RULES ───────────────────────────────────────────
+  /commission-rules:
+    get:
+      operationId: listCommissionRules
+      summary: List commission rules
+      tags: [Commissions]
+      responses:
+        "200":
+          description: List of commission rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CommissionRule"
+    post:
+      operationId: createCommissionRule
+      summary: Create a commission rule
+      tags: [Commissions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCommissionRuleBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommissionRule"
+
+  /commission-rules/{id}:
+    patch:
+      operationId: updateCommissionRule
+      summary: Update a commission rule
+      tags: [Commissions]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCommissionRuleBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommissionRule"
+    delete:
+      operationId: deleteCommissionRule
+      summary: Delete a commission rule
+      tags: [Commissions]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── COMMISSIONS ────────────────────────────────────────────────
+  /commissions:
+    get:
+      operationId: listCommissions
+      summary: List commissions
+      tags: [Commissions]
+      responses:
+        "200":
+          description: List of commissions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Commission"
+
+  /commissions/{id}:
+    patch:
+      operationId: updateCommission
+      summary: Update commission status
+      tags: [Commissions]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCommissionBody"
+      responses:
+        "200":
+          description: Updated commission
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Commission"
+
+  # ─── REFERRALS ──────────────────────────────────────────────────
+  /referrals:
+    get:
+      operationId: listReferrals
+      summary: List referrals
+      tags: [Referrals]
+      responses:
+        "200":
+          description: List of referrals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Referral"
+    post:
+      operationId: createReferral
+      summary: Create a referral
+      tags: [Referrals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReferralBody"
+      responses:
+        "201":
+          description: Created referral
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Referral"
+
+  /referrals/{id}:
+    patch:
+      operationId: updateReferral
+      summary: Update referral status
+      tags: [Referrals]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateReferralBody"
+      responses:
+        "200":
+          description: Updated referral
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Referral"
+
+  # ─── COUPONS ────────────────────────────────────────────────────
+  /coupons:
+    get:
+      operationId: listCoupons
+      summary: List coupons
+      tags: [Coupons]
+      responses:
+        "200":
+          description: List of coupons
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Coupon"
+    post:
+      operationId: createCoupon
+      summary: Create a coupon
+      tags: [Coupons]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCouponBody"
+      responses:
+        "201":
+          description: Created coupon
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Coupon"
+
+  /coupons/{id}:
+    patch:
+      operationId: updateCoupon
+      summary: Update a coupon
+      tags: [Coupons]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCouponBody"
+      responses:
+        "200":
+          description: Updated coupon
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Coupon"
+    delete:
+      operationId: deleteCoupon
+      summary: Delete a coupon
+      tags: [Coupons]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── DOCUMENTS ──────────────────────────────────────────────────
+  /documents:
+    get:
+      operationId: listDocuments
+      summary: List documents
+      tags: [Documents]
+      responses:
+        "200":
+          description: List of documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Document"
+    post:
+      operationId: createDocument
+      summary: Upload/register a document
+      tags: [Documents]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDocumentBody"
+      responses:
+        "201":
+          description: Created document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+
+  /documents/{id}:
+    delete:
+      operationId: deleteDocument
+      summary: Delete a document
+      tags: [Documents]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── LOYALTY ────────────────────────────────────────────────────
+  /loyalty-programs:
+    get:
+      operationId: listLoyaltyPrograms
+      summary: List loyalty programs
+      tags: [Loyalty]
+      responses:
+        "200":
+          description: List of loyalty programs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LoyaltyProgram"
+    post:
+      operationId: createLoyaltyProgram
+      summary: Create a loyalty program
+      tags: [Loyalty]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLoyaltyProgramBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoyaltyProgram"
+
+  /loyalty-programs/{id}:
+    patch:
+      operationId: updateLoyaltyProgram
+      summary: Update a loyalty program
+      tags: [Loyalty]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLoyaltyProgramBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoyaltyProgram"
+
+  /loyalty-members:
+    get:
+      operationId: listLoyaltyMembers
+      summary: List loyalty members
+      tags: [Loyalty]
+      responses:
+        "200":
+          description: List of loyalty members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LoyaltyMember"
+    post:
+      operationId: createLoyaltyMember
+      summary: Enroll a client in loyalty program
+      tags: [Loyalty]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLoyaltyMemberBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoyaltyMember"
+
+  /loyalty-transactions:
+    get:
+      operationId: listLoyaltyTransactions
+      summary: List loyalty transactions
+      tags: [Loyalty]
+      responses:
+        "200":
+          description: List of loyalty transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LoyaltyTransaction"
+    post:
+      operationId: createLoyaltyTransaction
+      summary: Create a loyalty transaction
+      tags: [Loyalty]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLoyaltyTransactionBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoyaltyTransaction"
+
+  # ─── CHATBOT ────────────────────────────────────────────────────
+  /chatbot-conversations:
+    get:
+      operationId: listChatbotConversations
+      summary: List chatbot conversations
+      tags: [Chatbot]
+      responses:
+        "200":
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChatbotConversation"
+    post:
+      operationId: createChatbotConversation
+      summary: Start a chatbot conversation
+      tags: [Chatbot]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChatbotConversationBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatbotConversation"
+
+  /chatbot-conversations/{id}:
+    patch:
+      operationId: updateChatbotConversation
+      summary: Update a chatbot conversation
+      tags: [Chatbot]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateChatbotConversationBody"
+      responses:
+        "200":
+          description: Updated conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatbotConversation"
+
+  /chatbot-conversations/{id}/messages:
+    get:
+      operationId: listChatbotMessages
+      summary: List messages for a conversation
+      tags: [Chatbot]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChatbotMessage"
+
+  /chatbot-messages:
+    post:
+      operationId: createChatbotMessage
+      summary: Send a chatbot message
+      tags: [Chatbot]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChatbotMessageBody"
+      responses:
+        "201":
+          description: Created message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatbotMessage"
+
+  # ─── AUDIT ──────────────────────────────────────────────────────
+  /audit-logs:
+    get:
+      operationId: listAuditLogs
+      summary: List audit logs
+      tags: [Audit]
+      responses:
+        "200":
+          description: List of audit logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditLog"
+
+  /system-configs:
+    get:
+      operationId: listSystemConfigs
+      summary: List system configs
+      tags: [Audit]
+      responses:
+        "200":
+          description: List of system configs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SystemConfig"
+    put:
+      operationId: upsertSystemConfig
+      summary: Upsert a system config
+      tags: [Audit]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertSystemConfigBody"
+      responses:
+        "200":
+          description: Config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemConfig"
+
 components:
   schemas:
     HealthStatus:
@@ -3701,3 +4404,589 @@ components:
           type: ["string", "null"]
         isActive:
           type: ["boolean", "null"]
+
+    # ─── TENANT ────────────────────────────────────────────────────
+    Tenant:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        email:
+          type: string
+        plan:
+          type: ["string", "null"]
+        logoUrl:
+          type: ["string", "null"]
+        primaryColor:
+          type: ["string", "null"]
+        customDomain:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+      required: [id, name, slug, email, isActive, createdAt]
+
+    CreateTenantBody:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        email:
+          type: string
+        plan:
+          type: string
+      required: [name, slug, email]
+
+    UpdateTenantBody:
+      type: object
+      properties:
+        name:
+          type: string
+        plan:
+          type: string
+        logoUrl:
+          type: string
+        primaryColor:
+          type: string
+        customDomain:
+          type: string
+        isActive:
+          type: boolean
+
+    # ─── BOARDING LOCATION ─────────────────────────────────────────
+    BoardingLocation:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        name:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        reference:
+          type: ["string", "null"]
+        departureTime:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, tenantId, name, address, city, state, createdAt]
+
+    CreateBoardingLocationBody:
+      type: object
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        reference:
+          type: string
+        departureTime:
+          type: string
+      required: [name, address, city, state]
+
+    # ─── COMMISSION RULE ───────────────────────────────────────────
+    CommissionRule:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        value:
+          type: string
+        appliesTo:
+          type: string
+        tripId:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+      required: [id, tenantId, name, type, value, appliesTo, isActive, createdAt]
+
+    CreateCommissionRuleBody:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [percentage, fixed]
+        value:
+          type: string
+        appliesTo:
+          type: string
+        tripId:
+          type: string
+        isActive:
+          type: boolean
+      required: [name, value]
+
+    # ─── COMMISSION ────────────────────────────────────────────────
+    Commission:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        ruleId:
+          type: ["string", "null"]
+        userId:
+          type: string
+        reservationId:
+          type: ["string", "null"]
+        baseAmount:
+          type: string
+        commissionAmount:
+          type: string
+        status:
+          type: string
+        paidAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, tenantId, userId, baseAmount, commissionAmount, status, createdAt]
+
+    UpdateCommissionBody:
+      type: object
+      properties:
+        status:
+          type: string
+        paidAt:
+          type: string
+
+    # ─── REFERRAL ──────────────────────────────────────────────────
+    Referral:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        referrerId:
+          type: string
+        referredId:
+          type: ["string", "null"]
+        referredEmail:
+          type: ["string", "null"]
+        code:
+          type: string
+        status:
+          type: string
+        bonusAmount:
+          type: string
+        bonusPaid:
+          type: boolean
+        convertedAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, tenantId, referrerId, code, status, bonusAmount, bonusPaid, createdAt]
+
+    CreateReferralBody:
+      type: object
+      properties:
+        referrerId:
+          type: string
+        referredId:
+          type: string
+        referredEmail:
+          type: string
+          format: email
+        code:
+          type: string
+        bonusAmount:
+          type: string
+      required: [referrerId, code]
+
+    UpdateReferralBody:
+      type: object
+      properties:
+        status:
+          type: string
+        bonusPaid:
+          type: boolean
+        convertedAt:
+          type: string
+
+    # ─── COUPON ────────────────────────────────────────────────────
+    Coupon:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        code:
+          type: string
+        type:
+          type: string
+        value:
+          type: string
+        minOrderValue:
+          type: ["string", "null"]
+        maxUses:
+          type: ["integer", "null"]
+        usedCount:
+          type: integer
+        isActive:
+          type: boolean
+        validFrom:
+          type: ["string", "null"]
+        validUntil:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, tenantId, code, type, value, usedCount, isActive, createdAt]
+
+    CreateCouponBody:
+      type: object
+      properties:
+        code:
+          type: string
+        type:
+          type: string
+          enum: [percentage, fixed]
+        value:
+          type: string
+        minOrderValue:
+          type: string
+        maxUses:
+          type: integer
+        isActive:
+          type: boolean
+        validFrom:
+          type: string
+        validUntil:
+          type: string
+      required: [code, value]
+
+    # ─── DOCUMENT ──────────────────────────────────────────────────
+    Document:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        url:
+          type: string
+        mimeType:
+          type: ["string", "null"]
+        sizeBytes:
+          type: ["integer", "null"]
+        entityType:
+          type: ["string", "null"]
+        entityId:
+          type: ["string", "null"]
+        uploadedById:
+          type: string
+        createdAt:
+          type: string
+      required: [id, tenantId, name, type, url, uploadedById, createdAt]
+
+    CreateDocumentBody:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        url:
+          type: string
+          format: uri
+        mimeType:
+          type: string
+        sizeBytes:
+          type: integer
+        entityType:
+          type: string
+        entityId:
+          type: string
+      required: [name, type, url]
+
+    # ─── LOYALTY PROGRAM ───────────────────────────────────────────
+    LoyaltyProgram:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        pointsPerReal:
+          type: string
+        realPerPoint:
+          type: string
+        minRedeemPoints:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+      required: [id, tenantId, name, pointsPerReal, realPerPoint, minRedeemPoints, isActive, createdAt]
+
+    CreateLoyaltyProgramBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        pointsPerReal:
+          type: string
+        realPerPoint:
+          type: string
+        minRedeemPoints:
+          type: integer
+      required: [name]
+
+    # ─── LOYALTY MEMBER ────────────────────────────────────────────
+    LoyaltyMember:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        programId:
+          type: string
+        clientId:
+          type: string
+        totalPoints:
+          type: integer
+        availablePoints:
+          type: integer
+        tier:
+          type: string
+        joinedAt:
+          type: string
+      required: [id, tenantId, programId, clientId, totalPoints, availablePoints, tier, joinedAt]
+
+    CreateLoyaltyMemberBody:
+      type: object
+      properties:
+        programId:
+          type: string
+        clientId:
+          type: string
+        tier:
+          type: string
+      required: [programId, clientId]
+
+    # ─── LOYALTY TRANSACTION ───────────────────────────────────────
+    LoyaltyTransaction:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        memberId:
+          type: string
+        programId:
+          type: string
+        type:
+          type: string
+        points:
+          type: integer
+        description:
+          type: string
+        referenceId:
+          type: ["string", "null"]
+        referenceType:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, tenantId, memberId, programId, type, points, description, createdAt]
+
+    CreateLoyaltyTransactionBody:
+      type: object
+      properties:
+        memberId:
+          type: string
+        programId:
+          type: string
+        type:
+          type: string
+          enum: [earn, redeem, expire, bonus]
+        points:
+          type: integer
+        description:
+          type: string
+        referenceId:
+          type: string
+        referenceType:
+          type: string
+      required: [memberId, programId, type, points]
+
+    # ─── CHATBOT CONVERSATION ──────────────────────────────────────
+    ChatbotConversation:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        clientId:
+          type: ["string", "null"]
+        channel:
+          type: string
+        status:
+          type: string
+        assignedUserId:
+          type: ["string", "null"]
+        sessionId:
+          type: ["string", "null"]
+        startedAt:
+          type: string
+        endedAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, tenantId, channel, status, startedAt, createdAt]
+
+    CreateChatbotConversationBody:
+      type: object
+      properties:
+        clientId:
+          type: string
+        channel:
+          type: string
+          enum: [webchat, whatsapp, email]
+        sessionId:
+          type: string
+
+    UpdateChatbotConversationBody:
+      type: object
+      properties:
+        status:
+          type: string
+        assignedUserId:
+          type: string
+        endedAt:
+          type: string
+
+    # ─── CHATBOT MESSAGE ───────────────────────────────────────────
+    ChatbotMessage:
+      type: object
+      properties:
+        id:
+          type: string
+        conversationId:
+          type: string
+        tenantId:
+          type: string
+        role:
+          type: string
+        content:
+          type: string
+        mediaUrl:
+          type: ["string", "null"]
+        isBot:
+          type: boolean
+        sentAt:
+          type: string
+      required: [id, conversationId, tenantId, role, content, isBot, sentAt]
+
+    CreateChatbotMessageBody:
+      type: object
+      properties:
+        conversationId:
+          type: string
+        role:
+          type: string
+          enum: [user, assistant, system]
+        content:
+          type: string
+        mediaUrl:
+          type: string
+        isBot:
+          type: boolean
+      required: [conversationId, content]
+
+    # ─── AUDIT LOG ─────────────────────────────────────────────────
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        userId:
+          type: ["string", "null"]
+        action:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: string
+        before:
+          type: object
+          nullable: true
+        after:
+          type: object
+          nullable: true
+        ipAddress:
+          type: ["string", "null"]
+        userAgent:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, tenantId, action, entityType, entityId, createdAt]
+
+    # ─── SYSTEM CONFIG ─────────────────────────────────────────────
+    SystemConfig:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        key:
+          type: string
+        value:
+          type: object
+          nullable: true
+        updatedById:
+          type: ["string", "null"]
+        updatedAt:
+          type: string
+      required: [id, tenantId, key, updatedAt]
+
+    UpsertSystemConfigBody:
+      type: object
+      properties:
+        key:
+          type: string
+        value: {}
+      required: [key]

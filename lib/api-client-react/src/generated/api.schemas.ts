@@ -1132,6 +1132,388 @@ export interface UpdateUserBody {
   isActive?: boolean | null;
 }
 
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  email: string;
+  /** @nullable */
+  plan?: string | null;
+  /** @nullable */
+  logoUrl?: string | null;
+  /** @nullable */
+  primaryColor?: string | null;
+  /** @nullable */
+  customDomain?: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface CreateTenantBody {
+  name: string;
+  slug: string;
+  email: string;
+  plan?: string;
+}
+
+export interface UpdateTenantBody {
+  name?: string;
+  plan?: string;
+  logoUrl?: string;
+  primaryColor?: string;
+  customDomain?: string;
+  isActive?: boolean;
+}
+
+export interface BoardingLocation {
+  id: string;
+  tenantId: string;
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  /** @nullable */
+  reference?: string | null;
+  /** @nullable */
+  departureTime?: string | null;
+  createdAt: string;
+}
+
+export interface CreateBoardingLocationBody {
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  reference?: string;
+  departureTime?: string;
+}
+
+export interface CommissionRule {
+  id: string;
+  tenantId: string;
+  name: string;
+  type: string;
+  value: string;
+  appliesTo: string;
+  /** @nullable */
+  tripId?: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type CreateCommissionRuleBodyType =
+  (typeof CreateCommissionRuleBodyType)[keyof typeof CreateCommissionRuleBodyType];
+
+export const CreateCommissionRuleBodyType = {
+  percentage: "percentage",
+  fixed: "fixed",
+} as const;
+
+export interface CreateCommissionRuleBody {
+  name: string;
+  type?: CreateCommissionRuleBodyType;
+  value: string;
+  appliesTo?: string;
+  tripId?: string;
+  isActive?: boolean;
+}
+
+export interface Commission {
+  id: string;
+  tenantId: string;
+  /** @nullable */
+  ruleId?: string | null;
+  userId: string;
+  /** @nullable */
+  reservationId?: string | null;
+  baseAmount: string;
+  commissionAmount: string;
+  status: string;
+  /** @nullable */
+  paidAt?: string | null;
+  createdAt: string;
+}
+
+export interface UpdateCommissionBody {
+  status?: string;
+  paidAt?: string;
+}
+
+export interface Referral {
+  id: string;
+  tenantId: string;
+  referrerId: string;
+  /** @nullable */
+  referredId?: string | null;
+  /** @nullable */
+  referredEmail?: string | null;
+  code: string;
+  status: string;
+  bonusAmount: string;
+  bonusPaid: boolean;
+  /** @nullable */
+  convertedAt?: string | null;
+  createdAt: string;
+}
+
+export interface CreateReferralBody {
+  referrerId: string;
+  referredId?: string;
+  referredEmail?: string;
+  code: string;
+  bonusAmount?: string;
+}
+
+export interface UpdateReferralBody {
+  status?: string;
+  bonusPaid?: boolean;
+  convertedAt?: string;
+}
+
+export interface Coupon {
+  id: string;
+  tenantId: string;
+  code: string;
+  type: string;
+  value: string;
+  /** @nullable */
+  minOrderValue?: string | null;
+  /** @nullable */
+  maxUses?: number | null;
+  usedCount: number;
+  isActive: boolean;
+  /** @nullable */
+  validFrom?: string | null;
+  /** @nullable */
+  validUntil?: string | null;
+  createdAt: string;
+}
+
+export type CreateCouponBodyType =
+  (typeof CreateCouponBodyType)[keyof typeof CreateCouponBodyType];
+
+export const CreateCouponBodyType = {
+  percentage: "percentage",
+  fixed: "fixed",
+} as const;
+
+export interface CreateCouponBody {
+  code: string;
+  type?: CreateCouponBodyType;
+  value: string;
+  minOrderValue?: string;
+  maxUses?: number;
+  isActive?: boolean;
+  validFrom?: string;
+  validUntil?: string;
+}
+
+export interface Document {
+  id: string;
+  tenantId: string;
+  name: string;
+  type: string;
+  url: string;
+  /** @nullable */
+  mimeType?: string | null;
+  /** @nullable */
+  sizeBytes?: number | null;
+  /** @nullable */
+  entityType?: string | null;
+  /** @nullable */
+  entityId?: string | null;
+  uploadedById: string;
+  createdAt: string;
+}
+
+export interface CreateDocumentBody {
+  name: string;
+  type: string;
+  url: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  entityType?: string;
+  entityId?: string;
+}
+
+export interface LoyaltyProgram {
+  id: string;
+  tenantId: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  pointsPerReal: string;
+  realPerPoint: string;
+  minRedeemPoints: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface CreateLoyaltyProgramBody {
+  name: string;
+  description?: string;
+  pointsPerReal?: string;
+  realPerPoint?: string;
+  minRedeemPoints?: number;
+}
+
+export interface LoyaltyMember {
+  id: string;
+  tenantId: string;
+  programId: string;
+  clientId: string;
+  totalPoints: number;
+  availablePoints: number;
+  tier: string;
+  joinedAt: string;
+}
+
+export interface CreateLoyaltyMemberBody {
+  programId: string;
+  clientId: string;
+  tier?: string;
+}
+
+export interface LoyaltyTransaction {
+  id: string;
+  tenantId: string;
+  memberId: string;
+  programId: string;
+  type: string;
+  points: number;
+  description: string;
+  /** @nullable */
+  referenceId?: string | null;
+  /** @nullable */
+  referenceType?: string | null;
+  createdAt: string;
+}
+
+export type CreateLoyaltyTransactionBodyType =
+  (typeof CreateLoyaltyTransactionBodyType)[keyof typeof CreateLoyaltyTransactionBodyType];
+
+export const CreateLoyaltyTransactionBodyType = {
+  earn: "earn",
+  redeem: "redeem",
+  expire: "expire",
+  bonus: "bonus",
+} as const;
+
+export interface CreateLoyaltyTransactionBody {
+  memberId: string;
+  programId: string;
+  type: CreateLoyaltyTransactionBodyType;
+  points: number;
+  description?: string;
+  referenceId?: string;
+  referenceType?: string;
+}
+
+export interface ChatbotConversation {
+  id: string;
+  tenantId: string;
+  /** @nullable */
+  clientId?: string | null;
+  channel: string;
+  status: string;
+  /** @nullable */
+  assignedUserId?: string | null;
+  /** @nullable */
+  sessionId?: string | null;
+  startedAt: string;
+  /** @nullable */
+  endedAt?: string | null;
+  createdAt: string;
+}
+
+export type CreateChatbotConversationBodyChannel =
+  (typeof CreateChatbotConversationBodyChannel)[keyof typeof CreateChatbotConversationBodyChannel];
+
+export const CreateChatbotConversationBodyChannel = {
+  webchat: "webchat",
+  whatsapp: "whatsapp",
+  email: "email",
+} as const;
+
+export interface CreateChatbotConversationBody {
+  clientId?: string;
+  channel?: CreateChatbotConversationBodyChannel;
+  sessionId?: string;
+}
+
+export interface UpdateChatbotConversationBody {
+  status?: string;
+  assignedUserId?: string;
+  endedAt?: string;
+}
+
+export interface ChatbotMessage {
+  id: string;
+  conversationId: string;
+  tenantId: string;
+  role: string;
+  content: string;
+  /** @nullable */
+  mediaUrl?: string | null;
+  isBot: boolean;
+  sentAt: string;
+}
+
+export type CreateChatbotMessageBodyRole =
+  (typeof CreateChatbotMessageBodyRole)[keyof typeof CreateChatbotMessageBodyRole];
+
+export const CreateChatbotMessageBodyRole = {
+  user: "user",
+  assistant: "assistant",
+  system: "system",
+} as const;
+
+export interface CreateChatbotMessageBody {
+  conversationId: string;
+  role?: CreateChatbotMessageBodyRole;
+  content: string;
+  mediaUrl?: string;
+  isBot?: boolean;
+}
+
+export type AuditLogBefore = { [key: string]: unknown } | null;
+
+export type AuditLogAfter = { [key: string]: unknown } | null;
+
+export interface AuditLog {
+  id: string;
+  tenantId: string;
+  /** @nullable */
+  userId?: string | null;
+  action: string;
+  entityType: string;
+  entityId: string;
+  before?: AuditLogBefore;
+  after?: AuditLogAfter;
+  /** @nullable */
+  ipAddress?: string | null;
+  /** @nullable */
+  userAgent?: string | null;
+  createdAt: string;
+}
+
+export type SystemConfigValue = { [key: string]: unknown } | null;
+
+export interface SystemConfig {
+  id: string;
+  tenantId: string;
+  key: string;
+  value?: SystemConfigValue;
+  /** @nullable */
+  updatedById?: string | null;
+  updatedAt: string;
+}
+
+export interface UpsertSystemConfigBody {
+  key: string;
+  value?: unknown;
+}
+
 export type GetDashboardRevenueChartParams = {
   period?: GetDashboardRevenueChartPeriod;
 };
