@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ElementType } from "react";
 import {
   useGetDashboardSummary, useGetDashboardRevenueChart, useGetDashboardUpcomingTrips,
   useListPayments, useListClients, useGetMe, useListPipelineStages, useListDeals
@@ -24,7 +24,7 @@ function formatCurrency(value: number) {
 const DONUT_COLORS = ["#3B82F6", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#6B7280"];
 
 function KpiCard({ title, value, sub, icon: Icon, loading, color = "text-primary" }: {
-  title: string; value: string | number; sub?: string; icon: React.ElementType; loading: boolean; color?: string;
+  title: string; value: string | number; sub?: string; icon: ElementType; loading: boolean; color?: string;
 }) {
   return (
     <Card>

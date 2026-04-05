@@ -138,6 +138,7 @@ export const ListClientsResponse = zod.object({
       updatedAt: zod.string(),
       lastContactAt: zod.string().nullish(),
       origin: zod.string().nullish(),
+      lastTripName: zod.string().nullish(),
     }),
   ),
   total: zod.number(),
@@ -199,6 +200,7 @@ export const GetClientResponse = zod.object({
   updatedAt: zod.string(),
   lastContactAt: zod.string().nullish(),
   origin: zod.string().nullish(),
+  lastTripName: zod.string().nullish(),
 });
 
 /**
@@ -257,6 +259,7 @@ export const UpdateClientResponse = zod.object({
   updatedAt: zod.string(),
   lastContactAt: zod.string().nullish(),
   origin: zod.string().nullish(),
+  lastTripName: zod.string().nullish(),
 });
 
 /**
@@ -308,6 +311,7 @@ export const UpdateClientPipelineStageResponse = zod.object({
   updatedAt: zod.string(),
   lastContactAt: zod.string().nullish(),
   origin: zod.string().nullish(),
+  lastTripName: zod.string().nullish(),
 });
 
 /**

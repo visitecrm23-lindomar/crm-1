@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { clientsTable, notesTable, reservationsTable } from "@workspace/db";
+import { clientsTable, notesTable, reservationsTable, tripsTable } from "@workspace/db";
 import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -97,8 +97,25 @@ router.get("/clients", async (req, res): Promise<void> => {
     const [countResult] = await db.select({ count: sql<number>`count(*)` })
       .from(clientsTable).where(and(...conditions));
 
+    const clientIds = clients.map(c => c.id);
+    let lastTripMap: Record<string, string> = {};
+    if (clientIds.length > 0) {
+      const lastTrips = await db.select({
+        clientId: reservationsTable.clientId,
+        tripName: tripsTable.name,
+        createdAt: reservationsTable.createdAt,
+      })
+        .from(reservationsTable)
+        .innerJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
+        .where(and(eq(reservationsTable.tenantId, me.tenantId), inArray(reservationsTable.clientId, clientIds)))
+        .orderBy(desc(reservationsTable.createdAt));
+      for (const row of lastTrips) {
+        if (!lastTripMap[row.clientId]) lastTripMap[row.clientId] = row.tripName;
+      }
+    }
+
     res.json({
-      data: clients.map(formatClient),
+      data: clients.map(c => ({ ...formatClient(c), lastTripName: lastTripMap[c.id] ?? null })),
       total: Number(countResult?.count ?? 0),
       page: pageNum,
       limit: limitNum,

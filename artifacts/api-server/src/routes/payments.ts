@@ -91,17 +91,21 @@ router.get("/payments", async (req, res): Promise<void> => {
         return;
       }
     } else if (me.role === "vendedor") {
+      const sellerClients = await db.select({ id: clientsTable.id })
+        .from(clientsTable)
+        .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.createdById, me.id)));
+      if (!sellerClients.length) {
+        res.json({ data: [], total: 0, page: pageNum, limit: limitNum });
+        return;
+      }
+      const sellerClientIds = sellerClients.map(c => c.id);
       if (clientIdParam) {
-        conditions.push(eq(paymentsTable.clientId, clientIdParam));
-      } else {
-        const sellerClients = await db.select({ id: clientsTable.id })
-          .from(clientsTable)
-          .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.createdById, me.id)));
-        if (!sellerClients.length) {
+        if (!sellerClientIds.includes(clientIdParam)) {
           res.json({ data: [], total: 0, page: pageNum, limit: limitNum });
           return;
         }
-        const sellerClientIds = sellerClients.map(c => c.id);
+        conditions.push(eq(paymentsTable.clientId, clientIdParam));
+      } else {
         conditions.push(inArray(paymentsTable.clientId, sellerClientIds));
       }
     } else if (clientIdParam) {

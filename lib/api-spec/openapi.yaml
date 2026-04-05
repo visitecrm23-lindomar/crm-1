@@ -3156,6 +3156,8 @@ components:
           type: ["string", "null"]
         origin:
           type: ["string", "null"]
+        lastTripName:
+          type: ["string", "null"]
       required:
         - id
         - name

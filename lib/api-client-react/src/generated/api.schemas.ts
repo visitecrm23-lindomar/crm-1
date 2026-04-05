@@ -100,6 +100,8 @@ export interface Client {
   lastContactAt?: string | null;
   /** @nullable */
   origin?: string | null;
+  /** @nullable */
+  lastTripName?: string | null;
 }
 
 export interface ClientListResponse {

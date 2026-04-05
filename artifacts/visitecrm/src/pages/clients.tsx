@@ -744,6 +744,7 @@ export default function Clients() {
                 <TableHead>Contato</TableHead>
                 <TableHead>Localidade</TableHead>
                 <TableHead>Origem</TableHead>
+                <TableHead>Última Viagem</TableHead>
                 <TableHead>Classificação</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead><SortableHeader label="Gasto Total" field="totalSpent" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></TableHead>
@@ -754,11 +755,11 @@ export default function Clients() {
             <TableBody>
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i}>{Array.from({ length: 9 }).map((__, j) => <TableCell key={j}><Skeleton className="h-8 w-full" /></TableCell>)}</TableRow>
+                  <TableRow key={i}>{Array.from({ length: 10 }).map((__, j) => <TableCell key={j}><Skeleton className="h-8 w-full" /></TableCell>)}</TableRow>
                 ))
               ) : (clientsData?.data ?? []).length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
                     {hasFilters ? "Nenhum cliente encontrado com os filtros aplicados." : "Nenhum cliente cadastrado."}
                   </TableCell>
                 </TableRow>
@@ -790,6 +791,11 @@ export default function Clients() {
                       <TableCell>
                         {client.origin ? (
                           <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5 truncate max-w-[100px] inline-block">{client.origin}</span>
+                        ) : <span className="text-muted-foreground text-sm">—</span>}
+                      </TableCell>
+                      <TableCell>
+                        {client.lastTripName ? (
+                          <span className="text-xs text-muted-foreground truncate max-w-[120px] inline-block">{client.lastTripName}</span>
                         ) : <span className="text-muted-foreground text-sm">—</span>}
                       </TableCell>
                       <TableCell>
