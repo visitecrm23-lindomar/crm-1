@@ -35,12 +35,12 @@ const UpdateDealBody = z.object({
 const MoveDealBody = z.object({ stageId: z.string() });
 
 const DEFAULT_STAGES = [
-  { name: "Novo Lead", order: 1, color: "#6366F1", isFinal: false },
-  { name: "Qualificado", order: 2, color: "#8B5CF6", isFinal: false },
-  { name: "Proposta Enviada", order: 3, color: "#F59E0B", isFinal: false },
-  { name: "Negociação", order: 4, color: "#EF4444", isFinal: false },
-  { name: "Reserva Feita", order: 5, color: "#10B981", isFinal: false },
-  { name: "Pago", order: 6, color: "#06B6D4", isFinal: false },
+  { name: "Novos", order: 1, color: "#6366F1", isFinal: false },
+  { name: "Contato", order: 2, color: "#8B5CF6", isFinal: false },
+  { name: "Qualificados", order: 3, color: "#F59E0B", isFinal: false },
+  { name: "Reservados", order: 4, color: "#10B981", isFinal: false },
+  { name: "Proposta", order: 5, color: "#EF4444", isFinal: false },
+  { name: "Em Viagem", order: 6, color: "#06B6D4", isFinal: false },
   { name: "Pós-Venda", order: 7, color: "#6B7280", isFinal: true },
 ];
 

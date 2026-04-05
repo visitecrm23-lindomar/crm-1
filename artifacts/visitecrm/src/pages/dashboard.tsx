@@ -51,7 +51,7 @@ function AgencyDashboard() {
   const { data: rawChartData, isLoading: loadingChart } = useGetDashboardRevenueChart({ period: "12m" });
   const chartData = rawChartData?.slice(-6);
   const { data: upcomingTrips, isLoading: loadingTrips } = useGetDashboardUpcomingTrips();
-  const { data: recentClients, isLoading: loadingClients } = useListClients({ limit: 10, page: 1 });
+  const { data: recentClients, isLoading: loadingClients } = useListClients({ limit: 10, page: 1, sortBy: "createdAt", sortOrder: "desc" });
   const { data: pendingPayments, isLoading: loadingPayments } = useListPayments({ status: "pending", limit: 10 });
   const { data: stages, isLoading: loadingStages } = useListPipelineStages();
   const { data: deals, isLoading: loadingDeals } = useListDeals({ status: "open" });
@@ -243,7 +243,7 @@ function AgencyDashboard() {
               <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
             ) : (
               <div className="space-y-2">
-                {recentClients?.data.slice(0, 8).map(client => (
+                {recentClients?.data.slice(0, 10).map(client => (
                   <div key={client.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
@@ -520,6 +520,7 @@ function ClientDashboard() {
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm">Ver Voucher</Button>
+                <Button variant="outline" size="sm">Baixar PDF</Button>
               </div>
             </div>
           </CardContent>

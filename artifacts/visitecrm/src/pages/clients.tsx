@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   useListClients, useCreateClient, useUpdateClient,
-  useListPipelineStages, useListReservations, useListPayments, useListTrips
+  useListPipelineStages, useListReservations, useListPayments, useListTrips, useListUsers
 } from "@workspace/api-client-react";
 import type { Client } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -504,8 +504,10 @@ export default function Clients() {
   const [filterPipelineStage, setFilterPipelineStage] = useState<string>("");
   const [filterCity, setFilterCity] = useState<string>("");
   const [filterTripId, setFilterTripId] = useState<string>("");
+  const [filterSellerId, setFilterSellerId] = useState<string>("");
   const [filterDateFrom, setFilterDateFrom] = useState<string>("");
   const [filterDateTo, setFilterDateTo] = useState<string>("");
+  const [filterOrigin, setFilterOrigin] = useState<string>("");
   const [sortBy, setSortBy] = useState<SortField>("createdAt");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -515,14 +517,16 @@ export default function Clients() {
 
   const { data: stages } = useListPipelineStages();
   const { data: tripsData } = useListTrips({ limit: 100 });
+  const { data: sellers } = useListUsers();
 
   const { data: clientsData, isLoading, refetch } = useListClients({
     search: search || undefined,
     status: filterStatus || undefined,
     pipelineStage: filterPipelineStage || undefined,
     classification: filterClassification || undefined,
-    city: filterCity || undefined,
+    city: filterCity || filterOrigin || undefined,
     tripId: filterTripId || undefined,
+    sellerId: filterSellerId || undefined,
     dateFrom: filterDateFrom || undefined,
     dateTo: filterDateTo || undefined,
     sortBy: sortBy || undefined,
@@ -553,12 +557,13 @@ export default function Clients() {
     setPage(1);
   }, [sortBy]);
 
-  const hasFilters = !!(search || filterStatus || filterClassification || filterPipelineStage || filterCity || filterTripId || filterDateFrom || filterDateTo);
+  const hasFilters = !!(search || filterStatus || filterClassification || filterPipelineStage || filterCity || filterTripId || filterSellerId || filterDateFrom || filterDateTo || filterOrigin);
 
   const clearFilters = () => {
     setSearch(""); setFilterStatus(""); setFilterClassification("");
     setFilterPipelineStage(""); setFilterCity(""); setFilterTripId("");
-    setFilterDateFrom(""); setFilterDateTo(""); setPage(1);
+    setFilterSellerId(""); setFilterDateFrom(""); setFilterDateTo("");
+    setFilterOrigin(""); setPage(1);
   };
 
   const totalPages = Math.ceil((clientsData?.total ?? 0) / LIMIT);
@@ -634,12 +639,21 @@ export default function Clients() {
             </Select>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Input placeholder="Filtrar por cidade..." value={filterCity} onChange={e => { setFilterCity(e.target.value); setPage(1); }} className="w-40" />
+            <Input placeholder="Filtrar por cidade / origem..." value={filterCity} onChange={e => { setFilterCity(e.target.value); setPage(1); }} className="w-44" />
             <Select value={filterTripId} onValueChange={v => { setFilterTripId(v); setPage(1); }}>
-              <SelectTrigger className="w-48"><SelectValue placeholder="Viagem de interesse" /></SelectTrigger>
+              <SelectTrigger className="w-44"><SelectValue placeholder="Viagem de interesse" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="">Todas as viagens</SelectItem>
                 {tripsData?.data.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterSellerId} onValueChange={v => { setFilterSellerId(v); setPage(1); }}>
+              <SelectTrigger className="w-44"><SelectValue placeholder="Vendedor / Captador" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Todos os vendedores</SelectItem>
+                {(sellers ?? []).filter(u => u.role === "vendedor" || u.role === "agencia").map(u => (
+                  <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <div className="flex items-center gap-1">
