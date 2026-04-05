@@ -1040,6 +1040,63 @@ paths:
               schema:
                 $ref: "#/components/schemas/Deal"
 
+  /pipelines:
+    get:
+      operationId: listPipelines
+      tags: [deals]
+      summary: List pipelines
+      responses:
+        "200":
+          description: Pipelines
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Pipeline"
+    post:
+      operationId: createPipeline
+      tags: [deals]
+      summary: Create a pipeline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePipelineBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pipeline"
+
+  /pipelines/{id}:
+    patch:
+      operationId: updatePipeline
+      tags: [deals]
+      summary: Update a pipeline
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePipelineBody"
+      responses:
+        "200":
+          description: Updated pipeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pipeline"
+
   /pipeline/stages:
     get:
       operationId: listPipelineStages
@@ -3931,6 +3988,42 @@ components:
           type: ["string", "null"]
         expectedCloseDate:
           type: ["string", "null"]
+
+    Pipeline:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        isDefault:
+          type: boolean
+        isActive:
+          type: boolean
+        tenantId:
+          type: string
+        createdAt:
+          type: string
+      required: [id, name, isDefault, isActive, tenantId, createdAt]
+
+    CreatePipelineBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+      required: [name]
+
+    UpdatePipelineBody:
+      type: object
+      properties:
+        name:
+          type: string
+        isActive:
+          type: boolean
 
     PipelineStage:
       type: object

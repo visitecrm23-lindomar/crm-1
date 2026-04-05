@@ -1,12 +1,17 @@
 import { pgTable, text, timestamp, boolean, numeric, integer } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { tenantsTable } from "./tenants";
+import { tripsTable } from "./trips";
+import { clientsTable } from "./clients";
+import { usersTable } from "./users";
 
 export const reservationsTable = pgTable("reservations", {
   id: text("id").primaryKey(),
-  tenantId: text("tenant_id").notNull(),
-  tripId: text("trip_id").notNull(),
-  clientId: text("client_id").notNull(),
+  tenantId: text("tenant_id").notNull().references(() => tenantsTable.id, { onDelete: "cascade" }),
+  tripId: text("trip_id").notNull().references(() => tripsTable.id),
+  clientId: text("client_id").notNull().references(() => clientsTable.id),
   seats: text("seats").array().notNull().default([]),
   boardingLocationId: text("boarding_location_id"),
   tripType: text("trip_type"),
@@ -27,7 +32,7 @@ export const reservationsTable = pgTable("reservations", {
   notes: text("notes"),
   confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
   cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
-  createdById: text("created_by_id").notNull(),
+  createdById: text("created_by_id").notNull().references(() => usersTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -36,9 +41,17 @@ export const insertReservationSchema = createInsertSchema(reservationsTable).omi
 export type InsertReservation = z.infer<typeof insertReservationSchema>;
 export type Reservation = typeof reservationsTable.$inferSelect;
 
+export const reservationsRelations = relations(reservationsTable, ({ one, many }) => ({
+  tenant: one(tenantsTable, { fields: [reservationsTable.tenantId], references: [tenantsTable.id] }),
+  trip: one(tripsTable, { fields: [reservationsTable.tripId], references: [tripsTable.id] }),
+  client: one(clientsTable, { fields: [reservationsTable.clientId], references: [clientsTable.id] }),
+  createdBy: one(usersTable, { fields: [reservationsTable.createdById], references: [usersTable.id] }),
+  passengers: many(passengersTable),
+}));
+
 export const passengersTable = pgTable("passengers", {
   id: text("id").primaryKey(),
-  reservationId: text("reservation_id").notNull(),
+  reservationId: text("reservation_id").notNull().references(() => reservationsTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   cpf: text("cpf"),
   rg: text("rg"),
@@ -51,3 +64,7 @@ export const passengersTable = pgTable("passengers", {
 export const insertPassengerSchema = createInsertSchema(passengersTable);
 export type InsertPassenger = z.infer<typeof insertPassengerSchema>;
 export type Passenger = typeof passengersTable.$inferSelect;
+
+export const passengersRelations = relations(passengersTable, ({ one }) => ({
+  reservation: one(reservationsTable, { fields: [passengersTable.reservationId], references: [reservationsTable.id] }),
+}));

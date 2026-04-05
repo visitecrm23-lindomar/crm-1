@@ -1,10 +1,12 @@
 import { pgTable, text, timestamp, boolean, numeric, integer, json } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { tenantsTable } from "./tenants";
 
 export const tripsTable = pgTable("trips", {
   id: text("id").primaryKey(),
-  tenantId: text("tenant_id").notNull(),
+  tenantId: text("tenant_id").notNull().references(() => tenantsTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
   description: text("description"),
@@ -60,3 +62,7 @@ export const tripsTable = pgTable("trips", {
 export const insertTripSchema = createInsertSchema(tripsTable).omit({ createdAt: true, updatedAt: true });
 export type InsertTrip = z.infer<typeof insertTripSchema>;
 export type Trip = typeof tripsTable.$inferSelect;
+
+export const tripsRelations = relations(tripsTable, ({ one }) => ({
+  tenant: one(tenantsTable, { fields: [tripsTable.tenantId], references: [tenantsTable.id] }),
+}));

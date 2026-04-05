@@ -1233,6 +1233,50 @@ export const MoveDealResponse = zod.object({
 });
 
 /**
+ * @summary List pipelines
+ */
+export const ListPipelinesResponseItem = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  isDefault: zod.boolean(),
+  isActive: zod.boolean(),
+  tenantId: zod.string(),
+  createdAt: zod.string(),
+});
+export const ListPipelinesResponse = zod.array(ListPipelinesResponseItem);
+
+/**
+ * @summary Create a pipeline
+ */
+export const CreatePipelineBody = zod.object({
+  name: zod.string(),
+  description: zod.string().optional(),
+});
+
+/**
+ * @summary Update a pipeline
+ */
+export const UpdatePipelineParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdatePipelineBody = zod.object({
+  name: zod.string().optional(),
+  isActive: zod.boolean().optional(),
+});
+
+export const UpdatePipelineResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  isDefault: zod.boolean(),
+  isActive: zod.boolean(),
+  tenantId: zod.string(),
+  createdAt: zod.string(),
+});
+
+/**
  * @summary List pipeline stages
  */
 export const ListPipelineStagesResponseItem = zod.object({

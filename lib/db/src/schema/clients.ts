@@ -1,10 +1,12 @@
 import { pgTable, text, timestamp, boolean, numeric, integer } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { tenantsTable } from "./tenants";
 
 export const clientsTable = pgTable("clients", {
   id: text("id").primaryKey(),
-  tenantId: text("tenant_id").notNull(),
+  tenantId: text("tenant_id").notNull().references(() => tenantsTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   email: text("email").notNull(),
   whatsapp: text("whatsapp").notNull(),
@@ -48,3 +50,7 @@ export const clientsTable = pgTable("clients", {
 export const insertClientSchema = createInsertSchema(clientsTable).omit({ createdAt: true, updatedAt: true });
 export type InsertClient = z.infer<typeof insertClientSchema>;
 export type Client = typeof clientsTable.$inferSelect;
+
+export const clientsRelations = relations(clientsTable, ({ one }) => ({
+  tenant: one(tenantsTable, { fields: [clientsTable.tenantId], references: [tenantsTable.id] }),
+}));

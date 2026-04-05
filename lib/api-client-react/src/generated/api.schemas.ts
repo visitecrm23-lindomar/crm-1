@@ -627,6 +627,27 @@ export interface UpdateDealBody {
   expectedCloseDate?: string | null;
 }
 
+export interface Pipeline {
+  id: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  isDefault: boolean;
+  isActive: boolean;
+  tenantId: string;
+  createdAt: string;
+}
+
+export interface CreatePipelineBody {
+  name: string;
+  description?: string;
+}
+
+export interface UpdatePipelineBody {
+  name?: string;
+  isActive?: boolean;
+}
+
 export interface PipelineStage {
   id: string;
   name: string;

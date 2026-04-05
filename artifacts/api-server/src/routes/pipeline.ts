@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { pipelineStagesTable, dealsTable, clientsTable } from "@workspace/db";
+import { pipelinesTable, pipelineStagesTable, dealsTable, clientsTable } from "@workspace/db";
 import { eq, and, asc, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -49,6 +49,13 @@ async function ensureDefaultPipeline(tenantId: string): Promise<string> {
     .where(eq(pipelineStagesTable.tenantId, tenantId));
   if (existing.length > 0) return existing[0].pipelineId;
   const pipelineId = generateId();
+  await db.insert(pipelinesTable).values({
+    id: pipelineId,
+    tenantId,
+    name: "Pipeline Principal",
+    isDefault: true,
+    isActive: true,
+  });
   for (const stage of DEFAULT_STAGES) {
     await db.insert(pipelineStagesTable).values({
       id: generateId(),
@@ -248,6 +255,63 @@ router.delete("/deals/:id", async (req, res): Promise<void> => {
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Error deleting deal");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/pipelines", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    await ensureDefaultPipeline(me.tenantId);
+    const pipelines = await db.select().from(pipelinesTable)
+      .where(eq(pipelinesTable.tenantId, me.tenantId));
+    res.json(pipelines.map((p) => ({
+      id: p.id, name: p.name, description: p.description,
+      isDefault: p.isDefault, isActive: p.isActive, tenantId: p.tenantId,
+      createdAt: p.createdAt.toISOString(),
+    })));
+  } catch (err) {
+    req.log.error({ err }, "Error listing pipelines");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/pipelines", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!["agencia", "superadmin"].includes(me.role)) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    const parsed = z.object({ name: z.string().min(1), description: z.string().optional() }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error }); return; }
+    const id = generateId();
+    await db.insert(pipelinesTable).values({ id, tenantId: me.tenantId, name: parsed.data.name, description: parsed.data.description });
+    const [pipeline] = await db.select().from(pipelinesTable).where(eq(pipelinesTable.id, id));
+    res.status(201).json(pipeline);
+  } catch (err) {
+    req.log.error({ err }, "Error creating pipeline");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/pipelines/:id", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!["agencia", "superadmin"].includes(me.role)) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    const parsed = z.object({ name: z.string().min(1).optional(), isActive: z.boolean().optional() }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error }); return; }
+    await db.update(pipelinesTable).set(parsed.data).where(and(eq(pipelinesTable.id, req.params.id), eq(pipelinesTable.tenantId, me.tenantId)));
+    const [pipeline] = await db.select().from(pipelinesTable).where(and(eq(pipelinesTable.id, req.params.id), eq(pipelinesTable.tenantId, me.tenantId)));
+    res.json(pipeline ?? { error: "Not found" });
+  } catch (err) {
+    req.log.error({ err }, "Error updating pipeline");
     res.status(500).json({ error: "Internal server error" });
   }
 });
