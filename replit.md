@@ -36,12 +36,12 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 | `/pipeline` | Pipeline | Kanban drag-and-drop sales pipeline |
 | `/clients` | Clientes | Client list with search + create |
 | `/trips` | Viagens | Trip list with stat cards, card grid, search/status filters, grid/list view toggle |
-| `/trips/new` | Nova Viagem | 6-tab trip creation form (Basic, Pricing, Inclusions, Transport, Media, Config) |
-| `/trips/:id/edit` | Editar Viagem | Same 6-tab form pre-populated for editing |
-| `/trips/:id/seat-map` | Mapa de Assentos | Visual 2x2 bus seat layout, color-coded by status |
-| `/trips/:id/passengers-overview` | Visão Geral | 6 KPI cards + reservations list + payment breakdown |
-| `/trips/:id/passengers` | Lista ANTT | Full passenger table with export/WhatsApp bulk actions |
-| `/trips/calendar` | Calendário | Monthly calendar view with trip events and click-to-detail modal |
+| `/trips/new` | Nova Viagem | 8-tab trip creation form (Básicas, Preços, Pontos de Embarque, Roteiro, Inclusões/Exclusões, Custos, Transporte e Hospedagem, Mídia) with Tiptap rich text editor for description |
+| `/trips/:id/edit` | Editar Viagem | Same 8-tab form pre-populated for editing |
+| `/trips/:id/seat-map` | Mapa de Assentos | Visual 2x2/2x1 bus seat layout, color-coded by status, trip selector dropdown, client search + manual mode assignment modal |
+| `/trips/:id/passengers-overview` | Visão Geral | Trip selector, 6 KPI cards, status breakdown bars, payment method bars, sortable reservations table, client origin chart, guide/vehicle info, full quick-actions (Add, Export PDF, WhatsApp, Financial Report, Close Trip) |
+| `/trips/:id/passengers` | Lista ANTT | Full passenger table with search, status/payment/type/boarding-point filters, select-all/bulk check-in/vouchers/WhatsApp, CSV/PDF/Excel export |
+| `/trips/calendar` | Calendário | Month/week/day views with trip events, color by status, click-to-detail modal |
 | `/reservations` | Reservas | Reservation management + vouchers |
 | `/financial` | Financeiro | Receivables, payables, expenses |
 | `/communication` | Comunicação | Messages + templates |

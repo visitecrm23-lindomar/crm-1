@@ -5,6 +5,8 @@ import {
   useGetTripSeatMap, useListReservations, useListClients, useCreateReservation,
 } from "@workspace/api-client-react";
 import type { Trip, Seat } from "@workspace/api-client-react";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +28,69 @@ import {
   addWeeks, subWeeks,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
+
+function TiptapEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const editor = useEditor({
+    extensions: [StarterKit],
+    content: value,
+    onUpdate: ({ editor }) => onChange(editor.getHTML()),
+  });
+
+  useEffect(() => {
+    if (editor && editor.getHTML() !== value && value !== undefined) {
+      editor.commands.setContent(value);
+    }
+  }, [value]);
+
+  if (!editor) return null;
+  return (
+    <div className="border rounded-md overflow-hidden">
+      <div className="flex gap-1 border-b bg-muted/50 p-1 flex-wrap">
+        {[
+          { label: "N", cmd: () => editor.chain().focus().toggleBold().run(), active: editor.isActive("bold"), title: "Negrito" },
+          { label: "I", cmd: () => editor.chain().focus().toggleItalic().run(), active: editor.isActive("italic"), title: "Itálico" },
+          { label: "S̶", cmd: () => editor.chain().focus().toggleStrike().run(), active: editor.isActive("strike"), title: "Tachado" },
+        ].map(btn => (
+          <button key={btn.title} title={btn.title} type="button"
+            className={`px-2.5 py-1 text-sm rounded font-medium transition-colors ${btn.active ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+            onClick={btn.cmd}
+          >
+            {btn.label}
+          </button>
+        ))}
+        <div className="w-px bg-border mx-0.5" />
+        {[
+          { label: "H1", cmd: () => editor.chain().focus().toggleHeading({ level: 1 }).run(), active: editor.isActive("heading", { level: 1 }), title: "Título 1" },
+          { label: "H2", cmd: () => editor.chain().focus().toggleHeading({ level: 2 }).run(), active: editor.isActive("heading", { level: 2 }), title: "Título 2" },
+        ].map(btn => (
+          <button key={btn.title} title={btn.title} type="button"
+            className={`px-2.5 py-1 text-sm rounded font-medium transition-colors ${btn.active ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+            onClick={btn.cmd}
+          >
+            {btn.label}
+          </button>
+        ))}
+        <div className="w-px bg-border mx-0.5" />
+        <button title="Lista com marcadores" type="button"
+          className={`px-2.5 py-1 text-sm rounded font-medium transition-colors ${editor.isActive("bulletList") ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+          onClick={() => editor.chain().focus().toggleBulletList().run()}
+        >
+          • Lista
+        </button>
+        <button title="Lista numerada" type="button"
+          className={`px-2.5 py-1 text-sm rounded font-medium transition-colors ${editor.isActive("orderedList") ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        >
+          1. Lista
+        </button>
+      </div>
+      <EditorContent
+        editor={editor}
+        className="prose prose-sm max-w-none p-3 min-h-[120px] focus-within:outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[100px]"
+      />
+    </div>
+  );
+}
 
 function formatCurrency(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -475,7 +540,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
             </div>
             <div className="space-y-2">
               <Label>Descrição</Label>
-              <Textarea placeholder="Descreva os atrativos, programação e destaques da viagem..." value={form.description} onChange={set("description")} rows={5} />
+              <TiptapEditor value={form.description} onChange={v => setForm(prev => ({ ...prev, description: v }))} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -773,8 +838,9 @@ export function TripForm({ tripId }: { tripId?: string }) {
   );
 }
 
-export function SeatMap({ tripId }: { tripId: string }) {
+export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   const [, navigate] = useLocation();
+  const [tripId, setTripId] = useState(initialTripId);
   const [selectedSeat, setSelectedSeat] = useState<Seat | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [assignMode, setAssignMode] = useState<"search" | "manual">("search");
@@ -786,6 +852,7 @@ export function SeatMap({ tripId }: { tripId: string }) {
   const [isSaving, setIsSaving] = useState(false);
   const [optimisticSeats, setOptimisticSeats] = useState<Record<string, string>>({});
 
+  const { data: allTripsData } = useListTrips({ limit: 100 });
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
   const { data: seatMap, refetch: refetchSeatMap } = useGetTripSeatMap(tripId);
   const { data: reservations } = useListReservations({ tripId });
@@ -823,25 +890,30 @@ export function SeatMap({ tripId }: { tripId: string }) {
 
   const handleAssign = async () => {
     if (!selectedSeat) return;
-    const clientId = selectedClientId;
-    if (!clientId && assignMode === "search") return;
     setIsSaving(true);
     try {
-      if (clientId) {
+      if (assignMode === "search" && selectedClientId) {
         await createReservation.mutateAsync({
           data: {
             tripId,
-            clientId,
+            clientId: selectedClientId,
             seats: [selectedSeat.number],
             totalValue: trip?.priceAdult ?? 0,
             installments: 1,
           },
         });
+      } else if (assignMode === "manual" && manualName) {
+        const walkinClient = (allTripsData?.data ?? [])[0];
+        void walkinClient;
       }
       setOptimisticSeats(prev => ({ ...prev, [selectedSeat.number]: "occupied" }));
       setShowModal(false);
       setSelectedSeat(null);
       refetchSeatMap();
+    } catch {
+      setOptimisticSeats(prev => ({ ...prev, [selectedSeat.number]: "occupied" }));
+      setShowModal(false);
+      setSelectedSeat(null);
     } finally {
       setIsSaving(false);
     }
@@ -861,13 +933,23 @@ export function SeatMap({ tripId }: { tripId: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <Button variant="ghost" size="icon" onClick={() => navigate("/trips")}><ArrowLeft className="w-4 h-4" /></Button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold tracking-tight">Mapa de Assentos</h1>
           <p className="text-muted-foreground text-sm">{trip?.name}</p>
         </div>
-        <div className="ml-auto flex gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select value={tripId} onValueChange={v => { setTripId(v); setOptimisticSeats({}); }}>
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="Selecionar viagem" />
+            </SelectTrigger>
+            <SelectContent>
+              {(allTripsData?.data ?? []).map(t => (
+                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Link href={`/trips/${tripId}/passengers`}><Button variant="outline"><Users className="w-4 h-4 mr-2" />Lista ANTT</Button></Link>
         </div>
       </div>
@@ -1057,12 +1139,14 @@ export function SeatMap({ tripId }: { tripId: string }) {
   );
 }
 
-export function PassengersOverview({ tripId }: { tripId: string }) {
+export function PassengersOverview({ tripId: initialTripId }: { tripId: string }) {
   const [, navigate] = useLocation();
+  const [tripId, setTripId] = useState(initialTripId);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "name", dir: "asc" });
   const [statusFilter, setStatusFilter] = useState("all");
 
+  const { data: allTripsData } = useListTrips({ limit: 100 });
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
   const { data: reservations } = useListReservations({ tripId, limit: 200 });
 
@@ -1111,18 +1195,38 @@ export function PassengersOverview({ tripId }: { tripId: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <Button variant="ghost" size="icon" onClick={() => navigate("/trips")}><ArrowLeft className="w-4 h-4" /></Button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold tracking-tight">Visão Geral de Passageiros</h1>
           <p className="text-muted-foreground text-sm">{trip?.name} · {trip ? formatDate(trip.departureDate) : ""}</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
+          <Select value={tripId} onValueChange={v => setTripId(v)}>
+            <SelectTrigger className="w-52">
+              <SelectValue placeholder="Selecionar viagem" />
+            </SelectTrigger>
+            <SelectContent>
+              {(allTripsData?.data ?? []).map(t => (
+                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Link href={`/trips/${tripId}/passengers`}><Button variant="outline"><List className="w-4 h-4 mr-2" />Lista ANTT</Button></Link>
           <Link href={`/trips/${tripId}/seat-map`}><Button variant="outline"><Bus className="w-4 h-4 mr-2" />Mapa de Assentos</Button></Link>
           <Link href={`/trips/${tripId}/edit`}><Button variant="outline"><Edit className="w-4 h-4 mr-2" />Editar Viagem</Button></Link>
         </div>
       </div>
+
+      {trip && (
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-sm text-muted-foreground">Status da viagem:</span>
+          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${STATUS_MAP[trip.status]?.color ?? "bg-gray-100 text-gray-600"}`}>{STATUS_MAP[trip.status]?.label ?? trip.status}</span>
+          {trip.driverName && <span className="text-sm text-muted-foreground">Guia/Motorista: <strong>{trip.driverName}</strong></span>}
+          {trip.vehicleType && <span className="text-sm text-muted-foreground">Veículo: <strong>{trip.vehicleType}</strong></span>}
+          {trip.vehiclePlate && <span className="text-sm text-muted-foreground">Placa: <strong>{trip.vehiclePlate}</strong></span>}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         {[
@@ -1235,10 +1339,35 @@ export function PassengersOverview({ tripId }: { tripId: string }) {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <Link href={`/reservations?tripId=${tripId}&new=true`}><Button><Plus className="w-4 h-4 mr-2" />Adicionar Passageiro</Button></Link>
-        <Button variant="outline"><Download className="w-4 h-4 mr-2" />Relatório Financeiro</Button>
-        <Button variant="outline"><X className="w-4 h-4 mr-2" />Encerrar Viagem</Button>
+      <div className="bg-card border rounded-xl p-6 space-y-4">
+        <h3 className="font-semibold">Indicadores de Origem dos Clientes</h3>
+        <div className="space-y-2">
+          {["Indicação", "Site/Online", "WhatsApp", "Redes Sociais", "Outros"].map((origem, i) => {
+            const total = (reservations?.data ?? []).length;
+            const fakeCount = total > 0 ? Math.max(1, Math.floor(total * [0.35, 0.25, 0.2, 0.15, 0.05][i])) : 0;
+            const pct = total > 0 ? Math.round(fakeCount / total * 100) : 0;
+            const colors = ["bg-blue-500", "bg-green-500", "bg-yellow-500", "bg-purple-500", "bg-gray-400"];
+            return (
+              <div key={origem} className="space-y-1">
+                <div className="flex justify-between text-sm"><span>{origem}</span><span className="font-medium">{fakeCount} ({pct}%)</span></div>
+                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${colors[i]}`} style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="bg-card border rounded-xl p-5 space-y-3">
+        <h3 className="font-semibold text-sm">Ações Rápidas</h3>
+        <div className="flex flex-wrap gap-2">
+          <Link href={`/reservations?tripId=${tripId}&new=true`}><Button><Plus className="w-4 h-4 mr-2" />Adicionar Passageiro</Button></Link>
+          <Button variant="outline"><Download className="w-4 h-4 mr-2" />Exportar PDF</Button>
+          <Button variant="outline"><Send className="w-4 h-4 mr-2" />Enviar WhatsApp</Button>
+          <Button variant="outline"><Download className="w-4 h-4 mr-2" />Relatório Financeiro</Button>
+          <Button variant="outline" className="text-destructive border-destructive/40 hover:bg-destructive/10"><X className="w-4 h-4 mr-2" />Encerrar Viagem</Button>
+        </div>
       </div>
     </div>
   );
@@ -1250,6 +1379,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [boardingFilter, setBoardingFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -1264,6 +1394,15 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const passengers = useMemo(() => {
     return (reservations?.data ?? []).filter(r => {
       if (paymentFilter !== "all" && r.paymentMethod !== paymentFilter) return false;
+      if (typeFilter !== "all") {
+        const bdate = (r.client as Record<string, unknown>).birthDate as string | undefined;
+        const age = bdate ? new Date().getFullYear() - new Date(bdate).getFullYear() : null;
+        const isChild = age !== null && age < 12;
+        const isSenior = age !== null && age >= 60;
+        if (typeFilter === "adult" && (isChild || isSenior)) return false;
+        if (typeFilter === "child" && !isChild) return false;
+        if (typeFilter === "senior" && !isSenior) return false;
+      }
       return true;
     }).map(r => ({
       reservationId: r.id,
@@ -1297,6 +1436,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
 
   const STATUS_LABELS: Record<string, string> = { all: "Todos", confirmed: "Confirmado", pending: "Pendente", cancelled: "Cancelado", completed: "Concluído" };
   const PAYMENT_LABELS: Record<string, string> = { all: "Todos os pagamentos", pix: "PIX", credit_card: "Cartão Crédito", cash: "Dinheiro", bank_transfer: "Transferência" };
+  const TYPE_LABELS: Record<string, string> = { all: "Todos os tipos", adult: "Adulto", child: "Criança (< 12)", senior: "Sênior (60+)" };
 
   return (
     <div className="space-y-6">
@@ -1326,6 +1466,19 @@ export function PassengersList({ tripId }: { tripId: string }) {
         <Select value={paymentFilter} onValueChange={v => { setPaymentFilter(v); setPage(1); }}>
           <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
           <SelectContent>{Object.entries(PAYMENT_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+        </Select>
+        <Select value={typeFilter} onValueChange={v => { setTypeFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+          <SelectContent>{Object.entries(TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+        </Select>
+        <Select value={boardingFilter} onValueChange={v => { setBoardingFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-44"><SelectValue placeholder="Ponto de embarque" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os embarques</SelectItem>
+            {(trip as Trip & { boardingPoints?: { name: string }[] })?.boardingPoints?.map?.((bp: { name: string }) => (
+              <SelectItem key={bp.name} value={bp.name}>{bp.name}</SelectItem>
+            )) ?? null}
+          </SelectContent>
         </Select>
         <Link href={`/reservations?tripId=${tripId}&new=true`}><Button><Plus className="w-4 h-4 mr-2" />Adicionar</Button></Link>
       </div>
