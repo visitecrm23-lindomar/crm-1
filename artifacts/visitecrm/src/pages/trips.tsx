@@ -879,11 +879,15 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   const maxRow = useMemo(() => Math.max(...seats.map(s => s.row), 0), [seats]);
   const cols = seatMap?.layout === "2x1" ? 3 : 4;
 
-  const seatCounts = useMemo(() => ({
-    available: seats.filter(s => (optimisticSeats[s.number] ?? s.status) === "available").length,
-    occupied: seats.filter(s => (optimisticSeats[s.number] ?? s.status) === "occupied").length,
-    blocked: seats.filter(s => (optimisticSeats[s.number] ?? s.status) === "blocked").length,
-  }), [seats, optimisticSeats]);
+  const seatCounts = useMemo(() => {
+    const statusList = seats.map(s => optimisticSeats[s.number] ?? s.status);
+    return {
+      available: statusList.filter(st => st === "available").length,
+      reserved: statusList.filter(st => st === "reserved" || st === "occupied").length,
+      confirmed: statusList.filter(st => st === "confirmed").length,
+      blocked: statusList.filter(st => st === "blocked").length,
+    };
+  }, [seats, optimisticSeats]);
 
   const getEffectiveStatus = (seat: Seat) => optimisticSeats[seat.number] ?? seat.status;
 
@@ -914,7 +918,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
             installments: 1,
           },
         });
-        setOptimisticSeats(prev => ({ ...prev, [selectedSeat.number]: "occupied" }));
+        setOptimisticSeats(prev => ({ ...prev, [selectedSeat.number]: "reserved" }));
         setShowModal(false);
         setSelectedSeat(null);
         refetchSeatMap();
@@ -938,7 +942,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
             installments: 1,
           },
         });
-        setOptimisticSeats(prev => ({ ...prev, [selectedSeat.number]: "occupied" }));
+        setOptimisticSeats(prev => ({ ...prev, [selectedSeat.number]: "reserved" }));
         setShowModal(false);
         setSelectedSeat(null);
         refetchSeatMap();
@@ -953,6 +957,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   function getSeatColor(status: string) {
     switch (status) {
       case "available": return "bg-white border-2 border-gray-200 hover:border-primary hover:bg-primary/5 cursor-pointer";
+      case "reserved":
       case "occupied": return "bg-orange-400 border-2 border-orange-500 text-white cursor-not-allowed";
       case "confirmed": return "bg-green-500 border-2 border-green-600 text-white cursor-not-allowed";
       case "blocked": return "bg-gray-300 border-2 border-gray-400 text-gray-600 cursor-not-allowed";
@@ -1056,9 +1061,10 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
             <h3 className="font-semibold text-sm">Resumo dos Assentos</h3>
             {[
               { label: "Disponíveis", count: seatCounts.available, color: "text-green-600" },
-              { label: "Reservados", count: seatCounts.occupied, color: "text-orange-600" },
+              { label: "Reservados", count: seatCounts.reserved, color: "text-orange-600" },
+              { label: "Confirmados", count: seatCounts.confirmed, color: "text-primary" },
               { label: "Bloqueados", count: seatCounts.blocked, color: "text-gray-600" },
-              { label: "Total", count: seats.length, color: "text-primary" },
+              { label: "Total", count: seats.length, color: "text-foreground" },
             ].map(s => (
               <div key={s.label} className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">{s.label}</span>
@@ -1068,10 +1074,10 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
             <div className="pt-2 border-t">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Ocupação</span>
-                <span className="font-semibold">{seats.length > 0 ? Math.round(seatCounts.occupied / seats.length * 100) : 0}%</span>
+                <span className="font-semibold">{seats.length > 0 ? Math.round((seatCounts.reserved + seatCounts.confirmed) / seats.length * 100) : 0}%</span>
               </div>
               <div className="mt-1 w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-primary rounded-full" style={{ width: seats.length > 0 ? `${seatCounts.occupied / seats.length * 100}%` : "0%" }} />
+                <div className="h-full bg-primary rounded-full" style={{ width: seats.length > 0 ? `${(seatCounts.reserved + seatCounts.confirmed) / seats.length * 100}%` : "0%" }} />
               </div>
             </div>
           </div>
