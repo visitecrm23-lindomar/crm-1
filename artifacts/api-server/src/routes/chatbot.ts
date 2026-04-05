@@ -60,7 +60,10 @@ router.get("/chatbot-conversations/:id/messages", async (req, res): Promise<void
       .where(and(eq(chatbotConversationsTable.id, req.params.id), eq(chatbotConversationsTable.tenantId, me.tenantId))).limit(1);
     if (!conv) { res.status(404).json({ error: "Not found" }); return; }
     const messages = await db.select().from(chatbotMessagesTable)
-      .where(eq(chatbotMessagesTable.conversationId, req.params.id))
+      .where(and(
+        eq(chatbotMessagesTable.conversationId, req.params.id),
+        eq(chatbotMessagesTable.tenantId, me.tenantId),
+      ))
       .orderBy(chatbotMessagesTable.sentAt);
     res.json(messages);
   } catch (err) {
@@ -75,6 +78,12 @@ router.post("/chatbot-messages", async (req, res): Promise<void> => {
     if (!me) return;
     const parsed = CreateMessageBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    const [conv] = await db.select().from(chatbotConversationsTable)
+      .where(and(
+        eq(chatbotConversationsTable.id, parsed.data.conversationId),
+        eq(chatbotConversationsTable.tenantId, me.tenantId),
+      )).limit(1);
+    if (!conv) { res.status(404).json({ error: "Conversation not found or does not belong to your tenant" }); return; }
     const id = generateId();
     await db.insert(chatbotMessagesTable).values({ id, tenantId: me.tenantId, ...parsed.data });
     const [msg] = await db.select().from(chatbotMessagesTable).where(eq(chatbotMessagesTable.id, id)).limit(1);

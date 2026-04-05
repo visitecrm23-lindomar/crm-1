@@ -2118,11 +2118,13 @@ export const ListTenantsResponseItem = zod.object({
   name: zod.string(),
   slug: zod.string(),
   email: zod.string(),
-  plan: zod.string().nullish(),
+  whatsapp: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  planId: zod.string(),
+  status: zod.string(),
   logoUrl: zod.string().nullish(),
   primaryColor: zod.string().nullish(),
-  customDomain: zod.string().nullish(),
-  isActive: zod.boolean(),
+  secondaryColor: zod.string().nullish(),
   createdAt: zod.string(),
 });
 export const ListTenantsResponse = zod.array(ListTenantsResponseItem);
@@ -2134,7 +2136,8 @@ export const CreateTenantBody = zod.object({
   name: zod.string(),
   slug: zod.string(),
   email: zod.string(),
-  plan: zod.string().optional(),
+  planId: zod.string().optional(),
+  status: zod.string().optional(),
 });
 
 /**
@@ -2149,11 +2152,13 @@ export const GetTenantResponse = zod.object({
   name: zod.string(),
   slug: zod.string(),
   email: zod.string(),
-  plan: zod.string().nullish(),
+  whatsapp: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  planId: zod.string(),
+  status: zod.string(),
   logoUrl: zod.string().nullish(),
   primaryColor: zod.string().nullish(),
-  customDomain: zod.string().nullish(),
-  isActive: zod.boolean(),
+  secondaryColor: zod.string().nullish(),
   createdAt: zod.string(),
 });
 
@@ -2166,11 +2171,13 @@ export const UpdateTenantParams = zod.object({
 
 export const UpdateTenantBody = zod.object({
   name: zod.string().optional(),
-  plan: zod.string().optional(),
+  planId: zod.string().optional(),
+  status: zod.string().optional(),
   logoUrl: zod.string().optional(),
   primaryColor: zod.string().optional(),
-  customDomain: zod.string().optional(),
-  isActive: zod.boolean().optional(),
+  secondaryColor: zod.string().optional(),
+  whatsapp: zod.string().optional(),
+  phone: zod.string().optional(),
 });
 
 export const UpdateTenantResponse = zod.object({
@@ -2178,11 +2185,13 @@ export const UpdateTenantResponse = zod.object({
   name: zod.string(),
   slug: zod.string(),
   email: zod.string(),
-  plan: zod.string().nullish(),
+  whatsapp: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  planId: zod.string(),
+  status: zod.string(),
   logoUrl: zod.string().nullish(),
   primaryColor: zod.string().nullish(),
-  customDomain: zod.string().nullish(),
-  isActive: zod.boolean(),
+  secondaryColor: zod.string().nullish(),
   createdAt: zod.string(),
 });
 
@@ -2724,6 +2733,215 @@ export const CreateChatbotMessageBody = zod.object({
   mediaUrl: zod.string().optional(),
   isBot: zod.boolean().optional(),
 });
+
+/**
+ * @summary List product categories
+ */
+export const ListProductCategoriesResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  slug: zod.string(),
+  description: zod.string().nullish(),
+  parentId: zod.string().nullish(),
+  imageUrl: zod.string().nullish(),
+  isActive: zod.boolean(),
+  sortOrder: zod.number(),
+  createdAt: zod.string(),
+});
+export const ListProductCategoriesResponse = zod.array(
+  ListProductCategoriesResponseItem,
+);
+
+/**
+ * @summary Create a product category
+ */
+export const CreateProductCategoryBody = zod.object({
+  name: zod.string(),
+  slug: zod.string(),
+  description: zod.string().optional(),
+  parentId: zod.string().optional(),
+  imageUrl: zod.string().optional(),
+  isActive: zod.boolean().optional(),
+  sortOrder: zod.number().optional(),
+});
+
+/**
+ * @summary Update a product category
+ */
+export const UpdateProductCategoryParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateProductCategoryBody = zod.object({
+  name: zod.string(),
+  slug: zod.string(),
+  description: zod.string().optional(),
+  parentId: zod.string().optional(),
+  imageUrl: zod.string().optional(),
+  isActive: zod.boolean().optional(),
+  sortOrder: zod.number().optional(),
+});
+
+export const UpdateProductCategoryResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  slug: zod.string(),
+  description: zod.string().nullish(),
+  parentId: zod.string().nullish(),
+  imageUrl: zod.string().nullish(),
+  isActive: zod.boolean(),
+  sortOrder: zod.number(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Delete a product category
+ */
+export const DeleteProductCategoryParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary List product images
+ */
+export const ListProductImagesResponseItem = zod.object({
+  id: zod.string(),
+  productId: zod.string(),
+  tenantId: zod.string(),
+  url: zod.string(),
+  altText: zod.string().nullish(),
+  sortOrder: zod.number(),
+  createdAt: zod.string(),
+});
+export const ListProductImagesResponse = zod.array(
+  ListProductImagesResponseItem,
+);
+
+/**
+ * @summary Add a product image
+ */
+export const CreateProductImageBody = zod.object({
+  productId: zod.string(),
+  url: zod.string().url(),
+  altText: zod.string().optional(),
+  sortOrder: zod.number().optional(),
+});
+
+/**
+ * @summary Delete a product image
+ */
+export const DeleteProductImageParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary List cart items
+ */
+export const ListCartItemsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  clientId: zod.string(),
+  productId: zod.string(),
+  quantity: zod.number(),
+  addedAt: zod.string(),
+});
+export const ListCartItemsResponse = zod.array(ListCartItemsResponseItem);
+
+/**
+ * @summary Add item to cart
+ */
+export const CreateCartItemBody = zod.object({
+  clientId: zod.string(),
+  productId: zod.string(),
+  quantity: zod.number().optional(),
+});
+
+/**
+ * @summary Remove item from cart
+ */
+export const DeleteCartItemParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary List automation actions
+ */
+export const ListAutomationActionsResponseItem = zod.object({
+  id: zod.string(),
+  automationId: zod.string(),
+  tenantId: zod.string(),
+  type: zod.string(),
+  config: zod.object({}).passthrough(),
+  order: zod.number(),
+  isActive: zod.boolean(),
+  createdAt: zod.string(),
+});
+export const ListAutomationActionsResponse = zod.array(
+  ListAutomationActionsResponseItem,
+);
+
+/**
+ * @summary Create an automation action
+ */
+export const CreateAutomationActionBody = zod.object({
+  automationId: zod.string(),
+  type: zod.string(),
+  config: zod.object({}).passthrough().optional(),
+  order: zod.number().optional(),
+  isActive: zod.boolean().optional(),
+});
+
+/**
+ * @summary Update an automation action
+ */
+export const UpdateAutomationActionParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateAutomationActionBody = zod.object({
+  automationId: zod.string(),
+  type: zod.string(),
+  config: zod.object({}).passthrough().optional(),
+  order: zod.number().optional(),
+  isActive: zod.boolean().optional(),
+});
+
+export const UpdateAutomationActionResponse = zod.object({
+  id: zod.string(),
+  automationId: zod.string(),
+  tenantId: zod.string(),
+  type: zod.string(),
+  config: zod.object({}).passthrough(),
+  order: zod.number(),
+  isActive: zod.boolean(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Delete an automation action
+ */
+export const DeleteAutomationActionParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary List automation logs
+ */
+export const ListAutomationLogsResponseItem = zod.object({
+  id: zod.string(),
+  automationId: zod.string(),
+  tenantId: zod.string(),
+  status: zod.string(),
+  triggerData: zod.object({}).passthrough().nullish(),
+  result: zod.object({}).passthrough().nullish(),
+  errorMessage: zod.string().nullish(),
+  executedAt: zod.string(),
+});
+export const ListAutomationLogsResponse = zod.array(
+  ListAutomationLogsResponseItem,
+);
 
 /**
  * @summary List audit logs

@@ -6,10 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface CreateTenantBody {
-  name: string;
-  slug: string;
-  email: string;
-  planId?: string;
-  status?: string;
+export interface CartItem {
+  id: string;
+  tenantId: string;
+  clientId: string;
+  productId: string;
+  quantity: number;
+  addedAt: string;
 }

@@ -6,10 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface CreateTenantBody {
+export interface CreateProductCategoryBody {
   name: string;
   slug: string;
-  email: string;
-  planId?: string;
-  status?: string;
+  description?: string;
+  parentId?: string;
+  imageUrl?: string;
+  isActive?: boolean;
+  sortOrder?: number;
 }

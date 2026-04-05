@@ -6,7 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface CreateTenantBody {
+export interface CreateTenantBodyV2 {
   name: string;
   slug: string;
   email: string;

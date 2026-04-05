@@ -6,22 +6,18 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface Tenant {
+export interface ProductCategory {
   id: string;
+  tenantId: string;
   name: string;
   slug: string;
-  email: string;
   /** @nullable */
-  whatsapp?: string | null;
+  description?: string | null;
   /** @nullable */
-  phone?: string | null;
-  planId: string;
-  status: string;
+  parentId?: string | null;
   /** @nullable */
-  logoUrl?: string | null;
-  /** @nullable */
-  primaryColor?: string | null;
-  /** @nullable */
-  secondaryColor?: string | null;
+  imageUrl?: string | null;
+  isActive: boolean;
+  sortOrder: number;
   createdAt: string;
 }

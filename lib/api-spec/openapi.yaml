@@ -2597,6 +2597,257 @@ paths:
               schema:
                 $ref: "#/components/schemas/ChatbotMessage"
 
+  # ─── CATALOG ────────────────────────────────────────────────────
+  /product-categories:
+    get:
+      operationId: listProductCategories
+      summary: List product categories
+      tags: [Catalog]
+      responses:
+        "200":
+          description: List of product categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProductCategory"
+    post:
+      operationId: createProductCategory
+      summary: Create a product category
+      tags: [Catalog]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductCategoryBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductCategory"
+
+  /product-categories/{id}:
+    patch:
+      operationId: updateProductCategory
+      summary: Update a product category
+      tags: [Catalog]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductCategoryBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductCategory"
+    delete:
+      operationId: deleteProductCategory
+      summary: Delete a product category
+      tags: [Catalog]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /product-images:
+    get:
+      operationId: listProductImages
+      summary: List product images
+      tags: [Catalog]
+      responses:
+        "200":
+          description: List of product images
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProductImage"
+    post:
+      operationId: createProductImage
+      summary: Add a product image
+      tags: [Catalog]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductImageBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductImage"
+
+  /product-images/{id}:
+    delete:
+      operationId: deleteProductImage
+      summary: Delete a product image
+      tags: [Catalog]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /cart-items:
+    get:
+      operationId: listCartItems
+      summary: List cart items
+      tags: [Catalog]
+      responses:
+        "200":
+          description: List of cart items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CartItem"
+    post:
+      operationId: createCartItem
+      summary: Add item to cart
+      tags: [Catalog]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCartItemBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CartItem"
+
+  /cart-items/{id}:
+    delete:
+      operationId: deleteCartItem
+      summary: Remove item from cart
+      tags: [Catalog]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── AUTOMATION EXTRAS ──────────────────────────────────────────
+  /automation-actions:
+    get:
+      operationId: listAutomationActions
+      summary: List automation actions
+      tags: [AutomationExtras]
+      responses:
+        "200":
+          description: List of automation actions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AutomationAction"
+    post:
+      operationId: createAutomationAction
+      summary: Create an automation action
+      tags: [AutomationExtras]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAutomationActionBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationAction"
+
+  /automation-actions/{id}:
+    patch:
+      operationId: updateAutomationAction
+      summary: Update an automation action
+      tags: [AutomationExtras]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAutomationActionBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationAction"
+    delete:
+      operationId: deleteAutomationAction
+      summary: Delete an automation action
+      tags: [AutomationExtras]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /automation-logs:
+    get:
+      operationId: listAutomationLogs
+      summary: List automation logs
+      tags: [AutomationExtras]
+      responses:
+        "200":
+          description: List of automation logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AutomationLog"
+
   # ─── AUDIT ──────────────────────────────────────────────────────
   /audit-logs:
     get:
@@ -4417,19 +4668,23 @@ components:
           type: string
         email:
           type: string
-        plan:
+        whatsapp:
           type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        planId:
+          type: string
+        status:
+          type: string
         logoUrl:
           type: ["string", "null"]
         primaryColor:
           type: ["string", "null"]
-        customDomain:
+        secondaryColor:
           type: ["string", "null"]
-        isActive:
-          type: boolean
         createdAt:
           type: string
-      required: [id, name, slug, email, isActive, createdAt]
+      required: [id, name, slug, email, planId, status, createdAt]
 
     CreateTenantBody:
       type: object
@@ -4440,7 +4695,9 @@ components:
           type: string
         email:
           type: string
-        plan:
+        planId:
+          type: string
+        status:
           type: string
       required: [name, slug, email]
 
@@ -4449,16 +4706,20 @@ components:
       properties:
         name:
           type: string
-        plan:
+        planId:
+          type: string
+        status:
           type: string
         logoUrl:
           type: string
         primaryColor:
           type: string
-        customDomain:
+        secondaryColor:
           type: string
-        isActive:
-          type: boolean
+        whatsapp:
+          type: string
+        phone:
+          type: string
 
     # ─── BOARDING LOCATION ─────────────────────────────────────────
     BoardingLocation:
@@ -4990,3 +5251,205 @@ components:
           type: string
         value: {}
       required: [key]
+
+    # ─── CATALOG ───────────────────────────────────────────────────
+    ProductCategory:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: ["string", "null"]
+        parentId:
+          type: ["string", "null"]
+        imageUrl:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        sortOrder:
+          type: integer
+        createdAt:
+          type: string
+      required: [id, tenantId, name, slug, isActive, sortOrder, createdAt]
+
+    CreateProductCategoryBody:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        parentId:
+          type: string
+        imageUrl:
+          type: string
+        isActive:
+          type: boolean
+        sortOrder:
+          type: integer
+      required: [name, slug]
+
+    ProductImage:
+      type: object
+      properties:
+        id:
+          type: string
+        productId:
+          type: string
+        tenantId:
+          type: string
+        url:
+          type: string
+        altText:
+          type: ["string", "null"]
+        sortOrder:
+          type: integer
+        createdAt:
+          type: string
+      required: [id, productId, tenantId, url, sortOrder, createdAt]
+
+    CreateProductImageBody:
+      type: object
+      properties:
+        productId:
+          type: string
+        url:
+          type: string
+          format: uri
+        altText:
+          type: string
+        sortOrder:
+          type: integer
+      required: [productId, url]
+
+    CartItem:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        clientId:
+          type: string
+        productId:
+          type: string
+        quantity:
+          type: integer
+        addedAt:
+          type: string
+      required: [id, tenantId, clientId, productId, quantity, addedAt]
+
+    CreateCartItemBody:
+      type: object
+      properties:
+        clientId:
+          type: string
+        productId:
+          type: string
+        quantity:
+          type: integer
+      required: [clientId, productId]
+
+    # ─── AUTOMATION EXTRAS ─────────────────────────────────────────
+    AutomationAction:
+      type: object
+      properties:
+        id:
+          type: string
+        automationId:
+          type: string
+        tenantId:
+          type: string
+        type:
+          type: string
+        config:
+          type: object
+        order:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+      required: [id, automationId, tenantId, type, config, order, isActive, createdAt]
+
+    CreateAutomationActionBody:
+      type: object
+      properties:
+        automationId:
+          type: string
+        type:
+          type: string
+        config:
+          type: object
+        order:
+          type: integer
+        isActive:
+          type: boolean
+      required: [automationId, type]
+
+    AutomationLog:
+      type: object
+      properties:
+        id:
+          type: string
+        automationId:
+          type: string
+        tenantId:
+          type: string
+        status:
+          type: string
+        triggerData:
+          type: object
+          nullable: true
+        result:
+          type: object
+          nullable: true
+        errorMessage:
+          type: ["string", "null"]
+        executedAt:
+          type: string
+      required: [id, automationId, tenantId, status, executedAt]
+
+    # ─── TENANT SCHEMA FIX ─────────────────────────────────────────
+    CreateTenantBodyV2:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        email:
+          type: string
+        planId:
+          type: string
+        status:
+          type: string
+      required: [name, slug, email]
+
+    UpdateTenantBodyV2:
+      type: object
+      properties:
+        name:
+          type: string
+        planId:
+          type: string
+        status:
+          type: string
+        logoUrl:
+          type: string
+        primaryColor:
+          type: string
+        secondaryColor:
+          type: string
+        whatsapp:
+          type: string
+        phone:
+          type: string

@@ -9,11 +9,13 @@ const router = Router();
 
 const UpdateTenantBody = z.object({
   name: z.string().min(1).optional(),
-  plan: z.string().optional(),
+  planId: z.string().optional(),
+  status: z.string().optional(),
   logoUrl: z.string().optional(),
   primaryColor: z.string().optional(),
-  customDomain: z.string().optional(),
-  isActive: z.boolean().optional(),
+  secondaryColor: z.string().optional(),
+  whatsapp: z.string().optional(),
+  phone: z.string().optional(),
 });
 
 router.get("/tenants", async (req, res): Promise<void> => {
@@ -55,7 +57,8 @@ router.post("/tenants", async (req, res): Promise<void> => {
       name: z.string().min(1),
       slug: z.string().min(1),
       email: z.string().email(),
-      plan: z.string().optional(),
+      planId: z.string().optional(),
+      status: z.string().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const id = generateId();
@@ -75,8 +78,8 @@ router.patch("/tenants/:id", async (req, res): Promise<void> => {
     const isAdminOfTenant = (me.role === "agencia" || me.role === "superadmin") && me.tenantId === req.params.id;
     const isSuperadmin = me.role === "superadmin";
     if (!isAdminOfTenant && !isSuperadmin) { res.status(403).json({ error: "Forbidden" }); return; }
-    if (me.role !== "superadmin" && req.body.isActive != null) {
-      res.status(403).json({ error: "Forbidden: apenas superadmin pode desativar tenants" }); return;
+    if (me.role !== "superadmin" && (req.body.status === "suspended" || req.body.planId)) {
+      res.status(403).json({ error: "Forbidden: apenas superadmin pode alterar plano ou suspender tenant" }); return;
     }
     const parsed = UpdateTenantBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }

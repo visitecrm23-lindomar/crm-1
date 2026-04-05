@@ -1138,14 +1138,17 @@ export interface Tenant {
   slug: string;
   email: string;
   /** @nullable */
-  plan?: string | null;
+  whatsapp?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  planId: string;
+  status: string;
   /** @nullable */
   logoUrl?: string | null;
   /** @nullable */
   primaryColor?: string | null;
   /** @nullable */
-  customDomain?: string | null;
-  isActive: boolean;
+  secondaryColor?: string | null;
   createdAt: string;
 }
 
@@ -1153,16 +1156,19 @@ export interface CreateTenantBody {
   name: string;
   slug: string;
   email: string;
-  plan?: string;
+  planId?: string;
+  status?: string;
 }
 
 export interface UpdateTenantBody {
   name?: string;
-  plan?: string;
+  planId?: string;
+  status?: string;
   logoUrl?: string;
   primaryColor?: string;
-  customDomain?: string;
-  isActive?: boolean;
+  secondaryColor?: string;
+  whatsapp?: string;
+  phone?: string;
 }
 
 export interface BoardingLocation {
@@ -1512,6 +1518,123 @@ export interface SystemConfig {
 export interface UpsertSystemConfigBody {
   key: string;
   value?: unknown;
+}
+
+export interface ProductCategory {
+  id: string;
+  tenantId: string;
+  name: string;
+  slug: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  parentId?: string | null;
+  /** @nullable */
+  imageUrl?: string | null;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface CreateProductCategoryBody {
+  name: string;
+  slug: string;
+  description?: string;
+  parentId?: string;
+  imageUrl?: string;
+  isActive?: boolean;
+  sortOrder?: number;
+}
+
+export interface ProductImage {
+  id: string;
+  productId: string;
+  tenantId: string;
+  url: string;
+  /** @nullable */
+  altText?: string | null;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface CreateProductImageBody {
+  productId: string;
+  url: string;
+  altText?: string;
+  sortOrder?: number;
+}
+
+export interface CartItem {
+  id: string;
+  tenantId: string;
+  clientId: string;
+  productId: string;
+  quantity: number;
+  addedAt: string;
+}
+
+export interface CreateCartItemBody {
+  clientId: string;
+  productId: string;
+  quantity?: number;
+}
+
+export type AutomationActionConfig = { [key: string]: unknown };
+
+export interface AutomationAction {
+  id: string;
+  automationId: string;
+  tenantId: string;
+  type: string;
+  config: AutomationActionConfig;
+  order: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type CreateAutomationActionBodyConfig = { [key: string]: unknown };
+
+export interface CreateAutomationActionBody {
+  automationId: string;
+  type: string;
+  config?: CreateAutomationActionBodyConfig;
+  order?: number;
+  isActive?: boolean;
+}
+
+export type AutomationLogTriggerData = { [key: string]: unknown } | null;
+
+export type AutomationLogResult = { [key: string]: unknown } | null;
+
+export interface AutomationLog {
+  id: string;
+  automationId: string;
+  tenantId: string;
+  status: string;
+  triggerData?: AutomationLogTriggerData;
+  result?: AutomationLogResult;
+  /** @nullable */
+  errorMessage?: string | null;
+  executedAt: string;
+}
+
+export interface CreateTenantBodyV2 {
+  name: string;
+  slug: string;
+  email: string;
+  planId?: string;
+  status?: string;
+}
+
+export interface UpdateTenantBodyV2 {
+  name?: string;
+  planId?: string;
+  status?: string;
+  logoUrl?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  whatsapp?: string;
+  phone?: string;
 }
 
 export type GetDashboardRevenueChartParams = {

@@ -6,10 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface CreateTenantBody {
-  name: string;
-  slug: string;
-  email: string;
+export interface UpdateTenantBodyV2 {
+  name?: string;
   planId?: string;
   status?: string;
+  logoUrl?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  whatsapp?: string;
+  phone?: string;
 }

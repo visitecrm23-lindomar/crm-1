@@ -8,9 +8,11 @@
 
 export interface UpdateTenantBody {
   name?: string;
-  plan?: string;
+  planId?: string;
+  status?: string;
   logoUrl?: string;
   primaryColor?: string;
-  customDomain?: string;
-  isActive?: boolean;
+  secondaryColor?: string;
+  whatsapp?: string;
+  phone?: string;
 }
