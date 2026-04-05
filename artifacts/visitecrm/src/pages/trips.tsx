@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import {
   useListTrips, useCreateTrip, useGetTrip, useUpdateTrip, useDeleteTrip,
-  useGetTripSeatMap, useListReservations, useListClients, useCreateReservation,
+  useGetTripSeatMap, useListReservations, useListClients, useCreateReservation, useUpdateReservation,
 } from "@workspace/api-client-react";
 import type { Trip, Seat } from "@workspace/api-client-react";
 import { useEditor, EditorContent } from "@tiptap/react";
@@ -850,6 +850,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   const [manualCpf, setManualCpf] = useState("");
   const [manualPhone, setManualPhone] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
   const [optimisticSeats, setOptimisticSeats] = useState<Record<string, string>>({});
 
   const { data: allTripsData } = useListTrips({ limit: 100 });
@@ -885,14 +886,17 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
     setClientSearch("");
     setSelectedClientId(null);
     setManualName(""); setManualCpf(""); setManualPhone("");
+    setAssignError(null);
     setShowModal(true);
   };
 
   const handleAssign = async () => {
     if (!selectedSeat) return;
+    setAssignError(null);
     setIsSaving(true);
     try {
-      if (assignMode === "search" && selectedClientId) {
+      if (assignMode === "search") {
+        if (!selectedClientId) { setAssignError("Selecione um cliente para continuar."); setIsSaving(false); return; }
         await createReservation.mutateAsync({
           data: {
             tripId,
@@ -902,18 +906,19 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
             installments: 1,
           },
         });
-      } else if (assignMode === "manual" && manualName) {
-        const walkinClient = (allTripsData?.data ?? [])[0];
-        void walkinClient;
+        setOptimisticSeats(prev => ({ ...prev, [selectedSeat.number]: "occupied" }));
+        setShowModal(false);
+        setSelectedSeat(null);
+        refetchSeatMap();
+      } else {
+        if (!manualName) { setAssignError("Informe o nome do passageiro."); setIsSaving(false); return; }
+        setOptimisticSeats(prev => ({ ...prev, [selectedSeat.number]: "occupied" }));
+        setShowModal(false);
+        setSelectedSeat(null);
+        refetchSeatMap();
       }
-      setOptimisticSeats(prev => ({ ...prev, [selectedSeat.number]: "occupied" }));
-      setShowModal(false);
-      setSelectedSeat(null);
-      refetchSeatMap();
     } catch {
-      setOptimisticSeats(prev => ({ ...prev, [selectedSeat.number]: "occupied" }));
-      setShowModal(false);
-      setSelectedSeat(null);
+      setAssignError("Erro ao salvar reserva. Tente novamente.");
     } finally {
       setIsSaving(false);
     }
@@ -1122,14 +1127,25 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
               </div>
             )}
 
+            {assignError && (
+              <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-md p-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{assignError}</span>
+              </div>
+            )}
+            {assignMode === "manual" && (
+              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md p-2">
+                Modo avulso: o assento sera bloqueado visualmente. Vincule um cliente cadastrado para gerar reserva formal.
+              </p>
+            )}
             <div className="flex gap-2 pt-2">
-              <Button variant="outline" className="flex-1" onClick={() => { setShowModal(false); setSelectedSeat(null); }}>Cancelar</Button>
+              <Button variant="outline" className="flex-1" onClick={() => { setShowModal(false); setSelectedSeat(null); setAssignError(null); }}>Cancelar</Button>
               <Button
                 className="flex-1"
                 disabled={isSaving || (assignMode === "search" ? !selectedClientId : !manualName)}
                 onClick={handleAssign}
               >
-                {isSaving ? "Reservando..." : "Confirmar Reserva"}
+                {isSaving ? "Reservando..." : "Confirmar"}
               </Button>
             </div>
           </div>
@@ -1143,12 +1159,14 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
   const [, navigate] = useLocation();
   const [tripId, setTripId] = useState(initialTripId);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{ status: string; paymentMethod: string }>({ status: "", paymentMethod: "" });
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "name", dir: "asc" });
   const [statusFilter, setStatusFilter] = useState("all");
 
   const { data: allTripsData } = useListTrips({ limit: 100 });
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
-  const { data: reservations } = useListReservations({ tripId, limit: 200 });
+  const { data: reservations, refetch: refetchReservations } = useListReservations({ tripId, limit: 200 });
+  const updateReservation = useUpdateReservation();
 
   const filteredReservations = useMemo(() => {
     let data = reservations?.data ?? [];
@@ -1190,6 +1208,24 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
   };
 
   const toggleSort = (key: string) => setSort(prev => ({ key, dir: prev.key === key && prev.dir === "asc" ? "desc" : "asc" }));
+
+  const startEdit = (r: { id: string; status: string; paymentMethod?: string | null }) => {
+    setEditingId(r.id);
+    setEditForm({ status: r.status, paymentMethod: r.paymentMethod ?? "" });
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    await updateReservation.mutateAsync({
+      id: editingId,
+      data: {
+        status: editForm.status as "pending" | "confirmed" | "cancelled" | "completed",
+        paymentMethod: editForm.paymentMethod || undefined,
+      },
+    });
+    setEditingId(null);
+    refetchReservations();
+  };
 
   const STATUS_LABELS: Record<string, string> = { all: "Todos", confirmed: "Confirmado", pending: "Pendente", cancelled: "Cancelado", completed: "Concluído" };
 
@@ -1309,31 +1345,74 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
                   { key: "voucher", label: "Voucher" },
                   { key: "seats", label: "Assento(s)" },
                   { key: "status", label: "Status" },
+                  { key: "payment", label: "Pagamento" },
                   { key: "value", label: "Valor" },
                   { key: "balance", label: "Saldo" },
+                  { key: "actions", label: "" },
                 ].map(col => (
-                  <th key={col.key} className="text-left p-2 font-medium cursor-pointer hover:text-primary" onClick={() => toggleSort(col.key)}>
+                  <th key={col.key} className={`text-left p-2 font-medium ${["name","value","balance","status"].includes(col.key) ? "cursor-pointer hover:text-primary" : ""}`}
+                    onClick={() => ["name","value","balance","status"].includes(col.key) ? toggleSort(col.key) : undefined}>
                     {col.label} {sort.key === col.key ? (sort.dir === "asc" ? "↑" : "↓") : ""}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filteredReservations.slice(0, 15).map(r => (
-                <tr key={r.id} className="border-b hover:bg-muted/30">
-                  <td className="p-2 font-medium">{r.client.name}</td>
-                  <td className="p-2"><code className="text-xs bg-muted px-1.5 py-0.5 rounded">{r.voucherCode}</code></td>
-                  <td className="p-2">{r.seats.join(", ") || "—"}</td>
-                  <td className="p-2">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${r.status === "confirmed" ? "bg-green-100 text-green-700" : r.status === "pending" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-700"}`}>
-                      {STATUS_LABELS[r.status] ?? r.status}
-                    </span>
-                  </td>
-                  <td className="p-2 font-medium">{formatCurrency(r.totalValue)}</td>
-                  <td className={`p-2 font-medium ${r.balance > 0 ? "text-red-600" : "text-green-600"}`}>{formatCurrency(r.balance)}</td>
-                </tr>
-              ))}
-              {!filteredReservations.length && <tr><td colSpan={6} className="text-center py-8 text-muted-foreground">Sem reservas</td></tr>}
+              {filteredReservations.slice(0, 15).map(r => {
+                const isEditing = editingId === r.id;
+                return (
+                  <tr key={r.id} className={`border-b ${isEditing ? "bg-primary/5" : "hover:bg-muted/30"}`}>
+                    <td className="p-2 font-medium">{r.client.name}</td>
+                    <td className="p-2"><code className="text-xs bg-muted px-1.5 py-0.5 rounded">{r.voucherCode}</code></td>
+                    <td className="p-2">{r.seats.join(", ") || "—"}</td>
+                    <td className="p-2">
+                      {isEditing ? (
+                        <Select value={editForm.status} onValueChange={v => setEditForm(f => ({ ...f, status: v }))}>
+                          <SelectTrigger className="h-7 text-xs w-32"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {["pending","confirmed","cancelled","completed"].map(s => (
+                              <SelectItem key={s} value={s}>{STATUS_LABELS[s] ?? s}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${r.status === "confirmed" ? "bg-green-100 text-green-700" : r.status === "pending" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-700"}`}>
+                          {STATUS_LABELS[r.status] ?? r.status}
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-2">
+                      {isEditing ? (
+                        <Select value={editForm.paymentMethod} onValueChange={v => setEditForm(f => ({ ...f, paymentMethod: v }))}>
+                          <SelectTrigger className="h-7 text-xs w-36"><SelectValue placeholder="Pagamento" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pix">PIX</SelectItem>
+                            <SelectItem value="credit_card">Cartão Crédito</SelectItem>
+                            <SelectItem value="debit_card">Cartão Débito</SelectItem>
+                            <SelectItem value="cash">Dinheiro</SelectItem>
+                            <SelectItem value="bank_transfer">Transferência</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">{METHOD_LABELS[r.paymentMethod ?? ""] ?? r.paymentMethod ?? "—"}</span>
+                      )}
+                    </td>
+                    <td className="p-2 font-medium">{formatCurrency(r.totalValue)}</td>
+                    <td className={`p-2 font-medium ${r.balance > 0 ? "text-red-600" : "text-green-600"}`}>{formatCurrency(r.balance)}</td>
+                    <td className="p-2">
+                      {isEditing ? (
+                        <div className="flex gap-1">
+                          <Button size="icon" variant="default" className="h-6 w-6" onClick={saveEdit} disabled={updateReservation.isPending}><Check className="w-3 h-3" /></Button>
+                          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditingId(null)}><X className="w-3 h-3" /></Button>
+                        </div>
+                      ) : (
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEdit(r)} title="Editar"><Edit className="w-3 h-3" /></Button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {!filteredReservations.length && <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">Sem reservas</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1403,6 +1482,10 @@ export function PassengersList({ tripId }: { tripId: string }) {
         if (typeFilter === "child" && !isChild) return false;
         if (typeFilter === "senior" && !isSenior) return false;
       }
+      if (boardingFilter !== "all") {
+        const bp = (r as unknown as Record<string, unknown>).boardingPoint as string | undefined;
+        if (bp !== boardingFilter) return false;
+      }
       return true;
     }).map(r => ({
       reservationId: r.id,
@@ -1419,7 +1502,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
       checkedIn: !!r.checkedInAt,
       hasInsurance: r.hasInsurance,
     }));
-  }, [reservations, paymentFilter]);
+  }, [reservations, paymentFilter, typeFilter, boardingFilter]);
 
   const totalPages = Math.ceil((reservations?.total ?? 0) / 20);
   const allSelected = passengers.length > 0 && passengers.every(p => selectedIds.has(p.reservationId));
