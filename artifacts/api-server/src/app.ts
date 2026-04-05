@@ -31,15 +31,17 @@ app.use(
 
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
-const ALLOWED_ORIGINS = [
-  process.env["FRONTEND_URL"],
-  process.env["REPLIT_DEV_DOMAIN"] ? `https://${process.env["REPLIT_DEV_DOMAIN"]}` : undefined,
-].filter(Boolean) as string[];
+const ALLOWED_ORIGINS = new Set(
+  [
+    process.env["FRONTEND_URL"],
+    process.env["REPLIT_DEV_DOMAIN"] ? `https://${process.env["REPLIT_DEV_DOMAIN"]}` : undefined,
+  ].filter(Boolean) as string[]
+);
 
 app.use(cors({
   credentials: true,
   origin: (origin, callback) => {
-    if (!origin || ALLOWED_ORIGINS.some(o => origin.startsWith(o))) {
+    if (!origin || ALLOWED_ORIGINS.has(origin)) {
       callback(null, true);
     } else {
       callback(new Error("Not allowed by CORS"));

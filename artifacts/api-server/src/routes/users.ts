@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { usersTable, tenantsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { generateId } from "../lib/id";
-import { requireAuth, getTenantUser } from "../lib/tenant";
+import { requireAuth } from "../lib/tenant";
 import {
   SyncMeBody,
   CreateUserBody,
@@ -11,14 +11,9 @@ import {
   GetMeResponse,
   SyncMeResponse,
 } from "@workspace/api-zod";
-import type { Request } from "express";
+import { getAuth } from "@clerk/express";
 
 const router = Router();
-
-function getClerkUserId(req: Request): string | null {
-  const auth = (req as Request & { auth?: { userId?: string } }).auth;
-  return auth?.userId ?? null;
-}
 
 function formatUser(u: typeof usersTable.$inferSelect) {
   return {
@@ -31,7 +26,7 @@ function formatUser(u: typeof usersTable.$inferSelect) {
 
 router.get("/users/me", async (req, res): Promise<void> => {
   try {
-    const clerkId = getClerkUserId(req);
+    const { userId: clerkId } = getAuth(req);
     if (!clerkId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId)).limit(1);
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
@@ -49,7 +44,7 @@ router.get("/users/me", async (req, res): Promise<void> => {
 
 router.post("/users/me/sync", async (req, res): Promise<void> => {
   try {
-    const clerkId = getClerkUserId(req);
+    const { userId: clerkId } = getAuth(req);
     if (!clerkId) { res.status(401).json({ error: "Not authenticated" }); return; }
 
     const parsed = SyncMeBody.safeParse(req.body);

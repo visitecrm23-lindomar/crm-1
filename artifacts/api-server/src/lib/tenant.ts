@@ -1,6 +1,7 @@
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { getAuth } from "@clerk/express";
 import type { Request, Response } from "express";
 
 export type AuthedUser = {
@@ -13,12 +14,12 @@ export type AuthedUser = {
 };
 
 export async function requireAuth(req: Request, res: Response): Promise<AuthedUser | null> {
-  const auth = (req as any).auth;
-  if (!auth?.userId) {
+  const { userId } = getAuth(req);
+  if (!userId) {
     res.status(401).json({ error: "Not authenticated" });
     return null;
   }
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.userId)).limit(1);
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, userId)).limit(1);
   if (!user?.tenantId) {
     res.status(401).json({ error: "User not provisioned" });
     return null;
@@ -27,9 +28,21 @@ export async function requireAuth(req: Request, res: Response): Promise<AuthedUs
 }
 
 export async function getTenantUser(req: Request): Promise<AuthedUser | null> {
-  const auth = (req as any).auth;
-  if (!auth?.userId) return null;
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.userId)).limit(1);
+  const { userId } = getAuth(req);
+  if (!userId) return null;
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, userId)).limit(1);
   if (!user?.tenantId) return null;
   return user as AuthedUser;
+}
+
+export function requireRole(allowedRoles: string[]) {
+  return async (req: Request, res: Response, next: () => void): Promise<void> => {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!allowedRoles.includes(me.role)) {
+      res.status(403).json({ error: "Forbidden: insufficient role" });
+      return;
+    }
+    next();
+  };
 }
