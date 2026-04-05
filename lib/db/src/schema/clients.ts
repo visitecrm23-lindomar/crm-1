@@ -42,6 +42,7 @@ export const clientsTable = pgTable("clients", {
   tags: text("tags").array().notNull().default([]),
   pipelineStage: text("pipeline_stage").notNull().default("novo"),
   createdById: text("created_by_id").notNull(),
+  userId: text("user_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
   lastContactAt: timestamp("last_contact_at", { withTimezone: true }),

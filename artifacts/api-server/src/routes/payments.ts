@@ -82,7 +82,7 @@ router.get("/payments", async (req, res): Promise<void> => {
     if (me.role === "cliente") {
       const [clientRecord] = await db.select({ id: clientsTable.id })
         .from(clientsTable)
-        .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.createdById, me.id)))
+        .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.userId, me.id)))
         .limit(1);
       if (clientRecord) {
         conditions.push(eq(paymentsTable.clientId, clientRecord.id));

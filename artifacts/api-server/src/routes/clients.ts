@@ -51,7 +51,7 @@ router.get("/clients", async (req, res): Promise<void> => {
 
     const {
       search, status, pipelineStage, classification,
-      city, tripId, sellerId, dateFrom, dateTo, sortBy = "createdAt", sortOrder = "desc",
+      city, tripId, sellerId, origin, dateFrom, dateTo, sortBy = "createdAt", sortOrder = "desc",
       page = "1", limit = "20",
     } = req.query as Record<string, string>;
     const pageNum = parseInt(page) || 1;
@@ -70,6 +70,7 @@ router.get("/clients", async (req, res): Promise<void> => {
     if (pipelineStage) conditions.push(eq(clientsTable.pipelineStage, pipelineStage));
     if (classification) conditions.push(eq(clientsTable.classification, classification));
     if (city) conditions.push(ilike(clientsTable.addressCity, `%${city}%`) as ReturnType<typeof eq>);
+    if (origin) conditions.push(ilike(clientsTable.origin, `%${origin}%`) as ReturnType<typeof eq>);
     if (dateFrom) conditions.push(sql`${clientsTable.createdAt} >= ${new Date(dateFrom)}` as ReturnType<typeof eq>);
     if (dateTo) conditions.push(sql`${clientsTable.createdAt} <= ${new Date(dateTo)}` as ReturnType<typeof eq>);
     if (sellerId) conditions.push(eq(clientsTable.createdById, sellerId));

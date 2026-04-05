@@ -171,6 +171,10 @@ paths:
           in: query
           schema:
             type: ["string", "null"]
+        - name: origin
+          in: query
+          schema:
+            type: ["string", "null"]
         - name: dateFrom
           in: query
           schema:

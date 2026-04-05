@@ -568,6 +568,7 @@ export default function Clients() {
   const [filterCity, setFilterCity] = useState<string>("");
   const [filterTripId, setFilterTripId] = useState<string>("all");
   const [filterSellerId, setFilterSellerId] = useState<string>("all");
+  const [filterOrigin, setFilterOrigin] = useState<string>("");
   const [filterDateFrom, setFilterDateFrom] = useState<string>("");
   const [filterDateTo, setFilterDateTo] = useState<string>("");
   const [sortBy, setSortBy] = useState<SortField>("createdAt");
@@ -587,6 +588,7 @@ export default function Clients() {
     pipelineStage: filterPipelineStage !== "all" ? filterPipelineStage : undefined,
     classification: filterClassification !== "all" ? filterClassification : undefined,
     city: filterCity || undefined,
+    origin: filterOrigin || undefined,
     tripId: filterTripId !== "all" ? filterTripId : undefined,
     sellerId: filterSellerId !== "all" ? filterSellerId : undefined,
     dateFrom: filterDateFrom || undefined,
@@ -619,11 +621,11 @@ export default function Clients() {
     setPage(1);
   }, [sortBy]);
 
-  const hasFilters = !!(search || filterStatus !== "all" || filterClassification !== "all" || filterPipelineStage !== "all" || filterCity || filterTripId !== "all" || filterSellerId !== "all" || filterDateFrom || filterDateTo);
+  const hasFilters = !!(search || filterStatus !== "all" || filterClassification !== "all" || filterPipelineStage !== "all" || filterCity || filterOrigin || filterTripId !== "all" || filterSellerId !== "all" || filterDateFrom || filterDateTo);
 
   const clearFilters = () => {
     setSearch(""); setFilterStatus("all"); setFilterClassification("all");
-    setFilterPipelineStage("all"); setFilterCity(""); setFilterTripId("all");
+    setFilterPipelineStage("all"); setFilterCity(""); setFilterOrigin(""); setFilterTripId("all");
     setFilterSellerId("all"); setFilterDateFrom(""); setFilterDateTo("");
     setPage(1);
   };
@@ -701,7 +703,8 @@ export default function Clients() {
             </Select>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Input placeholder="Filtrar por cidade / origem..." value={filterCity} onChange={e => { setFilterCity(e.target.value); setPage(1); }} className="w-44" />
+            <Input placeholder="Filtrar por cidade..." value={filterCity} onChange={e => { setFilterCity(e.target.value); setPage(1); }} className="w-36" />
+            <Input placeholder="Filtrar por origem..." value={filterOrigin} onChange={e => { setFilterOrigin(e.target.value); setPage(1); }} className="w-36" />
             <Select value={filterTripId} onValueChange={v => { setFilterTripId(v); setPage(1); }}>
               <SelectTrigger className="w-44"><SelectValue placeholder="Viagem de interesse" /></SelectTrigger>
               <SelectContent>

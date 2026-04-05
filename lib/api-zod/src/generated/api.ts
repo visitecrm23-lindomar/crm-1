@@ -100,6 +100,7 @@ export const ListClientsQueryParams = zod.object({
   city: zod.coerce.string().nullish(),
   tripId: zod.coerce.string().nullish(),
   sellerId: zod.coerce.string().nullish(),
+  origin: zod.coerce.string().nullish(),
   dateFrom: zod.coerce.string().nullish(),
   dateTo: zod.coerce.string().nullish(),
   sortBy: zod.coerce.string().nullish(),

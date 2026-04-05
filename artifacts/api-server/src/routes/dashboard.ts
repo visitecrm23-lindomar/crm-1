@@ -15,6 +15,88 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
+    if (me.role === "cliente") {
+      const [clientRecord] = await db.select({ id: clientsTable.id, totalSpent: clientsTable.totalSpent, outstandingBalance: clientsTable.outstandingBalance, npsScore: clientsTable.npsScore })
+        .from(clientsTable)
+        .where(and(eq(clientsTable.tenantId, tenantId), eq(clientsTable.userId, me.id)))
+        .limit(1);
+
+      const clientId = clientRecord?.id;
+      let totalReservations = 0, confirmedReservations = 0;
+      if (clientId) {
+        const [rc] = await db.select({ count: sql<number>`count(*)` })
+          .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.clientId, clientId)));
+        const [cc] = await db.select({ count: sql<number>`count(*)` })
+          .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.clientId, clientId), eq(reservationsTable.status, "confirmed")));
+        totalReservations = Number(rc?.count ?? 0);
+        confirmedReservations = Number(cc?.count ?? 0);
+      }
+
+      res.json({
+        totalClients: 1, newClientsThisMonth: 0, totalTrips: 0, activeTrips: 0,
+        totalRevenue: Number(clientRecord?.totalSpent ?? 0),
+        revenueThisMonth: 0,
+        pendingPayments: Number(clientRecord?.outstandingBalance ?? 0),
+        totalReservations, confirmedReservations, occupancyRate: 0,
+        averageNps: clientRecord?.npsScore ?? null,
+        openDeals: 0, dealsPipelineValue: 0,
+      });
+      return;
+    }
+
+    if (me.role === "vendedor") {
+      const [clientCount] = await db.select({ count: sql<number>`count(*)` })
+        .from(clientsTable).where(and(eq(clientsTable.tenantId, tenantId), eq(clientsTable.createdById, me.id)));
+      const [newClientCount] = await db.select({ count: sql<number>`count(*)` })
+        .from(clientsTable).where(and(eq(clientsTable.tenantId, tenantId), eq(clientsTable.createdById, me.id), gte(clientsTable.createdAt, startOfMonth)));
+
+      const myClients = await db.select({ id: clientsTable.id }).from(clientsTable)
+        .where(and(eq(clientsTable.tenantId, tenantId), eq(clientsTable.createdById, me.id)));
+      const myClientIds = myClients.map(c => c.id);
+
+      let totalRevenue = 0, revenueThisMonth = 0, pendingAmount = 0;
+      if (myClientIds.length > 0) {
+        const payments = await db.select().from(paymentsTable)
+          .where(and(eq(paymentsTable.tenantId, tenantId), inArray(paymentsTable.clientId, myClientIds)));
+        for (const p of payments) {
+          if (p.type === "receivable" && p.status === "paid") {
+            totalRevenue += Number(p.amount);
+            if (p.paidAt && p.paidAt >= startOfMonth) revenueThisMonth += Number(p.amount);
+          }
+          if (p.status === "pending") pendingAmount += Number(p.amount);
+        }
+      }
+
+      let totalReservations = 0, confirmedReservations = 0;
+      if (myClientIds.length > 0) {
+        const [rc] = await db.select({ count: sql<number>`count(*)` })
+          .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), inArray(reservationsTable.clientId, myClientIds)));
+        const [cc] = await db.select({ count: sql<number>`count(*)` })
+          .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), inArray(reservationsTable.clientId, myClientIds), eq(reservationsTable.status, "confirmed")));
+        totalReservations = Number(rc?.count ?? 0);
+        confirmedReservations = Number(cc?.count ?? 0);
+      }
+
+      const [dealCount] = await db.select({ count: sql<number>`count(*)` })
+        .from(dealsTable).where(and(eq(dealsTable.tenantId, tenantId), eq(dealsTable.status, "open"), eq(dealsTable.ownerId, me.id)));
+      const [dealValue] = await db.select({ total: sql<number>`sum(cast(value as numeric))` })
+        .from(dealsTable).where(and(eq(dealsTable.tenantId, tenantId), eq(dealsTable.status, "open"), eq(dealsTable.ownerId, me.id)));
+
+      res.json({
+        totalClients: Number(clientCount?.count ?? 0),
+        newClientsThisMonth: Number(newClientCount?.count ?? 0),
+        totalTrips: 0, activeTrips: 0,
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        revenueThisMonth: Math.round(revenueThisMonth * 100) / 100,
+        pendingPayments: Math.round(pendingAmount * 100) / 100,
+        totalReservations, confirmedReservations, occupancyRate: 0,
+        averageNps: null,
+        openDeals: Number(dealCount?.count ?? 0),
+        dealsPipelineValue: Number(dealValue?.total ?? 0),
+      });
+      return;
+    }
+
     const [clientCount] = await db.select({ count: sql<number>`count(*)` })
       .from(clientsTable).where(eq(clientsTable.tenantId, tenantId));
     const [newClientCount] = await db.select({ count: sql<number>`count(*)` })
@@ -147,7 +229,7 @@ router.get("/dashboard/upcoming-trips", async (req, res): Promise<void> => {
     if (me.role === "cliente") {
       const [clientRecord] = await db.select({ id: clientsTable.id })
         .from(clientsTable)
-        .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.createdById, me.id)))
+        .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.userId, me.id)))
         .limit(1);
 
       if (!clientRecord) {

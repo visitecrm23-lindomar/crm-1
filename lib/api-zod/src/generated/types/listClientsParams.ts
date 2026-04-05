@@ -38,6 +38,10 @@ export type ListClientsParams = {
   /**
    * @nullable
    */
+  origin?: string | null;
+  /**
+   * @nullable
+   */
   dateFrom?: string | null;
   /**
    * @nullable
