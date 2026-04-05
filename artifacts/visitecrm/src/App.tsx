@@ -120,6 +120,12 @@ function Router() {
       <Route path="/clients" component={() => <ProtectedRoute component={Clients} />} />
       <Route path="/clients/:id" component={() => <ProtectedRoute component={Clients} />} />
       <Route path="/trips" component={() => <ProtectedRoute component={Trips} />} />
+      <Route path="/trips/new" component={() => <ProtectedRoute component={Trips} />} />
+      <Route path="/trips/calendar" component={() => <ProtectedRoute component={Trips} />} />
+      <Route path="/trips/:id/edit" component={() => <ProtectedRoute component={Trips} />} />
+      <Route path="/trips/:id/seat-map" component={() => <ProtectedRoute component={Trips} />} />
+      <Route path="/trips/:id/passengers-overview" component={() => <ProtectedRoute component={Trips} />} />
+      <Route path="/trips/:id/passengers" component={() => <ProtectedRoute component={Trips} />} />
       <Route path="/trips/:id" component={() => <ProtectedRoute component={Trips} />} />
       <Route path="/reservations" component={() => <ProtectedRoute component={Reservations} />} />
       <Route path="/reservations/:id" component={() => <ProtectedRoute component={Reservations} />} />

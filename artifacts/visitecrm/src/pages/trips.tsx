@@ -1,185 +1,1330 @@
-import { useState } from "react";
-import { Link } from "wouter";
-import { useListTrips, useCreateTrip } from "@workspace/api-client-react";
+import { useState, useMemo } from "react";
+import { Link, useLocation, useRoute } from "wouter";
+import {
+  useListTrips, useCreateTrip, useGetTrip, useUpdateTrip, useDeleteTrip,
+  useGetTripSeatMap, useListReservations, useListClients,
+} from "@workspace/api-client-react";
+import type { Trip } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Search, MapPin, Calendar } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Plus, Search, MapPin, Calendar, Users, Bus, Edit, Trash2, Eye, ChevronsLeft, ChevronsRight,
+  LayoutGrid, List, ChevronLeft, ChevronRight, ArrowLeft, Check, X, Download, Send,
+} from "lucide-react";
+import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay, isToday } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
-export default function Trips() {
+function formatCurrency(v: number) {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function formatDate(d: string) {
+  try { return format(parseISO(d), "dd/MM/yyyy", { locale: ptBR }); }
+  catch { return d; }
+}
+
+const STATUS_MAP: Record<string, { label: string; color: string }> = {
+  draft:      { label: "Rascunho",   color: "bg-gray-100 text-gray-600" },
+  active:     { label: "Ativa",      color: "bg-green-100 text-green-700" },
+  confirmed:  { label: "Confirmada", color: "bg-blue-100 text-blue-700" },
+  completed:  { label: "Concluída",  color: "bg-purple-100 text-purple-700" },
+  cancelled:  { label: "Cancelada",  color: "bg-red-100 text-red-700" },
+};
+
+const VEHICLE_TYPES = ["Ônibus", "Micro-ônibus", "Van", "Carro", "Outro"];
+const TRIP_TYPES = ["excursion", "package", "custom", "transfer"];
+const TRIP_TYPE_LABELS: Record<string, string> = {
+  excursion: "Excursão", package: "Pacote", custom: "Personalizado", transfer: "Transfer",
+};
+
+function OccupancyBar({ reserved, confirmed, total }: { reserved: number; confirmed: number; total: number }) {
+  const pct = total > 0 ? Math.round((reserved + confirmed) / total * 100) : 0;
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between text-xs text-muted-foreground">
+        <span>{reserved + confirmed}/{total} assentos</span>
+        <span>{pct}%</span>
+      </div>
+      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-amber-500" : "bg-green-500"}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+export function TripList() {
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [, navigate] = useLocation();
 
-  const { data: tripsData, isLoading, refetch } = useListTrips({ search, page, limit: 10 });
-  const createTrip = useCreateTrip();
+  const { data: tripsData, isLoading, refetch } = useListTrips({
+    search: search || undefined,
+    status: statusFilter !== "all" ? statusFilter : undefined,
+    page,
+    limit: 12,
+  });
+  const deleteTrip = useDeleteTrip();
 
-  const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    await createTrip.mutateAsync({
-      data: {
-        name: formData.get("name") as string,
-        destination: formData.get("destination") as string,
-        destinationCity: formData.get("destinationCity") as string,
-        destinationState: formData.get("destinationState") as string,
-        type: formData.get("type") as string || "excursion",
-        category: formData.get("category") as string || "standard",
-        departureDate: formData.get("departureDate") as string,
-        totalCapacity: parseInt(formData.get("totalCapacity") as string || "0"),
-        priceAdult: parseFloat(formData.get("priceAdult") as string || "0"),
-      }
-    });
-    setIsCreateOpen(false);
+  const { data: allTrips } = useListTrips({ limit: 100 });
+  const trips = tripsData?.data ?? [];
+
+  const stats = useMemo(() => {
+    const all = allTrips?.data ?? [];
+    const active = all.filter(t => t.status === "active" || t.status === "confirmed");
+    const totalSeats = active.reduce((acc, t) => acc + t.totalCapacity, 0);
+    const occupiedSeats = active.reduce((acc, t) => acc + t.reservedSeats + t.confirmedSeats, 0);
+    const totalRevenue = active.reduce((acc, t) => acc + (t.reservedSeats + t.confirmedSeats) * t.priceAdult, 0);
+    return {
+      total: all.length,
+      active: active.length,
+      occupancyRate: totalSeats > 0 ? Math.round(occupiedSeats / totalSeats * 100) : 0,
+      totalRevenue,
+    };
+  }, [allTrips]);
+
+  const handleDelete = async (id: string) => {
+    await deleteTrip.mutateAsync({ id });
+    setDeletingId(null);
     refetch();
   };
+
+  const totalPages = Math.ceil((tripsData?.total ?? 0) / 12);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Trips</h1>
-          <p className="text-muted-foreground mt-2">Manage your agency's excursions and packages.</p>
+          <h1 className="text-2xl font-bold tracking-tight">Viagens</h1>
+          <p className="text-muted-foreground text-sm">Gerencie excursões e pacotes da agência</p>
         </div>
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <DialogTrigger asChild>
-            <Button><Plus className="w-4 h-4 mr-2" /> New Trip</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Create New Trip</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleCreate} className="grid grid-cols-2 gap-4 mt-4">
-              <div className="space-y-2 col-span-2">
-                <label className="text-sm font-medium">Trip Name</label>
-                <Input name="name" required placeholder="Summer in Rio" />
+        <div className="flex gap-2">
+          <Link href="/trips/calendar">
+            <Button variant="outline"><Calendar className="w-4 h-4 mr-2" />Calendário</Button>
+          </Link>
+          <Link href="/trips/new">
+            <Button><Plus className="w-4 h-4 mr-2" />Nova Viagem</Button>
+          </Link>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: "Total de Viagens", value: stats.total, icon: MapPin, color: "text-blue-600" },
+          { label: "Viagens Ativas", value: stats.active, icon: Calendar, color: "text-green-600" },
+          { label: "Taxa de Ocupação", value: `${stats.occupancyRate}%`, icon: Users, color: "text-amber-600" },
+          { label: "Receita Estimada", value: formatCurrency(stats.totalRevenue), icon: Bus, color: "text-purple-600" },
+        ].map(s => (
+          <div key={s.label} className="bg-card border rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <s.icon className={`w-4 h-4 ${s.color}`} />
+              <span className="text-xs text-muted-foreground">{s.label}</span>
+            </div>
+            <p className="text-2xl font-bold">{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap gap-3 items-center">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input placeholder="Buscar viagens..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+        </div>
+        <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os status</SelectItem>
+            {Object.entries(STATUS_MAP).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <div className="flex border rounded-md overflow-hidden">
+          <Button variant={viewMode === "grid" ? "default" : "ghost"} size="icon" className="rounded-none h-9 w-9" onClick={() => setViewMode("grid")}>
+            <LayoutGrid className="w-4 h-4" />
+          </Button>
+          <Button variant={viewMode === "list" ? "default" : "ghost"} size="icon" className="rounded-none h-9 w-9" onClick={() => setViewMode("list")}>
+            <List className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-64 rounded-xl" />)}
+        </div>
+      ) : trips.length === 0 ? (
+        <div className="text-center py-20 text-muted-foreground">
+          <MapPin className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="font-medium">Nenhuma viagem encontrada</p>
+          <p className="text-sm mt-1">Crie sua primeira viagem para começar</p>
+          <Link href="/trips/new"><Button className="mt-4">Nova Viagem</Button></Link>
+        </div>
+      ) : viewMode === "grid" ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {trips.map(trip => (
+            <TripCard key={trip.id} trip={trip} onDelete={() => setDeletingId(trip.id)} navigate={navigate} />
+          ))}
+        </div>
+      ) : (
+        <div className="bg-card border rounded-lg overflow-hidden">
+          {trips.map((trip, i) => (
+            <div key={trip.id} className={`flex items-center gap-4 p-4 ${i > 0 ? "border-t" : ""}`}>
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <MapPin className="w-5 h-5 text-primary" />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Destination Title</label>
-                <Input name="destination" required placeholder="Rio de Janeiro" />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium truncate">{trip.name}</p>
+                <p className="text-sm text-muted-foreground">{trip.destinationCity}, {trip.destinationState} · {formatDate(trip.departureDate)}</p>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">City</label>
-                <Input name="destinationCity" required placeholder="Rio de Janeiro" />
+              <div className="hidden md:block w-40">
+                <OccupancyBar reserved={trip.reservedSeats} confirmed={trip.confirmedSeats} total={trip.totalCapacity} />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">State (UF)</label>
-                <Input name="destinationState" required placeholder="RJ" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Departure Date</label>
-                <Input name="departureDate" type="date" required />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Capacity (Seats)</label>
-                <Input name="totalCapacity" type="number" required placeholder="46" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Adult Price (R$)</label>
-                <Input name="priceAdult" type="number" step="0.01" required placeholder="1500.00" />
-              </div>
-              <div className="col-span-2 pt-4 flex justify-end">
-                <Button type="submit" disabled={createTrip.isPending}>
-                  {createTrip.isPending ? "Creating..." : "Create Trip"}
+              <Badge className={STATUS_MAP[trip.status]?.color}>{STATUS_MAP[trip.status]?.label ?? trip.status}</Badge>
+              <div className="flex gap-1">
+                <Link href={`/trips/${trip.id}/passengers-overview`}>
+                  <Button size="icon" variant="ghost" className="h-8 w-8"><Eye className="w-4 h-4" /></Button>
+                </Link>
+                <Link href={`/trips/${trip.id}/edit`}>
+                  <Button size="icon" variant="ghost" className="h-8 w-8"><Edit className="w-4 h-4" /></Button>
+                </Link>
+                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => setDeletingId(trip.id)}>
+                  <Trash2 className="w-4 h-4" />
                 </Button>
               </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-      <div className="flex items-center gap-4 bg-card p-4 rounded-lg border">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search trips..." 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <Button variant="outline" size="icon" disabled={page <= 1} onClick={() => setPage(1)}><ChevronsLeft className="w-4 h-4" /></Button>
+          <Button variant="outline" size="icon" disabled={page <= 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></Button>
+          <span className="text-sm text-muted-foreground">Página {page} de {totalPages}</span>
+          <Button variant="outline" size="icon" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></Button>
+          <Button variant="outline" size="icon" disabled={page >= totalPages} onClick={() => setPage(totalPages)}><ChevronsRight className="w-4 h-4" /></Button>
+        </div>
+      )}
+
+      <Dialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Confirmar exclusão</DialogTitle></DialogHeader>
+          <p className="text-muted-foreground">Tem certeza que deseja excluir esta viagem? Esta ação não pode ser desfeita.</p>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setDeletingId(null)}>Cancelar</Button>
+            <Button variant="destructive" onClick={() => deletingId && handleDelete(deletingId)} disabled={deleteTrip.isPending}>
+              {deleteTrip.isPending ? "Excluindo..." : "Excluir"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function TripCard({ trip, onDelete, navigate }: { trip: Trip; onDelete: () => void; navigate: (to: string) => void }) {
+  const pct = trip.totalCapacity > 0 ? Math.round((trip.reservedSeats + trip.confirmedSeats) / trip.totalCapacity * 100) : 0;
+  const statusInfo = STATUS_MAP[trip.status] ?? { label: trip.status, color: "bg-gray-100 text-gray-600" };
+
+  return (
+    <div className="bg-card border rounded-xl overflow-hidden hover:shadow-md transition-shadow group">
+      <div className="relative h-36 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+        {trip.coverImage ? (
+          <img src={trip.coverImage} alt={trip.name} className="w-full h-full object-cover" />
+        ) : (
+          <MapPin className="w-12 h-12 text-primary/30" />
+        )}
+        <div className="absolute top-3 right-3">
+          <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusInfo.color}`}>{statusInfo.label}</span>
         </div>
       </div>
-
-      <div className="bg-card rounded-lg border overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Trip</TableHead>
-              <TableHead>Destination</TableHead>
-              <TableHead>Dates</TableHead>
-              <TableHead>Availability</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell><Skeleton className="h-10 w-[200px]" /></TableCell>
-                  <TableCell><Skeleton className="h-6 w-[150px]" /></TableCell>
-                  <TableCell><Skeleton className="h-6 w-[120px]" /></TableCell>
-                  <TableCell><Skeleton className="h-6 w-[100px]" /></TableCell>
-                  <TableCell><Skeleton className="h-6 w-[80px]" /></TableCell>
-                  <TableCell><Skeleton className="h-8 w-[80px] ml-auto" /></TableCell>
-                </TableRow>
-              ))
-            ) : tripsData?.data.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                  No trips found.
-                </TableCell>
-              </TableRow>
-            ) : (
-              tripsData?.data.map((trip) => (
-                <TableRow key={trip.id}>
-                  <TableCell>
-                    <p className="font-medium">{trip.name}</p>
-                    <p className="text-xs text-muted-foreground">{trip.type} - {trip.category}</p>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm">{trip.destinationCity}, {trip.destinationState}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm">{new Date(trip.departureDate).toLocaleDateString()}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-sm">{trip.availableSeats} of {trip.totalCapacity} left</span>
-                      <div className="w-24 h-2 bg-secondary/20 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-primary" 
-                          style={{ width: `${(trip.reservedSeats + trip.confirmedSeats) / trip.totalCapacity * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      trip.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {trip.status}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Link href={`/trips/${trip.id}`}>
-                      <Button variant="ghost" size="sm">Manage</Button>
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+      <div className="p-4 space-y-3">
+        <div>
+          <h3 className="font-semibold truncate">{trip.name}</h3>
+          <p className="text-sm text-muted-foreground flex items-center gap-1">
+            <MapPin className="w-3 h-3" /> {trip.destinationCity}, {trip.destinationState}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+          <Calendar className="w-3 h-3" />
+          <span>{formatDate(trip.departureDate)}</span>
+          {trip.returnDate && <><span>—</span><span>{formatDate(trip.returnDate)}</span></>}
+        </div>
+        <OccupancyBar reserved={trip.reservedSeats} confirmed={trip.confirmedSeats} total={trip.totalCapacity} />
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-semibold text-primary">{formatCurrency(trip.priceAdult)}<span className="text-xs text-muted-foreground font-normal">/pessoa</span></span>
+          <span className="text-muted-foreground text-xs">{pct}% ocupado</span>
+        </div>
+        <div className="flex gap-1 pt-1">
+          <Link href={`/trips/${trip.id}/passengers-overview`} className="flex-1">
+            <Button variant="outline" size="sm" className="w-full text-xs"><Eye className="w-3 h-3 mr-1" />Visão Geral</Button>
+          </Link>
+          <Link href={`/trips/${trip.id}/seat-map`}>
+            <Button variant="outline" size="sm" className="text-xs"><Bus className="w-3 h-3 mr-1" />Mapa</Button>
+          </Link>
+          <Link href={`/trips/${trip.id}/edit`}>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground"><Edit className="w-4 h-4" /></Button>
+          </Link>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={onDelete}>
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
     </div>
   );
+}
+
+interface TripFormData {
+  name: string; description: string;
+  destination: string; destinationCity: string; destinationState: string;
+  type: string; category: string;
+  departureDate: string; returnDate: string;
+  totalCapacity: string; seatLayout: string;
+  priceAdult: string; priceChild: string; priceSenior: string;
+  inclusions: string; exclusions: string;
+  coverImage: string;
+  vehicleType: string; vehiclePlate: string; driverName: string;
+  status: string;
+}
+
+const EMPTY_FORM: TripFormData = {
+  name: "", description: "", destination: "", destinationCity: "", destinationState: "",
+  type: "excursion", category: "standard", departureDate: "", returnDate: "",
+  totalCapacity: "46", seatLayout: "2x2",
+  priceAdult: "", priceChild: "", priceSenior: "",
+  inclusions: "", exclusions: "", coverImage: "",
+  vehicleType: "", vehiclePlate: "", driverName: "", status: "draft",
+};
+
+export function TripForm({ tripId }: { tripId?: string }) {
+  const [, navigate] = useLocation();
+  const [tab, setTab] = useState("basico");
+  const [form, setForm] = useState<TripFormData>(EMPTY_FORM);
+  const [loaded, setLoaded] = useState(false);
+
+  const { data: existingTrip } = useGetTrip(tripId ?? "", { query: { enabled: !!tripId, queryKey: ["/api/trips", tripId] } });
+  const createTrip = useCreateTrip();
+  const updateTrip = useUpdateTrip();
+  const isPending = createTrip.isPending || updateTrip.isPending;
+
+  if (existingTrip && !loaded) {
+    setLoaded(true);
+    setForm({
+      name: existingTrip.name,
+      description: existingTrip.description ?? "",
+      destination: existingTrip.destination,
+      destinationCity: existingTrip.destinationCity,
+      destinationState: existingTrip.destinationState,
+      type: existingTrip.type,
+      category: existingTrip.category,
+      departureDate: existingTrip.departureDate.split("T")[0],
+      returnDate: existingTrip.returnDate?.split("T")[0] ?? "",
+      totalCapacity: String(existingTrip.totalCapacity),
+      seatLayout: existingTrip.seatLayout ?? "2x2",
+      priceAdult: String(existingTrip.priceAdult),
+      priceChild: existingTrip.priceChild ? String(existingTrip.priceChild) : "",
+      priceSenior: existingTrip.priceSenior ? String(existingTrip.priceSenior) : "",
+      inclusions: (existingTrip.inclusions ?? []).join("\n"),
+      exclusions: (existingTrip.exclusions ?? []).join("\n"),
+      coverImage: existingTrip.coverImage ?? "",
+      vehicleType: existingTrip.vehicleType ?? "",
+      vehiclePlate: existingTrip.vehiclePlate ?? "",
+      driverName: existingTrip.driverName ?? "",
+      status: existingTrip.status,
+    });
+  }
+
+  const set = (k: keyof TripFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+    setForm(prev => ({ ...prev, [k]: e.target.value }));
+  const setVal = (k: keyof TripFormData) => (v: string) => setForm(prev => ({ ...prev, [k]: v }));
+
+  const handleSave = async (publish = false) => {
+    const inclArr = form.inclusions.split("\n").map(s => s.trim()).filter(Boolean);
+    const exclArr = form.exclusions.split("\n").map(s => s.trim()).filter(Boolean);
+    const statusToSave = publish ? "active" : form.status;
+
+    if (tripId) {
+      await updateTrip.mutateAsync({
+        id: tripId,
+        data: {
+          name: form.name,
+          description: form.description || undefined,
+          departureDate: form.departureDate,
+          returnDate: form.returnDate || undefined,
+          totalCapacity: parseInt(form.totalCapacity),
+          priceAdult: parseFloat(form.priceAdult),
+          priceChild: form.priceChild ? parseFloat(form.priceChild) : undefined,
+          priceSenior: form.priceSenior ? parseFloat(form.priceSenior) : undefined,
+          inclusions: inclArr,
+          exclusions: exclArr,
+          coverImage: form.coverImage || undefined,
+          vehicleType: form.vehicleType || undefined,
+          vehiclePlate: form.vehiclePlate || undefined,
+          driverName: form.driverName || undefined,
+          status: statusToSave,
+        },
+      });
+    } else {
+      await createTrip.mutateAsync({
+        data: {
+          name: form.name,
+          description: form.description || undefined,
+          destination: form.destination,
+          destinationCity: form.destinationCity,
+          destinationState: form.destinationState,
+          type: form.type,
+          category: form.category,
+          departureDate: form.departureDate,
+          returnDate: form.returnDate || undefined,
+          totalCapacity: parseInt(form.totalCapacity),
+          priceAdult: parseFloat(form.priceAdult),
+          priceChild: form.priceChild ? parseFloat(form.priceChild) : undefined,
+          priceSenior: form.priceSenior ? parseFloat(form.priceSenior) : undefined,
+          inclusions: inclArr,
+          exclusions: exclArr,
+          coverImage: form.coverImage || undefined,
+          seatLayout: form.seatLayout,
+          vehicleType: form.vehicleType || undefined,
+          vehiclePlate: form.vehiclePlate || undefined,
+          driverName: form.driverName || undefined,
+        },
+      });
+    }
+    navigate("/trips");
+  };
+
+  const marginPct = form.priceAdult ? 30 : 0;
+
+  const TABS = [
+    { id: "basico", label: "Informações Básicas" },
+    { id: "precos", label: "Preços" },
+    { id: "inclusoes", label: "Inclusões / Exclusões" },
+    { id: "transporte", label: "Transporte" },
+    { id: "midia", label: "Mídia" },
+    { id: "configuracoes", label: "Configurações" },
+  ];
+
+  return (
+    <div className="space-y-6 max-w-4xl">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/trips")}><ArrowLeft className="w-4 h-4" /></Button>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{tripId ? "Editar Viagem" : "Nova Viagem"}</h1>
+          <p className="text-muted-foreground text-sm">{tripId ? "Atualize as informações da viagem" : "Preencha as informações para criar uma nova viagem"}</p>
+        </div>
+      </div>
+
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="flex flex-wrap h-auto gap-1">
+          {TABS.map(t => <TabsTrigger key={t.id} value={t.id} className="text-xs">{t.label}</TabsTrigger>)}
+        </TabsList>
+
+        <TabsContent value="basico" className="space-y-4 mt-6">
+          <div className="bg-card border rounded-lg p-6 space-y-4">
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-2">
+                <Label>Nome da Viagem *</Label>
+                <Input placeholder="Ex: Maravilhas do Nordeste" value={form.name} onChange={set("name")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Descrição</Label>
+                <Textarea placeholder="Descreva os atrativos, programação e destaques da viagem..." value={form.description} onChange={set("description")} rows={4} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Destino / Título *</Label>
+                <Input placeholder="Nordeste Brasileiro" value={form.destination} onChange={set("destination")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Cidade *</Label>
+                <Input placeholder="Natal" value={form.destinationCity} onChange={set("destinationCity")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Estado (UF) *</Label>
+                <Input placeholder="RN" maxLength={2} value={form.destinationState} onChange={set("destinationState")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Tipo</Label>
+                <Select value={form.type} onValueChange={setVal("type")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TRIP_TYPES.map(t => <SelectItem key={t} value={t}>{TRIP_TYPE_LABELS[t] ?? t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Data de Saída *</Label>
+                <Input type="date" value={form.departureDate} onChange={set("departureDate")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Data de Retorno</Label>
+                <Input type="date" value={form.returnDate} onChange={set("returnDate")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Capacidade Total (assentos) *</Label>
+                <Input type="number" min="1" max="200" value={form.totalCapacity} onChange={set("totalCapacity")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Layout dos Assentos</Label>
+                <Select value={form.seatLayout} onValueChange={setVal("seatLayout")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="2x2">2x2 (Padrão)</SelectItem>
+                    <SelectItem value="2x1">2x1 (Premium)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="precos" className="space-y-4 mt-6">
+          <div className="bg-card border rounded-lg p-6 space-y-4">
+            <h3 className="font-semibold">Preços por Categoria</h3>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Preço Adulto (R$) *</Label>
+                <Input type="number" step="0.01" placeholder="0.00" value={form.priceAdult} onChange={set("priceAdult")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Preço Criança (R$)</Label>
+                <Input type="number" step="0.01" placeholder="0.00" value={form.priceChild} onChange={set("priceChild")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Preço Idoso (R$)</Label>
+                <Input type="number" step="0.01" placeholder="0.00" value={form.priceSenior} onChange={set("priceSenior")} />
+              </div>
+            </div>
+            {form.priceAdult && (
+              <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                <p className="text-sm font-medium">Receita Estimada (com {form.totalCapacity || 0} assentos)</p>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Receita Bruta Máxima:</span>
+                    <span className="ml-2 font-semibold">{formatCurrency(parseFloat(form.priceAdult || "0") * parseInt(form.totalCapacity || "0"))}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Margem Estimada ({marginPct}%):</span>
+                    <span className="ml-2 font-semibold text-green-600">
+                      {formatCurrency(parseFloat(form.priceAdult || "0") * parseInt(form.totalCapacity || "0") * marginPct / 100)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="inclusoes" className="space-y-4 mt-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-card border rounded-lg p-6 space-y-3">
+              <div className="flex items-center gap-2">
+                <Check className="w-4 h-4 text-green-600" />
+                <h3 className="font-semibold">O que está incluso</h3>
+              </div>
+              <Textarea
+                placeholder={"Transporte ida e volta\nCafé da manhã\nGuia turístico\nSeguro de viagem"}
+                value={form.inclusions} onChange={set("inclusions")} rows={8}
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">Um item por linha</p>
+            </div>
+            <div className="bg-card border rounded-lg p-6 space-y-3">
+              <div className="flex items-center gap-2">
+                <X className="w-4 h-4 text-red-600" />
+                <h3 className="font-semibold">O que não está incluso</h3>
+              </div>
+              <Textarea
+                placeholder={"Despesas pessoais\nAlmoço e jantar\nIngresso para atrações opcionais"}
+                value={form.exclusions} onChange={set("exclusions")} rows={8}
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">Um item por linha</p>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="transporte" className="space-y-4 mt-6">
+          <div className="bg-card border rounded-lg p-6 space-y-4">
+            <h3 className="font-semibold">Veículo e Motorista</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Tipo de Veículo</Label>
+                <Select value={form.vehicleType || "none"} onValueChange={v => setVal("vehicleType")(v === "none" ? "" : v)}>
+                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não definido</SelectItem>
+                    {VEHICLE_TYPES.map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Placa do Veículo</Label>
+                <Input placeholder="ABC-1234" value={form.vehiclePlate} onChange={set("vehiclePlate")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Nome do Motorista</Label>
+                <Input placeholder="João da Silva" value={form.driverName} onChange={set("driverName")} />
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="midia" className="space-y-4 mt-6">
+          <div className="bg-card border rounded-lg p-6 space-y-4">
+            <h3 className="font-semibold">Imagem de Capa</h3>
+            <div className="space-y-2">
+              <Label>URL da Imagem de Capa</Label>
+              <Input placeholder="https://exemplo.com/imagem.jpg" value={form.coverImage} onChange={set("coverImage")} />
+            </div>
+            {form.coverImage && (
+              <div className="mt-3 rounded-lg overflow-hidden h-48 bg-muted">
+                <img src={form.coverImage} alt="Preview" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+              </div>
+            )}
+            <div className="bg-muted/50 rounded-lg p-4 text-sm text-muted-foreground">
+              Galeria de imagens adicional estará disponível em breve.
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="configuracoes" className="space-y-4 mt-6">
+          <div className="bg-card border rounded-lg p-6 space-y-4">
+            <h3 className="font-semibold">Status da Viagem</h3>
+            <Select value={form.status} onValueChange={setVal("status")}>
+              <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(STATUS_MAP).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <div className="text-sm text-muted-foreground space-y-1">
+              <p><strong>Rascunho</strong>: visível apenas para administradores.</p>
+              <p><strong>Ativa</strong>: viagem aberta para reservas.</p>
+              <p><strong>Confirmada</strong>: viagem confirmada com todos os detalhes.</p>
+              <p><strong>Concluída</strong>: viagem já realizada.</p>
+              <p><strong>Cancelada</strong>: viagem cancelada.</p>
+            </div>
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      <div className="flex items-center justify-between bg-card border rounded-lg p-4">
+        <Button variant="ghost" onClick={() => navigate("/trips")}>Cancelar</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => handleSave(false)} disabled={isPending || !form.name || !form.destination || !form.departureDate || !form.priceAdult}>
+            {isPending ? "Salvando..." : "Salvar como Rascunho"}
+          </Button>
+          <Button onClick={() => handleSave(true)} disabled={isPending || !form.name || !form.destination || !form.departureDate || !form.priceAdult}>
+            {isPending ? "Publicando..." : "Publicar Viagem"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function SeatMap({ tripId }: { tripId: string }) {
+  const [, navigate] = useLocation();
+  const [selectedSeat, setSelectedSeat] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [clientSearch, setClientSearch] = useState("");
+
+  const { data: trip } = useGetTrip(tripId);
+  const { data: seatMap, refetch: refetchSeatMap } = useGetTripSeatMap(tripId);
+  const { data: reservations } = useListReservations({ tripId });
+  const { data: clientsData } = useListClients({ search: clientSearch || undefined, limit: 10 });
+
+  const seats = useMemo(() => {
+    if (!seatMap?.seats) return [];
+    return [...seatMap.seats].sort((a, b) => {
+      if (a.row !== b.row) return a.row - b.row;
+      return a.col - b.col;
+    });
+  }, [seatMap]);
+
+  const maxRow = useMemo(() => Math.max(...seats.map(s => s.row), 0), [seats]);
+  const cols = seatMap?.layout === "2x1" ? 3 : 4;
+
+  const seatCounts = useMemo(() => {
+    const available = seats.filter(s => s.status === "available").length;
+    const occupied = seats.filter(s => s.status === "occupied").length;
+    const blocked = seats.filter(s => s.status === "blocked").length;
+    return { available, occupied, blocked };
+  }, [seats]);
+
+  const handleSeatClick = (seatNum: string) => {
+    const seat = seats.find(s => s.number === seatNum);
+    if (seat?.status === "available") {
+      setSelectedSeat(seatNum);
+      setShowModal(true);
+    }
+  };
+
+  function getSeatColor(status: string) {
+    switch (status) {
+      case "available": return "bg-white border-2 border-gray-200 hover:border-primary hover:bg-primary/5 cursor-pointer";
+      case "occupied": return "bg-orange-400 border-2 border-orange-500 text-white";
+      case "confirmed": return "bg-green-500 border-2 border-green-600 text-white";
+      case "blocked": return "bg-gray-300 border-2 border-gray-400 text-gray-600";
+      default: return "bg-gray-100 border-2 border-gray-200";
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/trips")}><ArrowLeft className="w-4 h-4" /></Button>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Mapa de Assentos</h1>
+          <p className="text-muted-foreground text-sm">{trip?.name}</p>
+        </div>
+        <div className="ml-auto flex gap-2">
+          <Link href={`/trips/${tripId}/passengers`}>
+            <Button variant="outline"><Users className="w-4 h-4 mr-2" />Lista de Passageiros</Button>
+          </Link>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="lg:col-span-3">
+          <div className="bg-card border rounded-xl p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">Layout: {seatMap?.layout === "2x1" ? "2x1 Premium" : "2x2 Padrão"}</p>
+              <p className="text-sm text-muted-foreground">{seatMap?.totalSeats ?? 0} assentos no total</p>
+            </div>
+
+            <div className="bg-gray-800 text-white text-center py-3 rounded-lg text-sm font-medium mb-4">
+              FRENTE DO ONIBUS
+            </div>
+
+            <div className="space-y-2 max-w-sm mx-auto">
+              {Array.from({ length: maxRow }).map((_, rowIdx) => {
+                const rowNum = rowIdx + 1;
+                const rowSeats = seats.filter(s => s.row === rowNum);
+                const leftSeats = rowSeats.filter(s => s.col <= 2);
+                const rightSeats = rowSeats.filter(s => s.col > (cols === 3 ? 2 : 2));
+                return (
+                  <div key={rowNum} className="flex items-center gap-2 justify-center">
+                    <div className="flex gap-1">
+                      {leftSeats.map(seat => (
+                        <button
+                          key={seat.number}
+                          className={`w-10 h-10 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(seat.status)}`}
+                          onClick={() => handleSeatClick(seat.number)}
+                          title={`Assento ${seat.number} - ${seat.status}`}
+                        >
+                          {seat.number}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="w-6 text-center text-xs text-muted-foreground">|</div>
+                    <div className="flex gap-1">
+                      {rightSeats.map(seat => (
+                        <button
+                          key={seat.number}
+                          className={`w-10 h-10 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(seat.status)}`}
+                          onClick={() => handleSeatClick(seat.number)}
+                          title={`Assento ${seat.number} - ${seat.status}`}
+                        >
+                          {seat.number}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-4 justify-center text-xs flex-wrap">
+              {[
+                { color: "bg-white border-2 border-gray-200", label: "Disponível" },
+                { color: "bg-orange-400", label: "Reservado" },
+                { color: "bg-green-500", label: "Confirmado" },
+                { color: "bg-gray-300", label: "Bloqueado" },
+              ].map(l => (
+                <div key={l.label} className="flex items-center gap-1.5">
+                  <div className={`w-4 h-4 rounded ${l.color}`} />
+                  <span className="text-muted-foreground">{l.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="bg-card border rounded-xl p-4 space-y-3">
+            <h3 className="font-semibold text-sm">Resumo dos Assentos</h3>
+            {[
+              { label: "Disponíveis", count: seatCounts.available, color: "text-green-600" },
+              { label: "Reservados", count: seatCounts.occupied, color: "text-orange-600" },
+              { label: "Bloqueados", count: seatCounts.blocked, color: "text-gray-600" },
+              { label: "Total", count: seats.length, color: "text-primary" },
+            ].map(s => (
+              <div key={s.label} className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">{s.label}</span>
+                <span className={`font-bold ${s.color}`}>{s.count}</span>
+              </div>
+            ))}
+            <div className="pt-2 border-t">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Ocupação</span>
+                <span className="font-semibold">
+                  {seats.length > 0 ? Math.round(seatCounts.occupied / seats.length * 100) : 0}%
+                </span>
+              </div>
+              <div className="mt-1 w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full"
+                  style={{ width: seats.length > 0 ? `${seatCounts.occupied / seats.length * 100}%` : "0%" }}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-card border rounded-xl p-4 space-y-3">
+            <h3 className="font-semibold text-sm">Reservas Recentes</h3>
+            {(reservations?.data ?? []).slice(0, 5).map(r => (
+              <div key={r.id} className="flex items-center gap-2 text-sm">
+                <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center">
+                  <Users className="w-3 h-3 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="truncate font-medium">{r.client.name}</p>
+                  <p className="text-xs text-muted-foreground">{r.seats.join(", ")}</p>
+                </div>
+              </div>
+            ))}
+            {(!reservations?.data?.length) && (
+              <p className="text-sm text-muted-foreground text-center py-2">Sem reservas ainda</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <Dialog open={showModal} onOpenChange={() => { setShowModal(false); setSelectedSeat(null); setClientSearch(""); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Assento {selectedSeat}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Para reservar este assento, crie uma reserva para o cliente desejado.
+            </p>
+            <div className="space-y-2">
+              <Label>Buscar Cliente</Label>
+              <Input
+                placeholder="Buscar por nome..."
+                value={clientSearch}
+                onChange={e => setClientSearch(e.target.value)}
+              />
+              {clientsData?.data?.length ? (
+                <div className="border rounded-lg overflow-hidden max-h-40 overflow-y-auto">
+                  {clientsData.data.map(c => (
+                    <div key={c.id} className="p-2 text-sm hover:bg-muted/50 border-b last:border-b-0">
+                      <p className="font-medium">{c.name}</p>
+                      <p className="text-xs text-muted-foreground">{c.whatsapp}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => { setShowModal(false); setSelectedSeat(null); }}>Fechar</Button>
+              <Link href={`/reservations?tripId=${tripId}&seat=${selectedSeat}&new=true`}>
+                <Button>Criar Reserva</Button>
+              </Link>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+export function PassengersOverview({ tripId }: { tripId: string }) {
+  const [, navigate] = useLocation();
+
+  const { data: trip } = useGetTrip(tripId);
+  const { data: reservations } = useListReservations({ tripId, limit: 200 });
+
+  const stats = useMemo(() => {
+    const all = reservations?.data ?? [];
+    const confirmed = all.filter(r => r.status === "confirmed" || r.status === "completed");
+    const pending = all.filter(r => r.status === "pending");
+    const totalRevenue = all.reduce((acc, r) => acc + r.totalValue, 0);
+    const amountReceived = all.reduce((acc, r) => acc + r.paidValue, 0);
+    const amountPending = totalRevenue - amountReceived;
+    const capacity = trip?.totalCapacity ?? 0;
+    const occupancy = capacity > 0 ? Math.round(confirmed.length / capacity * 100) : 0;
+    const avgTicket = confirmed.length > 0 ? totalRevenue / confirmed.length : 0;
+    return { confirmed: confirmed.length, pending: pending.length, totalRevenue, amountReceived, amountPending, occupancy, avgTicket };
+  }, [reservations, trip]);
+
+  const paymentMethodCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    (reservations?.data ?? []).forEach(r => {
+      const m = r.paymentMethod ?? "outro";
+      counts[m] = (counts[m] ?? 0) + 1;
+    });
+    return counts;
+  }, [reservations]);
+
+  const METHOD_LABELS: Record<string, string> = {
+    pix: "PIX", credit_card: "Cartão Crédito", debit_card: "Cartão Débito",
+    cash: "Dinheiro", bank_transfer: "Transferência", installment: "Parcelado",
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/trips")}><ArrowLeft className="w-4 h-4" /></Button>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold tracking-tight">Visão Geral de Passageiros</h1>
+          <p className="text-muted-foreground text-sm">{trip?.name} · {trip ? formatDate(trip.departureDate) : ""}</p>
+        </div>
+        <div className="flex gap-2">
+          <Link href={`/trips/${tripId}/passengers`}>
+            <Button variant="outline"><List className="w-4 h-4 mr-2" />Lista ANTT</Button>
+          </Link>
+          <Link href={`/trips/${tripId}/seat-map`}>
+            <Button variant="outline"><Bus className="w-4 h-4 mr-2" />Mapa de Assentos</Button>
+          </Link>
+          <Link href={`/trips/${tripId}/edit`}>
+            <Button variant="outline"><Edit className="w-4 h-4 mr-2" />Editar Viagem</Button>
+          </Link>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        {[
+          { label: "Passageiros Confirmados", value: stats.confirmed, sub: `de ${trip?.totalCapacity ?? 0} assentos`, color: "text-green-600" },
+          { label: "Reservas Pendentes", value: stats.pending, sub: "aguardando confirmação", color: "text-amber-600" },
+          { label: "Receita Total", value: formatCurrency(stats.totalRevenue), sub: "valor das reservas", color: "text-blue-600" },
+          { label: "A Receber", value: formatCurrency(stats.amountPending), sub: "saldo em aberto", color: "text-red-600" },
+          { label: "Ocupação do Ônibus", value: `${stats.occupancy}%`, sub: "taxa de ocupação", color: "text-purple-600" },
+          { label: "Ticket Médio", value: formatCurrency(stats.avgTicket), sub: "por passageiro", color: "text-indigo-600" },
+        ].map(s => (
+          <div key={s.label} className="bg-card border rounded-lg p-4">
+            <p className="text-xs text-muted-foreground mb-1">{s.label}</p>
+            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+            <p className="text-xs text-muted-foreground mt-1">{s.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-card border rounded-xl p-6 space-y-4">
+          <h3 className="font-semibold">Reservas por Status</h3>
+          <div className="space-y-3">
+            {["confirmed", "pending", "cancelled", "completed"].map(s => {
+              const count = (reservations?.data ?? []).filter(r => r.status === s).length;
+              const total = reservations?.total ?? 0;
+              const pct = total > 0 ? Math.round(count / total * 100) : 0;
+              const colors: Record<string, string> = {
+                confirmed: "bg-green-500", pending: "bg-amber-500", cancelled: "bg-red-500", completed: "bg-blue-500",
+              };
+              const labels: Record<string, string> = {
+                confirmed: "Confirmado", pending: "Pendente", cancelled: "Cancelado", completed: "Concluído",
+              };
+              return (
+                <div key={s} className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span>{labels[s] ?? s}</span>
+                    <span className="font-medium">{count} ({pct}%)</span>
+                  </div>
+                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${colors[s] ?? "bg-gray-400"}`} style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="bg-card border rounded-xl p-6 space-y-4">
+          <h3 className="font-semibold">Forma de Pagamento</h3>
+          <div className="space-y-3">
+            {Object.entries(paymentMethodCounts).map(([method, count]) => {
+              const total = reservations?.total ?? 0;
+              const pct = total > 0 ? Math.round(count / total * 100) : 0;
+              return (
+                <div key={method} className="flex items-center gap-3 text-sm">
+                  <span className="w-32 text-muted-foreground truncate">{METHOD_LABELS[method] ?? method}</span>
+                  <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-primary rounded-full" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="font-medium w-12 text-right">{pct}%</span>
+                  <span className="text-muted-foreground w-8 text-right">{count}</span>
+                </div>
+              );
+            })}
+            {Object.keys(paymentMethodCounts).length === 0 && (
+              <p className="text-sm text-muted-foreground">Sem dados de pagamento</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-card border rounded-xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold">Lista de Reservas</h3>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm"><Download className="w-4 h-4 mr-2" />Exportar</Button>
+            <Button variant="outline" size="sm"><Send className="w-4 h-4 mr-2" />Enviar WhatsApp</Button>
+          </div>
+        </div>
+        <div className="divide-y">
+          {(reservations?.data ?? []).slice(0, 10).map(r => (
+            <div key={r.id} className="flex items-center gap-4 py-3">
+              <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                <Users className="w-4 h-4 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium truncate">{r.client.name}</p>
+                <p className="text-xs text-muted-foreground">{r.voucherCode} · {r.seats.length} assento(s)</p>
+              </div>
+              <div className="text-right text-sm">
+                <p className="font-semibold">{formatCurrency(r.totalValue)}</p>
+                <p className="text-xs text-muted-foreground">{formatCurrency(r.paidValue)} pago</p>
+              </div>
+              <Badge className={
+                r.status === "confirmed" ? "bg-green-100 text-green-700" :
+                r.status === "pending" ? "bg-amber-100 text-amber-700" :
+                r.status === "cancelled" ? "bg-red-100 text-red-700" :
+                "bg-gray-100 text-gray-700"
+              }>
+                {r.status === "confirmed" ? "Confirmado" : r.status === "pending" ? "Pendente" : r.status === "cancelled" ? "Cancelado" : r.status}
+              </Badge>
+            </div>
+          ))}
+          {!reservations?.data?.length && (
+            <p className="text-center text-muted-foreground py-6">Sem reservas para esta viagem</p>
+          )}
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <Link href={`/reservations?tripId=${tripId}&new=true`}>
+          <Button><Plus className="w-4 h-4 mr-2" />Adicionar Passageiro</Button>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export function PassengersList({ tripId }: { tripId: string }) {
+  const [, navigate] = useLocation();
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [page, setPage] = useState(1);
+
+  const { data: trip } = useGetTrip(tripId);
+  const { data: reservations, isLoading } = useListReservations({
+    tripId,
+    status: statusFilter !== "all" ? statusFilter : undefined,
+    search: search || undefined,
+    page,
+    limit: 20,
+  });
+
+  const passengers = useMemo(() => {
+    return (reservations?.data ?? []).map(r => ({
+      reservationId: r.id,
+      name: r.client.name,
+      whatsapp: r.client.whatsapp,
+      email: r.client.email,
+      voucherCode: r.voucherCode,
+      seats: r.seats.join(", "),
+      status: r.status,
+      paymentMethod: r.paymentMethod ?? "-",
+      totalValue: r.totalValue,
+      paidValue: r.paidValue,
+      balance: r.balance,
+      checkedIn: !!r.checkedInAt,
+    }));
+  }, [reservations]);
+
+  const totalPages = Math.ceil((reservations?.total ?? 0) / 20);
+
+  const STATUS_LABELS: Record<string, string> = {
+    all: "Todos", confirmed: "Confirmado", pending: "Pendente", cancelled: "Cancelado", completed: "Concluído",
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/trips")}><ArrowLeft className="w-4 h-4" /></Button>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold tracking-tight">Lista de Passageiros — ANTT</h1>
+          <p className="text-muted-foreground text-sm">{trip?.name} · {trip ? formatDate(trip.departureDate) : ""}</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm"><Download className="w-4 h-4 mr-2" />Exportar CSV</Button>
+          <Button variant="outline" size="sm"><Download className="w-4 h-4 mr-2" />Exportar PDF</Button>
+          <Button variant="outline" size="sm"><Send className="w-4 h-4 mr-2" />WhatsApp em Massa</Button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input placeholder="Buscar passageiro..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+        </div>
+        <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {Object.entries(STATUS_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Link href={`/reservations?tripId=${tripId}&new=true`}>
+          <Button><Plus className="w-4 h-4 mr-2" />Adicionar</Button>
+        </Link>
+      </div>
+
+      <div className="bg-card border rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="border-b bg-muted/50">
+              <tr>
+                <th className="text-left p-3 font-medium">Passageiro</th>
+                <th className="text-left p-3 font-medium">Contato</th>
+                <th className="text-left p-3 font-medium">Voucher</th>
+                <th className="text-left p-3 font-medium">Assento(s)</th>
+                <th className="text-left p-3 font-medium">Status</th>
+                <th className="text-left p-3 font-medium">Pagamento</th>
+                <th className="text-right p-3 font-medium">Valor Total</th>
+                <th className="text-right p-3 font-medium">Saldo</th>
+                <th className="text-center p-3 font-medium">Check-in</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i} className="border-b">
+                    {Array.from({ length: 9 }).map((_, j) => (
+                      <td key={j} className="p-3"><Skeleton className="h-4 w-full" /></td>
+                    ))}
+                  </tr>
+                ))
+              ) : passengers.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="text-center py-10 text-muted-foreground">
+                    Nenhum passageiro encontrado
+                  </td>
+                </tr>
+              ) : (
+                passengers.map(p => (
+                  <tr key={p.reservationId} className="border-b hover:bg-muted/30">
+                    <td className="p-3 font-medium">{p.name}</td>
+                    <td className="p-3 text-muted-foreground">{p.whatsapp}</td>
+                    <td className="p-3">
+                      <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{p.voucherCode}</code>
+                    </td>
+                    <td className="p-3">{p.seats || "—"}</td>
+                    <td className="p-3">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                        p.status === "confirmed" ? "bg-green-100 text-green-700" :
+                        p.status === "pending" ? "bg-amber-100 text-amber-700" :
+                        p.status === "cancelled" ? "bg-red-100 text-red-700" :
+                        "bg-gray-100 text-gray-700"
+                      }`}>
+                        {STATUS_LABELS[p.status] ?? p.status}
+                      </span>
+                    </td>
+                    <td className="p-3 text-muted-foreground">{p.paymentMethod}</td>
+                    <td className="p-3 text-right font-medium">{formatCurrency(p.totalValue)}</td>
+                    <td className={`p-3 text-right font-medium ${p.balance > 0 ? "text-red-600" : "text-green-600"}`}>
+                      {formatCurrency(p.balance)}
+                    </td>
+                    <td className="p-3 text-center">
+                      {p.checkedIn ? (
+                        <Check className="w-4 h-4 text-green-600 mx-auto" />
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <Button variant="outline" size="icon" disabled={page <= 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></Button>
+          <span className="text-sm text-muted-foreground">Página {page} de {totalPages}</span>
+          <Button variant="outline" size="icon" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function TripCalendar() {
+  const [, navigate] = useLocation();
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [view, setView] = useState<"month" | "week">("month");
+  const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
+
+  const { data: tripsData } = useListTrips({ limit: 100 });
+  const trips = tripsData?.data ?? [];
+
+  const monthStart = startOfMonth(currentDate);
+  const monthEnd = endOfMonth(currentDate);
+  const calendarDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const startDow = getDay(monthStart);
+
+  const tripsOnDay = (day: Date) => trips.filter(t => {
+    try { return isSameDay(parseISO(t.departureDate), day); }
+    catch { return false; }
+  });
+
+  const STATUS_COLORS: Record<string, string> = {
+    draft: "bg-gray-200 text-gray-700",
+    active: "bg-green-100 text-green-700",
+    confirmed: "bg-blue-100 text-blue-700",
+    completed: "bg-purple-100 text-purple-700",
+    cancelled: "bg-red-100 text-red-700",
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/trips")}><ArrowLeft className="w-4 h-4" /></Button>
+        <h1 className="text-2xl font-bold tracking-tight">Calendário de Viagens</h1>
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={() => setCurrentDate(d => subMonths(d, 1))}>
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <span className="text-sm font-medium min-w-[140px] text-center">
+            {format(currentDate, "MMMM yyyy", { locale: ptBR })}
+          </span>
+          <Button variant="outline" size="icon" onClick={() => setCurrentDate(d => addMonths(d, 1))}>
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())}>Hoje</Button>
+        </div>
+      </div>
+
+      <div className="bg-card border rounded-xl overflow-hidden">
+        <div className="grid grid-cols-7 border-b">
+          {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map(d => (
+            <div key={d} className="p-3 text-center text-xs font-medium text-muted-foreground">{d}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7">
+          {Array.from({ length: startDow }).map((_, i) => (
+            <div key={`empty-${i}`} className="min-h-[100px] border-b border-r bg-muted/20" />
+          ))}
+          {calendarDays.map(day => {
+            const dayTrips = tripsOnDay(day);
+            const today = isToday(day);
+            return (
+              <div
+                key={day.toISOString()}
+                className={`min-h-[100px] border-b border-r p-1.5 ${today ? "bg-primary/5" : ""}`}
+              >
+                <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${today ? "bg-primary text-white" : "text-muted-foreground"}`}>
+                  {format(day, "d")}
+                </div>
+                <div className="space-y-0.5">
+                  {dayTrips.map(trip => (
+                    <button
+                      key={trip.id}
+                      className={`w-full text-left px-1.5 py-0.5 rounded text-xs truncate ${STATUS_COLORS[trip.status] ?? "bg-gray-100"}`}
+                      onClick={() => setSelectedTrip(trip)}
+                    >
+                      {trip.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <Dialog open={!!selectedTrip} onOpenChange={() => setSelectedTrip(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{selectedTrip?.name}</DialogTitle>
+          </DialogHeader>
+          {selectedTrip && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Destino</p>
+                  <p className="font-medium">{selectedTrip.destinationCity}, {selectedTrip.destinationState}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Data de Saída</p>
+                  <p className="font-medium">{formatDate(selectedTrip.departureDate)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Capacidade</p>
+                  <p className="font-medium">{selectedTrip.totalCapacity} assentos</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Preço Adulto</p>
+                  <p className="font-medium">{formatCurrency(selectedTrip.priceAdult)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Ocupação</p>
+                  <p className="font-medium">{selectedTrip.reservedSeats + selectedTrip.confirmedSeats} reservado(s)</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Status</p>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[selectedTrip.status] ?? "bg-gray-100"}`}>
+                    {STATUS_MAP[selectedTrip.status]?.label ?? selectedTrip.status}
+                  </span>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Link href={`/trips/${selectedTrip.id}/passengers-overview`} className="flex-1">
+                  <Button variant="outline" className="w-full" onClick={() => setSelectedTrip(null)}>
+                    <Eye className="w-4 h-4 mr-2" />Visão Geral
+                  </Button>
+                </Link>
+                <Link href={`/trips/${selectedTrip.id}/edit`} className="flex-1">
+                  <Button className="w-full" onClick={() => setSelectedTrip(null)}>
+                    <Edit className="w-4 h-4 mr-2" />Editar
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+export default function Trips() {
+  const [matchNew] = useRoute("/trips/new");
+  const [matchCalendar] = useRoute("/trips/calendar");
+  const [matchEdit, paramsEdit] = useRoute("/trips/:id/edit");
+  const [matchSeatMap, paramsSeatMap] = useRoute("/trips/:id/seat-map");
+  const [matchPassengersOverview, paramsPassengersOverview] = useRoute("/trips/:id/passengers-overview");
+  const [matchPassengers, paramsPassengers] = useRoute("/trips/:id/passengers");
+
+  if (matchNew) return <TripForm />;
+  if (matchCalendar) return <TripCalendar />;
+  if (matchEdit && paramsEdit?.id) return <TripForm tripId={paramsEdit.id} />;
+  if (matchSeatMap && paramsSeatMap?.id) return <SeatMap tripId={paramsSeatMap.id} />;
+  if (matchPassengersOverview && paramsPassengersOverview?.id) return <PassengersOverview tripId={paramsPassengersOverview.id} />;
+  if (matchPassengers && paramsPassengers?.id) return <PassengersList tripId={paramsPassengers.id} />;
+
+  return <TripList />;
 }
