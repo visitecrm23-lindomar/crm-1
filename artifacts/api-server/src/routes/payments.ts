@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { paymentsTable, expensesTable, reservationsTable, clientsTable } from "@workspace/db";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { CreatePaymentBody, UpdatePaymentBody, CreateExpenseBody, UpdateExpenseBody } from "@workspace/api-zod";
@@ -89,6 +89,20 @@ router.get("/payments", async (req, res): Promise<void> => {
       } else {
         res.json({ data: [], total: 0, page: pageNum, limit: limitNum });
         return;
+      }
+    } else if (me.role === "vendedor") {
+      if (clientIdParam) {
+        conditions.push(eq(paymentsTable.clientId, clientIdParam));
+      } else {
+        const sellerClients = await db.select({ id: clientsTable.id })
+          .from(clientsTable)
+          .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.createdById, me.id)));
+        if (!sellerClients.length) {
+          res.json({ data: [], total: 0, page: pageNum, limit: limitNum });
+          return;
+        }
+        const sellerClientIds = sellerClients.map(c => c.id);
+        conditions.push(inArray(paymentsTable.clientId, sellerClientIds));
       }
     } else if (clientIdParam) {
       conditions.push(eq(paymentsTable.clientId, clientIdParam));

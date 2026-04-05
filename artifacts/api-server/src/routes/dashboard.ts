@@ -172,11 +172,27 @@ router.get("/dashboard/revenue-chart", async (req, res): Promise<void> => {
     else if (period === "90d") daysBack = 90;
     else if (period === "12m") daysBack = 365;
 
-    const payments = await db.select().from(paymentsTable)
-      .where(and(eq(paymentsTable.tenantId, me.tenantId), gte(paymentsTable.createdAt, new Date(now.getTime() - daysBack * 86400000))));
+    const since = new Date(now.getTime() - daysBack * 86400000);
 
-    const reservations = await db.select().from(reservationsTable)
-      .where(and(eq(reservationsTable.tenantId, me.tenantId), gte(reservationsTable.createdAt, new Date(now.getTime() - daysBack * 86400000))));
+    let paymentConditions = and(eq(paymentsTable.tenantId, me.tenantId), gte(paymentsTable.createdAt, since))!;
+    let reservationConditions = and(eq(reservationsTable.tenantId, me.tenantId), gte(reservationsTable.createdAt, since))!;
+
+    if (me.role === "vendedor") {
+      const sellerClients = await db.select({ id: clientsTable.id })
+        .from(clientsTable)
+        .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.createdById, me.id)));
+      if (!sellerClients.length) {
+        res.json([]);
+        return;
+      }
+      const sellerClientIds = sellerClients.map(c => c.id);
+      paymentConditions = and(eq(paymentsTable.tenantId, me.tenantId), gte(paymentsTable.createdAt, since), inArray(paymentsTable.clientId, sellerClientIds))!;
+      reservationConditions = and(eq(reservationsTable.tenantId, me.tenantId), gte(reservationsTable.createdAt, since), inArray(reservationsTable.clientId, sellerClientIds))!;
+    }
+
+    const payments = await db.select().from(paymentsTable).where(paymentConditions);
+
+    const reservations = await db.select().from(reservationsTable).where(reservationConditions);
 
     const numPoints = period === "12m" ? 12 : Math.min(daysBack, 12);
 
