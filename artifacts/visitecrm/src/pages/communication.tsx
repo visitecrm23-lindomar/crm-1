@@ -193,7 +193,7 @@ export default function Communication() {
                   <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nenhuma mensagem enviada.</TableCell></TableRow>
                 ) : messages.map(m => (
                   <TableRow key={m.id}>
-                    <TableCell className="font-medium">{(m as any).clientName ?? "—"}</TableCell>
+                    <TableCell className="font-medium">{m.clientName ?? "—"}</TableCell>
                     <TableCell><Badge className={channelColors[m.channel] ?? ""}>{m.channel}</Badge></TableCell>
                     <TableCell><p className="text-sm max-w-xs truncate">{m.content}</p></TableCell>
                     <TableCell><Badge variant="outline">{m.status}</Badge></TableCell>

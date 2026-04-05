@@ -1114,6 +1114,20 @@ export interface NpsSummary {
   total: number;
 }
 
+export type UserProfileTenant = {
+  id: string;
+  name: string;
+  slug: string;
+  /** @nullable */
+  logoUrl?: string | null;
+  /** @nullable */
+  primaryColor?: string | null;
+  /** @nullable */
+  secondaryColor?: string | null;
+  status: string;
+  planId: string;
+} | null;
+
 export interface UserProfile {
   id: string;
   clerkId: string;
@@ -1128,6 +1142,7 @@ export interface UserProfile {
   referralCode: string;
   referralBalance: number;
   createdAt: string;
+  tenant?: UserProfileTenant;
 }
 
 export interface SyncUserBody {

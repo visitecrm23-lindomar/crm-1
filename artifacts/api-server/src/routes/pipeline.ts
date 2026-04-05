@@ -223,7 +223,7 @@ router.patch("/deals/:id", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/deals/:id/move", async (req, res): Promise<void> => {
+router.patch("/deals/:id/move", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;

@@ -60,11 +60,10 @@ export default function Layout({ children }: { children: ReactNode }) {
   const { signOut } = useClerk();
   const { data: me } = useGetMe();
 
-  const meData = me as any;
-  const tenantName: string = meData?.tenant?.name ?? "VisiteCRM";
-  const tenantLogoUrl: string | undefined = meData?.tenant?.logoUrl;
-  const tenantPrimaryColor: string = meData?.tenant?.primaryColor ?? "#3B82F6";
-  const userRole: string | undefined = meData?.role;
+  const tenantName: string = me?.tenant?.name ?? "VisiteCRM";
+  const tenantLogoUrl: string | undefined = me?.tenant?.logoUrl ?? undefined;
+  const tenantPrimaryColor: string = me?.tenant?.primaryColor ?? "#3B82F6";
+  const userRole: string | undefined = me?.role;
   const tenantInitial = tenantName.charAt(0).toUpperCase();
   const currentSection = NAVIGATION.find(
     (n) => location === n.href || (n.href !== "/" && location.startsWith(n.href))

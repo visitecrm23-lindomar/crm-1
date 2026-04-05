@@ -2074,6 +2074,18 @@ export const GetMeResponse = zod.object({
   referralCode: zod.string(),
   referralBalance: zod.number(),
   createdAt: zod.string(),
+  tenant: zod
+    .object({
+      id: zod.string(),
+      name: zod.string(),
+      slug: zod.string(),
+      logoUrl: zod.string().nullish(),
+      primaryColor: zod.string().nullish(),
+      secondaryColor: zod.string().nullish(),
+      status: zod.string(),
+      planId: zod.string(),
+    })
+    .nullish(),
 });
 
 /**
@@ -2098,6 +2110,18 @@ export const SyncMeResponse = zod.object({
   referralCode: zod.string(),
   referralBalance: zod.number(),
   createdAt: zod.string(),
+  tenant: zod
+    .object({
+      id: zod.string(),
+      name: zod.string(),
+      slug: zod.string(),
+      logoUrl: zod.string().nullish(),
+      primaryColor: zod.string().nullish(),
+      secondaryColor: zod.string().nullish(),
+      status: zod.string(),
+      planId: zod.string(),
+    })
+    .nullish(),
 });
 
 /**
@@ -2115,6 +2139,18 @@ export const ListUsersResponseItem = zod.object({
   referralCode: zod.string(),
   referralBalance: zod.number(),
   createdAt: zod.string(),
+  tenant: zod
+    .object({
+      id: zod.string(),
+      name: zod.string(),
+      slug: zod.string(),
+      logoUrl: zod.string().nullish(),
+      primaryColor: zod.string().nullish(),
+      secondaryColor: zod.string().nullish(),
+      status: zod.string(),
+      planId: zod.string(),
+    })
+    .nullish(),
 });
 export const ListUsersResponse = zod.array(ListUsersResponseItem);
 
@@ -2152,6 +2188,18 @@ export const UpdateUserResponse = zod.object({
   referralCode: zod.string(),
   referralBalance: zod.number(),
   createdAt: zod.string(),
+  tenant: zod
+    .object({
+      id: zod.string(),
+      name: zod.string(),
+      slug: zod.string(),
+      logoUrl: zod.string().nullish(),
+      primaryColor: zod.string().nullish(),
+      secondaryColor: zod.string().nullish(),
+      status: zod.string(),
+      planId: zod.string(),
+    })
+    .nullish(),
 });
 
 /**

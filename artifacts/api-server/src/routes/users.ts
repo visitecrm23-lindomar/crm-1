@@ -30,12 +30,24 @@ router.get("/users/me", async (req, res): Promise<void> => {
     if (!clerkId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId)).limit(1);
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
-    res.json(GetMeResponse.parse({
+    let tenant = null;
+    if (user.tenantId) {
+      const [t] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, user.tenantId)).limit(1);
+      if (t) {
+        tenant = {
+          id: t.id, name: t.name, slug: t.slug, logoUrl: t.logoUrl,
+          primaryColor: t.primaryColor, secondaryColor: t.secondaryColor,
+          status: t.status, planId: t.planId,
+        };
+      }
+    }
+    res.json({
       id: user.id, clerkId: user.clerkId, name: user.name, email: user.email,
       role: user.role, avatarUrl: user.avatarUrl, isActive: user.isActive,
       tenantId: user.tenantId, referralCode: user.referralCode,
       referralBalance: Number(user.referralBalance), createdAt: user.createdAt.toISOString(),
-    }));
+      tenant,
+    });
   } catch (err) {
     req.log.error({ err }, "Error fetching user");
     res.status(500).json({ error: "Internal server error" });

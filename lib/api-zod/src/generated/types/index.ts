@@ -154,4 +154,5 @@ export * from "./updateUserBody";
 export * from "./updateVehicleBody";
 export * from "./upsertSystemConfigBody";
 export * from "./userProfile";
+export * from "./userProfileTenant";
 export * from "./vehicle";

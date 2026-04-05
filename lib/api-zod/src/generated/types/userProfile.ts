@@ -5,6 +5,7 @@
  * VisiteCRM API - SaaS CRM for tourism agencies
  * OpenAPI spec version: 0.1.0
  */
+import type { UserProfileTenant } from "./userProfileTenant";
 
 export interface UserProfile {
   id: string;
@@ -20,4 +21,5 @@ export interface UserProfile {
   referralCode: string;
   referralBalance: number;
   createdAt: string;
+  tenant?: UserProfileTenant;
 }

@@ -4713,6 +4713,27 @@ components:
           type: number
         createdAt:
           type: string
+        tenant:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            slug:
+              type: string
+            logoUrl:
+              type: ["string", "null"]
+            primaryColor:
+              type: ["string", "null"]
+            secondaryColor:
+              type: ["string", "null"]
+            status:
+              type: string
+            planId:
+              type: string
+          required: [id, name, slug, status, planId]
       required: [id, clerkId, name, email, role, isActive, referralCode, referralBalance, createdAt]
 
     SyncUserBody:
