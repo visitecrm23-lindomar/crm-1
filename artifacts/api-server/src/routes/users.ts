@@ -161,8 +161,15 @@ router.patch("/users/:id", async (req, res): Promise<void> => {
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const updates: Partial<typeof usersTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
-    if (parsed.data.role != null) updates.role = parsed.data.role;
-    if (parsed.data.isActive != null) updates.isActive = parsed.data.isActive;
+    if (parsed.data.role != null || parsed.data.isActive != null) {
+      const adminRoles = ["agencia", "superadmin"];
+      if (!adminRoles.includes(me.role)) {
+        res.status(403).json({ error: "Forbidden: apenas administradores podem alterar funcao ou status" });
+        return;
+      }
+      if (parsed.data.role != null) updates.role = parsed.data.role;
+      if (parsed.data.isActive != null) updates.isActive = parsed.data.isActive;
+    }
     await db.update(usersTable).set(updates)
       .where(and(eq(usersTable.id, req.params.id), eq(usersTable.tenantId, me.tenantId)));
     const [user] = await db.select().from(usersTable)

@@ -184,6 +184,31 @@ router.delete("/campaigns/:id", async (req, res): Promise<void> => {
   }
 });
 
+router.get("/nps/summary", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const responses = await db.select().from(npsResponsesTable)
+      .where(eq(npsResponsesTable.tenantId, me.tenantId));
+    const total = responses.length;
+    const promoters = responses.filter(r => r.classification === "promoter").length;
+    const detractors = responses.filter(r => r.classification === "detractor").length;
+    const npsScore = total === 0 ? 0 : Math.round(((promoters - detractors) / total) * 100);
+    const avg = total === 0 ? 0 : responses.reduce((s, r) => s + r.score, 0) / total;
+    res.json({
+      total,
+      promoters,
+      passives: responses.filter(r => r.classification === "passive").length,
+      detractors,
+      npsScore,
+      averageScore: Math.round(avg * 10) / 10,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error fetching NPS summary");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/nps", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);

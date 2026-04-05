@@ -99,7 +99,7 @@ router.get("/pipeline/stages", async (req, res): Promise<void> => {
   }
 });
 
-router.get("/pipeline/deals", async (req, res): Promise<void> => {
+router.get("/deals", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -116,7 +116,7 @@ router.get("/pipeline/deals", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/pipeline/deals", async (req, res): Promise<void> => {
+router.post("/deals", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -164,7 +164,7 @@ router.post("/pipeline/deals", async (req, res): Promise<void> => {
   }
 });
 
-router.get("/pipeline/deals/:id", async (req, res): Promise<void> => {
+router.get("/deals/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -179,7 +179,7 @@ router.get("/pipeline/deals/:id", async (req, res): Promise<void> => {
   }
 });
 
-router.patch("/pipeline/deals/:id", async (req, res): Promise<void> => {
+router.patch("/deals/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -216,7 +216,7 @@ router.patch("/pipeline/deals/:id", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/pipeline/deals/:id/move", async (req, res): Promise<void> => {
+router.post("/deals/:id/move", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -239,7 +239,7 @@ router.post("/pipeline/deals/:id/move", async (req, res): Promise<void> => {
   }
 });
 
-router.delete("/pipeline/deals/:id", async (req, res): Promise<void> => {
+router.delete("/deals/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
