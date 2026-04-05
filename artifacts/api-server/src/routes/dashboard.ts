@@ -301,11 +301,32 @@ router.get("/dashboard/recent-activity", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
+    if (me.role === "cliente") {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+
+    let clientCondition = eq(clientsTable.tenantId, me.tenantId);
+    let reservationCondition = eq(reservationsTable.tenantId, me.tenantId);
+
+    if (me.role === "vendedor") {
+      const sellerClients = await db.select({ id: clientsTable.id }).from(clientsTable)
+        .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.createdById, me.id)));
+      const sellerClientIds = sellerClients.map(c => c.id);
+      if (sellerClientIds.length > 0) {
+        clientCondition = and(eq(clientsTable.tenantId, me.tenantId), inArray(clientsTable.id, sellerClientIds))!;
+        reservationCondition = and(eq(reservationsTable.tenantId, me.tenantId), inArray(reservationsTable.clientId, sellerClientIds))!;
+      } else {
+        res.json([]);
+        return;
+      }
+    }
+
     const recentClients = await db.select().from(clientsTable)
-      .where(eq(clientsTable.tenantId, me.tenantId)).orderBy(desc(clientsTable.createdAt)).limit(3);
+      .where(clientCondition).orderBy(desc(clientsTable.createdAt)).limit(3);
     const recentReservations = await db.select().from(reservationsTable)
-      .where(eq(reservationsTable.tenantId, me.tenantId)).orderBy(desc(reservationsTable.createdAt)).limit(3);
-    const recentTrips = await db.select().from(tripsTable)
+      .where(reservationCondition).orderBy(desc(reservationsTable.createdAt)).limit(3);
+    const recentTrips = me.role === "vendedor" ? [] : await db.select().from(tripsTable)
       .where(eq(tripsTable.tenantId, me.tenantId)).orderBy(desc(tripsTable.createdAt)).limit(2);
 
     const activities = [
