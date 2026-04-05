@@ -16,3 +16,6 @@ export * from "./audit";
 export * from "./documents";
 export * from "./boarding";
 export * from "./coupons";
+export * from "./chatbot";
+export * from "./automation_extras";
+export * from "./catalog";

@@ -13,7 +13,8 @@ import {
   Target,
   Trello,
   Zap,
-  BookOpen
+  BookOpen,
+  BarChart2
 } from "lucide-react";
 
 export default function Layout({ children }: { children: ReactNode }) {
@@ -32,6 +33,7 @@ export default function Layout({ children }: { children: ReactNode }) {
     { name: "Automações", href: "/automations", icon: Zap },
     { name: "Marketing", href: "/marketing", icon: Target },
     { name: "Cadastros", href: "/registrations", icon: BookOpen },
+    { name: "Analíticos", href: "/analytics", icon: BarChart2 },
     { name: "Configurações", href: "/settings", icon: Settings },
   ];
 

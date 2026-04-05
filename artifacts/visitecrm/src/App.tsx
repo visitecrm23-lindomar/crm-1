@@ -19,6 +19,7 @@ import Communication from "@/pages/communication";
 import Automations from "@/pages/automations";
 import Marketing from "@/pages/marketing";
 import Registrations from "@/pages/registrations";
+import Analytics from "@/pages/analytics";
 import Settings from "@/pages/settings";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -127,6 +128,7 @@ function Router() {
       <Route path="/automations" component={() => <ProtectedRoute component={Automations} />} />
       <Route path="/marketing" component={() => <ProtectedRoute component={Marketing} />} />
       <Route path="/registrations" component={() => <ProtectedRoute component={Registrations} />} />
+      <Route path="/analytics" component={() => <ProtectedRoute component={Analytics} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
       <Route component={() => <ProtectedRoute component={() => <Redirect to="/dashboard" />} />} />
     </Switch>

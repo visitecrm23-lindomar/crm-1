@@ -34,6 +34,19 @@ async function main() {
   });
   console.log("Tenant created:", tenantId);
 
+  const superadminId = generateId();
+  await db.insert(usersTable).values({
+    id: superadminId,
+    clerkId: "seed_superadmin_" + superadminId,
+    tenantId,
+    name: "Super Admin",
+    email: "superadmin@demo.com",
+    role: "superadmin",
+    referralCode: "SUPER1",
+    referralBalance: "0",
+    isActive: true,
+  });
+
   const adminId = generateId();
   await db.insert(usersTable).values({
     id: adminId,
@@ -59,7 +72,20 @@ async function main() {
     referralBalance: "50",
     isActive: true,
   });
-  console.log("Users created");
+
+  const clienteUserId = generateId();
+  await db.insert(usersTable).values({
+    id: clienteUserId,
+    clerkId: "seed_cliente_" + clienteUserId,
+    tenantId,
+    name: "Ana Cliente",
+    email: "ana.cliente@demo.com",
+    role: "cliente",
+    referralCode: "CLI001",
+    referralBalance: "25",
+    isActive: true,
+  });
+  console.log("Users created (superadmin, agencia, vendedor, cliente)");
 
   const clientIds: string[] = [];
   const clientsData = [
@@ -144,6 +170,18 @@ async function main() {
   for (const t of tripsData) {
     const id = generateId();
     tripIds.push(id);
+    const seatMap: Record<string, unknown> = {};
+    const cols = 4;
+    const rows = Math.ceil(t.totalCapacity / cols);
+    let seatNum = 1;
+    for (let r = 1; r <= rows; r++) {
+      for (let c = 1; c <= cols; c++) {
+        if (seatNum <= t.totalCapacity) {
+          seatMap[`${seatNum}`] = { row: r, col: c, status: seatNum <= t.reservedSeats ? "reserved" : "available" };
+          seatNum++;
+        }
+      }
+    }
     await db.insert(tripsTable).values({
       id, tenantId,
       name: t.name, slug: t.slug,
@@ -155,6 +193,8 @@ async function main() {
       priceAdult: t.priceAdult,
       type: t.type, category: t.category,
       status: t.status,
+      seatMap,
+      seatLayout: "2x2",
       createdById: adminId,
     });
   }

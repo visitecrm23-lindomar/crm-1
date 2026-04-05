@@ -124,6 +124,10 @@ router.post("/users", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (!["agencia", "superadmin"].includes(me.role)) {
+      res.status(403).json({ error: "Apenas administradores podem criar usuarios" });
+      return;
+    }
     const parsed = CreateUserBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const userId = generateId();
