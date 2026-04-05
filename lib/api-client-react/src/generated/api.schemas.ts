@@ -310,6 +310,14 @@ export interface UpdateTripBody {
   vehicleType?: string | null;
   /** @nullable */
   driverName?: string | null;
+  /** @nullable */
+  itinerary?: { day: number; title: string; description: string }[] | null;
+  /** @nullable */
+  fixedCosts?: number | null;
+  /** @nullable */
+  variableCosts?: number | null;
+  /** @nullable */
+  gallery?: string[] | null;
 }
 
 export interface Seat {

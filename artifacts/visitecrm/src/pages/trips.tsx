@@ -400,6 +400,9 @@ interface TripFormData {
   boardingPoints: BoardingPoint[];
   itinerary: ItineraryDay[];
   costs: CostItem[];
+  fixedCosts: string;
+  variableCosts: string;
+  gallery: string[];
   accommodation: string;
   guide: string;
 }
@@ -414,7 +417,7 @@ const EMPTY_FORM: TripFormData = {
   priceAdult: "", priceChild: "", priceSenior: "",
   inclusions: "", exclusions: "", coverImage: "",
   vehicleType: "", vehiclePlate: "", driverName: "", status: "draft",
-  boardingPoints: [newBP()], itinerary: [newDay(1)], costs: [], accommodation: "", guide: "",
+  boardingPoints: [newBP()], itinerary: [newDay(1)], costs: [], fixedCosts: "", variableCosts: "", gallery: [], accommodation: "", guide: "",
 };
 
 export function TripForm({ tripId }: { tripId?: string }) {
@@ -452,8 +455,13 @@ export function TripForm({ tripId }: { tripId?: string }) {
       driverName: existingTrip.driverName ?? "",
       status: existingTrip.status,
       boardingPoints: [newBP()],
-      itinerary: [newDay(1)],
+      itinerary: (existingTrip as unknown as { itinerary?: ItineraryDay[] }).itinerary?.length
+        ? (existingTrip as unknown as { itinerary: ItineraryDay[] }).itinerary
+        : [newDay(1)],
       costs: [],
+      fixedCosts: (existingTrip as unknown as { fixedCosts?: string | number }).fixedCosts ? String((existingTrip as unknown as { fixedCosts: string | number }).fixedCosts) : "",
+      variableCosts: (existingTrip as unknown as { variableCosts?: string | number }).variableCosts ? String((existingTrip as unknown as { variableCosts: string | number }).variableCosts) : "",
+      gallery: (existingTrip.gallery ?? []) as string[],
       accommodation: "",
       guide: "",
     });
@@ -464,14 +472,20 @@ export function TripForm({ tripId }: { tripId?: string }) {
   const setVal = (k: keyof TripFormData) => (v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
   const totalCosts = form.costs.reduce((acc, c) => acc + (parseFloat(c.amount) || 0), 0);
+  const fixedCostsNum = parseFloat(form.fixedCosts || "0");
+  const variableCostsNum = parseFloat(form.variableCosts || "0");
   const grossRevenue = parseFloat(form.priceAdult || "0") * parseInt(form.totalCapacity || "0");
-  const margin = grossRevenue - totalCosts;
+  const effectiveCosts = fixedCostsNum + variableCostsNum * parseInt(form.totalCapacity || "0");
+  const margin = grossRevenue - (effectiveCosts || totalCosts);
   const marginPct = grossRevenue > 0 ? Math.round(margin / grossRevenue * 100) : 0;
 
   const handleSave = async (publish = false) => {
     const inclArr = form.inclusions.split("\n").map(s => s.trim()).filter(Boolean);
     const exclArr = form.exclusions.split("\n").map(s => s.trim()).filter(Boolean);
     const statusToSave = publish ? "active" : form.status;
+    const itineraryToSave = form.itinerary.filter(d => d.title || d.description);
+    const fixedCostsNum = form.fixedCosts ? parseFloat(form.fixedCosts) : undefined;
+    const variableCostsNum = form.variableCosts ? parseFloat(form.variableCosts) : undefined;
     if (tripId) {
       await updateTrip.mutateAsync({
         id: tripId,
@@ -486,6 +500,10 @@ export function TripForm({ tripId }: { tripId?: string }) {
           coverImage: form.coverImage || undefined,
           vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined,
           status: statusToSave,
+          itinerary: itineraryToSave.length ? itineraryToSave : undefined,
+          fixedCosts: fixedCostsNum,
+          variableCosts: variableCostsNum,
+          gallery: form.gallery.length ? form.gallery : undefined,
         },
       });
     } else {
@@ -640,41 +658,13 @@ export function TripForm({ tripId }: { tripId?: string }) {
         </TabsContent>
 
         <TabsContent value="pontos" className="space-y-4 mt-6">
-          <div className="bg-card border rounded-lg p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold">Pontos de Embarque</h3>
-              <Button size="sm" variant="outline" onClick={() => setForm(prev => ({ ...prev, boardingPoints: [...prev.boardingPoints, newBP()] }))}>
-                <Plus className="w-4 h-4 mr-1" />Adicionar Ponto
-              </Button>
+          <div className="bg-card border rounded-lg p-12 flex flex-col items-center justify-center text-center space-y-3">
+            <div className="w-14 h-14 bg-blue-50 rounded-full flex items-center justify-center">
+              <MapPin className="w-7 h-7 text-blue-400" />
             </div>
-            <div className="space-y-3">
-              {form.boardingPoints.map((bp, idx) => (
-                <div key={bp.id} className="border rounded-lg p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-muted-foreground">Ponto {idx + 1}</span>
-                    {form.boardingPoints.length > 1 && (
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setForm(prev => ({ ...prev, boardingPoints: prev.boardingPoints.filter(b => b.id !== bp.id) }))}>
-                        <X className="w-3 h-3" />
-                      </Button>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Nome do Ponto</Label>
-                      <Input placeholder="Terminal Rodoviário" value={bp.name} onChange={e => setForm(prev => ({ ...prev, boardingPoints: prev.boardingPoints.map(b => b.id === bp.id ? { ...b, name: e.target.value } : b) }))} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Horário</Label>
-                      <Input type="time" value={bp.time} onChange={e => setForm(prev => ({ ...prev, boardingPoints: prev.boardingPoints.map(b => b.id === bp.id ? { ...b, time: e.target.value } : b) }))} />
-                    </div>
-                    <div className="space-y-1 col-span-2">
-                      <Label className="text-xs">Endereço / Referência</Label>
-                      <Input placeholder="Av. Principal, 100 — Em frente ao posto Shell" value={bp.address} onChange={e => setForm(prev => ({ ...prev, boardingPoints: prev.boardingPoints.map(b => b.id === bp.id ? { ...b, address: e.target.value } : b) }))} />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <h3 className="font-semibold text-lg">Pontos de Embarque</h3>
+            <p className="text-sm text-muted-foreground max-w-sm">Esta funcionalidade estara disponivel em breve. Permitira cadastrar multiplos pontos de coleta com horarios e enderecos para cada passageiro.</p>
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">Em breve</span>
           </div>
         </TabsContent>
 
@@ -724,14 +714,29 @@ export function TripForm({ tripId }: { tripId?: string }) {
 
         <TabsContent value="custos" className="space-y-4 mt-6">
           <div className="bg-card border rounded-lg p-6 space-y-4">
+            <h3 className="font-semibold">Custos Operacionais</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Custo Fixo (R$)</Label>
+                <Input type="number" step="0.01" placeholder="0.00" value={form.fixedCosts} onChange={set("fixedCosts")} />
+                <p className="text-xs text-muted-foreground">Fretamento, guia, hotel, etc.</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Custo Variável (R$)</Label>
+                <Input type="number" step="0.01" placeholder="0.00" value={form.variableCosts} onChange={set("variableCosts")} />
+                <p className="text-xs text-muted-foreground">Por passageiro: alimentação, ingressos, etc.</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-card border rounded-lg p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold">Custos Operacionais</h3>
+              <h3 className="font-semibold">Detalhamento de Custos</h3>
               <Button size="sm" variant="outline" onClick={() => setForm(prev => ({ ...prev, costs: [...prev.costs, newCost()] }))}>
-                <Plus className="w-4 h-4 mr-1" />Adicionar Custo
+                <Plus className="w-4 h-4 mr-1" />Adicionar Item
               </Button>
             </div>
             {form.costs.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">Nenhum custo cadastrado. Clique em "Adicionar Custo" para começar.</p>
+              <p className="text-sm text-muted-foreground text-center py-4">Nenhum item cadastrado. Use para detalhar os custos individualmente.</p>
             )}
             <div className="space-y-2">
               {form.costs.map((cost) => (
@@ -743,25 +748,26 @@ export function TripForm({ tripId }: { tripId?: string }) {
               ))}
             </div>
             {form.costs.length > 0 && (
-              <div className="border-t pt-4 space-y-3">
-                <div className="flex justify-between text-sm font-medium">
-                  <span>Total de Custos:</span><span>{formatCurrency(totalCosts)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Receita Bruta Estimada:</span><span>{formatCurrency(grossRevenue)}</span>
-                </div>
-                <div className={`flex justify-between text-sm font-bold ${marginPct >= 20 ? "text-green-600" : marginPct >= 10 ? "text-amber-600" : "text-red-600"}`}>
-                  <span>Margem Estimada ({marginPct}%):</span><span>{formatCurrency(margin)}</span>
-                </div>
-                <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full ${marginPct >= 20 ? "bg-green-500" : marginPct >= 10 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${Math.max(0, Math.min(100, marginPct))}%` }} />
-                </div>
-                {marginPct < 10 && (
-                  <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 rounded-lg p-3">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>Atenção: margem abaixo de 10%. Revise os custos ou ajuste o preço.</span>
-                  </div>
-                )}
+              <div className="border-t pt-3 flex justify-between text-sm font-medium">
+                <span>Total Detalhado:</span><span>{formatCurrency(totalCosts)}</span>
+              </div>
+            )}
+          </div>
+          <div className="bg-card border rounded-lg p-6 space-y-3">
+            <h3 className="font-semibold">Análise de Margem</h3>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Receita Bruta Estimada:</span><span>{formatCurrency(grossRevenue)}</span>
+            </div>
+            <div className={`flex justify-between text-sm font-bold ${marginPct >= 20 ? "text-green-600" : marginPct >= 10 ? "text-amber-600" : "text-red-600"}`}>
+              <span>Margem Estimada ({marginPct}%):</span><span>{formatCurrency(margin)}</span>
+            </div>
+            <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full ${marginPct >= 20 ? "bg-green-500" : marginPct >= 10 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${Math.max(0, Math.min(100, marginPct))}%` }} />
+            </div>
+            {marginPct < 10 && (
+              <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 rounded-lg p-3">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>Atenção: margem abaixo de 10%. Revise os custos ou ajuste o preço.</span>
               </div>
             )}
           </div>
@@ -817,13 +823,24 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 <img src={form.coverImage} alt="Preview" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
               </div>
             )}
-            <div className="bg-muted/50 rounded-lg p-4 text-sm text-muted-foreground">
-              Galeria de imagens adicional — arraste imagens ou cole URLs abaixo.
-            </div>
-            <div className="border-2 border-dashed rounded-lg p-8 text-center text-muted-foreground text-sm">
-              <Download className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              <p>Galeria de imagens</p>
-              <p className="text-xs mt-1">Upload de múltiplas imagens disponível em breve</p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-sm">Galeria de Imagens</h4>
+                <Button size="sm" variant="outline" onClick={() => setForm(prev => ({ ...prev, gallery: [...prev.gallery, ""] }))}>
+                  <Plus className="w-4 h-4 mr-1" />Adicionar URL
+                </Button>
+              </div>
+              {form.gallery.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">Nenhuma imagem na galeria. Adicione URLs de imagens.</p>
+              )}
+              <div className="space-y-2">
+                {form.gallery.map((url, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <Input placeholder="https://exemplo.com/foto.jpg" value={url} onChange={e => setForm(prev => ({ ...prev, gallery: prev.gallery.map((u, i) => i === idx ? e.target.value : u) }))} className="flex-1" />
+                    <Button size="icon" variant="ghost" className="text-destructive" onClick={() => setForm(prev => ({ ...prev, gallery: prev.gallery.filter((_, i) => i !== idx) }))}><X className="w-4 h-4" /></Button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </TabsContent>
@@ -1503,7 +1520,6 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [boardingFilter, setBoardingFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -1536,10 +1552,6 @@ export function PassengersList({ tripId }: { tripId: string }) {
         if (typeFilter === "child" && !isChild) return false;
         if (typeFilter === "senior" && !isSenior) return false;
       }
-      if (boardingFilter !== "all") {
-        const bp = (r as unknown as Record<string, unknown>).boardingPoint as string | undefined;
-        if (bp !== boardingFilter) return false;
-      }
       return true;
     }).map(r => {
       const bdate = (r.client as unknown as Record<string, unknown>).birthDate as string | undefined;
@@ -1570,7 +1582,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
         hasInsurance: r.hasInsurance,
       };
     });
-  }, [reservations, paymentFilter, typeFilter, boardingFilter]);
+  }, [reservations, paymentFilter, typeFilter]);
 
   const totalPages = Math.ceil((reservations?.total ?? 0) / 20);
   const allSelected = passengers.length > 0 && passengers.every(p => selectedIds.has(p.reservationId));
@@ -1621,15 +1633,6 @@ export function PassengersList({ tripId }: { tripId: string }) {
         <Select value={typeFilter} onValueChange={v => { setTypeFilter(v); setPage(1); }}>
           <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
           <SelectContent>{Object.entries(TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
-        </Select>
-        <Select value={boardingFilter} onValueChange={v => { setBoardingFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-44"><SelectValue placeholder="Ponto de embarque" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os embarques</SelectItem>
-            {(trip as Trip & { boardingPoints?: { name: string }[] })?.boardingPoints?.map?.((bp: { name: string }) => (
-              <SelectItem key={bp.name} value={bp.name}>{bp.name}</SelectItem>
-            )) ?? null}
-          </SelectContent>
         </Select>
         <Link href={`/reservations?tripId=${tripId}&new=true`}><Button><Plus className="w-4 h-4 mr-2" />Adicionar</Button></Link>
       </div>

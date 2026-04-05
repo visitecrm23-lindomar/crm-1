@@ -502,6 +502,10 @@ export const UpdateTripBody = zod.object({
   vehiclePlate: zod.string().nullish(),
   vehicleType: zod.string().nullish(),
   driverName: zod.string().nullish(),
+  itinerary: zod.array(zod.object({ day: zod.number(), title: zod.string(), description: zod.string() })).nullish(),
+  fixedCosts: zod.number().nullish(),
+  variableCosts: zod.number().nullish(),
+  gallery: zod.array(zod.string()).nullish(),
 });
 
 export const UpdateTripResponse = zod.object({

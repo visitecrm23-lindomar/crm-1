@@ -183,6 +183,10 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
     if (parsed.data.vehiclePlate !== undefined) updates.vehiclePlate = parsed.data.vehiclePlate ?? null;
     if (parsed.data.vehicleType !== undefined) updates.vehicleType = parsed.data.vehicleType ?? null;
     if (parsed.data.driverName !== undefined) updates.driverName = parsed.data.driverName ?? null;
+    if (parsed.data.itinerary !== undefined) updates.itinerary = parsed.data.itinerary ?? null;
+    if (parsed.data.fixedCosts !== undefined) updates.fixedCosts = parsed.data.fixedCosts != null ? String(parsed.data.fixedCosts) : null;
+    if (parsed.data.variableCosts !== undefined) updates.variableCosts = parsed.data.variableCosts != null ? String(parsed.data.variableCosts) : null;
+    if (parsed.data.gallery !== undefined) updates.gallery = parsed.data.gallery ?? [];
 
     await db.update(tripsTable).set(updates)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)));
