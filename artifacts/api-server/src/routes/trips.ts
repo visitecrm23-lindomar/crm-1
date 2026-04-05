@@ -223,10 +223,11 @@ router.get("/trips/:id/seat-map", async (req, res): Promise<void> => {
     const reservations = await db.select().from(reservationsTable)
       .where(and(eq(reservationsTable.tripId, req.params.id), eq(reservationsTable.tenantId, me.tenantId)));
 
-    const occupiedSeats: Record<string, { reservationId: string; passengerName: string }> = {};
+    const occupiedSeats: Record<string, { reservationId: string; passengerName: string; seatStatus: string }> = {};
     for (const r of reservations) {
+      const seatStatus = r.status === "confirmed" ? "confirmed" : "reserved";
       for (const seat of r.seats) {
-        occupiedSeats[seat] = { reservationId: r.id, passengerName: "" };
+        occupiedSeats[seat] = { reservationId: r.id, passengerName: "", seatStatus };
       }
     }
 
@@ -235,7 +236,7 @@ router.get("/trips/:id/seat-map", async (req, res): Promise<void> => {
       number: num,
       row: data.row,
       col: data.col,
-      status: occupiedSeats[num] ? "occupied" : data.status,
+      status: occupiedSeats[num] ? occupiedSeats[num].seatStatus : data.status,
       passengerName: occupiedSeats[num]?.passengerName ?? null,
       reservationId: occupiedSeats[num]?.reservationId ?? null,
     }));

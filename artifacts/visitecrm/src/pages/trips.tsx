@@ -1511,9 +1511,18 @@ export function PassengersList({ tripId }: { tripId: string }) {
 
   const passengers = useMemo(() => {
     return (reservations?.data ?? []).filter(r => {
-      if (paymentFilter !== "all" && r.paymentMethod !== paymentFilter) return false;
+      if (paymentFilter !== "all") {
+        const isPaid = r.balance <= 0 && r.paidValue > 0;
+        const isPending = r.balance > 0 && r.paidValue > 0;
+        const isUnpaid = r.paidValue === 0;
+        const isOverdue = isUnpaid || isPending;
+        if (paymentFilter === "paid" && !isPaid) return false;
+        if (paymentFilter === "pending" && !isPending) return false;
+        if (paymentFilter === "unpaid" && !isUnpaid) return false;
+        if (paymentFilter === "overdue" && !isOverdue) return false;
+      }
       if (typeFilter !== "all") {
-        const bdate = (r.client as Record<string, unknown>).birthDate as string | undefined;
+        const bdate = (r.client as unknown as Record<string, unknown>).birthDate as string | undefined;
         const age = bdate ? new Date().getFullYear() - new Date(bdate).getFullYear() : null;
         const isChild = age !== null && age < 12;
         const isSenior = age !== null && age >= 60;
@@ -1526,21 +1535,35 @@ export function PassengersList({ tripId }: { tripId: string }) {
         if (bp !== boardingFilter) return false;
       }
       return true;
-    }).map(r => ({
-      reservationId: r.id,
-      name: r.client.name,
-      whatsapp: r.client.whatsapp,
-      email: r.client.email,
-      voucherCode: r.voucherCode,
-      seats: r.seats.join(", "),
-      status: r.status,
-      paymentMethod: r.paymentMethod ?? "-",
-      totalValue: r.totalValue,
-      paidValue: r.paidValue,
-      balance: r.balance,
-      checkedIn: !!r.checkedInAt,
-      hasInsurance: r.hasInsurance,
-    }));
+    }).map(r => {
+      const bdate = (r.client as unknown as Record<string, unknown>).birthDate as string | undefined;
+      const age = bdate ? new Date().getFullYear() - new Date(bdate).getFullYear() : null;
+      const passengerType = age === null ? "Adulto" : age < 12 ? "Criança" : age >= 60 ? "Sênior" : "Adulto";
+      const isPaid = r.balance <= 0 && r.paidValue > 0;
+      const isPending = r.balance > 0 && r.paidValue > 0;
+      const paymentStatus = isPaid ? "Pago" : isPending ? "Parcial" : r.paidValue === 0 ? "Não pago" : "Pendente";
+      const paymentStatusColor = isPaid ? "bg-green-100 text-green-700" : isPending ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700";
+      return {
+        reservationId: r.id,
+        name: r.client.name,
+        cpf: (r.client as Record<string, unknown>).cpf as string | undefined,
+        birthDate: bdate,
+        whatsapp: r.client.whatsapp,
+        email: r.client.email,
+        passengerType,
+        voucherCode: r.voucherCode,
+        seats: r.seats.join(", "),
+        status: r.status,
+        paymentMethod: r.paymentMethod ?? "-",
+        paymentStatus,
+        paymentStatusColor,
+        totalValue: r.totalValue,
+        paidValue: r.paidValue,
+        balance: r.balance,
+        checkedIn: !!r.checkedInAt,
+        hasInsurance: r.hasInsurance,
+      };
+    });
   }, [reservations, paymentFilter, typeFilter, boardingFilter]);
 
   const totalPages = Math.ceil((reservations?.total ?? 0) / 20);
@@ -1557,7 +1580,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
   });
 
   const STATUS_LABELS: Record<string, string> = { all: "Todos", confirmed: "Confirmado", pending: "Pendente", cancelled: "Cancelado", completed: "Concluído" };
-  const PAYMENT_LABELS: Record<string, string> = { all: "Todos os pagamentos", pix: "PIX", credit_card: "Cartão Crédito", cash: "Dinheiro", bank_transfer: "Transferência" };
+  const PAYMENT_STATUS_LABELS: Record<string, string> = { all: "Todos os status de pag.", paid: "Pago", pending: "Pagamento Parcial", unpaid: "Não pago", overdue: "Em aberto" };
   const TYPE_LABELS: Record<string, string> = { all: "Todos os tipos", adult: "Adulto", child: "Criança (< 12)", senior: "Sênior (60+)" };
 
   return (
@@ -1586,8 +1609,8 @@ export function PassengersList({ tripId }: { tripId: string }) {
           <SelectContent>{Object.entries(STATUS_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
         </Select>
         <Select value={paymentFilter} onValueChange={v => { setPaymentFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
-          <SelectContent>{Object.entries(PAYMENT_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+          <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
+          <SelectContent>{Object.entries(PAYMENT_STATUS_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
         </Select>
         <Select value={typeFilter} onValueChange={v => { setTypeFilter(v); setPage(1); }}>
           <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
@@ -1623,43 +1646,51 @@ export function PassengersList({ tripId }: { tripId: string }) {
                 <th className="p-3 w-8">
                   <Checkbox checked={allSelected} onCheckedChange={toggleAll} />
                 </th>
-                <th className="text-left p-3 font-medium">Passageiro</th>
-                <th className="text-left p-3 font-medium">Contato</th>
-                <th className="text-left p-3 font-medium">Voucher</th>
-                <th className="text-left p-3 font-medium">Assento(s)</th>
-                <th className="text-left p-3 font-medium">Status</th>
-                <th className="text-left p-3 font-medium">Pagamento</th>
-                <th className="text-right p-3 font-medium">Valor Total</th>
-                <th className="text-right p-3 font-medium">Saldo</th>
-                <th className="text-center p-3 font-medium">Check-in</th>
-                <th className="text-center p-3 font-medium">Seguro</th>
+                <th className="text-left p-3 font-medium whitespace-nowrap">Passageiro</th>
+                <th className="text-left p-3 font-medium whitespace-nowrap">CPF</th>
+                <th className="text-left p-3 font-medium whitespace-nowrap">Nascimento</th>
+                <th className="text-left p-3 font-medium whitespace-nowrap">Tipo</th>
+                <th className="text-left p-3 font-medium whitespace-nowrap">Contato</th>
+                <th className="text-left p-3 font-medium whitespace-nowrap">Assento(s)</th>
+                <th className="text-left p-3 font-medium whitespace-nowrap">Voucher</th>
+                <th className="text-left p-3 font-medium whitespace-nowrap">Reserva</th>
+                <th className="text-left p-3 font-medium whitespace-nowrap">Sit. Pgto.</th>
+                <th className="text-right p-3 font-medium whitespace-nowrap">Valor</th>
+                <th className="text-right p-3 font-medium whitespace-nowrap">Saldo</th>
+                <th className="text-center p-3 font-medium whitespace-nowrap">Check-in</th>
+                <th className="text-center p-3 font-medium whitespace-nowrap">Seguro</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b">
-                    {Array.from({ length: 11 }).map((_, j) => <td key={j} className="p-3"><Skeleton className="h-4 w-full" /></td>)}
+                    {Array.from({ length: 14 }).map((_, j) => <td key={j} className="p-3"><Skeleton className="h-4 w-full" /></td>)}
                   </tr>
                 ))
               ) : passengers.length === 0 ? (
-                <tr><td colSpan={11} className="text-center py-10 text-muted-foreground">Nenhum passageiro encontrado</td></tr>
+                <tr><td colSpan={14} className="text-center py-10 text-muted-foreground">Nenhum passageiro encontrado</td></tr>
               ) : (
                 passengers.map(p => (
                   <tr key={p.reservationId} className="border-b hover:bg-muted/30">
                     <td className="p-3"><Checkbox checked={selectedIds.has(p.reservationId)} onCheckedChange={() => toggleOne(p.reservationId)} /></td>
-                    <td className="p-3 font-medium">{p.name}</td>
-                    <td className="p-3 text-muted-foreground text-xs">{p.whatsapp}</td>
+                    <td className="p-3 font-medium whitespace-nowrap">{p.name}</td>
+                    <td className="p-3 text-muted-foreground text-xs">{p.cpf ?? "—"}</td>
+                    <td className="p-3 text-muted-foreground text-xs whitespace-nowrap">{p.birthDate ? new Date(p.birthDate).toLocaleDateString("pt-BR") : "—"}</td>
+                    <td className="p-3 text-xs"><span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{p.passengerType}</span></td>
+                    <td className="p-3 text-muted-foreground text-xs whitespace-nowrap">{p.whatsapp}</td>
+                    <td className="p-3 whitespace-nowrap">{p.seats || "—"}</td>
                     <td className="p-3"><code className="text-xs bg-muted px-1.5 py-0.5 rounded">{p.voucherCode}</code></td>
-                    <td className="p-3">{p.seats || "—"}</td>
                     <td className="p-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${p.status === "confirmed" ? "bg-green-100 text-green-700" : p.status === "pending" ? "bg-amber-100 text-amber-700" : p.status === "cancelled" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-700"}`}>
                         {STATUS_LABELS[p.status] ?? p.status}
                       </span>
                     </td>
-                    <td className="p-3 text-muted-foreground text-xs">{PAYMENT_LABELS[p.paymentMethod] ?? p.paymentMethod}</td>
-                    <td className="p-3 text-right font-medium">{formatCurrency(p.totalValue)}</td>
-                    <td className={`p-3 text-right font-medium ${p.balance > 0 ? "text-red-600" : "text-green-600"}`}>{formatCurrency(p.balance)}</td>
+                    <td className="p-3">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${p.paymentStatusColor}`}>{p.paymentStatus}</span>
+                    </td>
+                    <td className="p-3 text-right font-medium whitespace-nowrap">{formatCurrency(p.totalValue)}</td>
+                    <td className={`p-3 text-right font-medium whitespace-nowrap ${p.balance > 0 ? "text-red-600" : "text-green-600"}`}>{formatCurrency(p.balance)}</td>
                     <td className="p-3 text-center">{p.checkedIn ? <Check className="w-4 h-4 text-green-600 mx-auto" /> : <span className="text-muted-foreground">—</span>}</td>
                     <td className="p-3 text-center">{p.hasInsurance ? <Check className="w-4 h-4 text-blue-600 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}</td>
                   </tr>
