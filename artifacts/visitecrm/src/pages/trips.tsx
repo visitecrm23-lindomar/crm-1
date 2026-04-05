@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import {
   useListTrips, useCreateTrip, useGetTrip, useUpdateTrip, useDeleteTrip,
-  useGetTripSeatMap, useListReservations, useListClients, useCreateReservation, useUpdateReservation,
+  useGetTripSeatMap, useListReservations, useListClients, useCreateReservation, useUpdateReservation, useCreateClient,
 } from "@workspace/api-client-react";
 import type { Trip, Seat } from "@workspace/api-client-react";
 import { useEditor, EditorContent } from "@tiptap/react";
@@ -503,6 +503,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
           coverImage: form.coverImage || undefined,
           seatLayout: form.seatLayout,
           vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined,
+          status: statusToSave,
         },
       });
     }
@@ -854,6 +855,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   const [manualName, setManualName] = useState("");
   const [manualCpf, setManualCpf] = useState("");
   const [manualPhone, setManualPhone] = useState("");
+  const [manualEmail, setManualEmail] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
   const [optimisticSeats, setOptimisticSeats] = useState<Record<string, string>>({});
@@ -864,6 +866,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   const { data: reservations } = useListReservations({ tripId });
   const { data: clientsData } = useListClients({ search: clientSearch || undefined, limit: 8 });
   const createReservation = useCreateReservation();
+  const createClient = useCreateClient();
 
   const seats = useMemo(() => {
     if (!seatMap?.seats) return [];
@@ -890,7 +893,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
     setAssignMode("search");
     setClientSearch("");
     setSelectedClientId(null);
-    setManualName(""); setManualCpf(""); setManualPhone("");
+    setManualName(""); setManualCpf(""); setManualPhone(""); setManualEmail("");
     setAssignError(null);
     setShowModal(true);
   };
@@ -917,6 +920,24 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
         refetchSeatMap();
       } else {
         if (!manualName) { setAssignError("Informe o nome do passageiro."); setIsSaving(false); return; }
+        if (!manualEmail) { setAssignError("Informe o e-mail do passageiro."); setIsSaving(false); return; }
+        const newClient = await createClient.mutateAsync({
+          data: {
+            name: manualName,
+            email: manualEmail,
+            whatsapp: manualPhone || "00000000000",
+            cpf: manualCpf || undefined,
+          },
+        });
+        await createReservation.mutateAsync({
+          data: {
+            tripId,
+            clientId: newClient.id,
+            seats: [selectedSeat.number],
+            totalValue: trip?.priceAdult ?? 0,
+            installments: 1,
+          },
+        });
         setOptimisticSeats(prev => ({ ...prev, [selectedSeat.number]: "occupied" }));
         setShowModal(false);
         setSelectedSeat(null);
@@ -1116,9 +1137,14 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
               </div>
             ) : (
               <div className="space-y-3">
+                <p className="text-xs text-muted-foreground bg-muted rounded-md p-2">Um novo cadastro de cliente será criado e a reserva será salva automaticamente.</p>
                 <div className="space-y-2">
                   <Label>Nome Completo *</Label>
                   <Input placeholder="João da Silva" value={manualName} onChange={e => setManualName(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>E-mail *</Label>
+                  <Input type="email" placeholder="joao@email.com" value={manualEmail} onChange={e => setManualEmail(e.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <Label>CPF</Label>
@@ -1128,7 +1154,6 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
                   <Label>WhatsApp</Label>
                   <Input placeholder="(11) 99999-9999" value={manualPhone} onChange={e => setManualPhone(e.target.value)} />
                 </div>
-                <p className="text-xs text-muted-foreground">Passageiro avulso — será associado à viagem sem criar uma reserva completa.</p>
               </div>
             )}
 
@@ -1137,11 +1162,6 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{assignError}</span>
               </div>
-            )}
-            {assignMode === "manual" && (
-              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md p-2">
-                Modo avulso: o assento sera bloqueado visualmente. Vincule um cliente cadastrado para gerar reserva formal.
-              </p>
             )}
             <div className="flex gap-2 pt-2">
               <Button variant="outline" className="flex-1" onClick={() => { setShowModal(false); setSelectedSeat(null); setAssignError(null); }}>Cancelar</Button>
@@ -1851,6 +1871,7 @@ export default function Trips() {
   const [matchSeatMap, paramsSeatMap] = useRoute("/trips/:id/seat-map");
   const [matchPassengersOverview, paramsPassengersOverview] = useRoute("/trips/:id/passengers-overview");
   const [matchPassengers, paramsPassengers] = useRoute("/trips/:id/passengers");
+  const [matchDetail, paramsDetail] = useRoute("/trips/:id");
 
   if (matchNew) return <TripForm />;
   if (matchCalendar) return <TripCalendar />;
@@ -1858,6 +1879,7 @@ export default function Trips() {
   if (matchSeatMap && paramsSeatMap?.id) return <SeatMap tripId={paramsSeatMap.id} />;
   if (matchPassengersOverview && paramsPassengersOverview?.id) return <PassengersOverview tripId={paramsPassengersOverview.id} />;
   if (matchPassengers && paramsPassengers?.id) return <PassengersList tripId={paramsPassengers.id} />;
+  if (matchDetail && paramsDetail?.id) return <PassengersOverview tripId={paramsDetail.id} />;
 
   return <TripList />;
 }

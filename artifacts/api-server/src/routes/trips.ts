@@ -128,6 +128,7 @@ router.post("/trips", async (req, res): Promise<void> => {
       vehicleType: parsed.data.vehicleType ?? null,
       driverName: parsed.data.driverName ?? null,
       createdById: me.id,
+      ...(parsed.data.status ? { status: parsed.data.status } : {}),
     });
 
     const [trip] = await db.select().from(tripsTable)

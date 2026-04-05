@@ -271,6 +271,8 @@ export interface CreateTripBody {
   vehicleType?: string | null;
   /** @nullable */
   driverName?: string | null;
+  /** @nullable */
+  status?: string | null;
 }
 
 export interface UpdateTripBody {

@@ -433,6 +433,7 @@ export const CreateTripBody = zod.object({
   vehiclePlate: zod.string().nullish(),
   vehicleType: zod.string().nullish(),
   driverName: zod.string().nullish(),
+  status: zod.string().nullish(),
 });
 
 /**
