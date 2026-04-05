@@ -1,10 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import {
   useListTrips, useCreateTrip, useGetTrip, useUpdateTrip, useDeleteTrip,
-  useGetTripSeatMap, useListReservations, useListClients,
+  useGetTripSeatMap, useListReservations, useListClients, useCreateReservation,
 } from "@workspace/api-client-react";
-import type { Trip } from "@workspace/api-client-react";
+import type { Trip, Seat } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -14,17 +14,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Plus, Search, MapPin, Calendar, Users, Bus, Edit, Trash2, Eye, ChevronsLeft, ChevronsRight,
-  LayoutGrid, List, ChevronLeft, ChevronRight, ArrowLeft, Check, X, Download, Send,
+  LayoutGrid, List, ChevronLeft, ChevronRight, ArrowLeft, Check, X, Download, Send, Copy,
+  AlertCircle, DollarSign,
 } from "lucide-react";
-import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay, isToday } from "date-fns";
+import {
+  format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay,
+  addMonths, subMonths, isSameDay, isToday, startOfWeek, addDays,
+  addWeeks, subWeeks,
+} from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 function formatCurrency(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
-
 function formatDate(d: string) {
   try { return format(parseISO(d), "dd/MM/yyyy", { locale: ptBR }); }
   catch { return d; }
@@ -37,7 +42,6 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   completed:  { label: "Concluída",  color: "bg-purple-100 text-purple-700" },
   cancelled:  { label: "Cancelada",  color: "bg-red-100 text-red-700" },
 };
-
 const VEHICLE_TYPES = ["Ônibus", "Micro-ônibus", "Van", "Carro", "Outro"];
 const TRIP_TYPES = ["excursion", "package", "custom", "transfer"];
 const TRIP_TYPE_LABELS: Record<string, string> = {
@@ -65,6 +69,8 @@ function OccupancyBar({ reserved, confirmed, total }: { reserved: number; confir
 export function TripList() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("");
   const [page, setPage] = useState(1);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -73,13 +79,22 @@ export function TripList() {
   const { data: tripsData, isLoading, refetch } = useListTrips({
     search: search || undefined,
     status: statusFilter !== "all" ? statusFilter : undefined,
-    page,
-    limit: 12,
+    page, limit: 12,
   });
+  const createTrip = useCreateTrip();
   const deleteTrip = useDeleteTrip();
 
   const { data: allTrips } = useListTrips({ limit: 100 });
-  const trips = tripsData?.data ?? [];
+
+  const trips = useMemo(() => {
+    let data = tripsData?.data ?? [];
+    if (typeFilter !== "all") data = data.filter(t => t.type === typeFilter);
+    if (dateFilter) {
+      const from = new Date(dateFilter);
+      data = data.filter(t => { try { return parseISO(t.departureDate) >= from; } catch { return true; } });
+    }
+    return data;
+  }, [tripsData, typeFilter, dateFilter]);
 
   const stats = useMemo(() => {
     const all = allTrips?.data ?? [];
@@ -87,17 +102,39 @@ export function TripList() {
     const totalSeats = active.reduce((acc, t) => acc + t.totalCapacity, 0);
     const occupiedSeats = active.reduce((acc, t) => acc + t.reservedSeats + t.confirmedSeats, 0);
     const totalRevenue = active.reduce((acc, t) => acc + (t.reservedSeats + t.confirmedSeats) * t.priceAdult, 0);
-    return {
-      total: all.length,
-      active: active.length,
-      occupancyRate: totalSeats > 0 ? Math.round(occupiedSeats / totalSeats * 100) : 0,
-      totalRevenue,
-    };
+    return { total: all.length, active: active.length, occupancyRate: totalSeats > 0 ? Math.round(occupiedSeats / totalSeats * 100) : 0, totalRevenue };
   }, [allTrips]);
 
   const handleDelete = async (id: string) => {
     await deleteTrip.mutateAsync({ id });
     setDeletingId(null);
+    refetch();
+  };
+
+  const handleDuplicate = async (trip: Trip) => {
+    await createTrip.mutateAsync({
+      data: {
+        name: `${trip.name} (cópia)`,
+        description: trip.description ?? undefined,
+        destination: trip.destination,
+        destinationCity: trip.destinationCity,
+        destinationState: trip.destinationState,
+        type: trip.type,
+        category: trip.category,
+        departureDate: trip.departureDate.split("T")[0],
+        returnDate: trip.returnDate?.split("T")[0],
+        totalCapacity: trip.totalCapacity,
+        priceAdult: trip.priceAdult,
+        priceChild: trip.priceChild ?? undefined,
+        priceSenior: trip.priceSenior ?? undefined,
+        inclusions: trip.inclusions,
+        exclusions: trip.exclusions,
+        seatLayout: trip.seatLayout ?? "2x2",
+        vehicleType: trip.vehicleType ?? undefined,
+        vehiclePlate: trip.vehiclePlate ?? undefined,
+        driverName: trip.driverName ?? undefined,
+      },
+    });
     refetch();
   };
 
@@ -111,12 +148,8 @@ export function TripList() {
           <p className="text-muted-foreground text-sm">Gerencie excursões e pacotes da agência</p>
         </div>
         <div className="flex gap-2">
-          <Link href="/trips/calendar">
-            <Button variant="outline"><Calendar className="w-4 h-4 mr-2" />Calendário</Button>
-          </Link>
-          <Link href="/trips/new">
-            <Button><Plus className="w-4 h-4 mr-2" />Nova Viagem</Button>
-          </Link>
+          <Link href="/trips/calendar"><Button variant="outline"><Calendar className="w-4 h-4 mr-2" />Calendário</Button></Link>
+          <Link href="/trips/new"><Button><Plus className="w-4 h-4 mr-2" />Nova Viagem</Button></Link>
         </div>
       </div>
 
@@ -125,7 +158,7 @@ export function TripList() {
           { label: "Total de Viagens", value: stats.total, icon: MapPin, color: "text-blue-600" },
           { label: "Viagens Ativas", value: stats.active, icon: Calendar, color: "text-green-600" },
           { label: "Taxa de Ocupação", value: `${stats.occupancyRate}%`, icon: Users, color: "text-amber-600" },
-          { label: "Receita Estimada", value: formatCurrency(stats.totalRevenue), icon: Bus, color: "text-purple-600" },
+          { label: "Receita Estimada", value: formatCurrency(stats.totalRevenue), icon: DollarSign, color: "text-purple-600" },
         ].map(s => (
           <div key={s.label} className="bg-card border rounded-lg p-4">
             <div className="flex items-center gap-2 mb-1">
@@ -138,24 +171,33 @@ export function TripList() {
       </div>
 
       <div className="flex flex-wrap gap-3 items-center">
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar viagens..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <Input placeholder="Buscar viagens..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="pl-9" />
         </div>
         <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectTrigger className="w-36"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos os status</SelectItem>
             {Object.entries(STATUS_MAP).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
           </SelectContent>
         </Select>
-        <div className="flex border rounded-md overflow-hidden">
-          <Button variant={viewMode === "grid" ? "default" : "ghost"} size="icon" className="rounded-none h-9 w-9" onClick={() => setViewMode("grid")}>
-            <LayoutGrid className="w-4 h-4" />
+        <Select value={typeFilter} onValueChange={v => { setTypeFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-36"><SelectValue placeholder="Tipo" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os tipos</SelectItem>
+            {TRIP_TYPES.map(t => <SelectItem key={t} value={t}>{TRIP_TYPE_LABELS[t] ?? t}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Input type="date" value={dateFilter} onChange={e => { setDateFilter(e.target.value); setPage(1); }} className="w-40" title="Filtrar por data de saída (a partir de)" />
+        {(search || statusFilter !== "all" || typeFilter !== "all" || dateFilter) && (
+          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setStatusFilter("all"); setTypeFilter("all"); setDateFilter(""); setPage(1); }}>
+            <X className="w-4 h-4 mr-1" />Limpar
           </Button>
-          <Button variant={viewMode === "list" ? "default" : "ghost"} size="icon" className="rounded-none h-9 w-9" onClick={() => setViewMode("list")}>
-            <List className="w-4 h-4" />
-          </Button>
+        )}
+        <div className="flex border rounded-md overflow-hidden ml-auto">
+          <Button variant={viewMode === "grid" ? "default" : "ghost"} size="icon" className="rounded-none h-9 w-9" onClick={() => setViewMode("grid")}><LayoutGrid className="w-4 h-4" /></Button>
+          <Button variant={viewMode === "list" ? "default" : "ghost"} size="icon" className="rounded-none h-9 w-9" onClick={() => setViewMode("list")}><List className="w-4 h-4" /></Button>
         </div>
       </div>
 
@@ -173,14 +215,14 @@ export function TripList() {
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {trips.map(trip => (
-            <TripCard key={trip.id} trip={trip} onDelete={() => setDeletingId(trip.id)} navigate={navigate} />
+            <TripCard key={trip.id} trip={trip} onDelete={() => setDeletingId(trip.id)} onDuplicate={() => handleDuplicate(trip)} navigate={navigate} />
           ))}
         </div>
       ) : (
         <div className="bg-card border rounded-lg overflow-hidden">
           {trips.map((trip, i) => (
             <div key={trip.id} className={`flex items-center gap-4 p-4 ${i > 0 ? "border-t" : ""}`}>
-              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                 <MapPin className="w-5 h-5 text-primary" />
               </div>
               <div className="flex-1 min-w-0">
@@ -192,15 +234,10 @@ export function TripList() {
               </div>
               <Badge className={STATUS_MAP[trip.status]?.color}>{STATUS_MAP[trip.status]?.label ?? trip.status}</Badge>
               <div className="flex gap-1">
-                <Link href={`/trips/${trip.id}/passengers-overview`}>
-                  <Button size="icon" variant="ghost" className="h-8 w-8"><Eye className="w-4 h-4" /></Button>
-                </Link>
-                <Link href={`/trips/${trip.id}/edit`}>
-                  <Button size="icon" variant="ghost" className="h-8 w-8"><Edit className="w-4 h-4" /></Button>
-                </Link>
-                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => setDeletingId(trip.id)}>
-                  <Trash2 className="w-4 h-4" />
-                </Button>
+                <Link href={`/trips/${trip.id}/passengers-overview`}><Button size="icon" variant="ghost" className="h-8 w-8"><Eye className="w-4 h-4" /></Button></Link>
+                <Link href={`/trips/${trip.id}/edit`}><Button size="icon" variant="ghost" className="h-8 w-8"><Edit className="w-4 h-4" /></Button></Link>
+                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleDuplicate(trip)} title="Duplicar"><Copy className="w-4 h-4" /></Button>
+                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => setDeletingId(trip.id)}><Trash2 className="w-4 h-4" /></Button>
               </div>
             </div>
           ))}
@@ -233,32 +270,22 @@ export function TripList() {
   );
 }
 
-function TripCard({ trip, onDelete, navigate }: { trip: Trip; onDelete: () => void; navigate: (to: string) => void }) {
+function TripCard({ trip, onDelete, onDuplicate, navigate }: { trip: Trip; onDelete: () => void; onDuplicate: () => void; navigate: (to: string) => void }) {
   const pct = trip.totalCapacity > 0 ? Math.round((trip.reservedSeats + trip.confirmedSeats) / trip.totalCapacity * 100) : 0;
   const statusInfo = STATUS_MAP[trip.status] ?? { label: trip.status, color: "bg-gray-100 text-gray-600" };
-
   return (
-    <div className="bg-card border rounded-xl overflow-hidden hover:shadow-md transition-shadow group">
+    <div className="bg-card border rounded-xl overflow-hidden hover:shadow-md transition-shadow">
       <div className="relative h-36 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-        {trip.coverImage ? (
-          <img src={trip.coverImage} alt={trip.name} className="w-full h-full object-cover" />
-        ) : (
-          <MapPin className="w-12 h-12 text-primary/30" />
-        )}
-        <div className="absolute top-3 right-3">
-          <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusInfo.color}`}>{statusInfo.label}</span>
-        </div>
+        {trip.coverImage ? <img src={trip.coverImage} alt={trip.name} className="w-full h-full object-cover" /> : <MapPin className="w-12 h-12 text-primary/30" />}
+        <div className="absolute top-3 right-3"><span className={`text-xs px-2 py-1 rounded-full font-medium ${statusInfo.color}`}>{statusInfo.label}</span></div>
       </div>
       <div className="p-4 space-y-3">
         <div>
           <h3 className="font-semibold truncate">{trip.name}</h3>
-          <p className="text-sm text-muted-foreground flex items-center gap-1">
-            <MapPin className="w-3 h-3" /> {trip.destinationCity}, {trip.destinationState}
-          </p>
+          <p className="text-sm text-muted-foreground flex items-center gap-1"><MapPin className="w-3 h-3" />{trip.destinationCity}, {trip.destinationState}</p>
         </div>
         <div className="flex items-center gap-1 text-sm text-muted-foreground">
-          <Calendar className="w-3 h-3" />
-          <span>{formatDate(trip.departureDate)}</span>
+          <Calendar className="w-3 h-3" /><span>{formatDate(trip.departureDate)}</span>
           {trip.returnDate && <><span>—</span><span>{formatDate(trip.returnDate)}</span></>}
         </div>
         <OccupancyBar reserved={trip.reservedSeats} confirmed={trip.confirmedSeats} total={trip.totalCapacity} />
@@ -276,15 +303,19 @@ function TripCard({ trip, onDelete, navigate }: { trip: Trip; onDelete: () => vo
           <Link href={`/trips/${trip.id}/edit`}>
             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground"><Edit className="w-4 h-4" /></Button>
           </Link>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={onDelete}>
-            <Trash2 className="w-4 h-4" />
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={onDuplicate} title="Duplicar">
+            <Copy className="w-4 h-4" />
           </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={onDelete}><Trash2 className="w-4 h-4" /></Button>
         </div>
       </div>
     </div>
   );
 }
 
+interface BoardingPoint { id: string; name: string; time: string; address: string; }
+interface ItineraryDay { day: number; title: string; description: string; }
+interface CostItem { id: string; label: string; amount: string; }
 interface TripFormData {
   name: string; description: string;
   destination: string; destinationCity: string; destinationState: string;
@@ -296,8 +327,16 @@ interface TripFormData {
   coverImage: string;
   vehicleType: string; vehiclePlate: string; driverName: string;
   status: string;
+  boardingPoints: BoardingPoint[];
+  itinerary: ItineraryDay[];
+  costs: CostItem[];
+  accommodation: string;
+  guide: string;
 }
 
+const newBP = (): BoardingPoint => ({ id: crypto.randomUUID(), name: "", time: "", address: "" });
+const newDay = (day: number): ItineraryDay => ({ day, title: "", description: "" });
+const newCost = (): CostItem => ({ id: crypto.randomUUID(), label: "", amount: "" });
 const EMPTY_FORM: TripFormData = {
   name: "", description: "", destination: "", destinationCity: "", destinationState: "",
   type: "excursion", category: "standard", departureDate: "", returnDate: "",
@@ -305,21 +344,21 @@ const EMPTY_FORM: TripFormData = {
   priceAdult: "", priceChild: "", priceSenior: "",
   inclusions: "", exclusions: "", coverImage: "",
   vehicleType: "", vehiclePlate: "", driverName: "", status: "draft",
+  boardingPoints: [newBP()], itinerary: [newDay(1)], costs: [], accommodation: "", guide: "",
 };
 
 export function TripForm({ tripId }: { tripId?: string }) {
   const [, navigate] = useLocation();
   const [tab, setTab] = useState("basico");
   const [form, setForm] = useState<TripFormData>(EMPTY_FORM);
-  const [loaded, setLoaded] = useState(false);
 
   const { data: existingTrip } = useGetTrip(tripId ?? "", { query: { enabled: !!tripId, queryKey: ["/api/trips", tripId] } });
   const createTrip = useCreateTrip();
   const updateTrip = useUpdateTrip();
   const isPending = createTrip.isPending || updateTrip.isPending;
 
-  if (existingTrip && !loaded) {
-    setLoaded(true);
+  useEffect(() => {
+    if (!existingTrip || !tripId) return;
     setForm({
       name: existingTrip.name,
       description: existingTrip.description ?? "",
@@ -342,78 +381,76 @@ export function TripForm({ tripId }: { tripId?: string }) {
       vehiclePlate: existingTrip.vehiclePlate ?? "",
       driverName: existingTrip.driverName ?? "",
       status: existingTrip.status,
+      boardingPoints: [newBP()],
+      itinerary: [newDay(1)],
+      costs: [],
+      accommodation: "",
+      guide: "",
     });
-  }
+  }, [existingTrip?.id, tripId]);
 
   const set = (k: keyof TripFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(prev => ({ ...prev, [k]: e.target.value }));
   const setVal = (k: keyof TripFormData) => (v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
+  const totalCosts = form.costs.reduce((acc, c) => acc + (parseFloat(c.amount) || 0), 0);
+  const grossRevenue = parseFloat(form.priceAdult || "0") * parseInt(form.totalCapacity || "0");
+  const margin = grossRevenue - totalCosts;
+  const marginPct = grossRevenue > 0 ? Math.round(margin / grossRevenue * 100) : 0;
+
   const handleSave = async (publish = false) => {
     const inclArr = form.inclusions.split("\n").map(s => s.trim()).filter(Boolean);
     const exclArr = form.exclusions.split("\n").map(s => s.trim()).filter(Boolean);
     const statusToSave = publish ? "active" : form.status;
-
     if (tripId) {
       await updateTrip.mutateAsync({
         id: tripId,
         data: {
-          name: form.name,
-          description: form.description || undefined,
-          departureDate: form.departureDate,
-          returnDate: form.returnDate || undefined,
+          name: form.name, description: form.description || undefined,
+          departureDate: form.departureDate, returnDate: form.returnDate || undefined,
           totalCapacity: parseInt(form.totalCapacity),
           priceAdult: parseFloat(form.priceAdult),
           priceChild: form.priceChild ? parseFloat(form.priceChild) : undefined,
           priceSenior: form.priceSenior ? parseFloat(form.priceSenior) : undefined,
-          inclusions: inclArr,
-          exclusions: exclArr,
+          inclusions: inclArr, exclusions: exclArr,
           coverImage: form.coverImage || undefined,
-          vehicleType: form.vehicleType || undefined,
-          vehiclePlate: form.vehiclePlate || undefined,
-          driverName: form.driverName || undefined,
+          vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined,
           status: statusToSave,
         },
       });
     } else {
       await createTrip.mutateAsync({
         data: {
-          name: form.name,
-          description: form.description || undefined,
-          destination: form.destination,
-          destinationCity: form.destinationCity,
-          destinationState: form.destinationState,
-          type: form.type,
-          category: form.category,
-          departureDate: form.departureDate,
-          returnDate: form.returnDate || undefined,
+          name: form.name, description: form.description || undefined,
+          destination: form.destination, destinationCity: form.destinationCity, destinationState: form.destinationState,
+          type: form.type, category: form.category,
+          departureDate: form.departureDate, returnDate: form.returnDate || undefined,
           totalCapacity: parseInt(form.totalCapacity),
           priceAdult: parseFloat(form.priceAdult),
           priceChild: form.priceChild ? parseFloat(form.priceChild) : undefined,
           priceSenior: form.priceSenior ? parseFloat(form.priceSenior) : undefined,
-          inclusions: inclArr,
-          exclusions: exclArr,
+          inclusions: inclArr, exclusions: exclArr,
           coverImage: form.coverImage || undefined,
           seatLayout: form.seatLayout,
-          vehicleType: form.vehicleType || undefined,
-          vehiclePlate: form.vehiclePlate || undefined,
-          driverName: form.driverName || undefined,
+          vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined,
         },
       });
     }
     navigate("/trips");
   };
 
-  const marginPct = form.priceAdult ? 30 : 0;
-
   const TABS = [
     { id: "basico", label: "Informações Básicas" },
     { id: "precos", label: "Preços" },
+    { id: "pontos", label: "Pontos de Embarque" },
+    { id: "roteiro", label: "Roteiro" },
     { id: "inclusoes", label: "Inclusões / Exclusões" },
-    { id: "transporte", label: "Transporte" },
+    { id: "custos", label: "Financeiro / Custos" },
+    { id: "transporte", label: "Transporte e Hospedagem" },
     { id: "midia", label: "Mídia" },
-    { id: "configuracoes", label: "Configurações" },
   ];
+
+  const canSave = !!form.name && !!form.destination && !!form.departureDate && !!form.priceAdult;
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -432,15 +469,13 @@ export function TripForm({ tripId }: { tripId?: string }) {
 
         <TabsContent value="basico" className="space-y-4 mt-6">
           <div className="bg-card border rounded-lg p-6 space-y-4">
-            <div className="grid grid-cols-1 gap-4">
-              <div className="space-y-2">
-                <Label>Nome da Viagem *</Label>
-                <Input placeholder="Ex: Maravilhas do Nordeste" value={form.name} onChange={set("name")} />
-              </div>
-              <div className="space-y-2">
-                <Label>Descrição</Label>
-                <Textarea placeholder="Descreva os atrativos, programação e destaques da viagem..." value={form.description} onChange={set("description")} rows={4} />
-              </div>
+            <div className="space-y-2">
+              <Label>Nome da Viagem *</Label>
+              <Input placeholder="Ex: Maravilhas do Nordeste" value={form.name} onChange={set("name")} />
+            </div>
+            <div className="space-y-2">
+              <Label>Descrição</Label>
+              <Textarea placeholder="Descreva os atrativos, programação e destaques da viagem..." value={form.description} onChange={set("description")} rows={5} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -459,9 +494,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 <Label>Tipo</Label>
                 <Select value={form.type} onValueChange={setVal("type")}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {TRIP_TYPES.map(t => <SelectItem key={t} value={t}>{TRIP_TYPE_LABELS[t] ?? t}</SelectItem>)}
-                  </SelectContent>
+                  <SelectContent>{TRIP_TYPES.map(t => <SelectItem key={t} value={t}>{TRIP_TYPE_LABELS[t] ?? t}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
@@ -507,52 +540,159 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 <Input type="number" step="0.01" placeholder="0.00" value={form.priceSenior} onChange={set("priceSenior")} />
               </div>
             </div>
+            <div className="border-t pt-4 space-y-3">
+              <h4 className="font-medium text-sm">Faixas de Preço Dinâmico</h4>
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { label: "Preço de Lançamento (–20%)", value: form.priceAdult ? formatCurrency(parseFloat(form.priceAdult) * 0.8) : "—" },
+                  { label: "Preço Antecipado (–10%)", value: form.priceAdult ? formatCurrency(parseFloat(form.priceAdult) * 0.9) : "—" },
+                  { label: "Preço Padrão", value: form.priceAdult ? formatCurrency(parseFloat(form.priceAdult)) : "—" },
+                  { label: "Preço de Última Hora (+10%)", value: form.priceAdult ? formatCurrency(parseFloat(form.priceAdult) * 1.1) : "—" },
+                ].map(tier => (
+                  <div key={tier.label} className="flex justify-between items-center p-3 bg-muted/30 rounded-lg text-sm">
+                    <span className="text-muted-foreground">{tier.label}</span>
+                    <span className="font-medium">{tier.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
             {form.priceAdult && (
               <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-                <p className="text-sm font-medium">Receita Estimada (com {form.totalCapacity || 0} assentos)</p>
+                <p className="text-sm font-medium">Receita Estimada com {form.totalCapacity || 0} assentos</p>
                 <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Receita Bruta Máxima:</span>
-                    <span className="ml-2 font-semibold">{formatCurrency(parseFloat(form.priceAdult || "0") * parseInt(form.totalCapacity || "0"))}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Margem Estimada ({marginPct}%):</span>
-                    <span className="ml-2 font-semibold text-green-600">
-                      {formatCurrency(parseFloat(form.priceAdult || "0") * parseInt(form.totalCapacity || "0") * marginPct / 100)}
-                    </span>
-                  </div>
+                  <div><span className="text-muted-foreground">Receita Bruta Máxima:</span><span className="ml-2 font-semibold">{formatCurrency(grossRevenue)}</span></div>
+                  <div><span className="text-muted-foreground">Ocupação 80%:</span><span className="ml-2 font-semibold">{formatCurrency(grossRevenue * 0.8)}</span></div>
                 </div>
               </div>
             )}
           </div>
         </TabsContent>
 
+        <TabsContent value="pontos" className="space-y-4 mt-6">
+          <div className="bg-card border rounded-lg p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Pontos de Embarque</h3>
+              <Button size="sm" variant="outline" onClick={() => setForm(prev => ({ ...prev, boardingPoints: [...prev.boardingPoints, newBP()] }))}>
+                <Plus className="w-4 h-4 mr-1" />Adicionar Ponto
+              </Button>
+            </div>
+            <div className="space-y-3">
+              {form.boardingPoints.map((bp, idx) => (
+                <div key={bp.id} className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-muted-foreground">Ponto {idx + 1}</span>
+                    {form.boardingPoints.length > 1 && (
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setForm(prev => ({ ...prev, boardingPoints: prev.boardingPoints.filter(b => b.id !== bp.id) }))}>
+                        <X className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Nome do Ponto</Label>
+                      <Input placeholder="Terminal Rodoviário" value={bp.name} onChange={e => setForm(prev => ({ ...prev, boardingPoints: prev.boardingPoints.map(b => b.id === bp.id ? { ...b, name: e.target.value } : b) }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Horário</Label>
+                      <Input type="time" value={bp.time} onChange={e => setForm(prev => ({ ...prev, boardingPoints: prev.boardingPoints.map(b => b.id === bp.id ? { ...b, time: e.target.value } : b) }))} />
+                    </div>
+                    <div className="space-y-1 col-span-2">
+                      <Label className="text-xs">Endereço / Referência</Label>
+                      <Input placeholder="Av. Principal, 100 — Em frente ao posto Shell" value={bp.address} onChange={e => setForm(prev => ({ ...prev, boardingPoints: prev.boardingPoints.map(b => b.id === bp.id ? { ...b, address: e.target.value } : b) }))} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="roteiro" className="space-y-4 mt-6">
+          <div className="bg-card border rounded-lg p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Roteiro por Dia</h3>
+              <Button size="sm" variant="outline" onClick={() => setForm(prev => ({ ...prev, itinerary: [...prev.itinerary, newDay(prev.itinerary.length + 1)] }))}>
+                <Plus className="w-4 h-4 mr-1" />Adicionar Dia
+              </Button>
+            </div>
+            <div className="space-y-3">
+              {form.itinerary.map((day, idx) => (
+                <div key={idx} className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold">Dia {day.day}</span>
+                    {form.itinerary.length > 1 && (
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setForm(prev => ({ ...prev, itinerary: prev.itinerary.filter((_, i) => i !== idx).map((d, i) => ({ ...d, day: i + 1 })) }))}>
+                        <X className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Input placeholder="Título do dia (ex: Chegada em Natal)" value={day.title} onChange={e => setForm(prev => ({ ...prev, itinerary: prev.itinerary.map((d, i) => i === idx ? { ...d, title: e.target.value } : d) }))} />
+                    <Textarea placeholder="Descreva as atividades do dia..." rows={3} value={day.description} onChange={e => setForm(prev => ({ ...prev, itinerary: prev.itinerary.map((d, i) => i === idx ? { ...d, description: e.target.value } : d) }))} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </TabsContent>
+
         <TabsContent value="inclusoes" className="space-y-4 mt-6">
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-card border rounded-lg p-6 space-y-3">
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-green-600" />
-                <h3 className="font-semibold">O que está incluso</h3>
-              </div>
-              <Textarea
-                placeholder={"Transporte ida e volta\nCafé da manhã\nGuia turístico\nSeguro de viagem"}
-                value={form.inclusions} onChange={set("inclusions")} rows={8}
-                className="font-mono text-sm"
-              />
+              <div className="flex items-center gap-2"><Check className="w-4 h-4 text-green-600" /><h3 className="font-semibold">O que está incluso</h3></div>
+              <Textarea placeholder={"Transporte ida e volta\nCafé da manhã\nGuia turístico\nSeguro de viagem"} value={form.inclusions} onChange={set("inclusions")} rows={8} className="font-mono text-sm" />
               <p className="text-xs text-muted-foreground">Um item por linha</p>
             </div>
             <div className="bg-card border rounded-lg p-6 space-y-3">
-              <div className="flex items-center gap-2">
-                <X className="w-4 h-4 text-red-600" />
-                <h3 className="font-semibold">O que não está incluso</h3>
-              </div>
-              <Textarea
-                placeholder={"Despesas pessoais\nAlmoço e jantar\nIngresso para atrações opcionais"}
-                value={form.exclusions} onChange={set("exclusions")} rows={8}
-                className="font-mono text-sm"
-              />
+              <div className="flex items-center gap-2"><X className="w-4 h-4 text-red-600" /><h3 className="font-semibold">O que não está incluso</h3></div>
+              <Textarea placeholder={"Despesas pessoais\nAlmoço e jantar\nIngresso para atrações opcionais"} value={form.exclusions} onChange={set("exclusions")} rows={8} className="font-mono text-sm" />
               <p className="text-xs text-muted-foreground">Um item por linha</p>
             </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="custos" className="space-y-4 mt-6">
+          <div className="bg-card border rounded-lg p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Custos Operacionais</h3>
+              <Button size="sm" variant="outline" onClick={() => setForm(prev => ({ ...prev, costs: [...prev.costs, newCost()] }))}>
+                <Plus className="w-4 h-4 mr-1" />Adicionar Custo
+              </Button>
+            </div>
+            {form.costs.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">Nenhum custo cadastrado. Clique em "Adicionar Custo" para começar.</p>
+            )}
+            <div className="space-y-2">
+              {form.costs.map((cost) => (
+                <div key={cost.id} className="flex items-center gap-3">
+                  <Input placeholder="Descrição (ex: Fretamento do ônibus)" value={cost.label} onChange={e => setForm(prev => ({ ...prev, costs: prev.costs.map(c => c.id === cost.id ? { ...c, label: e.target.value } : c) }))} className="flex-1" />
+                  <Input type="number" step="0.01" placeholder="0.00" value={cost.amount} onChange={e => setForm(prev => ({ ...prev, costs: prev.costs.map(c => c.id === cost.id ? { ...c, amount: e.target.value } : c) }))} className="w-36" />
+                  <Button size="icon" variant="ghost" className="shrink-0 text-destructive" onClick={() => setForm(prev => ({ ...prev, costs: prev.costs.filter(c => c.id !== cost.id) }))}><X className="w-4 h-4" /></Button>
+                </div>
+              ))}
+            </div>
+            {form.costs.length > 0 && (
+              <div className="border-t pt-4 space-y-3">
+                <div className="flex justify-between text-sm font-medium">
+                  <span>Total de Custos:</span><span>{formatCurrency(totalCosts)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Receita Bruta Estimada:</span><span>{formatCurrency(grossRevenue)}</span>
+                </div>
+                <div className={`flex justify-between text-sm font-bold ${marginPct >= 20 ? "text-green-600" : marginPct >= 10 ? "text-amber-600" : "text-red-600"}`}>
+                  <span>Margem Estimada ({marginPct}%):</span><span>{formatCurrency(margin)}</span>
+                </div>
+                <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${marginPct >= 20 ? "bg-green-500" : marginPct >= 10 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${Math.max(0, Math.min(100, marginPct))}%` }} />
+                </div>
+                {marginPct < 10 && (
+                  <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 rounded-lg p-3">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>Atenção: margem abaixo de 10%. Revise os custos ou ajuste o preço.</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </TabsContent>
 
@@ -578,7 +718,19 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 <Label>Nome do Motorista</Label>
                 <Input placeholder="João da Silva" value={form.driverName} onChange={set("driverName")} />
               </div>
+              <div className="space-y-2">
+                <Label>Guia Turístico</Label>
+                <Input placeholder="Maria Costa" value={form.guide} onChange={set("guide")} />
+              </div>
             </div>
+          </div>
+          <div className="bg-card border rounded-lg p-6 space-y-4">
+            <h3 className="font-semibold">Hospedagem</h3>
+            <div className="space-y-2">
+              <Label>Hotel / Pousada</Label>
+              <Input placeholder="Hotel Beira Mar — Natal, RN" value={form.accommodation} onChange={set("accommodation")} />
+            </div>
+            <p className="text-xs text-muted-foreground">Integração com cadastro de hospedagens disponível em breve.</p>
           </div>
         </TabsContent>
 
@@ -595,26 +747,12 @@ export function TripForm({ tripId }: { tripId?: string }) {
               </div>
             )}
             <div className="bg-muted/50 rounded-lg p-4 text-sm text-muted-foreground">
-              Galeria de imagens adicional estará disponível em breve.
+              Galeria de imagens adicional — arraste imagens ou cole URLs abaixo.
             </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="configuracoes" className="space-y-4 mt-6">
-          <div className="bg-card border rounded-lg p-6 space-y-4">
-            <h3 className="font-semibold">Status da Viagem</h3>
-            <Select value={form.status} onValueChange={setVal("status")}>
-              <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {Object.entries(STATUS_MAP).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <div className="text-sm text-muted-foreground space-y-1">
-              <p><strong>Rascunho</strong>: visível apenas para administradores.</p>
-              <p><strong>Ativa</strong>: viagem aberta para reservas.</p>
-              <p><strong>Confirmada</strong>: viagem confirmada com todos os detalhes.</p>
-              <p><strong>Concluída</strong>: viagem já realizada.</p>
-              <p><strong>Cancelada</strong>: viagem cancelada.</p>
+            <div className="border-2 border-dashed rounded-lg p-8 text-center text-muted-foreground text-sm">
+              <Download className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              <p>Galeria de imagens</p>
+              <p className="text-xs mt-1">Upload de múltiplas imagens disponível em breve</p>
             </div>
           </div>
         </TabsContent>
@@ -623,10 +761,10 @@ export function TripForm({ tripId }: { tripId?: string }) {
       <div className="flex items-center justify-between bg-card border rounded-lg p-4">
         <Button variant="ghost" onClick={() => navigate("/trips")}>Cancelar</Button>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => handleSave(false)} disabled={isPending || !form.name || !form.destination || !form.departureDate || !form.priceAdult}>
+          <Button variant="outline" onClick={() => handleSave(false)} disabled={isPending || !canSave}>
             {isPending ? "Salvando..." : "Salvar como Rascunho"}
           </Button>
-          <Button onClick={() => handleSave(true)} disabled={isPending || !form.name || !form.destination || !form.departureDate || !form.priceAdult}>
+          <Button onClick={() => handleSave(true)} disabled={isPending || !canSave}>
             {isPending ? "Publicando..." : "Publicar Viagem"}
           </Button>
         </div>
@@ -637,14 +775,22 @@ export function TripForm({ tripId }: { tripId?: string }) {
 
 export function SeatMap({ tripId }: { tripId: string }) {
   const [, navigate] = useLocation();
-  const [selectedSeat, setSelectedSeat] = useState<string | null>(null);
+  const [selectedSeat, setSelectedSeat] = useState<Seat | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [assignMode, setAssignMode] = useState<"search" | "manual">("search");
   const [clientSearch, setClientSearch] = useState("");
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [manualName, setManualName] = useState("");
+  const [manualCpf, setManualCpf] = useState("");
+  const [manualPhone, setManualPhone] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [optimisticSeats, setOptimisticSeats] = useState<Record<string, string>>({});
 
-  const { data: trip } = useGetTrip(tripId);
+  const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
   const { data: seatMap, refetch: refetchSeatMap } = useGetTripSeatMap(tripId);
   const { data: reservations } = useListReservations({ tripId });
-  const { data: clientsData } = useListClients({ search: clientSearch || undefined, limit: 10 });
+  const { data: clientsData } = useListClients({ search: clientSearch || undefined, limit: 8 });
+  const createReservation = useCreateReservation();
 
   const seats = useMemo(() => {
     if (!seatMap?.seats) return [];
@@ -657,30 +803,61 @@ export function SeatMap({ tripId }: { tripId: string }) {
   const maxRow = useMemo(() => Math.max(...seats.map(s => s.row), 0), [seats]);
   const cols = seatMap?.layout === "2x1" ? 3 : 4;
 
-  const seatCounts = useMemo(() => {
-    const available = seats.filter(s => s.status === "available").length;
-    const occupied = seats.filter(s => s.status === "occupied").length;
-    const blocked = seats.filter(s => s.status === "blocked").length;
-    return { available, occupied, blocked };
-  }, [seats]);
+  const seatCounts = useMemo(() => ({
+    available: seats.filter(s => (optimisticSeats[s.number] ?? s.status) === "available").length,
+    occupied: seats.filter(s => (optimisticSeats[s.number] ?? s.status) === "occupied").length,
+    blocked: seats.filter(s => (optimisticSeats[s.number] ?? s.status) === "blocked").length,
+  }), [seats, optimisticSeats]);
 
-  const handleSeatClick = (seatNum: string) => {
-    const seat = seats.find(s => s.number === seatNum);
-    if (seat?.status === "available") {
-      setSelectedSeat(seatNum);
-      setShowModal(true);
+  const getEffectiveStatus = (seat: Seat) => optimisticSeats[seat.number] ?? seat.status;
+
+  const handleSeatClick = (seat: Seat) => {
+    if (getEffectiveStatus(seat) !== "available") return;
+    setSelectedSeat(seat);
+    setAssignMode("search");
+    setClientSearch("");
+    setSelectedClientId(null);
+    setManualName(""); setManualCpf(""); setManualPhone("");
+    setShowModal(true);
+  };
+
+  const handleAssign = async () => {
+    if (!selectedSeat) return;
+    const clientId = selectedClientId;
+    if (!clientId && assignMode === "search") return;
+    setIsSaving(true);
+    try {
+      if (clientId) {
+        await createReservation.mutateAsync({
+          data: {
+            tripId,
+            clientId,
+            seats: [selectedSeat.number],
+            totalValue: trip?.priceAdult ?? 0,
+            installments: 1,
+          },
+        });
+      }
+      setOptimisticSeats(prev => ({ ...prev, [selectedSeat.number]: "occupied" }));
+      setShowModal(false);
+      setSelectedSeat(null);
+      refetchSeatMap();
+    } finally {
+      setIsSaving(false);
     }
   };
 
   function getSeatColor(status: string) {
     switch (status) {
       case "available": return "bg-white border-2 border-gray-200 hover:border-primary hover:bg-primary/5 cursor-pointer";
-      case "occupied": return "bg-orange-400 border-2 border-orange-500 text-white";
-      case "confirmed": return "bg-green-500 border-2 border-green-600 text-white";
-      case "blocked": return "bg-gray-300 border-2 border-gray-400 text-gray-600";
+      case "occupied": return "bg-orange-400 border-2 border-orange-500 text-white cursor-not-allowed";
+      case "confirmed": return "bg-green-500 border-2 border-green-600 text-white cursor-not-allowed";
+      case "blocked": return "bg-gray-300 border-2 border-gray-400 text-gray-600 cursor-not-allowed";
       default: return "bg-gray-100 border-2 border-gray-200";
     }
   }
+
+  const selectedClient = clientsData?.data?.find(c => c.id === selectedClientId);
 
   return (
     <div className="space-y-6">
@@ -691,52 +868,50 @@ export function SeatMap({ tripId }: { tripId: string }) {
           <p className="text-muted-foreground text-sm">{trip?.name}</p>
         </div>
         <div className="ml-auto flex gap-2">
-          <Link href={`/trips/${tripId}/passengers`}>
-            <Button variant="outline"><Users className="w-4 h-4 mr-2" />Lista de Passageiros</Button>
-          </Link>
+          <Link href={`/trips/${tripId}/passengers`}><Button variant="outline"><Users className="w-4 h-4 mr-2" />Lista ANTT</Button></Link>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3">
           <div className="bg-card border rounded-xl p-6 space-y-6">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Layout: {seatMap?.layout === "2x1" ? "2x1 Premium" : "2x2 Padrão"}</p>
-              <p className="text-sm text-muted-foreground">{seatMap?.totalSeats ?? 0} assentos no total</p>
+            <div className="flex items-center justify-between text-sm">
+              <span>Layout: <strong>{seatMap?.layout === "2x1" ? "2x1 Premium" : "2x2 Padrão"}</strong></span>
+              <span className="text-muted-foreground">{seatMap?.totalSeats ?? 0} assentos no total</span>
             </div>
 
-            <div className="bg-gray-800 text-white text-center py-3 rounded-lg text-sm font-medium mb-4">
-              FRENTE DO ONIBUS
-            </div>
+            <div className="bg-gray-800 text-white text-center py-3 rounded-lg text-sm font-medium">FRENTE DO ONIBUS</div>
 
-            <div className="space-y-2 max-w-sm mx-auto">
+            <div className="space-y-2 max-w-xs mx-auto">
               {Array.from({ length: maxRow }).map((_, rowIdx) => {
                 const rowNum = rowIdx + 1;
                 const rowSeats = seats.filter(s => s.row === rowNum);
                 const leftSeats = rowSeats.filter(s => s.col <= 2);
-                const rightSeats = rowSeats.filter(s => s.col > (cols === 3 ? 2 : 2));
+                const rightSeats = rowSeats.filter(s => s.col > 2);
                 return (
                   <div key={rowNum} className="flex items-center gap-2 justify-center">
                     <div className="flex gap-1">
                       {leftSeats.map(seat => (
                         <button
                           key={seat.number}
-                          className={`w-10 h-10 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(seat.status)}`}
-                          onClick={() => handleSeatClick(seat.number)}
-                          title={`Assento ${seat.number} - ${seat.status}`}
+                          className={`w-10 h-10 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(getEffectiveStatus(seat))}`}
+                          onClick={() => handleSeatClick(seat)}
+                          title={`Assento ${seat.number} — ${getEffectiveStatus(seat)}`}
+                          disabled={getEffectiveStatus(seat) !== "available"}
                         >
                           {seat.number}
                         </button>
                       ))}
                     </div>
-                    <div className="w-6 text-center text-xs text-muted-foreground">|</div>
+                    <div className="w-5 text-center text-xs text-muted-foreground shrink-0">|</div>
                     <div className="flex gap-1">
                       {rightSeats.map(seat => (
                         <button
                           key={seat.number}
-                          className={`w-10 h-10 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(seat.status)}`}
-                          onClick={() => handleSeatClick(seat.number)}
-                          title={`Assento ${seat.number} - ${seat.status}`}
+                          className={`w-10 h-10 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(getEffectiveStatus(seat))}`}
+                          onClick={() => handleSeatClick(seat)}
+                          title={`Assento ${seat.number} — ${getEffectiveStatus(seat)}`}
+                          disabled={getEffectiveStatus(seat) !== "available"}
                         >
                           {seat.number}
                         </button>
@@ -780,15 +955,10 @@ export function SeatMap({ tripId }: { tripId: string }) {
             <div className="pt-2 border-t">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Ocupação</span>
-                <span className="font-semibold">
-                  {seats.length > 0 ? Math.round(seatCounts.occupied / seats.length * 100) : 0}%
-                </span>
+                <span className="font-semibold">{seats.length > 0 ? Math.round(seatCounts.occupied / seats.length * 100) : 0}%</span>
               </div>
               <div className="mt-1 w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary rounded-full"
-                  style={{ width: seats.length > 0 ? `${seatCounts.occupied / seats.length * 100}%` : "0%" }}
-                />
+                <div className="h-full bg-primary rounded-full" style={{ width: seats.length > 0 ? `${seatCounts.occupied / seats.length * 100}%` : "0%" }} />
               </div>
             </div>
           </div>
@@ -797,52 +967,88 @@ export function SeatMap({ tripId }: { tripId: string }) {
             <h3 className="font-semibold text-sm">Reservas Recentes</h3>
             {(reservations?.data ?? []).slice(0, 5).map(r => (
               <div key={r.id} className="flex items-center gap-2 text-sm">
-                <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center">
+                <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
                   <Users className="w-3 h-3 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="truncate font-medium">{r.client.name}</p>
-                  <p className="text-xs text-muted-foreground">{r.seats.join(", ")}</p>
+                  <p className="text-xs text-muted-foreground">Assento(s): {r.seats.join(", ")}</p>
                 </div>
               </div>
             ))}
-            {(!reservations?.data?.length) && (
-              <p className="text-sm text-muted-foreground text-center py-2">Sem reservas ainda</p>
-            )}
+            {(!reservations?.data?.length) && <p className="text-sm text-muted-foreground text-center py-2">Sem reservas ainda</p>}
           </div>
         </div>
       </div>
 
-      <Dialog open={showModal} onOpenChange={() => { setShowModal(false); setSelectedSeat(null); setClientSearch(""); }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Assento {selectedSeat}</DialogTitle></DialogHeader>
+      <Dialog open={showModal} onOpenChange={() => { setShowModal(false); setSelectedSeat(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Assento {selectedSeat?.number} — Atribuir Passageiro</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Para reservar este assento, crie uma reserva para o cliente desejado.
-            </p>
-            <div className="space-y-2">
-              <Label>Buscar Cliente</Label>
-              <Input
-                placeholder="Buscar por nome..."
-                value={clientSearch}
-                onChange={e => setClientSearch(e.target.value)}
-              />
-              {clientsData?.data?.length ? (
-                <div className="border rounded-lg overflow-hidden max-h-40 overflow-y-auto">
-                  {clientsData.data.map(c => (
-                    <div key={c.id} className="p-2 text-sm hover:bg-muted/50 border-b last:border-b-0">
-                      <p className="font-medium">{c.name}</p>
-                      <p className="text-xs text-muted-foreground">{c.whatsapp}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
+            <div className="flex gap-2">
+              <Button variant={assignMode === "search" ? "default" : "outline"} size="sm" className="flex-1" onClick={() => setAssignMode("search")}>Buscar Cliente</Button>
+              <Button variant={assignMode === "manual" ? "default" : "outline"} size="sm" className="flex-1" onClick={() => setAssignMode("manual")}>Dados Manuais</Button>
             </div>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => { setShowModal(false); setSelectedSeat(null); }}>Fechar</Button>
-              <Link href={`/reservations?tripId=${tripId}&seat=${selectedSeat}&new=true`}>
-                <Button>Criar Reserva</Button>
-              </Link>
+
+            {assignMode === "search" ? (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label>Buscar cliente pelo nome</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input className="pl-9" placeholder="Nome do cliente..." value={clientSearch} onChange={e => { setClientSearch(e.target.value); setSelectedClientId(null); }} />
+                  </div>
+                </div>
+                {clientsData?.data?.length ? (
+                  <div className="border rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                    {clientsData.data.map(c => (
+                      <button
+                        key={c.id}
+                        className={`w-full text-left p-3 text-sm hover:bg-muted/50 border-b last:border-b-0 transition-colors ${selectedClientId === c.id ? "bg-primary/10 font-medium" : ""}`}
+                        onClick={() => setSelectedClientId(c.id)}
+                      >
+                        <p className="font-medium">{c.name}</p>
+                        <p className="text-xs text-muted-foreground">{c.whatsapp} · {c.email}</p>
+                      </button>
+                    ))}
+                  </div>
+                ) : clientSearch.length > 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-3">Nenhum cliente encontrado</p>
+                ) : null}
+                {selectedClient && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm">
+                    <p className="font-medium text-green-800">Selecionado: {selectedClient.name}</p>
+                    <p className="text-green-600 text-xs">{selectedClient.whatsapp}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label>Nome Completo *</Label>
+                  <Input placeholder="João da Silva" value={manualName} onChange={e => setManualName(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>CPF</Label>
+                  <Input placeholder="000.000.000-00" value={manualCpf} onChange={e => setManualCpf(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>WhatsApp</Label>
+                  <Input placeholder="(11) 99999-9999" value={manualPhone} onChange={e => setManualPhone(e.target.value)} />
+                </div>
+                <p className="text-xs text-muted-foreground">Passageiro avulso — será associado à viagem sem criar uma reserva completa.</p>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-2">
+              <Button variant="outline" className="flex-1" onClick={() => { setShowModal(false); setSelectedSeat(null); }}>Cancelar</Button>
+              <Button
+                className="flex-1"
+                disabled={isSaving || (assignMode === "search" ? !selectedClientId : !manualName)}
+                onClick={handleAssign}
+              >
+                {isSaving ? "Reservando..." : "Confirmar Reserva"}
+              </Button>
             </div>
           </div>
         </DialogContent>
@@ -853,9 +1059,27 @@ export function SeatMap({ tripId }: { tripId: string }) {
 
 export function PassengersOverview({ tripId }: { tripId: string }) {
   const [, navigate] = useLocation();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "name", dir: "asc" });
+  const [statusFilter, setStatusFilter] = useState("all");
 
-  const { data: trip } = useGetTrip(tripId);
+  const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
   const { data: reservations } = useListReservations({ tripId, limit: 200 });
+
+  const filteredReservations = useMemo(() => {
+    let data = reservations?.data ?? [];
+    if (statusFilter !== "all") data = data.filter(r => r.status === statusFilter);
+    return [...data].sort((a, b) => {
+      let va: string | number = "";
+      let vb: string | number = "";
+      if (sort.key === "name") { va = a.client.name; vb = b.client.name; }
+      else if (sort.key === "value") { va = a.totalValue; vb = b.totalValue; }
+      else if (sort.key === "balance") { va = a.balance; vb = b.balance; }
+      if (va < vb) return sort.dir === "asc" ? -1 : 1;
+      if (va > vb) return sort.dir === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [reservations, statusFilter, sort]);
 
   const stats = useMemo(() => {
     const all = reservations?.data ?? [];
@@ -872,10 +1096,7 @@ export function PassengersOverview({ tripId }: { tripId: string }) {
 
   const paymentMethodCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    (reservations?.data ?? []).forEach(r => {
-      const m = r.paymentMethod ?? "outro";
-      counts[m] = (counts[m] ?? 0) + 1;
-    });
+    (reservations?.data ?? []).forEach(r => { const m = r.paymentMethod ?? "outro"; counts[m] = (counts[m] ?? 0) + 1; });
     return counts;
   }, [reservations]);
 
@@ -883,6 +1104,10 @@ export function PassengersOverview({ tripId }: { tripId: string }) {
     pix: "PIX", credit_card: "Cartão Crédito", debit_card: "Cartão Débito",
     cash: "Dinheiro", bank_transfer: "Transferência", installment: "Parcelado",
   };
+
+  const toggleSort = (key: string) => setSort(prev => ({ key, dir: prev.key === key && prev.dir === "asc" ? "desc" : "asc" }));
+
+  const STATUS_LABELS: Record<string, string> = { all: "Todos", confirmed: "Confirmado", pending: "Pendente", cancelled: "Cancelado", completed: "Concluído" };
 
   return (
     <div className="space-y-6">
@@ -892,16 +1117,10 @@ export function PassengersOverview({ tripId }: { tripId: string }) {
           <h1 className="text-2xl font-bold tracking-tight">Visão Geral de Passageiros</h1>
           <p className="text-muted-foreground text-sm">{trip?.name} · {trip ? formatDate(trip.departureDate) : ""}</p>
         </div>
-        <div className="flex gap-2">
-          <Link href={`/trips/${tripId}/passengers`}>
-            <Button variant="outline"><List className="w-4 h-4 mr-2" />Lista ANTT</Button>
-          </Link>
-          <Link href={`/trips/${tripId}/seat-map`}>
-            <Button variant="outline"><Bus className="w-4 h-4 mr-2" />Mapa de Assentos</Button>
-          </Link>
-          <Link href={`/trips/${tripId}/edit`}>
-            <Button variant="outline"><Edit className="w-4 h-4 mr-2" />Editar Viagem</Button>
-          </Link>
+        <div className="flex gap-2 flex-wrap">
+          <Link href={`/trips/${tripId}/passengers`}><Button variant="outline"><List className="w-4 h-4 mr-2" />Lista ANTT</Button></Link>
+          <Link href={`/trips/${tripId}/seat-map`}><Button variant="outline"><Bus className="w-4 h-4 mr-2" />Mapa de Assentos</Button></Link>
+          <Link href={`/trips/${tripId}/edit`}><Button variant="outline"><Edit className="w-4 h-4 mr-2" />Editar Viagem</Button></Link>
         </div>
       </div>
 
@@ -930,18 +1149,11 @@ export function PassengersOverview({ tripId }: { tripId: string }) {
               const count = (reservations?.data ?? []).filter(r => r.status === s).length;
               const total = reservations?.total ?? 0;
               const pct = total > 0 ? Math.round(count / total * 100) : 0;
-              const colors: Record<string, string> = {
-                confirmed: "bg-green-500", pending: "bg-amber-500", cancelled: "bg-red-500", completed: "bg-blue-500",
-              };
-              const labels: Record<string, string> = {
-                confirmed: "Confirmado", pending: "Pendente", cancelled: "Cancelado", completed: "Concluído",
-              };
+              const colors: Record<string, string> = { confirmed: "bg-green-500", pending: "bg-amber-500", cancelled: "bg-red-500", completed: "bg-blue-500" };
+              const labels: Record<string, string> = { confirmed: "Confirmado", pending: "Pendente", cancelled: "Cancelado", completed: "Concluído" };
               return (
                 <div key={s} className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span>{labels[s] ?? s}</span>
-                    <span className="font-medium">{count} ({pct}%)</span>
-                  </div>
+                  <div className="flex justify-between text-sm"><span>{labels[s] ?? s}</span><span className="font-medium">{count} ({pct}%)</span></div>
                   <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div className={`h-full rounded-full ${colors[s] ?? "bg-gray-400"}`} style={{ width: `${pct}%` }} />
                   </div>
@@ -950,7 +1162,6 @@ export function PassengersOverview({ tripId }: { tripId: string }) {
             })}
           </div>
         </div>
-
         <div className="bg-card border rounded-xl p-6 space-y-4">
           <h3 className="font-semibold">Forma de Pagamento</h3>
           <div className="space-y-3">
@@ -963,60 +1174,71 @@ export function PassengersOverview({ tripId }: { tripId: string }) {
                   <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div className="h-full bg-primary rounded-full" style={{ width: `${pct}%` }} />
                   </div>
-                  <span className="font-medium w-12 text-right">{pct}%</span>
-                  <span className="text-muted-foreground w-8 text-right">{count}</span>
+                  <span className="font-medium w-10 text-right">{pct}%</span>
+                  <span className="text-muted-foreground w-6 text-right">{count}</span>
                 </div>
               );
             })}
-            {Object.keys(paymentMethodCounts).length === 0 && (
-              <p className="text-sm text-muted-foreground">Sem dados de pagamento</p>
-            )}
+            {!Object.keys(paymentMethodCounts).length && <p className="text-sm text-muted-foreground">Sem dados de pagamento</p>}
           </div>
         </div>
       </div>
 
       <div className="bg-card border rounded-xl p-6 space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className="font-semibold">Lista de Reservas</h3>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-36 h-8"><SelectValue /></SelectTrigger>
+              <SelectContent>{Object.entries(STATUS_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+            </Select>
             <Button variant="outline" size="sm"><Download className="w-4 h-4 mr-2" />Exportar</Button>
-            <Button variant="outline" size="sm"><Send className="w-4 h-4 mr-2" />Enviar WhatsApp</Button>
+            <Button variant="outline" size="sm"><Send className="w-4 h-4 mr-2" />WhatsApp</Button>
           </div>
         </div>
-        <div className="divide-y">
-          {(reservations?.data ?? []).slice(0, 10).map(r => (
-            <div key={r.id} className="flex items-center gap-4 py-3">
-              <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-                <Users className="w-4 h-4 text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{r.client.name}</p>
-                <p className="text-xs text-muted-foreground">{r.voucherCode} · {r.seats.length} assento(s)</p>
-              </div>
-              <div className="text-right text-sm">
-                <p className="font-semibold">{formatCurrency(r.totalValue)}</p>
-                <p className="text-xs text-muted-foreground">{formatCurrency(r.paidValue)} pago</p>
-              </div>
-              <Badge className={
-                r.status === "confirmed" ? "bg-green-100 text-green-700" :
-                r.status === "pending" ? "bg-amber-100 text-amber-700" :
-                r.status === "cancelled" ? "bg-red-100 text-red-700" :
-                "bg-gray-100 text-gray-700"
-              }>
-                {r.status === "confirmed" ? "Confirmado" : r.status === "pending" ? "Pendente" : r.status === "cancelled" ? "Cancelado" : r.status}
-              </Badge>
-            </div>
-          ))}
-          {!reservations?.data?.length && (
-            <p className="text-center text-muted-foreground py-6">Sem reservas para esta viagem</p>
-          )}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="border-b">
+              <tr>
+                {[
+                  { key: "name", label: "Passageiro" },
+                  { key: "voucher", label: "Voucher" },
+                  { key: "seats", label: "Assento(s)" },
+                  { key: "status", label: "Status" },
+                  { key: "value", label: "Valor" },
+                  { key: "balance", label: "Saldo" },
+                ].map(col => (
+                  <th key={col.key} className="text-left p-2 font-medium cursor-pointer hover:text-primary" onClick={() => toggleSort(col.key)}>
+                    {col.label} {sort.key === col.key ? (sort.dir === "asc" ? "↑" : "↓") : ""}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredReservations.slice(0, 15).map(r => (
+                <tr key={r.id} className="border-b hover:bg-muted/30">
+                  <td className="p-2 font-medium">{r.client.name}</td>
+                  <td className="p-2"><code className="text-xs bg-muted px-1.5 py-0.5 rounded">{r.voucherCode}</code></td>
+                  <td className="p-2">{r.seats.join(", ") || "—"}</td>
+                  <td className="p-2">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${r.status === "confirmed" ? "bg-green-100 text-green-700" : r.status === "pending" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-700"}`}>
+                      {STATUS_LABELS[r.status] ?? r.status}
+                    </span>
+                  </td>
+                  <td className="p-2 font-medium">{formatCurrency(r.totalValue)}</td>
+                  <td className={`p-2 font-medium ${r.balance > 0 ? "text-red-600" : "text-green-600"}`}>{formatCurrency(r.balance)}</td>
+                </tr>
+              ))}
+              {!filteredReservations.length && <tr><td colSpan={6} className="text-center py-8 text-muted-foreground">Sem reservas</td></tr>}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      <div className="flex gap-2">
-        <Link href={`/reservations?tripId=${tripId}&new=true`}>
-          <Button><Plus className="w-4 h-4 mr-2" />Adicionar Passageiro</Button>
-        </Link>
+      <div className="flex flex-wrap gap-2">
+        <Link href={`/reservations?tripId=${tripId}&new=true`}><Button><Plus className="w-4 h-4 mr-2" />Adicionar Passageiro</Button></Link>
+        <Button variant="outline"><Download className="w-4 h-4 mr-2" />Relatório Financeiro</Button>
+        <Button variant="outline"><X className="w-4 h-4 mr-2" />Encerrar Viagem</Button>
       </div>
     </div>
   );
@@ -1026,19 +1248,24 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [paymentFilter, setPaymentFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [page, setPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const { data: trip } = useGetTrip(tripId);
+  const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
   const { data: reservations, isLoading } = useListReservations({
     tripId,
     status: statusFilter !== "all" ? statusFilter : undefined,
     search: search || undefined,
-    page,
-    limit: 20,
+    page, limit: 20,
   });
 
   const passengers = useMemo(() => {
-    return (reservations?.data ?? []).map(r => ({
+    return (reservations?.data ?? []).filter(r => {
+      if (paymentFilter !== "all" && r.paymentMethod !== paymentFilter) return false;
+      return true;
+    }).map(r => ({
       reservationId: r.id,
       name: r.client.name,
       whatsapp: r.client.whatsapp,
@@ -1051,14 +1278,25 @@ export function PassengersList({ tripId }: { tripId: string }) {
       paidValue: r.paidValue,
       balance: r.balance,
       checkedIn: !!r.checkedInAt,
+      hasInsurance: r.hasInsurance,
     }));
-  }, [reservations]);
+  }, [reservations, paymentFilter]);
 
   const totalPages = Math.ceil((reservations?.total ?? 0) / 20);
+  const allSelected = passengers.length > 0 && passengers.every(p => selectedIds.has(p.reservationId));
 
-  const STATUS_LABELS: Record<string, string> = {
-    all: "Todos", confirmed: "Confirmado", pending: "Pendente", cancelled: "Cancelado", completed: "Concluído",
+  const toggleAll = () => {
+    if (allSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(passengers.map(p => p.reservationId)));
   };
+  const toggleOne = (id: string) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const STATUS_LABELS: Record<string, string> = { all: "Todos", confirmed: "Confirmado", pending: "Pendente", cancelled: "Cancelado", completed: "Concluído" };
+  const PAYMENT_LABELS: Record<string, string> = { all: "Todos os pagamentos", pix: "PIX", credit_card: "Cartão Crédito", cash: "Dinheiro", bank_transfer: "Transferência" };
 
   return (
     <div className="space-y-6">
@@ -1068,34 +1306,48 @@ export function PassengersList({ tripId }: { tripId: string }) {
           <h1 className="text-2xl font-bold tracking-tight">Lista de Passageiros — ANTT</h1>
           <p className="text-muted-foreground text-sm">{trip?.name} · {trip ? formatDate(trip.departureDate) : ""}</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm"><Download className="w-4 h-4 mr-2" />Exportar CSV</Button>
-          <Button variant="outline" size="sm"><Download className="w-4 h-4 mr-2" />Exportar PDF</Button>
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" size="sm"><Download className="w-4 h-4 mr-2" />CSV</Button>
+          <Button variant="outline" size="sm"><Download className="w-4 h-4 mr-2" />PDF</Button>
+          <Button variant="outline" size="sm"><Download className="w-4 h-4 mr-2" />Excel</Button>
           <Button variant="outline" size="sm"><Send className="w-4 h-4 mr-2" />WhatsApp em Massa</Button>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar passageiro..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <Input placeholder="Buscar passageiro..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="pl-9" />
         </div>
         <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
           <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {Object.entries(STATUS_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-          </SelectContent>
+          <SelectContent>{Object.entries(STATUS_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
         </Select>
-        <Link href={`/reservations?tripId=${tripId}&new=true`}>
-          <Button><Plus className="w-4 h-4 mr-2" />Adicionar</Button>
-        </Link>
+        <Select value={paymentFilter} onValueChange={v => { setPaymentFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+          <SelectContent>{Object.entries(PAYMENT_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+        </Select>
+        <Link href={`/reservations?tripId=${tripId}&new=true`}><Button><Plus className="w-4 h-4 mr-2" />Adicionar</Button></Link>
       </div>
+
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 bg-primary/10 rounded-lg p-3 text-sm">
+          <span className="font-medium">{selectedIds.size} selecionado(s)</span>
+          <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())} className="h-7">Desmarcar</Button>
+          <Button size="sm" variant="outline" className="h-7"><Check className="w-3 h-3 mr-1" />Check-in</Button>
+          <Button size="sm" variant="outline" className="h-7"><Download className="w-3 h-3 mr-1" />Vouchers</Button>
+          <Button size="sm" variant="outline" className="h-7"><Send className="w-3 h-3 mr-1" />WhatsApp</Button>
+        </div>
+      )}
 
       <div className="bg-card border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50">
               <tr>
+                <th className="p-3 w-8">
+                  <Checkbox checked={allSelected} onCheckedChange={toggleAll} />
+                </th>
                 <th className="text-left p-3 font-medium">Passageiro</th>
                 <th className="text-left p-3 font-medium">Contato</th>
                 <th className="text-left p-3 font-medium">Voucher</th>
@@ -1105,54 +1357,36 @@ export function PassengersList({ tripId }: { tripId: string }) {
                 <th className="text-right p-3 font-medium">Valor Total</th>
                 <th className="text-right p-3 font-medium">Saldo</th>
                 <th className="text-center p-3 font-medium">Check-in</th>
+                <th className="text-center p-3 font-medium">Seguro</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b">
-                    {Array.from({ length: 9 }).map((_, j) => (
-                      <td key={j} className="p-3"><Skeleton className="h-4 w-full" /></td>
-                    ))}
+                    {Array.from({ length: 11 }).map((_, j) => <td key={j} className="p-3"><Skeleton className="h-4 w-full" /></td>)}
                   </tr>
                 ))
               ) : passengers.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="text-center py-10 text-muted-foreground">
-                    Nenhum passageiro encontrado
-                  </td>
-                </tr>
+                <tr><td colSpan={11} className="text-center py-10 text-muted-foreground">Nenhum passageiro encontrado</td></tr>
               ) : (
                 passengers.map(p => (
                   <tr key={p.reservationId} className="border-b hover:bg-muted/30">
+                    <td className="p-3"><Checkbox checked={selectedIds.has(p.reservationId)} onCheckedChange={() => toggleOne(p.reservationId)} /></td>
                     <td className="p-3 font-medium">{p.name}</td>
-                    <td className="p-3 text-muted-foreground">{p.whatsapp}</td>
-                    <td className="p-3">
-                      <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{p.voucherCode}</code>
-                    </td>
+                    <td className="p-3 text-muted-foreground text-xs">{p.whatsapp}</td>
+                    <td className="p-3"><code className="text-xs bg-muted px-1.5 py-0.5 rounded">{p.voucherCode}</code></td>
                     <td className="p-3">{p.seats || "—"}</td>
                     <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                        p.status === "confirmed" ? "bg-green-100 text-green-700" :
-                        p.status === "pending" ? "bg-amber-100 text-amber-700" :
-                        p.status === "cancelled" ? "bg-red-100 text-red-700" :
-                        "bg-gray-100 text-gray-700"
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${p.status === "confirmed" ? "bg-green-100 text-green-700" : p.status === "pending" ? "bg-amber-100 text-amber-700" : p.status === "cancelled" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-700"}`}>
                         {STATUS_LABELS[p.status] ?? p.status}
                       </span>
                     </td>
-                    <td className="p-3 text-muted-foreground">{p.paymentMethod}</td>
+                    <td className="p-3 text-muted-foreground text-xs">{PAYMENT_LABELS[p.paymentMethod] ?? p.paymentMethod}</td>
                     <td className="p-3 text-right font-medium">{formatCurrency(p.totalValue)}</td>
-                    <td className={`p-3 text-right font-medium ${p.balance > 0 ? "text-red-600" : "text-green-600"}`}>
-                      {formatCurrency(p.balance)}
-                    </td>
-                    <td className="p-3 text-center">
-                      {p.checkedIn ? (
-                        <Check className="w-4 h-4 text-green-600 mx-auto" />
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
+                    <td className={`p-3 text-right font-medium ${p.balance > 0 ? "text-red-600" : "text-green-600"}`}>{formatCurrency(p.balance)}</td>
+                    <td className="p-3 text-center">{p.checkedIn ? <Check className="w-4 h-4 text-green-600 mx-auto" /> : <span className="text-muted-foreground">—</span>}</td>
+                    <td className="p-3 text-center">{p.hasInsurance ? <Check className="w-4 h-4 text-blue-600 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}</td>
                   </tr>
                 ))
               )}
@@ -1175,49 +1409,25 @@ export function PassengersList({ tripId }: { tripId: string }) {
 export function TripCalendar() {
   const [, navigate] = useLocation();
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [view, setView] = useState<"month" | "week">("month");
+  const [view, setView] = useState<"month" | "week" | "day">("month");
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
 
-  const { data: tripsData } = useListTrips({ limit: 100 });
+  const { data: tripsData } = useListTrips({ limit: 200 });
   const trips = tripsData?.data ?? [];
 
-  const monthStart = startOfMonth(currentDate);
-  const monthEnd = endOfMonth(currentDate);
-  const calendarDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
-  const startDow = getDay(monthStart);
-
-  const tripsOnDay = (day: Date) => trips.filter(t => {
-    try { return isSameDay(parseISO(t.departureDate), day); }
-    catch { return false; }
-  });
-
   const STATUS_COLORS: Record<string, string> = {
-    draft: "bg-gray-200 text-gray-700",
-    active: "bg-green-100 text-green-700",
-    confirmed: "bg-blue-100 text-blue-700",
-    completed: "bg-purple-100 text-purple-700",
-    cancelled: "bg-red-100 text-red-700",
+    draft: "bg-gray-200 text-gray-700", active: "bg-green-100 text-green-700",
+    confirmed: "bg-blue-100 text-blue-700", completed: "bg-purple-100 text-purple-700", cancelled: "bg-red-100 text-red-700",
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/trips")}><ArrowLeft className="w-4 h-4" /></Button>
-        <h1 className="text-2xl font-bold tracking-tight">Calendário de Viagens</h1>
-        <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => setCurrentDate(d => subMonths(d, 1))}>
-            <ChevronLeft className="w-4 h-4" />
-          </Button>
-          <span className="text-sm font-medium min-w-[140px] text-center">
-            {format(currentDate, "MMMM yyyy", { locale: ptBR })}
-          </span>
-          <Button variant="outline" size="icon" onClick={() => setCurrentDate(d => addMonths(d, 1))}>
-            <ChevronRight className="w-4 h-4" />
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())}>Hoje</Button>
-        </div>
-      </div>
+  const tripsOnDay = (day: Date) => trips.filter(t => { try { return isSameDay(parseISO(t.departureDate), day); } catch { return false; } });
 
+  const MonthView = () => {
+    const monthStart = startOfMonth(currentDate);
+    const monthEnd = endOfMonth(currentDate);
+    const calendarDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+    const startDow = getDay(monthStart);
+    return (
       <div className="bg-card border rounded-xl overflow-hidden">
         <div className="grid grid-cols-7 border-b">
           {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map(d => (
@@ -1225,27 +1435,18 @@ export function TripCalendar() {
           ))}
         </div>
         <div className="grid grid-cols-7">
-          {Array.from({ length: startDow }).map((_, i) => (
-            <div key={`empty-${i}`} className="min-h-[100px] border-b border-r bg-muted/20" />
-          ))}
+          {Array.from({ length: startDow }).map((_, i) => <div key={`e-${i}`} className="min-h-[100px] border-b border-r bg-muted/20" />)}
           {calendarDays.map(day => {
             const dayTrips = tripsOnDay(day);
             const today = isToday(day);
             return (
-              <div
-                key={day.toISOString()}
-                className={`min-h-[100px] border-b border-r p-1.5 ${today ? "bg-primary/5" : ""}`}
-              >
+              <div key={day.toISOString()} className={`min-h-[100px] border-b border-r p-1.5 ${today ? "bg-primary/5" : ""}`}>
                 <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${today ? "bg-primary text-white" : "text-muted-foreground"}`}>
                   {format(day, "d")}
                 </div>
                 <div className="space-y-0.5">
                   {dayTrips.map(trip => (
-                    <button
-                      key={trip.id}
-                      className={`w-full text-left px-1.5 py-0.5 rounded text-xs truncate ${STATUS_COLORS[trip.status] ?? "bg-gray-100"}`}
-                      onClick={() => setSelectedTrip(trip)}
-                    >
+                    <button key={trip.id} className={`w-full text-left px-1.5 py-0.5 rounded text-xs truncate ${STATUS_COLORS[trip.status] ?? "bg-gray-100"}`} onClick={() => setSelectedTrip(trip)}>
                       {trip.name}
                     </button>
                   ))}
@@ -1255,35 +1456,116 @@ export function TripCalendar() {
           })}
         </div>
       </div>
+    );
+  };
+
+  const WeekView = () => {
+    const weekStart = startOfWeek(currentDate, { locale: ptBR });
+    const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+    return (
+      <div className="bg-card border rounded-xl overflow-hidden">
+        <div className="grid grid-cols-7 border-b">
+          {weekDays.map(day => (
+            <div key={day.toISOString()} className={`p-3 text-center border-r last:border-r-0 ${isToday(day) ? "bg-primary/5" : ""}`}>
+              <p className="text-xs text-muted-foreground">{format(day, "EEE", { locale: ptBR })}</p>
+              <p className={`text-sm font-medium mt-0.5 ${isToday(day) ? "text-primary font-bold" : ""}`}>{format(day, "d")}</p>
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 min-h-[300px]">
+          {weekDays.map(day => {
+            const dayTrips = tripsOnDay(day);
+            return (
+              <div key={day.toISOString()} className={`p-2 border-r last:border-r-0 space-y-1 ${isToday(day) ? "bg-primary/5" : ""}`}>
+                {dayTrips.map(trip => (
+                  <button key={trip.id} className={`w-full text-left px-2 py-1.5 rounded text-xs ${STATUS_COLORS[trip.status] ?? "bg-gray-100"}`} onClick={() => setSelectedTrip(trip)}>
+                    <p className="font-medium truncate">{trip.name}</p>
+                    <p className="text-xs opacity-70">{trip.destinationCity}</p>
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const DayView = () => {
+    const dayTrips = tripsOnDay(currentDate);
+    return (
+      <div className="bg-card border rounded-xl p-6 space-y-4">
+        <h3 className="font-semibold">{format(currentDate, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}</h3>
+        {dayTrips.length === 0 ? (
+          <p className="text-muted-foreground text-sm py-8 text-center">Nenhuma viagem neste dia</p>
+        ) : (
+          <div className="space-y-3">
+            {dayTrips.map(trip => (
+              <div key={trip.id} className={`p-4 rounded-lg cursor-pointer ${STATUS_COLORS[trip.status] ?? "bg-gray-100"}`} onClick={() => setSelectedTrip(trip)}>
+                <p className="font-semibold">{trip.name}</p>
+                <p className="text-sm mt-1">{trip.destinationCity}, {trip.destinationState}</p>
+                <div className="flex gap-4 mt-2 text-xs">
+                  <span>{trip.totalCapacity} assentos</span>
+                  <span>{formatCurrency(trip.priceAdult)}/pessoa</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const goBack = () => {
+    if (view === "month") setCurrentDate(d => subMonths(d, 1));
+    else if (view === "week") setCurrentDate(d => subWeeks(d, 1));
+    else setCurrentDate(d => addDays(d, -1));
+  };
+  const goForward = () => {
+    if (view === "month") setCurrentDate(d => addMonths(d, 1));
+    else if (view === "week") setCurrentDate(d => addWeeks(d, 1));
+    else setCurrentDate(d => addDays(d, 1));
+  };
+
+  const title = view === "month"
+    ? format(currentDate, "MMMM yyyy", { locale: ptBR })
+    : view === "week"
+    ? `Semana de ${format(startOfWeek(currentDate, { locale: ptBR }), "d MMM", { locale: ptBR })}`
+    : format(currentDate, "d 'de' MMMM yyyy", { locale: ptBR });
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3 flex-wrap">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/trips")}><ArrowLeft className="w-4 h-4" /></Button>
+        <h1 className="text-2xl font-bold tracking-tight">Calendário de Viagens</h1>
+        <div className="ml-auto flex items-center gap-2">
+          <div className="flex border rounded-md overflow-hidden">
+            {(["month", "week", "day"] as const).map(v => (
+              <Button key={v} variant={view === v ? "default" : "ghost"} size="sm" className="rounded-none text-xs" onClick={() => setView(v)}>
+                {v === "month" ? "Mês" : v === "week" ? "Semana" : "Dia"}
+              </Button>
+            ))}
+          </div>
+          <Button variant="outline" size="icon" onClick={goBack}><ChevronLeft className="w-4 h-4" /></Button>
+          <span className="text-sm font-medium min-w-[160px] text-center capitalize">{title}</span>
+          <Button variant="outline" size="icon" onClick={goForward}><ChevronRight className="w-4 h-4" /></Button>
+          <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())}>Hoje</Button>
+        </div>
+      </div>
+
+      {view === "month" ? <MonthView /> : view === "week" ? <WeekView /> : <DayView />}
 
       <Dialog open={!!selectedTrip} onOpenChange={() => setSelectedTrip(null)}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{selectedTrip?.name}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>{selectedTrip?.name}</DialogTitle></DialogHeader>
           {selectedTrip && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Destino</p>
-                  <p className="font-medium">{selectedTrip.destinationCity}, {selectedTrip.destinationState}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Data de Saída</p>
-                  <p className="font-medium">{formatDate(selectedTrip.departureDate)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Capacidade</p>
-                  <p className="font-medium">{selectedTrip.totalCapacity} assentos</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Preço Adulto</p>
-                  <p className="font-medium">{formatCurrency(selectedTrip.priceAdult)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Ocupação</p>
-                  <p className="font-medium">{selectedTrip.reservedSeats + selectedTrip.confirmedSeats} reservado(s)</p>
-                </div>
+                <div><p className="text-muted-foreground">Destino</p><p className="font-medium">{selectedTrip.destinationCity}, {selectedTrip.destinationState}</p></div>
+                <div><p className="text-muted-foreground">Data de Saída</p><p className="font-medium">{formatDate(selectedTrip.departureDate)}</p></div>
+                <div><p className="text-muted-foreground">Capacidade</p><p className="font-medium">{selectedTrip.totalCapacity} assentos</p></div>
+                <div><p className="text-muted-foreground">Preço Adulto</p><p className="font-medium">{formatCurrency(selectedTrip.priceAdult)}</p></div>
+                <div><p className="text-muted-foreground">Ocupação</p><p className="font-medium">{selectedTrip.reservedSeats + selectedTrip.confirmedSeats} reservado(s)</p></div>
                 <div>
                   <p className="text-muted-foreground">Status</p>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[selectedTrip.status] ?? "bg-gray-100"}`}>
@@ -1293,14 +1575,10 @@ export function TripCalendar() {
               </div>
               <div className="flex gap-2">
                 <Link href={`/trips/${selectedTrip.id}/passengers-overview`} className="flex-1">
-                  <Button variant="outline" className="w-full" onClick={() => setSelectedTrip(null)}>
-                    <Eye className="w-4 h-4 mr-2" />Visão Geral
-                  </Button>
+                  <Button variant="outline" className="w-full" onClick={() => setSelectedTrip(null)}><Eye className="w-4 h-4 mr-2" />Visão Geral</Button>
                 </Link>
                 <Link href={`/trips/${selectedTrip.id}/edit`} className="flex-1">
-                  <Button className="w-full" onClick={() => setSelectedTrip(null)}>
-                    <Edit className="w-4 h-4 mr-2" />Editar
-                  </Button>
+                  <Button className="w-full" onClick={() => setSelectedTrip(null)}><Edit className="w-4 h-4 mr-2" />Editar</Button>
                 </Link>
               </div>
             </div>
