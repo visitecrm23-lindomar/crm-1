@@ -178,14 +178,24 @@ router.post("/deals", async (req, res): Promise<void> => {
   }
 });
 
+async function requireDealAccess(me: { id: string; tenantId: string; role: string }, dealId: string, res: import("express").Response): Promise<typeof dealsTable.$inferSelect | null> {
+  if (me.role === "cliente") {
+    res.status(403).json({ error: "Access denied" });
+    return null;
+  }
+  const dealConditions: ReturnType<typeof eq>[] = [eq(dealsTable.id, dealId), eq(dealsTable.tenantId, me.tenantId)];
+  if (me.role === "vendedor") dealConditions.push(eq(dealsTable.ownerId, me.id));
+  const [deal] = await db.select().from(dealsTable).where(and(...dealConditions)).limit(1);
+  if (!deal) { res.status(404).json({ error: "Not found" }); return null; }
+  return deal;
+}
+
 router.get("/deals/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const [deal] = await db.select().from(dealsTable)
-      .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)))
-      .limit(1);
-    if (!deal) { res.status(404).json({ error: "Not found" }); return; }
+    const deal = await requireDealAccess(me, req.params.id, res);
+    if (!deal) return;
     res.json(formatDeal(deal));
   } catch (err) {
     req.log.error({ err }, "Error fetching deal");
@@ -197,6 +207,9 @@ router.patch("/deals/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    const existing = await requireDealAccess(me, req.params.id, res);
+    if (!existing) return;
+
     const parsed = UpdateDealBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -234,6 +247,9 @@ router.patch("/deals/:id/move", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    const existing = await requireDealAccess(me, req.params.id, res);
+    if (!existing) return;
+
     const parsed = MoveDealBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const [stage] = await db.select().from(pipelineStagesTable)
@@ -257,6 +273,8 @@ router.delete("/deals/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    const existing = await requireDealAccess(me, req.params.id, res);
+    if (!existing) return;
     await db.delete(dealsTable)
       .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)));
     res.json({ success: true });

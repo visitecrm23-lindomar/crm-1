@@ -7,7 +7,7 @@ import {
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import {
   useListPipelineStages, useListDeals, useCreateDeal, useMoveDeal,
-  useDeleteDeal, useListClients, useListTrips, useCreateClient, useUpdateClient,
+  useDeleteDeal, useListClients, useListTrips, useCreateClient, useUpdateClient, useUpdateDeal,
 } from "@workspace/api-client-react";
 import type { Deal, PipelineStage, Client } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -62,7 +62,7 @@ const EMPTY_CLIENT: ClientFormData = {
   dealValue: "", dealPaymentMethod: "none", dealInstallments: "1", dealCommission: "",
 };
 
-function clientToForm(c: Client, defaultStageId = ""): ClientFormData {
+function clientToForm(c: Client, defaultStageId = "", deal?: Deal | null): ClientFormData {
   return {
     name: c.name, email: c.email, whatsapp: c.whatsapp, phone: c.phone ?? "",
     cpf: c.cpf ?? "", birthDate: c.birthDate ? c.birthDate.split("T")[0] : "",
@@ -71,8 +71,8 @@ function clientToForm(c: Client, defaultStageId = ""): ClientFormData {
     tags: (c.tags ?? []).join(", "), dreamDestinations: (c.dreamDestinations ?? []).join(", "),
     pipelineStage: c.pipelineStage ?? "", classification: c.classification ?? "lead",
     npsScore: c.npsScore != null ? String(c.npsScore) : "", status: c.status ?? "active",
-    stageId: defaultStageId, tripInterestId: "none",
-    dealValue: "", dealPaymentMethod: "none", dealInstallments: "1", dealCommission: "",
+    stageId: deal?.stageId ?? defaultStageId, tripInterestId: deal?.tripId ?? "none",
+    dealValue: deal?.value != null ? String(deal.value) : "", dealPaymentMethod: "none", dealInstallments: "1", dealCommission: "",
   };
 }
 
@@ -80,17 +80,19 @@ interface ClientPipelineModalProps {
   open: boolean;
   onClose: () => void;
   editClient?: Client | null;
+  editDeal?: Deal | null;
   defaultStageId?: string;
   stages: PipelineStage[];
   onSave: () => void;
 }
 
-function ClientPipelineModal({ open, onClose, editClient, defaultStageId = "", stages, onSave }: ClientPipelineModalProps) {
+function ClientPipelineModal({ open, onClose, editClient, editDeal, defaultStageId = "", stages, onSave }: ClientPipelineModalProps) {
   const [tab, setTab] = useState("personal");
   const [form, setForm] = useState<ClientFormData>(EMPTY_CLIENT);
   const [, navigate] = useLocation();
   const createClient = useCreateClient();
   const updateClient = useUpdateClient();
+  const updateDeal = useUpdateDeal();
   const createDeal = useCreateDeal();
   const { data: tripsData } = useListTrips({ limit: 100 });
 
@@ -98,15 +100,15 @@ function ClientPipelineModal({ open, onClose, editClient, defaultStageId = "", s
     if (open) {
       setTab("personal");
       if (editClient) {
-        const resolvedStageId = editClient.pipelineStage
+        const resolvedStageId = editDeal?.stageId ?? (editClient.pipelineStage
           ? (stages.find(s => s.name === editClient.pipelineStage)?.id ?? defaultStageId)
-          : defaultStageId;
-        setForm(clientToForm(editClient, resolvedStageId));
+          : defaultStageId);
+        setForm(clientToForm(editClient, resolvedStageId, editDeal));
       } else {
         setForm({ ...EMPTY_CLIENT, stageId: defaultStageId });
       }
     }
-  }, [open, editClient, defaultStageId, stages]);
+  }, [open, editClient, editDeal, defaultStageId, stages]);
 
   const isEditing = !!editClient;
   const isPending = createClient.isPending || updateClient.isPending;
@@ -139,6 +141,14 @@ function ClientPipelineModal({ open, onClose, editClient, defaultStageId = "", s
         },
       });
       savedClientId = editClient.id;
+      if (editDeal) {
+        const dealUpdates: { stageId?: string; value?: number } = {};
+        if (form.stageId && form.stageId !== editDeal.stageId) dealUpdates.stageId = form.stageId;
+        if (form.dealValue !== "") dealUpdates.value = parseFloat(form.dealValue);
+        if (Object.keys(dealUpdates).length > 0) {
+          await updateDeal.mutateAsync({ id: editDeal.id, data: dealUpdates });
+        }
+      }
     } else {
       const result = await createClient.mutateAsync({ data: base });
       savedClientId = result.id;
@@ -551,6 +561,7 @@ export default function Pipeline() {
   const [filterCity, setFilterCity] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [defaultStageId, setDefaultStageId] = useState("");
   const [activeDragDeal, setActiveDragDeal] = useState<Deal | null>(null);
 
@@ -637,12 +648,14 @@ export default function Pipeline() {
 
   const handleEdit = (deal: Deal, client?: Client) => {
     setEditingClient(client ?? null);
+    setEditingDeal(deal);
     setDefaultStageId(deal.stageId);
     setIsModalOpen(true);
   };
 
   const openNew = (stageId = "") => {
     setEditingClient(null);
+    setEditingDeal(null);
     setDefaultStageId(stageId);
     setIsModalOpen(true);
   };
@@ -650,6 +663,7 @@ export default function Pipeline() {
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingClient(null);
+    setEditingDeal(null);
   };
 
   const totalValue = (deals ?? []).reduce((acc, d) => acc + d.value, 0);
@@ -778,6 +792,7 @@ export default function Pipeline() {
         open={isModalOpen}
         onClose={closeModal}
         editClient={editingClient}
+        editDeal={editingDeal}
         defaultStageId={defaultStageId}
         stages={stages ?? []}
         onSave={() => { refetchDeals(); refetchStages(); }}
