@@ -182,14 +182,37 @@ router.post("/reservations", async (req, res): Promise<void> => {
   }
 });
 
+async function requireReservationAccess(
+  me: { id: string; tenantId: string; role: string },
+  reservationId: string,
+  res: import("express").Response,
+): Promise<typeof reservationsTable.$inferSelect | null> {
+  const [reservation] = await db.select().from(reservationsTable)
+    .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, me.tenantId)))
+    .limit(1);
+  if (!reservation) { res.status(404).json({ error: "Not found" }); return null; }
+  if (me.role === "cliente") {
+    const [clientRecord] = await db.select({ id: clientsTable.id }).from(clientsTable)
+      .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.userId, me.id))).limit(1);
+    if (!clientRecord || reservation.clientId !== clientRecord.id) {
+      res.status(404).json({ error: "Not found" }); return null;
+    }
+  } else if (me.role === "vendedor") {
+    const [clientRecord] = await db.select({ createdById: clientsTable.createdById }).from(clientsTable)
+      .where(and(eq(clientsTable.id, reservation.clientId), eq(clientsTable.tenantId, me.tenantId))).limit(1);
+    if (!clientRecord || clientRecord.createdById !== me.id) {
+      res.status(404).json({ error: "Not found" }); return null;
+    }
+  }
+  return reservation;
+}
+
 router.get("/reservations/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const [reservation] = await db.select().from(reservationsTable)
-      .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)))
-      .limit(1);
-    if (!reservation) { res.status(404).json({ error: "Not found" }); return; }
+    const reservation = await requireReservationAccess(me, req.params.id, res);
+    if (!reservation) return;
     const formatted = await formatReservation(reservation);
     res.json(formatted);
   } catch (err) {
@@ -202,6 +225,10 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (me.role === "cliente") { res.status(403).json({ error: "Forbidden" }); return; }
+    const existing = await requireReservationAccess(me, req.params.id, res);
+    if (!existing) return;
+
     const parsed = UpdateReservationBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -229,6 +256,9 @@ router.post("/reservations/:id/check-in", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    const existing = await requireReservationAccess(me, req.params.id, res);
+    if (!existing) return;
     await db.update(reservationsTable).set({
       checkedInAt: new Date(),
       status: "completed",
@@ -249,10 +279,8 @@ router.get("/reservations/:reservationId/passengers", async (req, res): Promise<
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const [reservation] = await db.select().from(reservationsTable)
-      .where(and(eq(reservationsTable.id, req.params.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
-      .limit(1);
-    if (!reservation) { res.status(404).json({ error: "Not found" }); return; }
+    const reservation = await requireReservationAccess(me, req.params.reservationId, res);
+    if (!reservation) return;
     const passengers = await db.select().from(passengersTable)
       .where(eq(passengersTable.reservationId, req.params.reservationId));
     res.json(passengers.map(formatPassenger));
@@ -266,10 +294,9 @@ router.post("/reservations/:reservationId/passengers", async (req, res): Promise
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const [reservation] = await db.select().from(reservationsTable)
-      .where(and(eq(reservationsTable.id, req.params.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
-      .limit(1);
-    if (!reservation) { res.status(404).json({ error: "Not found" }); return; }
+    if (me.role === "cliente") { res.status(403).json({ error: "Forbidden" }); return; }
+    const reservation = await requireReservationAccess(me, req.params.reservationId, res);
+    if (!reservation) return;
     const parsed = CreatePassengerBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const id = generateId();
@@ -299,10 +326,9 @@ router.patch("/reservations/:reservationId/passengers/:id", async (req, res): Pr
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const [reservation] = await db.select().from(reservationsTable)
-      .where(and(eq(reservationsTable.id, req.params.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
-      .limit(1);
-    if (!reservation) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role === "cliente") { res.status(403).json({ error: "Forbidden" }); return; }
+    const reservation = await requireReservationAccess(me, req.params.reservationId, res);
+    if (!reservation) return;
     const parsed = UpdatePassengerBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const updates: Partial<typeof passengersTable.$inferInsert> = {};
@@ -327,10 +353,9 @@ router.delete("/reservations/:reservationId/passengers/:id", async (req, res): P
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const [reservation] = await db.select().from(reservationsTable)
-      .where(and(eq(reservationsTable.id, req.params.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
-      .limit(1);
-    if (!reservation) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role === "cliente") { res.status(403).json({ error: "Forbidden" }); return; }
+    const reservation = await requireReservationAccess(me, req.params.reservationId, res);
+    if (!reservation) return;
     await db.delete(passengersTable)
       .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)));
     res.json({ success: true });

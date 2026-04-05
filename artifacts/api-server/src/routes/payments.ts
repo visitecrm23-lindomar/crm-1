@@ -180,14 +180,39 @@ router.post("/payments", async (req, res): Promise<void> => {
   }
 });
 
+async function requirePaymentAccess(
+  me: { id: string; tenantId: string; role: string },
+  paymentId: string,
+  res: import("express").Response,
+): Promise<typeof paymentsTable.$inferSelect | null> {
+  const [payment] = await db.select().from(paymentsTable)
+    .where(and(eq(paymentsTable.id, paymentId), eq(paymentsTable.tenantId, me.tenantId)))
+    .limit(1);
+  if (!payment) { res.status(404).json({ error: "Not found" }); return null; }
+  if (me.role === "cliente") {
+    if (!payment.clientId) { res.status(404).json({ error: "Not found" }); return null; }
+    const [clientRecord] = await db.select({ id: clientsTable.id }).from(clientsTable)
+      .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.userId, me.id))).limit(1);
+    if (!clientRecord || payment.clientId !== clientRecord.id) {
+      res.status(404).json({ error: "Not found" }); return null;
+    }
+  } else if (me.role === "vendedor") {
+    if (!payment.clientId) { res.status(404).json({ error: "Not found" }); return null; }
+    const [clientRecord] = await db.select({ createdById: clientsTable.createdById }).from(clientsTable)
+      .where(and(eq(clientsTable.id, payment.clientId), eq(clientsTable.tenantId, me.tenantId))).limit(1);
+    if (!clientRecord || clientRecord.createdById !== me.id) {
+      res.status(404).json({ error: "Not found" }); return null;
+    }
+  }
+  return payment;
+}
+
 router.get("/payments/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const [payment] = await db.select().from(paymentsTable)
-      .where(and(eq(paymentsTable.id, req.params.id), eq(paymentsTable.tenantId, me.tenantId)))
-      .limit(1);
-    if (!payment) { res.status(404).json({ error: "Not found" }); return; }
+    const payment = await requirePaymentAccess(me, req.params.id, res);
+    if (!payment) return;
     res.json(formatPayment(payment));
   } catch (err) {
     req.log.error({ err }, "Error fetching payment");

@@ -185,14 +185,25 @@ router.post("/clients", async (req, res): Promise<void> => {
   }
 });
 
+async function requireClientAccess(
+  me: { id: string; tenantId: string; role: string },
+  clientId: string,
+  res: import("express").Response,
+): Promise<typeof clientsTable.$inferSelect | null> {
+  const conditions: ReturnType<typeof eq>[] = [eq(clientsTable.id, clientId), eq(clientsTable.tenantId, me.tenantId)];
+  if (me.role === "cliente") conditions.push(eq(clientsTable.userId, me.id));
+  else if (me.role === "vendedor") conditions.push(eq(clientsTable.createdById, me.id));
+  const [client] = await db.select().from(clientsTable).where(and(...conditions)).limit(1);
+  if (!client) { res.status(404).json({ error: "Not found" }); return null; }
+  return client;
+}
+
 router.get("/clients/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const [client] = await db.select().from(clientsTable)
-      .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)))
-      .limit(1);
-    if (!client) { res.status(404).json({ error: "Not found" }); return; }
+    const client = await requireClientAccess(me, req.params.id, res);
+    if (!client) return;
     res.json(formatClient(client));
   } catch (err) {
     req.log.error({ err }, "Error fetching client");
@@ -204,6 +215,10 @@ router.patch("/clients/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (me.role === "cliente") { res.status(403).json({ error: "Forbidden" }); return; }
+    const existing = await requireClientAccess(me, req.params.id, res);
+    if (!existing) return;
+
     const parsed = UpdateClientBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -260,6 +275,10 @@ router.patch("/clients/:id/pipeline-stage", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (me.role === "cliente") { res.status(403).json({ error: "Forbidden" }); return; }
+    const existing = await requireClientAccess(me, req.params.id, res);
+    if (!existing) return;
+
     const parsed = UpdateClientPipelineStageBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     await db.update(clientsTable).set({ pipelineStage: parsed.data.stage })
@@ -279,10 +298,8 @@ router.get("/clients/:clientId/notes", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const [client] = await db.select().from(clientsTable)
-      .where(and(eq(clientsTable.id, req.params.clientId), eq(clientsTable.tenantId, me.tenantId)))
-      .limit(1);
-    if (!client) { res.status(404).json({ error: "Not found" }); return; }
+    const client = await requireClientAccess(me, req.params.clientId, res);
+    if (!client) return;
     const notes = await db.select().from(notesTable)
       .where(eq(notesTable.clientId, req.params.clientId))
       .orderBy(desc(notesTable.createdAt));
@@ -301,10 +318,8 @@ router.post("/clients/:clientId/notes", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const [client] = await db.select().from(clientsTable)
-      .where(and(eq(clientsTable.id, req.params.clientId), eq(clientsTable.tenantId, me.tenantId)))
-      .limit(1);
-    if (!client) { res.status(404).json({ error: "Not found" }); return; }
+    const client = await requireClientAccess(me, req.params.clientId, res);
+    if (!client) return;
     const parsed = CreateClientNoteBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const id = generateId();
@@ -334,10 +349,8 @@ router.delete("/clients/:clientId/notes/:noteId", async (req, res): Promise<void
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const [client] = await db.select().from(clientsTable)
-      .where(and(eq(clientsTable.id, req.params.clientId), eq(clientsTable.tenantId, me.tenantId)))
-      .limit(1);
-    if (!client) { res.status(403).json({ error: "Forbidden" }); return; }
+    const client = await requireClientAccess(me, req.params.clientId, res);
+    if (!client) return;
     await db.delete(notesTable)
       .where(and(eq(notesTable.id, req.params.noteId), eq(notesTable.clientId, req.params.clientId)));
     res.json({ success: true });
