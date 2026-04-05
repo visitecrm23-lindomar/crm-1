@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { clientsTable, tripsTable, reservationsTable, paymentsTable, dealsTable, npsResponsesTable } from "@workspace/db";
-import { eq, and, gte, desc, sql } from "drizzle-orm";
+import { clientsTable, tripsTable, reservationsTable, paymentsTable, dealsTable, npsResponsesTable, usersTable } from "@workspace/db";
+import { eq, and, gte, desc, sql, inArray } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 
 const router = Router();
@@ -141,9 +141,46 @@ router.get("/dashboard/upcoming-trips", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
     const now = new Date();
-    const trips = await db.select().from(tripsTable)
-      .where(and(eq(tripsTable.tenantId, me.tenantId), gte(tripsTable.departureDate, now)))
-      .orderBy(tripsTable.departureDate).limit(5);
+
+    let trips;
+
+    if (me.role === "cliente") {
+      const [clientRecord] = await db.select({ id: clientsTable.id })
+        .from(clientsTable)
+        .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.createdById, me.id)))
+        .limit(1);
+
+      if (!clientRecord) {
+        res.json([]);
+        return;
+      }
+
+      const reservations = await db.select({ tripId: reservationsTable.tripId })
+        .from(reservationsTable)
+        .where(and(
+          eq(reservationsTable.tenantId, me.tenantId),
+          eq(reservationsTable.clientId, clientRecord.id),
+        ));
+
+      const tripIds = reservations.map(r => r.tripId).filter(Boolean) as string[];
+      if (tripIds.length === 0) {
+        res.json([]);
+        return;
+      }
+
+      trips = await db.select().from(tripsTable)
+        .where(and(
+          eq(tripsTable.tenantId, me.tenantId),
+          gte(tripsTable.departureDate, now),
+          inArray(tripsTable.id, tripIds),
+        ))
+        .orderBy(tripsTable.departureDate).limit(5);
+    } else {
+      trips = await db.select().from(tripsTable)
+        .where(and(eq(tripsTable.tenantId, me.tenantId), gte(tripsTable.departureDate, now)))
+        .orderBy(tripsTable.departureDate).limit(5);
+    }
+
     res.json(trips.map(t => ({
       id: t.id, name: t.name, destination: t.destination,
       departureDate: t.departureDate.toISOString(),

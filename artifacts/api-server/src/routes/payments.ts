@@ -69,16 +69,30 @@ router.get("/payments", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    const { reservationId, clientId, status, type, page = "1", limit = "20" } = req.query as Record<string, string>;
+    const { reservationId, clientId: clientIdParam, status, type, page = "1", limit = "20" } = req.query as Record<string, string>;
     const pageNum = parseInt(page) || 1;
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (pageNum - 1) * limitNum;
 
     const conditions: ReturnType<typeof eq>[] = [eq(paymentsTable.tenantId, me.tenantId)];
     if (reservationId) conditions.push(eq(paymentsTable.reservationId, reservationId));
-    if (clientId) conditions.push(eq(paymentsTable.clientId, clientId));
     if (status) conditions.push(eq(paymentsTable.status, status));
     if (type) conditions.push(eq(paymentsTable.type, type));
+
+    if (me.role === "cliente") {
+      const [clientRecord] = await db.select({ id: clientsTable.id })
+        .from(clientsTable)
+        .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.createdById, me.id)))
+        .limit(1);
+      if (clientRecord) {
+        conditions.push(eq(paymentsTable.clientId, clientRecord.id));
+      } else {
+        res.json({ data: [], total: 0, page: pageNum, limit: limitNum });
+        return;
+      }
+    } else if (clientIdParam) {
+      conditions.push(eq(paymentsTable.clientId, clientIdParam));
+    }
 
     const payments = await db.select().from(paymentsTable)
       .where(and(...conditions)).orderBy(desc(paymentsTable.dueDate))
