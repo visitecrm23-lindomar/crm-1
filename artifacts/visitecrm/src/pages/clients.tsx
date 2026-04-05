@@ -1,7 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
-  useListClients, useCreateClient, useUpdateClient, useListTrips,
-  useListPipelineStages, useListReservations, useListPayments
+  useListClients, useCreateClient, useUpdateClient,
+  useListPipelineStages, useListReservations, useListPayments, useListTrips
 } from "@workspace/api-client-react";
 import type { Client } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,7 +20,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   Plus, Search, Users, TrendingUp, UserCheck, MoreHorizontal,
-  Phone, Mail, MapPin, Calendar, Download, Upload, ChevronLeft, ChevronRight, X, Star
+  Phone, Mail, MapPin, Calendar, Download, Upload, ChevronLeft, ChevronRight,
+  X, Star, ArrowUpDown, ArrowUp, ArrowDown
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -52,40 +53,25 @@ const GENDER_OPTIONS = [
 ];
 
 interface ClientFormData {
-  name: string;
-  email: string;
-  whatsapp: string;
-  phone: string;
-  cpf: string;
-  birthDate: string;
-  gender: string;
-  addressCity: string;
-  addressState: string;
-  instagram: string;
-  observations: string;
-  tags: string;
-  dreamDestinations: string;
-  pipelineStage: string;
-  classification: string;
-  npsScore: string;
-  status: string;
+  name: string; email: string; whatsapp: string; phone: string; cpf: string;
+  birthDate: string; gender: string; addressCity: string; addressState: string;
+  instagram: string; observations: string; tags: string; dreamDestinations: string;
+  pipelineStage: string; classification: string; npsScore: string; status: string;
 }
 
 const EMPTY_CLIENT: ClientFormData = {
-  name: "", email: "", whatsapp: "", phone: "", cpf: "",
-  birthDate: "", gender: "", addressCity: "", addressState: "",
-  instagram: "", observations: "", tags: "", dreamDestinations: "",
-  pipelineStage: "", classification: "lead", npsScore: "", status: "active",
+  name: "", email: "", whatsapp: "", phone: "", cpf: "", birthDate: "", gender: "",
+  addressCity: "", addressState: "", instagram: "", observations: "", tags: "",
+  dreamDestinations: "", pipelineStage: "", classification: "lead", npsScore: "", status: "active",
 };
 
 function clientToForm(c: Client): ClientFormData {
   return {
     name: c.name, email: c.email, whatsapp: c.whatsapp, phone: c.phone ?? "",
     cpf: c.cpf ?? "", birthDate: c.birthDate ? c.birthDate.split("T")[0] : "",
-    gender: c.gender ?? "", addressCity: c.addressCity ?? "",
-    addressState: c.addressState ?? "", instagram: c.instagram ?? "",
-    observations: c.observations ?? "", tags: (c.tags ?? []).join(", "),
-    dreamDestinations: (c.dreamDestinations ?? []).join(", "),
+    gender: c.gender ?? "", addressCity: c.addressCity ?? "", addressState: c.addressState ?? "",
+    instagram: c.instagram ?? "", observations: c.observations ?? "",
+    tags: (c.tags ?? []).join(", "), dreamDestinations: (c.dreamDestinations ?? []).join(", "),
     pipelineStage: c.pipelineStage ?? "", classification: c.classification ?? "lead",
     npsScore: c.npsScore != null ? String(c.npsScore) : "", status: c.status ?? "active",
   };
@@ -100,10 +86,17 @@ interface ClientModalProps {
 
 function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
   const [tab, setTab] = useState("personal");
-  const [form, setForm] = useState<ClientFormData>(editClient ? clientToForm(editClient) : EMPTY_CLIENT);
+  const [form, setForm] = useState<ClientFormData>(EMPTY_CLIENT);
   const { data: stages } = useListPipelineStages();
   const createClient = useCreateClient();
   const updateClient = useUpdateClient();
+
+  useEffect(() => {
+    if (open) {
+      setTab("personal");
+      setForm(editClient ? clientToForm(editClient) : EMPTY_CLIENT);
+    }
+  }, [open, editClient]);
 
   const isEditing = !!editClient;
   const isPending = createClient.isPending || updateClient.isPending;
@@ -124,13 +117,8 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
     if (isEditing && editClient) {
       await updateClient.mutateAsync({
         id: editClient.id,
-        data: {
-          ...base,
-          pipelineStage: form.pipelineStage || undefined,
-          classification: form.classification || undefined,
-          npsScore: form.npsScore ? parseFloat(form.npsScore) : undefined,
-          status: form.status || undefined,
-        },
+        data: { ...base, pipelineStage: form.pipelineStage || undefined, classification: form.classification || undefined,
+          npsScore: form.npsScore ? parseFloat(form.npsScore) : undefined, status: form.status || undefined },
       });
     } else {
       await createClient.mutateAsync({ data: base });
@@ -272,10 +260,7 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
                 <div className="flex items-center gap-2">
                   <div className="flex">
                     {Array.from({ length: 10 }).map((_, i) => (
-                      <Star
-                        key={i}
-                        className={`w-4 h-4 ${i < parseInt(form.npsScore) ? "text-yellow-400 fill-yellow-400" : "text-gray-200 fill-gray-200"}`}
-                      />
+                      <Star key={i} className={`w-4 h-4 ${i < parseInt(form.npsScore) ? "text-yellow-400 fill-yellow-400" : "text-gray-200 fill-gray-200"}`} />
                     ))}
                   </div>
                   <span className="text-sm text-muted-foreground">{form.npsScore}/10</span>
@@ -284,12 +269,7 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
             </div>
             <div className="space-y-2">
               <Label>Observações</Label>
-              <Textarea
-                placeholder="Anotações sobre o cliente, preferências, histórico de atendimento..."
-                rows={6}
-                value={form.observations}
-                onChange={e => set("observations")(e.target.value)}
-              />
+              <Textarea placeholder="Anotações sobre o cliente..." rows={6} value={form.observations} onChange={e => set("observations")(e.target.value)} />
             </div>
           </TabsContent>
 
@@ -297,12 +277,7 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
             <p className="text-sm text-muted-foreground">Preferências de lifestyle e marketing</p>
             <div className="space-y-2">
               <Label>Destinos Sonhados</Label>
-              <Textarea
-                placeholder="Destinos que o cliente mencionou querer visitar..."
-                rows={3}
-                value={form.dreamDestinations}
-                onChange={e => set("dreamDestinations")(e.target.value)}
-              />
+              <Textarea placeholder="Destinos que o cliente mencionou querer visitar..." rows={3} value={form.dreamDestinations} onChange={e => set("dreamDestinations")(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>Tags de Interesse</Label>
@@ -314,7 +289,7 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
         <div className="flex justify-end gap-2 pt-4 border-t mt-2">
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button onClick={handleSubmit} disabled={isPending || !form.name || !form.email || !form.whatsapp}>
-            {isPending ? "Salvando..." : isEditing ? "Salvar Alterações" : "Criar e Ver Detalhes"}
+            {isPending ? "Salvando..." : isEditing ? "Salvar Alterações" : "Criar Cliente"}
           </Button>
         </div>
       </DialogContent>
@@ -322,11 +297,7 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
   );
 }
 
-interface Client360ModalProps {
-  open: boolean;
-  onClose: () => void;
-  client: Client;
-}
+interface Client360ModalProps { open: boolean; onClose: () => void; client: Client; }
 
 function Client360Modal({ open, onClose, client }: Client360ModalProps) {
   const { data: reservations } = useListReservations({ clientId: client.id, limit: 20 });
@@ -344,28 +315,17 @@ function Client360Modal({ open, onClose, client }: Client360ModalProps) {
               <DialogTitle className="text-left">{client.name}</DialogTitle>
               <p className="text-sm text-muted-foreground">{client.email}</p>
             </div>
-            {(() => {
-              const s = STATUS_LABELS[client.status];
-              return s ? <Badge className={`${s.color} border ml-auto`}>{s.label}</Badge> : null;
-            })()}
+            {(() => { const s = STATUS_LABELS[client.status]; return s ? <Badge className={`${s.color} border ml-auto`}>{s.label}</Badge> : null; })()}
           </div>
         </DialogHeader>
 
         <div className="grid grid-cols-3 gap-3 py-2">
-          <Card className="p-3">
-            <p className="text-xs text-muted-foreground">Total Gasto</p>
-            <p className="text-lg font-bold">{formatCurrency(client.totalSpent)}</p>
-          </Card>
+          <Card className="p-3"><p className="text-xs text-muted-foreground">Total Gasto</p><p className="text-lg font-bold">{formatCurrency(client.totalSpent)}</p></Card>
           <Card className="p-3">
             <p className="text-xs text-muted-foreground">Saldo Devedor</p>
-            <p className={`text-lg font-bold ${client.outstandingBalance > 0 ? "text-destructive" : "text-green-600"}`}>
-              {formatCurrency(client.outstandingBalance)}
-            </p>
+            <p className={`text-lg font-bold ${client.outstandingBalance > 0 ? "text-destructive" : "text-green-600"}`}>{formatCurrency(client.outstandingBalance)}</p>
           </Card>
-          <Card className="p-3">
-            <p className="text-xs text-muted-foreground">NPS</p>
-            <p className="text-lg font-bold">{client.npsScore != null ? `${client.npsScore}/10` : "—"}</p>
-          </Card>
+          <Card className="p-3"><p className="text-xs text-muted-foreground">NPS</p><p className="text-lg font-bold">{client.npsScore != null ? `${client.npsScore}/10` : "—"}</p></Card>
         </div>
 
         <Tabs defaultValue="data">
@@ -391,32 +351,22 @@ function Client360Modal({ open, onClose, client }: Client360ModalProps) {
               ].map(({ label, value, icon: Icon }) => (
                 <div key={label} className="flex items-center gap-2">
                   {Icon && <Icon className="w-4 h-4 text-muted-foreground shrink-0" />}
-                  <div>
-                    <p className="text-xs text-muted-foreground">{label}</p>
-                    <p className="font-medium">{value}</p>
-                  </div>
+                  <div><p className="text-xs text-muted-foreground">{label}</p><p className="font-medium">{value}</p></div>
                 </div>
               ))}
             </div>
             {client.tags.length > 0 && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Tags</p>
-                <div className="flex flex-wrap gap-1">
-                  {client.tags.map(tag => <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>)}
-                </div>
+              <div><p className="text-xs text-muted-foreground mb-1">Tags</p>
+                <div className="flex flex-wrap gap-1">{client.tags.map(tag => <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>)}</div>
               </div>
             )}
             {client.dreamDestinations.length > 0 && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Destinos Sonhados</p>
-                <div className="flex flex-wrap gap-1">
-                  {client.dreamDestinations.map(d => <Badge key={d} variant="secondary" className="text-xs">{d}</Badge>)}
-                </div>
+              <div><p className="text-xs text-muted-foreground mb-1">Destinos Sonhados</p>
+                <div className="flex flex-wrap gap-1">{client.dreamDestinations.map(d => <Badge key={d} variant="secondary" className="text-xs">{d}</Badge>)}</div>
               </div>
             )}
             {client.observations && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Observações</p>
+              <div><p className="text-xs text-muted-foreground mb-1">Observações</p>
                 <p className="text-sm bg-muted/50 rounded-lg p-3">{client.observations}</p>
               </div>
             )}
@@ -431,9 +381,7 @@ function Client360Modal({ open, onClose, client }: Client360ModalProps) {
                   <div key={r.id} className="flex items-center justify-between p-3 rounded-lg border">
                     <div>
                       <p className="font-medium text-sm">{r.trip.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {format(parseISO(r.trip.departureDate), "dd/MM/yyyy", { locale: ptBR })} · {r.seats.length} lugar(es)
-                      </p>
+                      <p className="text-xs text-muted-foreground">{format(parseISO(r.trip.departureDate), "dd/MM/yyyy", { locale: ptBR })} · {r.seats.length} lugar(es)</p>
                     </div>
                     <div className="text-right">
                       <p className="font-semibold text-sm">{formatCurrency(r.totalValue)}</p>
@@ -463,10 +411,7 @@ function Client360Modal({ open, onClose, client }: Client360ModalProps) {
                     </div>
                     <div className="text-right">
                       <p className="font-semibold text-sm">{formatCurrency(p.amount)}</p>
-                      <Badge
-                        variant={p.status === "paid" ? "default" : p.status === "overdue" ? "destructive" : "secondary"}
-                        className="text-xs"
-                      >
+                      <Badge variant={p.status === "paid" ? "default" : p.status === "overdue" ? "destructive" : "secondary"} className="text-xs">
                         {p.status === "paid" ? "Pago" : p.status === "overdue" ? "Vencido" : "Pendente"}
                       </Badge>
                     </div>
@@ -477,17 +422,13 @@ function Client360Modal({ open, onClose, client }: Client360ModalProps) {
           </TabsContent>
 
           <TabsContent value="history" className="mt-4">
-            <p className="text-sm text-muted-foreground text-center py-8">
-              Histórico de atividades disponível em breve.
-            </p>
+            <p className="text-sm text-muted-foreground text-center py-8">Histórico de atividades disponível em breve.</p>
           </TabsContent>
 
           <TabsContent value="documents" className="mt-4">
             <div className="text-center py-8 space-y-3">
               <p className="text-sm text-muted-foreground">Nenhum documento enviado.</p>
-              <Button variant="outline" size="sm" disabled>
-                <Upload className="w-4 h-4 mr-2" /> Enviar Documento
-              </Button>
+              <Button variant="outline" size="sm" disabled><Upload className="w-4 h-4 mr-2" /> Enviar Documento</Button>
             </div>
           </TabsContent>
         </Tabs>
@@ -496,20 +437,65 @@ function Client360Modal({ open, onClose, client }: Client360ModalProps) {
   );
 }
 
+type SortField = "name" | "createdAt" | "totalSpent";
+type SortOrder = "asc" | "desc";
+
+interface SortableHeaderProps {
+  label: string;
+  field: SortField;
+  currentSort: SortField;
+  currentOrder: SortOrder;
+  onSort: (field: SortField) => void;
+}
+
+function SortableHeader({ label, field, currentSort, currentOrder, onSort }: SortableHeaderProps) {
+  const isActive = currentSort === field;
+  return (
+    <button
+      className="flex items-center gap-1 text-xs font-semibold hover:text-foreground transition-colors"
+      onClick={() => onSort(field)}
+    >
+      {label}
+      {isActive ? (
+        currentOrder === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+      ) : (
+        <ArrowUpDown className="w-3 h-3 opacity-40" />
+      )}
+    </button>
+  );
+}
+
 export default function Clients() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [filterStatus, setFilterStatus] = useState<string>("");
   const [filterClassification, setFilterClassification] = useState<string>("");
-  const [sortBy, setSortBy] = useState<string>("createdAt");
+  const [filterPipelineStage, setFilterPipelineStage] = useState<string>("");
+  const [filterCity, setFilterCity] = useState<string>("");
+  const [filterTripId, setFilterTripId] = useState<string>("");
+  const [filterDateFrom, setFilterDateFrom] = useState<string>("");
+  const [filterDateTo, setFilterDateTo] = useState<string>("");
+  const [sortBy, setSortBy] = useState<SortField>("createdAt");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editClient, setEditClient] = useState<Client | null>(null);
   const [viewClient, setViewClient] = useState<Client | null>(null);
   const LIMIT = 12;
 
+  const { data: stages } = useListPipelineStages();
+  const { data: tripsData } = useListTrips({ limit: 100 });
+
   const { data: clientsData, isLoading, refetch } = useListClients({
     search: search || undefined,
     status: filterStatus || undefined,
+    pipelineStage: filterPipelineStage || undefined,
+    classification: filterClassification || undefined,
+    city: filterCity || undefined,
+    tripId: filterTripId || undefined,
+    dateFrom: filterDateFrom || undefined,
+    dateTo: filterDateTo || undefined,
+    sortBy: sortBy || undefined,
+    sortOrder: sortOrder || undefined,
     page,
     limit: LIMIT,
   });
@@ -526,11 +512,23 @@ export default function Clients() {
     };
   }, [allClients]);
 
-  const filteredData = useMemo(() => {
-    let data = clientsData?.data ?? [];
-    if (filterClassification) data = data.filter(c => c.classification === filterClassification);
-    return data;
-  }, [clientsData, filterClassification]);
+  const handleSort = useCallback((field: SortField) => {
+    if (sortBy === field) {
+      setSortOrder(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortOrder("desc");
+    }
+    setPage(1);
+  }, [sortBy]);
+
+  const hasFilters = !!(search || filterStatus || filterClassification || filterPipelineStage || filterCity || filterTripId || filterDateFrom || filterDateTo);
+
+  const clearFilters = () => {
+    setSearch(""); setFilterStatus(""); setFilterClassification("");
+    setFilterPipelineStage(""); setFilterCity(""); setFilterTripId("");
+    setFilterDateFrom(""); setFilterDateTo(""); setPage(1);
+  };
 
   const totalPages = Math.ceil((clientsData?.total ?? 0) / LIMIT);
 
@@ -554,106 +552,90 @@ export default function Clients() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
-              <Users className="w-5 h-5 text-blue-600" />
+      <div className="grid gap-3 grid-cols-4">
+        {[
+          { icon: Users, color: "bg-blue-100 text-blue-600", label: "Total", value: stats.total },
+          { icon: UserCheck, color: "bg-green-100 text-green-600", label: "Ativos", value: stats.active },
+          { icon: TrendingUp, color: "bg-purple-100 text-purple-600", label: "Leads", value: stats.leads },
+          { icon: TrendingUp, color: "bg-yellow-100 text-yellow-600", label: "Receita Total", value: formatCurrency(stats.totalRevenue) },
+        ].map(({ icon: Icon, color, label, value }) => (
+          <Card key={label} className="p-4">
+            <div className="flex items-center gap-3">
+              <div className={`w-9 h-9 rounded-lg ${color} flex items-center justify-center`}>
+                <Icon className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">{label}</p>
+                <p className="text-xl font-bold">{value}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Total</p>
-              <p className="text-xl font-bold">{stats.total}</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-green-100 flex items-center justify-center">
-              <UserCheck className="w-5 h-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Ativos</p>
-              <p className="text-xl font-bold">{stats.active}</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-purple-100 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Leads</p>
-              <p className="text-xl font-bold">{stats.leads}</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-yellow-100 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-yellow-600" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Receita Total</p>
-              <p className="text-xl font-bold">{formatCurrency(stats.totalRevenue)}</p>
-            </div>
-          </div>
-        </Card>
+          </Card>
+        ))}
       </div>
 
       <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
+        <CardHeader className="pb-3 space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por nome, email, WhatsApp..."
-                value={search}
-                onChange={e => { setSearch(e.target.value); setPage(1); }}
-                className="pl-9"
-              />
+              <Input placeholder="Buscar por nome, email, WhatsApp..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="pl-9" />
             </div>
-            <div className="flex gap-2">
-              <Select value={filterStatus} onValueChange={v => { setFilterStatus(v); setPage(1); }}>
-                <SelectTrigger className="w-36">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Todos os status</SelectItem>
-                  {Object.entries(STATUS_LABELS).map(([v, { label }]) => (
-                    <SelectItem key={v} value={v}>{label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={filterClassification} onValueChange={v => { setFilterClassification(v); setPage(1); }}>
-                <SelectTrigger className="w-36">
-                  <SelectValue placeholder="Classificação" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Todas</SelectItem>
-                  {Object.entries(CLASSIFICATION_LABELS).map(([v, l]) => (
-                    <SelectItem key={v} value={v}>{l}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {(search || filterStatus || filterClassification) && (
-                <Button variant="ghost" size="icon" onClick={() => { setSearch(""); setFilterStatus(""); setFilterClassification(""); setPage(1); }}>
-                  <X className="w-4 h-4" />
-                </Button>
-              )}
+            <Select value={filterStatus} onValueChange={v => { setFilterStatus(v); setPage(1); }}>
+              <SelectTrigger className="w-36"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Todos os status</SelectItem>
+                {Object.entries(STATUS_LABELS).map(([v, { label }]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterClassification} onValueChange={v => { setFilterClassification(v); setPage(1); }}>
+              <SelectTrigger className="w-36"><SelectValue placeholder="Classificação" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Todas</SelectItem>
+                {Object.entries(CLASSIFICATION_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterPipelineStage} onValueChange={v => { setFilterPipelineStage(v); setPage(1); }}>
+              <SelectTrigger className="w-40"><SelectValue placeholder="Pipeline" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Todos os estágios</SelectItem>
+                {stages?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Input placeholder="Filtrar por cidade..." value={filterCity} onChange={e => { setFilterCity(e.target.value); setPage(1); }} className="w-40" />
+            <Select value={filterTripId} onValueChange={v => { setFilterTripId(v); setPage(1); }}>
+              <SelectTrigger className="w-48"><SelectValue placeholder="Viagem de interesse" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Todas as viagens</SelectItem>
+                {tripsData?.data.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <div className="flex items-center gap-1">
+              <Label className="text-xs text-muted-foreground whitespace-nowrap">De:</Label>
+              <Input type="date" value={filterDateFrom} onChange={e => { setFilterDateFrom(e.target.value); setPage(1); }} className="w-36" />
             </div>
+            <div className="flex items-center gap-1">
+              <Label className="text-xs text-muted-foreground whitespace-nowrap">Até:</Label>
+              <Input type="date" value={filterDateTo} onChange={e => { setFilterDateTo(e.target.value); setPage(1); }} className="w-36" />
+            </div>
+            {hasFilters && (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                <X className="w-4 h-4 mr-1" /> Limpar filtros
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Cliente</TableHead>
+                <TableHead><SortableHeader label="Cliente" field="name" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></TableHead>
                 <TableHead>Contato</TableHead>
                 <TableHead>Localidade</TableHead>
                 <TableHead>Classificação</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Gasto Total</TableHead>
+                <TableHead><SortableHeader label="Gasto Total" field="totalSpent" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></TableHead>
                 <TableHead>Saldo</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -661,28 +643,21 @@ export default function Clients() {
             <TableBody>
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i}>
-                    {Array.from({ length: 8 }).map((__, j) => (
-                      <TableCell key={j}><Skeleton className="h-8 w-full" /></TableCell>
-                    ))}
-                  </TableRow>
+                  <TableRow key={i}>{Array.from({ length: 8 }).map((__, j) => <TableCell key={j}><Skeleton className="h-8 w-full" /></TableCell>)}</TableRow>
                 ))
-              ) : filteredData.length === 0 ? (
+              ) : (clientsData?.data ?? []).length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
-                    Nenhum cliente encontrado.
+                    {hasFilters ? "Nenhum cliente encontrado com os filtros aplicados." : "Nenhum cliente cadastrado."}
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredData.map(client => {
+                (clientsData?.data ?? []).map(client => {
                   const status = STATUS_LABELS[client.status];
                   return (
                     <TableRow key={client.id} className="hover:bg-muted/30">
                       <TableCell>
-                        <button
-                          className="flex items-center gap-3 text-left"
-                          onClick={() => setViewClient(client)}
-                        >
+                        <button className="flex items-center gap-3 text-left" onClick={() => setViewClient(client)}>
                           <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">
                             {client.name.charAt(0).toUpperCase()}
                           </div>
@@ -698,23 +673,14 @@ export default function Clients() {
                       </TableCell>
                       <TableCell>
                         {client.addressCity ? (
-                          <div className="flex items-center gap-1 text-sm">
-                            <MapPin className="w-3 h-3 text-muted-foreground" />
-                            {client.addressCity}{client.addressState ? `/${client.addressState}` : ""}
-                          </div>
+                          <div className="flex items-center gap-1 text-sm"><MapPin className="w-3 h-3 text-muted-foreground" />{client.addressCity}{client.addressState ? `/${client.addressState}` : ""}</div>
                         ) : <span className="text-muted-foreground text-sm">—</span>}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {CLASSIFICATION_LABELS[client.classification] ?? client.classification}
-                        </Badge>
+                        <Badge variant="outline" className="text-xs">{CLASSIFICATION_LABELS[client.classification] ?? client.classification}</Badge>
                       </TableCell>
                       <TableCell>
-                        {status ? (
-                          <Badge className={`${status.color} border text-xs`}>{status.label}</Badge>
-                        ) : (
-                          <Badge variant="secondary" className="text-xs">{client.status}</Badge>
-                        )}
+                        {status ? <Badge className={`${status.color} border text-xs`}>{status.label}</Badge> : <Badge variant="secondary" className="text-xs">{client.status}</Badge>}
                       </TableCell>
                       <TableCell className="font-medium text-sm">{formatCurrency(client.totalSpent)}</TableCell>
                       <TableCell>
@@ -725,21 +691,13 @@ export default function Clients() {
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="w-4 h-4" /></Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setViewClient(client)}>
-                              Ver detalhes 360°
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => { setEditClient(client); setIsCreateOpen(true); }}>
-                              Editar dados
-                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setViewClient(client)}>Ver detalhes 360°</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setEditClient(client); setIsCreateOpen(true); }}>Editar dados</DropdownMenuItem>
                             <DropdownMenuItem asChild>
-                              <a href={`https://wa.me/${client.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer">
-                                Abrir WhatsApp
-                              </a>
+                              <a href={`https://wa.me/${client.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer">Abrir WhatsApp</a>
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -759,31 +717,15 @@ export default function Clients() {
             Mostrando {((page - 1) * LIMIT) + 1}–{Math.min(page * LIMIT, clientsData?.total ?? 0)} de {clientsData?.total ?? 0} clientes
           </p>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
+            <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}><ChevronLeft className="w-4 h-4" /></Button>
             <span className="text-sm font-medium">{page} / {totalPages}</span>
-            <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
-              <ChevronRight className="w-4 h-4" />
-            </Button>
+            <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}><ChevronRight className="w-4 h-4" /></Button>
           </div>
         </div>
       )}
 
-      <ClientModal
-        open={isCreateOpen}
-        onClose={() => { setIsCreateOpen(false); setEditClient(null); }}
-        editClient={editClient}
-        onSave={() => { refetch(); }}
-      />
-
-      {viewClient && (
-        <Client360Modal
-          open={!!viewClient}
-          onClose={() => setViewClient(null)}
-          client={viewClient}
-        />
-      )}
+      <ClientModal open={isCreateOpen} onClose={() => { setIsCreateOpen(false); setEditClient(null); }} editClient={editClient} onSave={() => refetch()} />
+      {viewClient && <Client360Modal open={!!viewClient} onClose={() => setViewClient(null)} client={viewClient} />}
     </div>
   );
 }

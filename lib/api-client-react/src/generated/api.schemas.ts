@@ -1704,6 +1704,34 @@ export type ListClientsParams = {
    * @nullable
    */
   classification?: string | null;
+  /**
+   * @nullable
+   */
+  city?: string | null;
+  /**
+   * @nullable
+   */
+  tripId?: string | null;
+  /**
+   * @nullable
+   */
+  sellerId?: string | null;
+  /**
+   * @nullable
+   */
+  dateFrom?: string | null;
+  /**
+   * @nullable
+   */
+  dateTo?: string | null;
+  /**
+   * @nullable
+   */
+  sortBy?: string | null;
+  /**
+   * @nullable
+   */
+  sortOrder?: string | null;
   page?: number;
   limit?: number;
 };

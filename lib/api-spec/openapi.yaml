@@ -159,6 +159,34 @@ paths:
           in: query
           schema:
             type: ["string", "null"]
+        - name: city
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: tripId
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: sellerId
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: dateFrom
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: dateTo
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: sortBy
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: sortOrder
+          in: query
+          schema:
+            type: ["string", "null"]
         - name: page
           in: query
           schema:

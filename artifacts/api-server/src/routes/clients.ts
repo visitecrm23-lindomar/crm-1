@@ -48,7 +48,11 @@ router.get("/clients", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    const { search, status, pipelineStage, classification, page = "1", limit = "20" } = req.query as Record<string, string>;
+    const {
+      search, status, pipelineStage, classification,
+      city, dateFrom, dateTo, sortBy = "createdAt", sortOrder = "desc",
+      page = "1", limit = "20",
+    } = req.query as Record<string, string>;
     const pageNum = parseInt(page) || 1;
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (pageNum - 1) * limitNum;
@@ -64,10 +68,19 @@ router.get("/clients", async (req, res): Promise<void> => {
     if (status) conditions.push(eq(clientsTable.status, status));
     if (pipelineStage) conditions.push(eq(clientsTable.pipelineStage, pipelineStage));
     if (classification) conditions.push(eq(clientsTable.classification, classification));
+    if (city) conditions.push(ilike(clientsTable.addressCity, `%${city}%`) as ReturnType<typeof eq>);
+    if (dateFrom) conditions.push(sql`${clientsTable.createdAt} >= ${new Date(dateFrom)}` as ReturnType<typeof eq>);
+    if (dateTo) conditions.push(sql`${clientsTable.createdAt} <= ${new Date(dateTo)}` as ReturnType<typeof eq>);
+
+    const orderCol = sortBy === "name" ? clientsTable.name
+      : sortBy === "totalSpent" ? clientsTable.totalSpent
+      : sortBy === "createdAt" ? clientsTable.createdAt
+      : clientsTable.createdAt;
+    const orderDir = sortOrder === "asc" ? orderCol : desc(orderCol);
 
     const clients = await db.select().from(clientsTable)
       .where(and(...conditions))
-      .orderBy(desc(clientsTable.createdAt))
+      .orderBy(orderDir)
       .limit(limitNum)
       .offset(offset);
 

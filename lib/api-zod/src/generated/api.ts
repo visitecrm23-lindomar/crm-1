@@ -97,6 +97,13 @@ export const ListClientsQueryParams = zod.object({
   status: zod.coerce.string().nullish(),
   pipelineStage: zod.coerce.string().nullish(),
   classification: zod.coerce.string().nullish(),
+  city: zod.coerce.string().nullish(),
+  tripId: zod.coerce.string().nullish(),
+  sellerId: zod.coerce.string().nullish(),
+  dateFrom: zod.coerce.string().nullish(),
+  dateTo: zod.coerce.string().nullish(),
+  sortBy: zod.coerce.string().nullish(),
+  sortOrder: zod.coerce.string().nullish(),
   page: zod.coerce.number().default(listClientsQueryPageDefault),
   limit: zod.coerce.number().default(listClientsQueryLimitDefault),
 });
