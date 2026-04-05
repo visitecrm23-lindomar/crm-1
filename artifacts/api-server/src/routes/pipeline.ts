@@ -110,6 +110,10 @@ router.get("/deals", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (me.role === "cliente") {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
     const { stageId, clientId, ownerId, status } = req.query as Record<string, string>;
     const conditions: ReturnType<typeof eq>[] = [eq(dealsTable.tenantId, me.tenantId)];
     if (stageId) conditions.push(eq(dealsTable.stageId, stageId));

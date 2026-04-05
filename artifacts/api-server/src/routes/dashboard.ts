@@ -163,6 +163,11 @@ router.get("/dashboard/revenue-chart", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
+    if (me.role === "cliente") {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+
     const { period = "30d" } = req.query as Record<string, string>;
     const now = new Date();
     const points: Array<{ label: string; revenue: number; expenses: number; reservations: number }> = [];
