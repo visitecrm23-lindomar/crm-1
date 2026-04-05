@@ -48,7 +48,8 @@ function KpiCard({ title, value, sub, icon: Icon, loading, color = "text-primary
 
 function AgencyDashboard() {
   const { data: summary, isLoading: loadingSummary } = useGetDashboardSummary();
-  const { data: chartData, isLoading: loadingChart } = useGetDashboardRevenueChart({ period: "12m" });
+  const { data: rawChartData, isLoading: loadingChart } = useGetDashboardRevenueChart({ period: "12m" });
+  const chartData = rawChartData?.slice(-6);
   const { data: upcomingTrips, isLoading: loadingTrips } = useGetDashboardUpcomingTrips();
   const { data: recentClients, isLoading: loadingClients } = useListClients({ limit: 10, page: 1 });
   const { data: pendingPayments, isLoading: loadingPayments } = useListPayments({ status: "pending", limit: 10 });
@@ -301,11 +302,16 @@ function AgencyDashboard() {
 
 function SellerDashboard() {
   const { data: summary, isLoading } = useGetDashboardSummary();
-  const { data: chartData, isLoading: loadingChart } = useGetDashboardRevenueChart({ period: "12m" });
+  const { data: rawChartData, isLoading: loadingChart } = useGetDashboardRevenueChart({ period: "12m" });
+  const chartData = rawChartData?.slice(-6);
   const { data: myClients, isLoading: loadingClients } = useListClients({ limit: 10, page: 1 });
   const { data: stages } = useListPipelineStages();
   const { data: deals } = useListDeals({ status: "open" });
   const { data: pendingPayments, isLoading: loadingPayments } = useListPayments({ status: "pending", limit: 8 });
+
+  const monthGoal = 50000;
+  const monthRevenue = summary?.revenueThisMonth ?? 0;
+  const goalPercent = Math.min(100, Math.round((monthRevenue / monthGoal) * 100));
 
   const funnelData = useMemo(() => {
     if (!stages || !deals) return [];
@@ -325,16 +331,34 @@ function SellerDashboard() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <KpiCard title="Meus Clientes" value={summary?.totalClients ?? 0} sub="Total na carteira" icon={Users} loading={isLoading} />
-        <KpiCard title="Minhas Vendas" value={formatCurrency(summary?.revenueThisMonth ?? 0)} sub="Receita este mês" icon={DollarSign} loading={isLoading} color="text-green-600" />
+        <KpiCard title="Vendas do Mês" value={formatCurrency(monthRevenue)} sub={`Meta: ${formatCurrency(monthGoal)}`} icon={DollarSign} loading={isLoading} color="text-green-600" />
         <KpiCard title="Reservas do Mês" value={summary?.confirmedReservations ?? 0} sub="Confirmadas este mês" icon={CalendarCheck} loading={isLoading} color="text-blue-600" />
-        <KpiCard title="Negócios Abertos" value={summary?.openDeals ?? 0} sub={`${formatCurrency(summary?.dealsPipelineValue ?? 0)} no pipeline`} icon={Briefcase} loading={isLoading} color="text-purple-600" />
+        <KpiCard title="Comissões Pendentes" value={formatCurrency(pendingPayments?.data.reduce((a, p) => a + p.amount, 0) ?? 0)} sub={`${pendingPayments?.data.length ?? 0} em aberto`} icon={Briefcase} loading={isLoading} color="text-purple-600" />
       </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Meta vs Realizado</CardTitle>
+            <span className="text-sm font-semibold text-primary">{goalPercent}%</span>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="w-full bg-muted rounded-full h-3 mb-1">
+            <div className="h-3 rounded-full bg-primary transition-all" style={{ width: `${goalPercent}%` }} />
+          </div>
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>Realizado: <span className="font-semibold text-foreground">{formatCurrency(monthRevenue)}</span></span>
+            <span>Meta: <span className="font-semibold text-foreground">{formatCurrency(monthGoal)}</span></span>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-7">
         <Card className="lg:col-span-4">
           <CardHeader>
             <CardTitle>Desempenho de Vendas</CardTitle>
-            <CardDescription>Receita dos últimos 12 meses</CardDescription>
+            <CardDescription>Receita dos últimos 6 meses</CardDescription>
           </CardHeader>
           <CardContent>
             {loadingChart ? <Skeleton className="h-[260px] w-full" /> : (
@@ -388,8 +412,8 @@ function SellerDashboard() {
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Meus Leads Recentes</CardTitle>
-              <Link href="/clients"><Button variant="ghost" size="sm">Ver todos</Button></Link>
+              <CardTitle className="text-base">Minhas Reservas</CardTitle>
+              <Link href="/reservations"><Button variant="ghost" size="sm">Ver todas</Button></Link>
             </div>
           </CardHeader>
           <CardContent>

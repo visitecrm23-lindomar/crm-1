@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { clientsTable, notesTable } from "@workspace/db";
-import { eq, and, ilike, or, sql, desc } from "drizzle-orm";
+import { clientsTable, notesTable, reservationsTable } from "@workspace/db";
+import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import {
@@ -50,7 +50,7 @@ router.get("/clients", async (req, res): Promise<void> => {
 
     const {
       search, status, pipelineStage, classification,
-      city, dateFrom, dateTo, sortBy = "createdAt", sortOrder = "desc",
+      city, tripId, sellerId, dateFrom, dateTo, sortBy = "createdAt", sortOrder = "desc",
       page = "1", limit = "20",
     } = req.query as Record<string, string>;
     const pageNum = parseInt(page) || 1;
@@ -71,6 +71,14 @@ router.get("/clients", async (req, res): Promise<void> => {
     if (city) conditions.push(ilike(clientsTable.addressCity, `%${city}%`) as ReturnType<typeof eq>);
     if (dateFrom) conditions.push(sql`${clientsTable.createdAt} >= ${new Date(dateFrom)}` as ReturnType<typeof eq>);
     if (dateTo) conditions.push(sql`${clientsTable.createdAt} <= ${new Date(dateTo)}` as ReturnType<typeof eq>);
+    if (sellerId) conditions.push(eq(clientsTable.createdById, sellerId));
+    if (tripId) {
+      const clientIdsInTrip = await db.selectDistinct({ clientId: reservationsTable.clientId })
+        .from(reservationsTable)
+        .where(and(eq(reservationsTable.tripId, tripId), eq(reservationsTable.tenantId, me.tenantId)));
+      const ids = clientIdsInTrip.map(r => r.clientId);
+      conditions.push(ids.length > 0 ? inArray(clientsTable.id, ids) : sql`false` as ReturnType<typeof eq>);
+    }
 
     const orderCol = sortBy === "name" ? clientsTable.name
       : sortBy === "totalSpent" ? clientsTable.totalSpent

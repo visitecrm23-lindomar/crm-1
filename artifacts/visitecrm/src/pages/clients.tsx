@@ -81,7 +81,7 @@ interface ClientModalProps {
   open: boolean;
   onClose: () => void;
   editClient?: Client | null;
-  onSave: () => void;
+  onSave: (createReservation?: boolean, savedClientId?: string) => void;
 }
 
 function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
@@ -102,7 +102,7 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
   const isPending = createClient.isPending || updateClient.isPending;
   const set = (key: keyof ClientFormData) => (val: string) => setForm(prev => ({ ...prev, [key]: val }));
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (withReservation = false) => {
     const base = {
       name: form.name, email: form.email, whatsapp: form.whatsapp,
       phone: form.phone || undefined, cpf: form.cpf || undefined,
@@ -114,16 +114,19 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
       dreamDestinations: form.dreamDestinations ? form.dreamDestinations.split(",").map(t => t.trim()).filter(Boolean) : [],
     };
 
+    let savedId: string | undefined;
     if (isEditing && editClient) {
       await updateClient.mutateAsync({
         id: editClient.id,
         data: { ...base, pipelineStage: form.pipelineStage || undefined, classification: form.classification || undefined,
           npsScore: form.npsScore ? parseFloat(form.npsScore) : undefined, status: form.status || undefined },
       });
+      savedId = editClient.id;
     } else {
-      await createClient.mutateAsync({ data: base });
+      const result = await createClient.mutateAsync({ data: base });
+      savedId = result.id;
     }
-    onSave();
+    onSave(withReservation, savedId);
     onClose();
   };
 
@@ -253,17 +256,40 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
           </TabsContent>
 
           <TabsContent value="observations" className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <Label>NPS (0–10)</Label>
-              <Input type="number" min="0" max="10" step="1" placeholder="Ex: 9" value={form.npsScore} onChange={e => set("npsScore")(e.target.value)} />
-              {form.npsScore && (
-                <div className="flex items-center gap-2">
-                  <div className="flex">
-                    {Array.from({ length: 10 }).map((_, i) => (
-                      <Star key={i} className={`w-4 h-4 ${i < parseInt(form.npsScore) ? "text-yellow-400 fill-yellow-400" : "text-gray-200 fill-gray-200"}`} />
-                    ))}
-                  </div>
-                  <span className="text-sm text-muted-foreground">{form.npsScore}/10</span>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>NPS — Nota de 0 a 10</Label>
+                {form.npsScore !== "" && (
+                  <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${
+                    parseInt(form.npsScore) >= 9 ? "bg-green-100 text-green-700" :
+                    parseInt(form.npsScore) >= 7 ? "bg-yellow-100 text-yellow-700" :
+                    "bg-red-100 text-red-700"
+                  }`}>{form.npsScore}/10</span>
+                )}
+              </div>
+              <input
+                type="range" min="0" max="10" step="1"
+                value={form.npsScore !== "" ? parseInt(form.npsScore) : 0}
+                onChange={e => set("npsScore")(e.target.value)}
+                className="w-full accent-primary cursor-pointer"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>0 — Detrator</span><span>6 — Neutro</span><span>10 — Promotor</span>
+              </div>
+              {form.npsScore !== "" && (
+                <div className="flex gap-1 mt-1">
+                  {Array.from({ length: 10 }).map((_, i) => (
+                    <button
+                      type="button"
+                      key={i}
+                      onClick={() => set("npsScore")(String(i + 1))}
+                      className={`flex-1 h-7 rounded text-xs font-bold transition-all ${
+                        i + 1 <= parseInt(form.npsScore)
+                          ? parseInt(form.npsScore) >= 9 ? "bg-green-500 text-white" : parseInt(form.npsScore) >= 7 ? "bg-yellow-400 text-white" : "bg-red-400 text-white"
+                          : "bg-muted text-muted-foreground hover:bg-muted-foreground/20"
+                      }`}
+                    >{i + 1}</button>
+                  ))}
                 </div>
               )}
             </div>
@@ -286,9 +312,14 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
           </TabsContent>
         </Tabs>
 
-        <div className="flex justify-end gap-2 pt-4 border-t mt-2">
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={handleSubmit} disabled={isPending || !form.name || !form.email || !form.whatsapp}>
+        <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t mt-2">
+          <Button variant="outline" onClick={onClose} className="sm:order-1">Cancelar</Button>
+          {!isEditing && (
+            <Button variant="secondary" onClick={() => handleSubmit(true)} disabled={isPending || !form.name || !form.email || !form.whatsapp} className="sm:order-2">
+              {isPending ? "Salvando..." : "Salvar e Criar Reserva"}
+            </Button>
+          )}
+          <Button onClick={() => handleSubmit(false)} disabled={isPending || !form.name || !form.email || !form.whatsapp} className="sm:order-3">
             {isPending ? "Salvando..." : isEditing ? "Salvar Alterações" : "Criar Cliente"}
           </Button>
         </div>
@@ -724,7 +755,17 @@ export default function Clients() {
         </div>
       )}
 
-      <ClientModal open={isCreateOpen} onClose={() => { setIsCreateOpen(false); setEditClient(null); }} editClient={editClient} onSave={() => refetch()} />
+      <ClientModal
+        open={isCreateOpen}
+        onClose={() => { setIsCreateOpen(false); setEditClient(null); }}
+        editClient={editClient}
+        onSave={(withReservation, savedClientId) => {
+          refetch();
+          if (withReservation && savedClientId) {
+            window.location.href = `/visitecrm/reservations?clientId=${savedClientId}&new=true`;
+          }
+        }}
+      />
       {viewClient && <Client360Modal open={!!viewClient} onClose={() => setViewClient(null)} client={viewClient} />}
     </div>
   );

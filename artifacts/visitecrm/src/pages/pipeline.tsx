@@ -66,15 +66,18 @@ interface DealCardContentProps {
 }
 
 function DealCardContent({ deal, isDragging, onEdit, onDelete }: DealCardContentProps) {
+  const clientName = deal.clientName ?? deal.leadName;
+  const whatsapp = deal.leadWhatsapp;
+
   return (
     <div className={`bg-card rounded-lg border p-3 shadow-sm group relative select-none ${isDragging ? "opacity-50" : "hover:shadow-md"} transition-all`}>
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex-1 min-w-0">
           <p className="font-medium text-sm leading-tight truncate">{deal.title}</p>
-          {(deal.leadName ?? deal.clientName) && (
+          {clientName && (
             <div className="flex items-center gap-1 mt-1">
               <User className="w-3 h-3 text-muted-foreground shrink-0" />
-              <p className="text-xs text-muted-foreground truncate">{deal.leadName ?? deal.clientName}</p>
+              <p className="text-xs text-muted-foreground truncate">{clientName}</p>
             </div>
           )}
         </div>
@@ -88,10 +91,10 @@ function DealCardContent({ deal, isDragging, onEdit, onDelete }: DealCardContent
         </div>
       </div>
 
-      {deal.leadWhatsapp && (
+      {whatsapp && (
         <div className="flex items-center gap-1 mb-1">
           <Phone className="w-3 h-3 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">{deal.leadWhatsapp}</span>
+          <span className="text-xs text-muted-foreground">{whatsapp}</span>
         </div>
       )}
 
@@ -104,10 +107,18 @@ function DealCardContent({ deal, isDragging, onEdit, onDelete }: DealCardContent
         </div>
       )}
 
+      {deal.tripId && (
+        <div className="mb-1">
+          <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">Viagem vinculada</span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between pt-2 border-t">
         <span className="text-sm font-bold text-primary">{formatCurrency(deal.value)}</span>
-        {deal.status === "won" && <Badge className="text-xs bg-green-100 text-green-700 border-0">Ganho</Badge>}
-        {deal.status === "lost" && <Badge variant="destructive" className="text-xs">Perdido</Badge>}
+        <div className="flex gap-1 items-center">
+          {deal.status === "won" && <Badge className="text-xs bg-green-100 text-green-700 border-0 h-5">Ganho</Badge>}
+          {deal.status === "lost" && <Badge variant="destructive" className="text-xs h-5">Perdido</Badge>}
+        </div>
       </div>
     </div>
   );
