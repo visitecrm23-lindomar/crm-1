@@ -299,10 +299,12 @@ export function TripList() {
               </div>
               <Badge className={STATUS_MAP[trip.status]?.color}>{STATUS_MAP[trip.status]?.label ?? trip.status}</Badge>
               <div className="flex gap-1">
-                <Link href={`/trips/${trip.id}/passengers-overview`}><Button size="icon" variant="ghost" className="h-8 w-8"><Eye className="w-4 h-4" /></Button></Link>
-                <Link href={`/trips/${trip.id}/edit`}><Button size="icon" variant="ghost" className="h-8 w-8"><Edit className="w-4 h-4" /></Button></Link>
+                <Link href={`/trips/${trip.id}/passengers-overview`}><Button size="icon" variant="ghost" className="h-8 w-8" title="Visão Geral"><Eye className="w-4 h-4" /></Button></Link>
+                <Link href={`/trips/${trip.id}/passengers`}><Button size="icon" variant="ghost" className="h-8 w-8" title="Passageiros"><Users className="w-4 h-4" /></Button></Link>
+                <Link href={`/trips/${trip.id}/seat-map`}><Button size="icon" variant="ghost" className="h-8 w-8" title="Mapa de Assentos"><Bus className="w-4 h-4" /></Button></Link>
+                <Link href={`/trips/${trip.id}/edit`}><Button size="icon" variant="ghost" className="h-8 w-8" title="Editar"><Edit className="w-4 h-4" /></Button></Link>
                 <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleDuplicate(trip)} title="Duplicar"><Copy className="w-4 h-4" /></Button>
-                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => setDeletingId(trip.id)}><Trash2 className="w-4 h-4" /></Button>
+                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => setDeletingId(trip.id)} title="Excluir"><Trash2 className="w-4 h-4" /></Button>
               </div>
             </div>
           ))}
@@ -358,20 +360,23 @@ function TripCard({ trip, onDelete, onDuplicate, navigate }: { trip: Trip; onDel
           <span className="font-semibold text-primary">{formatCurrency(trip.priceAdult)}<span className="text-xs text-muted-foreground font-normal">/pessoa</span></span>
           <span className="text-muted-foreground text-xs">{pct}% ocupado</span>
         </div>
-        <div className="flex gap-1 pt-1">
-          <Link href={`/trips/${trip.id}/passengers-overview`} className="flex-1">
-            <Button variant="outline" size="sm" className="w-full text-xs"><Eye className="w-3 h-3 mr-1" />Visão Geral</Button>
+        <div className="flex gap-1 pt-1 flex-wrap">
+          <Link href={`/trips/${trip.id}/passengers-overview`}>
+            <Button variant="outline" size="sm" className="text-xs"><Eye className="w-3 h-3 mr-1" />Visão Geral</Button>
+          </Link>
+          <Link href={`/trips/${trip.id}/passengers`}>
+            <Button variant="outline" size="sm" className="text-xs"><Users className="w-3 h-3 mr-1" />Passageiros</Button>
           </Link>
           <Link href={`/trips/${trip.id}/seat-map`}>
             <Button variant="outline" size="sm" className="text-xs"><Bus className="w-3 h-3 mr-1" />Mapa</Button>
           </Link>
           <Link href={`/trips/${trip.id}/edit`}>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground"><Edit className="w-4 h-4" /></Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" title="Editar"><Edit className="w-4 h-4" /></Button>
           </Link>
           <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={onDuplicate} title="Duplicar">
             <Copy className="w-4 h-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={onDelete}><Trash2 className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={onDelete} title="Excluir"><Trash2 className="w-4 h-4" /></Button>
         </div>
       </div>
     </div>
@@ -1192,8 +1197,8 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
     const amountPending = totalRevenue - amountReceived;
     const capacity = trip?.totalCapacity ?? 0;
     const occupancy = capacity > 0 ? Math.round(confirmed.length / capacity * 100) : 0;
-    const avgTicket = confirmed.length > 0 ? totalRevenue / confirmed.length : 0;
-    return { confirmed: confirmed.length, pending: pending.length, totalRevenue, amountReceived, amountPending, occupancy, avgTicket };
+    const estimatedProfit = amountReceived - (trip?.priceAdult ? trip.priceAdult * 0.6 * confirmed.length : 0);
+    return { confirmed: confirmed.length, pending: pending.length, totalRevenue, amountReceived, amountPending, occupancy, estimatedProfit };
   }, [reservations, trip]);
 
   const paymentMethodCounts = useMemo(() => {
@@ -1271,7 +1276,7 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
           { label: "Receita Total", value: formatCurrency(stats.totalRevenue), sub: "valor das reservas", color: "text-blue-600" },
           { label: "A Receber", value: formatCurrency(stats.amountPending), sub: "saldo em aberto", color: "text-red-600" },
           { label: "Ocupação do Ônibus", value: `${stats.occupancy}%`, sub: "taxa de ocupação", color: "text-purple-600" },
-          { label: "Ticket Médio", value: formatCurrency(stats.avgTicket), sub: "por passageiro", color: "text-indigo-600" },
+          { label: "Lucro Estimado", value: formatCurrency(stats.estimatedProfit), sub: "receita recebida — custo estimado (60%)", color: "text-indigo-600" },
         ].map(s => (
           <div key={s.label} className="bg-card border rounded-lg p-4">
             <p className="text-xs text-muted-foreground mb-1">{s.label}</p>
@@ -1419,23 +1424,37 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
       </div>
 
       <div className="bg-card border rounded-xl p-6 space-y-4">
-        <h3 className="font-semibold">Indicadores de Origem dos Clientes</h3>
-        <div className="space-y-2">
-          {["Indicação", "Site/Online", "WhatsApp", "Redes Sociais", "Outros"].map((origem, i) => {
-            const total = (reservations?.data ?? []).length;
-            const fakeCount = total > 0 ? Math.max(1, Math.floor(total * [0.35, 0.25, 0.2, 0.15, 0.05][i])) : 0;
-            const pct = total > 0 ? Math.round(fakeCount / total * 100) : 0;
-            const colors = ["bg-blue-500", "bg-green-500", "bg-yellow-500", "bg-purple-500", "bg-gray-400"];
-            return (
-              <div key={origem} className="space-y-1">
-                <div className="flex justify-between text-sm"><span>{origem}</span><span className="font-medium">{fakeCount} ({pct}%)</span></div>
-                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full ${colors[i]}`} style={{ width: `${pct}%` }} />
-                </div>
-              </div>
-            );
-          })}
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold">Origem dos Clientes</h3>
+          <span className="text-xs text-muted-foreground">Campo origem disponível ao cadastrar o cliente</span>
         </div>
+        {(reservations?.data ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">Sem reservas para exibir dados de origem</p>
+        ) : (
+          <div className="space-y-2">
+            {(() => {
+              const origins: Record<string, number> = {};
+              (reservations?.data ?? []).forEach(r => {
+                const src = (r.client as Record<string, unknown>).referralSource as string | undefined;
+                const key = src ?? "Não informado";
+                origins[key] = (origins[key] ?? 0) + 1;
+              });
+              const total = (reservations?.data ?? []).length;
+              const colors = ["bg-blue-500", "bg-green-500", "bg-yellow-500", "bg-purple-500", "bg-gray-400"];
+              return Object.entries(origins).slice(0, 5).map(([key, count], i) => {
+                const pct = Math.round(count / total * 100);
+                return (
+                  <div key={key} className="space-y-1">
+                    <div className="flex justify-between text-sm"><span>{key}</span><span className="font-medium">{count} ({pct}%)</span></div>
+                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${colors[i % colors.length]}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        )}
       </div>
 
       <div className="bg-card border rounded-xl p-5 space-y-3">
