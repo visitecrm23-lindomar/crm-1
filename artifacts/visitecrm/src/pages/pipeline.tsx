@@ -51,6 +51,7 @@ interface ClientFormData {
   instagram: string; observations: string; tags: string; dreamDestinations: string;
   pipelineStage: string; classification: string; npsScore: string; status: string;
   stageId: string; tripInterestId: string;
+  dealValue: string; dealPaymentMethod: string; dealInstallments: string; dealCommission: string;
 }
 
 const EMPTY_CLIENT: ClientFormData = {
@@ -58,6 +59,7 @@ const EMPTY_CLIENT: ClientFormData = {
   addressCity: "", addressState: "", instagram: "", observations: "", tags: "",
   dreamDestinations: "", pipelineStage: "", classification: "lead", npsScore: "", status: "active",
   stageId: "", tripInterestId: "none",
+  dealValue: "", dealPaymentMethod: "none", dealInstallments: "1", dealCommission: "",
 };
 
 function clientToForm(c: Client, defaultStageId = ""): ClientFormData {
@@ -70,6 +72,7 @@ function clientToForm(c: Client, defaultStageId = ""): ClientFormData {
     pipelineStage: c.pipelineStage ?? "", classification: c.classification ?? "lead",
     npsScore: c.npsScore != null ? String(c.npsScore) : "", status: c.status ?? "active",
     stageId: defaultStageId, tripInterestId: "none",
+    dealValue: "", dealPaymentMethod: "none", dealInstallments: "1", dealCommission: "",
   };
 }
 
@@ -144,7 +147,7 @@ function ClientPipelineModal({ open, onClose, editClient, defaultStageId = "", s
           data: {
             stageId: form.stageId,
             title: `${form.name} — Lead`,
-            value: 0,
+            value: form.dealValue ? parseFloat(form.dealValue) : 0,
             clientId: savedClientId,
             leadName: form.name,
             leadWhatsapp: form.whatsapp || undefined,
@@ -275,7 +278,73 @@ function ClientPipelineModal({ open, onClose, editClient, defaultStageId = "", s
 
           <TabsContent value="financial" className="space-y-4 mt-4">
             <div className="space-y-2">
-              <Label>Classificação</Label>
+              <Label>Valor do Negócio (R$)</Label>
+              <Input
+                type="number" min="0" step="0.01"
+                placeholder="5000.00"
+                value={form.dealValue}
+                onChange={e => set("dealValue")(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">Valor estimado desta oportunidade de venda</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Forma de Pagamento</Label>
+                <Select value={form.dealPaymentMethod} onValueChange={set("dealPaymentMethod")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não definido</SelectItem>
+                    <SelectItem value="pix">PIX</SelectItem>
+                    <SelectItem value="credit_card">Cartão de Crédito</SelectItem>
+                    <SelectItem value="debit_card">Cartão de Débito</SelectItem>
+                    <SelectItem value="cash">Dinheiro</SelectItem>
+                    <SelectItem value="bank_transfer">Transferência</SelectItem>
+                    <SelectItem value="boleto">Boleto</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Parcelas</Label>
+                <Select value={form.dealInstallments} onValueChange={set("dealInstallments")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 12 }, (_, i) => (
+                      <SelectItem key={i + 1} value={String(i + 1)}>{i + 1}x</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Comissão do Vendedor (%)</Label>
+              <Input
+                type="number" min="0" max="100" step="0.5"
+                placeholder="5.0"
+                value={form.dealCommission}
+                onChange={e => set("dealCommission")(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                {form.dealValue && form.dealCommission
+                  ? `Comissão: ${formatCurrency((parseFloat(form.dealValue) * parseFloat(form.dealCommission)) / 100)}`
+                  : "Percentual de comissão sobre o valor do negócio"}
+              </p>
+            </div>
+            {isEditing && editClient && (
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Total Gasto pelo Cliente</p>
+                  <p className="text-lg font-bold">{formatCurrency(editClient.totalSpent)}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Saldo Devedor</p>
+                  <p className={`text-lg font-bold ${editClient.outstandingBalance > 0 ? "text-destructive" : "text-green-600"}`}>
+                    {formatCurrency(editClient.outstandingBalance)}
+                  </p>
+                </div>
+              </div>
+            )}
+            <div className="pt-3 border-t space-y-2">
+              <Label>Classificação do Cliente</Label>
               <Select value={form.classification} onValueChange={set("classification")}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -283,29 +352,6 @@ function ClientPipelineModal({ open, onClose, editClient, defaultStageId = "", s
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={form.status} onValueChange={set("status")}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(STATUS_LABELS).map(([v, { label }]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            {isEditing && editClient && (
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Gasto</p>
-                  <p className="text-lg font-bold">{formatCurrency(editClient.totalSpent)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Saldo Devedor</p>
-                  <p className={`text-lg font-bold ${editClient.outstandingBalance > 0 ? "text-destructive" : "text-green-600"}`}>
-                    {formatCurrency(editClient.outstandingBalance)}
-                  </p>
-                </div>
-              </div>
-            )}
           </TabsContent>
 
           <TabsContent value="observations" className="space-y-4 mt-4">
@@ -397,20 +443,22 @@ function ClientPipelineModal({ open, onClose, editClient, defaultStageId = "", s
 interface ClientCardProps {
   deal: Deal;
   clientsById: Map<string, Client>;
+  tripsById: Map<string, string>;
   onEdit: (d: Deal, client?: Client) => void;
   onDelete: (id: string) => void;
   isDragging?: boolean;
 }
 
-function ClientCardContent({ deal, clientsById, onEdit, onDelete, isDragging }: ClientCardProps) {
+function ClientCardContent({ deal, clientsById, tripsById, onEdit, onDelete, isDragging }: ClientCardProps) {
   const client = deal.clientId ? clientsById.get(deal.clientId) : undefined;
   const name = client?.name ?? deal.leadName ?? "Lead Desconhecido";
   const whatsapp = client?.whatsapp ?? deal.leadWhatsapp;
   const city = client?.addressCity;
   const state = client?.addressState;
-  const totalSpent = client?.totalSpent ?? 0;
+  const dealValue = deal.value ?? 0;
   const outstanding = client?.outstandingBalance ?? 0;
   const hasOutstanding = outstanding > 0;
+  const tripName = deal.tripId ? tripsById.get(deal.tripId) : undefined;
   const initials = name.charAt(0).toUpperCase();
 
   return (
@@ -454,16 +502,16 @@ function ClientCardContent({ deal, clientsById, onEdit, onDelete, isDragging }: 
         </div>
       )}
 
-      {deal.tripId && (
+      {tripName && (
         <div className="mb-1">
-          <span className="text-xs bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded">Viagem vinculada</span>
+          <span className="text-xs bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded truncate inline-block max-w-full">{tripName}</span>
         </div>
       )}
 
       <div className="flex items-center justify-between pt-2 border-t mt-1">
         <div>
-          <p className="text-xs text-muted-foreground">Gasto total</p>
-          <p className="text-sm font-bold text-primary">{formatCurrency(totalSpent)}</p>
+          <p className="text-xs text-muted-foreground">Valor do negócio</p>
+          <p className="text-sm font-bold text-primary">{formatCurrency(dealValue)}</p>
         </div>
         {hasOutstanding && (
           <Badge variant="destructive" className="text-xs">
@@ -475,11 +523,11 @@ function ClientCardContent({ deal, clientsById, onEdit, onDelete, isDragging }: 
   );
 }
 
-function DraggableCard({ deal, clientsById, onEdit, onDelete }: Omit<ClientCardProps, "isDragging">) {
+function DraggableCard({ deal, clientsById, tripsById, onEdit, onDelete }: Omit<ClientCardProps, "isDragging">) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: deal.id });
   return (
     <div ref={setNodeRef} {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing">
-      <ClientCardContent deal={deal} clientsById={clientsById} onEdit={onEdit} onDelete={onDelete} isDragging={isDragging} />
+      <ClientCardContent deal={deal} clientsById={clientsById} tripsById={tripsById} onEdit={onEdit} onDelete={onDelete} isDragging={isDragging} />
     </div>
   );
 }
@@ -509,6 +557,7 @@ export default function Pipeline() {
   const { data: stages, isLoading: loadingStages, refetch: refetchStages } = useListPipelineStages();
   const { data: deals, isLoading: loadingDeals, refetch: refetchDeals } = useListDeals({ status: "open" });
   const { data: allClients } = useListClients({ limit: 500, page: 1 });
+  const { data: tripsData } = useListTrips({ limit: 200 });
   const moveDeal = useMoveDeal();
   const deleteDeal = useDeleteDeal();
 
@@ -517,6 +566,12 @@ export default function Pipeline() {
     (allClients?.data ?? []).forEach(c => map.set(c.id, c));
     return map;
   }, [allClients]);
+
+  const tripsById = useMemo(() => {
+    const map = new Map<string, string>();
+    (tripsData?.data ?? []).forEach(t => map.set(t.id, t.name));
+    return map;
+  }, [tripsData]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -684,6 +739,7 @@ export default function Pipeline() {
                         key={deal.id}
                         deal={deal}
                         clientsById={clientsById}
+                        tripsById={tripsById}
                         onEdit={handleEdit}
                         onDelete={handleDelete}
                       />
@@ -708,6 +764,7 @@ export default function Pipeline() {
                 <ClientCardContent
                   deal={activeDragDeal}
                   clientsById={clientsById}
+                  tripsById={tripsById}
                   onEdit={() => {}}
                   onDelete={() => {}}
                 />

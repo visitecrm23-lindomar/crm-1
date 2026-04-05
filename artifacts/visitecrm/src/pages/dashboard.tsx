@@ -1,7 +1,7 @@
 import { useMemo, type ElementType } from "react";
 import {
   useGetDashboardSummary, useGetDashboardRevenueChart, useGetDashboardUpcomingTrips,
-  useListPayments, useListClients, useGetMe, useListPipelineStages, useListDeals
+  useListPayments, useListClients, useGetMe, useListPipelineStages, useListDeals, useListReservations,
 } from "@workspace/api-client-react";
 import { Users, Map, DollarSign, Star, Briefcase, CalendarCheck, AlertTriangle, ArrowUpRight, Plus, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -310,9 +310,8 @@ function SellerDashboard() {
     limit: 8, page: 1, classification: "lead", sortBy: "createdAt", sortOrder: "desc",
     sellerId: me?.id ?? undefined,
   });
-  const { data: myReservations, isLoading: loadingReservations } = useListClients({
-    limit: 8, page: 1, sortBy: "createdAt", sortOrder: "desc",
-    sellerId: me?.id ?? undefined,
+  const { data: myReservations, isLoading: loadingReservations } = useListReservations({
+    limit: 8, status: "confirmed",
   });
   const { data: stages } = useListPipelineStages();
   const { data: deals } = useListDeals({ status: "open", ownerId: me?.id ?? undefined });
@@ -454,29 +453,31 @@ function SellerDashboard() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Minhas Reservas</CardTitle>
-              <Link href="/clients"><Button variant="ghost" size="sm">Ver todas</Button></Link>
+              <Link href="/reservations"><Button variant="ghost" size="sm">Ver todas</Button></Link>
             </div>
           </CardHeader>
           <CardContent>
             {loadingReservations ? <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div> : (
               <div className="space-y-2">
-                {myReservations?.data.filter(c => c.totalSpent > 0).map(client => (
-                  <div key={client.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50">
+                {!myReservations?.data.length ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">Nenhuma reserva confirmada.</p>
+                ) : myReservations.data.map(r => (
+                  <div key={r.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 border">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
-                        {client.name.charAt(0).toUpperCase()}
+                        {r.client.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <p className="text-sm font-medium">{client.name}</p>
-                        <p className="text-xs text-muted-foreground">{client.pipelineStage ?? client.classification}</p>
+                        <p className="text-sm font-medium">{r.client.name}</p>
+                        <p className="text-xs text-muted-foreground truncate max-w-[140px]">{r.trip.name}</p>
                       </div>
                     </div>
-                    <span className="text-sm font-semibold">{formatCurrency(client.totalSpent)}</span>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold">{formatCurrency(r.totalValue)}</p>
+                      <Badge variant={r.status === "confirmed" ? "default" : "secondary"} className="text-xs">{r.status === "confirmed" ? "Confirmada" : r.status}</Badge>
+                    </div>
                   </div>
                 ))}
-                {!myReservations?.data.filter(c => c.totalSpent > 0).length && (
-                  <p className="text-sm text-muted-foreground text-center py-4">Nenhuma reserva.</p>
-                )}
               </div>
             )}
           </CardContent>

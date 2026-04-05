@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { reservationsTable, passengersTable, tripsTable, clientsTable } from "@workspace/db";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { generateId, generateVoucherCode } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { CreateReservationBody, UpdateReservationBody, CreatePassengerBody, UpdatePassengerBody } from "@workspace/api-zod";
@@ -71,8 +71,29 @@ router.get("/reservations", async (req, res): Promise<void> => {
 
     const conditions: ReturnType<typeof eq>[] = [eq(reservationsTable.tenantId, me.tenantId)];
     if (tripId) conditions.push(eq(reservationsTable.tripId, tripId));
-    if (clientId) conditions.push(eq(reservationsTable.clientId, clientId));
     if (status) conditions.push(eq(reservationsTable.status, status));
+
+    if (me.role === "vendedor") {
+      const sellerClients = await db.select({ id: clientsTable.id })
+        .from(clientsTable)
+        .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.createdById, me.id)));
+      if (!sellerClients.length && !clientId) {
+        res.json({ data: [], total: 0, page: pageNum, limit: limitNum });
+        return;
+      }
+      const sellerClientIds = sellerClients.map(c => c.id);
+      if (clientId) {
+        if (!sellerClientIds.includes(clientId)) {
+          res.json({ data: [], total: 0, page: pageNum, limit: limitNum });
+          return;
+        }
+        conditions.push(eq(reservationsTable.clientId, clientId));
+      } else {
+        conditions.push(inArray(reservationsTable.clientId, sellerClientIds));
+      }
+    } else if (clientId) {
+      conditions.push(eq(reservationsTable.clientId, clientId));
+    }
 
     const reservations = await db.select().from(reservationsTable)
       .where(and(...conditions))
