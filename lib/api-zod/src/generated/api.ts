@@ -136,6 +136,7 @@ export const ListClientsResponse = zod.object({
       createdAt: zod.string(),
       updatedAt: zod.string(),
       lastContactAt: zod.string().nullish(),
+      origin: zod.string().nullish(),
     }),
   ),
   total: zod.number(),
@@ -160,6 +161,7 @@ export const CreateClientBody = zod.object({
   observations: zod.string().nullish(),
   tags: zod.array(zod.string()).optional(),
   dreamDestinations: zod.array(zod.string()).optional(),
+  origin: zod.string().nullish(),
 });
 
 /**
@@ -195,6 +197,7 @@ export const GetClientResponse = zod.object({
   createdAt: zod.string(),
   updatedAt: zod.string(),
   lastContactAt: zod.string().nullish(),
+  origin: zod.string().nullish(),
 });
 
 /**
@@ -223,6 +226,7 @@ export const UpdateClientBody = zod.object({
   npsScore: zod.number().nullish(),
   pipelineStage: zod.string().nullish(),
   lastContactAt: zod.string().nullish(),
+  origin: zod.string().nullish(),
 });
 
 export const UpdateClientResponse = zod.object({
@@ -251,6 +255,7 @@ export const UpdateClientResponse = zod.object({
   createdAt: zod.string(),
   updatedAt: zod.string(),
   lastContactAt: zod.string().nullish(),
+  origin: zod.string().nullish(),
 });
 
 /**
@@ -301,6 +306,7 @@ export const UpdateClientPipelineStageResponse = zod.object({
   createdAt: zod.string(),
   updatedAt: zod.string(),
   lastContactAt: zod.string().nullish(),
+  origin: zod.string().nullish(),
 });
 
 /**

@@ -110,10 +110,13 @@ router.get("/deals", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const { stageId, clientId } = req.query as Record<string, string>;
+    const { stageId, clientId, ownerId, status } = req.query as Record<string, string>;
     const conditions: ReturnType<typeof eq>[] = [eq(dealsTable.tenantId, me.tenantId)];
     if (stageId) conditions.push(eq(dealsTable.stageId, stageId));
     if (clientId) conditions.push(eq(dealsTable.clientId, clientId));
+    if (ownerId) conditions.push(eq(dealsTable.ownerId, ownerId));
+    if (status) conditions.push(eq(dealsTable.status, status));
+    if (me.role === "vendedor") conditions.push(eq(dealsTable.ownerId, me.id));
     const deals = await db.select().from(dealsTable)
       .where(and(...conditions)).orderBy(desc(dealsTable.createdAt));
     res.json(deals.map(formatDeal));

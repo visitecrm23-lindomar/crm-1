@@ -98,6 +98,8 @@ export interface Client {
   updatedAt: string;
   /** @nullable */
   lastContactAt?: string | null;
+  /** @nullable */
+  origin?: string | null;
 }
 
 export interface ClientListResponse {
@@ -129,6 +131,8 @@ export interface CreateClientBody {
   observations?: string | null;
   tags?: string[];
   dreamDestinations?: string[];
+  /** @nullable */
+  origin?: string | null;
 }
 
 export interface UpdateClientBody {
@@ -168,6 +172,8 @@ export interface UpdateClientBody {
   pipelineStage?: string | null;
   /** @nullable */
   lastContactAt?: string | null;
+  /** @nullable */
+  origin?: string | null;
 }
 
 export interface Note {

@@ -3150,6 +3150,8 @@ components:
           type: string
         lastContactAt:
           type: ["string", "null"]
+        origin:
+          type: ["string", "null"]
       required:
         - id
         - name
@@ -3213,6 +3215,8 @@ components:
           type: array
           items:
             type: string
+        origin:
+          type: ["string", "null"]
       required: [name, email, whatsapp]
 
     UpdateClientBody:
@@ -3257,6 +3261,8 @@ components:
         pipelineStage:
           type: ["string", "null"]
         lastContactAt:
+          type: ["string", "null"]
+        origin:
           type: ["string", "null"]
 
     # ─── NOTE ──────────────────────────────────────────────────────

@@ -28,4 +28,6 @@ export interface CreateClientBody {
   observations?: string | null;
   tags?: string[];
   dreamDestinations?: string[];
+  /** @nullable */
+  origin?: string | null;
 }

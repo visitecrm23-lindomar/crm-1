@@ -43,4 +43,6 @@ export interface UpdateClientBody {
   pipelineStage?: string | null;
   /** @nullable */
   lastContactAt?: string | null;
+  /** @nullable */
+  origin?: string | null;
 }

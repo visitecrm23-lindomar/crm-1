@@ -40,6 +40,7 @@ function formatClient(c: typeof clientsTable.$inferSelect) {
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
     lastContactAt: c.lastContactAt?.toISOString() ?? null,
+    origin: c.origin ?? null,
   };
 }
 
@@ -131,6 +132,7 @@ router.post("/clients", async (req, res): Promise<void> => {
       observations: parsed.data.observations ?? null,
       tags: parsed.data.tags ?? [],
       dreamDestinations: parsed.data.dreamDestinations ?? [],
+      origin: parsed.data.origin ?? null,
       createdById: me.id,
     });
 
@@ -186,6 +188,7 @@ router.patch("/clients/:id", async (req, res): Promise<void> => {
     if (parsed.data.pipelineStage != null) updates.pipelineStage = parsed.data.pipelineStage;
     if (parsed.data.lastContactAt !== undefined) updates.lastContactAt = parsed.data.lastContactAt ? new Date(parsed.data.lastContactAt) : null;
     if (parsed.data.photoUrl !== undefined) updates.photoUrl = parsed.data.photoUrl ?? null;
+    if (parsed.data.origin !== undefined) updates.origin = parsed.data.origin ?? null;
 
     await db.update(clientsTable).set(updates)
       .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)));

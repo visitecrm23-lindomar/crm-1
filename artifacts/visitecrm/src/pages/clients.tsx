@@ -58,12 +58,14 @@ interface ClientFormData {
   birthDate: string; gender: string; addressCity: string; addressState: string;
   instagram: string; observations: string; tags: string; dreamDestinations: string;
   pipelineStage: string; classification: string; npsScore: string; status: string;
+  origin: string;
 }
 
 const EMPTY_CLIENT: ClientFormData = {
   name: "", email: "", whatsapp: "", phone: "", cpf: "", birthDate: "", gender: "none",
   addressCity: "", addressState: "", instagram: "", observations: "", tags: "",
   dreamDestinations: "", pipelineStage: "none", classification: "lead", npsScore: "", status: "active",
+  origin: "",
 };
 
 function clientToForm(c: Client): ClientFormData {
@@ -75,7 +77,46 @@ function clientToForm(c: Client): ClientFormData {
     tags: (c.tags ?? []).join(", "), dreamDestinations: (c.dreamDestinations ?? []).join(", "),
     pipelineStage: c.pipelineStage ?? "none", classification: c.classification ?? "lead",
     npsScore: c.npsScore != null ? String(c.npsScore) : "", status: c.status ?? "active",
+    origin: c.origin ?? "",
   };
+}
+
+function ClientPaymentsSection({ clientId }: { clientId: string }) {
+  const { data: payments, isLoading } = useListPayments({ clientId, limit: 10 });
+
+  if (isLoading) return <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>;
+
+  const items = payments?.data ?? [];
+
+  return (
+    <div className="space-y-2 pt-2 border-t">
+      <p className="text-sm font-medium text-muted-foreground">Pagamentos / Comissões</p>
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Nenhum pagamento registrado.</p>
+      ) : (
+        <div className="space-y-1 max-h-[220px] overflow-y-auto">
+          {items.map(p => (
+            <div key={p.id} className="flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-2">
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{p.description ?? p.category}</p>
+                <p className="text-xs text-muted-foreground">
+                  Vence {p.dueDate ? format(parseISO(p.dueDate), "dd/MM/yyyy", { locale: ptBR }) : "—"}
+                  {p.installmentNumber ? ` · Parcela ${p.installmentNumber}` : ""}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                  p.status === "paid" ? "bg-green-100 text-green-700" :
+                  p.status === "overdue" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"
+                }`}>{p.status === "paid" ? "Pago" : p.status === "overdue" ? "Vencido" : "Pendente"}</span>
+                <span className="text-sm font-semibold">{formatCurrency(p.amount)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface ClientModalProps {
@@ -114,6 +155,7 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
       observations: form.observations || undefined,
       tags: form.tags ? form.tags.split(",").map(t => t.trim()).filter(Boolean) : [],
       dreamDestinations: form.dreamDestinations ? form.dreamDestinations.split(",").map(t => t.trim()).filter(Boolean) : [],
+      origin: form.origin || undefined,
     };
 
     let savedId: string | undefined;
@@ -197,7 +239,11 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
                 <Label>Estado</Label>
                 <Input placeholder="MG" maxLength={2} value={form.addressState} onChange={e => set("addressState")(e.target.value.toUpperCase())} />
               </div>
-              <div className="col-span-2 space-y-2">
+              <div className="space-y-2">
+                <Label>Origem / Canal de Captação</Label>
+                <Input placeholder="Indicação, Instagram, Feira..." value={form.origin} onChange={e => set("origin")(e.target.value)} />
+              </div>
+              <div className="space-y-2">
                 <Label>Instagram</Label>
                 <Input placeholder="@mariaSilva" value={form.instagram} onChange={e => set("instagram")(e.target.value)} />
               </div>
@@ -228,37 +274,46 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
           </TabsContent>
 
           <TabsContent value="financial" className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <Label>Classificação</Label>
-              <Select value={form.classification} onValueChange={set("classification")}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(CLASSIFICATION_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={form.status} onValueChange={set("status")}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(STATUS_LABELS).map(([v, { label }]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Classificação</Label>
+                <Select value={form.classification} onValueChange={set("classification")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(CLASSIFICATION_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={form.status} onValueChange={set("status")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(STATUS_LABELS).map(([v, { label }]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             {isEditing && editClient && (
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Gasto</p>
-                  <p className="text-lg font-bold">{formatCurrency(editClient.totalSpent)}</p>
+              <>
+                <div className="grid grid-cols-3 gap-4 pt-4 border-t">
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <p className="text-xs text-muted-foreground mb-1">Total Gasto</p>
+                    <p className="text-lg font-bold">{formatCurrency(editClient.totalSpent)}</p>
+                  </div>
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <p className="text-xs text-muted-foreground mb-1">Saldo Devedor</p>
+                    <p className={`text-lg font-bold ${editClient.outstandingBalance > 0 ? "text-destructive" : "text-green-600"}`}>
+                      {formatCurrency(editClient.outstandingBalance)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <p className="text-xs text-muted-foreground mb-1">Pontos Fidelidade</p>
+                    <p className="text-lg font-bold">0 pts</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Saldo Devedor</p>
-                  <p className={`text-lg font-bold ${editClient.outstandingBalance > 0 ? "text-destructive" : "text-green-600"}`}>
-                    {formatCurrency(editClient.outstandingBalance)}
-                  </p>
-                </div>
-              </div>
+                <ClientPaymentsSection clientId={editClient.id} />
+              </>
             )}
           </TabsContent>
 
@@ -685,6 +740,7 @@ export default function Clients() {
                 <TableHead><SortableHeader label="Cliente" field="name" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></TableHead>
                 <TableHead>Contato</TableHead>
                 <TableHead>Localidade</TableHead>
+                <TableHead>Origem</TableHead>
                 <TableHead>Classificação</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead><SortableHeader label="Gasto Total" field="totalSpent" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></TableHead>
@@ -695,11 +751,11 @@ export default function Clients() {
             <TableBody>
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i}>{Array.from({ length: 8 }).map((__, j) => <TableCell key={j}><Skeleton className="h-8 w-full" /></TableCell>)}</TableRow>
+                  <TableRow key={i}>{Array.from({ length: 9 }).map((__, j) => <TableCell key={j}><Skeleton className="h-8 w-full" /></TableCell>)}</TableRow>
                 ))
               ) : (clientsData?.data ?? []).length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
                     {hasFilters ? "Nenhum cliente encontrado com os filtros aplicados." : "Nenhum cliente cadastrado."}
                   </TableCell>
                 </TableRow>
@@ -726,6 +782,11 @@ export default function Clients() {
                       <TableCell>
                         {client.addressCity ? (
                           <div className="flex items-center gap-1 text-sm"><MapPin className="w-3 h-3 text-muted-foreground" />{client.addressCity}{client.addressState ? `/${client.addressState}` : ""}</div>
+                        ) : <span className="text-muted-foreground text-sm">—</span>}
+                      </TableCell>
+                      <TableCell>
+                        {client.origin ? (
+                          <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5 truncate max-w-[100px] inline-block">{client.origin}</span>
                         ) : <span className="text-muted-foreground text-sm">—</span>}
                       </TableCell>
                       <TableCell>

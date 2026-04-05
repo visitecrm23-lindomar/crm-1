@@ -44,4 +44,6 @@ export interface Client {
   updatedAt: string;
   /** @nullable */
   lastContactAt?: string | null;
+  /** @nullable */
+  origin?: string | null;
 }

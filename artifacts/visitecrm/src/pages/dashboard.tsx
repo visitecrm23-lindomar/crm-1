@@ -51,6 +51,7 @@ function AgencyDashboard() {
   const { data: rawChartData, isLoading: loadingChart } = useGetDashboardRevenueChart({ period: "12m" });
   const chartData = rawChartData?.slice(-6);
   const { data: upcomingTrips, isLoading: loadingTrips } = useGetDashboardUpcomingTrips();
+  const { data: allClientsOrigin } = useListClients({ limit: 200, page: 1, sortBy: "createdAt", sortOrder: "desc" });
   const { data: recentClients, isLoading: loadingClients } = useListClients({ limit: 10, page: 1, sortBy: "createdAt", sortOrder: "desc" });
   const { data: pendingPayments, isLoading: loadingPayments } = useListPayments({ status: "pending", limit: 10 });
   const { data: stages, isLoading: loadingStages } = useListPipelineStages();
@@ -59,14 +60,14 @@ function AgencyDashboard() {
   const npsLabel = summary?.averageNps != null ? `${summary.averageNps.toFixed(1)} / 10` : "—";
 
   const clientOriginData = useMemo(() => {
-    const all = recentClients?.data ?? [];
+    const all = allClientsOrigin?.data ?? [];
     const groups: Record<string, number> = {};
     all.forEach(c => {
-      const origin = c.addressState ?? "Outros";
+      const origin = c.origin ?? c.addressState ?? "Outros";
       groups[origin] = (groups[origin] ?? 0) + 1;
     });
     return Object.entries(groups).map(([name, value]) => ({ name, value })).slice(0, 6);
-  }, [recentClients]);
+  }, [allClientsOrigin]);
 
   const miniPipelineStages = useMemo(() => {
     if (!stages || !deals) return [];
@@ -314,7 +315,7 @@ function SellerDashboard() {
     sellerId: me?.id ?? undefined,
   });
   const { data: stages } = useListPipelineStages();
-  const { data: deals } = useListDeals({ status: "open" });
+  const { data: deals } = useListDeals({ status: "open", ownerId: me?.id ?? undefined });
   const { data: pendingPayments, isLoading: loadingPayments } = useListPayments({ status: "pending", limit: 8 });
 
   const monthGoal = 50000;
