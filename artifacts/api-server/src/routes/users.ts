@@ -60,20 +60,21 @@ router.post("/users/me/sync", async (req, res): Promise<void> => {
     const [existing] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId)).limit(1);
 
     let tenantId: string;
-    const [tenant] = await db.select().from(tenantsTable).limit(1);
-    if (!tenant) {
+    if (existing) {
+      if (!existing.tenantId) { res.status(500).json({ error: "User has no tenant assigned" }); return; }
+      tenantId = existing.tenantId;
+    } else {
       tenantId = generateId();
+      const tenantSlug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + tenantId.slice(0, 4);
       await db.insert(tenantsTable).values({
         id: tenantId,
         name: name + "'s Agency",
-        slug: tenantId,
+        slug: tenantSlug,
         email,
         planId: "starter",
         status: "trial",
         limits: { users: 10, clients: 1000, trips: 50 },
       });
-    } else {
-      tenantId = tenant.id;
     }
 
     if (!existing) {

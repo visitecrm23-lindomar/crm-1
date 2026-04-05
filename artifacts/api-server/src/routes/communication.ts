@@ -4,37 +4,73 @@ import { messagesTable, messageTemplatesTable, automationsTable, clientsTable } 
 import { eq, and, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
-import {
-  SendMessageBody as CreateMessageBody, CreateMessageTemplateBody, UpdateMessageTemplateBody,
-  CreateAutomationBody, UpdateAutomationBody,
-} from "@workspace/api-zod";
+import { z } from "zod";
 
 const router = Router();
+
+const CreateMessageBody = z.object({
+  toClientId: z.string().optional(),
+  channel: z.string(),
+  content: z.string(),
+});
+
+const CreateMessageTemplateBody = z.object({
+  name: z.string(),
+  channel: z.string(),
+  category: z.string().optional(),
+  subject: z.string().optional(),
+  content: z.string(),
+  variables: z.array(z.string()).optional(),
+});
+
+const UpdateMessageTemplateBody = z.object({
+  name: z.string().optional(),
+  content: z.string().optional(),
+  subject: z.string().optional(),
+  variables: z.array(z.string()).optional(),
+});
+
+const CreateAutomationBody = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  triggerType: z.string(),
+  triggerConfig: z.record(z.unknown()).optional(),
+  conditions: z.unknown().optional(),
+  isActive: z.boolean().optional(),
+});
+
+const UpdateAutomationBody = z.object({
+  name: z.string().optional(),
+  isActive: z.boolean().optional(),
+  triggerConfig: z.record(z.unknown()).optional(),
+  conditions: z.unknown().optional(),
+});
 
 function formatMessage(m: typeof messagesTable.$inferSelect) {
   return {
     id: m.id, tenantId: m.tenantId, fromUserId: m.fromUserId, toClientId: m.toClientId,
-    channel: m.channel, direction: m.direction, content: m.content,
-    status: m.status, sentAt: m.sentAt?.toISOString() ?? null,
+    channel: m.channel, content: m.content, status: m.status,
+    sentAt: m.sentAt.toISOString(),
     deliveredAt: m.deliveredAt?.toISOString() ?? null, readAt: m.readAt?.toISOString() ?? null,
-    metadata: m.metadata, createdAt: m.createdAt.toISOString(),
+    metadata: m.metadata,
   };
 }
 
 function formatTemplate(t: typeof messageTemplatesTable.$inferSelect) {
   return {
     id: t.id, tenantId: t.tenantId, name: t.name, channel: t.channel,
-    category: t.category, subject: t.subject, body: t.body,
-    variables: t.variables ?? [], isActive: t.isActive,
+    category: t.category, subject: t.subject, content: t.content,
+    variables: t.variables ?? [],
     createdAt: t.createdAt.toISOString(), updatedAt: t.updatedAt.toISOString(),
   };
 }
 
 function formatAutomation(a: typeof automationsTable.$inferSelect) {
   return {
-    id: a.id, tenantId: a.tenantId, name: a.name, trigger: a.trigger,
-    conditions: a.conditions ?? {}, actions: a.actions ?? [],
-    isActive: a.isActive, executionCount: a.executionCount,
+    id: a.id, tenantId: a.tenantId, name: a.name, description: a.description,
+    triggerType: a.triggerType, triggerConfig: a.triggerConfig ?? {},
+    conditions: a.conditions ?? {}, isActive: a.isActive,
+    executionsCount: a.executionsCount,
     lastExecutedAt: a.lastExecutedAt?.toISOString() ?? null,
     createdAt: a.createdAt.toISOString(), updatedAt: a.updatedAt.toISOString(),
   };
@@ -48,7 +84,7 @@ router.get("/messages", async (req, res): Promise<void> => {
     const conditions: ReturnType<typeof eq>[] = [eq(messagesTable.tenantId, me.tenantId)];
     if (clientId) conditions.push(eq(messagesTable.toClientId, clientId));
     const messages = await db.select().from(messagesTable)
-      .where(and(...conditions)).orderBy(desc(messagesTable.createdAt));
+      .where(and(...conditions)).orderBy(desc(messagesTable.sentAt));
     res.json(messages.map(formatMessage));
   } catch (err) {
     req.log.error({ err }, "Error listing messages");
@@ -77,10 +113,8 @@ router.post("/messages", async (req, res): Promise<void> => {
       fromUserId: me.id,
       toClientId: parsed.data.toClientId ?? null,
       channel: parsed.data.channel,
-      direction: "outbound",
       content: parsed.data.content,
       status: "sent",
-      sentAt: new Date(),
     });
     const [message] = await db.select().from(messagesTable)
       .where(and(eq(messagesTable.id, id), eq(messagesTable.tenantId, me.tenantId)))
@@ -121,7 +155,7 @@ router.post("/message-templates", async (req, res): Promise<void> => {
       channel: parsed.data.channel,
       category: parsed.data.category ?? null,
       subject: parsed.data.subject ?? null,
-      body: parsed.data.body,
+      content: parsed.data.content,
       variables: parsed.data.variables ?? [],
     });
     const [template] = await db.select().from(messageTemplatesTable)
@@ -143,9 +177,8 @@ router.patch("/message-templates/:id", async (req, res): Promise<void> => {
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const updates: Partial<typeof messageTemplatesTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
-    if (parsed.data.body != null) updates.body = parsed.data.body;
+    if (parsed.data.content != null) updates.content = parsed.data.content;
     if (parsed.data.subject !== undefined) updates.subject = parsed.data.subject ?? null;
-    if (parsed.data.isActive != null) updates.isActive = parsed.data.isActive;
     if (parsed.data.variables != null) updates.variables = parsed.data.variables;
     await db.update(messageTemplatesTable).set(updates)
       .where(and(eq(messageTemplatesTable.id, req.params.id), eq(messageTemplatesTable.tenantId, me.tenantId)));
@@ -198,9 +231,10 @@ router.post("/automations", async (req, res): Promise<void> => {
       id,
       tenantId: me.tenantId,
       name: parsed.data.name,
-      trigger: parsed.data.trigger,
-      conditions: parsed.data.conditions ?? {},
-      actions: parsed.data.actions ?? [],
+      description: parsed.data.description ?? null,
+      triggerType: parsed.data.triggerType,
+      triggerConfig: parsed.data.triggerConfig ?? {},
+      conditions: parsed.data.conditions ?? null,
       isActive: parsed.data.isActive ?? true,
     });
     const [automation] = await db.select().from(automationsTable)
@@ -223,8 +257,8 @@ router.patch("/automations/:id", async (req, res): Promise<void> => {
     const updates: Partial<typeof automationsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.isActive != null) updates.isActive = parsed.data.isActive;
-    if (parsed.data.conditions != null) updates.conditions = parsed.data.conditions;
-    if (parsed.data.actions != null) updates.actions = parsed.data.actions;
+    if (parsed.data.triggerConfig != null) updates.triggerConfig = parsed.data.triggerConfig;
+    if (parsed.data.conditions !== undefined) updates.conditions = parsed.data.conditions ?? null;
     await db.update(automationsTable).set(updates)
       .where(and(eq(automationsTable.id, req.params.id), eq(automationsTable.tenantId, me.tenantId)));
     const [automation] = await db.select().from(automationsTable)

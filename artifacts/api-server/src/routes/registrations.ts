@@ -4,32 +4,113 @@ import { suppliersTable, vehiclesTable, accommodationsTable, destinationsTable }
 import { eq, and, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
-import {
-  CreateSupplierBody, UpdateSupplierBody,
-  CreateVehicleBody, UpdateVehicleBody,
-  CreateAccommodationBody, UpdateAccommodationBody,
-  CreateDestinationBody, UpdateDestinationBody,
-} from "@workspace/api-zod";
+import { z } from "zod";
 
 const router = Router();
+
+const CreateSupplierBody = z.object({
+  name: z.string(),
+  type: z.string(),
+  cnpj: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().optional(),
+  whatsapp: z.string().optional(),
+  contactName: z.string().optional(),
+  addressStreet: z.string().optional(),
+  addressCity: z.string().optional(),
+  addressState: z.string().optional(),
+  bankName: z.string().optional(),
+  bankAgency: z.string().optional(),
+  bankAccount: z.string().optional(),
+  pixKey: z.string().optional(),
+});
+
+const UpdateSupplierBody = z.object({
+  name: z.string().optional(),
+  type: z.string().optional(),
+  email: z.string().optional().nullable(),
+  phone: z.string().optional().nullable(),
+  status: z.string().optional(),
+  pixKey: z.string().optional().nullable(),
+});
+
+const CreateVehicleBody = z.object({
+  name: z.string(),
+  type: z.string(),
+  plate: z.string(),
+  capacity: z.number().int(),
+  model: z.string().optional(),
+  year: z.number().optional(),
+  amenities: z.array(z.string()).optional(),
+  dailyRate: z.number().optional(),
+  ratePerKm: z.number().optional(),
+});
+
+const UpdateVehicleBody = z.object({
+  status: z.string().optional(),
+  name: z.string().optional(),
+  amenities: z.array(z.string()).optional(),
+});
+
+const CreateAccommodationBody = z.object({
+  name: z.string(),
+  type: z.string(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  contactName: z.string().optional(),
+  phone: z.string().optional(),
+  email: z.string().optional(),
+  totalRooms: z.number().optional(),
+  amenities: z.array(z.string()).optional(),
+  pricePerNight: z.number().optional(),
+});
+
+const UpdateAccommodationBody = z.object({
+  name: z.string().optional(),
+  pricePerNight: z.number().optional(),
+  status: z.string().optional(),
+  amenities: z.array(z.string()).optional(),
+});
+
+const CreateDestinationBody = z.object({
+  name: z.string(),
+  city: z.string(),
+  state: z.string(),
+  country: z.string().optional(),
+  description: z.string().optional(),
+  mainAttractions: z.array(z.string()).optional(),
+  bestSeason: z.string().optional(),
+  coverImage: z.string().optional(),
+});
+
+const UpdateDestinationBody = z.object({
+  name: z.string().optional(),
+  description: z.string().optional().nullable(),
+  mainAttractions: z.array(z.string()).optional(),
+  gallery: z.array(z.string()).optional(),
+});
 
 function formatSupplier(s: typeof suppliersTable.$inferSelect) {
   return {
     id: s.id, tenantId: s.tenantId, name: s.name, type: s.type,
     cnpj: s.cnpj, email: s.email, phone: s.phone, whatsapp: s.whatsapp,
-    contactName: s.contactName, address: s.address,
-    bankDetails: s.bankDetails ?? {}, isActive: s.isActive, notes: s.notes,
+    contactName: s.contactName, addressStreet: s.addressStreet,
+    addressCity: s.addressCity, addressState: s.addressState,
+    bankName: s.bankName, bankAgency: s.bankAgency, bankAccount: s.bankAccount,
+    pixKey: s.pixKey, status: s.status,
     createdAt: s.createdAt.toISOString(), updatedAt: s.updatedAt.toISOString(),
   };
 }
 
 function formatVehicle(v: typeof vehiclesTable.$inferSelect) {
   return {
-    id: v.id, tenantId: v.tenantId, type: v.type, model: v.model,
-    licensePlate: v.licensePlate, capacity: v.capacity, year: v.year,
-    color: v.color, supplierId: v.supplierId, driverName: v.driverName,
-    driverPhone: v.driverPhone, status: v.status, notes: v.notes,
-    features: v.features ?? [], amenities: v.amenities ?? [],
+    id: v.id, tenantId: v.tenantId, name: v.name, type: v.type,
+    plate: v.plate, capacity: v.capacity, model: v.model, year: v.year,
+    amenities: v.amenities ?? [],
+    dailyRate: v.dailyRate ? Number(v.dailyRate) : null,
+    ratePerKm: v.ratePerKm ? Number(v.ratePerKm) : null,
+    photoUrl: v.photoUrl, status: v.status,
     createdAt: v.createdAt.toISOString(), updatedAt: v.updatedAt.toISOString(),
   };
 }
@@ -38,12 +119,12 @@ function formatAccommodation(a: typeof accommodationsTable.$inferSelect) {
   return {
     id: a.id, tenantId: a.tenantId, name: a.name, type: a.type,
     address: a.address, city: a.city, state: a.state,
-    stars: a.stars, totalRooms: a.totalRooms,
-    pricePerNight: Number(a.pricePerNight),
-    checkInTime: a.checkInTime, checkOutTime: a.checkOutTime,
+    totalRooms: a.totalRooms,
+    pricePerNight: a.pricePerNight ? Number(a.pricePerNight) : null,
     amenities: a.amenities ?? [], contactName: a.contactName,
-    contactPhone: a.contactPhone, email: a.email, website: a.website,
-    isActive: a.isActive, notes: a.notes,
+    phone: a.phone, email: a.email, status: a.status,
+    rating: a.rating ? Number(a.rating) : null,
+    coverImage: a.coverImage,
     createdAt: a.createdAt.toISOString(), updatedAt: a.updatedAt.toISOString(),
   };
 }
@@ -52,8 +133,10 @@ function formatDestination(d: typeof destinationsTable.$inferSelect) {
   return {
     id: d.id, tenantId: d.tenantId, name: d.name, country: d.country,
     state: d.state, city: d.city, description: d.description,
-    highlights: d.highlights ?? [], images: d.images ?? [],
-    isActive: d.isActive,
+    mainAttractions: d.mainAttractions ?? [],
+    bestSeason: d.bestSeason, coverImage: d.coverImage,
+    gallery: d.gallery ?? [],
+    rating: d.rating ? Number(d.rating) : null,
     createdAt: d.createdAt.toISOString(), updatedAt: d.updatedAt.toISOString(),
   };
 }
@@ -85,10 +168,13 @@ router.post("/suppliers", async (req, res): Promise<void> => {
       cnpj: parsed.data.cnpj ?? null, email: parsed.data.email ?? null,
       phone: parsed.data.phone ?? null, whatsapp: parsed.data.whatsapp ?? null,
       contactName: parsed.data.contactName ?? null,
-      address: parsed.data.address ?? null,
-      bankDetails: parsed.data.bankDetails ?? {},
-      notes: parsed.data.notes ?? null,
-      createdById: me.id,
+      addressStreet: parsed.data.addressStreet ?? null,
+      addressCity: parsed.data.addressCity ?? null,
+      addressState: parsed.data.addressState ?? null,
+      bankName: parsed.data.bankName ?? null,
+      bankAgency: parsed.data.bankAgency ?? null,
+      bankAccount: parsed.data.bankAccount ?? null,
+      pixKey: parsed.data.pixKey ?? null,
     });
     const [supplier] = await db.select().from(suppliersTable)
       .where(and(eq(suppliersTable.id, id), eq(suppliersTable.tenantId, me.tenantId)))
@@ -112,8 +198,8 @@ router.patch("/suppliers/:id", async (req, res): Promise<void> => {
     if (parsed.data.type != null) updates.type = parsed.data.type;
     if (parsed.data.email !== undefined) updates.email = parsed.data.email ?? null;
     if (parsed.data.phone !== undefined) updates.phone = parsed.data.phone ?? null;
-    if (parsed.data.isActive != null) updates.isActive = parsed.data.isActive;
-    if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
+    if (parsed.data.status != null) updates.status = parsed.data.status;
+    if (parsed.data.pixKey !== undefined) updates.pixKey = parsed.data.pixKey ?? null;
     await db.update(suppliersTable).set(updates)
       .where(and(eq(suppliersTable.id, req.params.id), eq(suppliersTable.tenantId, me.tenantId)));
     const [supplier] = await db.select().from(suppliersTable)
@@ -163,14 +249,12 @@ router.post("/vehicles", async (req, res): Promise<void> => {
     const id = generateId();
     await db.insert(vehiclesTable).values({
       id, tenantId: me.tenantId,
-      type: parsed.data.type, model: parsed.data.model,
-      licensePlate: parsed.data.licensePlate, capacity: parsed.data.capacity,
-      year: parsed.data.year ?? null, color: parsed.data.color ?? null,
-      supplierId: parsed.data.supplierId ?? null,
-      driverName: parsed.data.driverName ?? null, driverPhone: parsed.data.driverPhone ?? null,
-      features: parsed.data.features ?? [], amenities: parsed.data.amenities ?? [],
-      notes: parsed.data.notes ?? null,
-      createdById: me.id,
+      name: parsed.data.name, type: parsed.data.type,
+      plate: parsed.data.plate, capacity: parsed.data.capacity,
+      model: parsed.data.model ?? null, year: parsed.data.year ?? null,
+      amenities: parsed.data.amenities ?? [],
+      dailyRate: parsed.data.dailyRate ? String(parsed.data.dailyRate) : null,
+      ratePerKm: parsed.data.ratePerKm ? String(parsed.data.ratePerKm) : null,
     });
     const [vehicle] = await db.select().from(vehiclesTable)
       .where(and(eq(vehiclesTable.id, id), eq(vehiclesTable.tenantId, me.tenantId)))
@@ -191,9 +275,8 @@ router.patch("/vehicles/:id", async (req, res): Promise<void> => {
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const updates: Partial<typeof vehiclesTable.$inferInsert> = {};
     if (parsed.data.status != null) updates.status = parsed.data.status;
-    if (parsed.data.driverName !== undefined) updates.driverName = parsed.data.driverName ?? null;
-    if (parsed.data.driverPhone !== undefined) updates.driverPhone = parsed.data.driverPhone ?? null;
-    if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
+    if (parsed.data.name != null) updates.name = parsed.data.name;
+    if (parsed.data.amenities != null) updates.amenities = parsed.data.amenities;
     await db.update(vehiclesTable).set(updates)
       .where(and(eq(vehiclesTable.id, req.params.id), eq(vehiclesTable.tenantId, me.tenantId)));
     const [vehicle] = await db.select().from(vehiclesTable)
@@ -245,15 +328,12 @@ router.post("/accommodations", async (req, res): Promise<void> => {
       id, tenantId: me.tenantId,
       name: parsed.data.name, type: parsed.data.type,
       address: parsed.data.address ?? null,
-      city: parsed.data.city, state: parsed.data.state,
-      stars: parsed.data.stars ?? null, totalRooms: parsed.data.totalRooms ?? null,
-      pricePerNight: String(parsed.data.pricePerNight ?? 0),
-      checkInTime: parsed.data.checkInTime ?? null, checkOutTime: parsed.data.checkOutTime ?? null,
+      city: parsed.data.city ?? null, state: parsed.data.state ?? null,
+      totalRooms: parsed.data.totalRooms ?? null,
+      pricePerNight: parsed.data.pricePerNight ? String(parsed.data.pricePerNight) : null,
       amenities: parsed.data.amenities ?? [],
-      contactName: parsed.data.contactName ?? null, contactPhone: parsed.data.contactPhone ?? null,
-      email: parsed.data.email ?? null, website: parsed.data.website ?? null,
-      notes: parsed.data.notes ?? null,
-      createdById: me.id,
+      contactName: parsed.data.contactName ?? null,
+      phone: parsed.data.phone ?? null, email: parsed.data.email ?? null,
     });
     const [accommodation] = await db.select().from(accommodationsTable)
       .where(and(eq(accommodationsTable.id, id), eq(accommodationsTable.tenantId, me.tenantId)))
@@ -275,8 +355,8 @@ router.patch("/accommodations/:id", async (req, res): Promise<void> => {
     const updates: Partial<typeof accommodationsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.pricePerNight != null) updates.pricePerNight = String(parsed.data.pricePerNight);
-    if (parsed.data.isActive != null) updates.isActive = parsed.data.isActive;
-    if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
+    if (parsed.data.status != null) updates.status = parsed.data.status;
+    if (parsed.data.amenities != null) updates.amenities = parsed.data.amenities;
     await db.update(accommodationsTable).set(updates)
       .where(and(eq(accommodationsTable.id, req.params.id), eq(accommodationsTable.tenantId, me.tenantId)));
     const [accommodation] = await db.select().from(accommodationsTable)
@@ -326,12 +406,14 @@ router.post("/destinations", async (req, res): Promise<void> => {
     const id = generateId();
     await db.insert(destinationsTable).values({
       id, tenantId: me.tenantId,
-      name: parsed.data.name, country: parsed.data.country ?? "Brasil",
-      state: parsed.data.state ?? null, city: parsed.data.city ?? null,
+      name: parsed.data.name,
+      city: parsed.data.city,
+      state: parsed.data.state,
+      country: parsed.data.country ?? "Brasil",
       description: parsed.data.description ?? null,
-      highlights: parsed.data.highlights ?? [],
-      images: parsed.data.images ?? [],
-      createdById: me.id,
+      mainAttractions: parsed.data.mainAttractions ?? [],
+      bestSeason: parsed.data.bestSeason ?? null,
+      coverImage: parsed.data.coverImage ?? null,
     });
     const [destination] = await db.select().from(destinationsTable)
       .where(and(eq(destinationsTable.id, id), eq(destinationsTable.tenantId, me.tenantId)))
@@ -353,9 +435,8 @@ router.patch("/destinations/:id", async (req, res): Promise<void> => {
     const updates: Partial<typeof destinationsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.description !== undefined) updates.description = parsed.data.description ?? null;
-    if (parsed.data.highlights != null) updates.highlights = parsed.data.highlights;
-    if (parsed.data.images != null) updates.images = parsed.data.images;
-    if (parsed.data.isActive != null) updates.isActive = parsed.data.isActive;
+    if (parsed.data.mainAttractions != null) updates.mainAttractions = parsed.data.mainAttractions;
+    if (parsed.data.gallery != null) updates.gallery = parsed.data.gallery;
     await db.update(destinationsTable).set(updates)
       .where(and(eq(destinationsTable.id, req.params.id), eq(destinationsTable.tenantId, me.tenantId)));
     const [destination] = await db.select().from(destinationsTable)

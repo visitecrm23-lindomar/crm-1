@@ -4,60 +4,100 @@ import { campaignsTable, npsResponsesTable, productsTable, ordersTable, orderIte
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
-import {
-  CreateCampaignBody, UpdateCampaignBody,
-  CreateProductBody, UpdateProductBody,
-  UpdateOrderBody,
-} from "@workspace/api-zod";
 import { z } from "zod";
 
+const router = Router();
+
+const CreateCampaignBody = z.object({
+  name: z.string(),
+  type: z.string().default("email"),
+  subject: z.string().optional(),
+  content: z.string(),
+  targetSegment: z.record(z.unknown()).optional(),
+  scheduledAt: z.string().optional(),
+});
+
+const UpdateCampaignBody = z.object({
+  name: z.string().optional(),
+  status: z.string().optional(),
+  content: z.string().optional(),
+  subject: z.string().optional(),
+  targetSegment: z.record(z.unknown()).optional(),
+  scheduledAt: z.string().optional().nullable(),
+});
+
 const CreateNpsResponseBody = z.object({
-  clientId: z.string().optional(),
-  tripId: z.string().optional(),
+  userId: z.string(),
+  orderId: z.string().optional(),
   score: z.number().int().min(0).max(10),
   feedback: z.string().optional(),
 });
 
+const CreateProductBody = z.object({
+  name: z.string(),
+  slug: z.string().optional(),
+  type: z.string().default("physical"),
+  description: z.string().optional(),
+  price: z.number(),
+  promotionalPrice: z.number().optional(),
+  stock: z.number().optional(),
+  trackStock: z.boolean().optional(),
+  featured: z.boolean().optional(),
+});
+
+const UpdateProductBody = z.object({
+  name: z.string().optional(),
+  price: z.number().optional(),
+  promotionalPrice: z.number().optional().nullable(),
+  stock: z.number().optional(),
+  active: z.boolean().optional(),
+  description: z.string().optional().nullable(),
+});
+
 const CreateOrderBody = z.object({
-  clientId: z.string().optional(),
-  paymentMethod: z.string().optional(),
-  notes: z.string().optional(),
+  userId: z.string(),
   items: z.array(z.object({ productId: z.string(), quantity: z.number().int().positive() })).optional(),
 });
 
-const router = Router();
+const UpdateOrderBody = z.object({
+  status: z.string().optional(),
+  paymentStatus: z.string().optional(),
+});
 
 function formatCampaign(c: typeof campaignsTable.$inferSelect) {
   return {
     id: c.id, tenantId: c.tenantId, name: c.name, type: c.type,
-    channel: c.channel, status: c.status,
-    targetAudience: c.targetAudience ?? {}, content: c.content ?? {},
+    status: c.status, subject: c.subject, content: c.content,
+    targetSegment: c.targetSegment ?? {},
     scheduledAt: c.scheduledAt?.toISOString() ?? null,
     sentAt: c.sentAt?.toISOString() ?? null,
-    sentCount: c.sentCount, openCount: c.openCount, clickCount: c.clickCount,
-    budget: c.budget ? Number(c.budget) : null,
+    recipientsCount: c.recipientsCount, sentCount: c.sentCount,
+    deliveredCount: c.deliveredCount, openedCount: c.openedCount, clickedCount: c.clickedCount,
     createdAt: c.createdAt.toISOString(), updatedAt: c.updatedAt.toISOString(),
   };
 }
 
 function formatProduct(p: typeof productsTable.$inferSelect) {
   return {
-    id: p.id, tenantId: p.tenantId, name: p.name, description: p.description,
-    category: p.category, price: Number(p.price),
-    discountPrice: p.discountPrice ? Number(p.discountPrice) : null,
-    stock: p.stock, images: p.images ?? [], isActive: p.isActive,
-    tags: p.tags ?? [], createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString(),
+    id: p.id, tenantId: p.tenantId, name: p.name, slug: p.slug,
+    description: p.description, shortDescription: p.shortDescription,
+    type: p.type, price: Number(p.price),
+    promotionalPrice: p.promotionalPrice ? Number(p.promotionalPrice) : null,
+    cost: p.cost ? Number(p.cost) : null,
+    stock: p.stock, trackStock: p.trackStock, active: p.active, featured: p.featured,
+    createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString(),
   };
 }
 
 function formatOrder(o: typeof ordersTable.$inferSelect) {
   return {
-    id: o.id, tenantId: o.tenantId, clientId: o.clientId,
+    id: o.id, tenantId: o.tenantId, userId: o.userId,
     status: o.status, totalAmount: Number(o.totalAmount),
-    paymentMethod: o.paymentMethod,
+    finalAmount: Number(o.finalAmount),
+    discountApplied: Number(o.discountApplied),
     paymentStatus: o.paymentStatus,
-    notes: o.notes,
-    createdAt: o.createdAt.toISOString(), updatedAt: o.updatedAt.toISOString(),
+    createdAt: o.createdAt.toISOString(),
+    paidAt: o.paidAt?.toISOString() ?? null,
   };
 }
 
@@ -87,12 +127,11 @@ router.post("/campaigns", async (req, res): Promise<void> => {
       tenantId: me.tenantId,
       name: parsed.data.name,
       type: parsed.data.type,
-      channel: parsed.data.channel,
       status: "draft",
-      targetAudience: parsed.data.targetAudience ?? {},
-      content: parsed.data.content ?? {},
+      subject: parsed.data.subject ?? null,
+      content: parsed.data.content,
+      targetSegment: parsed.data.targetSegment ?? {},
       scheduledAt: parsed.data.scheduledAt ? new Date(parsed.data.scheduledAt) : null,
-      budget: parsed.data.budget ? String(parsed.data.budget) : null,
       createdById: me.id,
     });
     const [campaign] = await db.select().from(campaignsTable)
@@ -116,9 +155,9 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.content != null) updates.content = parsed.data.content;
-    if (parsed.data.targetAudience != null) updates.targetAudience = parsed.data.targetAudience;
+    if (parsed.data.subject !== undefined) updates.subject = parsed.data.subject ?? null;
+    if (parsed.data.targetSegment != null) updates.targetSegment = parsed.data.targetSegment;
     if (parsed.data.scheduledAt !== undefined) updates.scheduledAt = parsed.data.scheduledAt ? new Date(parsed.data.scheduledAt) : null;
-    if (parsed.data.budget !== undefined) updates.budget = parsed.data.budget ? String(parsed.data.budget) : null;
     await db.update(campaignsTable).set(updates)
       .where(and(eq(campaignsTable.id, req.params.id), eq(campaignsTable.tenantId, me.tenantId)));
     const [campaign] = await db.select().from(campaignsTable)
@@ -153,8 +192,8 @@ router.get("/nps", async (req, res): Promise<void> => {
       .where(eq(npsResponsesTable.tenantId, me.tenantId))
       .orderBy(desc(npsResponsesTable.createdAt));
     res.json(responses.map(r => ({
-      id: r.id, tenantId: r.tenantId, clientId: r.clientId, tripId: r.tripId,
-      score: r.score, feedback: r.feedback, category: r.category,
+      id: r.id, tenantId: r.tenantId, userId: r.userId, orderId: r.orderId,
+      score: r.score, classification: r.classification, feedback: r.feedback,
       createdAt: r.createdAt.toISOString(),
     })));
   } catch (err) {
@@ -170,28 +209,22 @@ router.post("/nps", async (req, res): Promise<void> => {
     const parsed = CreateNpsResponseBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-    if (parsed.data.clientId) {
-      const [client] = await db.select().from(clientsTable)
-        .where(and(eq(clientsTable.id, parsed.data.clientId), eq(clientsTable.tenantId, me.tenantId)))
-        .limit(1);
-      if (!client) { res.status(400).json({ error: "Client not found or not in tenant" }); return; }
-    }
-
     const id = generateId();
+    const classification = parsed.data.score >= 9 ? "promoter" : parsed.data.score >= 7 ? "passive" : "detractor";
     await db.insert(npsResponsesTable).values({
       id,
       tenantId: me.tenantId,
-      clientId: parsed.data.clientId ?? null,
-      tripId: parsed.data.tripId ?? null,
+      userId: parsed.data.userId,
+      orderId: parsed.data.orderId ?? null,
       score: parsed.data.score,
+      classification,
       feedback: parsed.data.feedback ?? null,
-      category: parsed.data.score >= 9 ? "promoter" : parsed.data.score >= 7 ? "passive" : "detractor",
     });
     const [nps] = await db.select().from(npsResponsesTable)
       .where(and(eq(npsResponsesTable.id, id), eq(npsResponsesTable.tenantId, me.tenantId)))
       .limit(1);
     if (!nps) { res.status(500).json({ error: "Failed to create NPS response" }); return; }
-    res.status(201).json({ id: nps.id, score: nps.score, category: nps.category });
+    res.status(201).json({ id: nps.id, score: nps.score, classification: nps.classification });
   } catch (err) {
     req.log.error({ err }, "Error creating NPS response");
     res.status(500).json({ error: "Internal server error" });
@@ -219,18 +252,19 @@ router.post("/products", async (req, res): Promise<void> => {
     const parsed = CreateProductBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const id = generateId();
+    const slug = parsed.data.slug ?? (parsed.data.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + id.slice(0, 4));
     await db.insert(productsTable).values({
       id,
       tenantId: me.tenantId,
       name: parsed.data.name,
+      slug,
+      type: parsed.data.type,
       description: parsed.data.description ?? null,
-      category: parsed.data.category ?? null,
       price: String(parsed.data.price),
-      discountPrice: parsed.data.discountPrice ? String(parsed.data.discountPrice) : null,
-      stock: parsed.data.stock ?? 0,
-      images: parsed.data.images ?? [],
-      tags: parsed.data.tags ?? [],
-      createdById: me.id,
+      promotionalPrice: parsed.data.promotionalPrice ? String(parsed.data.promotionalPrice) : null,
+      stock: parsed.data.stock ?? null,
+      trackStock: parsed.data.trackStock ?? true,
+      featured: parsed.data.featured ?? false,
     });
     const [product] = await db.select().from(productsTable)
       .where(and(eq(productsTable.id, id), eq(productsTable.tenantId, me.tenantId)))
@@ -252,11 +286,10 @@ router.patch("/products/:id", async (req, res): Promise<void> => {
     const updates: Partial<typeof productsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.price != null) updates.price = String(parsed.data.price);
-    if (parsed.data.discountPrice !== undefined) updates.discountPrice = parsed.data.discountPrice ? String(parsed.data.discountPrice) : null;
+    if (parsed.data.promotionalPrice !== undefined) updates.promotionalPrice = parsed.data.promotionalPrice ? String(parsed.data.promotionalPrice) : null;
     if (parsed.data.stock != null) updates.stock = parsed.data.stock;
-    if (parsed.data.isActive != null) updates.isActive = parsed.data.isActive;
+    if (parsed.data.active != null) updates.active = parsed.data.active;
     if (parsed.data.description !== undefined) updates.description = parsed.data.description ?? null;
-    if (parsed.data.images != null) updates.images = parsed.data.images;
     await db.update(productsTable).set(updates)
       .where(and(eq(productsTable.id, req.params.id), eq(productsTable.tenantId, me.tenantId)));
     const [product] = await db.select().from(productsTable)
@@ -306,8 +339,7 @@ router.get("/orders", async (req, res): Promise<void> => {
     res.json(orders.map(o => ({
       ...formatOrder(o),
       items: (itemsByOrder[o.id] ?? []).map(i => ({
-        id: i.id, productId: i.productId, quantity: i.quantity,
-        unitPrice: Number(i.unitPrice), totalPrice: Number(i.totalPrice),
+        id: i.id, productId: i.productId, quantity: i.quantity, price: Number(i.price),
       })),
     })));
   } catch (err) {
@@ -323,48 +355,41 @@ router.post("/orders", async (req, res): Promise<void> => {
     const parsed = CreateOrderBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-    if (parsed.data.clientId) {
-      const [client] = await db.select().from(clientsTable)
-        .where(and(eq(clientsTable.id, parsed.data.clientId), eq(clientsTable.tenantId, me.tenantId)))
-        .limit(1);
-      if (!client) { res.status(400).json({ error: "Client not found or not in tenant" }); return; }
-    }
-
-    const id = generateId();
-    let totalAmount = 0;
     const items = parsed.data.items ?? [];
+    let totalAmount = 0;
+    const priceMap: Record<string, number> = {};
     for (const item of items) {
       const [product] = await db.select().from(productsTable)
         .where(and(eq(productsTable.id, item.productId), eq(productsTable.tenantId, me.tenantId)))
         .limit(1);
       if (!product) { res.status(400).json({ error: `Product ${item.productId} not found or not in tenant` }); return; }
-      totalAmount += Number(product.discountPrice ?? product.price) * item.quantity;
+      const unitPrice = Number(product.promotionalPrice ?? product.price);
+      priceMap[item.productId] = unitPrice;
+      totalAmount += unitPrice * item.quantity;
     }
 
+    const id = generateId();
     await db.insert(ordersTable).values({
       id,
       tenantId: me.tenantId,
-      clientId: parsed.data.clientId ?? null,
-      status: "pending",
+      userId: parsed.data.userId,
       totalAmount: String(totalAmount),
-      paymentMethod: parsed.data.paymentMethod ?? null,
+      discountApplied: "0",
+      bonusUsed: "0",
+      shippingCost: "0",
+      finalAmount: String(totalAmount),
+      status: "pending",
       paymentStatus: "pending",
-      notes: parsed.data.notes ?? null,
-      createdById: me.id,
     });
 
     for (const item of items) {
-      const [product] = await db.select().from(productsTable)
-        .where(and(eq(productsTable.id, item.productId), eq(productsTable.tenantId, me.tenantId)))
-        .limit(1);
-      const unitPrice = Number(product!.discountPrice ?? product!.price);
+      const unitPrice = priceMap[item.productId]!;
       await db.insert(orderItemsTable).values({
         id: generateId(),
         orderId: id,
         productId: item.productId,
         quantity: item.quantity,
-        unitPrice: String(unitPrice),
-        totalPrice: String(unitPrice * item.quantity),
+        price: String(unitPrice),
       });
     }
 
@@ -391,8 +416,7 @@ router.get("/orders/:id", async (req, res): Promise<void> => {
     res.json({
       ...formatOrder(order),
       items: items.map(i => ({
-        id: i.id, productId: i.productId, quantity: i.quantity,
-        unitPrice: Number(i.unitPrice), totalPrice: Number(i.totalPrice),
+        id: i.id, productId: i.productId, quantity: i.quantity, price: Number(i.price),
       })),
     });
   } catch (err) {
@@ -410,7 +434,6 @@ router.patch("/orders/:id", async (req, res): Promise<void> => {
     const updates: Partial<typeof ordersTable.$inferInsert> = {};
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.paymentStatus != null) updates.paymentStatus = parsed.data.paymentStatus;
-    if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
     await db.update(ordersTable).set(updates)
       .where(and(eq(ordersTable.id, req.params.id), eq(ordersTable.tenantId, me.tenantId)));
     const [order] = await db.select().from(ordersTable)
