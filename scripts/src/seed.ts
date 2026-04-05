@@ -1,7 +1,7 @@
 import { db } from "@workspace/db";
 import {
   tenantsTable, usersTable, clientsTable, tripsTable, reservationsTable, paymentsTable,
-  pipelineStagesTable, dealsTable, notesTable, loyaltyProgramsTable, loyaltyMembersTable,
+  pipelinesTable, pipelineStagesTable, dealsTable, notesTable, loyaltyProgramsTable, loyaltyMembersTable,
   boardingLocationsTable, automationsTable, messageTemplatesTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
@@ -296,6 +296,12 @@ async function main() {
   console.log("20 payments created");
 
   const pipelineId = generateId();
+  await db.insert(pipelinesTable).values({
+    id: pipelineId, tenantId,
+    name: "Pipeline Principal",
+    isDefault: true,
+    isActive: true,
+  });
   const stageIds = [generateId(), generateId(), generateId(), generateId()];
   await db.insert(pipelineStagesTable).values([
     { id: stageIds[0]!, tenantId, pipelineId, name: "Contato Inicial", color: "#6366F1", order: 1, isFinal: false },
