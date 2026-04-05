@@ -25,6 +25,7 @@ export default function Pipeline() {
       const t = setTimeout(() => { refetchStages(); refetchDeals(); }, 2000);
       return () => clearTimeout(t);
     }
+    return undefined;
   }, [loadingStages, stages]);
   const createDeal = useCreateDeal();
   const moveDeal = useMoveDeal();

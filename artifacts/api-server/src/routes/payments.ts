@@ -31,11 +31,8 @@ function formatExpense(e: typeof expensesTable.$inferSelect) {
 
 router.get("/payments/summary", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) {
-      res.json({ totalReceivable: 0, totalPayable: 0, overdueReceivable: 0, overduePayable: 0, collectedThisMonth: 0, paidThisMonth: 0 });
-      return;
-    }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -69,8 +66,8 @@ router.get("/payments/summary", async (req, res): Promise<void> => {
 
 router.get("/payments", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) { res.json({ data: [], total: 0, page: 1, limit: 20 }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
 
     const { reservationId, clientId, status, type, page = "1", limit = "20" } = req.query as Record<string, string>;
     const pageNum = parseInt(page) || 1;
@@ -191,8 +188,8 @@ router.patch("/payments/:id", async (req, res): Promise<void> => {
 
 router.get("/expenses", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) { res.json({ data: [], total: 0, page: 1, limit: 20 }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
 
     const { tripId, status, page = "1", limit = "20" } = req.query as Record<string, string>;
     const pageNum = parseInt(page) || 1;

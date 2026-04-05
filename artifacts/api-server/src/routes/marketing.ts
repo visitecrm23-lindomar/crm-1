@@ -103,8 +103,8 @@ function formatOrder(o: typeof ordersTable.$inferSelect) {
 
 router.get("/campaigns", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) { res.json([]); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const campaigns = await db.select().from(campaignsTable)
       .where(eq(campaignsTable.tenantId, me.tenantId))
       .orderBy(desc(campaignsTable.createdAt));
@@ -186,8 +186,8 @@ router.delete("/campaigns/:id", async (req, res): Promise<void> => {
 
 router.get("/nps", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) { res.json([]); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const responses = await db.select().from(npsResponsesTable)
       .where(eq(npsResponsesTable.tenantId, me.tenantId))
       .orderBy(desc(npsResponsesTable.createdAt));
@@ -233,8 +233,8 @@ router.post("/nps", async (req, res): Promise<void> => {
 
 router.get("/products", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) { res.json([]); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const products = await db.select().from(productsTable)
       .where(eq(productsTable.tenantId, me.tenantId))
       .orderBy(desc(productsTable.createdAt));
@@ -318,8 +318,8 @@ router.delete("/products/:id", async (req, res): Promise<void> => {
 
 router.get("/orders", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) { res.json([]); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const orders = await db.select().from(ordersTable)
       .where(eq(ordersTable.tenantId, me.tenantId))
       .orderBy(desc(ordersTable.createdAt));

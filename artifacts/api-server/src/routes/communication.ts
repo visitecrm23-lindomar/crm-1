@@ -78,8 +78,8 @@ function formatAutomation(a: typeof automationsTable.$inferSelect) {
 
 router.get("/messages", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) { res.json([]); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const { clientId } = req.query as Record<string, string>;
     const conditions: ReturnType<typeof eq>[] = [eq(messagesTable.tenantId, me.tenantId)];
     if (clientId) conditions.push(eq(messagesTable.toClientId, clientId));
@@ -129,8 +129,8 @@ router.post("/messages", async (req, res): Promise<void> => {
 
 router.get("/message-templates", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) { res.json([]); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const templates = await db.select().from(messageTemplatesTable)
       .where(eq(messageTemplatesTable.tenantId, me.tenantId))
       .orderBy(desc(messageTemplatesTable.createdAt));
@@ -208,8 +208,8 @@ router.delete("/message-templates/:id", async (req, res): Promise<void> => {
 
 router.get("/automations", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) { res.json([]); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const automations = await db.select().from(automationsTable)
       .where(eq(automationsTable.tenantId, me.tenantId))
       .orderBy(desc(automationsTable.createdAt));
@@ -308,8 +308,8 @@ router.patch("/automations/:id/toggle", async (req, res): Promise<void> => {
 
 router.get("/clients-for-messaging", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) { res.json([]); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const clients = await db.select().from(clientsTable)
       .where(eq(clientsTable.tenantId, me.tenantId));
     res.json(clients.map(c => ({ id: c.id, name: c.name, email: c.email, whatsapp: c.whatsapp })));

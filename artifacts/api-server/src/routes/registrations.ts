@@ -143,8 +143,8 @@ function formatDestination(d: typeof destinationsTable.$inferSelect) {
 
 router.get("/suppliers", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) { res.json([]); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const suppliers = await db.select().from(suppliersTable)
       .where(eq(suppliersTable.tenantId, me.tenantId))
       .orderBy(desc(suppliersTable.createdAt));
@@ -228,8 +228,8 @@ router.delete("/suppliers/:id", async (req, res): Promise<void> => {
 
 router.get("/vehicles", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) { res.json([]); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const vehicles = await db.select().from(vehiclesTable)
       .where(eq(vehiclesTable.tenantId, me.tenantId))
       .orderBy(desc(vehiclesTable.createdAt));
@@ -305,8 +305,8 @@ router.delete("/vehicles/:id", async (req, res): Promise<void> => {
 
 router.get("/accommodations", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) { res.json([]); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const accommodations = await db.select().from(accommodationsTable)
       .where(eq(accommodationsTable.tenantId, me.tenantId))
       .orderBy(desc(accommodationsTable.createdAt));
@@ -385,8 +385,8 @@ router.delete("/accommodations/:id", async (req, res): Promise<void> => {
 
 router.get("/destinations", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) { res.json([]); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const destinations = await db.select().from(destinationsTable)
       .where(eq(destinationsTable.tenantId, me.tenantId))
       .orderBy(desc(destinationsTable.createdAt));

@@ -1,29 +1,15 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { clientsTable, tripsTable, reservationsTable, paymentsTable, dealsTable, npsResponsesTable, usersTable } from "@workspace/db";
+import { clientsTable, tripsTable, reservationsTable, paymentsTable, dealsTable, npsResponsesTable } from "@workspace/db";
 import { eq, and, gte, desc, sql } from "drizzle-orm";
+import { requireAuth } from "../lib/tenant";
 
 const router = Router();
 
-async function getTenantInfo(req: any) {
-  const auth = req.auth;
-  if (!auth?.userId) return null;
-  const [me] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.userId)).limit(1);
-  return me;
-}
-
 router.get("/dashboard/summary", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) {
-      res.json({
-        totalClients: 0, newClientsThisMonth: 0, totalTrips: 0, activeTrips: 0,
-        totalRevenue: 0, revenueThisMonth: 0, pendingPayments: 0,
-        totalReservations: 0, confirmedReservations: 0, occupancyRate: 0,
-        averageNps: null, openDeals: 0, dealsPipelineValue: 0,
-      });
-      return;
-    }
+    const me = await requireAuth(req, res);
+    if (!me) return;
 
     const tenantId = me.tenantId;
     const now = new Date();
@@ -92,8 +78,8 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
 
 router.get("/dashboard/revenue-chart", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.json([]); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
 
     const { period = "30d" } = req.query as Record<string, string>;
     const now = new Date();
@@ -152,8 +138,8 @@ router.get("/dashboard/revenue-chart", async (req, res): Promise<void> => {
 
 router.get("/dashboard/upcoming-trips", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.json([]); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const now = new Date();
     const trips = await db.select().from(tripsTable)
       .where(and(eq(tripsTable.tenantId, me.tenantId), gte(tripsTable.departureDate, now)))
@@ -172,8 +158,8 @@ router.get("/dashboard/upcoming-trips", async (req, res): Promise<void> => {
 
 router.get("/dashboard/recent-activity", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantInfo(req);
-    if (!me?.tenantId) { res.json([]); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
 
     const recentClients = await db.select().from(clientsTable)
       .where(eq(clientsTable.tenantId, me.tenantId)).orderBy(desc(clientsTable.createdAt)).limit(3);

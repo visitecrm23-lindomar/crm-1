@@ -37,7 +37,6 @@ export default function Automations() {
         description: fd.get("description") as string || undefined,
         triggerType: fd.get("triggerType") as string,
         triggerConfig: {},
-        isActive: true,
       }
     });
     setIsOpen(false);

@@ -61,8 +61,8 @@ function formatPassenger(p: typeof passengersTable.$inferSelect) {
 
 router.get("/reservations", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) { res.json({ data: [], total: 0, page: 1, limit: 20 }); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
 
     const { tripId, clientId, status, page = "1", limit = "20" } = req.query as Record<string, string>;
     const pageNum = parseInt(page) || 1;

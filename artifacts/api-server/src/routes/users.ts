@@ -115,8 +115,8 @@ router.post("/users/me/sync", async (req, res): Promise<void> => {
 
 router.get("/users", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) { res.json([]); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const users = await db.select().from(usersTable).where(eq(usersTable.tenantId, me.tenantId));
     res.json(users.map(formatUser));
   } catch (err) {

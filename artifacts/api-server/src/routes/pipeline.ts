@@ -86,8 +86,8 @@ function formatDeal(d: typeof dealsTable.$inferSelect) {
 
 router.get("/pipeline/stages", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) { res.json([]); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     await ensureDefaultPipeline(me.tenantId);
     const stages = await db.select().from(pipelineStagesTable)
       .where(eq(pipelineStagesTable.tenantId, me.tenantId))
@@ -101,8 +101,8 @@ router.get("/pipeline/stages", async (req, res): Promise<void> => {
 
 router.get("/pipeline/deals", async (req, res): Promise<void> => {
   try {
-    const me = await getTenantUser(req);
-    if (!me) { res.json([]); return; }
+    const me = await requireAuth(req, res);
+    if (!me) return;
     const { stageId, clientId } = req.query as Record<string, string>;
     const conditions: ReturnType<typeof eq>[] = [eq(dealsTable.tenantId, me.tenantId)];
     if (stageId) conditions.push(eq(dealsTable.stageId, stageId));
