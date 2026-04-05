@@ -38,6 +38,14 @@ const ALLOWED_ORIGINS = new Set(
   ].filter(Boolean) as string[]
 );
 
+if (ALLOWED_ORIGINS.size === 0) {
+  logger.warn(
+    "⚠️  CORS: No allowed origins configured. Set FRONTEND_URL or ensure REPLIT_DEV_DOMAIN is set. " +
+    "Browser API calls from external origins will be blocked. " +
+    "Only same-origin requests (no Origin header) will succeed."
+  );
+}
+
 app.use(cors({
   credentials: true,
   origin: (origin, callback) => {

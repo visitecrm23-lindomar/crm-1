@@ -79,6 +79,28 @@ Schema in `lib/db/src/schema/`: tenants, users, clients, trips, reservations, pa
 - Each agency has one tenant; pipeline stages are auto-created on first load
 - Users are created/synced on sign-in via `POST /api/users/me/sync`
 
+## RBAC Authorization
+
+Role enforcement uses the inline pattern throughout API routes:
+```ts
+const ADMIN_ROLES = ["agencia", "superadmin"];
+if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+```
+Mutations in `marketing.ts`, `registrations.ts`, and `communication.ts` are guarded. As new modules are added, apply the same pattern consistently.
+
+## Deployment Environment Variables
+
+Required for full functionality:
+- `CLERK_SECRET_KEY` — Clerk backend secret
+- `CLERK_PUBLISHABLE_KEY` — Clerk frontend key (in visitecrm)
+- `DATABASE_URL` — PostgreSQL connection string (auto-set by Replit DB)
+- `REPLIT_DEV_DOMAIN` — auto-set in Replit dev, used for CORS allowlist
+
+Optional:
+- `FRONTEND_URL` — explicit frontend origin for CORS (useful in custom/production deployments)
+
+If neither `FRONTEND_URL` nor `REPLIT_DEV_DOMAIN` is set at startup, the API server logs a CORS warning — browser cross-origin calls will be blocked (same-origin requests still work).
+
 ## Important Notes
 
 - API build uses esbuild (not tsc) — `tsc --noEmit` errors can be ignored
@@ -86,3 +108,4 @@ Schema in `lib/db/src/schema/`: tenants, users, clients, trips, reservations, pa
 - All numeric DB columns use `String()` on insert (Drizzle numeric type), `Number()` on read
 - Pipeline stages are created via `ensureDefaultPipeline()` on first `/api/pipeline/stages` request
 - `SyncMeBody` requires `clerkId`, `name`, `email` fields (passed from Clerk user object)
+- After codegen (`pnpm --filter @workspace/api-spec run codegen`), fix `lib/api-zod/src/index.ts` to only export `./generated/api` (codegen adds a second line that causes conflicts)
