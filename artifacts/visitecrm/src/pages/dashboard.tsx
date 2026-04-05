@@ -301,11 +301,18 @@ function AgencyDashboard() {
 }
 
 function SellerDashboard() {
+  const { data: me } = useGetMe();
   const { data: summary, isLoading } = useGetDashboardSummary();
   const { data: rawChartData, isLoading: loadingChart } = useGetDashboardRevenueChart({ period: "12m" });
   const chartData = rawChartData?.slice(-6);
-  const { data: myLeads, isLoading: loadingLeads } = useListClients({ limit: 8, page: 1, classification: "lead", sortBy: "createdAt", sortOrder: "desc" });
-  const { data: myReservations, isLoading: loadingReservations } = useListClients({ limit: 8, page: 1, sortBy: "createdAt", sortOrder: "desc" });
+  const { data: myLeads, isLoading: loadingLeads } = useListClients({
+    limit: 8, page: 1, classification: "lead", sortBy: "createdAt", sortOrder: "desc",
+    sellerId: me?.id ?? undefined,
+  });
+  const { data: myReservations, isLoading: loadingReservations } = useListClients({
+    limit: 8, page: 1, sortBy: "createdAt", sortOrder: "desc",
+    sellerId: me?.id ?? undefined,
+  });
   const { data: stages } = useListPipelineStages();
   const { data: deals } = useListDeals({ status: "open" });
   const { data: pendingPayments, isLoading: loadingPayments } = useListPayments({ status: "pending", limit: 8 });

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useLocation } from "wouter";
 import {
   DndContext, closestCenter, DragOverlay, useSensor, useSensors, PointerSensor,
   type DragStartEvent, type DragEndEvent
@@ -84,6 +85,7 @@ interface ClientPipelineModalProps {
 function ClientPipelineModal({ open, onClose, editClient, defaultStageId = "", stages, onSave }: ClientPipelineModalProps) {
   const [tab, setTab] = useState("personal");
   const [form, setForm] = useState<ClientFormData>(EMPTY_CLIENT);
+  const [, navigate] = useLocation();
   const createClient = useCreateClient();
   const updateClient = useUpdateClient();
   const createDeal = useCreateDeal();
@@ -153,7 +155,8 @@ function ClientPipelineModal({ open, onClose, editClient, defaultStageId = "", s
     }
 
     if (withReservation && savedClientId) {
-      window.location.href = `/visitecrm/reservations?clientId=${savedClientId}&new=true`;
+      navigate(`/reservations?clientId=${savedClientId}&new=true`);
+      onClose();
       return;
     }
     onSave();

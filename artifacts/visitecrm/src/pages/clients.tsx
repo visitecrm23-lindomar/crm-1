@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { useLocation } from "wouter";
 import {
   useListClients, useCreateClient, useUpdateClient,
   useListPipelineStages, useListReservations, useListPayments, useListTrips, useListUsers
@@ -503,6 +504,7 @@ function SortableHeader({ label, field, currentSort, currentOrder, onSort }: Sor
 }
 
 export default function Clients() {
+  const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -513,7 +515,6 @@ export default function Clients() {
   const [filterSellerId, setFilterSellerId] = useState<string>("all");
   const [filterDateFrom, setFilterDateFrom] = useState<string>("");
   const [filterDateTo, setFilterDateTo] = useState<string>("");
-  const [filterOrigin, setFilterOrigin] = useState<string>("");
   const [sortBy, setSortBy] = useState<SortField>("createdAt");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -569,7 +570,7 @@ export default function Clients() {
     setSearch(""); setFilterStatus("all"); setFilterClassification("all");
     setFilterPipelineStage("all"); setFilterCity(""); setFilterTripId("all");
     setFilterSellerId("all"); setFilterDateFrom(""); setFilterDateTo("");
-    setFilterOrigin(""); setPage(1);
+    setPage(1);
   };
 
   const totalPages = Math.ceil((clientsData?.total ?? 0) / LIMIT);
@@ -782,7 +783,7 @@ export default function Clients() {
         onSave={(withReservation, savedClientId) => {
           refetch();
           if (withReservation && savedClientId) {
-            window.location.href = `/visitecrm/reservations?clientId=${savedClientId}&new=true`;
+            navigate(`/reservations?clientId=${savedClientId}&new=true`);
           }
         }}
       />
