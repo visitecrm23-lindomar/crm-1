@@ -6,7 +6,7 @@ import {
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import {
   useListPipelineStages, useListDeals, useCreateDeal, useMoveDeal,
-  useDeleteDeal, useListClients, useListTrips, useCreateClient, useUpdateClient, useListPipelineStages as useStages
+  useDeleteDeal, useListClients, useListTrips, useCreateClient, useUpdateClient,
 } from "@workspace/api-client-react";
 import type { Deal, PipelineStage, Client } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Search, Trash2, Phone, Calendar, MapPin, X, Star } from "lucide-react";
+import { Plus, Search, Trash2, Phone, Calendar, MapPin, X } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -49,26 +49,26 @@ interface ClientFormData {
   birthDate: string; gender: string; addressCity: string; addressState: string;
   instagram: string; observations: string; tags: string; dreamDestinations: string;
   pipelineStage: string; classification: string; npsScore: string; status: string;
-  stageId: string;
+  stageId: string; tripInterestId: string;
 }
 
 const EMPTY_CLIENT: ClientFormData = {
-  name: "", email: "", whatsapp: "", phone: "", cpf: "", birthDate: "", gender: "",
+  name: "", email: "", whatsapp: "", phone: "", cpf: "", birthDate: "", gender: "none",
   addressCity: "", addressState: "", instagram: "", observations: "", tags: "",
   dreamDestinations: "", pipelineStage: "", classification: "lead", npsScore: "", status: "active",
-  stageId: "",
+  stageId: "", tripInterestId: "none",
 };
 
 function clientToForm(c: Client, defaultStageId = ""): ClientFormData {
   return {
     name: c.name, email: c.email, whatsapp: c.whatsapp, phone: c.phone ?? "",
     cpf: c.cpf ?? "", birthDate: c.birthDate ? c.birthDate.split("T")[0] : "",
-    gender: c.gender ?? "", addressCity: c.addressCity ?? "", addressState: c.addressState ?? "",
+    gender: c.gender ?? "none", addressCity: c.addressCity ?? "", addressState: c.addressState ?? "",
     instagram: c.instagram ?? "", observations: c.observations ?? "",
     tags: (c.tags ?? []).join(", "), dreamDestinations: (c.dreamDestinations ?? []).join(", "),
     pipelineStage: c.pipelineStage ?? "", classification: c.classification ?? "lead",
     npsScore: c.npsScore != null ? String(c.npsScore) : "", status: c.status ?? "active",
-    stageId: defaultStageId,
+    stageId: defaultStageId, tripInterestId: "none",
   };
 }
 
@@ -84,7 +84,6 @@ interface ClientPipelineModalProps {
 function ClientPipelineModal({ open, onClose, editClient, defaultStageId = "", stages, onSave }: ClientPipelineModalProps) {
   const [tab, setTab] = useState("personal");
   const [form, setForm] = useState<ClientFormData>(EMPTY_CLIENT);
-  const [saveAndReserve, setSaveAndReserve] = useState(false);
   const createClient = useCreateClient();
   const updateClient = useUpdateClient();
   const createDeal = useCreateDeal();
@@ -93,8 +92,14 @@ function ClientPipelineModal({ open, onClose, editClient, defaultStageId = "", s
   useEffect(() => {
     if (open) {
       setTab("personal");
-      setSaveAndReserve(false);
-      setForm(editClient ? clientToForm(editClient, editClient.pipelineStage ? stages.find(s => s.name === editClient.pipelineStage)?.id ?? defaultStageId : defaultStageId) : { ...EMPTY_CLIENT, stageId: defaultStageId });
+      if (editClient) {
+        const resolvedStageId = editClient.pipelineStage
+          ? (stages.find(s => s.name === editClient.pipelineStage)?.id ?? defaultStageId)
+          : defaultStageId;
+        setForm(clientToForm(editClient, resolvedStageId));
+      } else {
+        setForm({ ...EMPTY_CLIENT, stageId: defaultStageId });
+      }
     }
   }, [open, editClient, defaultStageId, stages]);
 
@@ -107,8 +112,10 @@ function ClientPipelineModal({ open, onClose, editClient, defaultStageId = "", s
       name: form.name, email: form.email, whatsapp: form.whatsapp,
       phone: form.phone || undefined, cpf: form.cpf || undefined,
       birthDate: form.birthDate ? new Date(form.birthDate).toISOString() : undefined,
-      gender: form.gender || undefined, addressCity: form.addressCity || undefined,
-      addressState: form.addressState || undefined, instagram: form.instagram || undefined,
+      gender: form.gender !== "none" ? form.gender : undefined,
+      addressCity: form.addressCity || undefined,
+      addressState: form.addressState || undefined,
+      instagram: form.instagram || undefined,
       observations: form.observations || undefined,
       tags: form.tags ? form.tags.split(",").map(t => t.trim()).filter(Boolean) : [],
       dreamDestinations: form.dreamDestinations ? form.dreamDestinations.split(",").map(t => t.trim()).filter(Boolean) : [],
@@ -118,22 +125,30 @@ function ClientPipelineModal({ open, onClose, editClient, defaultStageId = "", s
     if (isEditing && editClient) {
       await updateClient.mutateAsync({
         id: editClient.id,
-        data: { ...base, pipelineStage: form.pipelineStage || undefined, classification: form.classification || undefined,
-          npsScore: form.npsScore ? parseFloat(form.npsScore) : undefined, status: form.status || undefined },
+        data: {
+          ...base,
+          pipelineStage: form.pipelineStage || undefined,
+          classification: form.classification || undefined,
+          npsScore: form.npsScore ? parseFloat(form.npsScore) : undefined,
+          status: form.status || undefined,
+        },
       });
       savedClientId = editClient.id;
     } else {
       const result = await createClient.mutateAsync({ data: base });
       savedClientId = result.id;
       if (form.stageId && savedClientId) {
-        await createDeal.mutateAsync({ data: {
-          stageId: form.stageId,
-          title: `${form.name} — Lead`,
-          value: 0,
-          clientId: savedClientId,
-          leadName: form.name,
-          leadWhatsapp: form.whatsapp || undefined,
-        }});
+        await createDeal.mutateAsync({
+          data: {
+            stageId: form.stageId,
+            title: `${form.name} — Lead`,
+            value: 0,
+            clientId: savedClientId,
+            leadName: form.name,
+            leadWhatsapp: form.whatsapp || undefined,
+            tripId: form.tripInterestId !== "none" ? form.tripInterestId : undefined,
+          },
+        });
       }
     }
 
@@ -164,9 +179,10 @@ function ClientPipelineModal({ open, onClose, editClient, defaultStageId = "", s
           <TabsContent value="personal" className="space-y-4 mt-4">
             <div className="space-y-2">
               <Label>Estágio no Pipeline</Label>
-              <Select value={form.stageId} onValueChange={set("stageId")}>
+              <Select value={form.stageId || "none"} onValueChange={v => set("stageId")(v === "none" ? "" : v)}>
                 <SelectTrigger><SelectValue placeholder="Selecionar estágio..." /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none">Selecionar estágio...</SelectItem>
                   {stages.map(s => (
                     <SelectItem key={s.id} value={s.id}>
                       <div className="flex items-center gap-2">
@@ -206,9 +222,9 @@ function ClientPipelineModal({ open, onClose, editClient, defaultStageId = "", s
               <div className="space-y-2">
                 <Label>Gênero</Label>
                 <Select value={form.gender} onValueChange={set("gender")}>
-                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Não informado</SelectItem>
+                    <SelectItem value="none">Não informado</SelectItem>
                     {GENDER_OPTIONS.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -230,16 +246,11 @@ function ClientPipelineModal({ open, onClose, editClient, defaultStageId = "", s
 
           <TabsContent value="trip" className="space-y-4 mt-4">
             <div className="space-y-2">
-              <Label>Destinos Sonhados</Label>
-              <Input placeholder="Arraial do Cabo, Morro de São Paulo" value={form.dreamDestinations} onChange={e => set("dreamDestinations")(e.target.value)} />
-              <p className="text-xs text-muted-foreground">Separe com vírgula</p>
-            </div>
-            <div className="space-y-2">
               <Label>Viagem de Interesse</Label>
-              <Select onValueChange={() => {}}>
+              <Select value={form.tripInterestId} onValueChange={set("tripInterestId")}>
                 <SelectTrigger><SelectValue placeholder="Selecionar viagem..." /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhuma</SelectItem>
+                  <SelectItem value="none">Nenhuma</SelectItem>
                   {tripsData?.data.map(t => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.name} — {format(parseISO(t.departureDate), "dd/MM/yyyy")}
@@ -249,7 +260,12 @@ function ClientPipelineModal({ open, onClose, editClient, defaultStageId = "", s
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Tags</Label>
+              <Label>Destinos Sonhados</Label>
+              <Input placeholder="Arraial do Cabo, Morro de São Paulo" value={form.dreamDestinations} onChange={e => set("dreamDestinations")(e.target.value)} />
+              <p className="text-xs text-muted-foreground">Separe com vírgula</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Tags de Interesse</Label>
               <Input placeholder="praia, aventura, família" value={form.tags} onChange={e => set("tags")(e.target.value)} />
             </div>
           </TabsContent>
@@ -331,15 +347,15 @@ function ClientPipelineModal({ open, onClose, editClient, defaultStageId = "", s
           </TabsContent>
 
           <TabsContent value="marketing" className="space-y-4 mt-4">
-            <p className="text-sm text-muted-foreground">Follow-up e preferências de lifestyle</p>
+            <p className="text-sm text-muted-foreground">Follow-up e preferências de contato</p>
             <div className="space-y-2">
               <Label>Próximo Follow-up</Label>
               <Input type="date" />
             </div>
             <div className="space-y-2">
               <Label>Canal Preferido</Label>
-              <Select>
-                <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+              <Select defaultValue="whatsapp">
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="whatsapp">WhatsApp</SelectItem>
                   <SelectItem value="email">E-mail</SelectItem>
@@ -385,7 +401,7 @@ interface ClientCardProps {
 
 function ClientCardContent({ deal, clientsById, onEdit, onDelete, isDragging }: ClientCardProps) {
   const client = deal.clientId ? clientsById.get(deal.clientId) : undefined;
-  const name = client?.name ?? deal.clientName ?? deal.leadName ?? "Lead Desconhecido";
+  const name = client?.name ?? deal.leadName ?? "Lead Desconhecido";
   const whatsapp = client?.whatsapp ?? deal.leadWhatsapp;
   const city = client?.addressCity;
   const state = client?.addressState;
@@ -402,7 +418,7 @@ function ClientCardContent({ deal, clientsById, onEdit, onDelete, isDragging }: 
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm leading-tight truncate">{name}</p>
-          {deal.stageName && <p className="text-xs text-muted-foreground truncate">{deal.title}</p>}
+          <p className="text-xs text-muted-foreground truncate">{deal.title}</p>
         </div>
         <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
           <button onClick={() => onEdit(deal, client)} className="p-1 text-muted-foreground hover:text-foreground rounded">
@@ -479,11 +495,10 @@ function DroppableColumn({ stage, children }: { stage: PipelineStage; children: 
 
 export default function Pipeline() {
   const [search, setSearch] = useState("");
-  const [filterStage, setFilterStage] = useState("");
-  const [filterClassification, setFilterClassification] = useState("");
+  const [filterStageId, setFilterStageId] = useState("all");
+  const [filterClassification, setFilterClassification] = useState("all");
   const [filterCity, setFilterCity] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [defaultStageId, setDefaultStageId] = useState("");
   const [activeDragDeal, setActiveDragDeal] = useState<Deal | null>(null);
@@ -506,7 +521,7 @@ export default function Pipeline() {
 
   const filteredDeals = useMemo(() => {
     let d = deals ?? [];
-    if (filterStage) d = d.filter(x => x.stageId === filterStage);
+    if (filterStageId !== "all") d = d.filter(x => x.stageId === filterStageId);
     if (search.trim()) {
       const q = search.toLowerCase();
       d = d.filter(x => {
@@ -518,7 +533,7 @@ export default function Pipeline() {
           (client?.whatsapp ?? "").includes(q);
       });
     }
-    if (filterClassification) {
+    if (filterClassification !== "all") {
       d = d.filter(x => {
         if (!x.clientId) return false;
         const c = clientsById.get(x.clientId);
@@ -533,7 +548,7 @@ export default function Pipeline() {
       });
     }
     return d;
-  }, [deals, search, filterStage, filterClassification, filterCity, clientsById]);
+  }, [deals, search, filterStageId, filterClassification, filterCity, clientsById]);
 
   const dealsByStage = (stageId: string) => filteredDeals.filter(d => d.stageId === stageId);
 
@@ -563,14 +578,12 @@ export default function Pipeline() {
   };
 
   const handleEdit = (deal: Deal, client?: Client) => {
-    setEditingDeal(deal);
     setEditingClient(client ?? null);
     setDefaultStageId(deal.stageId);
     setIsModalOpen(true);
   };
 
   const openNew = (stageId = "") => {
-    setEditingDeal(null);
     setEditingClient(null);
     setDefaultStageId(stageId);
     setIsModalOpen(true);
@@ -578,12 +591,11 @@ export default function Pipeline() {
 
   const closeModal = () => {
     setIsModalOpen(false);
-    setEditingDeal(null);
     setEditingClient(null);
   };
 
   const totalValue = (deals ?? []).reduce((acc, d) => acc + d.value, 0);
-  const hasFilters = !!(search || filterStage || filterClassification || filterCity);
+  const hasFilters = !!(search || filterStageId !== "all" || filterClassification !== "all" || filterCity);
 
   return (
     <div className="space-y-5 flex flex-col" style={{ height: "calc(100vh - 120px)" }}>
@@ -604,16 +616,30 @@ export default function Pipeline() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Buscar leads, clientes..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
+        <Select value={filterStageId} onValueChange={setFilterStageId}>
+          <SelectTrigger className="w-40"><SelectValue placeholder="Estágio" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os estágios</SelectItem>
+            {stages?.map(s => (
+              <SelectItem key={s.id} value={s.id}>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                  {s.name}
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={filterClassification} onValueChange={setFilterClassification}>
           <SelectTrigger className="w-36"><SelectValue placeholder="Classificação" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todas</SelectItem>
+            <SelectItem value="all">Todas</SelectItem>
             {Object.entries(CLASSIFICATION_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
           </SelectContent>
         </Select>
         <Input placeholder="Cidade..." value={filterCity} onChange={e => setFilterCity(e.target.value)} className="w-32" />
         {hasFilters && (
-          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setFilterStage(""); setFilterClassification(""); setFilterCity(""); }}>
+          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setFilterStageId("all"); setFilterClassification("all"); setFilterCity(""); }}>
             <X className="w-4 h-4 mr-1" /> Limpar
           </Button>
         )}

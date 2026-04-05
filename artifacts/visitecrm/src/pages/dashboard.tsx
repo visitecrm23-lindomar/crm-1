@@ -304,7 +304,8 @@ function SellerDashboard() {
   const { data: summary, isLoading } = useGetDashboardSummary();
   const { data: rawChartData, isLoading: loadingChart } = useGetDashboardRevenueChart({ period: "12m" });
   const chartData = rawChartData?.slice(-6);
-  const { data: myClients, isLoading: loadingClients } = useListClients({ limit: 10, page: 1 });
+  const { data: myLeads, isLoading: loadingLeads } = useListClients({ limit: 8, page: 1, classification: "lead", sortBy: "createdAt", sortOrder: "desc" });
+  const { data: myReservations, isLoading: loadingReservations } = useListClients({ limit: 8, page: 1, sortBy: "createdAt", sortOrder: "desc" });
   const { data: stages } = useListPipelineStages();
   const { data: deals } = useListDeals({ status: "open" });
   const { data: pendingPayments, isLoading: loadingPayments } = useListPayments({ status: "pending", limit: 8 });
@@ -412,14 +413,46 @@ function SellerDashboard() {
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Minhas Reservas</CardTitle>
-              <Link href="/reservations"><Button variant="ghost" size="sm">Ver todas</Button></Link>
+              <CardTitle className="text-base">Minhas Leads</CardTitle>
+              <Link href="/clients?classification=lead"><Button variant="ghost" size="sm">Ver todas</Button></Link>
             </div>
           </CardHeader>
           <CardContent>
-            {loadingClients ? <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div> : (
+            {loadingLeads ? <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+              : !myLeads?.data.length ? (
+                <p className="text-sm text-muted-foreground text-center py-4">Nenhuma lead ativa.</p>
+              ) : (
+                <div className="space-y-2">
+                  {myLeads.data.map(client => (
+                    <div key={client.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs font-bold">
+                          {client.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{client.name}</p>
+                          <p className="text-xs text-muted-foreground">{client.pipelineStage ?? "Lead"}</p>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="text-xs">Lead</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Minhas Reservas</CardTitle>
+              <Link href="/clients"><Button variant="ghost" size="sm">Ver todas</Button></Link>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loadingReservations ? <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div> : (
               <div className="space-y-2">
-                {myClients?.data.map(client => (
+                {myReservations?.data.filter(c => c.totalSpent > 0).map(client => (
                   <div key={client.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
@@ -433,11 +466,16 @@ function SellerDashboard() {
                     <span className="text-sm font-semibold">{formatCurrency(client.totalSpent)}</span>
                   </div>
                 ))}
+                {!myReservations?.data.filter(c => c.totalSpent > 0).length && (
+                  <p className="text-sm text-muted-foreground text-center py-4">Nenhuma reserva.</p>
+                )}
               </div>
             )}
           </CardContent>
         </Card>
+      </div>
 
+      <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
@@ -464,16 +502,16 @@ function SellerDashboard() {
               )}
           </CardContent>
         </Card>
-      </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Tarefas do Dia</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground text-center py-4">Módulo de tarefas disponível em breve.</p>
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Tarefas do Dia</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground text-center py-4">Módulo de tarefas disponível em breve.</p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

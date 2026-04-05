@@ -60,19 +60,19 @@ interface ClientFormData {
 }
 
 const EMPTY_CLIENT: ClientFormData = {
-  name: "", email: "", whatsapp: "", phone: "", cpf: "", birthDate: "", gender: "",
+  name: "", email: "", whatsapp: "", phone: "", cpf: "", birthDate: "", gender: "none",
   addressCity: "", addressState: "", instagram: "", observations: "", tags: "",
-  dreamDestinations: "", pipelineStage: "", classification: "lead", npsScore: "", status: "active",
+  dreamDestinations: "", pipelineStage: "none", classification: "lead", npsScore: "", status: "active",
 };
 
 function clientToForm(c: Client): ClientFormData {
   return {
     name: c.name, email: c.email, whatsapp: c.whatsapp, phone: c.phone ?? "",
     cpf: c.cpf ?? "", birthDate: c.birthDate ? c.birthDate.split("T")[0] : "",
-    gender: c.gender ?? "", addressCity: c.addressCity ?? "", addressState: c.addressState ?? "",
+    gender: c.gender ?? "none", addressCity: c.addressCity ?? "", addressState: c.addressState ?? "",
     instagram: c.instagram ?? "", observations: c.observations ?? "",
     tags: (c.tags ?? []).join(", "), dreamDestinations: (c.dreamDestinations ?? []).join(", "),
-    pipelineStage: c.pipelineStage ?? "", classification: c.classification ?? "lead",
+    pipelineStage: c.pipelineStage ?? "none", classification: c.classification ?? "lead",
     npsScore: c.npsScore != null ? String(c.npsScore) : "", status: c.status ?? "active",
   };
 }
@@ -107,7 +107,8 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
       name: form.name, email: form.email, whatsapp: form.whatsapp,
       phone: form.phone || undefined, cpf: form.cpf || undefined,
       birthDate: form.birthDate ? new Date(form.birthDate).toISOString() : undefined,
-      gender: form.gender || undefined, addressCity: form.addressCity || undefined,
+      gender: form.gender !== "none" ? form.gender : undefined,
+      addressCity: form.addressCity || undefined,
       addressState: form.addressState || undefined, instagram: form.instagram || undefined,
       observations: form.observations || undefined,
       tags: form.tags ? form.tags.split(",").map(t => t.trim()).filter(Boolean) : [],
@@ -118,8 +119,13 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
     if (isEditing && editClient) {
       await updateClient.mutateAsync({
         id: editClient.id,
-        data: { ...base, pipelineStage: form.pipelineStage || undefined, classification: form.classification || undefined,
-          npsScore: form.npsScore ? parseFloat(form.npsScore) : undefined, status: form.status || undefined },
+        data: {
+          ...base,
+          pipelineStage: form.pipelineStage !== "none" ? form.pipelineStage : undefined,
+          classification: form.classification || undefined,
+          npsScore: form.npsScore ? parseFloat(form.npsScore) : undefined,
+          status: form.status || undefined,
+        },
       });
       savedId = editClient.id;
     } else {
@@ -175,9 +181,9 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
               <div className="space-y-2">
                 <Label>Gênero</Label>
                 <Select value={form.gender} onValueChange={set("gender")}>
-                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Não informado</SelectItem>
+                    <SelectItem value="none">Não informado</SelectItem>
                     {GENDER_OPTIONS.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -201,9 +207,9 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
             <div className="space-y-2">
               <Label>Estágio no Pipeline</Label>
               <Select value={form.pipelineStage} onValueChange={set("pipelineStage")}>
-                <SelectTrigger><SelectValue placeholder="Selecionar estágio..." /></SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhum</SelectItem>
+                  <SelectItem value="none">Nenhum</SelectItem>
                   {stages?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
                 </SelectContent>
               </Select>
@@ -499,12 +505,12 @@ function SortableHeader({ label, field, currentSort, currentOrder, onSort }: Sor
 export default function Clients() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [filterStatus, setFilterStatus] = useState<string>("");
-  const [filterClassification, setFilterClassification] = useState<string>("");
-  const [filterPipelineStage, setFilterPipelineStage] = useState<string>("");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterClassification, setFilterClassification] = useState<string>("all");
+  const [filterPipelineStage, setFilterPipelineStage] = useState<string>("all");
   const [filterCity, setFilterCity] = useState<string>("");
-  const [filterTripId, setFilterTripId] = useState<string>("");
-  const [filterSellerId, setFilterSellerId] = useState<string>("");
+  const [filterTripId, setFilterTripId] = useState<string>("all");
+  const [filterSellerId, setFilterSellerId] = useState<string>("all");
   const [filterDateFrom, setFilterDateFrom] = useState<string>("");
   const [filterDateTo, setFilterDateTo] = useState<string>("");
   const [filterOrigin, setFilterOrigin] = useState<string>("");
@@ -521,12 +527,12 @@ export default function Clients() {
 
   const { data: clientsData, isLoading, refetch } = useListClients({
     search: search || undefined,
-    status: filterStatus || undefined,
-    pipelineStage: filterPipelineStage || undefined,
-    classification: filterClassification || undefined,
-    city: filterCity || filterOrigin || undefined,
-    tripId: filterTripId || undefined,
-    sellerId: filterSellerId || undefined,
+    status: filterStatus !== "all" ? filterStatus : undefined,
+    pipelineStage: filterPipelineStage !== "all" ? filterPipelineStage : undefined,
+    classification: filterClassification !== "all" ? filterClassification : undefined,
+    city: filterCity || undefined,
+    tripId: filterTripId !== "all" ? filterTripId : undefined,
+    sellerId: filterSellerId !== "all" ? filterSellerId : undefined,
     dateFrom: filterDateFrom || undefined,
     dateTo: filterDateTo || undefined,
     sortBy: sortBy || undefined,
@@ -557,12 +563,12 @@ export default function Clients() {
     setPage(1);
   }, [sortBy]);
 
-  const hasFilters = !!(search || filterStatus || filterClassification || filterPipelineStage || filterCity || filterTripId || filterSellerId || filterDateFrom || filterDateTo || filterOrigin);
+  const hasFilters = !!(search || filterStatus !== "all" || filterClassification !== "all" || filterPipelineStage !== "all" || filterCity || filterTripId !== "all" || filterSellerId !== "all" || filterDateFrom || filterDateTo);
 
   const clearFilters = () => {
-    setSearch(""); setFilterStatus(""); setFilterClassification("");
-    setFilterPipelineStage(""); setFilterCity(""); setFilterTripId("");
-    setFilterSellerId(""); setFilterDateFrom(""); setFilterDateTo("");
+    setSearch(""); setFilterStatus("all"); setFilterClassification("all");
+    setFilterPipelineStage("all"); setFilterCity(""); setFilterTripId("all");
+    setFilterSellerId("all"); setFilterDateFrom(""); setFilterDateTo("");
     setFilterOrigin(""); setPage(1);
   };
 
@@ -619,21 +625,21 @@ export default function Clients() {
             <Select value={filterStatus} onValueChange={v => { setFilterStatus(v); setPage(1); }}>
               <SelectTrigger className="w-36"><SelectValue placeholder="Status" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todos os status</SelectItem>
+                <SelectItem value="all">Todos os status</SelectItem>
                 {Object.entries(STATUS_LABELS).map(([v, { label }]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={filterClassification} onValueChange={v => { setFilterClassification(v); setPage(1); }}>
               <SelectTrigger className="w-36"><SelectValue placeholder="Classificação" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todas</SelectItem>
+                <SelectItem value="all">Todas</SelectItem>
                 {Object.entries(CLASSIFICATION_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={filterPipelineStage} onValueChange={v => { setFilterPipelineStage(v); setPage(1); }}>
               <SelectTrigger className="w-40"><SelectValue placeholder="Pipeline" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todos os estágios</SelectItem>
+                <SelectItem value="all">Todos os estágios</SelectItem>
                 {stages?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -643,14 +649,14 @@ export default function Clients() {
             <Select value={filterTripId} onValueChange={v => { setFilterTripId(v); setPage(1); }}>
               <SelectTrigger className="w-44"><SelectValue placeholder="Viagem de interesse" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todas as viagens</SelectItem>
+                <SelectItem value="all">Todas as viagens</SelectItem>
                 {tripsData?.data.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={filterSellerId} onValueChange={v => { setFilterSellerId(v); setPage(1); }}>
               <SelectTrigger className="w-44"><SelectValue placeholder="Vendedor / Captador" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todos os vendedores</SelectItem>
+                <SelectItem value="all">Todos os vendedores</SelectItem>
                 {(sellers ?? []).filter(u => u.role === "vendedor" || u.role === "agencia").map(u => (
                   <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                 ))}
