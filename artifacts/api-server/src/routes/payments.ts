@@ -1,0 +1,270 @@
+import { Router } from "express";
+import { db } from "@workspace/db";
+import { paymentsTable, expensesTable, usersTable } from "@workspace/db";
+import { eq, and, sql, desc, lt, gte } from "drizzle-orm";
+import { generateId } from "../lib/id";
+import { CreatePaymentBody, UpdatePaymentBody, CreateExpenseBody, UpdateExpenseBody } from "@workspace/api-zod";
+
+const router = Router();
+
+async function getTenantInfo(req: any) {
+  const auth = req.auth;
+  if (!auth?.userId) return null;
+  const [me] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.userId)).limit(1);
+  return me;
+}
+
+function formatPayment(p: any) {
+  return {
+    id: p.id, reservationId: p.reservationId, clientId: p.clientId,
+    type: p.type, category: p.category, amount: Number(p.amount),
+    paymentMethod: p.paymentMethod, installmentNumber: p.installmentNumber,
+    totalInstallments: p.totalInstallments, dueDate: p.dueDate.toISOString(),
+    paidAt: p.paidAt?.toISOString() ?? null, status: p.status,
+    description: p.description, notes: p.notes,
+    createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString(),
+  };
+}
+
+router.get("/payments/summary", async (req, res): Promise<void> => {
+  try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) {
+      res.json({ totalReceivable: 0, totalPayable: 0, overdueReceivable: 0, overduePayable: 0, collectedThisMonth: 0, paidThisMonth: 0 });
+      return;
+    }
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.tenantId, me.tenantId));
+
+    let totalReceivable = 0, totalPayable = 0, overdueReceivable = 0, overduePayable = 0, collectedThisMonth = 0, paidThisMonth = 0;
+
+    for (const p of payments) {
+      const amount = Number(p.amount);
+      if (p.type === "receivable") {
+        if (p.status === "pending") {
+          totalReceivable += amount;
+          if (p.dueDate < now) overdueReceivable += amount;
+        }
+        if (p.paidAt && p.paidAt >= startOfMonth) collectedThisMonth += amount;
+      } else {
+        if (p.status === "pending") {
+          totalPayable += amount;
+          if (p.dueDate < now) overduePayable += amount;
+        }
+        if (p.paidAt && p.paidAt >= startOfMonth) paidThisMonth += amount;
+      }
+    }
+
+    res.json({ totalReceivable, totalPayable, overdueReceivable, overduePayable, collectedThisMonth, paidThisMonth });
+  } catch (err) {
+    req.log.error({ err }, "Error fetching payments summary");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/payments", async (req, res): Promise<void> => {
+  try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.json({ data: [], total: 0, page: 1, limit: 20 }); return; }
+
+    const { reservationId, clientId, status, type, page = "1", limit = "20" } = req.query as Record<string, string>;
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 20;
+    const offset = (pageNum - 1) * limitNum;
+
+    let conditions: any[] = [eq(paymentsTable.tenantId, me.tenantId)];
+    if (reservationId) conditions.push(eq(paymentsTable.reservationId, reservationId));
+    if (clientId) conditions.push(eq(paymentsTable.clientId, clientId));
+    if (status) conditions.push(eq(paymentsTable.status, status));
+    if (type) conditions.push(eq(paymentsTable.type, type));
+
+    const payments = await db.select().from(paymentsTable)
+      .where(and(...conditions)).orderBy(desc(paymentsTable.dueDate))
+      .limit(limitNum).offset(offset);
+
+    const [countResult] = await db.select({ count: sql<number>`count(*)` })
+      .from(paymentsTable).where(and(...conditions));
+
+    res.json({ data: payments.map(formatPayment), total: Number(countResult?.count ?? 0), page: pageNum, limit: limitNum });
+  } catch (err) {
+    req.log.error({ err }, "Error listing payments");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/payments", async (req, res): Promise<void> => {
+  try {
+    const me = await getTenantInfo(req);
+    if (!me) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const parsed = CreatePaymentBody.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const id = generateId();
+    const installments = parsed.data.installments ?? 1;
+
+    for (let i = 1; i <= installments; i++) {
+      const dueDate = new Date(parsed.data.dueDate);
+      dueDate.setMonth(dueDate.getMonth() + (i - 1));
+      await db.insert(paymentsTable).values({
+        id: i === 1 ? id : generateId(),
+        tenantId: me.tenantId ?? "default-tenant",
+        reservationId: parsed.data.reservationId ?? null,
+        clientId: parsed.data.clientId ?? null,
+        type: parsed.data.type,
+        category: parsed.data.category,
+        amount: String(parsed.data.amount / installments),
+        paymentMethod: parsed.data.paymentMethod,
+        installmentNumber: i,
+        totalInstallments: installments,
+        dueDate,
+        description: parsed.data.description ?? null,
+        notes: parsed.data.notes ?? null,
+      });
+    }
+
+    const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id)).limit(1);
+    res.status(201).json(formatPayment(payment));
+  } catch (err) {
+    req.log.error({ err }, "Error creating payment");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/payments/:id", async (req, res): Promise<void> => {
+  try {
+    const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, req.params.id)).limit(1);
+    if (!payment) { res.status(404).json({ error: "Not found" }); return; }
+    res.json(formatPayment(payment));
+  } catch (err) {
+    req.log.error({ err }, "Error fetching payment");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/payments/:id", async (req, res): Promise<void> => {
+  try {
+    const parsed = UpdatePaymentBody.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    const updates: any = {};
+    if (parsed.data.status != null) updates.status = parsed.data.status;
+    if (parsed.data.paidAt !== undefined) updates.paidAt = parsed.data.paidAt ? new Date(parsed.data.paidAt) : null;
+    if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes;
+    await db.update(paymentsTable).set(updates).where(eq(paymentsTable.id, req.params.id));
+    const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, req.params.id)).limit(1);
+    if (!payment) { res.status(404).json({ error: "Not found" }); return; }
+    res.json(formatPayment(payment));
+  } catch (err) {
+    req.log.error({ err }, "Error updating payment");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Expenses
+router.get("/expenses", async (req, res): Promise<void> => {
+  try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.json({ data: [], total: 0, page: 1, limit: 20 }); return; }
+
+    const { tripId, status, page = "1", limit = "20" } = req.query as Record<string, string>;
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 20;
+    const offset = (pageNum - 1) * limitNum;
+
+    let conditions: any[] = [eq(expensesTable.tenantId, me.tenantId)];
+    if (tripId) conditions.push(eq(expensesTable.tripId, tripId));
+    if (status) conditions.push(eq(expensesTable.status, status));
+
+    const expenses = await db.select().from(expensesTable)
+      .where(and(...conditions)).orderBy(desc(expensesTable.dueDate))
+      .limit(limitNum).offset(offset);
+
+    const [countResult] = await db.select({ count: sql<number>`count(*)` })
+      .from(expensesTable).where(and(...conditions));
+
+    res.json({
+      data: expenses.map(e => ({
+        id: e.id, tripId: e.tripId, category: e.category, description: e.description,
+        amount: Number(e.amount), supplierId: e.supplierId, paymentMethod: e.paymentMethod,
+        paymentDate: e.paymentDate?.toISOString() ?? null, dueDate: e.dueDate.toISOString(),
+        status: e.status, notes: e.notes, createdAt: e.createdAt.toISOString(),
+      })),
+      total: Number(countResult?.count ?? 0), page: pageNum, limit: limitNum
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error listing expenses");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/expenses", async (req, res): Promise<void> => {
+  try {
+    const me = await getTenantInfo(req);
+    if (!me) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const parsed = CreateExpenseBody.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const id = generateId();
+    await db.insert(expensesTable).values({
+      id,
+      tenantId: me.tenantId ?? "default-tenant",
+      tripId: parsed.data.tripId ?? null,
+      category: parsed.data.category,
+      description: parsed.data.description,
+      amount: String(parsed.data.amount),
+      supplierId: parsed.data.supplierId ?? null,
+      paymentMethod: parsed.data.paymentMethod ?? null,
+      dueDate: new Date(parsed.data.dueDate),
+      notes: parsed.data.notes ?? null,
+      createdById: me.id,
+    });
+
+    const [expense] = await db.select().from(expensesTable).where(eq(expensesTable.id, id)).limit(1);
+    res.status(201).json({
+      id: expense.id, tripId: expense.tripId, category: expense.category, description: expense.description,
+      amount: Number(expense.amount), supplierId: expense.supplierId, paymentMethod: expense.paymentMethod,
+      paymentDate: expense.paymentDate?.toISOString() ?? null, dueDate: expense.dueDate.toISOString(),
+      status: expense.status, notes: expense.notes, createdAt: expense.createdAt.toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error creating expense");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/expenses/:id", async (req, res): Promise<void> => {
+  try {
+    const parsed = UpdateExpenseBody.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    const updates: any = {};
+    if (parsed.data.status != null) updates.status = parsed.data.status;
+    if (parsed.data.paymentDate !== undefined) updates.paymentDate = parsed.data.paymentDate ? new Date(parsed.data.paymentDate) : null;
+    if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes;
+    if (parsed.data.amount != null) updates.amount = String(parsed.data.amount);
+    await db.update(expensesTable).set(updates).where(eq(expensesTable.id, req.params.id));
+    const [expense] = await db.select().from(expensesTable).where(eq(expensesTable.id, req.params.id)).limit(1);
+    if (!expense) { res.status(404).json({ error: "Not found" }); return; }
+    res.json({
+      id: expense.id, tripId: expense.tripId, category: expense.category, description: expense.description,
+      amount: Number(expense.amount), supplierId: expense.supplierId, paymentMethod: expense.paymentMethod,
+      paymentDate: expense.paymentDate?.toISOString() ?? null, dueDate: expense.dueDate.toISOString(),
+      status: expense.status, notes: expense.notes, createdAt: expense.createdAt.toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error updating expense");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/expenses/:id", async (req, res): Promise<void> => {
+  try {
+    await db.delete(expensesTable).where(eq(expensesTable.id, req.params.id));
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Error deleting expense");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+export default router;

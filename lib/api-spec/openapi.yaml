@@ -1,22 +1,67 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: VisiteCRM API - SaaS CRM for tourism agencies
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: tenants
+    description: Multi-tenancy operations
+  - name: users
+    description: User management
+  - name: clients
+    description: Client (CRM) operations
+  - name: trips
+    description: Trip management
+  - name: reservations
+    description: Reservation management
+  - name: passengers
+    description: Passenger management
+  - name: payments
+    description: Payment management
+  - name: expenses
+    description: Expense management
+  - name: deals
+    description: Pipeline/Deal management
+  - name: messages
+    description: Communication
+  - name: templates
+    description: Message templates
+  - name: automations
+    description: Automation rules
+  - name: suppliers
+    description: Supplier management
+  - name: vehicles
+    description: Vehicle management
+  - name: accommodations
+    description: Accommodation management
+  - name: destinations
+    description: Destination management
+  - name: products
+    description: Marketplace products
+  - name: orders
+    description: Marketplace orders
+  - name: campaigns
+    description: Marketing campaigns
+  - name: loyalty
+    description: Loyalty programs
+  - name: nps
+    description: NPS responses
+  - name: dashboard
+    description: Dashboard summary data
+  - name: notes
+    description: Client notes
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +69,1879 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ─── DASHBOARD ───────────────────────────────────────────────────
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get dashboard summary stats
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/revenue-chart:
+    get:
+      operationId: getDashboardRevenueChart
+      tags: [dashboard]
+      summary: Get revenue chart data
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [7d, 30d, 90d, 12m]
+            default: 30d
+      responses:
+        "200":
+          description: Revenue chart data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChartDataPoint"
+
+  /dashboard/upcoming-trips:
+    get:
+      operationId: getDashboardUpcomingTrips
+      tags: [dashboard]
+      summary: Get upcoming trips for dashboard
+      responses:
+        "200":
+          description: Upcoming trips
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TripSummary"
+
+  /dashboard/recent-activity:
+    get:
+      operationId: getDashboardRecentActivity
+      tags: [dashboard]
+      summary: Get recent activity feed
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
+  # ─── CLIENTS ─────────────────────────────────────────────────────
+  /clients:
+    get:
+      operationId: listClients
+      tags: [clients]
+      summary: List clients
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: pipelineStage
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: classification
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: List of clients
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientListResponse"
+    post:
+      operationId: createClient
+      tags: [clients]
+      summary: Create a client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateClientBody"
+      responses:
+        "201":
+          description: Created client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Client"
+
+  /clients/{id}:
+    get:
+      operationId: getClient
+      tags: [clients]
+      summary: Get a client
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Client"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateClient
+      tags: [clients]
+      summary: Update a client
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateClientBody"
+      responses:
+        "200":
+          description: Updated client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Client"
+    delete:
+      operationId: deleteClient
+      tags: [clients]
+      summary: Delete a client
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /clients/{id}/pipeline-stage:
+    patch:
+      operationId: updateClientPipelineStage
+      tags: [clients]
+      summary: Move client in pipeline
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                stage:
+                  type: string
+              required: [stage]
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Client"
+
+  # ─── NOTES ───────────────────────────────────────────────────────
+  /clients/{clientId}/notes:
+    get:
+      operationId: listClientNotes
+      tags: [notes]
+      summary: List client notes
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Note"
+    post:
+      operationId: createClientNote
+      tags: [notes]
+      summary: Create a note
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNoteBody"
+      responses:
+        "201":
+          description: Created note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+
+  /clients/{clientId}/notes/{noteId}:
+    delete:
+      operationId: deleteClientNote
+      tags: [notes]
+      summary: Delete a note
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: noteId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ─── TRIPS ───────────────────────────────────────────────────────
+  /trips:
+    get:
+      operationId: listTrips
+      tags: [trips]
+      summary: List trips
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: List of trips
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TripListResponse"
+    post:
+      operationId: createTrip
+      tags: [trips]
+      summary: Create a trip
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTripBody"
+      responses:
+        "201":
+          description: Created trip
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trip"
+
+  /trips/{id}:
+    get:
+      operationId: getTrip
+      tags: [trips]
+      summary: Get a trip
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Trip
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trip"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateTrip
+      tags: [trips]
+      summary: Update a trip
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTripBody"
+      responses:
+        "200":
+          description: Updated trip
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trip"
+    delete:
+      operationId: deleteTrip
+      tags: [trips]
+      summary: Delete a trip
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /trips/{id}/seat-map:
+    get:
+      operationId: getTripSeatMap
+      tags: [trips]
+      summary: Get trip seat map with occupation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Seat map
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeatMap"
+
+  # ─── RESERVATIONS ─────────────────────────────────────────────────
+  /reservations:
+    get:
+      operationId: listReservations
+      tags: [reservations]
+      summary: List reservations
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: tripId
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: clientId
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: List of reservations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationListResponse"
+    post:
+      operationId: createReservation
+      tags: [reservations]
+      summary: Create a reservation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReservationBody"
+      responses:
+        "201":
+          description: Created reservation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reservation"
+
+  /reservations/{id}:
+    get:
+      operationId: getReservation
+      tags: [reservations]
+      summary: Get a reservation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Reservation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reservation"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateReservation
+      tags: [reservations]
+      summary: Update a reservation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateReservationBody"
+      responses:
+        "200":
+          description: Updated reservation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reservation"
+
+  /reservations/{id}/check-in:
+    post:
+      operationId: checkInReservation
+      tags: [reservations]
+      summary: Check in a reservation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Checked in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reservation"
+
+  # ─── PASSENGERS ───────────────────────────────────────────────────
+  /reservations/{reservationId}/passengers:
+    get:
+      operationId: listPassengers
+      tags: [passengers]
+      summary: List passengers for a reservation
+      parameters:
+        - name: reservationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Passengers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Passenger"
+    post:
+      operationId: createPassenger
+      tags: [passengers]
+      summary: Add a passenger
+      parameters:
+        - name: reservationId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePassengerBody"
+      responses:
+        "201":
+          description: Created passenger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Passenger"
+
+  /reservations/{reservationId}/passengers/{id}:
+    patch:
+      operationId: updatePassenger
+      tags: [passengers]
+      summary: Update a passenger
+      parameters:
+        - name: reservationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePassengerBody"
+      responses:
+        "200":
+          description: Updated passenger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Passenger"
+    delete:
+      operationId: deletePassenger
+      tags: [passengers]
+      summary: Delete a passenger
+      parameters:
+        - name: reservationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ─── PAYMENTS ─────────────────────────────────────────────────────
+  /payments:
+    get:
+      operationId: listPayments
+      tags: [payments]
+      summary: List payments
+      parameters:
+        - name: reservationId
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: clientId
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: type
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: List of payments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentListResponse"
+    post:
+      operationId: createPayment
+      tags: [payments]
+      summary: Create a payment record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePaymentBody"
+      responses:
+        "201":
+          description: Created payment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+  /payments/{id}:
+    get:
+      operationId: getPayment
+      tags: [payments]
+      summary: Get a payment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Payment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+    patch:
+      operationId: updatePayment
+      tags: [payments]
+      summary: Update a payment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePaymentBody"
+      responses:
+        "200":
+          description: Updated payment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+  /payments/summary:
+    get:
+      operationId: getPaymentsSummary
+      tags: [payments]
+      summary: Get financial summary
+      responses:
+        "200":
+          description: Financial summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinancialSummary"
+
+  # ─── EXPENSES ─────────────────────────────────────────────────────
+  /expenses:
+    get:
+      operationId: listExpenses
+      tags: [expenses]
+      summary: List expenses
+      parameters:
+        - name: tripId
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: List of expenses
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpenseListResponse"
+    post:
+      operationId: createExpense
+      tags: [expenses]
+      summary: Create an expense
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExpenseBody"
+      responses:
+        "201":
+          description: Created expense
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+
+  /expenses/{id}:
+    patch:
+      operationId: updateExpense
+      tags: [expenses]
+      summary: Update an expense
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateExpenseBody"
+      responses:
+        "200":
+          description: Updated expense
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+    delete:
+      operationId: deleteExpense
+      tags: [expenses]
+      summary: Delete an expense
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ─── DEALS/PIPELINE ───────────────────────────────────────────────
+  /deals:
+    get:
+      operationId: listDeals
+      tags: [deals]
+      summary: List deals for pipeline
+      parameters:
+        - name: stageId
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: ownerId
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: List of deals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Deal"
+    post:
+      operationId: createDeal
+      tags: [deals]
+      summary: Create a deal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDealBody"
+      responses:
+        "201":
+          description: Created deal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deal"
+
+  /deals/{id}:
+    get:
+      operationId: getDeal
+      tags: [deals]
+      summary: Get a deal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deal"
+    patch:
+      operationId: updateDeal
+      tags: [deals]
+      summary: Update a deal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDealBody"
+      responses:
+        "200":
+          description: Updated deal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deal"
+    delete:
+      operationId: deleteDeal
+      tags: [deals]
+      summary: Delete a deal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /deals/{id}/move:
+    patch:
+      operationId: moveDeal
+      tags: [deals]
+      summary: Move deal to new stage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                stageId:
+                  type: string
+              required: [stageId]
+      responses:
+        "200":
+          description: Moved deal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deal"
+
+  /pipeline/stages:
+    get:
+      operationId: listPipelineStages
+      tags: [deals]
+      summary: List pipeline stages
+      responses:
+        "200":
+          description: Stages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PipelineStage"
+
+  # ─── MESSAGES ─────────────────────────────────────────────────────
+  /messages:
+    get:
+      operationId: listMessages
+      tags: [messages]
+      summary: List messages
+      parameters:
+        - name: clientId
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: channel
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+    post:
+      operationId: sendMessage
+      tags: [messages]
+      summary: Send a message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMessageBody"
+      responses:
+        "201":
+          description: Sent message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+
+  # ─── TEMPLATES ────────────────────────────────────────────────────
+  /message-templates:
+    get:
+      operationId: listMessageTemplates
+      tags: [templates]
+      summary: List message templates
+      responses:
+        "200":
+          description: Templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MessageTemplate"
+    post:
+      operationId: createMessageTemplate
+      tags: [templates]
+      summary: Create a message template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMessageTemplateBody"
+      responses:
+        "201":
+          description: Created template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageTemplate"
+
+  /message-templates/{id}:
+    patch:
+      operationId: updateMessageTemplate
+      tags: [templates]
+      summary: Update a message template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMessageTemplateBody"
+      responses:
+        "200":
+          description: Updated template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageTemplate"
+    delete:
+      operationId: deleteMessageTemplate
+      tags: [templates]
+      summary: Delete a message template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ─── AUTOMATIONS ──────────────────────────────────────────────────
+  /automations:
+    get:
+      operationId: listAutomations
+      tags: [automations]
+      summary: List automations
+      responses:
+        "200":
+          description: Automations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Automation"
+    post:
+      operationId: createAutomation
+      tags: [automations]
+      summary: Create an automation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAutomationBody"
+      responses:
+        "201":
+          description: Created automation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Automation"
+
+  /automations/{id}:
+    patch:
+      operationId: updateAutomation
+      tags: [automations]
+      summary: Update an automation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAutomationBody"
+      responses:
+        "200":
+          description: Updated automation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Automation"
+    delete:
+      operationId: deleteAutomation
+      tags: [automations]
+      summary: Delete an automation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /automations/{id}/toggle:
+    patch:
+      operationId: toggleAutomation
+      tags: [automations]
+      summary: Toggle automation active state
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Toggled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Automation"
+
+  # ─── SUPPLIERS ────────────────────────────────────────────────────
+  /suppliers:
+    get:
+      operationId: listSuppliers
+      tags: [suppliers]
+      summary: List suppliers
+      responses:
+        "200":
+          description: Suppliers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Supplier"
+    post:
+      operationId: createSupplier
+      tags: [suppliers]
+      summary: Create a supplier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupplierBody"
+      responses:
+        "201":
+          description: Created supplier
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Supplier"
+
+  /suppliers/{id}:
+    patch:
+      operationId: updateSupplier
+      tags: [suppliers]
+      summary: Update a supplier
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSupplierBody"
+      responses:
+        "200":
+          description: Updated supplier
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Supplier"
+    delete:
+      operationId: deleteSupplier
+      tags: [suppliers]
+      summary: Delete a supplier
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ─── VEHICLES ─────────────────────────────────────────────────────
+  /vehicles:
+    get:
+      operationId: listVehicles
+      tags: [vehicles]
+      summary: List vehicles
+      responses:
+        "200":
+          description: Vehicles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Vehicle"
+    post:
+      operationId: createVehicle
+      tags: [vehicles]
+      summary: Create a vehicle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVehicleBody"
+      responses:
+        "201":
+          description: Created vehicle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vehicle"
+
+  /vehicles/{id}:
+    patch:
+      operationId: updateVehicle
+      tags: [vehicles]
+      summary: Update a vehicle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateVehicleBody"
+      responses:
+        "200":
+          description: Updated vehicle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vehicle"
+    delete:
+      operationId: deleteVehicle
+      tags: [vehicles]
+      summary: Delete a vehicle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ─── ACCOMMODATIONS ───────────────────────────────────────────────
+  /accommodations:
+    get:
+      operationId: listAccommodations
+      tags: [accommodations]
+      summary: List accommodations
+      responses:
+        "200":
+          description: Accommodations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Accommodation"
+    post:
+      operationId: createAccommodation
+      tags: [accommodations]
+      summary: Create accommodation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAccommodationBody"
+      responses:
+        "201":
+          description: Created accommodation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Accommodation"
+
+  /accommodations/{id}:
+    patch:
+      operationId: updateAccommodation
+      tags: [accommodations]
+      summary: Update accommodation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAccommodationBody"
+      responses:
+        "200":
+          description: Updated accommodation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Accommodation"
+    delete:
+      operationId: deleteAccommodation
+      tags: [accommodations]
+      summary: Delete accommodation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ─── DESTINATIONS ─────────────────────────────────────────────────
+  /destinations:
+    get:
+      operationId: listDestinations
+      tags: [destinations]
+      summary: List destinations
+      responses:
+        "200":
+          description: Destinations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Destination"
+    post:
+      operationId: createDestination
+      tags: [destinations]
+      summary: Create a destination
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDestinationBody"
+      responses:
+        "201":
+          description: Created destination
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Destination"
+
+  /destinations/{id}:
+    patch:
+      operationId: updateDestination
+      tags: [destinations]
+      summary: Update a destination
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDestinationBody"
+      responses:
+        "200":
+          description: Updated destination
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Destination"
+    delete:
+      operationId: deleteDestination
+      tags: [destinations]
+      summary: Delete a destination
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ─── PRODUCTS ─────────────────────────────────────────────────────
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: List marketplace products
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: active
+          in: query
+          schema:
+            type: ["boolean", "null"]
+      responses:
+        "200":
+          description: Products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+    post:
+      operationId: createProduct
+      tags: [products]
+      summary: Create a product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductBody"
+      responses:
+        "201":
+          description: Created product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+
+  /products/{id}:
+    patch:
+      operationId: updateProduct
+      tags: [products]
+      summary: Update a product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductBody"
+      responses:
+        "200":
+          description: Updated product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+    delete:
+      operationId: deleteProduct
+      tags: [products]
+      summary: Delete a product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ─── ORDERS ───────────────────────────────────────────────────────
+  /orders:
+    get:
+      operationId: listOrders
+      tags: [orders]
+      summary: List orders
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+
+  /orders/{id}:
+    get:
+      operationId: getOrder
+      tags: [orders]
+      summary: Get an order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+    patch:
+      operationId: updateOrder
+      tags: [orders]
+      summary: Update order status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOrderBody"
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  # ─── CAMPAIGNS ────────────────────────────────────────────────────
+  /campaigns:
+    get:
+      operationId: listCampaigns
+      tags: [campaigns]
+      summary: List marketing campaigns
+      responses:
+        "200":
+          description: Campaigns
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Campaign"
+    post:
+      operationId: createCampaign
+      tags: [campaigns]
+      summary: Create a campaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCampaignBody"
+      responses:
+        "201":
+          description: Created campaign
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+
+  /campaigns/{id}:
+    patch:
+      operationId: updateCampaign
+      tags: [campaigns]
+      summary: Update a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCampaignBody"
+      responses:
+        "200":
+          description: Updated campaign
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+    delete:
+      operationId: deleteCampaign
+      tags: [campaigns]
+      summary: Delete a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ─── NPS ──────────────────────────────────────────────────────────
+  /nps:
+    get:
+      operationId: listNpsResponses
+      tags: [nps]
+      summary: List NPS responses
+      parameters:
+        - name: classification
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: NPS responses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NpsResponse"
+
+  /nps/summary:
+    get:
+      operationId: getNpsSummary
+      tags: [nps]
+      summary: Get NPS summary and score
+      responses:
+        "200":
+          description: NPS summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NpsSummary"
+
+  # ─── USERS ────────────────────────────────────────────────────────
+  /users/me:
+    get:
+      operationId: getMe
+      tags: [users]
+      summary: Get current user profile
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+
+  /users/me/sync:
+    post:
+      operationId: syncMe
+      tags: [users]
+      summary: Sync Clerk user into DB after login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SyncUserBody"
+      responses:
+        "200":
+          description: Synced user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List users (sellers/team)
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserProfile"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a user (invite seller)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserBody"
+      responses:
+        "201":
+          description: Created user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+
+  /users/{id}:
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Update a user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserBody"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +1949,1755 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required: [success]
+
+    # ─── DASHBOARD ─────────────────────────────────────────────────
+    DashboardSummary:
+      type: object
+      properties:
+        totalClients:
+          type: integer
+        newClientsThisMonth:
+          type: integer
+        totalTrips:
+          type: integer
+        activeTrips:
+          type: integer
+        totalRevenue:
+          type: number
+        revenueThisMonth:
+          type: number
+        pendingPayments:
+          type: number
+        totalReservations:
+          type: integer
+        confirmedReservations:
+          type: integer
+        occupancyRate:
+          type: number
+        averageNps:
+          type: ["number", "null"]
+        openDeals:
+          type: integer
+        dealsPipelineValue:
+          type: number
+      required:
+        - totalClients
+        - newClientsThisMonth
+        - totalTrips
+        - activeTrips
+        - totalRevenue
+        - revenueThisMonth
+        - pendingPayments
+        - totalReservations
+        - confirmedReservations
+        - occupancyRate
+        - openDeals
+        - dealsPipelineValue
+
+    ChartDataPoint:
+      type: object
+      properties:
+        label:
+          type: string
+        revenue:
+          type: number
+        expenses:
+          type: number
+        reservations:
+          type: integer
+      required: [label, revenue, expenses, reservations]
+
+    TripSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        destination:
+          type: string
+        departureDate:
+          type: string
+        availableSeats:
+          type: integer
+        totalCapacity:
+          type: integer
+        status:
+          type: string
+        coverImage:
+          type: ["string", "null"]
+      required: [id, name, destination, departureDate, availableSeats, totalCapacity, status]
+
+    ActivityItem:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+        entityId:
+          type: ["string", "null"]
+        entityType:
+          type: ["string", "null"]
+      required: [id, type, description, createdAt]
+
+    # ─── CLIENT ────────────────────────────────────────────────────
+    Client:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        whatsapp:
+          type: string
+        phone:
+          type: ["string", "null"]
+        cpf:
+          type: ["string", "null"]
+        rg:
+          type: ["string", "null"]
+        birthDate:
+          type: ["string", "null"]
+        gender:
+          type: ["string", "null"]
+        photoUrl:
+          type: ["string", "null"]
+        instagram:
+          type: ["string", "null"]
+        addressCity:
+          type: ["string", "null"]
+        addressState:
+          type: ["string", "null"]
+        classification:
+          type: string
+        status:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        pipelineStage:
+          type: string
+        totalSpent:
+          type: number
+        outstandingBalance:
+          type: number
+        npsScore:
+          type: ["integer", "null"]
+        observations:
+          type: ["string", "null"]
+        dreamDestinations:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        lastContactAt:
+          type: ["string", "null"]
+      required:
+        - id
+        - name
+        - email
+        - whatsapp
+        - classification
+        - status
+        - tags
+        - pipelineStage
+        - totalSpent
+        - outstandingBalance
+        - dreamDestinations
+        - createdAt
+        - updatedAt
+
+    ClientListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Client"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [data, total, page, limit]
+
+    CreateClientBody:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        whatsapp:
+          type: string
+        phone:
+          type: ["string", "null"]
+        cpf:
+          type: ["string", "null"]
+        birthDate:
+          type: ["string", "null"]
+        gender:
+          type: ["string", "null"]
+        photoUrl:
+          type: ["string", "null"]
+        addressCity:
+          type: ["string", "null"]
+        addressState:
+          type: ["string", "null"]
+        observations:
+          type: ["string", "null"]
+        tags:
+          type: array
+          items:
+            type: string
+        dreamDestinations:
+          type: array
+          items:
+            type: string
+      required: [name, email, whatsapp]
+
+    UpdateClientBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        whatsapp:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        cpf:
+          type: ["string", "null"]
+        birthDate:
+          type: ["string", "null"]
+        gender:
+          type: ["string", "null"]
+        photoUrl:
+          type: ["string", "null"]
+        status:
+          type: ["string", "null"]
+        classification:
+          type: ["string", "null"]
+        tags:
+          type: ["array", "null"]
+          items:
+            type: string
+        observations:
+          type: ["string", "null"]
+        dreamDestinations:
+          type: ["array", "null"]
+          items:
+            type: string
+        addressCity:
+          type: ["string", "null"]
+        addressState:
+          type: ["string", "null"]
+        npsScore:
+          type: ["integer", "null"]
+        pipelineStage:
+          type: ["string", "null"]
+        lastContactAt:
+          type: ["string", "null"]
+
+    # ─── NOTE ──────────────────────────────────────────────────────
+    Note:
+      type: object
+      properties:
+        id:
+          type: string
+        clientId:
+          type: string
+        content:
+          type: string
+        isPrivate:
+          type: boolean
+        createdById:
+          type: string
+        createdAt:
+          type: string
+      required: [id, clientId, content, isPrivate, createdById, createdAt]
+
+    CreateNoteBody:
+      type: object
+      properties:
+        content:
+          type: string
+        isPrivate:
+          type: boolean
+      required: [content]
+
+    # ─── TRIP ──────────────────────────────────────────────────────
+    Trip:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: ["string", "null"]
+        destination:
+          type: string
+        destinationCity:
+          type: string
+        destinationState:
+          type: string
+        type:
+          type: string
+        category:
+          type: string
+        departureDate:
+          type: string
+        returnDate:
+          type: ["string", "null"]
+        totalCapacity:
+          type: integer
+        availableSeats:
+          type: integer
+        reservedSeats:
+          type: integer
+        confirmedSeats:
+          type: integer
+        priceAdult:
+          type: number
+        priceChild:
+          type: ["number", "null"]
+        priceSenior:
+          type: ["number", "null"]
+        inclusions:
+          type: array
+          items:
+            type: string
+        exclusions:
+          type: array
+          items:
+            type: string
+        coverImage:
+          type: ["string", "null"]
+        gallery:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+        isPublic:
+          type: boolean
+        isFeatured:
+          type: boolean
+        vehiclePlate:
+          type: ["string", "null"]
+        vehicleType:
+          type: ["string", "null"]
+        driverName:
+          type: ["string", "null"]
+        seatLayout:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - name
+        - slug
+        - destination
+        - destinationCity
+        - destinationState
+        - type
+        - category
+        - departureDate
+        - totalCapacity
+        - availableSeats
+        - reservedSeats
+        - confirmedSeats
+        - priceAdult
+        - inclusions
+        - exclusions
+        - gallery
+        - status
+        - isPublic
+        - isFeatured
+        - createdAt
+        - updatedAt
+
+    TripListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Trip"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [data, total, page, limit]
+
+    CreateTripBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        destination:
+          type: string
+        destinationCity:
+          type: string
+        destinationState:
+          type: string
+        type:
+          type: string
+        category:
+          type: string
+        departureDate:
+          type: string
+        returnDate:
+          type: ["string", "null"]
+        totalCapacity:
+          type: integer
+        priceAdult:
+          type: number
+        priceChild:
+          type: ["number", "null"]
+        priceSenior:
+          type: ["number", "null"]
+        inclusions:
+          type: array
+          items:
+            type: string
+        exclusions:
+          type: array
+          items:
+            type: string
+        coverImage:
+          type: ["string", "null"]
+        seatLayout:
+          type: string
+        vehiclePlate:
+          type: ["string", "null"]
+        vehicleType:
+          type: ["string", "null"]
+        driverName:
+          type: ["string", "null"]
+      required:
+        - name
+        - destination
+        - destinationCity
+        - destinationState
+        - type
+        - category
+        - departureDate
+        - totalCapacity
+        - priceAdult
+
+    UpdateTripBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        status:
+          type: ["string", "null"]
+        isPublic:
+          type: ["boolean", "null"]
+        isFeatured:
+          type: ["boolean", "null"]
+        departureDate:
+          type: ["string", "null"]
+        returnDate:
+          type: ["string", "null"]
+        priceAdult:
+          type: ["number", "null"]
+        priceChild:
+          type: ["number", "null"]
+        priceSenior:
+          type: ["number", "null"]
+        totalCapacity:
+          type: ["integer", "null"]
+        coverImage:
+          type: ["string", "null"]
+        inclusions:
+          type: ["array", "null"]
+          items:
+            type: string
+        exclusions:
+          type: ["array", "null"]
+          items:
+            type: string
+        vehiclePlate:
+          type: ["string", "null"]
+        vehicleType:
+          type: ["string", "null"]
+        driverName:
+          type: ["string", "null"]
+
+    SeatMap:
+      type: object
+      properties:
+        tripId:
+          type: string
+        layout:
+          type: string
+        totalSeats:
+          type: integer
+        seats:
+          type: array
+          items:
+            $ref: "#/components/schemas/Seat"
+      required: [tripId, layout, totalSeats, seats]
+
+    Seat:
+      type: object
+      properties:
+        number:
+          type: string
+        row:
+          type: integer
+        col:
+          type: integer
+        status:
+          type: string
+        passengerName:
+          type: ["string", "null"]
+        reservationId:
+          type: ["string", "null"]
+      required: [number, row, col, status]
+
+    # ─── RESERVATION ───────────────────────────────────────────────
+    Reservation:
+      type: object
+      properties:
+        id:
+          type: string
+        tripId:
+          type: string
+        clientId:
+          type: string
+        seats:
+          type: array
+          items:
+            type: string
+        tripType:
+          type: ["string", "null"]
+        packageType:
+          type: ["string", "null"]
+        hasInsurance:
+          type: boolean
+        totalValue:
+          type: number
+        paidValue:
+          type: number
+        balance:
+          type: number
+        paymentMethod:
+          type: ["string", "null"]
+        installments:
+          type: integer
+        commissionPercentage:
+          type: ["number", "null"]
+        status:
+          type: string
+        voucherCode:
+          type: string
+        qrCode:
+          type: string
+        checkedInAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        trip:
+          $ref: "#/components/schemas/TripSummary"
+        client:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+            whatsapp:
+              type: string
+          required: [id, name, email, whatsapp]
+      required:
+        - id
+        - tripId
+        - clientId
+        - seats
+        - hasInsurance
+        - totalValue
+        - paidValue
+        - balance
+        - installments
+        - status
+        - voucherCode
+        - qrCode
+        - createdAt
+        - updatedAt
+        - trip
+        - client
+
+    ReservationListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Reservation"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [data, total, page, limit]
+
+    CreateReservationBody:
+      type: object
+      properties:
+        tripId:
+          type: string
+        clientId:
+          type: string
+        seats:
+          type: array
+          items:
+            type: string
+        tripType:
+          type: ["string", "null"]
+        packageType:
+          type: ["string", "null"]
+        hasInsurance:
+          type: boolean
+        totalValue:
+          type: number
+        paymentMethod:
+          type: ["string", "null"]
+        installments:
+          type: integer
+        commissionPercentage:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+      required: [tripId, clientId, seats, totalValue]
+
+    UpdateReservationBody:
+      type: object
+      properties:
+        status:
+          type: ["string", "null"]
+        paymentMethod:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        seats:
+          type: ["array", "null"]
+          items:
+            type: string
+
+    # ─── PASSENGER ─────────────────────────────────────────────────
+    Passenger:
+      type: object
+      properties:
+        id:
+          type: string
+        reservationId:
+          type: string
+        name:
+          type: string
+        cpf:
+          type: ["string", "null"]
+        rg:
+          type: ["string", "null"]
+        birthDate:
+          type: ["string", "null"]
+        ageCategory:
+          type: string
+        seatNumber:
+          type: ["string", "null"]
+        isChildUnder7:
+          type: boolean
+      required: [id, reservationId, name, ageCategory, isChildUnder7]
+
+    CreatePassengerBody:
+      type: object
+      properties:
+        name:
+          type: string
+        cpf:
+          type: ["string", "null"]
+        rg:
+          type: ["string", "null"]
+        birthDate:
+          type: ["string", "null"]
+        ageCategory:
+          type: string
+        seatNumber:
+          type: ["string", "null"]
+        isChildUnder7:
+          type: boolean
+      required: [name, ageCategory]
+
+    UpdatePassengerBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        cpf:
+          type: ["string", "null"]
+        seatNumber:
+          type: ["string", "null"]
+        ageCategory:
+          type: ["string", "null"]
+
+    # ─── PAYMENT ───────────────────────────────────────────────────
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+        reservationId:
+          type: ["string", "null"]
+        clientId:
+          type: ["string", "null"]
+        type:
+          type: string
+        category:
+          type: string
+        amount:
+          type: number
+        paymentMethod:
+          type: string
+        installmentNumber:
+          type: integer
+        totalInstallments:
+          type: integer
+        dueDate:
+          type: string
+        paidAt:
+          type: ["string", "null"]
+        status:
+          type: string
+        description:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - type
+        - category
+        - amount
+        - paymentMethod
+        - installmentNumber
+        - totalInstallments
+        - dueDate
+        - status
+        - createdAt
+        - updatedAt
+
+    PaymentListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Payment"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [data, total, page, limit]
+
+    CreatePaymentBody:
+      type: object
+      properties:
+        reservationId:
+          type: ["string", "null"]
+        clientId:
+          type: ["string", "null"]
+        type:
+          type: string
+        category:
+          type: string
+        amount:
+          type: number
+        paymentMethod:
+          type: string
+        installments:
+          type: integer
+        dueDate:
+          type: string
+        description:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+      required: [type, category, amount, paymentMethod, dueDate]
+
+    UpdatePaymentBody:
+      type: object
+      properties:
+        status:
+          type: ["string", "null"]
+        paidAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+
+    FinancialSummary:
+      type: object
+      properties:
+        totalReceivable:
+          type: number
+        totalPayable:
+          type: number
+        overdueReceivable:
+          type: number
+        overduePayable:
+          type: number
+        collectedThisMonth:
+          type: number
+        paidThisMonth:
+          type: number
+      required:
+        - totalReceivable
+        - totalPayable
+        - overdueReceivable
+        - overduePayable
+        - collectedThisMonth
+        - paidThisMonth
+
+    # ─── EXPENSE ───────────────────────────────────────────────────
+    Expense:
+      type: object
+      properties:
+        id:
+          type: string
+        tripId:
+          type: ["string", "null"]
+        category:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+        supplierId:
+          type: ["string", "null"]
+        paymentMethod:
+          type: ["string", "null"]
+        paymentDate:
+          type: ["string", "null"]
+        dueDate:
+          type: string
+        status:
+          type: string
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, category, description, amount, dueDate, status, createdAt]
+
+    ExpenseListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Expense"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [data, total, page, limit]
+
+    CreateExpenseBody:
+      type: object
+      properties:
+        tripId:
+          type: ["string", "null"]
+        category:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+        supplierId:
+          type: ["string", "null"]
+        paymentMethod:
+          type: ["string", "null"]
+        dueDate:
+          type: string
+        notes:
+          type: ["string", "null"]
+      required: [category, description, amount, dueDate]
+
+    UpdateExpenseBody:
+      type: object
+      properties:
+        status:
+          type: ["string", "null"]
+        paymentDate:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        amount:
+          type: ["number", "null"]
+
+    # ─── DEAL ──────────────────────────────────────────────────────
+    Deal:
+      type: object
+      properties:
+        id:
+          type: string
+        stageId:
+          type: string
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        value:
+          type: number
+        clientId:
+          type: ["string", "null"]
+        leadName:
+          type: ["string", "null"]
+        leadEmail:
+          type: ["string", "null"]
+        leadWhatsapp:
+          type: ["string", "null"]
+        tripId:
+          type: ["string", "null"]
+        ownerId:
+          type: string
+        expectedCloseDate:
+          type: ["string", "null"]
+        status:
+          type: string
+        lostReason:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        stageName:
+          type: ["string", "null"]
+        stageColor:
+          type: ["string", "null"]
+        clientName:
+          type: ["string", "null"]
+        ownerName:
+          type: ["string", "null"]
+      required:
+        - id
+        - stageId
+        - title
+        - value
+        - ownerId
+        - status
+        - createdAt
+        - updatedAt
+
+    CreateDealBody:
+      type: object
+      properties:
+        stageId:
+          type: string
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        value:
+          type: number
+        clientId:
+          type: ["string", "null"]
+        leadName:
+          type: ["string", "null"]
+        leadEmail:
+          type: ["string", "null"]
+        leadWhatsapp:
+          type: ["string", "null"]
+        tripId:
+          type: ["string", "null"]
+        expectedCloseDate:
+          type: ["string", "null"]
+      required: [stageId, title, value]
+
+    UpdateDealBody:
+      type: object
+      properties:
+        stageId:
+          type: ["string", "null"]
+        title:
+          type: ["string", "null"]
+        value:
+          type: ["number", "null"]
+        status:
+          type: ["string", "null"]
+        lostReason:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        expectedCloseDate:
+          type: ["string", "null"]
+
+    PipelineStage:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        color:
+          type: string
+        order:
+          type: integer
+        isFinal:
+          type: boolean
+        dealsCount:
+          type: integer
+        dealsValue:
+          type: number
+      required: [id, name, color, order, isFinal, dealsCount, dealsValue]
+
+    # ─── MESSAGE ───────────────────────────────────────────────────
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+        toClientId:
+          type: ["string", "null"]
+        channel:
+          type: string
+        content:
+          type: string
+        mediaUrl:
+          type: ["string", "null"]
+        status:
+          type: string
+        sentAt:
+          type: string
+        deliveredAt:
+          type: ["string", "null"]
+        readAt:
+          type: ["string", "null"]
+        clientName:
+          type: ["string", "null"]
+      required: [id, channel, content, status, sentAt]
+
+    SendMessageBody:
+      type: object
+      properties:
+        toClientId:
+          type: string
+        channel:
+          type: string
+        content:
+          type: string
+        mediaUrl:
+          type: ["string", "null"]
+      required: [toClientId, channel, content]
+
+    MessageTemplate:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        channel:
+          type: string
+        subject:
+          type: ["string", "null"]
+        content:
+          type: string
+        variables:
+          type: array
+          items:
+            type: string
+        category:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, name, channel, content, variables, createdAt]
+
+    CreateMessageTemplateBody:
+      type: object
+      properties:
+        name:
+          type: string
+        channel:
+          type: string
+        subject:
+          type: ["string", "null"]
+        content:
+          type: string
+        variables:
+          type: array
+          items:
+            type: string
+        category:
+          type: ["string", "null"]
+      required: [name, channel, content]
+
+    UpdateMessageTemplateBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        subject:
+          type: ["string", "null"]
+        content:
+          type: ["string", "null"]
+        category:
+          type: ["string", "null"]
+
+    # ─── AUTOMATION ────────────────────────────────────────────────
+    Automation:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        triggerType:
+          type: string
+        triggerConfig:
+          type: object
+          additionalProperties: true
+        isActive:
+          type: boolean
+        executionsCount:
+          type: integer
+        lastExecutedAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, name, triggerType, triggerConfig, isActive, executionsCount, createdAt]
+
+    CreateAutomationBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        triggerType:
+          type: string
+        triggerConfig:
+          type: object
+          additionalProperties: true
+        conditions:
+          type: ["object", "null"]
+          additionalProperties: true
+      required: [name, triggerType, triggerConfig]
+
+    UpdateAutomationBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        isActive:
+          type: ["boolean", "null"]
+        triggerConfig:
+          type: ["object", "null"]
+          additionalProperties: true
+
+    # ─── SUPPLIER ──────────────────────────────────────────────────
+    Supplier:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        cnpj:
+          type: ["string", "null"]
+        contactName:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        whatsapp:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        addressCity:
+          type: ["string", "null"]
+        addressState:
+          type: ["string", "null"]
+        pixKey:
+          type: ["string", "null"]
+        status:
+          type: string
+        createdAt:
+          type: string
+      required: [id, name, type, status, createdAt]
+
+    CreateSupplierBody:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        cnpj:
+          type: ["string", "null"]
+        contactName:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        whatsapp:
+          type: ["string", "null"]
+        addressCity:
+          type: ["string", "null"]
+        addressState:
+          type: ["string", "null"]
+        pixKey:
+          type: ["string", "null"]
+      required: [name, type]
+
+    UpdateSupplierBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        status:
+          type: ["string", "null"]
+        contactName:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        pixKey:
+          type: ["string", "null"]
+
+    # ─── VEHICLE ───────────────────────────────────────────────────
+    Vehicle:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        plate:
+          type: string
+        capacity:
+          type: integer
+        model:
+          type: ["string", "null"]
+        year:
+          type: ["integer", "null"]
+        amenities:
+          type: array
+          items:
+            type: string
+        dailyRate:
+          type: ["number", "null"]
+        photoUrl:
+          type: ["string", "null"]
+        status:
+          type: string
+        createdAt:
+          type: string
+      required: [id, name, type, plate, capacity, amenities, status, createdAt]
+
+    CreateVehicleBody:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        plate:
+          type: string
+        capacity:
+          type: integer
+        model:
+          type: ["string", "null"]
+        year:
+          type: ["integer", "null"]
+        amenities:
+          type: array
+          items:
+            type: string
+        dailyRate:
+          type: ["number", "null"]
+        photoUrl:
+          type: ["string", "null"]
+      required: [name, type, plate, capacity]
+
+    UpdateVehicleBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        status:
+          type: ["string", "null"]
+        capacity:
+          type: ["integer", "null"]
+        dailyRate:
+          type: ["number", "null"]
+
+    # ─── ACCOMMODATION ─────────────────────────────────────────────
+    Accommodation:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        address:
+          type: ["string", "null"]
+        city:
+          type: ["string", "null"]
+        state:
+          type: ["string", "null"]
+        contactName:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        totalRooms:
+          type: ["integer", "null"]
+        amenities:
+          type: array
+          items:
+            type: string
+        pricePerNight:
+          type: ["number", "null"]
+        coverImage:
+          type: ["string", "null"]
+        rating:
+          type: ["number", "null"]
+        status:
+          type: string
+        createdAt:
+          type: string
+      required: [id, name, type, amenities, status, createdAt]
+
+    CreateAccommodationBody:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        address:
+          type: ["string", "null"]
+        city:
+          type: ["string", "null"]
+        state:
+          type: ["string", "null"]
+        contactName:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        totalRooms:
+          type: ["integer", "null"]
+        amenities:
+          type: array
+          items:
+            type: string
+        pricePerNight:
+          type: ["number", "null"]
+      required: [name, type]
+
+    UpdateAccommodationBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        status:
+          type: ["string", "null"]
+        pricePerNight:
+          type: ["number", "null"]
+        totalRooms:
+          type: ["integer", "null"]
+
+    # ─── DESTINATION ───────────────────────────────────────────────
+    Destination:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        country:
+          type: string
+        description:
+          type: ["string", "null"]
+        mainAttractions:
+          type: array
+          items:
+            type: string
+        bestSeason:
+          type: ["string", "null"]
+        coverImage:
+          type: ["string", "null"]
+        rating:
+          type: ["number", "null"]
+        createdAt:
+          type: string
+      required: [id, name, city, state, country, mainAttractions, createdAt]
+
+    CreateDestinationBody:
+      type: object
+      properties:
+        name:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        country:
+          type: string
+        description:
+          type: ["string", "null"]
+        mainAttractions:
+          type: array
+          items:
+            type: string
+        bestSeason:
+          type: ["string", "null"]
+        coverImage:
+          type: ["string", "null"]
+      required: [name, city, state]
+
+    UpdateDestinationBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        mainAttractions:
+          type: ["array", "null"]
+          items:
+            type: string
+        bestSeason:
+          type: ["string", "null"]
+        coverImage:
+          type: ["string", "null"]
+        rating:
+          type: ["number", "null"]
+
+    # ─── PRODUCT ───────────────────────────────────────────────────
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: ["string", "null"]
+        type:
+          type: string
+        price:
+          type: number
+        promotionalPrice:
+          type: ["number", "null"]
+        stock:
+          type: ["integer", "null"]
+        active:
+          type: boolean
+        featured:
+          type: boolean
+        createdAt:
+          type: string
+      required: [id, name, slug, type, price, active, featured, createdAt]
+
+    CreateProductBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        type:
+          type: string
+        price:
+          type: number
+        promotionalPrice:
+          type: ["number", "null"]
+        stock:
+          type: ["integer", "null"]
+      required: [name, type, price]
+
+    UpdateProductBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        price:
+          type: ["number", "null"]
+        promotionalPrice:
+          type: ["number", "null"]
+        active:
+          type: ["boolean", "null"]
+        featured:
+          type: ["boolean", "null"]
+        stock:
+          type: ["integer", "null"]
+
+    # ─── ORDER ─────────────────────────────────────────────────────
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        totalAmount:
+          type: number
+        finalAmount:
+          type: number
+        status:
+          type: string
+        paymentStatus:
+          type: string
+        createdAt:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItem"
+      required: [id, userId, totalAmount, finalAmount, status, paymentStatus, createdAt, items]
+
+    OrderItem:
+      type: object
+      properties:
+        id:
+          type: string
+        productId:
+          type: string
+        quantity:
+          type: integer
+        price:
+          type: number
+        productName:
+          type: ["string", "null"]
+      required: [id, productId, quantity, price]
+
+    UpdateOrderBody:
+      type: object
+      properties:
+        status:
+          type: ["string", "null"]
+        paymentStatus:
+          type: ["string", "null"]
+
+    # ─── CAMPAIGN ──────────────────────────────────────────────────
+    Campaign:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        subject:
+          type: ["string", "null"]
+        content:
+          type: string
+        scheduledAt:
+          type: ["string", "null"]
+        sentAt:
+          type: ["string", "null"]
+        recipientsCount:
+          type: integer
+        sentCount:
+          type: integer
+        openedCount:
+          type: integer
+        clickedCount:
+          type: integer
+        createdAt:
+          type: string
+      required: [id, name, type, status, content, recipientsCount, sentCount, openedCount, clickedCount, createdAt]
+
+    CreateCampaignBody:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        subject:
+          type: ["string", "null"]
+        content:
+          type: string
+        targetSegment:
+          type: object
+          additionalProperties: true
+        scheduledAt:
+          type: ["string", "null"]
+      required: [name, type, content, targetSegment]
+
+    UpdateCampaignBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        status:
+          type: ["string", "null"]
+        scheduledAt:
+          type: ["string", "null"]
+        content:
+          type: ["string", "null"]
+
+    # ─── NPS ───────────────────────────────────────────────────────
+    NpsResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        score:
+          type: integer
+        classification:
+          type: string
+        feedback:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, userId, score, classification, createdAt]
+
+    NpsSummary:
+      type: object
+      properties:
+        averageScore:
+          type: number
+        npsScore:
+          type: number
+        promoters:
+          type: integer
+        passives:
+          type: integer
+        detractors:
+          type: integer
+        total:
+          type: integer
+      required: [averageScore, npsScore, promoters, passives, detractors, total]
+
+    # ─── USER ──────────────────────────────────────────────────────
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        clerkId:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        tenantId:
+          type: ["string", "null"]
+        referralCode:
+          type: string
+        referralBalance:
+          type: number
+        createdAt:
+          type: string
+      required: [id, clerkId, name, email, role, isActive, referralCode, referralBalance, createdAt]
+
+    SyncUserBody:
+      type: object
+      properties:
+        clerkId:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+      required: [clerkId, name, email]
+
+    CreateUserBody:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+      required: [name, email, role]
+
+    UpdateUserBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        role:
+          type: ["string", "null"]
+        isActive:
+          type: ["boolean", "null"]

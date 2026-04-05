@@ -1,20 +1,69 @@
-# Workspace
+# VisiteCRM
 
 ## Overview
 
+VisiteCRM is a comprehensive SaaS CRM platform for Brazilian tourism agencies specializing in group excursions. It features multi-tenancy, role-based access, trip/seat management, reservations, financial tracking, Kanban pipeline, communication, automations, loyalty programs, NPS, and analytics.
+
+## Architecture
+
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
 
-## Stack
+### Stack
 
 - **Monorepo tool**: pnpm workspaces
 - **Node.js version**: 24
 - **Package manager**: pnpm
-- **TypeScript version**: 5.9
+- **Frontend**: React 19 + Vite + Tailwind CSS v4 + shadcn/ui
+- **Auth**: Clerk (`@clerk/react`, `@clerk/express`)
 - **API framework**: Express 5
 - **Database**: PostgreSQL + Drizzle ORM
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+- **Build**: esbuild (API) + Vite (frontend)
+
+## Artifacts
+
+- **`artifacts/visitecrm`** — React frontend, port 19951, preview at `/`
+- **`artifacts/api-server`** — Express API server, port 8080, routes at `/api`
+- **`artifacts/mockup-sandbox`** — Vite component preview server, port 8081
+
+## Key Pages (all in Brazilian Portuguese)
+
+| Route | Page | Features |
+|-------|------|----------|
+| `/` | Landing | Marketing page with sign in/up |
+| `/dashboard` | Dashboard | Stats cards + upcoming trips |
+| `/pipeline` | Pipeline | Kanban drag-and-drop sales pipeline |
+| `/clients` | Clientes | Client list with search + create |
+| `/trips` | Viagens | Trip management + seat tracking |
+| `/reservations` | Reservas | Reservation management + vouchers |
+| `/financial` | Financeiro | Receivables, payables, expenses |
+| `/communication` | Comunicação | Messages + templates |
+| `/automations` | Automações | Rule-based automation triggers |
+| `/marketing` | Marketing | Campaigns + NPS tracking |
+| `/registrations` | Cadastros | Suppliers, Vehicles, Accommodations, Destinations |
+| `/settings` | Configurações | User profile + team management |
+
+## Key API Routes
+
+All routes under `/api/`:
+- `GET/POST /api/dashboard/*` — dashboard stats
+- `GET/POST/PUT /api/clients` — client CRUD
+- `GET/POST/PUT /api/trips` — trip CRUD
+- `GET/POST/PUT /api/reservations` — reservation CRUD
+- `GET/POST/PUT /api/payments` — payment/financial CRUD
+- `GET/POST/PUT /api/pipeline/stages`, `/api/deals` — Kanban pipeline
+- `GET/POST /api/messages`, `/api/message-templates` — communication
+- `GET/POST/PUT /api/automations` — automations
+- `GET/POST /api/campaigns` — marketing campaigns
+- `GET/POST /api/nps-responses`, `/api/nps/summary` — NPS
+- `GET/POST /api/suppliers`, `/api/vehicles`, `/api/accommodations`, `/api/destinations` — registrations
+- `POST /api/users/me/sync` — sync Clerk user to DB
+- `GET /api/users/me` — get current user profile
+
+## Database Schema (Drizzle)
+
+Schema in `lib/db/src/schema/`: tenants, users, clients, trips, reservations, passengers, seats, payments, expenses, pipeline_stages, deals, messages, message_templates, automations, suppliers, vehicles, accommodations, destinations, campaigns, nps_responses, loyalty_points, referrals.
 
 ## Key Commands
 
@@ -24,4 +73,16 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
 
-See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+## Multi-tenancy & Roles
+
+- Roles: `superadmin`, `agencia`, `vendedor`, `cliente`
+- Each agency has one tenant; pipeline stages are auto-created on first load
+- Users are created/synced on sign-in via `POST /api/users/me/sync`
+
+## Important Notes
+
+- API build uses esbuild (not tsc) — `tsc --noEmit` errors can be ignored
+- DB schema uses text IDs via `generateId()` (randomBytes base64url), NOT serial integers
+- All numeric DB columns use `String()` on insert (Drizzle numeric type), `Number()` on read
+- Pipeline stages are created via `ensureDefaultPipeline()` on first `/api/pipeline/stages` request
+- `SyncMeBody` requires `clerkId`, `name`, `email` fields (passed from Clerk user object)
