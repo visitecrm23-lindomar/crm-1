@@ -73,7 +73,17 @@ router.get("/reservations", async (req, res): Promise<void> => {
     if (tripId) conditions.push(eq(reservationsTable.tripId, tripId));
     if (status) conditions.push(eq(reservationsTable.status, status));
 
-    if (me.role === "vendedor") {
+    if (me.role === "cliente") {
+      const [clientRecord] = await db.select({ id: clientsTable.id })
+        .from(clientsTable)
+        .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.userId, me.id)))
+        .limit(1);
+      if (!clientRecord) {
+        res.json({ data: [], total: 0, page: pageNum, limit: limitNum });
+        return;
+      }
+      conditions.push(eq(reservationsTable.clientId, clientRecord.id));
+    } else if (me.role === "vendedor") {
       const sellerClients = await db.select({ id: clientsTable.id })
         .from(clientsTable)
         .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.createdById, me.id)));

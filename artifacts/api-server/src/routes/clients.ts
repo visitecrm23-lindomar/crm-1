@@ -58,7 +58,27 @@ router.get("/clients", async (req, res): Promise<void> => {
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (pageNum - 1) * limitNum;
 
+    if (me.role === "cliente") {
+      const [clientRecord] = await db.select().from(clientsTable)
+        .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.userId, me.id)))
+        .limit(1);
+      if (!clientRecord) {
+        res.json({ data: [], total: 0, page: pageNum, limit: limitNum });
+        return;
+      }
+      res.json({
+        data: [{ ...formatClient(clientRecord), lastTripName: null }],
+        total: 1, page: pageNum, limit: limitNum,
+      });
+      return;
+    }
+
     const conditions: ReturnType<typeof eq>[] = [eq(clientsTable.tenantId, me.tenantId)];
+
+    if (me.role === "vendedor") {
+      conditions.push(eq(clientsTable.createdById, me.id));
+    }
+
     if (search) {
       conditions.push(or(
         ilike(clientsTable.name, `%${search}%`),
@@ -73,7 +93,7 @@ router.get("/clients", async (req, res): Promise<void> => {
     if (origin) conditions.push(ilike(clientsTable.origin, `%${origin}%`) as ReturnType<typeof eq>);
     if (dateFrom) conditions.push(sql`${clientsTable.createdAt} >= ${new Date(dateFrom)}` as ReturnType<typeof eq>);
     if (dateTo) conditions.push(sql`${clientsTable.createdAt} <= ${new Date(dateTo)}` as ReturnType<typeof eq>);
-    if (sellerId) conditions.push(eq(clientsTable.createdById, sellerId));
+    if (me.role !== "vendedor" && sellerId) conditions.push(eq(clientsTable.createdById, sellerId));
     if (tripId) {
       const clientIdsInTrip = await db.selectDistinct({ clientId: reservationsTable.clientId })
         .from(reservationsTable)
