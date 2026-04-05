@@ -10,11 +10,21 @@ import communicationRouter from "./communication";
 import registrationsRouter from "./registrations";
 import marketingRouter from "./marketing";
 import dashboardRouter from "./dashboard";
+import loyaltyRouter from "./loyalty";
+import commissionsRouter from "./commissions";
+import referralsRouter from "./referrals";
+import boardingRouter from "./boarding";
+import couponsRouter from "./coupons";
+import documentsRouter from "./documents";
+import chatbotRouter from "./chatbot";
+import auditRouter from "./audit";
+import tenantsRouter from "./tenants";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(dashboardRouter);
+router.use(tenantsRouter);
 router.use(usersRouter);
 router.use(clientsRouter);
 router.use(tripsRouter);
@@ -24,5 +34,13 @@ router.use(pipelineRouter);
 router.use(communicationRouter);
 router.use(registrationsRouter);
 router.use(marketingRouter);
+router.use(loyaltyRouter);
+router.use(commissionsRouter);
+router.use(referralsRouter);
+router.use(boardingRouter);
+router.use(couponsRouter);
+router.use(documentsRouter);
+router.use(chatbotRouter);
+router.use(auditRouter);
 
 export default router;
