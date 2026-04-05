@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { pipelineStagesTable, dealsTable, clientsTable, tripsTable, usersTable } from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
-import { CreateDealBody, UpdateDealBody, MoveDealBody } from "@workspace/api-zod";
+import { CreateDealBody, UpdateDealBody } from "@workspace/api-zod";
 
 const router = Router();
 
@@ -40,6 +40,19 @@ async function ensureDefaultPipeline(tenantId: string): Promise<void> {
       isFinal: (stage as any).isFinal ?? false,
     });
   }
+}
+
+function formatDeal(d: any, extra?: { stageName?: string; stageColor?: string; clientName?: string; ownerName?: string }) {
+  return {
+    id: d.id, stageId: d.stageId, title: d.title, description: d.description,
+    value: Number(d.value), clientId: d.clientId, leadName: d.leadName,
+    leadEmail: d.leadEmail, leadWhatsapp: d.leadWhatsapp, tripId: d.tripId,
+    ownerId: d.ownerId, expectedCloseDate: d.expectedCloseDate?.toISOString() ?? null,
+    status: d.status, lostReason: d.lostReason,
+    createdAt: d.createdAt.toISOString(), updatedAt: d.updatedAt.toISOString(),
+    stageName: extra?.stageName ?? null, stageColor: extra?.stageColor ?? null,
+    clientName: extra?.clientName ?? null, ownerName: extra?.ownerName ?? null,
+  };
 }
 
 router.get("/pipeline/stages", async (req, res): Promise<void> => {
@@ -101,17 +114,11 @@ router.get("/deals", async (req, res): Promise<void> => {
     const clients = await db.select().from(clientsTable).where(eq(clientsTable.tenantId, me.tenantId));
     clients.forEach(c => { clientsMap[c.id] = c; });
 
-    res.json(deals.map(d => ({
-      id: d.id, stageId: d.stageId, title: d.title, description: d.description,
-      value: Number(d.value), clientId: d.clientId, leadName: d.leadName,
-      leadEmail: d.leadEmail, leadWhatsapp: d.leadWhatsapp, tripId: d.tripId,
-      ownerId: d.ownerId, expectedCloseDate: d.expectedCloseDate?.toISOString() ?? null,
-      status: d.status, lostReason: d.lostReason,
-      createdAt: d.createdAt.toISOString(), updatedAt: d.updatedAt.toISOString(),
-      stageName: stagesMap[d.stageId]?.name ?? null,
-      stageColor: stagesMap[d.stageId]?.color ?? null,
-      clientName: d.clientId ? clientsMap[d.clientId]?.name ?? null : null,
-      ownerName: usersMap[d.ownerId]?.name ?? null,
+    res.json(deals.map(d => formatDeal(d, {
+      stageName: stagesMap[d.stageId]?.name,
+      stageColor: stagesMap[d.stageId]?.color,
+      clientName: d.clientId ? clientsMap[d.clientId]?.name : null,
+      ownerName: usersMap[d.ownerId]?.name,
     })));
   } catch (err) {
     req.log.error({ err }, "Error listing deals");
@@ -122,14 +129,14 @@ router.get("/deals", async (req, res): Promise<void> => {
 router.post("/deals", async (req, res): Promise<void> => {
   try {
     const me = await getTenantInfo(req);
-    if (!me) { res.status(401).json({ error: "Not authenticated" }); return; }
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = CreateDealBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
     const id = generateId();
     await db.insert(dealsTable).values({
       id,
-      tenantId: me.tenantId ?? "default-tenant",
+      tenantId: me.tenantId,
       stageId: parsed.data.stageId,
       title: parsed.data.title,
       description: parsed.data.description ?? null,
@@ -144,15 +151,7 @@ router.post("/deals", async (req, res): Promise<void> => {
     });
 
     const [deal] = await db.select().from(dealsTable).where(eq(dealsTable.id, id)).limit(1);
-    res.status(201).json({
-      id: deal.id, stageId: deal.stageId, title: deal.title, description: deal.description,
-      value: Number(deal.value), clientId: deal.clientId, leadName: deal.leadName,
-      leadEmail: deal.leadEmail, leadWhatsapp: deal.leadWhatsapp, tripId: deal.tripId,
-      ownerId: deal.ownerId, expectedCloseDate: deal.expectedCloseDate?.toISOString() ?? null,
-      status: deal.status, lostReason: deal.lostReason,
-      createdAt: deal.createdAt.toISOString(), updatedAt: deal.updatedAt.toISOString(),
-      stageName: null, stageColor: null, clientName: null, ownerName: null,
-    });
+    res.status(201).json(formatDeal(deal));
   } catch (err) {
     req.log.error({ err }, "Error creating deal");
     res.status(500).json({ error: "Internal server error" });
@@ -161,17 +160,13 @@ router.post("/deals", async (req, res): Promise<void> => {
 
 router.get("/deals/:id", async (req, res): Promise<void> => {
   try {
-    const [deal] = await db.select().from(dealsTable).where(eq(dealsTable.id, req.params.id)).limit(1);
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const [deal] = await db.select().from(dealsTable)
+      .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!deal) { res.status(404).json({ error: "Not found" }); return; }
-    res.json({
-      id: deal.id, stageId: deal.stageId, title: deal.title, description: deal.description,
-      value: Number(deal.value), clientId: deal.clientId, leadName: deal.leadName,
-      leadEmail: deal.leadEmail, leadWhatsapp: deal.leadWhatsapp, tripId: deal.tripId,
-      ownerId: deal.ownerId, expectedCloseDate: deal.expectedCloseDate?.toISOString() ?? null,
-      status: deal.status, lostReason: deal.lostReason,
-      createdAt: deal.createdAt.toISOString(), updatedAt: deal.updatedAt.toISOString(),
-      stageName: null, stageColor: null, clientName: null, ownerName: null,
-    });
+    res.json(formatDeal(deal));
   } catch (err) {
     req.log.error({ err }, "Error fetching deal");
     res.status(500).json({ error: "Internal server error" });
@@ -180,6 +175,8 @@ router.get("/deals/:id", async (req, res): Promise<void> => {
 
 router.patch("/deals/:id", async (req, res): Promise<void> => {
   try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = UpdateDealBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const updates: any = {};
@@ -194,18 +191,13 @@ router.patch("/deals/:id", async (req, res): Promise<void> => {
     if (parsed.data.description !== undefined) updates.description = parsed.data.description;
     if (parsed.data.expectedCloseDate !== undefined) updates.expectedCloseDate = parsed.data.expectedCloseDate ? new Date(parsed.data.expectedCloseDate) : null;
 
-    await db.update(dealsTable).set(updates).where(eq(dealsTable.id, req.params.id));
-    const [deal] = await db.select().from(dealsTable).where(eq(dealsTable.id, req.params.id)).limit(1);
+    await db.update(dealsTable).set(updates)
+      .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)));
+    const [deal] = await db.select().from(dealsTable)
+      .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!deal) { res.status(404).json({ error: "Not found" }); return; }
-    res.json({
-      id: deal.id, stageId: deal.stageId, title: deal.title, description: deal.description,
-      value: Number(deal.value), clientId: deal.clientId, leadName: deal.leadName,
-      leadEmail: deal.leadEmail, leadWhatsapp: deal.leadWhatsapp, tripId: deal.tripId,
-      ownerId: deal.ownerId, expectedCloseDate: deal.expectedCloseDate?.toISOString() ?? null,
-      status: deal.status, lostReason: deal.lostReason,
-      createdAt: deal.createdAt.toISOString(), updatedAt: deal.updatedAt.toISOString(),
-      stageName: null, stageColor: null, clientName: null, ownerName: null,
-    });
+    res.json(formatDeal(deal));
   } catch (err) {
     req.log.error({ err }, "Error updating deal");
     res.status(500).json({ error: "Internal server error" });
@@ -214,7 +206,10 @@ router.patch("/deals/:id", async (req, res): Promise<void> => {
 
 router.delete("/deals/:id", async (req, res): Promise<void> => {
   try {
-    await db.delete(dealsTable).where(eq(dealsTable.id, req.params.id));
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    await db.delete(dealsTable)
+      .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Error deleting deal");
@@ -224,20 +219,21 @@ router.delete("/deals/:id", async (req, res): Promise<void> => {
 
 router.patch("/deals/:id/move", async (req, res): Promise<void> => {
   try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const { stageId } = req.body;
     if (!stageId) { res.status(400).json({ error: "stageId required" }); return; }
-    await db.update(dealsTable).set({ stageId }).where(eq(dealsTable.id, req.params.id));
-    const [deal] = await db.select().from(dealsTable).where(eq(dealsTable.id, req.params.id)).limit(1);
+    const [stage] = await db.select().from(pipelineStagesTable)
+      .where(and(eq(pipelineStagesTable.id, stageId), eq(pipelineStagesTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!stage) { res.status(403).json({ error: "Stage not in tenant" }); return; }
+    await db.update(dealsTable).set({ stageId })
+      .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)));
+    const [deal] = await db.select().from(dealsTable)
+      .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!deal) { res.status(404).json({ error: "Not found" }); return; }
-    res.json({
-      id: deal.id, stageId: deal.stageId, title: deal.title, description: deal.description,
-      value: Number(deal.value), clientId: deal.clientId, leadName: deal.leadName,
-      leadEmail: deal.leadEmail, leadWhatsapp: deal.leadWhatsapp, tripId: deal.tripId,
-      ownerId: deal.ownerId, expectedCloseDate: deal.expectedCloseDate?.toISOString() ?? null,
-      status: deal.status, lostReason: deal.lostReason,
-      createdAt: deal.createdAt.toISOString(), updatedAt: deal.updatedAt.toISOString(),
-      stageName: null, stageColor: null, clientName: null, ownerName: null,
-    });
+    res.json(formatDeal(deal));
   } catch (err) {
     req.log.error({ err }, "Error moving deal");
     res.status(500).json({ error: "Internal server error" });

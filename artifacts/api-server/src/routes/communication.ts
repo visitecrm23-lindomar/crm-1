@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { messagesTable, messageTemplatesTable, automationsTable, clientsTable, usersTable } from "@workspace/db";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import {
   SendMessageBody,
@@ -40,7 +40,8 @@ router.get("/messages", async (req, res): Promise<void> => {
       .limit(limitNum).offset(offset);
 
     const clientsMap: Record<string, string> = {};
-    const clients = await db.select({ id: clientsTable.id, name: clientsTable.name }).from(clientsTable);
+    const clients = await db.select({ id: clientsTable.id, name: clientsTable.name }).from(clientsTable)
+      .where(eq(clientsTable.tenantId, me.tenantId));
     clients.forEach(c => { clientsMap[c.id] = c.name; });
 
     res.json(messages.map(m => ({
@@ -58,14 +59,14 @@ router.get("/messages", async (req, res): Promise<void> => {
 router.post("/messages", async (req, res): Promise<void> => {
   try {
     const me = await getTenantInfo(req);
-    if (!me) { res.status(401).json({ error: "Not authenticated" }); return; }
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = SendMessageBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
     const id = generateId();
     await db.insert(messagesTable).values({
       id,
-      tenantId: me.tenantId ?? "default-tenant",
+      tenantId: me.tenantId,
       fromUserId: me.id,
       toClientId: parsed.data.toClientId,
       channel: parsed.data.channel,
@@ -109,14 +110,14 @@ router.get("/message-templates", async (req, res): Promise<void> => {
 router.post("/message-templates", async (req, res): Promise<void> => {
   try {
     const me = await getTenantInfo(req);
-    if (!me) { res.status(401).json({ error: "Not authenticated" }); return; }
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = CreateMessageTemplateBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
     const id = generateId();
     await db.insert(messageTemplatesTable).values({
       id,
-      tenantId: me.tenantId ?? "default-tenant",
+      tenantId: me.tenantId,
       name: parsed.data.name,
       channel: parsed.data.channel,
       subject: parsed.data.subject ?? null,
@@ -139,6 +140,8 @@ router.post("/message-templates", async (req, res): Promise<void> => {
 
 router.patch("/message-templates/:id", async (req, res): Promise<void> => {
   try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = UpdateMessageTemplateBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const updates: any = {};
@@ -146,8 +149,11 @@ router.patch("/message-templates/:id", async (req, res): Promise<void> => {
     if (parsed.data.subject !== undefined) updates.subject = parsed.data.subject;
     if (parsed.data.content != null) updates.content = parsed.data.content;
     if (parsed.data.category !== undefined) updates.category = parsed.data.category;
-    await db.update(messageTemplatesTable).set(updates).where(eq(messageTemplatesTable.id, req.params.id));
-    const [template] = await db.select().from(messageTemplatesTable).where(eq(messageTemplatesTable.id, req.params.id)).limit(1);
+    await db.update(messageTemplatesTable).set(updates)
+      .where(and(eq(messageTemplatesTable.id, req.params.id), eq(messageTemplatesTable.tenantId, me.tenantId)));
+    const [template] = await db.select().from(messageTemplatesTable)
+      .where(and(eq(messageTemplatesTable.id, req.params.id), eq(messageTemplatesTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!template) { res.status(404).json({ error: "Not found" }); return; }
     res.json({
       id: template.id, name: template.name, channel: template.channel, subject: template.subject,
@@ -162,7 +168,10 @@ router.patch("/message-templates/:id", async (req, res): Promise<void> => {
 
 router.delete("/message-templates/:id", async (req, res): Promise<void> => {
   try {
-    await db.delete(messageTemplatesTable).where(eq(messageTemplatesTable.id, req.params.id));
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    await db.delete(messageTemplatesTable)
+      .where(and(eq(messageTemplatesTable.id, req.params.id), eq(messageTemplatesTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Error deleting template");
@@ -194,14 +203,14 @@ router.get("/automations", async (req, res): Promise<void> => {
 router.post("/automations", async (req, res): Promise<void> => {
   try {
     const me = await getTenantInfo(req);
-    if (!me) { res.status(401).json({ error: "Not authenticated" }); return; }
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = CreateAutomationBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
     const id = generateId();
     await db.insert(automationsTable).values({
       id,
-      tenantId: me.tenantId ?? "default-tenant",
+      tenantId: me.tenantId,
       name: parsed.data.name,
       description: parsed.data.description ?? null,
       triggerType: parsed.data.triggerType,
@@ -224,6 +233,8 @@ router.post("/automations", async (req, res): Promise<void> => {
 
 router.patch("/automations/:id", async (req, res): Promise<void> => {
   try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = UpdateAutomationBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const updates: any = {};
@@ -231,8 +242,11 @@ router.patch("/automations/:id", async (req, res): Promise<void> => {
     if (parsed.data.description !== undefined) updates.description = parsed.data.description;
     if (parsed.data.isActive != null) updates.isActive = parsed.data.isActive;
     if (parsed.data.triggerConfig != null) updates.triggerConfig = parsed.data.triggerConfig;
-    await db.update(automationsTable).set(updates).where(eq(automationsTable.id, req.params.id));
-    const [automation] = await db.select().from(automationsTable).where(eq(automationsTable.id, req.params.id)).limit(1);
+    await db.update(automationsTable).set(updates)
+      .where(and(eq(automationsTable.id, req.params.id), eq(automationsTable.tenantId, me.tenantId)));
+    const [automation] = await db.select().from(automationsTable)
+      .where(and(eq(automationsTable.id, req.params.id), eq(automationsTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!automation) { res.status(404).json({ error: "Not found" }); return; }
     res.json({
       id: automation.id, name: automation.name, description: automation.description,
@@ -249,7 +263,10 @@ router.patch("/automations/:id", async (req, res): Promise<void> => {
 
 router.delete("/automations/:id", async (req, res): Promise<void> => {
   try {
-    await db.delete(automationsTable).where(eq(automationsTable.id, req.params.id));
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    await db.delete(automationsTable)
+      .where(and(eq(automationsTable.id, req.params.id), eq(automationsTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Error deleting automation");
@@ -259,10 +276,17 @@ router.delete("/automations/:id", async (req, res): Promise<void> => {
 
 router.patch("/automations/:id/toggle", async (req, res): Promise<void> => {
   try {
-    const [current] = await db.select().from(automationsTable).where(eq(automationsTable.id, req.params.id)).limit(1);
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const [current] = await db.select().from(automationsTable)
+      .where(and(eq(automationsTable.id, req.params.id), eq(automationsTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!current) { res.status(404).json({ error: "Not found" }); return; }
-    await db.update(automationsTable).set({ isActive: !current.isActive }).where(eq(automationsTable.id, req.params.id));
-    const [automation] = await db.select().from(automationsTable).where(eq(automationsTable.id, req.params.id)).limit(1);
+    await db.update(automationsTable).set({ isActive: !current.isActive })
+      .where(and(eq(automationsTable.id, req.params.id), eq(automationsTable.tenantId, me.tenantId)));
+    const [automation] = await db.select().from(automationsTable)
+      .where(and(eq(automationsTable.id, req.params.id), eq(automationsTable.tenantId, me.tenantId)))
+      .limit(1);
     res.json({
       id: automation.id, name: automation.name, description: automation.description,
       triggerType: automation.triggerType, triggerConfig: automation.triggerConfig,

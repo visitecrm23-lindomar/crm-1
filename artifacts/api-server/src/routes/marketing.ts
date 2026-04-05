@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { campaignsTable, npsResponsesTable, productsTable, ordersTable, orderItemsTable, usersTable } from "@workspace/db";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { CreateCampaignBody, UpdateCampaignBody, CreateProductBody, UpdateProductBody, UpdateOrderBody } from "@workspace/api-zod";
 
@@ -14,6 +14,24 @@ async function getTenantInfo(req: any) {
   return me;
 }
 
+function formatCampaign(c: any) {
+  return {
+    id: c.id, name: c.name, type: c.type, status: c.status, subject: c.subject,
+    content: c.content, scheduledAt: c.scheduledAt?.toISOString() ?? null,
+    sentAt: c.sentAt?.toISOString() ?? null, recipientsCount: c.recipientsCount,
+    sentCount: c.sentCount, openedCount: c.openedCount, clickedCount: c.clickedCount,
+    createdAt: c.createdAt.toISOString(),
+  };
+}
+
+function formatProduct(p: any) {
+  return {
+    id: p.id, name: p.name, slug: p.slug, description: p.description,
+    type: p.type, price: Number(p.price), promotionalPrice: p.promotionalPrice ? Number(p.promotionalPrice) : null,
+    stock: p.stock, active: p.active, featured: p.featured, createdAt: p.createdAt.toISOString(),
+  };
+}
+
 // Campaigns
 router.get("/campaigns", async (req, res): Promise<void> => {
   try {
@@ -21,25 +39,19 @@ router.get("/campaigns", async (req, res): Promise<void> => {
     if (!me?.tenantId) { res.json([]); return; }
     const campaigns = await db.select().from(campaignsTable)
       .where(eq(campaignsTable.tenantId, me.tenantId)).orderBy(desc(campaignsTable.createdAt));
-    res.json(campaigns.map(c => ({
-      id: c.id, name: c.name, type: c.type, status: c.status, subject: c.subject,
-      content: c.content, scheduledAt: c.scheduledAt?.toISOString() ?? null,
-      sentAt: c.sentAt?.toISOString() ?? null, recipientsCount: c.recipientsCount,
-      sentCount: c.sentCount, openedCount: c.openedCount, clickedCount: c.clickedCount,
-      createdAt: c.createdAt.toISOString(),
-    })));
+    res.json(campaigns.map(formatCampaign));
   } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
 });
 
 router.post("/campaigns", async (req, res): Promise<void> => {
   try {
     const me = await getTenantInfo(req);
-    if (!me) { res.status(401).json({ error: "Not authenticated" }); return; }
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = CreateCampaignBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const id = generateId();
     await db.insert(campaignsTable).values({
-      id, tenantId: me.tenantId ?? "default-tenant",
+      id, tenantId: me.tenantId,
       name: parsed.data.name, type: parsed.data.type,
       subject: parsed.data.subject ?? null, content: parsed.data.content,
       targetSegment: parsed.data.targetSegment,
@@ -47,15 +59,14 @@ router.post("/campaigns", async (req, res): Promise<void> => {
       createdById: me.id,
     });
     const [c] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, id)).limit(1);
-    res.status(201).json({ id: c.id, name: c.name, type: c.type, status: c.status, subject: c.subject,
-      content: c.content, scheduledAt: c.scheduledAt?.toISOString() ?? null,
-      sentAt: null, recipientsCount: 0, sentCount: 0, openedCount: 0, clickedCount: 0,
-      createdAt: c.createdAt.toISOString() });
+    res.status(201).json(formatCampaign(c));
   } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
 });
 
 router.patch("/campaigns/:id", async (req, res): Promise<void> => {
   try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = UpdateCampaignBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const updates: any = {};
@@ -63,20 +74,22 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.scheduledAt !== undefined) updates.scheduledAt = parsed.data.scheduledAt ? new Date(parsed.data.scheduledAt) : null;
     if (parsed.data.content != null) updates.content = parsed.data.content;
-    await db.update(campaignsTable).set(updates).where(eq(campaignsTable.id, req.params.id));
-    const [c] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, req.params.id)).limit(1);
+    await db.update(campaignsTable).set(updates)
+      .where(and(eq(campaignsTable.id, req.params.id), eq(campaignsTable.tenantId, me.tenantId)));
+    const [c] = await db.select().from(campaignsTable)
+      .where(and(eq(campaignsTable.id, req.params.id), eq(campaignsTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!c) { res.status(404).json({ error: "Not found" }); return; }
-    res.json({ id: c.id, name: c.name, type: c.type, status: c.status, subject: c.subject,
-      content: c.content, scheduledAt: c.scheduledAt?.toISOString() ?? null,
-      sentAt: c.sentAt?.toISOString() ?? null, recipientsCount: c.recipientsCount,
-      sentCount: c.sentCount, openedCount: c.openedCount, clickedCount: c.clickedCount,
-      createdAt: c.createdAt.toISOString() });
+    res.json(formatCampaign(c));
   } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
 });
 
 router.delete("/campaigns/:id", async (req, res): Promise<void> => {
   try {
-    await db.delete(campaignsTable).where(eq(campaignsTable.id, req.params.id));
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    await db.delete(campaignsTable)
+      .where(and(eq(campaignsTable.id, req.params.id), eq(campaignsTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
 });
@@ -142,24 +155,20 @@ router.get("/products", async (req, res): Promise<void> => {
     if (active !== undefined) conditions.push(eq(productsTable.active, active === "true"));
     const products = await db.select().from(productsTable)
       .where(and(...conditions)).orderBy(desc(productsTable.createdAt));
-    res.json(products.map(p => ({
-      id: p.id, name: p.name, slug: p.slug, description: p.description,
-      type: p.type, price: Number(p.price), promotionalPrice: p.promotionalPrice ? Number(p.promotionalPrice) : null,
-      stock: p.stock, active: p.active, featured: p.featured, createdAt: p.createdAt.toISOString(),
-    })));
+    res.json(products.map(formatProduct));
   } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
 });
 
 router.post("/products", async (req, res): Promise<void> => {
   try {
     const me = await getTenantInfo(req);
-    if (!me) { res.status(401).json({ error: "Not authenticated" }); return; }
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = CreateProductBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const id = generateId();
     const slug = parsed.data.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + id.slice(0, 4);
     await db.insert(productsTable).values({
-      id, tenantId: me.tenantId ?? "default-tenant",
+      id, tenantId: me.tenantId,
       name: parsed.data.name, slug,
       description: parsed.data.description ?? null, type: parsed.data.type,
       price: String(parsed.data.price),
@@ -167,14 +176,14 @@ router.post("/products", async (req, res): Promise<void> => {
       stock: parsed.data.stock ?? null,
     });
     const [p] = await db.select().from(productsTable).where(eq(productsTable.id, id)).limit(1);
-    res.status(201).json({ id: p.id, name: p.name, slug: p.slug, description: p.description,
-      type: p.type, price: Number(p.price), promotionalPrice: p.promotionalPrice ? Number(p.promotionalPrice) : null,
-      stock: p.stock, active: p.active, featured: p.featured, createdAt: p.createdAt.toISOString() });
+    res.status(201).json(formatProduct(p));
   } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
 });
 
 router.patch("/products/:id", async (req, res): Promise<void> => {
   try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = UpdateProductBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const updates: any = {};
@@ -184,18 +193,22 @@ router.patch("/products/:id", async (req, res): Promise<void> => {
     if (parsed.data.active != null) updates.active = parsed.data.active;
     if (parsed.data.featured != null) updates.featured = parsed.data.featured;
     if (parsed.data.stock !== undefined) updates.stock = parsed.data.stock;
-    await db.update(productsTable).set(updates).where(eq(productsTable.id, req.params.id));
-    const [p] = await db.select().from(productsTable).where(eq(productsTable.id, req.params.id)).limit(1);
+    await db.update(productsTable).set(updates)
+      .where(and(eq(productsTable.id, req.params.id), eq(productsTable.tenantId, me.tenantId)));
+    const [p] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.id, req.params.id), eq(productsTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!p) { res.status(404).json({ error: "Not found" }); return; }
-    res.json({ id: p.id, name: p.name, slug: p.slug, description: p.description,
-      type: p.type, price: Number(p.price), promotionalPrice: p.promotionalPrice ? Number(p.promotionalPrice) : null,
-      stock: p.stock, active: p.active, featured: p.featured, createdAt: p.createdAt.toISOString() });
+    res.json(formatProduct(p));
   } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
 });
 
 router.delete("/products/:id", async (req, res): Promise<void> => {
   try {
-    await db.delete(productsTable).where(eq(productsTable.id, req.params.id));
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    await db.delete(productsTable)
+      .where(and(eq(productsTable.id, req.params.id), eq(productsTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) { req.log.error({ err }, "Error"); res.status(500).json({ error: "Internal server error" }); }
 });
@@ -211,7 +224,8 @@ router.get("/orders", async (req, res): Promise<void> => {
     const orders = await db.select().from(ordersTable)
       .where(and(...conditions)).orderBy(desc(ordersTable.createdAt))
       .limit(parseInt(limit) || 20).offset(((parseInt(page) || 1) - 1) * (parseInt(limit) || 20));
-    const items = await db.select().from(orderItemsTable);
+    const items = await db.select().from(orderItemsTable)
+      .where(and(...orders.map(o => eq(orderItemsTable.orderId, o.id))));
     const itemsByOrder = items.reduce<Record<string, any[]>>((acc, item) => {
       if (!acc[item.orderId]) acc[item.orderId] = [];
       acc[item.orderId].push({ id: item.id, productId: item.productId, quantity: item.quantity, price: Number(item.price), productName: null });
@@ -227,7 +241,11 @@ router.get("/orders", async (req, res): Promise<void> => {
 
 router.get("/orders/:id", async (req, res): Promise<void> => {
   try {
-    const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, req.params.id)).limit(1);
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const [order] = await db.select().from(ordersTable)
+      .where(and(eq(ordersTable.id, req.params.id), eq(ordersTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!order) { res.status(404).json({ error: "Not found" }); return; }
     const items = await db.select().from(orderItemsTable).where(eq(orderItemsTable.orderId, req.params.id));
     res.json({
@@ -241,13 +259,18 @@ router.get("/orders/:id", async (req, res): Promise<void> => {
 
 router.patch("/orders/:id", async (req, res): Promise<void> => {
   try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = UpdateOrderBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const updates: any = {};
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.paymentStatus != null) updates.paymentStatus = parsed.data.paymentStatus;
-    await db.update(ordersTable).set(updates).where(eq(ordersTable.id, req.params.id));
-    const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, req.params.id)).limit(1);
+    await db.update(ordersTable).set(updates)
+      .where(and(eq(ordersTable.id, req.params.id), eq(ordersTable.tenantId, me.tenantId)));
+    const [order] = await db.select().from(ordersTable)
+      .where(and(eq(ordersTable.id, req.params.id), eq(ordersTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!order) { res.status(404).json({ error: "Not found" }); return; }
     const items = await db.select().from(orderItemsTable).where(eq(orderItemsTable.orderId, req.params.id));
     res.json({ id: order.id, userId: order.userId, totalAmount: Number(order.totalAmount),

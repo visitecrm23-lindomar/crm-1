@@ -213,6 +213,12 @@ router.patch("/clients/:id/pipeline-stage", async (req, res): Promise<void> => {
 
 router.get("/clients/:clientId/notes", async (req, res): Promise<void> => {
   try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const [client] = await db.select().from(clientsTable)
+      .where(and(eq(clientsTable.id, req.params.clientId), eq(clientsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!client) { res.status(404).json({ error: "Not found" }); return; }
     const notes = await db.select().from(notesTable)
       .where(eq(notesTable.clientId, req.params.clientId))
       .orderBy(desc(notesTable.createdAt));
@@ -230,7 +236,11 @@ router.get("/clients/:clientId/notes", async (req, res): Promise<void> => {
 router.post("/clients/:clientId/notes", async (req, res): Promise<void> => {
   try {
     const me = await getTenantInfo(req);
-    if (!me) { res.status(401).json({ error: "Not authenticated" }); return; }
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const [client] = await db.select().from(clientsTable)
+      .where(and(eq(clientsTable.id, req.params.clientId), eq(clientsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!client) { res.status(404).json({ error: "Not found" }); return; }
     const parsed = CreateClientNoteBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const id = generateId();
@@ -255,6 +265,12 @@ router.post("/clients/:clientId/notes", async (req, res): Promise<void> => {
 
 router.delete("/clients/:clientId/notes/:noteId", async (req, res): Promise<void> => {
   try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const [client] = await db.select().from(clientsTable)
+      .where(and(eq(clientsTable.id, req.params.clientId), eq(clientsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!client) { res.status(403).json({ error: "Forbidden" }); return; }
     await db.delete(notesTable).where(eq(notesTable.id, req.params.noteId));
     res.json({ success: true });
   } catch (err) {

@@ -91,7 +91,7 @@ router.get("/reservations", async (req, res): Promise<void> => {
 router.post("/reservations", async (req, res): Promise<void> => {
   try {
     const me = await getTenantInfo(req);
-    if (!me) { res.status(401).json({ error: "Not authenticated" }); return; }
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = CreateReservationBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -101,7 +101,7 @@ router.post("/reservations", async (req, res): Promise<void> => {
 
     await db.insert(reservationsTable).values({
       id,
-      tenantId: me.tenantId ?? "default-tenant",
+      tenantId: me.tenantId,
       tripId: parsed.data.tripId,
       clientId: parsed.data.clientId,
       seats: parsed.data.seats,
@@ -121,12 +121,11 @@ router.post("/reservations", async (req, res): Promise<void> => {
       createdById: me.id,
     });
 
-    // Update trip seat counts
     const seatsCount = parsed.data.seats.length;
     await db.update(tripsTable).set({
       reservedSeats: sql`reserved_seats + ${seatsCount}`,
       availableSeats: sql`available_seats - ${seatsCount}`,
-    }).where(eq(tripsTable.id, parsed.data.tripId));
+    }).where(and(eq(tripsTable.id, parsed.data.tripId), eq(tripsTable.tenantId, me.tenantId)));
 
     const [reservation] = await db.select().from(reservationsTable).where(eq(reservationsTable.id, id)).limit(1);
     const formatted = await formatReservation(reservation);
@@ -139,7 +138,11 @@ router.post("/reservations", async (req, res): Promise<void> => {
 
 router.get("/reservations/:id", async (req, res): Promise<void> => {
   try {
-    const [reservation] = await db.select().from(reservationsTable).where(eq(reservationsTable.id, req.params.id)).limit(1);
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const [reservation] = await db.select().from(reservationsTable)
+      .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!reservation) { res.status(404).json({ error: "Not found" }); return; }
     const formatted = await formatReservation(reservation);
     res.json(formatted);
@@ -151,6 +154,8 @@ router.get("/reservations/:id", async (req, res): Promise<void> => {
 
 router.patch("/reservations/:id", async (req, res): Promise<void> => {
   try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = UpdateReservationBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -160,8 +165,11 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
     if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes;
     if (parsed.data.seats != null) updates.seats = parsed.data.seats;
 
-    await db.update(reservationsTable).set(updates).where(eq(reservationsTable.id, req.params.id));
-    const [reservation] = await db.select().from(reservationsTable).where(eq(reservationsTable.id, req.params.id)).limit(1);
+    await db.update(reservationsTable).set(updates)
+      .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)));
+    const [reservation] = await db.select().from(reservationsTable)
+      .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!reservation) { res.status(404).json({ error: "Not found" }); return; }
     const formatted = await formatReservation(reservation);
     res.json(formatted);
@@ -173,11 +181,15 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
 
 router.post("/reservations/:id/check-in", async (req, res): Promise<void> => {
   try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     await db.update(reservationsTable).set({
       checkedInAt: new Date(),
       status: "completed",
-    }).where(eq(reservationsTable.id, req.params.id));
-    const [reservation] = await db.select().from(reservationsTable).where(eq(reservationsTable.id, req.params.id)).limit(1);
+    }).where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)));
+    const [reservation] = await db.select().from(reservationsTable)
+      .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!reservation) { res.status(404).json({ error: "Not found" }); return; }
     const formatted = await formatReservation(reservation);
     res.json(formatted);
@@ -187,9 +199,14 @@ router.post("/reservations/:id/check-in", async (req, res): Promise<void> => {
   }
 });
 
-// Passengers
 router.get("/reservations/:reservationId/passengers", async (req, res): Promise<void> => {
   try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const [reservation] = await db.select().from(reservationsTable)
+      .where(and(eq(reservationsTable.id, req.params.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!reservation) { res.status(404).json({ error: "Not found" }); return; }
     const passengers = await db.select().from(passengersTable)
       .where(eq(passengersTable.reservationId, req.params.reservationId));
     res.json(passengers.map(p => ({
@@ -205,6 +222,12 @@ router.get("/reservations/:reservationId/passengers", async (req, res): Promise<
 
 router.post("/reservations/:reservationId/passengers", async (req, res): Promise<void> => {
   try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const [reservation] = await db.select().from(reservationsTable)
+      .where(and(eq(reservationsTable.id, req.params.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!reservation) { res.status(404).json({ error: "Not found" }); return; }
     const parsed = CreatePassengerBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const id = generateId();
@@ -235,6 +258,12 @@ router.post("/reservations/:reservationId/passengers", async (req, res): Promise
 
 router.patch("/reservations/:reservationId/passengers/:id", async (req, res): Promise<void> => {
   try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const [reservation] = await db.select().from(reservationsTable)
+      .where(and(eq(reservationsTable.id, req.params.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!reservation) { res.status(403).json({ error: "Forbidden" }); return; }
     const parsed = UpdatePassengerBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const updates: any = {};
@@ -242,7 +271,8 @@ router.patch("/reservations/:reservationId/passengers/:id", async (req, res): Pr
     if (parsed.data.cpf !== undefined) updates.cpf = parsed.data.cpf;
     if (parsed.data.seatNumber !== undefined) updates.seatNumber = parsed.data.seatNumber;
     if (parsed.data.ageCategory != null) updates.ageCategory = parsed.data.ageCategory;
-    await db.update(passengersTable).set(updates).where(eq(passengersTable.id, req.params.id));
+    await db.update(passengersTable).set(updates)
+      .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)));
     const [passenger] = await db.select().from(passengersTable).where(eq(passengersTable.id, req.params.id)).limit(1);
     if (!passenger) { res.status(404).json({ error: "Not found" }); return; }
     res.json({ id: passenger.id, reservationId: passenger.reservationId, name: passenger.name,
@@ -256,7 +286,14 @@ router.patch("/reservations/:reservationId/passengers/:id", async (req, res): Pr
 
 router.delete("/reservations/:reservationId/passengers/:id", async (req, res): Promise<void> => {
   try {
-    await db.delete(passengersTable).where(eq(passengersTable.id, req.params.id));
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const [reservation] = await db.select().from(reservationsTable)
+      .where(and(eq(reservationsTable.id, req.params.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!reservation) { res.status(403).json({ error: "Forbidden" }); return; }
+    await db.delete(passengersTable)
+      .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)));
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Error deleting passenger");

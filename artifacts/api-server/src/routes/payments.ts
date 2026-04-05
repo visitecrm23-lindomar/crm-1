@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { paymentsTable, expensesTable, usersTable } from "@workspace/db";
-import { eq, and, sql, desc, lt, gte } from "drizzle-orm";
+import { eq, and, sql, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { CreatePaymentBody, UpdatePaymentBody, CreateExpenseBody, UpdateExpenseBody } from "@workspace/api-zod";
 
@@ -23,6 +23,15 @@ function formatPayment(p: any) {
     paidAt: p.paidAt?.toISOString() ?? null, status: p.status,
     description: p.description, notes: p.notes,
     createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString(),
+  };
+}
+
+function formatExpense(e: any) {
+  return {
+    id: e.id, tripId: e.tripId, category: e.category, description: e.description,
+    amount: Number(e.amount), supplierId: e.supplierId, paymentMethod: e.paymentMethod,
+    paymentDate: e.paymentDate?.toISOString() ?? null, dueDate: e.dueDate.toISOString(),
+    status: e.status, notes: e.notes, createdAt: e.createdAt.toISOString(),
   };
 }
 
@@ -97,7 +106,7 @@ router.get("/payments", async (req, res): Promise<void> => {
 router.post("/payments", async (req, res): Promise<void> => {
   try {
     const me = await getTenantInfo(req);
-    if (!me) { res.status(401).json({ error: "Not authenticated" }); return; }
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = CreatePaymentBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -109,7 +118,7 @@ router.post("/payments", async (req, res): Promise<void> => {
       dueDate.setMonth(dueDate.getMonth() + (i - 1));
       await db.insert(paymentsTable).values({
         id: i === 1 ? id : generateId(),
-        tenantId: me.tenantId ?? "default-tenant",
+        tenantId: me.tenantId,
         reservationId: parsed.data.reservationId ?? null,
         clientId: parsed.data.clientId ?? null,
         type: parsed.data.type,
@@ -134,7 +143,11 @@ router.post("/payments", async (req, res): Promise<void> => {
 
 router.get("/payments/:id", async (req, res): Promise<void> => {
   try {
-    const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, req.params.id)).limit(1);
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const [payment] = await db.select().from(paymentsTable)
+      .where(and(eq(paymentsTable.id, req.params.id), eq(paymentsTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!payment) { res.status(404).json({ error: "Not found" }); return; }
     res.json(formatPayment(payment));
   } catch (err) {
@@ -145,14 +158,19 @@ router.get("/payments/:id", async (req, res): Promise<void> => {
 
 router.patch("/payments/:id", async (req, res): Promise<void> => {
   try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = UpdatePaymentBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const updates: any = {};
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.paidAt !== undefined) updates.paidAt = parsed.data.paidAt ? new Date(parsed.data.paidAt) : null;
     if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes;
-    await db.update(paymentsTable).set(updates).where(eq(paymentsTable.id, req.params.id));
-    const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, req.params.id)).limit(1);
+    await db.update(paymentsTable).set(updates)
+      .where(and(eq(paymentsTable.id, req.params.id), eq(paymentsTable.tenantId, me.tenantId)));
+    const [payment] = await db.select().from(paymentsTable)
+      .where(and(eq(paymentsTable.id, req.params.id), eq(paymentsTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!payment) { res.status(404).json({ error: "Not found" }); return; }
     res.json(formatPayment(payment));
   } catch (err) {
@@ -161,7 +179,6 @@ router.patch("/payments/:id", async (req, res): Promise<void> => {
   }
 });
 
-// Expenses
 router.get("/expenses", async (req, res): Promise<void> => {
   try {
     const me = await getTenantInfo(req);
@@ -183,15 +200,7 @@ router.get("/expenses", async (req, res): Promise<void> => {
     const [countResult] = await db.select({ count: sql<number>`count(*)` })
       .from(expensesTable).where(and(...conditions));
 
-    res.json({
-      data: expenses.map(e => ({
-        id: e.id, tripId: e.tripId, category: e.category, description: e.description,
-        amount: Number(e.amount), supplierId: e.supplierId, paymentMethod: e.paymentMethod,
-        paymentDate: e.paymentDate?.toISOString() ?? null, dueDate: e.dueDate.toISOString(),
-        status: e.status, notes: e.notes, createdAt: e.createdAt.toISOString(),
-      })),
-      total: Number(countResult?.count ?? 0), page: pageNum, limit: limitNum
-    });
+    res.json({ data: expenses.map(formatExpense), total: Number(countResult?.count ?? 0), page: pageNum, limit: limitNum });
   } catch (err) {
     req.log.error({ err }, "Error listing expenses");
     res.status(500).json({ error: "Internal server error" });
@@ -201,14 +210,14 @@ router.get("/expenses", async (req, res): Promise<void> => {
 router.post("/expenses", async (req, res): Promise<void> => {
   try {
     const me = await getTenantInfo(req);
-    if (!me) { res.status(401).json({ error: "Not authenticated" }); return; }
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = CreateExpenseBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
     const id = generateId();
     await db.insert(expensesTable).values({
       id,
-      tenantId: me.tenantId ?? "default-tenant",
+      tenantId: me.tenantId,
       tripId: parsed.data.tripId ?? null,
       category: parsed.data.category,
       description: parsed.data.description,
@@ -221,12 +230,7 @@ router.post("/expenses", async (req, res): Promise<void> => {
     });
 
     const [expense] = await db.select().from(expensesTable).where(eq(expensesTable.id, id)).limit(1);
-    res.status(201).json({
-      id: expense.id, tripId: expense.tripId, category: expense.category, description: expense.description,
-      amount: Number(expense.amount), supplierId: expense.supplierId, paymentMethod: expense.paymentMethod,
-      paymentDate: expense.paymentDate?.toISOString() ?? null, dueDate: expense.dueDate.toISOString(),
-      status: expense.status, notes: expense.notes, createdAt: expense.createdAt.toISOString(),
-    });
+    res.status(201).json(formatExpense(expense));
   } catch (err) {
     req.log.error({ err }, "Error creating expense");
     res.status(500).json({ error: "Internal server error" });
@@ -235,6 +239,8 @@ router.post("/expenses", async (req, res): Promise<void> => {
 
 router.patch("/expenses/:id", async (req, res): Promise<void> => {
   try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = UpdateExpenseBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const updates: any = {};
@@ -242,15 +248,13 @@ router.patch("/expenses/:id", async (req, res): Promise<void> => {
     if (parsed.data.paymentDate !== undefined) updates.paymentDate = parsed.data.paymentDate ? new Date(parsed.data.paymentDate) : null;
     if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes;
     if (parsed.data.amount != null) updates.amount = String(parsed.data.amount);
-    await db.update(expensesTable).set(updates).where(eq(expensesTable.id, req.params.id));
-    const [expense] = await db.select().from(expensesTable).where(eq(expensesTable.id, req.params.id)).limit(1);
+    await db.update(expensesTable).set(updates)
+      .where(and(eq(expensesTable.id, req.params.id), eq(expensesTable.tenantId, me.tenantId)));
+    const [expense] = await db.select().from(expensesTable)
+      .where(and(eq(expensesTable.id, req.params.id), eq(expensesTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!expense) { res.status(404).json({ error: "Not found" }); return; }
-    res.json({
-      id: expense.id, tripId: expense.tripId, category: expense.category, description: expense.description,
-      amount: Number(expense.amount), supplierId: expense.supplierId, paymentMethod: expense.paymentMethod,
-      paymentDate: expense.paymentDate?.toISOString() ?? null, dueDate: expense.dueDate.toISOString(),
-      status: expense.status, notes: expense.notes, createdAt: expense.createdAt.toISOString(),
-    });
+    res.json(formatExpense(expense));
   } catch (err) {
     req.log.error({ err }, "Error updating expense");
     res.status(500).json({ error: "Internal server error" });
@@ -259,7 +263,10 @@ router.patch("/expenses/:id", async (req, res): Promise<void> => {
 
 router.delete("/expenses/:id", async (req, res): Promise<void> => {
   try {
-    await db.delete(expensesTable).where(eq(expensesTable.id, req.params.id));
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    await db.delete(expensesTable)
+      .where(and(eq(expensesTable.id, req.params.id), eq(expensesTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Error deleting expense");

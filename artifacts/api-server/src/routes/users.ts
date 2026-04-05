@@ -51,13 +51,15 @@ router.post("/users/me/sync", async (req, res): Promise<void> => {
       res.status(401).json({ error: "Not authenticated" });
       return;
     }
+
     const parsed = SyncMeBody.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.message });
       return;
     }
 
-    const { clerkId, name, email, avatarUrl } = parsed.data;
+    const { name, email, avatarUrl } = parsed.data;
+    const clerkId = auth.userId;
 
     const existing = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId)).limit(1);
 
@@ -160,13 +162,13 @@ router.post("/users", async (req, res): Promise<void> => {
     const parsed = CreateUserBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const [me] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.userId)).limit(1);
-    const tenantId = me?.tenantId ?? "default-tenant";
+    if (!me?.tenantId) { res.status(403).json({ error: "User not in a tenant" }); return; }
     const userId = generateId();
     const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     await db.insert(usersTable).values({
       id: userId,
       clerkId: "pending-" + userId,
-      tenantId,
+      tenantId: me.tenantId,
       name: parsed.data.name,
       email: parsed.data.email,
       role: parsed.data.role,
@@ -192,12 +194,18 @@ router.patch("/users/:id", async (req, res): Promise<void> => {
     if (!auth?.userId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = UpdateUserBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    const [me] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.userId)).limit(1);
+    if (!me?.tenantId) { res.status(403).json({ error: "Forbidden" }); return; }
     const updates: Partial<typeof usersTable.$inferInsert> = {};
     if (parsed.data.name) updates.name = parsed.data.name;
     if (parsed.data.role) updates.role = parsed.data.role;
     if (parsed.data.isActive !== null && parsed.data.isActive !== undefined) updates.isActive = parsed.data.isActive;
-    await db.update(usersTable).set(updates).where(eq(usersTable.id, req.params.id));
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.params.id)).limit(1);
+    await db.update(usersTable).set(updates).where(
+      and(eq(usersTable.id, req.params.id), eq(usersTable.tenantId, me.tenantId))
+    );
+    const [user] = await db.select().from(usersTable).where(
+      and(eq(usersTable.id, req.params.id), eq(usersTable.tenantId, me.tenantId))
+    ).limit(1);
     if (!user) { res.status(404).json({ error: "Not found" }); return; }
     res.json({
       id: user.id, clerkId: user.clerkId, name: user.name, email: user.email, role: user.role,

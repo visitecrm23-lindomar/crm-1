@@ -82,7 +82,7 @@ router.get("/trips", async (req, res): Promise<void> => {
 router.post("/trips", async (req, res): Promise<void> => {
   try {
     const me = await getTenantInfo(req);
-    if (!me) { res.status(401).json({ error: "Not authenticated" }); return; }
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = CreateTripBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -105,7 +105,7 @@ router.post("/trips", async (req, res): Promise<void> => {
 
     await db.insert(tripsTable).values({
       id,
-      tenantId: me.tenantId ?? "default-tenant",
+      tenantId: me.tenantId,
       name: parsed.data.name,
       slug,
       description: parsed.data.description ?? null,
@@ -142,7 +142,11 @@ router.post("/trips", async (req, res): Promise<void> => {
 
 router.get("/trips/:id", async (req, res): Promise<void> => {
   try {
-    const [trip] = await db.select().from(tripsTable).where(eq(tripsTable.id, req.params.id)).limit(1);
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const [trip] = await db.select().from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!trip) { res.status(404).json({ error: "Not found" }); return; }
     res.json(formatTrip(trip));
   } catch (err) {
@@ -153,6 +157,8 @@ router.get("/trips/:id", async (req, res): Promise<void> => {
 
 router.patch("/trips/:id", async (req, res): Promise<void> => {
   try {
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
     const parsed = UpdateTripBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -175,8 +181,11 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
     if (parsed.data.vehicleType !== undefined) updates.vehicleType = parsed.data.vehicleType;
     if (parsed.data.driverName !== undefined) updates.driverName = parsed.data.driverName;
 
-    await db.update(tripsTable).set(updates).where(eq(tripsTable.id, req.params.id));
-    const [trip] = await db.select().from(tripsTable).where(eq(tripsTable.id, req.params.id)).limit(1);
+    await db.update(tripsTable).set(updates)
+      .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)));
+    const [trip] = await db.select().from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!trip) { res.status(404).json({ error: "Not found" }); return; }
     res.json(formatTrip(trip));
   } catch (err) {
@@ -187,7 +196,10 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
 
 router.delete("/trips/:id", async (req, res): Promise<void> => {
   try {
-    await db.delete(tripsTable).where(eq(tripsTable.id, req.params.id));
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    await db.delete(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Error deleting trip");
@@ -197,11 +209,15 @@ router.delete("/trips/:id", async (req, res): Promise<void> => {
 
 router.get("/trips/:id/seat-map", async (req, res): Promise<void> => {
   try {
-    const [trip] = await db.select().from(tripsTable).where(eq(tripsTable.id, req.params.id)).limit(1);
+    const me = await getTenantInfo(req);
+    if (!me?.tenantId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    const [trip] = await db.select().from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
     if (!trip) { res.status(404).json({ error: "Not found" }); return; }
 
     const reservations = await db.select().from(reservationsTable)
-      .where(and(eq(reservationsTable.tripId, req.params.id)));
+      .where(and(eq(reservationsTable.tripId, req.params.id), eq(reservationsTable.tenantId, me.tenantId)));
 
     const occupiedSeats: Record<string, { reservationId: string; passengerName: string }> = {};
     for (const res_r of reservations) {
