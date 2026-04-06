@@ -419,6 +419,37 @@ const EMPTY_FORM: TripFormData = {
   vehicleType: "", vehiclePlate: "", driverName: "", status: "draft",
   boardingPoints: [newBP()], itinerary: [newDay(1)], costs: [], fixedCosts: "", variableCosts: "", gallery: [], accommodation: "", guide: "",
 };
+const toTripFormData = (trip: Trip & { itinerary?: ItineraryDay[]; fixedCosts?: string | number | null; variableCosts?: string | number | null; gallery?: string[] | null; boardingPoints?: BoardingPoint[] | null; accommodation?: string | null; guide?: string | null; }): TripFormData => ({
+  name: trip.name,
+  description: trip.description ?? "",
+  destination: trip.destination,
+  destinationCity: trip.destinationCity,
+  destinationState: trip.destinationState,
+  type: trip.type,
+  category: trip.category,
+  departureDate: trip.departureDate.split("T")[0],
+  returnDate: trip.returnDate?.split("T")[0] ?? "",
+  totalCapacity: String(trip.totalCapacity),
+  seatLayout: trip.seatLayout ?? "2x2",
+  priceAdult: String(trip.priceAdult),
+  priceChild: trip.priceChild ? String(trip.priceChild) : "",
+  priceSenior: trip.priceSenior ? String(trip.priceSenior) : "",
+  inclusions: (trip.inclusions ?? []).join("\n"),
+  exclusions: (trip.exclusions ?? []).join("\n"),
+  coverImage: trip.coverImage ?? "",
+  vehicleType: trip.vehicleType ?? "",
+  vehiclePlate: trip.vehiclePlate ?? "",
+  driverName: trip.driverName ?? "",
+  status: trip.status,
+  boardingPoints: trip.boardingPoints?.length ? trip.boardingPoints : [newBP()],
+  itinerary: trip.itinerary?.length ? trip.itinerary : [newDay(1)],
+  costs: [],
+  fixedCosts: trip.fixedCosts != null ? String(trip.fixedCosts) : "",
+  variableCosts: trip.variableCosts != null ? String(trip.variableCosts) : "",
+  gallery: trip.gallery ?? [],
+  accommodation: trip.accommodation ?? "",
+  guide: trip.guide ?? "",
+});
 
 export function TripForm({ tripId }: { tripId?: string }) {
   const [, navigate] = useLocation();
@@ -432,39 +463,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
 
   useEffect(() => {
     if (!existingTrip || !tripId) return;
-    setForm({
-      name: existingTrip.name,
-      description: existingTrip.description ?? "",
-      destination: existingTrip.destination,
-      destinationCity: existingTrip.destinationCity,
-      destinationState: existingTrip.destinationState,
-      type: existingTrip.type,
-      category: existingTrip.category,
-      departureDate: existingTrip.departureDate.split("T")[0],
-      returnDate: existingTrip.returnDate?.split("T")[0] ?? "",
-      totalCapacity: String(existingTrip.totalCapacity),
-      seatLayout: existingTrip.seatLayout ?? "2x2",
-      priceAdult: String(existingTrip.priceAdult),
-      priceChild: existingTrip.priceChild ? String(existingTrip.priceChild) : "",
-      priceSenior: existingTrip.priceSenior ? String(existingTrip.priceSenior) : "",
-      inclusions: (existingTrip.inclusions ?? []).join("\n"),
-      exclusions: (existingTrip.exclusions ?? []).join("\n"),
-      coverImage: existingTrip.coverImage ?? "",
-      vehicleType: existingTrip.vehicleType ?? "",
-      vehiclePlate: existingTrip.vehiclePlate ?? "",
-      driverName: existingTrip.driverName ?? "",
-      status: existingTrip.status,
-      boardingPoints: [newBP()],
-      itinerary: (existingTrip as unknown as { itinerary?: ItineraryDay[] }).itinerary?.length
-        ? (existingTrip as unknown as { itinerary: ItineraryDay[] }).itinerary
-        : [newDay(1)],
-      costs: [],
-      fixedCosts: (existingTrip as unknown as { fixedCosts?: string | number }).fixedCosts ? String((existingTrip as unknown as { fixedCosts: string | number }).fixedCosts) : "",
-      variableCosts: (existingTrip as unknown as { variableCosts?: string | number }).variableCosts ? String((existingTrip as unknown as { variableCosts: string | number }).variableCosts) : "",
-      gallery: (existingTrip.gallery ?? []) as string[],
-      accommodation: "",
-      guide: "",
-    });
+    setForm(toTripFormData(existingTrip as Trip & { itinerary?: ItineraryDay[]; fixedCosts?: string | number | null; variableCosts?: string | number | null; gallery?: string[] | null; boardingPoints?: BoardingPoint[] | null; accommodation?: string | null; guide?: string | null; }));
   }, [existingTrip?.id, tripId]);
 
   const set = (k: keyof TripFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -472,11 +471,11 @@ export function TripForm({ tripId }: { tripId?: string }) {
   const setVal = (k: keyof TripFormData) => (v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
   const totalCosts = form.costs.reduce((acc, c) => acc + (parseFloat(c.amount) || 0), 0);
-    const fixedCostsNum = parseFloat(form.fixedCosts || "0");
-    const variableCostsNum = parseFloat(form.variableCosts || "0");
-    const grossRevenue = parseFloat(form.priceAdult || "0") * parseInt(form.totalCapacity || "0");
-    const effectiveCosts = fixedCostsNum + variableCostsNum * parseInt(form.totalCapacity || "0");
-    const margin = grossRevenue - Math.max(effectiveCosts, totalCosts);
+  const fixedCostsNum = parseFloat(form.fixedCosts || "0");
+  const variableCostsNum = parseFloat(form.variableCosts || "0");
+  const grossRevenue = parseFloat(form.priceAdult || "0") * parseInt(form.totalCapacity || "0");
+  const effectiveCosts = fixedCostsNum + variableCostsNum * parseInt(form.totalCapacity || "0");
+  const margin = grossRevenue - Math.max(effectiveCosts, totalCosts);
   const marginPct = grossRevenue > 0 ? Math.round(margin / grossRevenue * 100) : 0;
 
   const handleSave = async (publish = false) => {
@@ -525,6 +524,10 @@ export function TripForm({ tripId }: { tripId?: string }) {
           seatLayout: form.seatLayout,
           vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined,
           status: statusToSave,
+          itinerary: itineraryToSave.length ? itineraryToSave : undefined,
+          fixedCosts: fixedCostsNum,
+          variableCosts: variableCostsNum,
+          gallery: form.gallery.length ? form.gallery : undefined,
         },
       });
     }
@@ -661,13 +664,44 @@ export function TripForm({ tripId }: { tripId?: string }) {
         </TabsContent>
 
         <TabsContent value="pontos" className="space-y-4 mt-6">
-          <div className="bg-card border rounded-lg p-12 flex flex-col items-center justify-center text-center space-y-3">
-            <div className="w-14 h-14 bg-blue-50 rounded-full flex items-center justify-center">
-              <MapPin className="w-7 h-7 text-blue-400" />
+          <div className="bg-card border rounded-lg p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold">Pontos de Embarque</h3>
+                <p className="text-sm text-muted-foreground">Cadastre os pontos e horários de coleta da viagem.</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => setForm(prev => ({ ...prev, boardingPoints: [...prev.boardingPoints, newBP()] }))}>
+                <Plus className="w-4 h-4 mr-1" />Adicionar Ponto
+              </Button>
             </div>
-            <h3 className="font-semibold text-lg">Pontos de Embarque</h3>
-            <p className="text-sm text-muted-foreground max-w-sm">Esta funcionalidade estara disponivel em breve. Permitira cadastrar multiplos pontos de coleta com horarios e enderecos para cada passageiro.</p>
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">Em breve</span>
+            <div className="space-y-3">
+              {form.boardingPoints.map((bp, idx) => (
+                <div key={bp.id} className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-muted-foreground">Ponto {idx + 1}</span>
+                    {form.boardingPoints.length > 1 && (
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setForm(prev => ({ ...prev, boardingPoints: prev.boardingPoints.filter(b => b.id !== bp.id) }))}>
+                        <X className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Nome do Ponto</Label>
+                      <Input placeholder="Terminal Rodoviário" value={bp.name} onChange={e => setForm(prev => ({ ...prev, boardingPoints: prev.boardingPoints.map(b => b.id === bp.id ? { ...b, name: e.target.value } : b) }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Horário</Label>
+                      <Input type="time" value={bp.time} onChange={e => setForm(prev => ({ ...prev, boardingPoints: prev.boardingPoints.map(b => b.id === bp.id ? { ...b, time: e.target.value } : b) }))} />
+                    </div>
+                    <div className="space-y-1 col-span-2">
+                      <Label className="text-xs">Endereço / Referência</Label>
+                      <Input placeholder="Av. Principal, 100 — Em frente ao posto Shell" value={bp.address} onChange={e => setForm(prev => ({ ...prev, boardingPoints: prev.boardingPoints.map(b => b.id === bp.id ? { ...b, address: e.target.value } : b) }))} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </TabsContent>
 
@@ -1523,6 +1557,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [boardingFilter, setBoardingFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -1555,6 +1590,10 @@ export function PassengersList({ tripId }: { tripId: string }) {
         if (typeFilter === "child" && !isChild) return false;
         if (typeFilter === "senior" && !isSenior) return false;
       }
+      if (boardingFilter !== "all") {
+        const bp = (r as unknown as Record<string, unknown>).boardingPoint as string | undefined;
+        if (bp !== boardingFilter) return false;
+      }
       return true;
     }).map(r => {
       const bdate = (r.client as unknown as Record<string, unknown>).birthDate as string | undefined;
@@ -1585,7 +1624,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
         hasInsurance: r.hasInsurance,
       };
     });
-  }, [reservations, paymentFilter, typeFilter]);
+  }, [reservations, paymentFilter, typeFilter, boardingFilter]);
 
   const totalPages = Math.ceil((reservations?.total ?? 0) / 20);
   const allSelected = passengers.length > 0 && passengers.every(p => selectedIds.has(p.reservationId));
@@ -1636,6 +1675,15 @@ export function PassengersList({ tripId }: { tripId: string }) {
         <Select value={typeFilter} onValueChange={v => { setTypeFilter(v); setPage(1); }}>
           <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
           <SelectContent>{Object.entries(TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+        </Select>
+        <Select value={boardingFilter} onValueChange={v => { setBoardingFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-44"><SelectValue placeholder="Ponto de embarque" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os embarques</SelectItem>
+            {(trip as Trip & { boardingPoints?: { name: string }[] })?.boardingPoints?.map?.((bp: { name: string }) => (
+              <SelectItem key={bp.name} value={bp.name}>{bp.name}</SelectItem>
+            )) ?? null}
+          </SelectContent>
         </Select>
         <Link href={`/reservations?tripId=${tripId}&new=true`}><Button><Plus className="w-4 h-4 mr-2" />Adicionar</Button></Link>
       </div>
