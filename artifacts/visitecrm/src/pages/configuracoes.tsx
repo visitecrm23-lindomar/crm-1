@@ -813,8 +813,8 @@ function CustomizationTab() {
 /* ──────────────────── API Keys Tab ──────────────────── */
 function ApiKeysTab() {
   const [keys] = useState([
-    { id: "1", name: "Produção", key: "sk-live-xxxxxxxxxxxxxxxxxxxx", createdAt: "2024-01-15", lastUsed: "Hoje" },
-    { id: "2", name: "Desenvolvimento", key: "sk-test-xxxxxxxxxxxxxxxxxxxx", createdAt: "2024-02-20", lastUsed: "Ontem" },
+    { id: "1", name: "Produção", key: "••••••••••••••••••••", createdAt: "2024-01-15", lastUsed: "Hoje" },
+    { id: "2", name: "Desenvolvimento", key: "••••••••••••••••••••", createdAt: "2024-02-20", lastUsed: "Ontem" },
   ]);
   const [visible, setVisible] = useState<Record<string, boolean>>({});
 
