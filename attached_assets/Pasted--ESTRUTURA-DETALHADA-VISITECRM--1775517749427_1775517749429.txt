@@ -1,0 +1,46 @@
+═══════════════════════════════════════════════════════════════
+ESTRUTURA DETALHADA - VISITECRM
+═══════════════════════════════════════════════════════════════
+
+visitecrm/
+├── app/
+│   ├── (auth)/                    # 🔓 Rotas Públicas
+│   ├── (super-admin)/             # 👑 Painel Super Admin
+│   ├── (dashboard)/               # 🏢 Painel Agência/Vendedor
+│   ├── (client-portal)/           # 👤 Portal do Cliente
+│   └── api/                       # 🔌 API Routes
+│
+├── components/
+│   ├── ui/                        # 🎨 Componentes shadcn/ui
+│   ├── layout/                    # 📐 Layouts compartilhados
+│   ├── super-admin/               # 👑 Componentes Super Admin
+│   ├── dashboard/                 # 🏢 Componentes Dashboard
+│   ├── client-portal/             # 👤 Componentes Portal Cliente
+│   └── shared/                    # 🔄 Componentes compartilhados
+│
+├── lib/
+│   ├── prisma.ts                  # 🗄️ Cliente Prisma
+│   ├── auth.ts                    # 🔐 Configuração NextAuth
+│   ├── rbac.ts                    # 🛡️ Sistema de permissões
+│   ├── multi-tenant.ts            # 🏢 Isolamento multi-tenant
+│   ├── utils.ts                   # 🛠️ Funções utilitárias
+│   ├── constants/
+│   │   ├── roles.ts               # 👥 Definição de roles
+│   │   ├── permissions.ts         # 🔑 Mapa de permissões
+│   │   └── routes.ts              # 🗺️ Rotas por role
+│   ├── hooks/
+│   │   ├── use-session.ts         # 🪝 Hook de sessão
+│   │   ├── use-permissions.ts     # 🪝 Hook de permissões
+│   │   └── use-tenant.ts          # 🪝 Hook de tenant
+│   └── services/
+│       ├── whatsapp.ts            # 💬 Serviço WhatsApp
+│       ├── email.ts               # 📧 Serviço Email
+│       ├── mercadopago.ts         # 💳 Serviço Mercado Pago
+│       └── ai.ts                  # 🤖 Serviço IA
+│
+├── middleware.ts                  # 🛡️ Proteção de rotas
+├── prisma/
+│   └── schema.prisma              # 📊 Schema do banco
+└── types/
+    ├── next-auth.d.ts             # 📝 Types NextAuth
+    └── index.ts                   # 📝 Types globais
