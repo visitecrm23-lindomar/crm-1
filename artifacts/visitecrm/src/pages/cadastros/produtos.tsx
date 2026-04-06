@@ -41,6 +41,30 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Search, Package, Tag } from "lucide-react";
 
+const PRODUCT_COST_KEY = "product_costs";
+
+function loadProductCosts(): Record<string, number> {
+  try {
+    return JSON.parse(localStorage.getItem(PRODUCT_COST_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveProductCost(productId: string, cost: number | undefined) {
+  const all = loadProductCosts();
+  if (cost != null && cost > 0) {
+    all[productId] = cost;
+  } else {
+    delete all[productId];
+  }
+  localStorage.setItem(PRODUCT_COST_KEY, JSON.stringify(all));
+}
+
+function getProductCost(productId: string): number | undefined {
+  return loadProductCosts()[productId];
+}
+
 const PRODUCT_TYPES = [
   "Seguro",
   "Transfer",
@@ -90,7 +114,12 @@ function CategoryManager({
       return;
     }
     try {
-      await createCategory.mutateAsync({ data: { name: newName.trim(), slug: newSlug || newName.toLowerCase().replace(/\s+/g, "-") } });
+      await createCategory.mutateAsync({
+        data: {
+          name: newName.trim(),
+          slug: newSlug || newName.toLowerCase().replace(/\s+/g, "-"),
+        },
+      });
       toast({ title: "Categoria criada" });
       setNewName("");
       setNewSlug("");
@@ -118,7 +147,9 @@ function CategoryManager({
           value={newName}
           onChange={(e) => handleNameChange(e.target.value)}
           placeholder="Nome da categoria"
-          onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleCreate();
+          }}
         />
         <Input
           value={newSlug}
@@ -152,7 +183,9 @@ function CategoryManager({
               {categories.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">{c.slug}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {c.slug}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={c.isActive ? "default" : "secondary"} className="text-xs">
                       {c.isActive ? "Ativo" : "Inativo"}
@@ -213,8 +246,11 @@ export default function Produtos() {
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
-  const [form, setForm] = useState<Partial<CreateProductBody & UpdateProductBody & { cost?: number; categoryId?: string }>>({});
+  const [form, setForm] = useState<
+    Partial<CreateProductBody & UpdateProductBody & { cost?: number; categoryId?: string }>
+  >({});
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [, forceUpdate] = useState(0);
 
   const filtered = products.filter(
     (p) =>
@@ -237,6 +273,7 @@ export default function Produtos() {
       stock: p.stock ?? undefined,
       active: p.active,
       featured: p.featured,
+      cost: getProductCost(p.id),
     });
     setModalOpen(true);
   }
@@ -255,13 +292,15 @@ export default function Produtos() {
             featured: (form as UpdateProductBody).featured ?? undefined,
           },
         });
+        saveProductCost(editing.id, form.cost);
+        forceUpdate((n) => n + 1);
         toast({ title: "Produto atualizado" });
       } else {
         if (!form.name || !(form as CreateProductBody).type || form.price == null) {
           toast({ title: "Preencha nome, tipo e preço", variant: "destructive" });
           return;
         }
-        await createProduct.mutateAsync({
+        const created = await createProduct.mutateAsync({
           data: {
             name: form.name!,
             type: (form as CreateProductBody).type!,
@@ -271,6 +310,10 @@ export default function Produtos() {
             stock: form.stock ?? undefined,
           },
         });
+        if (created?.id) {
+          saveProductCost(created.id, form.cost);
+        }
+        forceUpdate((n) => n + 1);
         toast({ title: "Produto criado" });
       }
       setModalOpen(false);
@@ -308,7 +351,9 @@ export default function Produtos() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Produtos</h1>
-          <p className="text-sm text-muted-foreground">{products.length} produto(s) cadastrado(s)</p>
+          <p className="text-sm text-muted-foreground">
+            {products.length} produto(s) cadastrado(s)
+          </p>
         </div>
         <Button onClick={openCreate}>
           <Plus className="w-4 h-4 mr-2" />
@@ -358,53 +403,67 @@ export default function Produtos() {
                 <TableBody>
                   {filtered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-muted-foreground py-10">
+                      <TableCell
+                        colSpan={9}
+                        className="text-center text-muted-foreground py-10"
+                      >
                         <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
                         Nenhum produto encontrado
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filtered.map((p) => (
-                      <TableRow key={p.id}>
-                        <TableCell className="font-medium">{p.name}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{p.type}</Badge>
-                        </TableCell>
-                        <TableCell className="font-mono">{fmtCurrency(p.price)}</TableCell>
-                        <TableCell className="font-mono text-green-600">
-                          {fmtCurrency(p.promotionalPrice)}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground font-mono">—</TableCell>
-                        <TableCell>{p.stock != null ? p.stock : "Ilimitado"}</TableCell>
-                        <TableCell>
-                          <Switch
-                            checked={p.active}
-                            onCheckedChange={() => handleToggle(p, "active")}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Switch
-                            checked={p.featured}
-                            onCheckedChange={() => handleToggle(p, "featured")}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
-                              <Pencil className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-destructive hover:text-destructive"
-                              onClick={() => setDeleteId(p.id)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    filtered.map((p) => {
+                      const cost = getProductCost(p.id);
+                      return (
+                        <TableRow key={p.id}>
+                          <TableCell className="font-medium">{p.name}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{p.type}</Badge>
+                          </TableCell>
+                          <TableCell className="font-mono">{fmtCurrency(p.price)}</TableCell>
+                          <TableCell className="font-mono text-green-600">
+                            {fmtCurrency(p.promotionalPrice)}
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">
+                            {cost != null ? fmtCurrency(cost) : "—"}
+                          </TableCell>
+                          <TableCell>
+                            {p.stock != null ? p.stock : "Ilimitado"}
+                          </TableCell>
+                          <TableCell>
+                            <Switch
+                              checked={p.active}
+                              onCheckedChange={() => handleToggle(p, "active")}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Switch
+                              checked={p.featured}
+                              onCheckedChange={() => handleToggle(p, "featured")}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openEdit(p)}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => setDeleteId(p.id)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
@@ -476,7 +535,9 @@ export default function Produtos() {
                   <Label>Descrição</Label>
                   <Textarea
                     value={(form as CreateProductBody).description ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, description: e.target.value }))
+                    }
                     rows={2}
                   />
                 </div>
@@ -518,7 +579,7 @@ export default function Produtos() {
                   }
                   min={0}
                   step={0.01}
-                  placeholder="Referência interna"
+                  placeholder="Custo de aquisição"
                 />
               </div>
               <div className="space-y-1">

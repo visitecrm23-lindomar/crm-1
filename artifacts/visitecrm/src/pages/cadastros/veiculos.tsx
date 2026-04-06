@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   useListVehicles,
   useCreateVehicle,
@@ -10,6 +10,7 @@ import type { Vehicle, CreateVehicleBody, UpdateVehicleBody } from "@workspace/a
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -54,10 +55,42 @@ const statusLabel: Record<string, string> = {
   maintenance: "Manutenção",
 };
 
+interface VehicleExtra {
+  driverName?: string;
+  driverPhone?: string;
+  driverLicense?: string;
+  seatLayout?: string;
+  layoutNotes?: string;
+}
+
+const STORAGE_KEY = "vehicle_extras";
+
+function loadExtras(): Record<string, VehicleExtra> {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveExtra(vehicleId: string, extra: VehicleExtra) {
+  const all = loadExtras();
+  all[vehicleId] = extra;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+}
+
 function fmtCurrency(v: number | null | undefined) {
   if (v == null) return "—";
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
+
+const LAYOUT_OPTIONS = [
+  "2+2 (standard)",
+  "2+1 (executivo)",
+  "1+1 (leito)",
+  "3+2 (popular)",
+  "Livre",
+];
 
 function VehicleDetailModal({
   vehicle,
@@ -71,6 +104,19 @@ function VehicleDetailModal({
   const { data: tripsData } = useListTrips({ limit: 200 });
   const allTrips = tripsData?.data ?? [];
   const linkedTrips = allTrips.filter((t) => t.vehiclePlate === vehicle?.plate);
+  const [extra, setExtra] = useState<VehicleExtra>({});
+
+  useEffect(() => {
+    if (vehicle) {
+      const all = loadExtras();
+      setExtra(all[vehicle.id] ?? {});
+    }
+  }, [vehicle]);
+
+  function handleSaveExtra() {
+    if (!vehicle) return;
+    saveExtra(vehicle.id, extra);
+  }
 
   if (!vehicle) return null;
 
@@ -83,8 +129,9 @@ function VehicleDetailModal({
         <Tabs defaultValue="info">
           <TabsList className="mb-4">
             <TabsTrigger value="info">Informações</TabsTrigger>
+            <TabsTrigger value="driver">Motorista e Layout</TabsTrigger>
             <TabsTrigger value="trips">
-              Viagens vinculadas {linkedTrips.length > 0 && `(${linkedTrips.length})`}
+              Viagens {linkedTrips.length > 0 && `(${linkedTrips.length})`}
             </TabsTrigger>
           </TabsList>
 
@@ -140,6 +187,65 @@ function VehicleDetailModal({
                 </div>
               </div>
             </div>
+          </TabsContent>
+
+          <TabsContent value="driver" className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label>Nome do Motorista</Label>
+                <Input
+                  value={extra.driverName ?? ""}
+                  onChange={(e) => setExtra((x) => ({ ...x, driverName: e.target.value }))}
+                  placeholder="Ex: João Silva"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Telefone do Motorista</Label>
+                <Input
+                  value={extra.driverPhone ?? ""}
+                  onChange={(e) => setExtra((x) => ({ ...x, driverPhone: e.target.value }))}
+                  placeholder="(11) 99999-9999"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>CNH (numero/categoria)</Label>
+                <Input
+                  value={extra.driverLicense ?? ""}
+                  onChange={(e) => setExtra((x) => ({ ...x, driverLicense: e.target.value }))}
+                  placeholder="Ex: 12345678901 D"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Layout de Assentos</Label>
+                <Select
+                  value={extra.seatLayout ?? ""}
+                  onValueChange={(v) => setExtra((x) => ({ ...x, seatLayout: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o layout" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LAYOUT_OPTIONS.map((l) => (
+                      <SelectItem key={l} value={l}>
+                        {l}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label>Observacoes sobre layout</Label>
+                <Textarea
+                  value={extra.layoutNotes ?? ""}
+                  onChange={(e) => setExtra((x) => ({ ...x, layoutNotes: e.target.value }))}
+                  rows={3}
+                  placeholder="Ex: fileiras 1-5 com tomada USB, corredor lado direito..."
+                />
+              </div>
+            </div>
+            <Button size="sm" onClick={handleSaveExtra}>
+              Salvar informacoes
+            </Button>
           </TabsContent>
 
           <TabsContent value="trips">
@@ -218,6 +324,7 @@ export default function Veiculos() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [amenitiesInput, setAmenitiesInput] = useState<string[]>([]);
   const [viewVehicle, setViewVehicle] = useState<Vehicle | null>(null);
+  const [createExtra, setCreateExtra] = useState<VehicleExtra>({});
 
   const filtered = vehicles.filter(
     (v) =>
@@ -230,6 +337,7 @@ export default function Veiculos() {
     setEditing(null);
     setForm({ amenities: [] });
     setAmenitiesInput([]);
+    setCreateExtra({});
     setModalOpen(true);
   }
 
@@ -242,6 +350,8 @@ export default function Veiculos() {
       status: v.status,
     });
     setAmenitiesInput(v.amenities ?? []);
+    const all = loadExtras();
+    setCreateExtra(all[v.id] ?? {});
     setModalOpen(true);
   }
 
@@ -261,6 +371,7 @@ export default function Veiculos() {
           status: (form as UpdateVehicleBody).status ?? undefined,
         };
         await updateVehicle.mutateAsync({ id: editing.id, data: body });
+        saveExtra(editing.id, createExtra);
         toast({ title: "Veículo atualizado" });
       } else {
         const body: CreateVehicleBody = {
@@ -277,7 +388,10 @@ export default function Veiculos() {
           toast({ title: "Preencha nome, tipo, placa e capacidade", variant: "destructive" });
           return;
         }
-        await createVehicle.mutateAsync({ data: body });
+        const created = await createVehicle.mutateAsync({ data: body });
+        if (created?.id && Object.keys(createExtra).some((k) => createExtra[k as keyof VehicleExtra])) {
+          saveExtra(created.id, createExtra);
+        }
         toast({ title: "Veículo criado" });
       }
       setModalOpen(false);
@@ -407,7 +521,6 @@ export default function Veiculos() {
         </Table>
       </div>
 
-      {/* Detail modal */}
       <VehicleDetailModal
         vehicle={viewVehicle}
         open={!!viewVehicle}
@@ -415,136 +528,207 @@ export default function Veiculos() {
       />
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Editar Veículo" : "Novo Veículo"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 space-y-1">
-                <Label>Nome *</Label>
-                <Input
-                  value={form.name ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                />
-              </div>
-              {!editing && (
-                <>
+          <Tabs defaultValue="basic">
+            <TabsList className="mb-4">
+              <TabsTrigger value="basic">Dados Básicos</TabsTrigger>
+              <TabsTrigger value="driver">Motorista e Layout</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="basic" className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2 space-y-1">
+                  <Label>Nome *</Label>
+                  <Input
+                    value={form.name ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  />
+                </div>
+                {!editing && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Tipo *</Label>
+                      <Select
+                        value={(form as CreateVehicleBody).type ?? ""}
+                        onValueChange={(v) => setForm((f) => ({ ...f, type: v }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Tipo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {VEHICLE_TYPES.map((t) => (
+                            <SelectItem key={t} value={t}>
+                              {t}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Placa *</Label>
+                      <Input
+                        value={(form as CreateVehicleBody).plate ?? ""}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, plate: e.target.value.toUpperCase() }))
+                        }
+                        className="uppercase"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Modelo</Label>
+                      <Input
+                        value={(form as CreateVehicleBody).model ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Ano</Label>
+                      <Input
+                        type="number"
+                        value={(form as CreateVehicleBody).year ?? ""}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, year: Number(e.target.value) || undefined }))
+                        }
+                        min={1990}
+                        max={new Date().getFullYear() + 1}
+                      />
+                    </div>
+                  </>
+                )}
+                <div className="space-y-1">
+                  <Label>Capacidade *</Label>
+                  <Input
+                    type="number"
+                    value={form.capacity ?? ""}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, capacity: Number(e.target.value) }))
+                    }
+                    min={1}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Diária (R$)</Label>
+                  <Input
+                    type="number"
+                    value={form.dailyRate ?? ""}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, dailyRate: Number(e.target.value) || undefined }))
+                    }
+                    min={0}
+                    step={0.01}
+                  />
+                </div>
+                {editing && (
                   <div className="space-y-1">
-                    <Label>Tipo *</Label>
+                    <Label>Status</Label>
                     <Select
-                      value={(form as CreateVehicleBody).type ?? ""}
-                      onValueChange={(v) => setForm((f) => ({ ...f, type: v }))}
+                      value={(form as UpdateVehicleBody).status ?? "active"}
+                      onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Tipo" />
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {VEHICLE_TYPES.map((t) => (
-                          <SelectItem key={t} value={t}>
-                            {t}
+                        {STATUS_OPTIONS.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {statusLabel[s]}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1">
-                    <Label>Placa *</Label>
-                    <Input
-                      value={(form as CreateVehicleBody).plate ?? ""}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, plate: e.target.value.toUpperCase() }))
-                      }
-                      className="uppercase"
-                    />
+                )}
+                {!editing && (
+                  <div className="col-span-2 space-y-2">
+                    <Label>Comodidades</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {AMENITY_OPTIONS.map((a) => (
+                        <button
+                          key={a}
+                          type="button"
+                          onClick={() => toggleAmenity(a)}
+                          className={`px-2 py-1 rounded text-xs border transition-colors ${
+                            amenitiesInput.includes(a)
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "border-border hover:border-primary"
+                          }`}
+                        >
+                          {a}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <Label>Modelo</Label>
-                    <Input
-                      value={(form as CreateVehicleBody).model ?? ""}
-                      onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Ano</Label>
-                    <Input
-                      type="number"
-                      value={(form as CreateVehicleBody).year ?? ""}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, year: Number(e.target.value) || undefined }))
-                      }
-                      min={1990}
-                      max={new Date().getFullYear() + 1}
-                    />
-                  </div>
-                </>
-              )}
-              <div className="space-y-1">
-                <Label>Capacidade *</Label>
-                <Input
-                  type="number"
-                  value={form.capacity ?? ""}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, capacity: Number(e.target.value) }))
-                  }
-                  min={1}
-                />
+                )}
               </div>
-              <div className="space-y-1">
-                <Label>Diária (R$)</Label>
-                <Input
-                  type="number"
-                  value={form.dailyRate ?? ""}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, dailyRate: Number(e.target.value) || undefined }))
-                  }
-                  min={0}
-                  step={0.01}
-                />
-              </div>
-              {editing && (
+            </TabsContent>
+
+            <TabsContent value="driver" className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <Label>Status</Label>
+                  <Label>Nome do Motorista</Label>
+                  <Input
+                    value={createExtra.driverName ?? ""}
+                    onChange={(e) =>
+                      setCreateExtra((x) => ({ ...x, driverName: e.target.value }))
+                    }
+                    placeholder="Ex: João Silva"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Telefone do Motorista</Label>
+                  <Input
+                    value={createExtra.driverPhone ?? ""}
+                    onChange={(e) =>
+                      setCreateExtra((x) => ({ ...x, driverPhone: e.target.value }))
+                    }
+                    placeholder="(11) 99999-9999"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>CNH (numero/categoria)</Label>
+                  <Input
+                    value={createExtra.driverLicense ?? ""}
+                    onChange={(e) =>
+                      setCreateExtra((x) => ({ ...x, driverLicense: e.target.value }))
+                    }
+                    placeholder="Ex: 12345678901 D"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Layout de Assentos</Label>
                   <Select
-                    value={(form as UpdateVehicleBody).status ?? "active"}
-                    onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}
+                    value={createExtra.seatLayout ?? ""}
+                    onValueChange={(v) => setCreateExtra((x) => ({ ...x, seatLayout: v }))}
                   >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Selecione o layout" />
                     </SelectTrigger>
                     <SelectContent>
-                      {STATUS_OPTIONS.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {statusLabel[s]}
+                      {LAYOUT_OPTIONS.map((l) => (
+                        <SelectItem key={l} value={l}>
+                          {l}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-              )}
-              {!editing && (
-                <div className="col-span-2 space-y-2">
-                  <Label>Comodidades</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {AMENITY_OPTIONS.map((a) => (
-                      <button
-                        key={a}
-                        type="button"
-                        onClick={() => toggleAmenity(a)}
-                        className={`px-2 py-1 rounded text-xs border transition-colors ${
-                          amenitiesInput.includes(a)
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "border-border hover:border-primary"
-                        }`}
-                      >
-                        {a}
-                      </button>
-                    ))}
-                  </div>
+                <div className="col-span-2 space-y-1">
+                  <Label>Observacoes sobre layout</Label>
+                  <Textarea
+                    value={createExtra.layoutNotes ?? ""}
+                    onChange={(e) =>
+                      setCreateExtra((x) => ({ ...x, layoutNotes: e.target.value }))
+                    }
+                    rows={3}
+                    placeholder="Ex: fileiras 1-5 com tomada USB, corredor lado direito..."
+                  />
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
+            </TabsContent>
+          </Tabs>
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalOpen(false)}>
               Cancelar

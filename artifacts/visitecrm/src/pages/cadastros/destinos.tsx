@@ -241,7 +241,7 @@ export default function Destinos() {
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 />
               </div>
-              {!editing && (
+              {!editing ? (
                 <>
                   <div className="space-y-1">
                     <Label>Cidade *</Label>
@@ -268,6 +268,14 @@ export default function Destinos() {
                     />
                   </div>
                 </>
+              ) : (
+                <div className="col-span-2 rounded-md bg-muted/40 px-3 py-2 text-sm">
+                  <span className="text-muted-foreground">Localização: </span>
+                  <span className="font-medium">
+                    {editing.city}/{editing.state} — {editing.country}
+                  </span>
+                  <span className="text-xs text-muted-foreground ml-2">(não editável)</span>
+                </div>
               )}
               <div className="col-span-2 space-y-1">
                 <Label>Descrição</Label>

@@ -42,6 +42,33 @@ const BANK_OPTIONS = ["Nubank", "Bradesco", "Itaú", "Santander", "Caixa", "BB",
 const PIX_TYPES = ["CPF/CNPJ", "E-mail", "Telefone", "Chave aleatória"];
 const STATUS_OPTIONS = ["active", "inactive"];
 
+const SUPPLIER_BANK_KEY = "supplier_bank_info";
+
+interface SupplierBankInfo {
+  bankName?: string;
+  bankAgency?: string;
+  bankAccount?: string;
+  pixType?: string;
+}
+
+function loadSupplierBanks(): Record<string, SupplierBankInfo> {
+  try {
+    return JSON.parse(localStorage.getItem(SUPPLIER_BANK_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveSupplierBank(supplierId: string, info: SupplierBankInfo) {
+  const all = loadSupplierBanks();
+  all[supplierId] = info;
+  localStorage.setItem(SUPPLIER_BANK_KEY, JSON.stringify(all));
+}
+
+function getSupplierBank(supplierId: string): SupplierBankInfo {
+  return loadSupplierBanks()[supplierId] ?? {};
+}
+
 const statusLabel: Record<string, string> = {
   active: "Ativo",
   inactive: "Inativo",
@@ -73,6 +100,7 @@ function SupplierDetailModal({
   if (!supplier) return null;
 
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+  const bank = getSupplierBank(supplier.id);
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -83,8 +111,9 @@ function SupplierDetailModal({
         <Tabs defaultValue="info">
           <TabsList className="mb-4">
             <TabsTrigger value="info">Informações</TabsTrigger>
+            <TabsTrigger value="bank">Dados Bancários</TabsTrigger>
             <TabsTrigger value="expenses">
-              Despesas vinculadas {expenses.length > 0 && `(${expenses.length})`}
+              Despesas {expenses.length > 0 && `(${expenses.length})`}
             </TabsTrigger>
           </TabsList>
 
@@ -127,6 +156,31 @@ function SupplierDetailModal({
                 <Badge variant={supplier.status === "active" ? "default" : "secondary"}>
                   {statusLabel[supplier.status] ?? supplier.status}
                 </Badge>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="bank" className="space-y-3">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-muted-foreground text-xs">Banco</p>
+                <p className="font-medium">{bank.bankName ?? "—"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Agência</p>
+                <p className="font-medium font-mono">{bank.bankAgency ?? "—"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Conta</p>
+                <p className="font-medium font-mono">{bank.bankAccount ?? "—"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Tipo de chave PIX</p>
+                <p className="font-medium">{bank.pixType ?? "—"}</p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-muted-foreground text-xs">Chave PIX</p>
+                <p className="font-medium font-mono">{supplier.pixKey ?? "—"}</p>
               </div>
             </div>
           </TabsContent>
@@ -224,17 +278,28 @@ export default function Fornecedores() {
 
   function openEdit(s: Supplier) {
     setEditing(s);
+    const bank = getSupplierBank(s.id);
     setForm({
       name: s.name,
       contactName: s.contactName ?? "",
       email: s.email ?? "",
       pixKey: s.pixKey ?? "",
       status: s.status,
+      bankName: bank.bankName ?? "",
+      bankAgency: bank.bankAgency ?? "",
+      bankAccount: bank.bankAccount ?? "",
+      pixType: bank.pixType ?? "",
     });
     setModalOpen(true);
   }
 
   async function handleSave() {
+    const bankInfo: SupplierBankInfo = {
+      bankName: form.bankName || undefined,
+      bankAgency: form.bankAgency || undefined,
+      bankAccount: form.bankAccount || undefined,
+      pixType: form.pixType || undefined,
+    };
     try {
       if (editing) {
         await updateSupplier.mutateAsync({ id: editing.id, data: {
@@ -244,13 +309,14 @@ export default function Fornecedores() {
           email: form.email ?? undefined,
           pixKey: form.pixKey ?? undefined,
         } as UpdateSupplierBody });
+        saveSupplierBank(editing.id, bankInfo);
         toast({ title: "Fornecedor atualizado" });
       } else {
         if (!form.name || !(form as CreateSupplierBody).type) {
           toast({ title: "Preencha nome e tipo", variant: "destructive" });
           return;
         }
-        await createSupplier.mutateAsync({ data: {
+        const created = await createSupplier.mutateAsync({ data: {
           name: form.name!,
           type: (form as CreateSupplierBody).type!,
           cnpj: (form as CreateSupplierBody).cnpj ?? undefined,
@@ -261,6 +327,9 @@ export default function Fornecedores() {
           addressState: (form as CreateSupplierBody).addressState ?? undefined,
           pixKey: form.pixKey ?? undefined,
         } as CreateSupplierBody });
+        if (created?.id) {
+          saveSupplierBank(created.id, bankInfo);
+        }
         toast({ title: "Fornecedor criado" });
       }
       setModalOpen(false);
@@ -552,8 +621,8 @@ export default function Fornecedores() {
                     </Select>
                   </div>
                   <div className="col-span-2 text-xs text-muted-foreground bg-muted/40 p-2 rounded">
-                    Dados bancários são armazenados apenas localmente por enquanto. O campo de chave PIX
-                    (aba Dados gerais) é salvo no sistema.
+                    A chave PIX é salva no sistema. Os demais dados bancários (banco, agência, conta)
+                    são armazenados localmente neste dispositivo.
                   </div>
                 </div>
               </TabsContent>
