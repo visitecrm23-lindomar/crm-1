@@ -28,7 +28,7 @@ import type { RequestHandler } from "express";
 const CLERK_FAPI = "https://frontend-api.clerk.dev";
 export const CLERK_PROXY_PATH = "/api/__clerk";
 
-export function clerkProxyMiddleware(): RequestHandler {
+export function clerkProxyMiddleware(allowedOrigins?: Set<string>): RequestHandler {
   const secretKey = process.env.CLERK_SECRET_KEY;
   if (!secretKey) {
     return (_req, _res, next) => next();
@@ -39,6 +39,14 @@ export function clerkProxyMiddleware(): RequestHandler {
     return (_req, _res, next) => next();
   }
 
+  let proxyOrigin: string;
+  try {
+    proxyOrigin = new URL(configuredProxyUrl).origin;
+  } catch {
+    console.error(`[clerkProxy] Invalid CLERK_PROXY_URL: "${configuredProxyUrl}". Proxy disabled.`);
+    return (_req, _res, next) => next();
+  }
+
   return createProxyMiddleware({
     target: CLERK_FAPI,
     changeOrigin: true,
@@ -46,7 +54,6 @@ export function clerkProxyMiddleware(): RequestHandler {
       path.replace(new RegExp(`^${CLERK_PROXY_PATH}`), ""),
     on: {
       proxyReq: (proxyReq, req) => {
-        const proxyOrigin = new URL(configuredProxyUrl).origin;
         proxyReq.setHeader("Clerk-Proxy-Url", configuredProxyUrl);
         proxyReq.setHeader("Clerk-Secret-Key", secretKey);
         proxyReq.setHeader("Origin", proxyOrigin);
@@ -62,7 +69,7 @@ export function clerkProxyMiddleware(): RequestHandler {
       },
       proxyRes: (proxyRes, req) => {
         const browserOrigin = (req as { headers: Record<string, string> }).headers["origin"];
-        if (browserOrigin) {
+        if (browserOrigin && (!allowedOrigins || allowedOrigins.has(browserOrigin))) {
           proxyRes.headers["access-control-allow-origin"] = browserOrigin;
           proxyRes.headers["access-control-allow-credentials"] = "true";
           proxyRes.headers["vary"] = "origin";

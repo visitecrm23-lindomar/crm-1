@@ -29,8 +29,6 @@ app.use(
   }),
 );
 
-app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
-
 const ALLOWED_ORIGINS = new Set(
   [
     process.env["FRONTEND_URL"],
@@ -45,6 +43,12 @@ if (ALLOWED_ORIGINS.size === 0) {
     "Only same-origin requests (no Origin header) will succeed."
   );
 }
+
+if (!process.env["CLERK_PROXY_URL"]) {
+  logger.warn("⚠️  CLERK_PROXY_URL is not set. Clerk proxy is disabled. Set it to enable auth proxy.");
+}
+
+app.use(CLERK_PROXY_PATH, clerkProxyMiddleware(ALLOWED_ORIGINS));
 
 app.use(cors({
   credentials: true,
