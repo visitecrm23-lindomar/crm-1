@@ -4,8 +4,11 @@ import {
   useCreateProduct,
   useUpdateProduct,
   useDeleteProduct,
+  useListProductCategories,
+  useCreateProductCategory,
+  useDeleteProductCategory,
 } from "@workspace/api-client-react";
-import type { Product, CreateProductBody, UpdateProductBody } from "@workspace/api-client-react";
+import type { Product, CreateProductBody, UpdateProductBody, ProductCategory } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,8 +37,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Search, Package } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Package, Tag } from "lucide-react";
 
 const PRODUCT_TYPES = [
   "Seguro",
@@ -53,9 +57,155 @@ function fmtCurrency(v: number | null | undefined) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function CategoryManager({
+  categories,
+  onRefetch,
+}: {
+  categories: ProductCategory[];
+  onRefetch: () => void;
+}) {
+  const { toast } = useToast();
+  const createCategory = useCreateProductCategory();
+  const deleteCategory = useDeleteProductCategory();
+
+  const [newName, setNewName] = useState("");
+  const [newSlug, setNewSlug] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  function handleNameChange(v: string) {
+    setNewName(v);
+    setNewSlug(
+      v
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+    );
+  }
+
+  async function handleCreate() {
+    if (!newName.trim()) {
+      toast({ title: "Digite um nome para a categoria", variant: "destructive" });
+      return;
+    }
+    try {
+      await createCategory.mutateAsync({ data: { name: newName.trim(), slug: newSlug || newName.toLowerCase().replace(/\s+/g, "-") } });
+      toast({ title: "Categoria criada" });
+      setNewName("");
+      setNewSlug("");
+      onRefetch();
+    } catch {
+      toast({ title: "Erro ao criar categoria", variant: "destructive" });
+    }
+  }
+
+  async function handleDelete(id: string) {
+    try {
+      await deleteCategory.mutateAsync({ id });
+      toast({ title: "Categoria excluída" });
+      setDeleteId(null);
+      onRefetch();
+    } catch {
+      toast({ title: "Erro ao excluir categoria", variant: "destructive" });
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        <Input
+          value={newName}
+          onChange={(e) => handleNameChange(e.target.value)}
+          placeholder="Nome da categoria"
+          onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }}
+        />
+        <Input
+          value={newSlug}
+          onChange={(e) => setNewSlug(e.target.value)}
+          placeholder="slug-automatico"
+          className="w-40 font-mono text-sm"
+        />
+        <Button onClick={handleCreate} disabled={createCategory.isPending}>
+          <Plus className="w-4 h-4 mr-1" />
+          Criar
+        </Button>
+      </div>
+      {categories.length === 0 ? (
+        <div className="text-center text-muted-foreground py-8 border-2 border-dashed rounded-lg">
+          <Tag className="w-8 h-8 mx-auto mb-2 opacity-30" />
+          Nenhuma categoria cadastrada
+        </div>
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>Slug</TableHead>
+                <TableHead>Ativo</TableHead>
+                <TableHead>Ordem</TableHead>
+                <TableHead className="w-16"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {categories.map((c) => (
+                <TableRow key={c.id}>
+                  <TableCell className="font-medium">{c.name}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{c.slug}</TableCell>
+                  <TableCell>
+                    <Badge variant={c.isActive ? "default" : "secondary"} className="text-xs">
+                      {c.isActive ? "Ativo" : "Inativo"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-sm">{c.sortOrder}</TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => setDeleteId(c.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Excluir Categoria</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Tem certeza que deseja excluir esta categoria?
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteId(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteId && handleDelete(deleteId)}
+              disabled={deleteCategory.isPending}
+            >
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 export default function Produtos() {
   const { toast } = useToast();
   const { data: products = [], refetch } = useListProducts();
+  const { data: categories = [], refetch: refetchCategories } = useListProductCategories();
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
@@ -63,7 +213,7 @@ export default function Produtos() {
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
-  const [form, setForm] = useState<Partial<CreateProductBody & UpdateProductBody>>({});
+  const [form, setForm] = useState<Partial<CreateProductBody & UpdateProductBody & { cost?: number; categoryId?: string }>>({});
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const filtered = products.filter(
@@ -166,83 +316,106 @@ export default function Produtos() {
         </Button>
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          className="pl-9"
-          placeholder="Buscar por nome, tipo..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
+      <Tabs defaultValue="produtos">
+        <TabsList>
+          <TabsTrigger value="produtos">
+            <Package className="w-4 h-4 mr-2" />
+            Produtos
+          </TabsTrigger>
+          <TabsTrigger value="categorias">
+            <Tag className="w-4 h-4 mr-2" />
+            Categorias ({categories.length})
+          </TabsTrigger>
+        </TabsList>
 
-      <div className="rounded-md border bg-background">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Produto</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead>Preço</TableHead>
-              <TableHead>Preço Promo</TableHead>
-              <TableHead>Estoque</TableHead>
-              <TableHead>Ativo</TableHead>
-              <TableHead>Destaque</TableHead>
-              <TableHead className="w-20"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground py-10">
-                  <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  Nenhum produto encontrado
-                </TableCell>
-              </TableRow>
-            ) : (
-              filtered.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-medium">{p.name}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{p.type}</Badge>
-                  </TableCell>
-                  <TableCell className="font-mono">{fmtCurrency(p.price)}</TableCell>
-                  <TableCell className="font-mono text-green-600">
-                    {fmtCurrency(p.promotionalPrice)}
-                  </TableCell>
-                  <TableCell>{p.stock != null ? p.stock : "Ilimitado"}</TableCell>
-                  <TableCell>
-                    <Switch
-                      checked={p.active}
-                      onCheckedChange={() => handleToggle(p, "active")}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Switch
-                      checked={p.featured}
-                      onCheckedChange={() => handleToggle(p, "featured")}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => setDeleteId(p.id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+        <TabsContent value="produtos" className="mt-4">
+          <div className="space-y-4">
+            <div className="relative max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                placeholder="Buscar por nome, tipo..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="rounded-md border bg-background">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Produto</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Preço</TableHead>
+                    <TableHead>Preço Promo</TableHead>
+                    <TableHead>Custo</TableHead>
+                    <TableHead>Estoque</TableHead>
+                    <TableHead>Ativo</TableHead>
+                    <TableHead>Destaque</TableHead>
+                    <TableHead className="w-20"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center text-muted-foreground py-10">
+                        <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                        Nenhum produto encontrado
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filtered.map((p) => (
+                      <TableRow key={p.id}>
+                        <TableCell className="font-medium">{p.name}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{p.type}</Badge>
+                        </TableCell>
+                        <TableCell className="font-mono">{fmtCurrency(p.price)}</TableCell>
+                        <TableCell className="font-mono text-green-600">
+                          {fmtCurrency(p.promotionalPrice)}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground font-mono">—</TableCell>
+                        <TableCell>{p.stock != null ? p.stock : "Ilimitado"}</TableCell>
+                        <TableCell>
+                          <Switch
+                            checked={p.active}
+                            onCheckedChange={() => handleToggle(p, "active")}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Switch
+                            checked={p.featured}
+                            onCheckedChange={() => handleToggle(p, "featured")}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setDeleteId(p.id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="categorias" className="mt-4">
+          <CategoryManager categories={categories} onRefetch={refetchCategories} />
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-lg">
@@ -272,6 +445,26 @@ export default function Produtos() {
                       {PRODUCT_TYPES.map((t) => (
                         <SelectItem key={t} value={t}>
                           {t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {!editing && categories.length > 0 && (
+                <div className="col-span-2 space-y-1">
+                  <Label>Categoria</Label>
+                  <Select
+                    value={form.categoryId ?? ""}
+                    onValueChange={(v) => setForm((f) => ({ ...f, categoryId: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecionar categoria (opcional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -313,6 +506,19 @@ export default function Produtos() {
                   }
                   min={0}
                   step={0.01}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Custo (R$)</Label>
+                <Input
+                  type="number"
+                  value={form.cost ?? ""}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, cost: Number(e.target.value) || undefined }))
+                  }
+                  min={0}
+                  step={0.01}
+                  placeholder="Referência interna"
                 />
               </div>
               <div className="space-y-1">

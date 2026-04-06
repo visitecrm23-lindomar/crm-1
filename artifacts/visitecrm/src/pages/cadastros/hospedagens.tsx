@@ -37,7 +37,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Search, Hotel, Star } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Hotel, Star, ImagePlus, X } from "lucide-react";
 
 const ACCOMMODATION_TYPES = ["Hotel", "Pousada", "Resort", "Hostel", "Chácara", "Chalé", "Outro"];
 const AMENITY_OPTIONS = [
@@ -71,6 +71,8 @@ export default function Hospedagens() {
   const [form, setForm] = useState<Partial<CreateAccommodationBody & UpdateAccommodationBody>>({});
   const [amenities, setAmenities] = useState<string[]>([]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [galleryUrls, setGalleryUrls] = useState<string[]>([]);
+  const [galleryInput, setGalleryInput] = useState("");
 
   const filtered = accommodations.filter(
     (a) =>
@@ -83,6 +85,8 @@ export default function Hospedagens() {
     setEditing(null);
     setForm({});
     setAmenities([]);
+    setGalleryUrls([]);
+    setGalleryInput("");
     setModalOpen(true);
   }
 
@@ -95,7 +99,17 @@ export default function Hospedagens() {
       status: a.status,
     });
     setAmenities(a.amenities ?? []);
+    setGalleryUrls([]);
+    setGalleryInput("");
     setModalOpen(true);
+  }
+
+  function addGalleryUrl() {
+    const url = galleryInput.trim();
+    if (url && !galleryUrls.includes(url)) {
+      setGalleryUrls((prev) => [...prev, url]);
+      setGalleryInput("");
+    }
   }
 
   function toggleAmenity(a: string) {
@@ -401,6 +415,51 @@ export default function Hospedagens() {
                   </div>
                 </div>
               )}
+              <div className="col-span-2 space-y-2">
+                <Label>Galeria de fotos</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={galleryInput}
+                    onChange={(e) => setGalleryInput(e.target.value)}
+                    placeholder="URL da imagem (https://...)"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { e.preventDefault(); addGalleryUrl(); }
+                    }}
+                  />
+                  <Button type="button" variant="outline" onClick={addGalleryUrl}>
+                    <ImagePlus className="w-4 h-4" />
+                  </Button>
+                </div>
+                {galleryUrls.length > 0 ? (
+                  <div className="grid grid-cols-3 gap-2 mt-1">
+                    {galleryUrls.map((url, i) => (
+                      <div key={i} className="relative group">
+                        <div className="h-20 bg-muted rounded border overflow-hidden flex items-center justify-center">
+                          <img
+                            src={url}
+                            alt={`Foto ${i + 1}`}
+                            className="h-full w-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = "none";
+                            }}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setGalleryUrls((prev) => prev.filter((_, idx) => idx !== i))}
+                          className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-16 rounded-lg border-2 border-dashed text-muted-foreground text-xs">
+                    Adicione URLs de fotos para criar a galeria
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <DialogFooter>

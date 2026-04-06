@@ -4,6 +4,7 @@ import {
   useCreateSupplier,
   useUpdateSupplier,
   useDeleteSupplier,
+  useListExpenses,
 } from "@workspace/api-client-react";
 import type { Supplier, CreateSupplierBody, UpdateSupplierBody } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -32,16 +33,167 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Eye } from "lucide-react";
 
 const SUPPLIER_TYPES = ["Transporte", "Hospedagem", "Alimentação", "Guia", "Seguro", "Outro"];
+const BANK_OPTIONS = ["Nubank", "Bradesco", "Itaú", "Santander", "Caixa", "BB", "Sicoob", "Outro"];
+const PIX_TYPES = ["CPF/CNPJ", "E-mail", "Telefone", "Chave aleatória"];
 const STATUS_OPTIONS = ["active", "inactive"];
 
 const statusLabel: Record<string, string> = {
   active: "Ativo",
   inactive: "Inativo",
 };
+
+function fmtCurrency(v: number) {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+const expenseStatusLabel: Record<string, string> = {
+  pending: "Pendente",
+  paid: "Pago",
+  overdue: "Vencido",
+  cancelled: "Cancelado",
+};
+
+function SupplierDetailModal({
+  supplier,
+  open,
+  onClose,
+}: {
+  supplier: Supplier | null;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const { data: expensesData } = useListExpenses({ limit: 200 });
+  const expenses = (expensesData?.data ?? []).filter((e) => e.supplierId === supplier?.id);
+
+  if (!supplier) return null;
+
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{supplier.name}</DialogTitle>
+        </DialogHeader>
+        <Tabs defaultValue="info">
+          <TabsList className="mb-4">
+            <TabsTrigger value="info">Informações</TabsTrigger>
+            <TabsTrigger value="expenses">
+              Despesas vinculadas {expenses.length > 0 && `(${expenses.length})`}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="info" className="space-y-3">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-muted-foreground text-xs">Tipo</p>
+                <p className="font-medium">{supplier.type}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">CNPJ</p>
+                <p className="font-medium font-mono">{supplier.cnpj ?? "—"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Contato</p>
+                <p className="font-medium">{supplier.contactName ?? "—"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">E-mail</p>
+                <p className="font-medium">{supplier.email ?? "—"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">WhatsApp</p>
+                <p className="font-medium">{supplier.whatsapp ?? "—"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Cidade/UF</p>
+                <p className="font-medium">
+                  {supplier.addressCity && supplier.addressState
+                    ? `${supplier.addressCity}/${supplier.addressState}`
+                    : supplier.addressCity ?? "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Chave PIX</p>
+                <p className="font-medium font-mono">{supplier.pixKey ?? "—"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Status</p>
+                <Badge variant={supplier.status === "active" ? "default" : "secondary"}>
+                  {statusLabel[supplier.status] ?? supplier.status}
+                </Badge>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="expenses">
+            {expenses.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                Nenhuma despesa vinculada a este fornecedor
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">{expenses.length} despesa(s)</span>
+                  <span className="font-bold">Total: {fmtCurrency(totalExpenses)}</span>
+                </div>
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Categoria</TableHead>
+                        <TableHead>Vencimento</TableHead>
+                        <TableHead>Valor</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {expenses.map((e) => (
+                        <TableRow key={e.id}>
+                          <TableCell className="text-sm">{e.description}</TableCell>
+                          <TableCell className="text-sm">{e.category}</TableCell>
+                          <TableCell className="text-sm">
+                            {new Date(e.dueDate).toLocaleDateString("pt-BR")}
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">{fmtCurrency(e.amount)}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                e.status === "paid"
+                                  ? "default"
+                                  : e.status === "overdue"
+                                  ? "destructive"
+                                  : "secondary"
+                              }
+                              className="text-xs"
+                            >
+                              {expenseStatusLabel[e.status] ?? e.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Fechar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export default function Fornecedores() {
   const { toast } = useToast();
@@ -53,8 +205,9 @@ export default function Fornecedores() {
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Supplier | null>(null);
-  const [form, setForm] = useState<Partial<CreateSupplierBody & UpdateSupplierBody>>({});
+  const [form, setForm] = useState<Partial<CreateSupplierBody & UpdateSupplierBody & { bankName?: string; bankAgency?: string; bankAccount?: string; pixType?: string }>>({});
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [viewSupplier, setViewSupplier] = useState<Supplier | null>(null);
 
   const filtered = suppliers.filter(
     (s) =>
@@ -84,14 +237,30 @@ export default function Fornecedores() {
   async function handleSave() {
     try {
       if (editing) {
-        await updateSupplier.mutateAsync({ id: editing.id, data: form as UpdateSupplierBody });
+        await updateSupplier.mutateAsync({ id: editing.id, data: {
+          name: form.name ?? undefined,
+          status: form.status ?? undefined,
+          contactName: form.contactName ?? undefined,
+          email: form.email ?? undefined,
+          pixKey: form.pixKey ?? undefined,
+        } as UpdateSupplierBody });
         toast({ title: "Fornecedor atualizado" });
       } else {
-        if (!form.name || !form.type) {
+        if (!form.name || !(form as CreateSupplierBody).type) {
           toast({ title: "Preencha nome e tipo", variant: "destructive" });
           return;
         }
-        await createSupplier.mutateAsync({ data: form as CreateSupplierBody });
+        await createSupplier.mutateAsync({ data: {
+          name: form.name!,
+          type: (form as CreateSupplierBody).type!,
+          cnpj: (form as CreateSupplierBody).cnpj ?? undefined,
+          contactName: form.contactName ?? undefined,
+          email: form.email ?? undefined,
+          whatsapp: (form as CreateSupplierBody).whatsapp ?? undefined,
+          addressCity: (form as CreateSupplierBody).addressCity ?? undefined,
+          addressState: (form as CreateSupplierBody).addressState ?? undefined,
+          pixKey: form.pixKey ?? undefined,
+        } as CreateSupplierBody });
         toast({ title: "Fornecedor criado" });
       }
       setModalOpen(false);
@@ -149,7 +318,7 @@ export default function Fornecedores() {
               <TableHead>Cidade/UF</TableHead>
               <TableHead>PIX</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="w-20"></TableHead>
+              <TableHead className="w-24"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -180,6 +349,9 @@ export default function Fornecedores() {
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => setViewSupplier(s)}>
+                        <Eye className="w-4 h-4" />
+                      </Button>
                       <Button variant="ghost" size="icon" onClick={() => openEdit(s)}>
                         <Pencil className="w-4 h-4" />
                       </Button>
@@ -202,121 +374,191 @@ export default function Fornecedores() {
 
       {/* Create/Edit Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Editar Fornecedor" : "Novo Fornecedor"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 space-y-1">
-                <Label>Nome *</Label>
-                <Input
-                  value={form.name ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                />
-              </div>
-              {!editing && (
+          <Tabs defaultValue="dados">
+            <TabsList className="mb-2">
+              <TabsTrigger value="dados">Dados gerais</TabsTrigger>
+              {!editing && <TabsTrigger value="banco">Dados bancários</TabsTrigger>}
+            </TabsList>
+            <TabsContent value="dados">
+              <div className="grid grid-cols-2 gap-4 py-2">
                 <div className="col-span-2 space-y-1">
-                  <Label>Tipo *</Label>
-                  <Select
-                    value={(form as CreateSupplierBody).type ?? ""}
-                    onValueChange={(v) => setForm((f) => ({ ...f, type: v }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecionar tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SUPPLIER_TYPES.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {t}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              {!editing && (
-                <div className="col-span-2 space-y-1">
-                  <Label>CNPJ</Label>
+                  <Label>Nome *</Label>
                   <Input
-                    value={(form as CreateSupplierBody).cnpj ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, cnpj: e.target.value }))}
-                    placeholder="00.000.000/0000-00"
+                    value={form.name ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                   />
                 </div>
-              )}
-              <div className="space-y-1">
-                <Label>Nome do Contato</Label>
-                <Input
-                  value={form.contactName ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, contactName: e.target.value }))}
-                />
+                {!editing && (
+                  <div className="col-span-2 space-y-1">
+                    <Label>Tipo *</Label>
+                    <Select
+                      value={(form as CreateSupplierBody).type ?? ""}
+                      onValueChange={(v) => setForm((f) => ({ ...f, type: v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecionar tipo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SUPPLIER_TYPES.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {t}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {!editing && (
+                  <div className="col-span-2 space-y-1">
+                    <Label>CNPJ</Label>
+                    <Input
+                      value={(form as CreateSupplierBody).cnpj ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, cnpj: e.target.value }))}
+                      placeholder="00.000.000/0000-00"
+                    />
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <Label>Nome do Contato</Label>
+                  <Input
+                    value={form.contactName ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, contactName: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>E-mail</Label>
+                  <Input
+                    value={form.email ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                  />
+                </div>
+                {!editing && (
+                  <div className="space-y-1">
+                    <Label>WhatsApp</Label>
+                    <Input
+                      value={(form as CreateSupplierBody).whatsapp ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, whatsapp: e.target.value }))}
+                    />
+                  </div>
+                )}
+                {!editing && (
+                  <div className="space-y-1">
+                    <Label>Cidade</Label>
+                    <Input
+                      value={(form as CreateSupplierBody).addressCity ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, addressCity: e.target.value }))}
+                    />
+                  </div>
+                )}
+                {!editing && (
+                  <div className="space-y-1">
+                    <Label>Estado (UF)</Label>
+                    <Input
+                      value={(form as CreateSupplierBody).addressState ?? ""}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, addressState: e.target.value.toUpperCase() }))
+                      }
+                      maxLength={2}
+                      className="uppercase"
+                    />
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <Label>Chave PIX</Label>
+                  <Input
+                    value={form.pixKey ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, pixKey: e.target.value }))}
+                  />
+                </div>
+                {editing && (
+                  <div className="space-y-1">
+                    <Label>Status</Label>
+                    <Select
+                      value={(form as UpdateSupplierBody).status ?? "active"}
+                      onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STATUS_OPTIONS.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {statusLabel[s]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
-              <div className="space-y-1">
-                <Label>E-mail</Label>
-                <Input
-                  value={form.email ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                />
-              </div>
-              {!editing && (
-                <div className="space-y-1">
-                  <Label>WhatsApp</Label>
-                  <Input
-                    value={(form as CreateSupplierBody).whatsapp ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, whatsapp: e.target.value }))}
-                  />
+            </TabsContent>
+            {!editing && (
+              <TabsContent value="banco">
+                <div className="grid grid-cols-2 gap-4 py-2">
+                  <div className="col-span-2 space-y-1">
+                    <Label>Banco</Label>
+                    <Select
+                      value={form.bankName ?? ""}
+                      onValueChange={(v) => setForm((f) => ({ ...f, bankName: v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecionar banco" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {BANK_OPTIONS.map((b) => (
+                          <SelectItem key={b} value={b}>
+                            {b}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Agência</Label>
+                    <Input
+                      value={form.bankAgency ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, bankAgency: e.target.value }))}
+                      placeholder="0000"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Conta</Label>
+                    <Input
+                      value={form.bankAccount ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, bankAccount: e.target.value }))}
+                      placeholder="00000-0"
+                    />
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <Label>Tipo de chave PIX</Label>
+                    <Select
+                      value={form.pixType ?? ""}
+                      onValueChange={(v) => setForm((f) => ({ ...f, pixType: v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecionar tipo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PIX_TYPES.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {t}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="col-span-2 text-xs text-muted-foreground bg-muted/40 p-2 rounded">
+                    Dados bancários são armazenados apenas localmente por enquanto. O campo de chave PIX
+                    (aba Dados gerais) é salvo no sistema.
+                  </div>
                 </div>
-              )}
-              {!editing && (
-                <div className="space-y-1">
-                  <Label>Cidade</Label>
-                  <Input
-                    value={(form as CreateSupplierBody).addressCity ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, addressCity: e.target.value }))}
-                  />
-                </div>
-              )}
-              {!editing && (
-                <div className="space-y-1">
-                  <Label>Estado (UF)</Label>
-                  <Input
-                    value={(form as CreateSupplierBody).addressState ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, addressState: e.target.value }))}
-                    maxLength={2}
-                    className="uppercase"
-                  />
-                </div>
-              )}
-              <div className="space-y-1">
-                <Label>Chave PIX</Label>
-                <Input
-                  value={form.pixKey ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, pixKey: e.target.value }))}
-                />
-              </div>
-              {editing && (
-                <div className="space-y-1">
-                  <Label>Status</Label>
-                  <Select
-                    value={(form as UpdateSupplierBody).status ?? "active"}
-                    onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STATUS_OPTIONS.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {statusLabel[s]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-          </div>
+              </TabsContent>
+            )}
+          </Tabs>
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalOpen(false)}>
               Cancelar
@@ -327,6 +569,13 @@ export default function Fornecedores() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Detail modal */}
+      <SupplierDetailModal
+        supplier={viewSupplier}
+        open={!!viewSupplier}
+        onClose={() => setViewSupplier(null)}
+      />
 
       {/* Delete confirmation */}
       <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>

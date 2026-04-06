@@ -4,6 +4,7 @@ import {
   useCreateVehicle,
   useUpdateVehicle,
   useDeleteVehicle,
+  useListTrips,
 } from "@workspace/api-client-react";
 import type { Vehicle, CreateVehicleBody, UpdateVehicleBody } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -32,8 +33,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Search, Bus } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Bus, Eye } from "lucide-react";
 
 const VEHICLE_TYPES = ["Ônibus", "Micro-ônibus", "Van", "Carro", "Barco", "Avião", "Outro"];
 const AMENITY_OPTIONS = [
@@ -57,6 +59,151 @@ function fmtCurrency(v: number | null | undefined) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function VehicleDetailModal({
+  vehicle,
+  open,
+  onClose,
+}: {
+  vehicle: Vehicle | null;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const { data: tripsData } = useListTrips({ limit: 200 });
+  const allTrips = tripsData?.data ?? [];
+  const linkedTrips = allTrips.filter((t) => t.vehiclePlate === vehicle?.plate);
+
+  if (!vehicle) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{vehicle.name}</DialogTitle>
+        </DialogHeader>
+        <Tabs defaultValue="info">
+          <TabsList className="mb-4">
+            <TabsTrigger value="info">Informações</TabsTrigger>
+            <TabsTrigger value="trips">
+              Viagens vinculadas {linkedTrips.length > 0 && `(${linkedTrips.length})`}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="info" className="space-y-3">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-muted-foreground text-xs">Placa</p>
+                <p className="font-medium font-mono">{vehicle.plate}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Tipo</p>
+                <p className="font-medium">{vehicle.type}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Modelo/Ano</p>
+                <p className="font-medium">
+                  {vehicle.model ? `${vehicle.model}${vehicle.year ? ` (${vehicle.year})` : ""}` : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Capacidade</p>
+                <p className="font-medium">{vehicle.capacity} lugares</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Diária</p>
+                <p className="font-medium">{fmtCurrency(vehicle.dailyRate)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Status</p>
+                <Badge
+                  variant={
+                    vehicle.status === "active"
+                      ? "default"
+                      : vehicle.status === "maintenance"
+                      ? "secondary"
+                      : "outline"
+                  }
+                >
+                  {statusLabel[vehicle.status] ?? vehicle.status}
+                </Badge>
+              </div>
+              <div className="col-span-2">
+                <p className="text-muted-foreground text-xs mb-1">Comodidades</p>
+                <div className="flex flex-wrap gap-1">
+                  {(vehicle.amenities ?? []).map((a) => (
+                    <Badge key={a} variant="outline" className="text-xs">
+                      {a}
+                    </Badge>
+                  ))}
+                  {(vehicle.amenities ?? []).length === 0 && (
+                    <span className="text-muted-foreground text-xs">Nenhuma</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="trips">
+            {linkedTrips.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                Nenhuma viagem vinculada a este veículo (placa: {vehicle.plate})
+              </div>
+            ) : (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Viagem</TableHead>
+                      <TableHead>Destino</TableHead>
+                      <TableHead>Partida</TableHead>
+                      <TableHead>Assentos</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {linkedTrips.map((t) => (
+                      <TableRow key={t.id}>
+                        <TableCell className="font-medium text-sm">{t.name}</TableCell>
+                        <TableCell className="text-sm">
+                          {t.destinationCity}/{t.destinationState}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {new Date(t.departureDate).toLocaleDateString("pt-BR")}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {t.reservedSeats}/{t.totalCapacity}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              t.status === "confirmed"
+                                ? "default"
+                                : t.status === "cancelled"
+                                ? "destructive"
+                                : "secondary"
+                            }
+                            className="text-xs"
+                          >
+                            {t.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Fechar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Veiculos() {
   const { toast } = useToast();
   const { data: vehicles = [], refetch } = useListVehicles();
@@ -70,6 +217,7 @@ export default function Veiculos() {
   const [form, setForm] = useState<Partial<CreateVehicleBody & UpdateVehicleBody>>({});
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [amenitiesInput, setAmenitiesInput] = useState<string[]>([]);
+  const [viewVehicle, setViewVehicle] = useState<Vehicle | null>(null);
 
   const filtered = vehicles.filter(
     (v) =>
@@ -185,7 +333,7 @@ export default function Veiculos() {
               <TableHead>Diária</TableHead>
               <TableHead>Comodidades</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="w-20"></TableHead>
+              <TableHead className="w-28"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -236,6 +384,9 @@ export default function Veiculos() {
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => setViewVehicle(v)}>
+                        <Eye className="w-4 h-4" />
+                      </Button>
                       <Button variant="ghost" size="icon" onClick={() => openEdit(v)}>
                         <Pencil className="w-4 h-4" />
                       </Button>
@@ -255,6 +406,13 @@ export default function Veiculos() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Detail modal */}
+      <VehicleDetailModal
+        vehicle={viewVehicle}
+        open={!!viewVehicle}
+        onClose={() => setViewVehicle(null)}
+      />
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-lg">

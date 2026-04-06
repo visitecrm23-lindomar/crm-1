@@ -3,11 +3,11 @@ import {
   useListReservations,
   useGetReservation,
   useCheckInReservation,
+  useListTrips,
 } from "@workspace/api-client-react";
 import type { Reservation } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Search,
@@ -36,6 +37,8 @@ import {
   CreditCard,
   ScanLine,
   Download,
+  Users,
+  FileText,
 } from "lucide-react";
 
 function fmtCurrency(v: number) {
@@ -193,20 +196,260 @@ function VoucherCard({ reservation }: { reservation: Reservation }) {
   );
 }
 
+function BulkCheckIn() {
+  const { toast } = useToast();
+  const { data: tripsData } = useListTrips({ limit: 100 });
+  const trips = tripsData?.data ?? [];
+  const [selectedTripId, setSelectedTripId] = useState("__none__");
+  const { data: reservationsData, refetch } = useListReservations({ limit: 500 });
+  const reservations = reservationsData?.data ?? [];
+  const checkIn = useCheckInReservation();
+
+  const tripReservations = selectedTripId === "__none__"
+    ? []
+    : reservations.filter((r) => r.trip.id === selectedTripId || r.trip.name === (trips.find(t => t.id === selectedTripId)?.name ?? ""));
+
+  const checkedIn = tripReservations.filter((r) => !!r.checkedInAt);
+  const pending = tripReservations.filter((r) => !r.checkedInAt && r.status === "confirmed");
+
+  const [processing, setProcessing] = useState(false);
+
+  async function handleBulkCheckIn() {
+    if (pending.length === 0) return;
+    setProcessing(true);
+    let success = 0;
+    for (const r of pending) {
+      try {
+        await checkIn.mutateAsync({ id: r.id });
+        success++;
+      } catch {
+        // continue with others
+      }
+    }
+    setProcessing(false);
+    toast({ title: `Check-in em massa: ${success} de ${pending.length} realizados` });
+    refetch();
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="flex-1">
+          <Select value={selectedTripId} onValueChange={setSelectedTripId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Selecionar viagem para check-in em massa" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Selecionar viagem...</SelectItem>
+              {trips.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.name} — {new Date(t.departureDate).toLocaleDateString("pt-BR")}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button
+          onClick={handleBulkCheckIn}
+          disabled={pending.length === 0 || processing}
+          className="shrink-0"
+        >
+          <CheckCircle2 className="w-4 h-4 mr-2" />
+          {processing ? "Processando..." : `Check-in em massa (${pending.length})`}
+        </Button>
+      </div>
+
+      {selectedTripId !== "__none__" && tripReservations.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex gap-4 text-sm">
+            <span className="text-green-600 font-medium">
+              <CheckCircle2 className="w-4 h-4 inline mr-1" />
+              {checkedIn.length} realizados
+            </span>
+            <span className="text-muted-foreground">
+              <Clock className="w-4 h-4 inline mr-1" />
+              {pending.length} pendentes
+            </span>
+            <span className="text-muted-foreground">
+              Total: {tripReservations.length} passageiros
+            </span>
+          </div>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Passageiro</TableHead>
+                  <TableHead>Voucher</TableHead>
+                  <TableHead>Assentos</TableHead>
+                  <TableHead>Status Reserva</TableHead>
+                  <TableHead>Check-in</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tripReservations.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell>
+                      <p className="font-medium text-sm">{r.client.name}</p>
+                      <p className="text-xs text-muted-foreground">{r.client.cpf ?? ""}</p>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{r.voucherCode}</TableCell>
+                    <TableCell className="text-sm">{r.seats.join(", ") || "—"}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={r.status === "confirmed" ? "default" : r.status === "cancelled" ? "destructive" : "secondary"}
+                        className="text-xs"
+                      >
+                        {STATUS_LABELS[r.status] ?? r.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {r.checkedInAt ? (
+                        <div className="flex items-center gap-1 text-green-600">
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span className="text-xs">
+                            {new Date(r.checkedInAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                      ) : (
+                        <Clock className="w-4 h-4 text-muted-foreground" />
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
+
+      {selectedTripId !== "__none__" && tripReservations.length === 0 && (
+        <div className="text-center text-muted-foreground py-8 border-2 border-dashed rounded-lg">
+          Nenhuma reserva encontrada para esta viagem
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VoucherGenerator() {
+  const { toast } = useToast();
+  const { data: reservationsData } = useListReservations({ limit: 500, status: "confirmed" });
+  const reservations = reservationsData?.data ?? [];
+  const [search, setSearch] = useState("");
+  const [generated, setGenerated] = useState<Set<string>>(new Set());
+
+  const filtered = reservations.filter(
+    (r) =>
+      !r.voucherCode ||
+      r.client.name.toLowerCase().includes(search.toLowerCase()) ||
+      r.voucherCode.toLowerCase().includes(search.toLowerCase())
+  );
+
+  function handleGenerate(r: Reservation) {
+    setGenerated((prev) => new Set([...prev, r.id]));
+    toast({
+      title: "Voucher gerado",
+      description: `Código: ${r.voucherCode}`,
+    });
+  }
+
+  function handleGenerateAll() {
+    const toGenerate = filtered.filter((r) => !generated.has(r.id));
+    setGenerated((prev) => new Set([...prev, ...toGenerate.map((r) => r.id)]));
+    toast({ title: `${toGenerate.length} vouchers gerados` });
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Buscar por nome ou código..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <Button variant="outline" onClick={handleGenerateAll}>
+          <FileText className="w-4 h-4 mr-2" />
+          Gerar todos os vouchers
+        </Button>
+      </div>
+
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Passageiro</TableHead>
+              <TableHead>Viagem</TableHead>
+              <TableHead>Código do Voucher</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="w-32"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-muted-foreground py-10">
+                  Nenhuma reserva confirmada encontrada
+                </TableCell>
+              </TableRow>
+            ) : (
+              filtered.slice(0, 30).map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>
+                    <p className="font-medium text-sm">{r.client.name}</p>
+                    <p className="text-xs text-muted-foreground">{r.client.cpf ?? ""}</p>
+                  </TableCell>
+                  <TableCell className="text-sm">{r.trip.name}</TableCell>
+                  <TableCell>
+                    <span className="font-mono text-sm font-bold">{r.voucherCode}</span>
+                  </TableCell>
+                  <TableCell>
+                    {generated.has(r.id) ? (
+                      <Badge className="bg-green-100 text-green-700 text-xs">Gerado</Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-xs">Pronto</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant={generated.has(r.id) ? "outline" : "default"}
+                        onClick={() => handleGenerate(r)}
+                      >
+                        <FileText className="w-3 h-3 mr-1" />
+                        {generated.has(r.id) ? "Re-gerar" : "Gerar"}
+                      </Button>
+                      <Button size="sm" variant="ghost">
+                        <Download className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
 export default function Vouchers() {
   const [searchCode, setSearchCode] = useState("");
   const [filterTrip, setFilterTrip] = useState("__all__");
   const [filterStatus, setFilterStatus] = useState("__all__");
 
-  const { data: reservationsData, refetch } = useListReservations({ limit: 200 });
+  const { data: reservationsData } = useListReservations({ limit: 200 });
   const reservations = reservationsData?.data ?? [];
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { data: selectedReservation } = useGetReservation(selectedId ?? "", {
     query: { enabled: !!selectedId, queryKey: [`/api/reservations/${selectedId}`] },
   });
-
-  const { toast } = useToast();
 
   const trips = Array.from(new Set(reservations.map((r) => r.trip.name)));
 
@@ -238,123 +481,150 @@ export default function Vouchers() {
         </Button>
       </div>
 
-      {/* Search + filters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[240px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            className="pl-9"
-            placeholder="Buscar por voucher, nome ou CPF..."
-            value={searchCode}
-            onChange={(e) => setSearchCode(e.target.value)}
-          />
-        </div>
-        <Select value={filterTrip} onValueChange={setFilterTrip}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Todas as viagens" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">Todas as viagens</SelectItem>
-            {trips.map((t) => (
-              <SelectItem key={t} value={t}>
-                {t}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Todos os status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">Todos os status</SelectItem>
-            <SelectItem value="confirmed">Confirmado</SelectItem>
-            <SelectItem value="pending">Pendente</SelectItem>
-            <SelectItem value="cancelled">Cancelado</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <Tabs defaultValue="lookup">
+        <TabsList>
+          <TabsTrigger value="lookup">
+            <Search className="w-4 h-4 mr-2" />
+            Busca individual
+          </TabsTrigger>
+          <TabsTrigger value="bulk">
+            <Users className="w-4 h-4 mr-2" />
+            Check-in em massa
+          </TabsTrigger>
+          <TabsTrigger value="generator">
+            <FileText className="w-4 h-4 mr-2" />
+            Gerador de vouchers
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Two column layout: table + card */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Table */}
-        <div className="lg:col-span-2 rounded-md border bg-background">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Voucher</TableHead>
-                <TableHead>Passageiro</TableHead>
-                <TableHead>Viagem</TableHead>
-                <TableHead>Assentos</TableHead>
-                <TableHead>Check-in</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
-                    Nenhum voucher encontrado
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filtered.map((r) => (
-                  <TableRow
-                    key={r.id}
-                    className={`cursor-pointer ${
-                      selectedId === r.id ? "bg-primary/5" : "hover:bg-muted/40"
-                    }`}
-                    onClick={() => setSelectedId(r.id)}
-                  >
-                    <TableCell className="font-mono text-sm">{r.voucherCode}</TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium text-sm">{r.client.name}</p>
-                        <p className="text-xs text-muted-foreground">{r.client.cpf ?? ""}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm">{r.trip.name}</TableCell>
-                    <TableCell className="text-sm">{r.seats.join(", ") || "—"}</TableCell>
-                    <TableCell>
-                      {r.checkedInAt ? (
-                        <CheckCircle2 className="w-4 h-4 text-green-500" />
-                      ) : (
-                        <Clock className="w-4 h-4 text-muted-foreground" />
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          r.status === "confirmed"
-                            ? "default"
-                            : r.status === "cancelled"
-                            ? "destructive"
-                            : "secondary"
-                        }
-                        className="text-xs"
-                      >
-                        {STATUS_LABELS[r.status] ?? r.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        {/* Voucher card */}
-        <div>
-          {selectedReservation ? (
-            <VoucherCard key={selectedReservation.id} reservation={selectedReservation} />
-          ) : (
-            <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground h-full flex flex-col items-center justify-center">
-              <QrCode className="w-10 h-10 mb-3 opacity-30" />
-              <p className="text-sm">Selecione uma reserva para ver o voucher</p>
+        <TabsContent value="lookup" className="mt-4">
+          {/* Search + filters */}
+          <div className="flex items-center gap-3 flex-wrap mb-4">
+            <div className="relative flex-1 min-w-[240px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                placeholder="Buscar por voucher, nome ou CPF..."
+                value={searchCode}
+                onChange={(e) => setSearchCode(e.target.value)}
+              />
             </div>
-          )}
-        </div>
-      </div>
+            <Select value={filterTrip} onValueChange={setFilterTrip}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Todas as viagens" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Todas as viagens</SelectItem>
+                {trips.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Todos os status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Todos os status</SelectItem>
+                <SelectItem value="confirmed">Confirmado</SelectItem>
+                <SelectItem value="pending">Pendente</SelectItem>
+                <SelectItem value="cancelled">Cancelado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Two column layout: table + card */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Table */}
+            <div className="lg:col-span-2 rounded-md border bg-background">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Voucher</TableHead>
+                    <TableHead>Passageiro</TableHead>
+                    <TableHead>Viagem</TableHead>
+                    <TableHead>Assentos</TableHead>
+                    <TableHead>Check-in</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
+                        Nenhum voucher encontrado
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filtered.map((r) => (
+                      <TableRow
+                        key={r.id}
+                        className={`cursor-pointer ${
+                          selectedId === r.id ? "bg-primary/5" : "hover:bg-muted/40"
+                        }`}
+                        onClick={() => setSelectedId(r.id)}
+                      >
+                        <TableCell className="font-mono text-sm">{r.voucherCode}</TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-sm">{r.client.name}</p>
+                            <p className="text-xs text-muted-foreground">{r.client.cpf ?? ""}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm">{r.trip.name}</TableCell>
+                        <TableCell className="text-sm">{r.seats.join(", ") || "—"}</TableCell>
+                        <TableCell>
+                          {r.checkedInAt ? (
+                            <CheckCircle2 className="w-4 h-4 text-green-500" />
+                          ) : (
+                            <Clock className="w-4 h-4 text-muted-foreground" />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              r.status === "confirmed"
+                                ? "default"
+                                : r.status === "cancelled"
+                                ? "destructive"
+                                : "secondary"
+                            }
+                            className="text-xs"
+                          >
+                            {STATUS_LABELS[r.status] ?? r.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Voucher card */}
+            <div>
+              {selectedReservation ? (
+                <VoucherCard key={selectedReservation.id} reservation={selectedReservation} />
+              ) : (
+                <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground h-full flex flex-col items-center justify-center">
+                  <QrCode className="w-10 h-10 mb-3 opacity-30" />
+                  <p className="text-sm">Selecione uma reserva para ver o voucher</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="bulk" className="mt-4">
+          <BulkCheckIn />
+        </TabsContent>
+
+        <TabsContent value="generator" className="mt-4">
+          <VoucherGenerator />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

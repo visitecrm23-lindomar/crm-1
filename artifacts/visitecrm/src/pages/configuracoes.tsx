@@ -699,6 +699,117 @@ function NotificationsTab() {
   );
 }
 
+/* ──────────────────── Customization Tab ──────────────────── */
+function CustomizationTab() {
+  const { toast } = useToast();
+  const { data: tenants = [], refetch } = useListTenants();
+  const updateTenant = useUpdateTenant();
+  const tenant = tenants[0];
+
+  const [primaryColor, setPrimaryColor] = useState(tenant?.primaryColor ?? "#3B82F6");
+  const [secondaryColor, setSecondaryColor] = useState(tenant?.secondaryColor ?? "#8B5CF6");
+  const [logoUrl, setLogoUrl] = useState(tenant?.logoUrl ?? "");
+
+  async function handleSave() {
+    if (!tenant) return;
+    try {
+      await updateTenant.mutateAsync({ id: tenant.id, data: { primaryColor, secondaryColor, logoUrl } });
+      toast({ title: "Personalização salva com sucesso" });
+      refetch();
+    } catch {
+      toast({ title: "Erro ao salvar personalização", variant: "destructive" });
+    }
+  }
+
+  return (
+    <div className="space-y-6 max-w-xl">
+      <div className="space-y-4">
+        <h3 className="font-semibold text-sm">Cores do sistema</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>Cor primária</Label>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={primaryColor}
+                onChange={(e) => setPrimaryColor(e.target.value)}
+                className="w-10 h-10 rounded cursor-pointer border border-border"
+              />
+              <Input
+                value={primaryColor}
+                onChange={(e) => setPrimaryColor(e.target.value)}
+                className="font-mono uppercase"
+                maxLength={7}
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Cor secundária</Label>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={secondaryColor}
+                onChange={(e) => setSecondaryColor(e.target.value)}
+                className="w-10 h-10 rounded cursor-pointer border border-border"
+              />
+              <Input
+                value={secondaryColor}
+                onChange={(e) => setSecondaryColor(e.target.value)}
+                className="font-mono uppercase"
+                maxLength={7}
+              />
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-3 pt-1">
+          <div className="w-16 h-8 rounded-md" style={{ backgroundColor: primaryColor }} />
+          <div className="w-16 h-8 rounded-md" style={{ backgroundColor: secondaryColor }} />
+          <div className="w-16 h-8 rounded-md bg-gradient-to-r" style={{ backgroundImage: `linear-gradient(to right, ${primaryColor}, ${secondaryColor})` }} />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <h3 className="font-semibold text-sm">Logotipo</h3>
+        <Label>URL do logotipo</Label>
+        <Input
+          value={logoUrl}
+          onChange={(e) => setLogoUrl(e.target.value)}
+          placeholder="https://exemplo.com/logo.png"
+        />
+        {logoUrl && (
+          <div className="rounded-lg border p-4 bg-muted/30 flex items-center justify-center">
+            <img
+              src={logoUrl}
+              alt="Logo preview"
+              className="max-h-16 max-w-[200px] object-contain"
+              onError={(e) => { (e.target as HTMLImageElement).style.opacity = "0.3"; }}
+            />
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Recomendado: PNG com fundo transparente, tamanho mínimo 200x60px
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <h3 className="font-semibold text-sm">Favicon</h3>
+        <div className="flex items-center gap-3 rounded-lg border p-3 bg-muted/20">
+          <div className="w-8 h-8 rounded bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm">
+            V
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Favicon gerado automaticamente a partir das iniciais do nome da agência
+          </p>
+        </div>
+      </div>
+
+      <Button onClick={handleSave} disabled={updateTenant.isPending}>
+        {updateTenant.isPending ? "Salvando..." : "Salvar personalização"}
+      </Button>
+    </div>
+  );
+}
+
 /* ──────────────────── API Keys Tab ──────────────────── */
 function ApiKeysTab() {
   const [keys] = useState([
@@ -783,6 +894,10 @@ export default function Configuracoes() {
             <Bell className="w-3.5 h-3.5" />
             Notificações
           </TabsTrigger>
+          <TabsTrigger value="customization" className="flex items-center gap-1.5">
+            <Palette className="w-3.5 h-3.5" />
+            Personalização
+          </TabsTrigger>
           <TabsTrigger value="apikeys" className="flex items-center gap-1.5">
             <Key className="w-3.5 h-3.5" />
             Chaves API
@@ -852,6 +967,20 @@ export default function Configuracoes() {
               </CardHeader>
               <CardContent>
                 <NotificationsTab />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="customization">
+            <Card>
+              <CardHeader>
+                <CardTitle>Personalização</CardTitle>
+                <CardDescription>
+                  Personalize cores, logotipo e aparência do sistema
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <CustomizationTab />
               </CardContent>
             </Card>
           </TabsContent>
