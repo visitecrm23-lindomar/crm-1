@@ -472,11 +472,11 @@ export function TripForm({ tripId }: { tripId?: string }) {
   const setVal = (k: keyof TripFormData) => (v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
   const totalCosts = form.costs.reduce((acc, c) => acc + (parseFloat(c.amount) || 0), 0);
-  const fixedCostsNum = parseFloat(form.fixedCosts || "0");
-  const variableCostsNum = parseFloat(form.variableCosts || "0");
-  const grossRevenue = parseFloat(form.priceAdult || "0") * parseInt(form.totalCapacity || "0");
-  const effectiveCosts = fixedCostsNum + variableCostsNum * parseInt(form.totalCapacity || "0");
-  const margin = grossRevenue - (effectiveCosts || totalCosts);
+    const fixedCostsNum = parseFloat(form.fixedCosts || "0");
+    const variableCostsNum = parseFloat(form.variableCosts || "0");
+    const grossRevenue = parseFloat(form.priceAdult || "0") * parseInt(form.totalCapacity || "0");
+    const effectiveCosts = fixedCostsNum + variableCostsNum * parseInt(form.totalCapacity || "0");
+    const margin = grossRevenue - Math.max(effectiveCosts, totalCosts);
   const marginPct = grossRevenue > 0 ? Math.round(margin / grossRevenue * 100) : 0;
 
   const handleSave = async (publish = false) => {
