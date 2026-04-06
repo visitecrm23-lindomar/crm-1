@@ -1235,6 +1235,17 @@ export interface UpdateUserBody {
   isActive?: boolean | null;
 }
 
+export type AdminStatsByStatus = { [key: string]: number };
+
+export type AdminStatsByPlan = { [key: string]: number };
+
+export interface AdminStats {
+  totalTenants: number;
+  byStatus: AdminStatsByStatus;
+  byPlan: AdminStatsByPlan;
+  mrr: number;
+}
+
 export interface Tenant {
   id: string;
   name: string;
@@ -1254,6 +1265,10 @@ export interface Tenant {
   secondaryColor?: string | null;
   createdAt: string;
 }
+
+export type TenantWithCount = Tenant & {
+  userCount: number;
+};
 
 export interface CreateTenantBody {
   name: string;

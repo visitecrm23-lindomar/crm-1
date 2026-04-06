@@ -5,9 +5,10 @@ import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useSyncMe } from "@workspace/api-client-react";
+import { useSyncMe, useGetMe } from "@workspace/api-client-react";
 
 import Layout from "@/components/layout";
+import AdminLayout from "@/components/admin-layout";
 import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
 import Pipeline from "@/pages/pipeline";
@@ -39,6 +40,8 @@ import Vouchers from "@/pages/vouchers";
 import Indicacoes from "@/pages/indicacoes";
 import Configuracoes from "@/pages/configuracoes";
 import Downloads from "@/pages/downloads";
+import AdminDashboard from "@/pages/admin/index";
+import AdminTenants from "@/pages/admin/tenants";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
@@ -106,6 +109,27 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
       </Show>
       <Show when="signed-out">
         <Redirect to="/" />
+      </Show>
+    </>
+  );
+}
+
+function AdminRoute({ component: Component }: { component: React.ComponentType }) {
+  const { data: me, isLoading } = useGetMe();
+
+  return (
+    <>
+      <Show when="signed-out">
+        <Redirect to="/" />
+      </Show>
+      <Show when="signed-in">
+        {isLoading ? null : me?.role === "superadmin" ? (
+          <AdminLayout>
+            <Component />
+          </AdminLayout>
+        ) : (
+          <Redirect to="/dashboard" />
+        )}
       </Show>
     </>
   );
@@ -221,6 +245,10 @@ function Router() {
 
       {/* Legacy redirect */}
       <Route path="/settings" component={() => <Redirect to="/configuracoes" />} />
+
+      {/* Super Admin */}
+      <Route path="/admin" component={() => <AdminRoute component={AdminDashboard} />} />
+      <Route path="/admin/tenants" component={() => <AdminRoute component={AdminTenants} />} />
 
       <Route
         component={() => <ProtectedRoute component={() => <Redirect to="/dashboard" />} />}

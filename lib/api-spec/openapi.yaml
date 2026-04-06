@@ -7,6 +7,8 @@ servers:
   - url: /api
     description: Base API path
 tags:
+  - name: admin
+    description: Super admin global operations
   - name: health
     description: Health operations
   - name: tenants
@@ -69,6 +71,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ─── ADMIN ───────────────────────────────────────────────────────
+  /admin/stats:
+    get:
+      operationId: getAdminStats
+      tags: [admin]
+      summary: Get global platform stats (superadmin only)
+      responses:
+        "200":
+          description: Admin stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
 
   # ─── DASHBOARD ───────────────────────────────────────────────────
   /dashboard/summary:
@@ -2045,7 +2061,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Tenant"
+                  $ref: "#/components/schemas/TenantWithCount"
     post:
       operationId: createTenant
       summary: Create a tenant (superadmin only)
@@ -4811,6 +4827,32 @@ components:
           type: ["boolean", "null"]
 
     # ─── TENANT ────────────────────────────────────────────────────
+    AdminStats:
+      type: object
+      properties:
+        totalTenants:
+          type: integer
+        byStatus:
+          type: object
+          additionalProperties:
+            type: integer
+        byPlan:
+          type: object
+          additionalProperties:
+            type: integer
+        mrr:
+          type: number
+      required: [totalTenants, byStatus, byPlan, mrr]
+
+    TenantWithCount:
+      allOf:
+        - $ref: "#/components/schemas/Tenant"
+        - type: object
+          properties:
+            userCount:
+              type: integer
+          required: [userCount]
+
     Tenant:
       type: object
       properties:

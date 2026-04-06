@@ -15,6 +15,16 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
+ * @summary Get global platform stats (superadmin only)
+ */
+export const GetAdminStatsResponse = zod.object({
+  totalTenants: zod.number(),
+  byStatus: zod.record(zod.string(), zod.number()),
+  byPlan: zod.record(zod.string(), zod.number()),
+  mrr: zod.number(),
+});
+
+/**
  * @summary Get dashboard summary stats
  */
 export const GetDashboardSummaryResponse = zod.object({
@@ -2251,20 +2261,26 @@ export const UpdateUserResponse = zod.object({
 /**
  * @summary List all tenants (superadmin only)
  */
-export const ListTenantsResponseItem = zod.object({
-  id: zod.string(),
-  name: zod.string(),
-  slug: zod.string(),
-  email: zod.string(),
-  whatsapp: zod.string().nullish(),
-  phone: zod.string().nullish(),
-  planId: zod.string(),
-  status: zod.string(),
-  logoUrl: zod.string().nullish(),
-  primaryColor: zod.string().nullish(),
-  secondaryColor: zod.string().nullish(),
-  createdAt: zod.string(),
-});
+export const ListTenantsResponseItem = zod
+  .object({
+    id: zod.string(),
+    name: zod.string(),
+    slug: zod.string(),
+    email: zod.string(),
+    whatsapp: zod.string().nullish(),
+    phone: zod.string().nullish(),
+    planId: zod.string(),
+    status: zod.string(),
+    logoUrl: zod.string().nullish(),
+    primaryColor: zod.string().nullish(),
+    secondaryColor: zod.string().nullish(),
+    createdAt: zod.string(),
+  })
+  .and(
+    zod.object({
+      userCount: zod.number(),
+    }),
+  );
 export const ListTenantsResponse = zod.array(ListTenantsResponseItem);
 
 /**

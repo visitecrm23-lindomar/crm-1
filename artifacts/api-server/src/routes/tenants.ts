@@ -1,11 +1,17 @@
 import { Router } from "express";
-import { db, tenantsTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { db, tenantsTable, usersTable } from "@workspace/db";
+import { eq, desc, count } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 
 const router = Router();
+
+const PLAN_MRR: Record<string, number> = {
+  starter: 0,
+  pro: 297,
+  enterprise: 997,
+};
 
 const UpdateTenantBody = z.object({
   name: z.string().min(1).optional(),
@@ -18,14 +24,59 @@ const UpdateTenantBody = z.object({
   phone: z.string().optional(),
 });
 
+router.get("/admin/stats", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden: superadmin only" }); return; }
+
+    const tenants = await db.select().from(tenantsTable);
+
+    const totalTenants = tenants.length;
+    const byStatus: Record<string, number> = {};
+    const byPlan: Record<string, number> = {};
+    let mrr = 0;
+
+    for (const t of tenants) {
+      byStatus[t.status] = (byStatus[t.status] ?? 0) + 1;
+      byPlan[t.planId] = (byPlan[t.planId] ?? 0) + 1;
+      if (t.status === "active") {
+        mrr += PLAN_MRR[t.planId] ?? 0;
+      }
+    }
+
+    res.json({
+      totalTenants,
+      byStatus,
+      byPlan,
+      mrr,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error fetching admin stats");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/tenants", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden: superadmin only" }); return; }
-    const tenants = await db.select().from(tenantsTable)
-      .orderBy(desc(tenantsTable.createdAt));
-    res.json(tenants);
+
+    const tenants = await db.select().from(tenantsTable).orderBy(desc(tenantsTable.createdAt));
+
+    const userCounts = await db
+      .select({ tenantId: usersTable.tenantId, userCount: count(usersTable.id) })
+      .from(usersTable)
+      .groupBy(usersTable.tenantId);
+
+    const countMap: Record<string, number> = {};
+    for (const row of userCounts) {
+      if (row.tenantId) countMap[row.tenantId] = row.userCount;
+    }
+
+    const result = tenants.map((t) => ({ ...t, userCount: countMap[t.id] ?? 0 }));
+    res.json(result);
   } catch (err) {
     req.log.error({ err }, "Error listing tenants");
     res.status(500).json({ error: "Internal server error" });

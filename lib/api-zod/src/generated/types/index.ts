@@ -8,6 +8,9 @@
 
 export * from "./accommodation";
 export * from "./activityItem";
+export * from "./adminStats";
+export * from "./adminStatsByPlan";
+export * from "./adminStatsByStatus";
 export * from "./auditLog";
 export * from "./auditLogAfter";
 export * from "./auditLogBefore";
@@ -124,6 +127,7 @@ export * from "./syncUserBody";
 export * from "./systemConfig";
 export * from "./systemConfigValue";
 export * from "./tenant";
+export * from "./tenantWithCount";
 export * from "./trip";
 export * from "./tripListResponse";
 export * from "./tripSummary";
