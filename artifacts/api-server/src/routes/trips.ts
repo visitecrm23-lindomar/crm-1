@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { tripsTable, reservationsTable } from "@workspace/db";
-import { eq, and, ilike, sql, desc } from "drizzle-orm";
+import { eq, and, ilike, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { CreateTripBody, UpdateTripBody } from "@workspace/api-zod";
@@ -240,8 +240,13 @@ router.get("/trips/:id/seat-map", async (req, res): Promise<void> => {
       .limit(1);
     if (!trip) { res.status(404).json({ error: "Not found" }); return; }
 
+    const ACTIVE_STATUSES = ["pending", "confirmed"] as const;
     const reservations = await db.select().from(reservationsTable)
-      .where(and(eq(reservationsTable.tripId, req.params.id), eq(reservationsTable.tenantId, me.tenantId)));
+      .where(and(
+        eq(reservationsTable.tripId, req.params.id),
+        eq(reservationsTable.tenantId, me.tenantId),
+        inArray(reservationsTable.status, [...ACTIVE_STATUSES]),
+      ));
 
     const occupiedSeats: Record<string, { reservationId: string; passengerName: string; seatStatus: string }> = {};
     for (const r of reservations) {

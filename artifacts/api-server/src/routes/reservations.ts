@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { reservationsTable, passengersTable, tripsTable, clientsTable } from "@workspace/db";
-import { eq, and, sql, desc, inArray } from "drizzle-orm";
+import { eq, and, sql, desc, inArray, or, ilike } from "drizzle-orm";
 import { generateId, generateVoucherCode } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { CreateReservationBody, UpdateReservationBody, CreatePassengerBody, UpdatePassengerBody } from "@workspace/api-zod";
@@ -67,7 +67,7 @@ router.get("/reservations", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    const { tripId, clientId, status, page = "1", limit = "20" } = req.query as Record<string, string>;
+    const { tripId, clientId, status, search, page = "1", limit = "20" } = req.query as Record<string, string>;
     const pageNum = parseInt(page) || 1;
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (pageNum - 1) * limitNum;
@@ -75,6 +75,28 @@ router.get("/reservations", async (req, res): Promise<void> => {
     const conditions: ReturnType<typeof eq>[] = [eq(reservationsTable.tenantId, me.tenantId)];
     if (tripId) conditions.push(eq(reservationsTable.tripId, tripId));
     if (status) conditions.push(eq(reservationsTable.status, status));
+    if (search) {
+      const term = `%${search}%`;
+      const matchingClients = await db
+        .select({ id: clientsTable.id })
+        .from(clientsTable)
+        .where(and(
+          eq(clientsTable.tenantId, me.tenantId),
+          or(
+            ilike(clientsTable.name, term),
+            ilike(clientsTable.email, term),
+            ilike(clientsTable.whatsapp, term),
+            ilike(clientsTable.cpf, term),
+          ),
+        ));
+      const matchingClientIds = matchingClients.map(c => c.id);
+      const voucherCondition = ilike(reservationsTable.voucherCode, term) as ReturnType<typeof eq>;
+      if (matchingClientIds.length > 0) {
+        conditions.push(or(voucherCondition, inArray(reservationsTable.clientId, matchingClientIds)) as ReturnType<typeof eq>);
+      } else {
+        conditions.push(voucherCondition);
+      }
+    }
 
     if (me.role === "cliente") {
       const [clientRecord] = await db.select({ id: clientsTable.id })
