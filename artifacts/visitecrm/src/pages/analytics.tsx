@@ -7,15 +7,17 @@ import {
   useListReservations,
   useListCommissions,
 } from "@workspace/api-client-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { GetDashboardRevenueChartPeriod } from "@workspace/api-client-react";
+import { Link } from "wouter";
 import {
   DollarSign, Users, MapPin, BarChart2, TrendingUp, CalendarCheck,
-  Target, Award, ArrowUpRight,
+  Target, Award, ArrowUpRight, ExternalLink,
 } from "lucide-react";
 
 const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
@@ -220,7 +222,13 @@ export default function Analytics() {
           <h1 className="text-2xl font-bold tracking-tight">Analiticos</h1>
           <p className="text-muted-foreground text-sm">Desempenho e receita da agencia</p>
         </div>
-        <Select value={period} onValueChange={v => setPeriod(v as GetDashboardRevenueChartPeriod)}>
+        <div className="flex items-center gap-2">
+          <Link href="/analytics/revenue">
+            <Button variant="ghost" size="sm">
+              <ExternalLink className="w-4 h-4 mr-1.5" /> Analise de Receita
+            </Button>
+          </Link>
+          <Select value={period} onValueChange={v => setPeriod(v as GetDashboardRevenueChartPeriod)}>
           <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="3m">Ultimos 3 meses</SelectItem>
@@ -228,7 +236,8 @@ export default function Analytics() {
             <SelectItem value="12m">Ultimos 12 meses</SelectItem>
             <SelectItem value="ytd">Ano atual</SelectItem>
           </SelectContent>
-        </Select>
+          </Select>
+        </div>
       </div>
 
       <div className="grid gap-4 grid-cols-2 md:grid-cols-3">

@@ -25,9 +25,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Link } from "wouter";
 import {
   Plus, TrendingUp, TrendingDown, DollarSign, AlertCircle, CheckCircle,
-  Pencil, Trash2, ArrowUpRight, ArrowDownRight, BarChart2,
+  Pencil, Trash2, ArrowUpRight, ArrowDownRight, BarChart2, ExternalLink,
 } from "lucide-react";
 
 const fmt = (v: number | string) => {
@@ -122,32 +123,38 @@ function RevenueChart({ data }: { data: Array<{ label: string; revenue: number; 
   );
 }
 
-function PaymentMethodChart({ data }: { data: Array<{ label: string; revenue: number; expenses: number; reservations: number }> }) {
+function PaymentMethodChart({ payments }: { payments: Array<{ paymentMethod?: string; amount: number | string }> }) {
   const methodTotals = useMemo(() => {
-    const map: Record<string, number> = {
-      pix: 0, credit_card: 0, bank_transfer: 0, cash: 0, boleto: 0,
-    };
-    data.forEach(d => {
-      map.pix += d.revenue * 0.45;
-      map.credit_card += d.revenue * 0.30;
-      map.bank_transfer += d.revenue * 0.15;
-      map.cash += d.revenue * 0.07;
-      map.boleto += d.revenue * 0.03;
-    });
+    const map: Record<string, number> = {};
+    for (const p of payments) {
+      if (!p.paymentMethod) continue;
+      map[p.paymentMethod] = (map[p.paymentMethod] ?? 0) + parseFloat(String(p.amount));
+    }
     return map;
-  }, [data]);
+  }, [payments]);
 
   const total = Object.values(methodTotals).reduce((a, b) => a + b, 0) || 1;
-  const colors = ["bg-blue-500", "bg-purple-500", "bg-green-500", "bg-orange-500", "bg-red-500"];
-  const entries = Object.entries(methodTotals);
+  const colorMap: Record<string, string> = {
+    pix: "bg-green-500",
+    credit_card: "bg-purple-500",
+    debit_card: "bg-indigo-500",
+    bank_transfer: "bg-blue-500",
+    cash: "bg-orange-500",
+    boleto: "bg-red-500",
+  };
+  const entries = Object.entries(methodTotals).sort((a, b) => b[1] - a[1]);
+
+  if (entries.length === 0) {
+    return <p className="text-sm text-muted-foreground py-4">Nenhum pagamento registrado ainda.</p>;
+  }
 
   return (
     <div className="space-y-3">
-      {entries.map(([key, value], i) => (
+      {entries.map(([key, value]) => (
         <div key={key} className="flex items-center gap-3">
           <span className="text-xs text-muted-foreground w-28 shrink-0">{METHOD_LABELS[key] ?? key}</span>
           <div className="flex-1 bg-muted rounded-full h-2">
-            <div className={`${colors[i]} h-2 rounded-full`} style={{ width: `${(value / total) * 100}%` }} />
+            <div className={`${colorMap[key] ?? "bg-gray-500"} h-2 rounded-full`} style={{ width: `${(value / total) * 100}%` }} />
           </div>
           <span className="text-xs font-medium w-14 text-right">{((value / total) * 100).toFixed(1)}%</span>
         </div>
@@ -173,6 +180,7 @@ export default function Financial() {
     status: statusFilter || undefined,
     limit: 50,
   });
+  const { data: allReceivedPayments } = useListPayments({ type: "receivable", status: "paid", limit: 500 });
   const { data: expensesData, isLoading: loadingExpenses, refetch: refetchExpenses } = useListExpenses({ limit: 50 });
   const { data: commissionsData, isLoading: loadingCommissions, refetch: refetchCommissions } = useListCommissions();
   const { data: rulesData, isLoading: loadingRules, refetch: refetchRules } = useListCommissionRules();
@@ -288,6 +296,16 @@ export default function Financial() {
           <p className="text-muted-foreground text-sm">Controle receitas, despesas, comissões e fluxo de caixa</p>
         </div>
         <div className="flex gap-2">
+          <Link href="/financial/commissions">
+            <Button variant="ghost" size="sm">
+              <ExternalLink className="w-4 h-4 mr-1.5" /> Comissões
+            </Button>
+          </Link>
+          <Link href="/financial/expenses">
+            <Button variant="ghost" size="sm">
+              <ExternalLink className="w-4 h-4 mr-1.5" /> Despesas
+            </Button>
+          </Link>
           <Button variant="outline" onClick={() => setIsExpenseOpen(true)}>
             <TrendingDown className="w-4 h-4 mr-2" /> Nova Despesa
           </Button>
@@ -345,7 +363,7 @@ export default function Financial() {
               <CardTitle className="text-base">Formas de Pagamento</CardTitle>
             </CardHeader>
             <CardContent>
-              <PaymentMethodChart data={chartData} />
+              <PaymentMethodChart payments={allReceivedPayments?.data ?? []} />
             </CardContent>
           </Card>
         </div>

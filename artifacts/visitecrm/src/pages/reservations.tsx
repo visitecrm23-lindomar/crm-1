@@ -1,11 +1,13 @@
 import { useState, useMemo } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useRoute } from "wouter";
 import {
   useListReservations,
   useGetReservation,
   useCreateReservation,
   useUpdateReservation,
+  useCheckInReservation,
   useCreatePayment,
+  useListPayments,
   useListTrips,
   useListClients,
 } from "@workspace/api-client-react";
@@ -72,6 +74,11 @@ function ReservationDetailModal({ reservationId, open, onClose }: { reservationI
       enabled: open && !!reservationId,
     },
   });
+  const { data: paymentsData } = useListPayments(
+    { reservationId, limit: 50 },
+    { query: { queryKey: ["payments", reservationId], enabled: open && !!reservationId } }
+  );
+  const payments = paymentsData?.data ?? [];
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -163,6 +170,30 @@ function ReservationDetailModal({ reservationId, open, onClose }: { reservationI
                 <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
                 <p className="text-sm text-green-700">Check-in realizado em {new Date(data.checkedInAt).toLocaleString("pt-BR")}</p>
               </div>
+            )}
+            {payments.length > 0 && (
+              <>
+                <Separator />
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Histórico de Pagamentos</p>
+                  <div className="space-y-2">
+                    {payments.map(p => (
+                      <div key={p.id} className="flex items-center justify-between p-2.5 bg-muted rounded-lg text-sm">
+                        <div>
+                          <p className="font-medium">{METHOD_LABELS[p.paymentMethod ?? ""] ?? p.paymentMethod ?? "—"}</p>
+                          <p className="text-xs text-muted-foreground">{new Date(p.dueDate).toLocaleDateString("pt-BR")} · {p.description || p.category}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className={`font-semibold ${p.status === "paid" ? "text-green-600" : ""}`}>{fmt(parseFloat(String(p.amount)))}</p>
+                          <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${p.status === "paid" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+                            {p.status === "paid" ? "Pago" : "Pendente"}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
             )}
             <div>
               <p className="text-xs text-muted-foreground mb-1">Criada em</p>
@@ -398,17 +429,19 @@ function NewReservationModal({ open, onClose, onSuccess }: { open: boolean; onCl
 }
 
 export default function Reservations() {
-  const [location] = useLocation();
+  const [, navigate] = useLocation();
+  const [routeMatch, routeParams] = useRoute("/reservations/:id");
+  const idFromRoute = routeMatch ? (routeParams as { id: string }).id : null;
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [tripFilter, setTripFilter] = useState("");
   const [page, setPage] = useState(1);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [paymentRes, setPaymentRes] = useState<Reservation | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  const idFromRoute = location.match(/\/reservations\/([^/]+)/)?.[1] ?? null;
+  const activeDetailId = detailId ?? idFromRoute;
 
   const { data, isLoading, refetch } = useListReservations({
     status: statusFilter || undefined,
@@ -419,6 +452,7 @@ export default function Reservations() {
   });
   const { data: tripsData } = useListTrips({ limit: 100 });
   const updateReservation = useUpdateReservation();
+  const checkInReservation = useCheckInReservation();
 
   const reservations = data?.data ?? [];
   const total = data?.total ?? 0;
@@ -435,10 +469,7 @@ export default function Reservations() {
   }, [reservations, data]);
 
   const handleCheckin = async (r: Reservation) => {
-    await updateReservation.mutateAsync({
-      id: r.id,
-      data: { status: r.checkedInAt ? r.status : "confirmed" }
-    });
+    await checkInReservation.mutateAsync({ id: r.id });
     refetch();
   };
   const handleCancel = async (id: string) => {
@@ -634,9 +665,14 @@ export default function Reservations() {
       )}
 
       <ReservationDetailModal
-        reservationId={detailId ?? idFromRoute ?? ""}
-        open={!!(detailId || idFromRoute)}
-        onClose={() => setDetailId(null)}
+        reservationId={activeDetailId ?? ""}
+        open={!!activeDetailId}
+        onClose={() => {
+          if (idFromRoute) {
+            navigate("/reservations");
+          }
+          setDetailId(null);
+        }}
       />
       <PaymentModal
         reservation={paymentRes}

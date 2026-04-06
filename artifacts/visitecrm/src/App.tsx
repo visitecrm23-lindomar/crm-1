@@ -20,6 +20,9 @@ import Automations from "@/pages/automations";
 import Marketing from "@/pages/marketing";
 import Registrations from "@/pages/registrations";
 import Analytics from "@/pages/analytics";
+import Commissions from "@/pages/commissions";
+import Expenses from "@/pages/expenses";
+import Revenue from "@/pages/revenue";
 import Settings from "@/pages/settings";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -130,11 +133,14 @@ function Router() {
       <Route path="/reservations" component={() => <ProtectedRoute component={Reservations} />} />
       <Route path="/reservations/:id" component={() => <ProtectedRoute component={Reservations} />} />
       <Route path="/financial" component={() => <ProtectedRoute component={Financial} />} />
+      <Route path="/financial/commissions" component={() => <ProtectedRoute component={Commissions} />} />
+      <Route path="/financial/expenses" component={() => <ProtectedRoute component={Expenses} />} />
       <Route path="/communication" component={() => <ProtectedRoute component={Communication} />} />
       <Route path="/automations" component={() => <ProtectedRoute component={Automations} />} />
       <Route path="/marketing" component={() => <ProtectedRoute component={Marketing} />} />
       <Route path="/registrations" component={() => <ProtectedRoute component={Registrations} />} />
       <Route path="/analytics" component={() => <ProtectedRoute component={Analytics} />} />
+      <Route path="/analytics/revenue" component={() => <ProtectedRoute component={Revenue} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
       <Route component={() => <ProtectedRoute component={() => <Redirect to="/dashboard" />} />} />
     </Switch>
