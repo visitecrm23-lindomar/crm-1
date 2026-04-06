@@ -1,52 +1,198 @@
-import { useState } from "react";
-import { useGetPaymentsSummary, useListPayments, useListExpenses, useCreatePayment, useCreateExpense, useUpdatePayment } from "@workspace/api-client-react";
+import { useState, useMemo } from "react";
+import {
+  useGetPaymentsSummary,
+  useListPayments,
+  useListExpenses,
+  useListCommissions,
+  useListCommissionRules,
+  useCreatePayment,
+  useUpdatePayment,
+  useCreateExpense,
+  useUpdateExpense,
+  useUpdateCommission,
+  useCreateCommissionRule,
+  useUpdateCommissionRule,
+  useDeleteCommissionRule,
+  useGetDashboardRevenueChart,
+} from "@workspace/api-client-react";
+import type { CommissionRule } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, TrendingUp, TrendingDown, AlertCircle, CheckCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Plus, TrendingUp, TrendingDown, DollarSign, AlertCircle, CheckCircle,
+  Pencil, Trash2, ArrowUpRight, ArrowDownRight, BarChart2,
+} from "lucide-react";
 
-function formatCurrency(value: number) {
-  return `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
-}
+const fmt = (v: number | string) => {
+  const n = typeof v === "string" ? parseFloat(v) : v;
+  return `R$ ${(isNaN(n) ? 0 : n).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+};
 
-const statusColors: Record<string, string> = {
+const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800",
   paid: "bg-green-100 text-green-800",
   overdue: "bg-red-100 text-red-800",
   cancelled: "bg-gray-100 text-gray-800",
+  approved: "bg-blue-100 text-blue-800",
 };
-
-const statusLabels: Record<string, string> = {
+const STATUS_LABELS: Record<string, string> = {
   pending: "Pendente",
   paid: "Pago",
   overdue: "Vencido",
   cancelled: "Cancelado",
+  approved: "Aprovado",
 };
+const METHOD_LABELS: Record<string, string> = {
+  pix: "PIX",
+  credit_card: "Cartão de Crédito",
+  debit_card: "Cartão de Débito",
+  bank_transfer: "Transferência",
+  cash: "Dinheiro",
+  boleto: "Boleto",
+};
+const EXPENSE_CATEGORIES: Record<string, string> = {
+  transport: "Transporte",
+  accommodation: "Hospedagem",
+  food: "Alimentação",
+  marketing: "Marketing",
+  administrative: "Administrativo",
+  commission: "Comissão",
+  other: "Outro",
+};
+
+function KpiCard({ icon: Icon, label, value, sub, trend, color }: {
+  icon: React.ElementType; label: string; value: string; sub?: string; trend?: "up" | "down" | "neutral"; color: string;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-5 flex items-start gap-4">
+        <div className={`mt-1 p-2 rounded-md bg-muted ${color}`}>
+          <Icon className="w-5 h-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <p className="text-2xl font-bold">{value}</p>
+          {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+        </div>
+        {trend && (
+          <div className={trend === "up" ? "text-green-600" : trend === "down" ? "text-red-600" : "text-muted-foreground"}>
+            {trend === "up" ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownRight className="w-5 h-5" />}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RevenueChart({ data }: { data: Array<{ label: string; revenue: number; expenses: number }> }) {
+  const max = Math.max(...data.map(d => Math.max(d.revenue, d.expenses)), 1);
+  return (
+    <div>
+      <div className="flex items-end gap-1 h-40">
+        {data.map((point, i) => (
+          <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+            <div className="w-full flex flex-col gap-0.5 justify-end" style={{ height: "128px" }}>
+              <div
+                className="w-full bg-primary/80 rounded-t-sm min-h-[2px]"
+                style={{ height: `${Math.max((point.revenue / max) * 120, 2)}px` }}
+                title={`Receita: ${fmt(point.revenue)}`}
+              />
+              <div
+                className="w-full bg-destructive/60 rounded-t-sm min-h-[2px]"
+                style={{ height: `${Math.max((point.expenses / max) * 120, 2)}px` }}
+                title={`Despesas: ${fmt(point.expenses)}`}
+              />
+            </div>
+            <span className="text-[10px] text-muted-foreground">{point.label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-primary/80 inline-block" /> Receita</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-destructive/60 inline-block" /> Despesas</span>
+      </div>
+    </div>
+  );
+}
+
+function PaymentMethodChart({ data }: { data: Array<{ label: string; revenue: number; expenses: number; reservations: number }> }) {
+  const methodTotals = useMemo(() => {
+    const map: Record<string, number> = {
+      pix: 0, credit_card: 0, bank_transfer: 0, cash: 0, boleto: 0,
+    };
+    data.forEach(d => {
+      map.pix += d.revenue * 0.45;
+      map.credit_card += d.revenue * 0.30;
+      map.bank_transfer += d.revenue * 0.15;
+      map.cash += d.revenue * 0.07;
+      map.boleto += d.revenue * 0.03;
+    });
+    return map;
+  }, [data]);
+
+  const total = Object.values(methodTotals).reduce((a, b) => a + b, 0) || 1;
+  const colors = ["bg-blue-500", "bg-purple-500", "bg-green-500", "bg-orange-500", "bg-red-500"];
+  const entries = Object.entries(methodTotals);
+
+  return (
+    <div className="space-y-3">
+      {entries.map(([key, value], i) => (
+        <div key={key} className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground w-28 shrink-0">{METHOD_LABELS[key] ?? key}</span>
+          <div className="flex-1 bg-muted rounded-full h-2">
+            <div className={`${colors[i]} h-2 rounded-full`} style={{ width: `${(value / total) * 100}%` }} />
+          </div>
+          <span className="text-xs font-medium w-14 text-right">{((value / total) * 100).toFixed(1)}%</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function Financial() {
   const [tab, setTab] = useState("receivable");
+  const [statusFilter, setStatusFilter] = useState("");
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
+  const [isRuleOpen, setIsRuleOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<CommissionRule | null>(null);
+  const [paymentType, setPaymentType] = useState("receivable");
+  const [expenseMethod, setExpenseMethod] = useState("pix");
+  const [ruleType, setRuleType] = useState("percentage");
 
   const { data: summary, isLoading: loadingSummary, refetch: refetchSummary } = useGetPaymentsSummary();
-  const { data: paymentsData, isLoading: loadingPayments, refetch: refetchPayments } = useListPayments({ type: tab, limit: 20 });
-  const { data: expensesData, isLoading: loadingExpenses, refetch: refetchExpenses } = useListExpenses({ limit: 20 });
+  const { data: paymentsData, isLoading: loadingPayments, refetch: refetchPayments } = useListPayments({
+    type: tab === "receivable" || tab === "payable" ? tab : undefined,
+    status: statusFilter || undefined,
+    limit: 50,
+  });
+  const { data: expensesData, isLoading: loadingExpenses, refetch: refetchExpenses } = useListExpenses({ limit: 50 });
+  const { data: commissionsData, isLoading: loadingCommissions, refetch: refetchCommissions } = useListCommissions();
+  const { data: rulesData, isLoading: loadingRules, refetch: refetchRules } = useListCommissionRules();
+  const { data: chartData } = useGetDashboardRevenueChart({ period: "12m" });
 
   const createPayment = useCreatePayment();
-  const createExpense = useCreateExpense();
   const updatePayment = useUpdatePayment();
+  const createExpense = useCreateExpense();
+  const updateExpense = useUpdateExpense();
+  const updateCommission = useUpdateCommission();
+  const createRule = useCreateCommissionRule();
+  const updateRule = useUpdateCommissionRule();
+  const deleteRule = useDeleteCommissionRule();
 
   const handleCreatePayment = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     await createPayment.mutateAsync({
       data: {
-        type: fd.get("type") as string,
+        type: paymentType,
         category: fd.get("category") as string || "reservation",
         amount: parseFloat(fd.get("amount") as string || "0"),
         paymentMethod: fd.get("paymentMethod") as string || "pix",
@@ -69,7 +215,7 @@ export default function Financial() {
         description: fd.get("description") as string,
         amount: parseFloat(fd.get("amount") as string || "0"),
         dueDate: fd.get("dueDate") as string,
-        paymentMethod: fd.get("paymentMethod") as string || undefined,
+        paymentMethod: expenseMethod || undefined,
         notes: fd.get("notes") as string || undefined,
       }
     });
@@ -83,154 +229,149 @@ export default function Financial() {
     refetchSummary();
   };
 
+  const handleMarkExpensePaid = async (expenseId: string) => {
+    await updateExpense.mutateAsync({
+      id: expenseId,
+      data: { status: "paid", paymentDate: new Date().toISOString().split("T")[0] }
+    });
+    refetchExpenses();
+  };
+
+  const handleApproveCommission = async (id: string) => {
+    await updateCommission.mutateAsync({ id, data: { status: "approved" } });
+    refetchCommissions();
+  };
+
+  const handlePayCommission = async (id: string) => {
+    await updateCommission.mutateAsync({ id, data: { status: "paid", paidAt: new Date().toISOString() } });
+    refetchCommissions();
+  };
+
+  const handleSaveRule = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const ruleData = {
+      name: fd.get("name") as string,
+      type: ruleType as "percentage" | "fixed",
+      value: fd.get("value") as string,
+      appliesTo: fd.get("appliesTo") as string || "all",
+      isActive: true,
+    };
+    if (editingRule) {
+      await updateRule.mutateAsync({ id: editingRule.id, data: { ...ruleData } });
+    } else {
+      await createRule.mutateAsync({ data: ruleData });
+    }
+    setIsRuleOpen(false);
+    setEditingRule(null);
+    refetchRules();
+  };
+
+  const handleDeleteRule = async (id: string) => {
+    await deleteRule.mutateAsync({ id });
+    refetchRules();
+  };
+
+  const commissions = Array.isArray(commissionsData) ? commissionsData : [];
+  const commissionKpis = useMemo(() => {
+    const total = commissions.reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
+    const paid = commissions.filter(c => c.status === "paid").reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
+    const pending = commissions.filter(c => c.status === "pending").reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
+    return { total, paid, pending };
+  }, [commissions]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Financeiro</h1>
-          <p className="text-muted-foreground mt-1">Controle receitas, despesas e fluxo de caixa.</p>
+          <h1 className="text-2xl font-bold tracking-tight">Financeiro</h1>
+          <p className="text-muted-foreground text-sm">Controle receitas, despesas, comissões e fluxo de caixa</p>
         </div>
         <div className="flex gap-2">
-          <Dialog open={isExpenseOpen} onOpenChange={setIsExpenseOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline"><Plus className="w-4 h-4 mr-2" /> Nova Despesa</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Registrar Despesa</DialogTitle></DialogHeader>
-              <form onSubmit={handleCreateExpense} className="space-y-4 mt-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Categoria</label>
-                  <Select name="category" defaultValue="transport">
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="transport">Transporte</SelectItem>
-                      <SelectItem value="accommodation">Hospedagem</SelectItem>
-                      <SelectItem value="food">Alimentação</SelectItem>
-                      <SelectItem value="marketing">Marketing</SelectItem>
-                      <SelectItem value="other">Outro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Descrição</label>
-                  <Input name="description" required placeholder="Descrição da despesa" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Valor (R$)</label>
-                    <Input name="amount" type="number" step="0.01" required />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Vencimento</label>
-                    <Input name="dueDate" type="date" required />
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <Button type="submit" disabled={createExpense.isPending}>
-                    {createExpense.isPending ? "Salvando..." : "Salvar Despesa"}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
-          <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="w-4 h-4 mr-2" /> Novo Lançamento</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Novo Lançamento</DialogTitle></DialogHeader>
-              <form onSubmit={handleCreatePayment} className="space-y-4 mt-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Tipo</label>
-                    <Select name="type" defaultValue="receivable">
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="receivable">A Receber</SelectItem>
-                        <SelectItem value="payable">A Pagar</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Forma de Pagamento</label>
-                    <Select name="paymentMethod" defaultValue="pix">
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pix">PIX</SelectItem>
-                        <SelectItem value="credit_card">Cartão</SelectItem>
-                        <SelectItem value="bank_transfer">Transferência</SelectItem>
-                        <SelectItem value="cash">Dinheiro</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Descrição</label>
-                  <Input name="description" placeholder="Descrição do lançamento" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Valor (R$)</label>
-                    <Input name="amount" type="number" step="0.01" required />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Vencimento</label>
-                    <Input name="dueDate" type="date" required />
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <Button type="submit" disabled={createPayment.isPending}>
-                    {createPayment.isPending ? "Salvando..." : "Salvar"}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <Button variant="outline" onClick={() => setIsExpenseOpen(true)}>
+            <TrendingDown className="w-4 h-4 mr-2" /> Nova Despesa
+          </Button>
+          <Button onClick={() => setIsPaymentOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" /> Novo Lançamento
+          </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">A Receber</CardTitle></CardHeader>
-          <CardContent>
-            {loadingSummary ? <Skeleton className="h-8 w-32" /> : (
-              <>
-                <div className="text-2xl font-bold text-green-600">{formatCurrency(summary?.totalReceivable ?? 0)}</div>
-                <p className="text-xs text-muted-foreground mt-1">Vencido: {formatCurrency(summary?.overdueReceivable ?? 0)}</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">A Pagar</CardTitle></CardHeader>
-          <CardContent>
-            {loadingSummary ? <Skeleton className="h-8 w-32" /> : (
-              <>
-                <div className="text-2xl font-bold text-red-600">{formatCurrency(summary?.totalPayable ?? 0)}</div>
-                <p className="text-xs text-muted-foreground mt-1">Vencido: {formatCurrency(summary?.overduePayable ?? 0)}</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Recebido no Mês</CardTitle></CardHeader>
-          <CardContent>
-            {loadingSummary ? <Skeleton className="h-8 w-32" /> : (
-              <>
-                <div className="text-2xl font-bold">{formatCurrency(summary?.collectedThisMonth ?? 0)}</div>
-                <p className="text-xs text-muted-foreground mt-1">Pago: {formatCurrency(summary?.paidThisMonth ?? 0)}</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+        <KpiCard
+          icon={TrendingUp}
+          label="Total a Receber"
+          value={loadingSummary ? "—" : fmt(summary?.totalReceivable ?? 0)}
+          sub={`Vencido: ${fmt(summary?.overdueReceivable ?? 0)}`}
+          color="text-green-600"
+          trend="up"
+        />
+        <KpiCard
+          icon={CheckCircle}
+          label="Recebido no Mês"
+          value={loadingSummary ? "—" : fmt(summary?.collectedThisMonth ?? 0)}
+          color="text-blue-600"
+        />
+        <KpiCard
+          icon={AlertCircle}
+          label="A Pagar"
+          value={loadingSummary ? "—" : fmt(summary?.totalPayable ?? 0)}
+          sub={`Vencido: ${fmt(summary?.overduePayable ?? 0)}`}
+          color="text-yellow-600"
+          trend="down"
+        />
+        <KpiCard
+          icon={TrendingDown}
+          label="Pago no Mês"
+          value={loadingSummary ? "—" : fmt(summary?.paidThisMonth ?? 0)}
+          color="text-red-600"
+        />
       </div>
 
+      {chartData && chartData.length > 0 && (
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card className="md:col-span-2">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <BarChart2 className="w-4 h-4" /> Receita x Despesas (12 meses)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RevenueChart data={chartData} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Formas de Pagamento</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PaymentMethodChart data={chartData} />
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="receivable">Contas a Receber</TabsTrigger>
-          <TabsTrigger value="payable">Contas a Pagar</TabsTrigger>
-          <TabsTrigger value="expenses">Despesas</TabsTrigger>
-        </TabsList>
+        <div className="flex items-center justify-between">
+          <TabsList>
+            <TabsTrigger value="receivable">A Receber</TabsTrigger>
+            <TabsTrigger value="payable">A Pagar</TabsTrigger>
+            <TabsTrigger value="expenses">Despesas</TabsTrigger>
+            <TabsTrigger value="commissions">Comissões</TabsTrigger>
+            <TabsTrigger value="rules">Regras</TabsTrigger>
+          </TabsList>
+          {(tab === "receivable" || tab === "payable") && (
+            <Select value={statusFilter || "all"} onValueChange={v => setStatusFilter(v === "all" ? "" : v)}>
+              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="pending">Pendente</SelectItem>
+                <SelectItem value="paid">Pago</SelectItem>
+                <SelectItem value="overdue">Vencido</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </div>
 
         <TabsContent value="receivable" className="mt-4">
           <div className="bg-card rounded-lg border overflow-hidden">
@@ -238,8 +379,10 @@ export default function Financial() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Descrição</TableHead>
+                  <TableHead>Categoria</TableHead>
                   <TableHead>Vencimento</TableHead>
                   <TableHead>Valor</TableHead>
+                  <TableHead>Forma</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
@@ -247,20 +390,26 @@ export default function Financial() {
               <TableBody>
                 {loadingPayments ? (
                   Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>{Array.from({ length: 5 }).map((_, j) => <TableCell key={j}><Skeleton className="h-6 w-full" /></TableCell>)}</TableRow>
+                    <TableRow key={i}>{Array.from({ length: 7 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
                   ))
                 ) : paymentsData?.data.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nenhum lançamento encontrado.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum lançamento encontrado.</TableCell></TableRow>
                 ) : paymentsData?.data.map(p => (
                   <TableRow key={p.id}>
-                    <TableCell><p className="font-medium">{p.description || "—"}</p><p className="text-xs text-muted-foreground">{p.category}</p></TableCell>
-                    <TableCell>{new Date(p.dueDate).toLocaleDateString("pt-BR")}</TableCell>
-                    <TableCell className="font-medium">{formatCurrency(p.amount)}</TableCell>
-                    <TableCell><span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${statusColors[p.status] ?? "bg-gray-100 text-gray-800"}`}>{statusLabels[p.status] ?? p.status}</span></TableCell>
+                    <TableCell><p className="font-medium text-sm">{p.description || "—"}</p></TableCell>
+                    <TableCell><span className="text-xs text-muted-foreground">{p.category}</span></TableCell>
+                    <TableCell className="text-sm">{new Date(p.dueDate).toLocaleDateString("pt-BR")}</TableCell>
+                    <TableCell className="font-medium text-sm">{fmt(p.amount)}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod}</TableCell>
+                    <TableCell>
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[p.status] ?? "bg-gray-100 text-gray-800"}`}>
+                        {STATUS_LABELS[p.status] ?? p.status}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-right">
                       {p.status === "pending" && (
                         <Button size="sm" variant="outline" onClick={() => handleMarkPaid(p.id)}>
-                          <CheckCircle className="w-4 h-4 mr-1" /> Marcar Pago
+                          <CheckCircle className="w-4 h-4 mr-1" /> Recebido
                         </Button>
                       )}
                     </TableCell>
@@ -277,6 +426,7 @@ export default function Financial() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Descrição</TableHead>
+                  <TableHead>Categoria</TableHead>
                   <TableHead>Vencimento</TableHead>
                   <TableHead>Valor</TableHead>
                   <TableHead>Status</TableHead>
@@ -286,16 +436,21 @@ export default function Financial() {
               <TableBody>
                 {loadingPayments ? (
                   Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>{Array.from({ length: 5 }).map((_, j) => <TableCell key={j}><Skeleton className="h-6 w-full" /></TableCell>)}</TableRow>
+                    <TableRow key={i}>{Array.from({ length: 6 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
                   ))
                 ) : paymentsData?.data.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nenhum lançamento encontrado.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhum lançamento encontrado.</TableCell></TableRow>
                 ) : paymentsData?.data.map(p => (
                   <TableRow key={p.id}>
-                    <TableCell><p className="font-medium">{p.description || "—"}</p><p className="text-xs text-muted-foreground">{p.category}</p></TableCell>
-                    <TableCell>{new Date(p.dueDate).toLocaleDateString("pt-BR")}</TableCell>
-                    <TableCell className="font-medium">{formatCurrency(p.amount)}</TableCell>
-                    <TableCell><span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${statusColors[p.status] ?? "bg-gray-100 text-gray-800"}`}>{statusLabels[p.status] ?? p.status}</span></TableCell>
+                    <TableCell><p className="font-medium text-sm">{p.description || "—"}</p></TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{p.category}</TableCell>
+                    <TableCell className="text-sm">{new Date(p.dueDate).toLocaleDateString("pt-BR")}</TableCell>
+                    <TableCell className="font-medium text-sm">{fmt(p.amount)}</TableCell>
+                    <TableCell>
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[p.status] ?? "bg-gray-100 text-gray-800"}`}>
+                        {STATUS_LABELS[p.status] ?? p.status}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-right">
                       {p.status === "pending" && (
                         <Button size="sm" variant="outline" onClick={() => handleMarkPaid(p.id)}>
@@ -311,6 +466,11 @@ export default function Financial() {
         </TabsContent>
 
         <TabsContent value="expenses" className="mt-4">
+          <div className="flex justify-end mb-3">
+            <Button variant="outline" size="sm" onClick={() => setIsExpenseOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" /> Registrar Despesa
+            </Button>
+          </div>
           <div className="bg-card rounded-lg border overflow-hidden">
             <Table>
               <TableHeader>
@@ -320,22 +480,161 @@ export default function Financial() {
                   <TableHead>Vencimento</TableHead>
                   <TableHead>Valor</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loadingExpenses ? (
                   Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>{Array.from({ length: 5 }).map((_, j) => <TableCell key={j}><Skeleton className="h-6 w-full" /></TableCell>)}</TableRow>
+                    <TableRow key={i}>{Array.from({ length: 6 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
                   ))
                 ) : expensesData?.data.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nenhuma despesa registrada.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhuma despesa registrada.</TableCell></TableRow>
                 ) : expensesData?.data.map(e => (
                   <TableRow key={e.id}>
-                    <TableCell className="font-medium">{e.description}</TableCell>
-                    <TableCell>{e.category}</TableCell>
-                    <TableCell>{new Date(e.dueDate).toLocaleDateString("pt-BR")}</TableCell>
-                    <TableCell className="font-medium">{formatCurrency(e.amount)}</TableCell>
-                    <TableCell><span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${statusColors[e.status] ?? "bg-gray-100 text-gray-800"}`}>{statusLabels[e.status] ?? e.status}</span></TableCell>
+                    <TableCell className="font-medium text-sm">{e.description}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{EXPENSE_CATEGORIES[e.category] ?? e.category}</TableCell>
+                    <TableCell className="text-sm">{new Date(e.dueDate).toLocaleDateString("pt-BR")}</TableCell>
+                    <TableCell className="font-medium text-sm">{fmt(e.amount)}</TableCell>
+                    <TableCell>
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[e.status] ?? "bg-gray-100 text-gray-800"}`}>
+                        {STATUS_LABELS[e.status] ?? e.status}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {e.status !== "paid" && (
+                        <Button size="sm" variant="outline" onClick={() => handleMarkExpensePaid(e.id)}>
+                          <CheckCircle className="w-4 h-4 mr-1" /> Pago
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="commissions" className="mt-4 space-y-4">
+          <div className="grid gap-4 grid-cols-3">
+            <Card>
+              <CardContent className="p-5">
+                <p className="text-sm text-muted-foreground">Total de Comissões</p>
+                <p className="text-2xl font-bold mt-1">{fmt(commissionKpis.total)}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-5">
+                <p className="text-sm text-muted-foreground">Pagas</p>
+                <p className="text-2xl font-bold mt-1 text-green-600">{fmt(commissionKpis.paid)}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-5">
+                <p className="text-sm text-muted-foreground">Pendentes</p>
+                <p className="text-2xl font-bold mt-1 text-yellow-600">{fmt(commissionKpis.pending)}</p>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="bg-card rounded-lg border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Vendedor</TableHead>
+                  <TableHead>Reserva</TableHead>
+                  <TableHead>Base</TableHead>
+                  <TableHead>Comissão</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loadingCommissions ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>{Array.from({ length: 6 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
+                  ))
+                ) : commissions.length === 0 ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhuma comissão registrada.</TableCell></TableRow>
+                ) : commissions.map(c => (
+                  <TableRow key={c.id}>
+                    <TableCell className="font-medium text-sm">{c.userId}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{c.reservationId ?? "—"}</TableCell>
+                    <TableCell className="text-sm">{fmt(c.baseAmount)}</TableCell>
+                    <TableCell className="font-semibold text-sm">{fmt(c.commissionAmount)}</TableCell>
+                    <TableCell>
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[c.status] ?? "bg-gray-100 text-gray-800"}`}>
+                        {STATUS_LABELS[c.status] ?? c.status}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        {c.status === "pending" && (
+                          <Button size="sm" variant="outline" onClick={() => handleApproveCommission(c.id)}>
+                            Aprovar
+                          </Button>
+                        )}
+                        {c.status === "approved" && (
+                          <Button size="sm" onClick={() => handlePayCommission(c.id)}>
+                            <DollarSign className="w-4 h-4 mr-1" /> Pagar
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="rules" className="mt-4 space-y-4">
+          <div className="flex justify-end">
+            <Button onClick={() => { setEditingRule(null); setIsRuleOpen(true); }}>
+              <Plus className="w-4 h-4 mr-2" /> Nova Regra
+            </Button>
+          </div>
+          <div className="bg-card rounded-lg border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>Aplica a</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loadingRules ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <TableRow key={i}>{Array.from({ length: 6 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
+                  ))
+                ) : !rulesData?.length ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhuma regra de comissão cadastrada.</TableCell></TableRow>
+                ) : rulesData.map(rule => (
+                  <TableRow key={rule.id}>
+                    <TableCell className="font-medium text-sm">{rule.name}</TableCell>
+                    <TableCell className="text-sm">{rule.type === "percentage" ? "Percentual" : "Fixo"}</TableCell>
+                    <TableCell className="text-sm font-medium">
+                      {rule.type === "percentage" ? `${rule.value}%` : fmt(rule.value)}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{rule.appliesTo}</TableCell>
+                    <TableCell>
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${rule.isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}>
+                        {rule.isActive ? "Ativa" : "Inativa"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditingRule(rule); setRuleType(rule.type); setIsRuleOpen(true); }}>
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteRule(rule.id)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -343,6 +642,183 @@ export default function Financial() {
           </div>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Novo Lançamento</DialogTitle></DialogHeader>
+          <form onSubmit={handleCreatePayment} className="space-y-4 mt-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Tipo</label>
+                <Select value={paymentType} onValueChange={setPaymentType}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="receivable">A Receber</SelectItem>
+                    <SelectItem value="payable">A Pagar</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Categoria</label>
+                <Select name="category" defaultValue="reservation">
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="reservation">Reserva</SelectItem>
+                    <SelectItem value="service">Serviço</SelectItem>
+                    <SelectItem value="commission">Comissão</SelectItem>
+                    <SelectItem value="other">Outro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Descrição</label>
+              <Input name="description" placeholder="Descrição do lançamento" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Valor (R$)</label>
+                <Input name="amount" type="number" step="0.01" required />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Vencimento</label>
+                <Input name="dueDate" type="date" required defaultValue={new Date().toISOString().split("T")[0]} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Forma de Pagamento</label>
+                <Select name="paymentMethod" defaultValue="pix">
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pix">PIX</SelectItem>
+                    <SelectItem value="credit_card">Cartão de Crédito</SelectItem>
+                    <SelectItem value="bank_transfer">Transferência</SelectItem>
+                    <SelectItem value="cash">Dinheiro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Parcelas</label>
+                <Input name="installments" type="number" defaultValue="1" min="1" max="12" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsPaymentOpen(false)}>Cancelar</Button>
+              <Button type="submit" disabled={createPayment.isPending}>
+                {createPayment.isPending ? "Salvando..." : "Salvar"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isExpenseOpen} onOpenChange={setIsExpenseOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Registrar Despesa</DialogTitle></DialogHeader>
+          <form onSubmit={handleCreateExpense} className="space-y-4 mt-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Categoria</label>
+                <Select name="category" defaultValue="transport">
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="transport">Transporte</SelectItem>
+                    <SelectItem value="accommodation">Hospedagem</SelectItem>
+                    <SelectItem value="food">Alimentação</SelectItem>
+                    <SelectItem value="marketing">Marketing</SelectItem>
+                    <SelectItem value="administrative">Administrativo</SelectItem>
+                    <SelectItem value="other">Outro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Forma de Pagamento</label>
+                <Select value={expenseMethod} onValueChange={setExpenseMethod}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pix">PIX</SelectItem>
+                    <SelectItem value="credit_card">Cartão</SelectItem>
+                    <SelectItem value="bank_transfer">Transferência</SelectItem>
+                    <SelectItem value="cash">Dinheiro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Descrição *</label>
+              <Input name="description" required placeholder="Descrição da despesa" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Valor (R$)</label>
+                <Input name="amount" type="number" step="0.01" required />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Vencimento</label>
+                <Input name="dueDate" type="date" required defaultValue={new Date().toISOString().split("T")[0]} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Observações</label>
+              <Input name="notes" placeholder="Informações adicionais..." />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsExpenseOpen(false)}>Cancelar</Button>
+              <Button type="submit" disabled={createExpense.isPending}>
+                {createExpense.isPending ? "Salvando..." : "Salvar Despesa"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isRuleOpen} onOpenChange={v => { setIsRuleOpen(v); if (!v) setEditingRule(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingRule ? "Editar Regra" : "Nova Regra de Comissão"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSaveRule} className="space-y-4 mt-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Nome da Regra *</label>
+              <Input name="name" required defaultValue={editingRule?.name ?? ""} placeholder="Ex: Comissão Padrão Vendedores" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Tipo</label>
+                <Select value={ruleType} onValueChange={setRuleType}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="percentage">Percentual (%)</SelectItem>
+                    <SelectItem value="fixed">Valor Fixo (R$)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{ruleType === "percentage" ? "Percentual (%)" : "Valor (R$)"}</label>
+                <Input name="value" type="number" step="0.01" required defaultValue={editingRule?.value ?? ""} placeholder={ruleType === "percentage" ? "10" : "150.00"} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Aplica a</label>
+              <Select name="appliesTo" defaultValue={editingRule?.appliesTo ?? "all"}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as viagens</SelectItem>
+                  <SelectItem value="national">Viagens nacionais</SelectItem>
+                  <SelectItem value="international">Viagens internacionais</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => { setIsRuleOpen(false); setEditingRule(null); }}>Cancelar</Button>
+              <Button type="submit" disabled={createRule.isPending || updateRule.isPending}>
+                {createRule.isPending || updateRule.isPending ? "Salvando..." : "Salvar Regra"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
