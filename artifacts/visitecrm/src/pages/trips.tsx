@@ -491,6 +491,8 @@ export function TripForm({ tripId }: { tripId?: string }) {
         id: tripId,
         data: {
           name: form.name, description: form.description || undefined,
+          destination: form.destination, destinationCity: form.destinationCity, destinationState: form.destinationState,
+          type: form.type, category: form.category,
           departureDate: form.departureDate, returnDate: form.returnDate || undefined,
           totalCapacity: parseInt(form.totalCapacity),
           priceAdult: parseFloat(form.priceAdult),
@@ -498,6 +500,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
           priceSenior: form.priceSenior ? parseFloat(form.priceSenior) : undefined,
           inclusions: inclArr, exclusions: exclArr,
           coverImage: form.coverImage || undefined,
+          seatLayout: form.seatLayout,
           vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined,
           status: statusToSave,
           itinerary: itineraryToSave.length ? itineraryToSave : undefined,
