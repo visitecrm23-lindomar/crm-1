@@ -132,6 +132,7 @@ function Router() {
       <Route path="/trips/:id" component={() => <ProtectedRoute component={Trips} />} />
       <Route path="/reservations" component={() => <ProtectedRoute component={Reservations} />} />
       <Route path="/reservations/:id" component={() => <ProtectedRoute component={Reservations} />} />
+      <Route path="/financial" component={() => <Redirect to="/financeiro" />} />
       <Route path="/financeiro" component={() => <ProtectedRoute component={Financial} />} />
       <Route path="/financeiro/commissions" component={() => <ProtectedRoute component={Commissions} />} />
       <Route path="/financeiro/expenses" component={() => <ProtectedRoute component={Expenses} />} />

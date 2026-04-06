@@ -85,6 +85,10 @@ export default function Commissions() {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const isTiered = ruleDisplayType === "tiered";
+    if (isTiered && !selectedTripId) {
+      alert("Selecione uma viagem para a regra escalonada por viagem.");
+      return;
+    }
     const effectiveAppliesTo = isTiered ? "trip" : appliesTo;
     const ruleData = {
       name: fd.get("name") as string,

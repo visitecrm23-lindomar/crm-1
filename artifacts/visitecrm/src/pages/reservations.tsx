@@ -456,6 +456,9 @@ export default function Reservations() {
     page,
     limit: 20,
   });
+  const { data: confirmedTotals } = useListReservations({ status: "confirmed", limit: 1 });
+  const { data: pendingTotals } = useListReservations({ status: "pending", limit: 1 });
+  const { data: cancelledTotals } = useListReservations({ status: "cancelled", limit: 1 });
   const { data: tripsData } = useListTrips({ limit: 100 });
   const { data: usersRaw } = useListUsers();
   const { data: boardingRaw } = useListBoardingLocations();
@@ -481,14 +484,13 @@ export default function Reservations() {
   const totalPages = Math.ceil(total / 20);
 
   const statCards = useMemo(() => {
-    const all = reservations;
     return {
       total: data?.total ?? 0,
-      confirmed: all.filter(r => r.status === "confirmed").length,
-      pending: all.filter(r => r.status === "pending").length,
-      cancelled: all.filter(r => r.status === "cancelled").length,
+      confirmed: confirmedTotals?.total ?? 0,
+      pending: pendingTotals?.total ?? 0,
+      cancelled: cancelledTotals?.total ?? 0,
     };
-  }, [reservations, data]);
+  }, [data, confirmedTotals, pendingTotals, cancelledTotals]);
 
   const handleCheckin = async (r: Reservation) => {
     await checkInReservation.mutateAsync({ id: r.id });
