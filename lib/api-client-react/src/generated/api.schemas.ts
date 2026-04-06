@@ -273,6 +273,12 @@ export interface CreateTripBody {
   driverName?: string | null;
   /** @nullable */
   status?: string | null;
+  itinerary?: { day: number; title: string; description: string }[] | null;
+  /** @nullable */
+  fixedCosts?: number | null;
+  /** @nullable */
+  variableCosts?: number | null;
+  gallery?: string[];
 }
 
 export interface UpdateTripBody {
@@ -280,6 +286,16 @@ export interface UpdateTripBody {
   name?: string | null;
   /** @nullable */
   description?: string | null;
+  /** @nullable */
+  destination?: string | null;
+  /** @nullable */
+  destinationCity?: string | null;
+  /** @nullable */
+  destinationState?: string | null;
+  /** @nullable */
+  type?: string | null;
+  /** @nullable */
+  category?: string | null;
   /** @nullable */
   status?: string | null;
   /** @nullable */
@@ -300,6 +316,8 @@ export interface UpdateTripBody {
   totalCapacity?: number | null;
   /** @nullable */
   coverImage?: string | null;
+  /** @nullable */
+  seatLayout?: string | null;
   /** @nullable */
   inclusions?: string[] | null;
   /** @nullable */
