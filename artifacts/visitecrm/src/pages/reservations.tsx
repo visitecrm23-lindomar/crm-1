@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useLocation, useRoute } from "wouter";
 import {
   useListReservations,
@@ -752,6 +752,11 @@ function EditReservationModal({ reservationId, open, onClose, onSuccess }: { res
   });
   const updateReservation = useUpdateReservation();
   const [paymentMethod, setPaymentMethod] = useState("");
+  const [editStatus, setEditStatus] = useState<string>("");
+
+  useEffect(() => {
+    if (data?.status) setEditStatus(data.status);
+  }, [data?.status]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -759,7 +764,7 @@ function EditReservationModal({ reservationId, open, onClose, onSuccess }: { res
     await updateReservation.mutateAsync({
       id: reservationId,
       data: {
-        status: (fd.get("status") as "pending" | "confirmed" | "completed" | "cancelled") || undefined,
+        status: (editStatus as "pending" | "confirmed" | "completed" | "cancelled") || undefined,
         paymentMethod: paymentMethod || undefined,
         notes: (fd.get("notes") as string) || undefined,
       }
@@ -777,7 +782,7 @@ function EditReservationModal({ reservationId, open, onClose, onSuccess }: { res
           <form onSubmit={handleSubmit} className="space-y-4 mt-2">
             <div className="space-y-2">
               <label className="text-sm font-medium">Status</label>
-              <Select name="status" defaultValue={data.status}>
+              <Select value={editStatus} onValueChange={setEditStatus}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="pending">Pendente</SelectItem>

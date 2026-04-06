@@ -14,6 +14,7 @@ import {
   useUpdateCommissionRule,
   useDeleteCommissionRule,
   useGetDashboardRevenueChart,
+  useListClients,
 } from "@workspace/api-client-react";
 import type { CommissionRule } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -174,7 +175,10 @@ export default function Financial() {
   const [isRuleOpen, setIsRuleOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<CommissionRule | null>(null);
   const [paymentType, setPaymentType] = useState("receivable");
+  const [paymentCategory, setPaymentCategory] = useState("reservation");
+  const [paymentMethodField, setPaymentMethodField] = useState("pix");
   const [expenseMethod, setExpenseMethod] = useState("pix");
+  const [expenseCategory, setExpenseCategory] = useState("transport");
   const [ruleType, setRuleType] = useState("percentage");
 
   const { data: summary, isLoading: loadingSummary, refetch: refetchSummary } = useGetPaymentsSummary();
@@ -188,6 +192,13 @@ export default function Financial() {
   const { data: commissionsData, isLoading: loadingCommissions, refetch: refetchCommissions } = useListCommissions();
   const { data: rulesData, isLoading: loadingRules, refetch: refetchRules } = useListCommissionRules();
   const { data: chartData } = useGetDashboardRevenueChart({ period: "12m" });
+  const { data: clientsData } = useListClients({ limit: 500, page: 1 });
+
+  const clientMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    (clientsData?.data ?? []).forEach(c => { map[c.id] = c.name; });
+    return map;
+  }, [clientsData]);
 
   const createPayment = useCreatePayment();
   const updatePayment = useUpdatePayment();
@@ -204,15 +215,17 @@ export default function Financial() {
     await createPayment.mutateAsync({
       data: {
         type: paymentType,
-        category: fd.get("category") as string || "reservation",
+        category: paymentCategory || "reservation",
         amount: parseFloat(fd.get("amount") as string || "0"),
-        paymentMethod: fd.get("paymentMethod") as string || "pix",
+        paymentMethod: paymentMethodField || "pix",
         dueDate: fd.get("dueDate") as string,
         description: fd.get("description") as string || undefined,
         installments: parseInt(fd.get("installments") as string || "1"),
       }
     });
     setIsPaymentOpen(false);
+    setPaymentCategory("reservation");
+    setPaymentMethodField("pix");
     refetchPayments();
     refetchSummary();
   };
@@ -222,7 +235,7 @@ export default function Financial() {
     const fd = new FormData(e.currentTarget);
     await createExpense.mutateAsync({
       data: {
-        category: fd.get("category") as string || "transport",
+        category: expenseCategory || "transport",
         description: fd.get("description") as string,
         amount: parseFloat(fd.get("amount") as string || "0"),
         dueDate: fd.get("dueDate") as string,
@@ -231,6 +244,7 @@ export default function Financial() {
       }
     });
     setIsExpenseOpen(false);
+    setExpenseCategory("transport");
     refetchExpenses();
   };
 
@@ -445,6 +459,7 @@ export default function Financial() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Descrição</TableHead>
+                  <TableHead>Cliente</TableHead>
                   <TableHead>Categoria</TableHead>
                   <TableHead>Vencimento</TableHead>
                   <TableHead>Valor</TableHead>
@@ -456,13 +471,14 @@ export default function Financial() {
               <TableBody>
                 {loadingPayments ? (
                   Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>{Array.from({ length: 7 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
+                    <TableRow key={i}>{Array.from({ length: 8 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
                   ))
                 ) : filteredPayments.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum lançamento encontrado.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Nenhum lançamento encontrado.</TableCell></TableRow>
                 ) : filteredPayments.map(p => (
                   <TableRow key={p.id}>
                     <TableCell><p className="font-medium text-sm">{p.description || "—"}</p></TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{(p as any).clientId ? (clientMap[(p as any).clientId] ?? "—") : "—"}</TableCell>
                     <TableCell><span className="text-xs text-muted-foreground">{p.category}</span></TableCell>
                     <TableCell className="text-sm">{new Date(p.dueDate).toLocaleDateString("pt-BR")}</TableCell>
                     <TableCell className="font-medium text-sm">{fmt(p.amount)}</TableCell>
@@ -728,7 +744,7 @@ export default function Financial() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Categoria</label>
-                <Select name="category" defaultValue="reservation">
+                <Select value={paymentCategory} onValueChange={setPaymentCategory}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="reservation">Reserva</SelectItem>
@@ -756,7 +772,7 @@ export default function Financial() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Forma de Pagamento</label>
-                <Select name="paymentMethod" defaultValue="pix">
+                <Select value={paymentMethodField} onValueChange={setPaymentMethodField}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pix">PIX</SelectItem>
@@ -798,7 +814,7 @@ export default function Financial() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Categoria</label>
-                <Select name="category" defaultValue="transport">
+                <Select value={expenseCategory} onValueChange={setExpenseCategory}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="transport">Transporte</SelectItem>
