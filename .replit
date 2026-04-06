@@ -27,3 +27,12 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.production]
+FRONTEND_URL = "https://visite-crm.replit.app"
+VITE_CLERK_PROXY_URL = "https://visite-crm.replit.app/api/__clerk"
+
+[userenv.shared]
+CLERK_PROXY_URL = "https://visite-crm.replit.app/api/__clerk"

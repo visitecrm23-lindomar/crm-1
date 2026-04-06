@@ -7,9 +7,15 @@
  *
  * See: https://clerk.com/docs/guides/dashboard/dns-domains/proxy-fapi
  *
+ * Required environment variables:
+ *   CLERK_SECRET_KEY  — Clerk secret key (activates the proxy)
+ *   CLERK_PROXY_URL   — The canonical proxy URL configured in the Clerk dashboard
+ *                       e.g. https://visite-crm.replit.app/api/__clerk
+ *
  * IMPORTANT:
- * - Only active in production (Clerk proxying doesn't work for dev instances)
  * - Must be mounted BEFORE express.json() middleware
+ * - CLERK_PROXY_URL must match the proxy URL configured in the Clerk dashboard
+ * - The proxy rewrites CORS response headers so any allowed origin can call it
  *
  * Usage in app.ts:
  *   import { CLERK_PROXY_PATH, clerkProxyMiddleware } from "./middlewares/clerkProxyMiddleware";
@@ -23,13 +29,13 @@ const CLERK_FAPI = "https://frontend-api.clerk.dev";
 export const CLERK_PROXY_PATH = "/api/__clerk";
 
 export function clerkProxyMiddleware(): RequestHandler {
-  // Only run proxy in production — Clerk proxying doesn't work for dev instances
-  if (process.env.NODE_ENV !== "production") {
+  const secretKey = process.env.CLERK_SECRET_KEY;
+  if (!secretKey) {
     return (_req, _res, next) => next();
   }
 
-  const secretKey = process.env.CLERK_SECRET_KEY;
-  if (!secretKey) {
+  const configuredProxyUrl = process.env.CLERK_PROXY_URL;
+  if (!configuredProxyUrl) {
     return (_req, _res, next) => next();
   }
 
@@ -40,12 +46,10 @@ export function clerkProxyMiddleware(): RequestHandler {
       path.replace(new RegExp(`^${CLERK_PROXY_PATH}`), ""),
     on: {
       proxyReq: (proxyReq, req) => {
-        const protocol = req.headers["x-forwarded-proto"] || "https";
-        const host = req.headers.host || "";
-        const proxyUrl = `${protocol}://${host}${CLERK_PROXY_PATH}`;
-
-        proxyReq.setHeader("Clerk-Proxy-Url", proxyUrl);
+        const proxyOrigin = new URL(configuredProxyUrl).origin;
+        proxyReq.setHeader("Clerk-Proxy-Url", configuredProxyUrl);
         proxyReq.setHeader("Clerk-Secret-Key", secretKey);
+        proxyReq.setHeader("Origin", proxyOrigin);
 
         const xff = req.headers["x-forwarded-for"];
         const clientIp =
@@ -54,6 +58,14 @@ export function clerkProxyMiddleware(): RequestHandler {
           "";
         if (clientIp) {
           proxyReq.setHeader("X-Forwarded-For", clientIp);
+        }
+      },
+      proxyRes: (proxyRes, req) => {
+        const browserOrigin = (req as { headers: Record<string, string> }).headers["origin"];
+        if (browserOrigin) {
+          proxyRes.headers["access-control-allow-origin"] = browserOrigin;
+          proxyRes.headers["access-control-allow-credentials"] = "true";
+          proxyRes.headers["vary"] = "origin";
         }
       },
     },

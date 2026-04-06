@@ -60,7 +60,16 @@ app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use(clerkMiddleware());
+const clerkProxyUrl = process.env["CLERK_PROXY_URL"];
+const clerkProxyOrigin = clerkProxyUrl ? new URL(clerkProxyUrl).origin : undefined;
+
+const authorizedParties = [
+  process.env["FRONTEND_URL"],
+  clerkProxyOrigin,
+  process.env["REPLIT_DEV_DOMAIN"] ? `https://${process.env["REPLIT_DEV_DOMAIN"]}` : undefined,
+].filter(Boolean) as string[];
+
+app.use(clerkMiddleware(authorizedParties.length > 0 ? { authorizedParties } : {}));
 
 app.use("/api", router);
 
