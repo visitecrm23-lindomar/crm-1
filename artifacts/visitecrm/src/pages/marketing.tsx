@@ -90,31 +90,38 @@ export default function Marketing() {
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    const code = (fd.get("code") as string).toUpperCase();
+    const value = fd.get("value") as string;
+    const minOrderValue = (fd.get("minOrderValue") as string) || undefined;
+    const maxUsesRaw = fd.get("maxUses") as string;
+    const maxUses = maxUsesRaw ? parseInt(maxUsesRaw, 10) : undefined;
+    const validFrom = (fd.get("validFrom") as string) || undefined;
+    const validUntil = (fd.get("validUntil") as string) || undefined;
     if (editingCoupon) {
       await updateCoupon.mutateAsync({
         id: editingCoupon.id,
         data: {
-          code: editingCoupon.code,
-          value: editingCoupon.value,
-          type: editingCoupon.type as CreateCouponBodyType,
+          code,
+          value,
+          type: couponType,
           isActive: editingCoupon.isActive,
-          validFrom: (fd.get("validFrom") as string) || editingCoupon.validFrom || undefined,
-          validUntil: (fd.get("validUntil") as string) || editingCoupon.validUntil || undefined,
+          minOrderValue,
+          maxUses,
+          validFrom,
+          validUntil,
         },
       });
     } else {
       await createCoupon.mutateAsync({
         data: {
-          code: (fd.get("code") as string).toUpperCase(),
+          code,
           type: couponType,
-          value: fd.get("value") as string,
-          minOrderValue: (fd.get("minOrderValue") as string) || undefined,
-          maxUses: fd.get("maxUses")
-            ? parseInt(fd.get("maxUses") as string, 10)
-            : undefined,
+          value,
+          minOrderValue,
+          maxUses,
           isActive: true,
-          validFrom: (fd.get("validFrom") as string) || undefined,
-          validUntil: (fd.get("validUntil") as string) || undefined,
+          validFrom,
+          validUntil,
         },
       });
     }
@@ -207,8 +214,7 @@ export default function Marketing() {
                       <label className="text-sm font-medium">Código</label>
                       <Input
                         name="code"
-                        required={!editingCoupon}
-                        disabled={!!editingCoupon}
+                        required
                         placeholder="VERAO2025"
                         defaultValue={editingCoupon?.code ?? ""}
                         className="uppercase"
@@ -221,7 +227,6 @@ export default function Marketing() {
                         onValueChange={(v) =>
                           setCouponType(v as CreateCouponBodyType)
                         }
-                        disabled={!!editingCoupon}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -240,8 +245,7 @@ export default function Marketing() {
                       </label>
                       <Input
                         name="value"
-                        required={!editingCoupon}
-                        disabled={!!editingCoupon}
+                        required
                         type="number"
                         step="0.01"
                         min="0"

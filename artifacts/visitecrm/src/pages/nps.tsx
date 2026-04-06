@@ -185,6 +185,8 @@ export default function Nps() {
   const [filterClass, setFilterClass] = useState("all");
   const [isSendOpen, setIsSendOpen] = useState(false);
   const [selectedTrip, setSelectedTrip] = useState("");
+  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
+  const [sendMode, setSendMode] = useState<"all" | "select">("all");
   const [detailResponse, setDetailResponse] = useState<NpsResponse | null>(null);
 
   const { data: summary, isLoading: loadingSummary } = useGetNpsSummary();
@@ -193,6 +195,7 @@ export default function Nps() {
     classification: filterClass === "all" ? undefined : filterClass,
   });
   const { data: trips } = useListTrips({ limit: 100 });
+  const { data: clients } = useListClients({ limit: 300 });
 
   const filteredResponses = responses ?? [];
 
@@ -211,14 +214,14 @@ export default function Nps() {
               <Send className="w-4 h-4 mr-2" /> Enviar Pesquisa
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Enviar Pesquisa NPS</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 mt-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Viagem</label>
-                <Select value={selectedTrip} onValueChange={setSelectedTrip}>
+                <Select value={selectedTrip} onValueChange={(v) => { setSelectedTrip(v); setSelectedClientIds([]); }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecionar viagem..." />
                   </SelectTrigger>
@@ -232,22 +235,99 @@ export default function Nps() {
                   </SelectContent>
                 </Select>
               </div>
-              <p className="text-sm text-muted-foreground p-3 rounded-lg bg-muted/50 border">
-                A pesquisa será enviada via WhatsApp para todos os passageiros
-                da viagem selecionada, solicitando uma avaliação de 0 a 10.
-              </p>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Destinatários</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setSendMode("all"); setSelectedClientIds([]); }}
+                    className={`flex-1 py-1.5 rounded-md border text-sm font-medium transition-colors ${
+                      sendMode === "all"
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background border-border hover:bg-muted"
+                    }`}
+                  >
+                    Todos os passageiros
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSendMode("select")}
+                    className={`flex-1 py-1.5 rounded-md border text-sm font-medium transition-colors ${
+                      sendMode === "select"
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background border-border hover:bg-muted"
+                    }`}
+                  >
+                    Selecionar clientes
+                  </button>
+                </div>
+              </div>
+
+              {sendMode === "select" && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Clientes</label>
+                  <div className="max-h-44 overflow-y-auto border rounded-lg divide-y">
+                    {(clients?.data ?? []).map((c) => (
+                      <label
+                        key={c.id}
+                        className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/50 text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          className="rounded"
+                          checked={selectedClientIds.includes(c.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedClientIds((prev) => [...prev, c.id]);
+                            } else {
+                              setSelectedClientIds((prev) =>
+                                prev.filter((id) => id !== c.id)
+                              );
+                            }
+                          }}
+                        />
+                        <span>{c.name}</span>
+                        {c.phone && (
+                          <span className="text-muted-foreground ml-auto">
+                            {c.phone}
+                          </span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                  {selectedClientIds.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {selectedClientIds.length} cliente(s) selecionado(s)
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {sendMode === "all" && (
+                <p className="text-sm text-muted-foreground p-3 rounded-lg bg-muted/50 border">
+                  A pesquisa será enviada via WhatsApp para todos os passageiros
+                  da viagem selecionada, solicitando uma avaliação de 0 a 10.
+                </p>
+              )}
+
               <div className="flex justify-end gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => setIsSendOpen(false)}
+                  onClick={() => { setIsSendOpen(false); setSelectedClientIds([]); setSendMode("all"); }}
                 >
                   Cancelar
                 </Button>
                 <Button
-                  disabled={!selectedTrip}
+                  disabled={
+                    !selectedTrip ||
+                    (sendMode === "select" && selectedClientIds.length === 0)
+                  }
                   onClick={() => {
                     setIsSendOpen(false);
                     setSelectedTrip("");
+                    setSelectedClientIds([]);
+                    setSendMode("all");
                   }}
                 >
                   <Send className="w-4 h-4 mr-2" /> Enviar

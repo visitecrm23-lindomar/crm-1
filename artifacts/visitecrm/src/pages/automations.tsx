@@ -97,15 +97,47 @@ const logStatusConfig: Record<string, { label: string; icon: React.ReactNode; cl
     },
   };
 
+type Condition = { field: string; operator: string; value: string };
+
+const conditionFields = [
+  { value: "client.tag", label: "Tag do cliente" },
+  { value: "client.city", label: "Cidade do cliente" },
+  { value: "trip.name", label: "Nome da viagem" },
+  { value: "payment.status", label: "Status do pagamento" },
+  { value: "pipeline.stage", label: "Estágio do Pipeline" },
+  { value: "days_before_trip", label: "Dias antes da viagem" },
+];
+
+const conditionOperators = [
+  { value: "equals", label: "é igual a" },
+  { value: "not_equals", label: "é diferente de" },
+  { value: "contains", label: "contém" },
+  { value: "greater_than", label: "maior que" },
+  { value: "less_than", label: "menor que" },
+];
+
 function AutomationDetail({
   automation,
   onClose,
+  onUpdated,
 }: {
   automation: Automation;
   onClose: () => void;
+  onUpdated: () => void;
 }) {
   const [actionType, setActionType] = useState("send_whatsapp");
   const [actionConfig, setActionConfig] = useState("");
+  const storedConditions =
+    automation.triggerConfig &&
+    typeof automation.triggerConfig === "object" &&
+    "conditions" in automation.triggerConfig &&
+    Array.isArray((automation.triggerConfig as Record<string, unknown>).conditions)
+      ? ((automation.triggerConfig as Record<string, unknown>).conditions as Condition[])
+      : [];
+  const [conditions, setConditions] = useState<Condition[]>(storedConditions);
+  const [condField, setCondField] = useState("client.tag");
+  const [condOp, setCondOp] = useState("equals");
+  const [condVal, setCondVal] = useState("");
 
   const { data: allActions, refetch: refetchActions } = useListAutomationActions();
   const { data: allLogs } = useListAutomationLogs();
@@ -119,6 +151,7 @@ function AutomationDetail({
 
   const createAction = useCreateAutomationAction();
   const deleteAction = useDeleteAutomationAction();
+  const updateAutomation = useUpdateAutomation();
 
   const handleAddAction = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -139,8 +172,38 @@ function AutomationDetail({
     refetchActions();
   };
 
+  const saveConditions = (newConds: Condition[]) => {
+    const existingConfig =
+      automation.triggerConfig && typeof automation.triggerConfig === "object"
+        ? (automation.triggerConfig as Record<string, unknown>)
+        : {};
+    updateAutomation.mutateAsync({
+      id: automation.id,
+      data: {
+        triggerConfig: { ...existingConfig, conditions: newConds },
+      },
+    }).then(onUpdated);
+  };
+
+  const handleAddCondition = () => {
+    if (!condVal.trim()) return;
+    const newConds = [
+      ...conditions,
+      { field: condField, operator: condOp, value: condVal.trim() },
+    ];
+    setConditions(newConds);
+    setCondVal("");
+    saveConditions(newConds);
+  };
+
+  const handleRemoveCondition = (idx: number) => {
+    const newConds = conditions.filter((_, i) => i !== idx);
+    setConditions(newConds);
+    saveConditions(newConds);
+  };
+
   return (
-    <DialogContent className="max-w-2xl">
+    <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <Zap className="w-5 h-5 text-primary" />
@@ -151,6 +214,9 @@ function AutomationDetail({
         <TabsList className="mb-4">
           <TabsTrigger value="actions">
             <Settings2 className="w-4 h-4 mr-1.5" /> Ações
+          </TabsTrigger>
+          <TabsTrigger value="conditions">
+            <ChevronRight className="w-4 h-4 mr-1.5" /> Condições
           </TabsTrigger>
           <TabsTrigger value="logs">
             <ScrollText className="w-4 h-4 mr-1.5" /> Histórico
@@ -230,6 +296,91 @@ function AutomationDetail({
               </Button>
             </div>
           </form>
+        </TabsContent>
+
+        <TabsContent value="conditions" className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Condições adicionais para controlar quando esta automação será disparada.
+            Deixe em branco para disparar sempre que o gatilho ocorrer.
+          </p>
+
+          {conditions.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">Condições configuradas</p>
+              {conditions.map((cond, idx) => {
+                const fieldLabel = conditionFields.find((f) => f.value === cond.field)?.label ?? cond.field;
+                const opLabel = conditionOperators.find((o) => o.value === cond.operator)?.label ?? cond.operator;
+                return (
+                  <div key={idx} className="flex items-center gap-3 p-3 border rounded-lg bg-card">
+                    <div className="flex-1 text-sm">
+                      <span className="font-medium">{fieldLabel}</span>{" "}
+                      <span className="text-muted-foreground">{opLabel}</span>{" "}
+                      <span className="font-medium text-primary">"{cond.value}"</span>
+                    </div>
+                    <button
+                      onClick={() => handleRemoveCondition(idx)}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-6 border rounded-lg bg-muted/20 text-muted-foreground text-sm">
+              Nenhuma condição adicional configurada — a automação dispara sempre que o gatilho ocorrer.
+            </div>
+          )}
+
+          <div className="space-y-3 pt-2 border-t">
+            <p className="text-sm font-medium">Adicionar Condição</p>
+            <div className="grid grid-cols-3 gap-2">
+              <Select value={condField} onValueChange={setCondField}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {conditionFields.map((f) => (
+                    <SelectItem key={f.value} value={f.value}>
+                      {f.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={condOp} onValueChange={setCondOp}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {conditionOperators.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                value={condVal}
+                onChange={(e) => setCondVal(e.target.value)}
+                placeholder="Valor"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={onClose}>
+                Fechar
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleAddCondition}
+                disabled={!condVal.trim() || updateAutomation.isPending}
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" />
+                Adicionar Condição
+              </Button>
+            </div>
+          </div>
         </TabsContent>
 
         <TabsContent value="logs">
@@ -507,6 +658,7 @@ export default function Automations() {
                         <AutomationDetail
                           automation={a}
                           onClose={() => setDetailAutomation(null)}
+                          onUpdated={() => refetch()}
                         />
                       )}
                     </Dialog>
