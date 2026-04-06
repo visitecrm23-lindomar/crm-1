@@ -188,6 +188,7 @@ export default function Financial() {
     limit: 50,
   });
   const { data: allReceivedPayments } = useListPayments({ type: "receivable", status: "paid", limit: 500 });
+  const { data: allExpensesData } = useListExpenses({ limit: 500 });
   const { data: expensesData, isLoading: loadingExpenses, refetch: refetchExpenses } = useListExpenses({ limit: 50 });
   const { data: commissionsData, isLoading: loadingCommissions, refetch: refetchCommissions } = useListCommissions();
   const { data: rulesData, isLoading: loadingRules, refetch: refetchRules } = useListCommissionRules();
@@ -199,6 +200,16 @@ export default function Financial() {
     (clientsData?.data ?? []).forEach(c => { map[c.id] = c.name; });
     return map;
   }, [clientsData]);
+
+  const totalRevenue = useMemo(() =>
+    (allReceivedPayments?.data ?? []).reduce((s, p) => s + Number(p.amount), 0),
+    [allReceivedPayments]
+  );
+
+  const totalExpensesSum = useMemo(() =>
+    (allExpensesData?.data ?? []).reduce((s, e) => s + Number(e.amount), 0),
+    [allExpensesData]
+  );
 
   const createPayment = useCreatePayment();
   const updatePayment = useUpdatePayment();
@@ -351,30 +362,32 @@ export default function Financial() {
       <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <KpiCard
           icon={TrendingUp}
-          label="Total a Receber"
-          value={loadingSummary ? "—" : fmt(summary?.totalReceivable ?? 0)}
-          sub={`Vencido: ${fmt(summary?.overdueReceivable ?? 0)}`}
+          label="Receita Total"
+          value={allReceivedPayments ? fmt(totalRevenue) : "—"}
+          sub={`Recebido no mês: ${fmt(summary?.collectedThisMonth ?? 0)}`}
           color="text-green-600"
           trend="up"
         />
         <KpiCard
           icon={CheckCircle}
-          label="Recebido no Mês"
+          label="Total Recebido"
           value={loadingSummary ? "—" : fmt(summary?.collectedThisMonth ?? 0)}
+          sub={`Pendente: ${fmt(summary?.totalReceivable ?? 0)}`}
           color="text-blue-600"
         />
         <KpiCard
           icon={AlertCircle}
-          label="A Pagar"
-          value={loadingSummary ? "—" : fmt(summary?.totalPayable ?? 0)}
-          sub={`Vencido: ${fmt(summary?.overduePayable ?? 0)}`}
+          label="Total Pendente"
+          value={loadingSummary ? "—" : fmt(summary?.totalReceivable ?? 0)}
+          sub={`Vencido: ${fmt(summary?.overdueReceivable ?? 0)}`}
           color="text-yellow-600"
           trend="down"
         />
         <KpiCard
           icon={TrendingDown}
-          label="Pago no Mês"
-          value={loadingSummary ? "—" : fmt(summary?.paidThisMonth ?? 0)}
+          label="Total Despesas"
+          value={allExpensesData ? fmt(totalExpensesSum) : "—"}
+          sub={`A pagar: ${fmt(summary?.totalPayable ?? 0)}`}
           color="text-red-600"
         />
       </div>

@@ -229,6 +229,9 @@ export default function Revenue() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterSeller, setFilterSeller] = useState("");
+  const [filterPaymentMethod, setFilterPaymentMethod] = useState("");
 
   const { data: chartData, isLoading: loadingChart } = useGetDashboardRevenueChart({ period });
   const { data: paymentSummary } = useGetPaymentsSummary();
@@ -272,6 +275,13 @@ export default function Revenue() {
   const newClients = summary?.newClientsThisMonth ?? 0;
   const recurringClients = Math.max(0, (summary?.totalClients ?? 0) - newClients);
 
+  const filteredReservations = useMemo(() => {
+    let items = reservations;
+    if (filterStatus) items = items.filter(r => r.status === filterStatus);
+    if (filterPaymentMethod) items = items.filter(r => r.paymentMethod === filterPaymentMethod);
+    return items;
+  }, [reservations, filterStatus, filterPaymentMethod]);
+
   const paymentMethodTotals = useMemo(() => {
     const payments = paymentsData?.data ?? [];
     const map: Record<string, number> = {};
@@ -285,6 +295,33 @@ export default function Revenue() {
       color: PAYMENT_METHOD_COLORS[method] ?? "#94A3B8",
     }));
   }, [paymentsData]);
+
+  const categoryColors: Record<string, string> = {
+    national: "#3B82F6", international: "#8B5CF6", adventure: "#F59E0B",
+    cultural: "#10B981", religious: "#EC4899", gastronomic: "#F97316", other: "#94A3B8",
+  };
+  const categoryLabels: Record<string, string> = {
+    national: "Nacional", international: "Internacional", adventure: "Aventura",
+    cultural: "Cultural", religious: "Religioso", gastronomic: "Gastronômico", other: "Outro",
+  };
+
+  const categoryByRevenue = useMemo(() => {
+    const trips = tripsData?.data ?? [];
+    const map: Record<string, number> = {};
+    for (const r of filteredReservations) {
+      const trip = trips.find(t => t.id === r.tripId);
+      const cat = trip?.category ?? "other";
+      map[cat] = (map[cat] ?? 0) + r.paidValue;
+    }
+    return Object.entries(map)
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([cat, value]) => ({
+        label: categoryLabels[cat] ?? cat,
+        value,
+        color: categoryColors[cat] ?? "#94A3B8",
+      }));
+  }, [filteredReservations, tripsData]);
 
   const topTrips = useMemo(() => {
     const trips = tripsData?.data ?? [];
@@ -384,15 +421,51 @@ export default function Revenue() {
       </div>
 
       {showFilters && (
-        <div className="flex items-center gap-3 bg-card p-4 rounded-lg border flex-wrap">
-          <div className="flex items-center gap-2">
-            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-36" />
-            <span className="text-muted-foreground text-sm">até</span>
-            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-36" />
+        <div className="bg-card p-4 rounded-lg border space-y-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground whitespace-nowrap">Data de:</span>
+              <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-36" />
+              <span className="text-muted-foreground text-sm">até</span>
+              <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-36" />
+            </div>
+            <Select value={filterStatus || "all"} onValueChange={v => setFilterStatus(v === "all" ? "" : v)}>
+              <SelectTrigger className="w-[150px] h-9 text-sm"><SelectValue placeholder="Status da Reserva" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os Status</SelectItem>
+                <SelectItem value="pending">Pendente</SelectItem>
+                <SelectItem value="confirmed">Confirmada</SelectItem>
+                <SelectItem value="completed">Concluída</SelectItem>
+                <SelectItem value="cancelled">Cancelada</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterPaymentMethod || "all"} onValueChange={v => setFilterPaymentMethod(v === "all" ? "" : v)}>
+              <SelectTrigger className="w-[160px] h-9 text-sm"><SelectValue placeholder="Forma de Pagamento" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as Formas</SelectItem>
+                <SelectItem value="pix">PIX</SelectItem>
+                <SelectItem value="credit_card">Cartão de Crédito</SelectItem>
+                <SelectItem value="debit_card">Cartão de Débito</SelectItem>
+                <SelectItem value="bank_transfer">Transferência</SelectItem>
+                <SelectItem value="cash">Dinheiro</SelectItem>
+                <SelectItem value="boleto">Boleto</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterSeller || "all"} onValueChange={v => setFilterSeller(v === "all" ? "" : v)}>
+              <SelectTrigger className="w-[150px] h-9 text-sm"><SelectValue placeholder="Vendedor" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os Vendedores</SelectItem>
+                {(usersRaw ?? []).filter(u => u.role === "vendedor" || u.role === "admin").map(u => (
+                  <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {(dateFrom || dateTo || filterStatus || filterPaymentMethod || filterSeller) && (
+              <Button variant="ghost" size="sm" onClick={() => { setDateFrom(""); setDateTo(""); setFilterStatus(""); setFilterPaymentMethod(""); setFilterSeller(""); }}>
+                Limpar filtros
+              </Button>
+            )}
           </div>
-          {(dateFrom || dateTo) && (
-            <Button variant="ghost" size="sm" onClick={() => { setDateFrom(""); setDateTo(""); }}>Limpar</Button>
-          )}
         </div>
       )}
 
@@ -430,6 +503,19 @@ export default function Revenue() {
             </Card>
             <Card>
               <CardHeader className="pb-2">
+                <CardTitle className="text-base">Vendas por Categoria</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {categoryByRevenue.length === 0 ? (
+                  <div className="py-8 text-center text-muted-foreground text-sm">Sem dados de categoria disponíveis.</div>
+                ) : <CategoryPieChart data={categoryByRevenue} />}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader className="pb-2">
                 <CardTitle className="text-base">Formas de Pagamento</CardTitle>
               </CardHeader>
               <CardContent>
@@ -438,20 +524,19 @@ export default function Revenue() {
                 ) : <CategoryPieChart data={paymentMethodTotals} />}
               </CardContent>
             </Card>
+            {originData.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <BarChart className="w-4 h-4" /> Vendas por Origem
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <BarChartHoriz data={originData} valueKey="value" labelKey="label" />
+                </CardContent>
+              </Card>
+            )}
           </div>
-
-          {originData.length > 0 && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <BarChart className="w-4 h-4" /> Vendas por Origem
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <BarChartHoriz data={originData} valueKey="value" labelKey="label" />
-              </CardContent>
-            </Card>
-          )}
 
           <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
             <Card><CardContent className="p-4">
