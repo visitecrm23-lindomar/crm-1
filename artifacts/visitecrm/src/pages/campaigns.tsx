@@ -96,7 +96,7 @@ export default function Campaigns() {
   const [isOpen, setIsOpen] = useState(false);
   const [analyticsId, setAnalyticsId] = useState<string | null>(null);
   const [campaignType, setCampaignType] = useState("email");
-  const [segTripId, setSegTripId] = useState("");
+  const [segTripId, setSegTripId] = useState("__all__");
 
   const { data: campaigns, isLoading, refetch } = useListCampaigns();
   const { data: trips } = useListTrips({ limit: 100 });
@@ -116,7 +116,7 @@ export default function Campaigns() {
     if (origin) seg.origin = origin;
     if (tag) seg.tag = tag;
     if (pipeline) seg.pipelineStage = pipeline;
-    if (segTripId) seg.tripId = segTripId;
+    if (segTripId && segTripId !== "__all__") seg.tripId = segTripId;
     await createCampaign.mutateAsync({
       data: {
         name: fd.get("name") as string,
@@ -131,7 +131,7 @@ export default function Campaigns() {
     });
     setIsOpen(false);
     setCampaignType("email");
-    setSegTripId("");
+    setSegTripId("__all__");
     refetch();
   };
 
@@ -234,7 +234,7 @@ export default function Campaigns() {
                         <SelectValue placeholder="Selecionar viagem (opcional)..." />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Todas as viagens</SelectItem>
+                        <SelectItem value="__all__">Todas as viagens</SelectItem>
                         {(trips?.data ?? []).map((t) => (
                           <SelectItem key={t.id} value={t.id}>
                             {t.name} —{" "}
