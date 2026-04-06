@@ -4,10 +4,11 @@ import {
   useCreateExpense,
   useUpdateExpense,
   useListTrips,
+  useListSuppliers,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -48,6 +49,35 @@ const METHOD_LABELS: Record<string, string> = {
   cash: "Dinheiro",
   boleto: "Boleto",
 };
+const CATEGORY_COLORS: Record<string, string> = {
+  transport: "#3B82F6",
+  accommodation: "#8B5CF6",
+  food: "#10B981",
+  marketing: "#F59E0B",
+  administrative: "#6366F1",
+  commission: "#EF4444",
+  other: "#94A3B8",
+};
+
+function CategoryChart({ data }: { data: Array<{ category: string; total: number }> }) {
+  const max = Math.max(...data.map(d => d.total), 1);
+  return (
+    <div className="space-y-3">
+      {data.map(d => {
+        const pct = (d.total / max) * 100;
+        return (
+          <div key={d.category} className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground w-28 shrink-0">{CATEGORY_LABELS[d.category] ?? d.category}</span>
+            <div className="flex-1 bg-muted rounded-full h-2">
+              <div className="h-2 rounded-full" style={{ width: `${pct}%`, backgroundColor: CATEGORY_COLORS[d.category] ?? "#94A3B8" }} />
+            </div>
+            <span className="text-xs font-medium w-24 text-right">{fmt(d.total)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function Expenses() {
   const [statusFilter, setStatusFilter] = useState("");
@@ -57,6 +87,7 @@ export default function Expenses() {
   const [dateTo, setDateTo] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [expenseMethod, setExpenseMethod] = useState("pix");
+  const [supplierFilter, setSupplierFilter] = useState("");
 
   const { data: expensesData, isLoading, refetch } = useListExpenses({
     status: statusFilter || undefined,
@@ -64,6 +95,7 @@ export default function Expenses() {
     limit: 100,
   });
   const { data: tripsData } = useListTrips({ limit: 100 });
+  const { data: suppliersRaw } = useListSuppliers();
   const createExpense = useCreateExpense();
   const updateExpense = useUpdateExpense();
 
@@ -72,8 +104,9 @@ export default function Expenses() {
     if (categoryFilter) all = all.filter(e => e.category === categoryFilter);
     if (dateFrom) all = all.filter(e => e.dueDate >= dateFrom);
     if (dateTo) all = all.filter(e => e.dueDate <= dateTo);
+    if (supplierFilter) all = all.filter(e => e.supplierId === supplierFilter);
     return all;
-  }, [expensesData, categoryFilter, dateFrom, dateTo]);
+  }, [expensesData, categoryFilter, dateFrom, dateTo, supplierFilter]);
 
   const kpis = useMemo(() => {
     const all = expensesData?.data ?? [];
@@ -83,6 +116,23 @@ export default function Expenses() {
     const overdue = all.filter(e => e.status === "overdue").reduce((s, e) => s + parseFloat(String(e.amount)), 0);
     return { total, paid, pending, overdue };
   }, [expensesData]);
+
+  const categoryBreakdown = useMemo(() => {
+    const all = expenses;
+    const map: Record<string, number> = {};
+    for (const e of all) {
+      map[e.category] = (map[e.category] ?? 0) + parseFloat(String(e.amount));
+    }
+    return Object.entries(map)
+      .map(([category, total]) => ({ category, total }))
+      .sort((a, b) => b.total - a.total);
+  }, [expenses]);
+
+  const suppliersMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const s of (suppliersRaw ?? [])) m[s.id] = s.name;
+    return m;
+  }, [suppliersRaw]);
 
   const handleMarkPaid = async (id: string) => {
     await updateExpense.mutateAsync({
@@ -103,6 +153,7 @@ export default function Expenses() {
         dueDate: fd.get("dueDate") as string,
         paymentMethod: expenseMethod || undefined,
         tripId: (fd.get("tripId") as string) || undefined,
+        supplierId: (fd.get("supplierId") as string) || undefined,
         notes: (fd.get("notes") as string) || undefined,
       }
     });
@@ -110,7 +161,7 @@ export default function Expenses() {
     refetch();
   };
 
-  const hasFilters = statusFilter || categoryFilter || tripFilter || dateFrom || dateTo;
+  const hasFilters = statusFilter || categoryFilter || tripFilter || dateFrom || dateTo || supplierFilter;
 
   return (
     <div className="space-y-6">
@@ -143,6 +194,17 @@ export default function Expenses() {
         </CardContent></Card>
       </div>
 
+      {categoryBreakdown.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Despesas por Categoria</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CategoryChart data={categoryBreakdown} />
+          </CardContent>
+        </Card>
+      )}
+
       <div className="flex flex-wrap items-center gap-3 bg-card p-4 rounded-lg border">
         <Select value={statusFilter || "all"} onValueChange={v => setStatusFilter(v === "all" ? "" : v)}>
           <SelectTrigger className="w-[140px]"><SelectValue placeholder="Status" /></SelectTrigger>
@@ -174,13 +236,24 @@ export default function Expenses() {
             ))}
           </SelectContent>
         </Select>
+        {(suppliersRaw ?? []).length > 0 && (
+          <Select value={supplierFilter || "all"} onValueChange={v => setSupplierFilter(v === "all" ? "" : v)}>
+            <SelectTrigger className="w-[160px]"><SelectValue placeholder="Fornecedor" /></SelectTrigger>
+            <SelectContent className="max-h-48">
+              <SelectItem value="all">Todos fornecedores</SelectItem>
+              {(suppliersRaw ?? []).map(s => (
+                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <div className="flex items-center gap-2">
           <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-36" placeholder="De" />
           <span className="text-muted-foreground text-sm">até</span>
           <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-36" placeholder="Até" />
         </div>
         {hasFilters && (
-          <Button variant="ghost" size="sm" onClick={() => { setStatusFilter(""); setCategoryFilter(""); setTripFilter(""); setDateFrom(""); setDateTo(""); }}>
+          <Button variant="ghost" size="sm" onClick={() => { setStatusFilter(""); setCategoryFilter(""); setTripFilter(""); setDateFrom(""); setDateTo(""); setSupplierFilter(""); }}>
             Limpar filtros
           </Button>
         )}
@@ -192,6 +265,7 @@ export default function Expenses() {
             <TableRow>
               <TableHead>Descrição</TableHead>
               <TableHead>Categoria</TableHead>
+              <TableHead>Fornecedor</TableHead>
               <TableHead>Viagem</TableHead>
               <TableHead>Vencimento</TableHead>
               <TableHead>Valor</TableHead>
@@ -203,11 +277,11 @@ export default function Expenses() {
           <TableBody>
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>{Array.from({ length: 8 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
+                <TableRow key={i}>{Array.from({ length: 9 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
               ))
             ) : expenses.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-10 text-muted-foreground">
                   {hasFilters ? "Nenhuma despesa com os filtros selecionados." : "Nenhuma despesa registrada."}
                 </TableCell>
               </TableRow>
@@ -215,6 +289,11 @@ export default function Expenses() {
               <TableRow key={e.id}>
                 <TableCell className="font-medium text-sm">{e.description}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{CATEGORY_LABELS[e.category] ?? e.category}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {e.supplierId ? (
+                    <span className="font-medium text-foreground">{suppliersMap[e.supplierId] ?? e.supplierId.slice(0, 8) + "…"}</span>
+                  ) : "—"}
+                </TableCell>
                 <TableCell className="text-sm text-muted-foreground">{e.tripId ? tripsData?.data.find(t => t.id === e.tripId)?.name ?? e.tripId.slice(0, 8) + "…" : "—"}</TableCell>
                 <TableCell className="text-sm">{new Date(e.dueDate).toLocaleDateString("pt-BR")}</TableCell>
                 <TableCell className="font-medium text-sm">{fmt(e.amount)}</TableCell>
@@ -283,6 +362,18 @@ export default function Expenses() {
                 <label className="text-sm font-medium">Vencimento *</label>
                 <Input name="dueDate" type="date" required defaultValue={new Date().toISOString().split("T")[0]} />
               </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Fornecedor (opcional)</label>
+              <Select name="supplierId" defaultValue="">
+                <SelectTrigger><SelectValue placeholder="Vincular a um fornecedor..." /></SelectTrigger>
+                <SelectContent className="max-h-48">
+                  <SelectItem value="">Nenhum</SelectItem>
+                  {(suppliersRaw ?? []).map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Viagem (opcional)</label>

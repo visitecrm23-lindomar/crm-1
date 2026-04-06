@@ -38,7 +38,7 @@ const NAVIGATION = [
   { name: "Clientes", href: "/clients", icon: Users },
   { name: "Viagens", href: "/trips", icon: Map },
   { name: "Reservas", href: "/reservations", icon: CalendarCheck },
-  { name: "Financeiro", href: "/financial", icon: DollarSign },
+  { name: "Financeiro", href: "/financeiro", icon: DollarSign },
   { name: "Comunicação", href: "/communication", icon: MessageSquare },
   { name: "Automações", href: "/automations", icon: Zap },
   { name: "Marketing", href: "/marketing", icon: Target },

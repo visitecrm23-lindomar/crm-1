@@ -296,12 +296,12 @@ export default function Financial() {
           <p className="text-muted-foreground text-sm">Controle receitas, despesas, comissões e fluxo de caixa</p>
         </div>
         <div className="flex gap-2">
-          <Link href="/financial/commissions">
+          <Link href="/financeiro/commissions">
             <Button variant="ghost" size="sm">
               <ExternalLink className="w-4 h-4 mr-1.5" /> Comissões
             </Button>
           </Link>
-          <Link href="/financial/expenses">
+          <Link href="/financeiro/expenses">
             <Button variant="ghost" size="sm">
               <ExternalLink className="w-4 h-4 mr-1.5" /> Despesas
             </Button>
@@ -720,6 +720,16 @@ export default function Financial() {
                 <label className="text-sm font-medium">Parcelas</label>
                 <Input name="installments" type="number" defaultValue="1" min="1" max="12" />
               </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Comprovante (opcional)</label>
+              <div className="flex items-center gap-2 border rounded-md px-3 py-2 bg-muted/30 cursor-not-allowed opacity-60">
+                <span className="text-xs text-muted-foreground flex-1">Nenhum arquivo selecionado</span>
+                <Button type="button" size="sm" variant="outline" disabled className="text-xs h-7">
+                  Selecionar arquivo
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Upload de comprovante disponível em breve (PDF, JPG, PNG)</p>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setIsPaymentOpen(false)}>Cancelar</Button>

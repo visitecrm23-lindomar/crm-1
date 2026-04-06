@@ -6,6 +6,7 @@ import {
   useCreateCommissionRule,
   useUpdateCommissionRule,
   useDeleteCommissionRule,
+  useListTrips,
 } from "@workspace/api-client-react";
 import type { CommissionRule } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -42,9 +43,12 @@ export default function Commissions() {
   const [isRuleOpen, setIsRuleOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<CommissionRule | null>(null);
   const [ruleType, setRuleType] = useState("percentage");
+  const [appliesTo, setAppliesTo] = useState("all");
+  const [selectedTripId, setSelectedTripId] = useState("");
 
   const { data: commissionsRaw, isLoading: loadingCommissions, refetch: refetchCommissions } = useListCommissions();
   const { data: rulesData, isLoading: loadingRules, refetch: refetchRules } = useListCommissionRules();
+  const { data: tripsData } = useListTrips({ limit: 100 });
   const updateCommission = useUpdateCommission();
   const createRule = useCreateCommissionRule();
   const updateRule = useUpdateCommissionRule();
@@ -78,11 +82,13 @@ export default function Commissions() {
   const handleSaveRule = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    const effectiveAppliesTo = appliesTo === "trip" ? "trip" : appliesTo;
     const ruleData = {
       name: fd.get("name") as string,
       type: ruleType as "percentage" | "fixed",
       value: fd.get("value") as string,
-      appliesTo: fd.get("appliesTo") as string || "all",
+      appliesTo: effectiveAppliesTo,
+      tripId: appliesTo === "trip" ? selectedTripId || undefined : undefined,
       isActive: true,
     };
     if (editingRule) {
@@ -92,6 +98,8 @@ export default function Commissions() {
     }
     setIsRuleOpen(false);
     setEditingRule(null);
+    setAppliesTo("all");
+    setSelectedTripId("");
     refetchRules();
   };
 
@@ -175,7 +183,7 @@ export default function Commissions() {
             </Select>
           )}
           {tab === "rules" && (
-            <Button onClick={() => { setEditingRule(null); setRuleType("percentage"); setIsRuleOpen(true); }}>
+            <Button onClick={() => { setEditingRule(null); setRuleType("percentage"); setAppliesTo("all"); setSelectedTripId(""); setIsRuleOpen(true); }}>
               <Plus className="w-4 h-4 mr-2" /> Nova Regra
             </Button>
           )}
@@ -264,7 +272,11 @@ export default function Commissions() {
                     <TableCell className="font-medium text-sm">
                       {rule.type === "percentage" ? `${rule.value}%` : fmt(rule.value)}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{rule.appliesTo}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {rule.appliesTo === "trip" && rule.tripId
+                        ? (tripsData?.data.find(t => t.id === rule.tripId)?.name ?? "Viagem específica")
+                        : rule.appliesTo === "all" ? "Todas" : rule.appliesTo === "national" ? "Nacionais" : rule.appliesTo === "international" ? "Internacionais" : rule.appliesTo}
+                    </TableCell>
                     <TableCell>
                       <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${rule.isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}>
                         {rule.isActive ? "Ativa" : "Inativa"}
@@ -274,7 +286,7 @@ export default function Commissions() {
                       <div className="flex justify-end gap-1">
                         <Button
                           variant="ghost" size="icon" className="h-8 w-8"
-                          onClick={() => { setEditingRule(rule); setRuleType(rule.type); setIsRuleOpen(true); }}
+                          onClick={() => { setEditingRule(rule); setRuleType(rule.type); setAppliesTo(rule.appliesTo ?? "all"); setSelectedTripId(rule.tripId ?? ""); setIsRuleOpen(true); }}
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
@@ -329,15 +341,29 @@ export default function Commissions() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Aplica a</label>
-              <Select name="appliesTo" defaultValue={editingRule?.appliesTo ?? "all"}>
+              <Select value={appliesTo} onValueChange={v => { setAppliesTo(v); if (v !== "trip") setSelectedTripId(""); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas as viagens</SelectItem>
                   <SelectItem value="national">Viagens nacionais</SelectItem>
                   <SelectItem value="international">Viagens internacionais</SelectItem>
+                  <SelectItem value="trip">Viagem específica (por viagem)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            {appliesTo === "trip" && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Selecionar viagem</label>
+                <Select value={selectedTripId} onValueChange={setSelectedTripId}>
+                  <SelectTrigger><SelectValue placeholder="Escolha a viagem..." /></SelectTrigger>
+                  <SelectContent className="max-h-48">
+                    {(tripsData?.data ?? []).map(t => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => { setIsRuleOpen(false); setEditingRule(null); }}>Cancelar</Button>
               <Button type="submit" disabled={createRule.isPending || updateRule.isPending}>

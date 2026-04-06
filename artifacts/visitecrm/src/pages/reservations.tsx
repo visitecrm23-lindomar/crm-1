@@ -10,6 +10,8 @@ import {
   useListPayments,
   useListTrips,
   useListClients,
+  useListUsers,
+  useListBoardingLocations,
 } from "@workspace/api-client-react";
 import type { Reservation } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -24,7 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import {
   Plus, Search, MoreHorizontal, Eye, DollarSign, QrCode, CheckCircle, XCircle,
-  CalendarCheck, Clock, Users, Tag,
+  CalendarCheck, Clock, Users, Tag, Pencil,
 } from "lucide-react";
 
 const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
@@ -436,8 +438,12 @@ export default function Reservations() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [tripFilter, setTripFilter] = useState("");
+  const [sellerFilter, setSellerFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
   const [paymentRes, setPaymentRes] = useState<Reservation | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
@@ -451,10 +457,26 @@ export default function Reservations() {
     limit: 20,
   });
   const { data: tripsData } = useListTrips({ limit: 100 });
+  const { data: usersRaw } = useListUsers();
+  const { data: boardingRaw } = useListBoardingLocations();
   const updateReservation = useUpdateReservation();
   const checkInReservation = useCheckInReservation();
 
-  const reservations = data?.data ?? [];
+  const sellers = useMemo(() => (usersRaw ?? []).filter(u => u.role === "vendedor" || u.role === "agencia"), [usersRaw]);
+  const boardingMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const b of (boardingRaw ?? [])) m[b.id] = b.name;
+    return m;
+  }, [boardingRaw]);
+
+  const reservationsRaw = data?.data ?? [];
+  const reservations = useMemo(() => {
+    let all = reservationsRaw;
+    if (dateFrom) all = all.filter(r => r.createdAt >= dateFrom);
+    if (dateTo) all = all.filter(r => r.createdAt <= dateTo + "T23:59:59.999Z");
+    if (sellerFilter) all = all.filter(r => (r as { sellerId?: string }).sellerId === sellerFilter);
+    return all;
+  }, [reservationsRaw, dateFrom, dateTo, sellerFilter]);
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / 20);
 
@@ -507,7 +529,7 @@ export default function Reservations() {
           />
         </div>
         <Select value={statusFilter || "all"} onValueChange={v => { setStatusFilter(v === "all" ? "" : v); setPage(1); }}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectTrigger className="w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos os status</SelectItem>
             <SelectItem value="pending">Pendente</SelectItem>
@@ -517,7 +539,7 @@ export default function Reservations() {
           </SelectContent>
         </Select>
         <Select value={tripFilter || "all"} onValueChange={v => { setTripFilter(v === "all" ? "" : v); setPage(1); }}>
-          <SelectTrigger className="w-[200px]"><SelectValue placeholder="Filtrar por viagem" /></SelectTrigger>
+          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Viagem" /></SelectTrigger>
           <SelectContent className="max-h-48">
             <SelectItem value="all">Todas as viagens</SelectItem>
             {tripsData?.data.map(t => (
@@ -525,8 +547,24 @@ export default function Reservations() {
             ))}
           </SelectContent>
         </Select>
-        {(search || statusFilter || tripFilter) && (
-          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setStatusFilter(""); setTripFilter(""); setPage(1); }}>
+        {sellers.length > 0 && (
+          <Select value={sellerFilter || "all"} onValueChange={v => { setSellerFilter(v === "all" ? "" : v); setPage(1); }}>
+            <SelectTrigger className="w-[150px]"><SelectValue placeholder="Vendedor" /></SelectTrigger>
+            <SelectContent className="max-h-48">
+              <SelectItem value="all">Todos</SelectItem>
+              {sellers.map(s => (
+                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <div className="flex items-center gap-2">
+          <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} className="w-36" />
+          <span className="text-muted-foreground text-xs">até</span>
+          <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} className="w-36" />
+        </div>
+        {(search || statusFilter || tripFilter || sellerFilter || dateFrom || dateTo) && (
+          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setStatusFilter(""); setTripFilter(""); setSellerFilter(""); setDateFrom(""); setDateTo(""); setPage(1); }}>
             Limpar filtros
           </Button>
         )}
@@ -539,6 +577,7 @@ export default function Reservations() {
               <TableHead>Voucher</TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead>Viagem</TableHead>
+              <TableHead>Embarque</TableHead>
               <TableHead>Assentos</TableHead>
               <TableHead>Valor Total</TableHead>
               <TableHead>Pago</TableHead>
@@ -552,14 +591,14 @@ export default function Reservations() {
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 10 }).map((_, j) => (
+                  {Array.from({ length: 11 }).map((_, j) => (
                     <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>
                   ))}
                 </TableRow>
               ))
             ) : reservations.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={11} className="text-center py-12 text-muted-foreground">
                   <div className="flex flex-col items-center gap-2">
                     <CalendarCheck className="w-8 h-8 opacity-30" />
                     <p>Nenhuma reserva encontrada</p>
@@ -587,6 +626,11 @@ export default function Reservations() {
                     <p className="text-xs text-muted-foreground">
                       {r.trip?.departureDate ? new Date(r.trip.departureDate).toLocaleDateString("pt-BR") : "—"}
                     </p>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {(r as { boardingLocationId?: string }).boardingLocationId
+                      ? boardingMap[(r as { boardingLocationId?: string }).boardingLocationId!] ?? "—"
+                      : "—"}
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-0.5">
@@ -620,6 +664,11 @@ export default function Reservations() {
                         <DropdownMenuItem onClick={() => setDetailId(r.id)}>
                           <Eye className="w-4 h-4 mr-2" /> Visualizar
                         </DropdownMenuItem>
+                        {r.status !== "cancelled" && (
+                          <DropdownMenuItem onClick={() => setEditId(r.id)}>
+                            <Pencil className="w-4 h-4 mr-2" /> Editar
+                          </DropdownMenuItem>
+                        )}
                         {r.balance > 0 && r.status !== "cancelled" && (
                           <DropdownMenuItem onClick={() => setPaymentRes(r)}>
                             <DollarSign className="w-4 h-4 mr-2" /> Registrar Pagamento
@@ -685,6 +734,86 @@ export default function Reservations() {
         onClose={() => setIsCreateOpen(false)}
         onSuccess={refetch}
       />
+      {editId && (
+        <EditReservationModal
+          reservationId={editId}
+          open={!!editId}
+          onClose={() => setEditId(null)}
+          onSuccess={() => { refetch(); setEditId(null); }}
+        />
+      )}
     </div>
+  );
+}
+
+function EditReservationModal({ reservationId, open, onClose, onSuccess }: { reservationId: string; open: boolean; onClose: () => void; onSuccess: () => void }) {
+  const { data, isLoading } = useGetReservation(reservationId, {
+    query: { queryKey: ["reservation-edit", reservationId], enabled: open && !!reservationId },
+  });
+  const updateReservation = useUpdateReservation();
+  const [paymentMethod, setPaymentMethod] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    await updateReservation.mutateAsync({
+      id: reservationId,
+      data: {
+        status: (fd.get("status") as "pending" | "confirmed" | "completed" | "cancelled") || undefined,
+        paymentMethod: paymentMethod || undefined,
+        notes: (fd.get("notes") as string) || undefined,
+      }
+    });
+    onSuccess();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Editar Reserva</DialogTitle></DialogHeader>
+        {isLoading ? (
+          <div className="space-y-3"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /></div>
+        ) : data ? (
+          <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Status</label>
+              <Select name="status" defaultValue={data.status}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pendente</SelectItem>
+                  <SelectItem value="confirmed">Confirmada</SelectItem>
+                  <SelectItem value="completed">Concluída</SelectItem>
+                  <SelectItem value="cancelled">Cancelada</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Forma de Pagamento</label>
+              <Select value={paymentMethod || data.paymentMethod || ""} onValueChange={setPaymentMethod}>
+                <SelectTrigger><SelectValue placeholder="Manter atual" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pix">PIX</SelectItem>
+                  <SelectItem value="credit_card">Cartão de Crédito</SelectItem>
+                  <SelectItem value="debit_card">Cartão de Débito</SelectItem>
+                  <SelectItem value="bank_transfer">Transferência</SelectItem>
+                  <SelectItem value="cash">Dinheiro</SelectItem>
+                  <SelectItem value="boleto">Boleto</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Observações</label>
+              <Input name="notes" defaultValue={data.notes ?? ""} placeholder="Observações sobre a reserva..." />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+              <Button type="submit" disabled={updateReservation.isPending}>
+                {updateReservation.isPending ? "Salvando..." : "Salvar alterações"}
+              </Button>
+            </div>
+          </form>
+        ) : <p className="text-muted-foreground py-4">Reserva não encontrada.</p>}
+      </DialogContent>
+    </Dialog>
   );
 }
