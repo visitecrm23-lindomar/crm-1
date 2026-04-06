@@ -1,60 +1,158 @@
 import { useState } from "react";
-import { useListMessages, useSendMessage, useListMessageTemplates, useCreateMessageTemplate, useDeleteMessageTemplate } from "@workspace/api-client-react";
+import {
+  useListMessages,
+  useSendMessage,
+  useListMessageTemplates,
+  useCreateMessageTemplate,
+  useUpdateMessageTemplate,
+  useDeleteMessageTemplate,
+} from "@workspace/api-client-react";
 import { useListClients } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Send, MessageSquare, Trash2 } from "lucide-react";
+import {
+  Plus,
+  Send,
+  MessageSquare,
+  Trash2,
+  Pencil,
+  CheckCheck,
+  Check,
+  Clock,
+  XCircle,
+  WholeWord,
+} from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { MessageTemplate } from "@workspace/api-client-react";
+
+const CHANNELS = [
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "email", label: "E-mail" },
+  { value: "sms", label: "SMS" },
+  { value: "instagram", label: "Instagram" },
+  { value: "telegram", label: "Telegram" },
+  { value: "internal", label: "Interno" },
+];
+
+const channelColors: Record<string, string> = {
+  whatsapp: "bg-green-100 text-green-800",
+  email: "bg-blue-100 text-blue-800",
+  sms: "bg-orange-100 text-orange-800",
+  instagram: "bg-pink-100 text-pink-800",
+  telegram: "bg-sky-100 text-sky-800",
+  internal: "bg-gray-100 text-gray-800",
+};
+
+const statusIcons: Record<string, React.ReactNode> = {
+  sent: <Check className="w-3.5 h-3.5 text-muted-foreground" />,
+  delivered: <CheckCheck className="w-3.5 h-3.5 text-blue-500" />,
+  read: <CheckCheck className="w-3.5 h-3.5 text-green-500" />,
+  failed: <XCircle className="w-3.5 h-3.5 text-red-500" />,
+  pending: <Clock className="w-3.5 h-3.5 text-yellow-500" />,
+};
+
+const statusLabels: Record<string, string> = {
+  sent: "Enviado",
+  delivered: "Entregue",
+  read: "Lido",
+  failed: "Falhou",
+  pending: "Pendente",
+};
 
 export default function Communication() {
   const [tab, setTab] = useState("messages");
   const [isSendOpen, setIsSendOpen] = useState(false);
   const [isTemplateOpen, setIsTemplateOpen] = useState(false);
-  const [selectedClientId, setSelectedClientId] = useState("");
-  const [channel, setChannel] = useState("whatsapp");
+  const [editingTemplate, setEditingTemplate] = useState<MessageTemplate | null>(null);
 
-  const { data: messages, isLoading: loadingMessages, refetch: refetchMessages } = useListMessages({ limit: 20 });
-  const { data: templates, isLoading: loadingTemplates, refetch: refetchTemplates } = useListMessageTemplates();
-  const { data: clients } = useListClients({ limit: 100 });
+  const [sendChannel, setSendChannel] = useState("whatsapp");
+  const [selectedClientId, setSelectedClientId] = useState("");
+  const [filterChannel, setFilterChannel] = useState("all");
+  const [messageContent, setMessageContent] = useState("");
+
+  const [tplChannel, setTplChannel] = useState("whatsapp");
+
+  const { data: messages, isLoading: loadingMessages, refetch: refetchMessages } =
+    useListMessages({ limit: 50 });
+  const { data: templates, isLoading: loadingTemplates, refetch: refetchTemplates } =
+    useListMessageTemplates();
+  const { data: clients } = useListClients({ limit: 200 });
+
   const sendMessage = useSendMessage();
   const createTemplate = useCreateMessageTemplate();
+  const updateTemplate = useUpdateMessageTemplate();
   const deleteTemplate = useDeleteMessageTemplate();
 
   const handleSend = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
     await sendMessage.mutateAsync({
       data: {
         toClientId: selectedClientId,
-        channel: fd.get("channel") as string || "whatsapp",
-        content: fd.get("content") as string,
-      }
+        channel: sendChannel,
+        content: messageContent,
+      },
     });
     setIsSendOpen(false);
+    setSelectedClientId("");
+    setSendChannel("whatsapp");
+    setMessageContent("");
     refetchMessages();
   };
 
   const handleCreateTemplate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    await createTemplate.mutateAsync({
-      data: {
-        name: fd.get("name") as string,
-        channel: fd.get("channel") as string || "whatsapp",
-        subject: fd.get("subject") as string || undefined,
-        content: fd.get("content") as string,
-        category: fd.get("category") as string || undefined,
-        variables: [],
-      }
-    });
+    if (editingTemplate) {
+      await updateTemplate.mutateAsync({
+        id: editingTemplate.id,
+        data: {
+          name: fd.get("name") as string,
+          subject: (fd.get("subject") as string) || null,
+          content: fd.get("content") as string,
+          category: (fd.get("category") as string) || null,
+        },
+      });
+    } else {
+      await createTemplate.mutateAsync({
+        data: {
+          name: fd.get("name") as string,
+          channel: tplChannel,
+          subject: (fd.get("subject") as string) || undefined,
+          content: fd.get("content") as string,
+          category: (fd.get("category") as string) || undefined,
+          variables: [],
+        },
+      });
+    }
     setIsTemplateOpen(false);
+    setEditingTemplate(null);
+    setTplChannel("whatsapp");
     refetchTemplates();
   };
 
@@ -63,100 +161,227 @@ export default function Communication() {
     refetchTemplates();
   };
 
-  const channelColors: Record<string, string> = {
-    whatsapp: "bg-green-100 text-green-800",
-    email: "bg-blue-100 text-blue-800",
-    sms: "bg-orange-100 text-orange-800",
+  const openEdit = (t: MessageTemplate) => {
+    setEditingTemplate(t);
+    setTplChannel(t.channel);
+    setIsTemplateOpen(true);
   };
+
+  const filteredMessages =
+    filterChannel === "all"
+      ? (messages ?? [])
+      : (messages ?? []).filter((m) => m.channel === filterChannel);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Comunicação</h1>
-          <p className="text-muted-foreground mt-1">Envie mensagens e gerencie templates de comunicação.</p>
+          <p className="text-muted-foreground mt-1">
+            Envie mensagens e gerencie templates omnicanal.
+          </p>
         </div>
         <div className="flex gap-2">
-          <Dialog open={isTemplateOpen} onOpenChange={setIsTemplateOpen}>
+          <Dialog
+            open={isTemplateOpen}
+            onOpenChange={(o) => {
+              setIsTemplateOpen(o);
+              if (!o) setEditingTemplate(null);
+            }}
+          >
             <DialogTrigger asChild>
-              <Button variant="outline"><Plus className="w-4 h-4 mr-2" /> Novo Template</Button>
+              <Button variant="outline">
+                <Plus className="w-4 h-4 mr-2" /> Novo Template
+              </Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
-              <DialogHeader><DialogTitle>Criar Template</DialogTitle></DialogHeader>
-              <form onSubmit={handleCreateTemplate} className="space-y-4 mt-4">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingTemplate ? "Editar Template" : "Criar Template"}
+                </DialogTitle>
+              </DialogHeader>
+              <form
+                key={editingTemplate?.id ?? "new"}
+                onSubmit={handleCreateTemplate}
+                className="space-y-4 mt-4"
+              >
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Nome do Template</label>
-                  <Input name="name" required placeholder="Ex: Confirmação de Reserva" />
+                  <Input
+                    name="name"
+                    required
+                    placeholder="Ex: Confirmação de Reserva"
+                    defaultValue={editingTemplate?.name ?? ""}
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Canal</label>
-                    <Select name="channel" defaultValue="whatsapp">
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                    <Select
+                      value={tplChannel}
+                      onValueChange={setTplChannel}
+                      disabled={!!editingTemplate}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                        <SelectItem value="email">E-mail</SelectItem>
-                        <SelectItem value="sms">SMS</SelectItem>
+                        {CHANNELS.map((ch) => (
+                          <SelectItem key={ch.value} value={ch.value}>
+                            {ch.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Categoria</label>
-                    <Input name="category" placeholder="Ex: confirmacao" />
+                    <Input
+                      name="category"
+                      placeholder="Ex: confirmacao"
+                      defaultValue={editingTemplate?.category ?? ""}
+                    />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Assunto (E-mail)</label>
-                  <Input name="subject" placeholder="Assunto do e-mail" />
-                </div>
+                {(tplChannel === "email") && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Assunto</label>
+                    <Input
+                      name="subject"
+                      placeholder="Assunto do e-mail"
+                      defaultValue={editingTemplate?.subject ?? ""}
+                    />
+                  </div>
+                )}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Conteúdo</label>
-                  <Textarea name="content" required rows={5} placeholder="Olá {nome}, sua reserva foi confirmada..." />
-                  <p className="text-xs text-muted-foreground">Use {"{nome}"}, {"{viagem}"}, {"{data}"} como variáveis.</p>
+                  <Textarea
+                    name="content"
+                    required
+                    rows={5}
+                    placeholder="Olá {nome}, sua reserva foi confirmada para {viagem} em {data}."
+                    defaultValue={editingTemplate?.content ?? ""}
+                  />
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <WholeWord className="w-3.5 h-3.5" />
+                    Use {"{nome}"}, {"{viagem}"}, {"{data}"} como variáveis.
+                  </p>
                 </div>
-                <div className="flex justify-end">
-                  <Button type="submit" disabled={createTemplate.isPending}>
-                    {createTemplate.isPending ? "Criando..." : "Criar Template"}
+                <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setIsTemplateOpen(false);
+                      setEditingTemplate(null);
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={createTemplate.isPending || updateTemplate.isPending}
+                  >
+                    {createTemplate.isPending || updateTemplate.isPending
+                      ? "Salvando..."
+                      : editingTemplate
+                      ? "Salvar Alterações"
+                      : "Criar Template"}
                   </Button>
                 </div>
               </form>
             </DialogContent>
           </Dialog>
+
           <Dialog open={isSendOpen} onOpenChange={setIsSendOpen}>
             <DialogTrigger asChild>
-              <Button><Send className="w-4 h-4 mr-2" /> Enviar Mensagem</Button>
+              <Button>
+                <Send className="w-4 h-4 mr-2" /> Enviar Mensagem
+              </Button>
             </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Enviar Mensagem</DialogTitle></DialogHeader>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Enviar Mensagem</DialogTitle>
+              </DialogHeader>
               <form onSubmit={handleSend} className="space-y-4 mt-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Cliente</label>
-                  <Select onValueChange={setSelectedClientId} value={selectedClientId}>
-                    <SelectTrigger><SelectValue placeholder="Selecionar cliente..." /></SelectTrigger>
+                  <Select
+                    value={selectedClientId}
+                    onValueChange={setSelectedClientId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecionar cliente..." />
+                    </SelectTrigger>
                     <SelectContent>
-                      {clients?.data?.map(c => (
-                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      {clients?.data?.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Canal</label>
-                  <Select name="channel" defaultValue="whatsapp">
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  <Select value={sendChannel} onValueChange={setSendChannel}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                      <SelectItem value="email">E-mail</SelectItem>
-                      <SelectItem value="sms">SMS</SelectItem>
+                      {CHANNELS.map((ch) => (
+                        <SelectItem key={ch.value} value={ch.value}>
+                          {ch.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Template (opcional)</label>
+                  <Select
+                    onValueChange={(id) => {
+                      const tpl = (templates ?? []).find((x) => x.id === id);
+                      if (tpl) setMessageContent(tpl.content);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecionar template..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(templates ?? [])
+                        .filter((t) => t.channel === sendChannel)
+                        .map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.name}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Mensagem</label>
-                  <Textarea name="content" required rows={4} placeholder="Digite sua mensagem..." />
+                  <Textarea
+                    name="content"
+                    required
+                    rows={4}
+                    placeholder="Digite sua mensagem..."
+                    value={messageContent}
+                    onChange={(e) => setMessageContent(e.target.value)}
+                  />
                 </div>
-                <div className="flex justify-end">
-                  <Button type="submit" disabled={sendMessage.isPending || !selectedClientId}>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsSendOpen(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={sendMessage.isPending || !selectedClientId}
+                  >
                     {sendMessage.isPending ? "Enviando..." : "Enviar"}
                   </Button>
                 </div>
@@ -172,7 +397,26 @@ export default function Communication() {
           <TabsTrigger value="templates">Templates</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="messages" className="mt-4">
+        <TabsContent value="messages" className="mt-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-muted-foreground">Filtrar:</span>
+            {["all", ...CHANNELS.map((c) => c.value)].map((ch) => (
+              <button
+                key={ch}
+                onClick={() => setFilterChannel(ch)}
+                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  filterChannel === ch
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border hover:bg-muted"
+                }`}
+              >
+                {ch === "all"
+                  ? "Todos"
+                  : CHANNELS.find((c) => c.value === ch)?.label ?? ch}
+              </button>
+            ))}
+          </div>
+
           <div className="bg-card rounded-lg border overflow-hidden">
             <Table>
               <TableHeader>
@@ -187,58 +431,138 @@ export default function Communication() {
               <TableBody>
                 {loadingMessages ? (
                   Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>{Array.from({ length: 5 }).map((_, j) => <TableCell key={j}><Skeleton className="h-6 w-full" /></TableCell>)}</TableRow>
+                    <TableRow key={i}>
+                      {Array.from({ length: 5 }).map((_, j) => (
+                        <TableCell key={j}>
+                          <Skeleton className="h-6 w-full" />
+                        </TableCell>
+                      ))}
+                    </TableRow>
                   ))
-                ) : !messages || messages.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nenhuma mensagem enviada.</TableCell></TableRow>
-                ) : messages.map(m => (
-                  <TableRow key={m.id}>
-                    <TableCell className="font-medium">{m.clientName ?? "—"}</TableCell>
-                    <TableCell><Badge className={channelColors[m.channel] ?? ""}>{m.channel}</Badge></TableCell>
-                    <TableCell><p className="text-sm max-w-xs truncate">{m.content}</p></TableCell>
-                    <TableCell><Badge variant="outline">{m.status}</Badge></TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {new Date(m.sentAt).toLocaleDateString("pt-BR")}
+                ) : filteredMessages.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className="text-center py-10 text-muted-foreground"
+                    >
+                      <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                      <p>Nenhuma mensagem encontrada.</p>
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  filteredMessages.map((m) => (
+                    <TableRow key={m.id}>
+                      <TableCell className="font-medium">
+                        {m.clientName ?? "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          className={channelColors[m.channel] ?? ""}
+                          variant="secondary"
+                        >
+                          {CHANNELS.find((c) => c.value === m.channel)?.label ??
+                            m.channel}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <p className="text-sm max-w-xs truncate">{m.content}</p>
+                      </TableCell>
+                      <TableCell>
+                        <span className="flex items-center gap-1.5 text-sm">
+                          {statusIcons[m.status] ?? null}
+                          {statusLabels[m.status] ?? m.status}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(m.sentAt).toLocaleString("pt-BR", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
         </TabsContent>
 
         <TabsContent value="templates" className="mt-4">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {loadingTemplates ? (
-              Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-40 w-full" />)
-            ) : !templates || templates.length === 0 ? (
-              <div className="col-span-3 text-center py-12 text-muted-foreground">
-                <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                <p>Nenhum template criado. Crie o seu primeiro template de mensagem.</p>
-              </div>
-            ) : templates.map(t => (
-              <Card key={t.id} className="group">
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between">
-                    <CardTitle className="text-sm font-semibold">{t.name}</CardTitle>
-                    <div className="flex items-center gap-2">
-                      <Badge className={channelColors[t.channel] ?? ""}>{t.channel}</Badge>
-                      <button
-                        onClick={() => handleDeleteTemplate(t.id)}
-                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+          {loadingTemplates ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-40 w-full" />
+              ))}
+            </div>
+          ) : !templates || templates.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-30" />
+              <p className="font-medium">Nenhum template criado.</p>
+              <p className="text-sm mt-1">
+                Crie templates para agilizar o envio de mensagens.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {templates.map((t) => (
+                <Card key={t.id} className="group">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between">
+                      <CardTitle className="text-sm font-semibold pr-2">
+                        {t.name}
+                      </CardTitle>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Badge
+                          className={channelColors[t.channel] ?? ""}
+                          variant="secondary"
+                        >
+                          {CHANNELS.find((c) => c.value === t.channel)?.label ??
+                            t.channel}
+                        </Badge>
+                        <button
+                          onClick={() => openEdit(t)}
+                          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTemplate(t.id)}
+                          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  {t.category && <p className="text-xs text-muted-foreground">{t.category}</p>}
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground line-clamp-3">{t.content}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                    {t.category && (
+                      <p className="text-xs text-muted-foreground">{t.category}</p>
+                    )}
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground line-clamp-3">
+                      {t.content}
+                    </p>
+                    {t.variables && t.variables.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {t.variables.map((v) => (
+                          <span
+                            key={v}
+                            className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono"
+                          >
+                            {"{"}
+                            {v}
+                            {"}"}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

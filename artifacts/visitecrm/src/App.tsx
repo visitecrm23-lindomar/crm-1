@@ -16,8 +16,11 @@ import Trips from "@/pages/trips";
 import Reservations from "@/pages/reservations";
 import Financial from "@/pages/financial";
 import Communication from "@/pages/communication";
+import Campaigns from "@/pages/campaigns";
 import Automations from "@/pages/automations";
 import Marketing from "@/pages/marketing";
+import Loyalty from "@/pages/loyalty";
+import Nps from "@/pages/nps";
 import Registrations from "@/pages/registrations";
 import Analytics from "@/pages/analytics";
 import Commissions from "@/pages/commissions";
@@ -136,9 +139,14 @@ function Router() {
       <Route path="/financeiro" component={() => <ProtectedRoute component={Financial} />} />
       <Route path="/financeiro/commissions" component={() => <ProtectedRoute component={Commissions} />} />
       <Route path="/financeiro/expenses" component={() => <ProtectedRoute component={Expenses} />} />
-      <Route path="/communication" component={() => <ProtectedRoute component={Communication} />} />
-      <Route path="/automations" component={() => <ProtectedRoute component={Automations} />} />
+      <Route path="/comunicacao" component={() => <ProtectedRoute component={Communication} />} />
+      <Route path="/communication" component={() => <Redirect to="/comunicacao" />} />
+      <Route path="/comunicacao/campanhas" component={() => <ProtectedRoute component={Campaigns} />} />
+      <Route path="/automacoes" component={() => <ProtectedRoute component={Automations} />} />
+      <Route path="/automations" component={() => <Redirect to="/automacoes" />} />
       <Route path="/marketing" component={() => <ProtectedRoute component={Marketing} />} />
+      <Route path="/fidelidade" component={() => <ProtectedRoute component={Loyalty} />} />
+      <Route path="/nps" component={() => <ProtectedRoute component={Nps} />} />
       <Route path="/registrations" component={() => <ProtectedRoute component={Registrations} />} />
       <Route path="/analytics" component={() => <ProtectedRoute component={Analytics} />} />
       <Route path="/analytics/revenue" component={() => <ProtectedRoute component={Revenue} />} />
