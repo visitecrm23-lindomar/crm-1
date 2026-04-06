@@ -188,6 +188,9 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
     if (parsed.data.totalCapacity != null) updates.totalCapacity = parsed.data.totalCapacity;
     if (parsed.data.coverImage !== undefined) updates.coverImage = parsed.data.coverImage ?? null;
     if (parsed.data.seatLayout !== undefined) updates.seatLayout = parsed.data.seatLayout ?? null;
+
+    const capacityOrLayoutChanged =
+      parsed.data.totalCapacity != null || parsed.data.seatLayout !== undefined;
     if (parsed.data.inclusions != null) updates.inclusions = parsed.data.inclusions;
     if (parsed.data.exclusions != null) updates.exclusions = parsed.data.exclusions;
     if (parsed.data.vehiclePlate !== undefined) updates.vehiclePlate = parsed.data.vehiclePlate ?? null;
@@ -203,6 +206,53 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
     if (parsed.data.fixedCosts !== undefined) updates.fixedCosts = parsed.data.fixedCosts != null ? String(parsed.data.fixedCosts) : null;
     if (parsed.data.variableCosts !== undefined) updates.variableCosts = parsed.data.variableCosts != null ? String(parsed.data.variableCosts) : null;
     if (parsed.data.gallery !== undefined) updates.gallery = parsed.data.gallery ?? [];
+
+    if (capacityOrLayoutChanged) {
+      const [currentTrip] = await db.select().from(tripsTable)
+        .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
+        .limit(1);
+      if (!currentTrip) { res.status(404).json({ error: "Not found" }); return; }
+
+      const newCapacity = parsed.data.totalCapacity ?? currentTrip.totalCapacity;
+      const newLayout = parsed.data.seatLayout ?? currentTrip.seatLayout ?? "2x2";
+      const newCols = newLayout === "2x1" ? 3 : 4;
+      const newRows = Math.ceil(newCapacity / newCols);
+
+      const newSeatMap: Record<string, { row: number; col: number; status: string }> = {};
+      let seatNum = 1;
+      for (let r = 1; r <= newRows; r++) {
+        for (let c = 1; c <= newCols; c++) {
+          if (seatNum <= newCapacity) {
+            newSeatMap[`${seatNum}`] = { row: r, col: c, status: "available" };
+            seatNum++;
+          }
+        }
+      }
+
+      const activeReservations = await db.select().from(reservationsTable)
+        .where(and(
+          eq(reservationsTable.tripId, req.params.id),
+          eq(reservationsTable.tenantId, me.tenantId),
+          inArray(reservationsTable.status, ["pending", "confirmed"]),
+        ));
+
+      let reservedSeats = 0;
+      let confirmedSeats = 0;
+      for (const r of activeReservations) {
+        for (const seat of r.seats) {
+          if (newSeatMap[seat]) {
+            newSeatMap[seat].status = r.status === "confirmed" ? "confirmed" : "reserved";
+            if (r.status === "confirmed") confirmedSeats++;
+            else reservedSeats++;
+          }
+        }
+      }
+      const occupiedTotal = reservedSeats + confirmedSeats;
+      updates.seatMap = newSeatMap;
+      updates.availableSeats = Math.max(0, newCapacity - occupiedTotal);
+      updates.reservedSeats = reservedSeats;
+      updates.confirmedSeats = confirmedSeats;
+    }
 
     await db.update(tripsTable).set(updates)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)));

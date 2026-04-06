@@ -198,6 +198,12 @@ export function TripList() {
         vehicleType: trip.vehicleType ?? undefined,
         vehiclePlate: trip.vehiclePlate ?? undefined,
         driverName: trip.driverName ?? undefined,
+        coverImage: trip.coverImage ?? undefined,
+        boardingPoints: trip.boardingPoints ?? [],
+        itinerary: trip.itinerary ?? undefined,
+        fixedCosts: trip.fixedCosts ?? undefined,
+        variableCosts: trip.variableCosts ?? undefined,
+        gallery: trip.gallery ?? [],
       },
     });
     refetch();
