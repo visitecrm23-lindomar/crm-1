@@ -192,6 +192,19 @@ export interface CreateNoteBody {
   isPrivate?: boolean;
 }
 
+export interface TripBoardingPoint {
+  id: string;
+  name: string;
+  time: string;
+  address: string;
+}
+
+export interface TripItineraryDay {
+  day: number;
+  title: string;
+  description: string;
+}
+
 export interface Trip {
   id: string;
   name: string;
@@ -220,6 +233,14 @@ export interface Trip {
   /** @nullable */
   coverImage?: string | null;
   gallery: string[];
+  /** @nullable */
+  itinerary?: TripItineraryDay[] | null;
+  /** @nullable */
+  boardingPoints?: TripBoardingPoint[] | null;
+  /** @nullable */
+  fixedCosts?: number | null;
+  /** @nullable */
+  variableCosts?: number | null;
   status: string;
   isPublic: boolean;
   isFeatured: boolean;
@@ -273,12 +294,14 @@ export interface CreateTripBody {
   driverName?: string | null;
   /** @nullable */
   status?: string | null;
-  itinerary?: { day: number; title: string; description: string }[] | null;
+  itinerary?: TripItineraryDay[] | null;
   /** @nullable */
   fixedCosts?: number | null;
   /** @nullable */
   variableCosts?: number | null;
   gallery?: string[];
+  /** @nullable */
+  boardingPoints?: TripBoardingPoint[] | null;
 }
 
 export interface UpdateTripBody {
@@ -329,13 +352,15 @@ export interface UpdateTripBody {
   /** @nullable */
   driverName?: string | null;
   /** @nullable */
-  itinerary?: { day: number; title: string; description: string }[] | null;
+  itinerary?: TripItineraryDay[] | null;
   /** @nullable */
   fixedCosts?: number | null;
   /** @nullable */
   variableCosts?: number | null;
   /** @nullable */
   gallery?: string[] | null;
+  /** @nullable */
+  boardingPoints?: TripBoardingPoint[] | null;
 }
 
 export interface Seat {
@@ -361,6 +386,10 @@ export type ReservationClient = {
   name: string;
   email: string;
   whatsapp: string;
+  /** @nullable */
+  cpf?: string | null;
+  /** @nullable */
+  birthDate?: string | null;
 };
 
 export interface Reservation {

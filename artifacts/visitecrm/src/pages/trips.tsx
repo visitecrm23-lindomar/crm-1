@@ -419,7 +419,7 @@ const EMPTY_FORM: TripFormData = {
   vehicleType: "", vehiclePlate: "", driverName: "", status: "draft",
   boardingPoints: [newBP()], itinerary: [newDay(1)], costs: [], fixedCosts: "", variableCosts: "", gallery: [], accommodation: "", guide: "",
 };
-const toTripFormData = (trip: Trip & { itinerary?: ItineraryDay[]; fixedCosts?: string | number | null; variableCosts?: string | number | null; gallery?: string[] | null; boardingPoints?: BoardingPoint[] | null; accommodation?: string | null; guide?: string | null; }): TripFormData => ({
+const toTripFormData = (trip: Trip): TripFormData => ({
   name: trip.name,
   description: trip.description ?? "",
   destination: trip.destination,
@@ -441,14 +441,14 @@ const toTripFormData = (trip: Trip & { itinerary?: ItineraryDay[]; fixedCosts?: 
   vehiclePlate: trip.vehiclePlate ?? "",
   driverName: trip.driverName ?? "",
   status: trip.status,
-  boardingPoints: trip.boardingPoints?.length ? trip.boardingPoints : [newBP()],
-  itinerary: trip.itinerary?.length ? trip.itinerary : [newDay(1)],
+  boardingPoints: trip.boardingPoints?.length ? (trip.boardingPoints as BoardingPoint[]) : [newBP()],
+  itinerary: trip.itinerary?.length ? (trip.itinerary as ItineraryDay[]) : [newDay(1)],
   costs: [],
   fixedCosts: trip.fixedCosts != null ? String(trip.fixedCosts) : "",
   variableCosts: trip.variableCosts != null ? String(trip.variableCosts) : "",
   gallery: trip.gallery ?? [],
-  accommodation: trip.accommodation ?? "",
-  guide: trip.guide ?? "",
+  accommodation: "",
+  guide: "",
 });
 
 export function TripForm({ tripId }: { tripId?: string }) {
@@ -463,7 +463,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
 
   useEffect(() => {
     if (!existingTrip || !tripId) return;
-    setForm(toTripFormData(existingTrip as Trip & { itinerary?: ItineraryDay[]; fixedCosts?: string | number | null; variableCosts?: string | number | null; gallery?: string[] | null; boardingPoints?: BoardingPoint[] | null; accommodation?: string | null; guide?: string | null; }));
+    setForm(toTripFormData(existingTrip));
   }, [existingTrip?.id, tripId]);
 
   const set = (k: keyof TripFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -1582,7 +1582,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
         if (paymentFilter === "overdue" && !isOverdue) return false;
       }
       if (typeFilter !== "all") {
-        const bdate = (r.client as unknown as Record<string, unknown>).birthDate as string | undefined;
+        const bdate = r.client.birthDate;
         const age = bdate ? new Date().getFullYear() - new Date(bdate).getFullYear() : null;
         const isChild = age !== null && age < 12;
         const isSenior = age !== null && age >= 60;
@@ -1591,12 +1591,11 @@ export function PassengersList({ tripId }: { tripId: string }) {
         if (typeFilter === "senior" && !isSenior) return false;
       }
       if (boardingFilter !== "all") {
-        const bp = (r as unknown as Record<string, unknown>).boardingPoint as string | undefined;
-        if (bp !== boardingFilter) return false;
+        // boarding location per reservation not yet tracked; skip filter
       }
       return true;
     }).map(r => {
-      const bdate = (r.client as unknown as Record<string, unknown>).birthDate as string | undefined;
+      const bdate = r.client.birthDate;
       const age = bdate ? new Date().getFullYear() - new Date(bdate).getFullYear() : null;
       const passengerType = age === null ? "Adulto" : age < 12 ? "Criança" : age >= 60 ? "Sênior" : "Adulto";
       const isPaid = r.balance <= 0 && r.paidValue > 0;
@@ -1606,8 +1605,8 @@ export function PassengersList({ tripId }: { tripId: string }) {
       return {
         reservationId: r.id,
         name: r.client.name,
-        cpf: (r.client as Record<string, unknown>).cpf as string | undefined,
-        birthDate: bdate,
+        cpf: r.client.cpf ?? undefined,
+        birthDate: bdate ?? undefined,
         whatsapp: r.client.whatsapp,
         email: r.client.email,
         passengerType,
@@ -1680,7 +1679,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
           <SelectTrigger className="w-44"><SelectValue placeholder="Ponto de embarque" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos os embarques</SelectItem>
-            {(trip as Trip & { boardingPoints?: { name: string }[] })?.boardingPoints?.map?.((bp: { name: string }) => (
+            {trip?.boardingPoints?.map?.((bp) => (
               <SelectItem key={bp.name} value={bp.name}>{bp.name}</SelectItem>
             )) ?? null}
           </SelectContent>

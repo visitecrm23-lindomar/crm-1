@@ -412,6 +412,9 @@ export const ListTripsResponse = zod.object({
 /**
  * @summary Create a trip
  */
+const BoardingPointSchema = zod.object({ id: zod.string(), name: zod.string(), time: zod.string(), address: zod.string() });
+const ItineraryDaySchema = zod.object({ day: zod.number(), title: zod.string(), description: zod.string() });
+
 export const CreateTripBody = zod.object({
   name: zod.string(),
   description: zod.string().nullish(),
@@ -434,10 +437,11 @@ export const CreateTripBody = zod.object({
   vehicleType: zod.string().nullish(),
   driverName: zod.string().nullish(),
   status: zod.string().nullish(),
-  itinerary: zod.array(zod.object({ day: zod.number(), title: zod.string(), description: zod.string() })).nullish(),
+  itinerary: zod.array(ItineraryDaySchema).nullish(),
   fixedCosts: zod.number().nullish(),
   variableCosts: zod.number().nullish(),
   gallery: zod.array(zod.string()).optional(),
+  boardingPoints: zod.array(BoardingPointSchema).nullish(),
 });
 
 /**
@@ -470,6 +474,10 @@ export const GetTripResponse = zod.object({
   exclusions: zod.array(zod.string()),
   coverImage: zod.string().nullish(),
   gallery: zod.array(zod.string()),
+  itinerary: zod.array(ItineraryDaySchema).nullish(),
+  boardingPoints: zod.array(BoardingPointSchema).nullish(),
+  fixedCosts: zod.number().nullish(),
+  variableCosts: zod.number().nullish(),
   status: zod.string(),
   isPublic: zod.boolean(),
   isFeatured: zod.boolean(),
@@ -512,10 +520,11 @@ export const UpdateTripBody = zod.object({
   vehiclePlate: zod.string().nullish(),
   vehicleType: zod.string().nullish(),
   driverName: zod.string().nullish(),
-  itinerary: zod.array(zod.object({ day: zod.number(), title: zod.string(), description: zod.string() })).nullish(),
+  itinerary: zod.array(ItineraryDaySchema).nullish(),
   fixedCosts: zod.number().nullish(),
   variableCosts: zod.number().nullish(),
   gallery: zod.array(zod.string()).nullish(),
+  boardingPoints: zod.array(BoardingPointSchema).nullish(),
 });
 
 export const UpdateTripResponse = zod.object({
@@ -541,6 +550,10 @@ export const UpdateTripResponse = zod.object({
   exclusions: zod.array(zod.string()),
   coverImage: zod.string().nullish(),
   gallery: zod.array(zod.string()),
+  itinerary: zod.array(ItineraryDaySchema).nullish(),
+  boardingPoints: zod.array(BoardingPointSchema).nullish(),
+  fixedCosts: zod.number().nullish(),
+  variableCosts: zod.number().nullish(),
   status: zod.string(),
   isPublic: zod.boolean(),
   isFeatured: zod.boolean(),

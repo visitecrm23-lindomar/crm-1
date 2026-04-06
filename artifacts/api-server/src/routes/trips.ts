@@ -33,6 +33,7 @@ function formatTrip(t: typeof tripsTable.$inferSelect) {
     coverImage: t.coverImage,
     gallery: t.gallery ?? [],
     itinerary: t.itinerary ?? [],
+    boardingPoints: t.boardingPoints ?? [],
     status: t.status,
     isPublic: t.isPublic,
     isFeatured: t.isFeatured,
@@ -127,6 +128,7 @@ router.post("/trips", async (req, res): Promise<void> => {
       coverImage: parsed.data.coverImage ?? null,
       seatLayout: layout,
       itinerary: parsed.data.itinerary ?? null,
+      boardingPoints: parsed.data.boardingPoints ?? [],
       fixedCosts: parsed.data.fixedCosts != null ? String(parsed.data.fixedCosts) : null,
       variableCosts: parsed.data.variableCosts != null ? String(parsed.data.variableCosts) : null,
       gallery: parsed.data.gallery ?? [],
@@ -197,6 +199,7 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
     if (parsed.data.type !== undefined) updates.type = parsed.data.type ?? "";
     if (parsed.data.category !== undefined) updates.category = parsed.data.category ?? "";
     if (parsed.data.itinerary !== undefined) updates.itinerary = parsed.data.itinerary ?? null;
+    if (parsed.data.boardingPoints !== undefined) updates.boardingPoints = parsed.data.boardingPoints ?? [];
     if (parsed.data.fixedCosts !== undefined) updates.fixedCosts = parsed.data.fixedCosts != null ? String(parsed.data.fixedCosts) : null;
     if (parsed.data.variableCosts !== undefined) updates.variableCosts = parsed.data.variableCosts != null ? String(parsed.data.variableCosts) : null;
     if (parsed.data.gallery !== undefined) updates.gallery = parsed.data.gallery ?? [];

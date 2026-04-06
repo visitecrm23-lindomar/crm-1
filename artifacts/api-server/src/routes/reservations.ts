@@ -47,7 +47,9 @@ async function formatReservation(r: typeof reservationsTable.$inferSelect) {
       name: client.name,
       email: client.email,
       whatsapp: client.whatsapp,
-    } : { id: r.clientId, name: "Unknown", email: "", whatsapp: "" },
+      cpf: client.cpf ?? null,
+      birthDate: client.birthDate?.toISOString() ?? null,
+    } : { id: r.clientId, name: "Unknown", email: "", whatsapp: "", cpf: null, birthDate: null },
   };
 }
 

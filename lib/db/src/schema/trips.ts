@@ -36,6 +36,7 @@ export const tripsTable = pgTable("trips", {
   inclusions: text("inclusions").array().notNull().default([]),
   exclusions: text("exclusions").array().notNull().default([]),
   itinerary: json("itinerary"),
+  boardingPoints: json("boarding_points").$type<{ id: string; name: string; time: string; address: string }[]>().default([]),
   coverImage: text("cover_image"),
   gallery: text("gallery").array().notNull().default([]),
   videos: text("videos").array().notNull().default([]),
