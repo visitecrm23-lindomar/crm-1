@@ -240,14 +240,25 @@ export default function Revenue() {
   const { data: summary } = useGetDashboardSummary();
 
   const filteredChart = useMemo(() => {
-    if (!chartData) return [];
+    if (!chartData || chartData.length === 0) return [];
     if (!dateFrom && !dateTo) return chartData;
-    return chartData.filter(d => {
-      if (dateFrom && d.label < dateFrom) return false;
-      if (dateTo && d.label > dateTo) return false;
+    const now = new Date();
+    const n = chartData.length;
+    return chartData.filter((_, idx) => {
+      let pointDate: Date;
+      if (period === "12m") {
+        pointDate = new Date(now.getFullYear(), now.getMonth() - (n - 1 - idx), 1);
+      } else {
+        const daysBack = period === "7d" ? 7 : period === "90d" ? 90 : 30;
+        const msPerPoint = (daysBack * 86400000) / n;
+        pointDate = new Date(now.getTime() - (n - 1 - idx) * msPerPoint);
+      }
+      const pointISO = pointDate.toISOString().slice(0, 10);
+      if (dateFrom && pointISO < dateFrom) return false;
+      if (dateTo && pointISO > dateTo) return false;
       return true;
     });
-  }, [chartData, dateFrom, dateTo]);
+  }, [chartData, dateFrom, dateTo, period]);
 
   const totalRevenue = filteredChart.reduce((s, d) => s + d.revenue, 0);
   const totalExpenses = filteredChart.reduce((s, d) => s + d.expenses, 0);

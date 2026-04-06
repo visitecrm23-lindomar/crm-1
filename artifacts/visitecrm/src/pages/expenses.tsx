@@ -297,7 +297,14 @@ export default function Expenses() {
                 <TableCell className="text-sm text-muted-foreground">{CATEGORY_LABELS[e.category] ?? e.category}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {e.supplierId ? (
-                    <span className="font-medium text-foreground">{suppliersMap[e.supplierId] ?? e.supplierId.slice(0, 8) + "…"}</span>
+                    <button
+                      type="button"
+                      className="font-medium text-primary underline-offset-2 hover:underline cursor-pointer text-left"
+                      onClick={() => setSupplierFilter(e.supplierId!)}
+                      title="Filtrar por este fornecedor"
+                    >
+                      {suppliersMap[e.supplierId] ?? e.supplierId.slice(0, 8) + "…"}
+                    </button>
                   ) : "—"}
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">{e.tripId ? tripsData?.data.find(t => t.id === e.tripId)?.name ?? e.tripId.slice(0, 8) + "…" : "—"}</TableCell>

@@ -478,7 +478,7 @@ export default function Financial() {
                 ) : filteredPayments.map(p => (
                   <TableRow key={p.id}>
                     <TableCell><p className="font-medium text-sm">{p.description || "—"}</p></TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{(p as any).clientId ? (clientMap[(p as any).clientId] ?? "—") : "—"}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{p.clientId ? (clientMap[p.clientId] ?? "—") : "—"}</TableCell>
                     <TableCell><span className="text-xs text-muted-foreground">{p.category}</span></TableCell>
                     <TableCell className="text-sm">{new Date(p.dueDate).toLocaleDateString("pt-BR")}</TableCell>
                     <TableCell className="font-medium text-sm">{fmt(p.amount)}</TableCell>
