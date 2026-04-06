@@ -28,7 +28,16 @@ router.get("/system-configs", async (req, res): Promise<void> => {
   }
 });
 
+router.put("/system-configs", async (req, res): Promise<void> => {
+  return upsertHandler(req, res);
+});
+
 router.post("/system-configs", async (req, res): Promise<void> => {
+  return upsertHandler(req, res);
+});
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function upsertHandler(req: any, res: any): Promise<void> {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -80,6 +89,6 @@ router.post("/system-configs", async (req, res): Promise<void> => {
     req.log.error({ err }, "Error upserting system config");
     res.status(500).json({ error: "Internal server error" });
   }
-});
+}
 
 export default router;

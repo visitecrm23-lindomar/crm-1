@@ -63,13 +63,15 @@ import {
 /* ──────────────────── Agency Profile Tab ──────────────────── */
 function AgencyProfileTab() {
   const { toast } = useToast();
-  const { data: me } = useGetMe();
-  const tenantId = me?.tenantId ?? "";
+  const { data: me, refetch: refetchMe } = useGetMe();
+  const tenantId = me?.tenantId ?? null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: tenant, refetch } = useGetTenant(tenantId, {
+  const { data: fullTenant } = useGetTenant(tenantId ?? "", {
     query: { enabled: !!tenantId } as any,
   });
   const updateTenant = useUpdateTenant();
+
+  const tenant = fullTenant ?? me?.tenant ?? null;
 
   const [form, setForm] = useState<UpdateTenantBody>({});
   useEffect(() => {
@@ -79,18 +81,21 @@ function AgencyProfileTab() {
         logoUrl: tenant.logoUrl ?? "",
         primaryColor: tenant.primaryColor ?? "#3B82F6",
         secondaryColor: tenant.secondaryColor ?? "#8B5CF6",
-        whatsapp: tenant.whatsapp ?? "",
-        phone: tenant.phone ?? "",
+        whatsapp: (tenant as Record<string, string>).whatsapp ?? "",
+        phone: (tenant as Record<string, string>).phone ?? "",
       });
     }
   }, [tenant?.id]);
 
   async function handleSave() {
-    if (!tenant) return;
+    if (!tenantId) {
+      toast({ title: "Não foi possível identificar a agência", variant: "destructive" });
+      return;
+    }
     try {
-      await updateTenant.mutateAsync({ id: tenant.id, data: form });
+      await updateTenant.mutateAsync({ id: tenantId, data: form });
       toast({ title: "Perfil da agência atualizado" });
-      refetch();
+      refetchMe();
     } catch {
       toast({ title: "Erro ao salvar", variant: "destructive" });
     }
@@ -204,8 +209,10 @@ function UsersTab() {
       setInviteOpen(false);
       setInviteForm({ name: "", email: "", role: "vendedor" });
       refetch();
-    } catch {
-      toast({ title: "Erro ao convidar usuário", variant: "destructive" });
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Erro ao convidar usuário";
+      toast({ title: msg, variant: "destructive" });
     }
   }
 
@@ -389,11 +396,7 @@ function UsersTab() {
 function PlanTab() {
   const { toast } = useToast();
   const { data: me } = useGetMe();
-  const tenantId = me?.tenantId ?? "";
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: tenant } = useGetTenant(tenantId, {
-    query: { enabled: !!tenantId } as any,
-  });
+  const tenant = me?.tenant;
 
   const plans = [
     { id: "starter", name: "Starter", price: "R$ 197/mês", clients: 500, trips: 20, users: 3 },
@@ -720,12 +723,9 @@ function NotificationsTab() {
 /* ──────────────────── Customization Tab ──────────────────── */
 function CustomizationTab() {
   const { toast } = useToast();
-  const { data: me } = useGetMe();
-  const tenantId = me?.tenantId ?? "";
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: tenant, refetch } = useGetTenant(tenantId, {
-    query: { enabled: !!tenantId } as any,
-  });
+  const { data: me, refetch: refetchMe } = useGetMe();
+  const tenant = me?.tenant;
+  const tenantId = me?.tenantId ?? null;
   const updateTenant = useUpdateTenant();
 
   const [primaryColor, setPrimaryColor] = useState(tenant?.primaryColor ?? "#3B82F6");
@@ -741,11 +741,14 @@ function CustomizationTab() {
   }, [tenant?.id]);
 
   async function handleSave() {
-    if (!tenant) return;
+    if (!tenantId) {
+      toast({ title: "Não foi possível identificar a agência", variant: "destructive" });
+      return;
+    }
     try {
-      await updateTenant.mutateAsync({ id: tenant.id, data: { primaryColor, secondaryColor, logoUrl } });
+      await updateTenant.mutateAsync({ id: tenantId, data: { primaryColor, secondaryColor, logoUrl } });
       toast({ title: "Personalização salva com sucesso" });
-      refetch();
+      refetchMe();
     } catch {
       toast({ title: "Erro ao salvar personalização", variant: "destructive" });
     }
