@@ -3,7 +3,7 @@ import {
   useListUsers,
   useCreateUser,
   useUpdateUser,
-  useListTenants,
+  useGetTenant,
   useUpdateTenant,
   useListSystemConfigs,
   useUpsertSystemConfig,
@@ -64,10 +64,12 @@ import {
 function AgencyProfileTab() {
   const { toast } = useToast();
   const { data: me } = useGetMe();
-  const { data: tenants = [], refetch } = useListTenants();
+  const tenantId = me?.tenantId ?? "";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: tenant, refetch } = useGetTenant(tenantId, {
+    query: { enabled: !!tenantId } as any,
+  });
   const updateTenant = useUpdateTenant();
-
-  const tenant = tenants[0];
 
   const [form, setForm] = useState<UpdateTenantBody>({});
   useEffect(() => {
@@ -385,8 +387,13 @@ function UsersTab() {
 
 /* ──────────────────── Plan & Billing Tab ──────────────────── */
 function PlanTab() {
-  const { data: tenants = [] } = useListTenants();
-  const tenant = tenants[0];
+  const { toast } = useToast();
+  const { data: me } = useGetMe();
+  const tenantId = me?.tenantId ?? "";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: tenant } = useGetTenant(tenantId, {
+    query: { enabled: !!tenantId } as any,
+  });
 
   const plans = [
     { id: "starter", name: "Starter", price: "R$ 197/mês", clients: 500, trips: 20, users: 3 },
@@ -402,6 +409,13 @@ function PlanTab() {
   ];
 
   const currentPlan = plans.find((p) => p.id === tenant?.planId) ?? plans[0];
+
+  function handleUpgrade(planName: string) {
+    toast({
+      title: `Upgrade para ${planName}`,
+      description: "Entre em contato com nosso suporte para fazer o upgrade do seu plano.",
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -464,7 +478,11 @@ function PlanTab() {
             </CardContent>
             {plan.id !== currentPlan.id && (
               <div className="px-6 pb-4">
-                <Button className="w-full" variant="outline">
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={() => handleUpgrade(plan.name)}
+                >
                   Fazer upgrade
                 </Button>
               </div>
@@ -702,13 +720,25 @@ function NotificationsTab() {
 /* ──────────────────── Customization Tab ──────────────────── */
 function CustomizationTab() {
   const { toast } = useToast();
-  const { data: tenants = [], refetch } = useListTenants();
+  const { data: me } = useGetMe();
+  const tenantId = me?.tenantId ?? "";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: tenant, refetch } = useGetTenant(tenantId, {
+    query: { enabled: !!tenantId } as any,
+  });
   const updateTenant = useUpdateTenant();
-  const tenant = tenants[0];
 
   const [primaryColor, setPrimaryColor] = useState(tenant?.primaryColor ?? "#3B82F6");
   const [secondaryColor, setSecondaryColor] = useState(tenant?.secondaryColor ?? "#8B5CF6");
   const [logoUrl, setLogoUrl] = useState(tenant?.logoUrl ?? "");
+
+  useEffect(() => {
+    if (tenant) {
+      setPrimaryColor(tenant.primaryColor ?? "#3B82F6");
+      setSecondaryColor(tenant.secondaryColor ?? "#8B5CF6");
+      setLogoUrl(tenant.logoUrl ?? "");
+    }
+  }, [tenant?.id]);
 
   async function handleSave() {
     if (!tenant) return;

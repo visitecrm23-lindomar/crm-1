@@ -21,6 +21,7 @@ import auditRouter from "./audit";
 import tenantsRouter from "./tenants";
 import catalogRouter from "./catalog";
 import automationExtrasRouter from "./automation-extras";
+import systemConfigsRouter from "./system-configs";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use(chatbotRouter);
 router.use(auditRouter);
 router.use(catalogRouter);
 router.use(automationExtrasRouter);
+router.use(systemConfigsRouter);
 
 export default router;
