@@ -275,12 +275,22 @@ export default function Revenue() {
   const newClients = summary?.newClientsThisMonth ?? 0;
   const recurringClients = Math.max(0, (summary?.totalClients ?? 0) - newClients);
 
+  const reservationSellerMap = useMemo(() => {
+    const commissions = Array.isArray(commissionsRaw) ? commissionsRaw : [];
+    const map: Record<string, string> = {};
+    for (const c of commissions) {
+      if (c.reservationId) map[c.reservationId] = c.userId;
+    }
+    return map;
+  }, [commissionsRaw]);
+
   const filteredReservations = useMemo(() => {
     let items = reservations;
     if (filterStatus) items = items.filter(r => r.status === filterStatus);
     if (filterPaymentMethod) items = items.filter(r => r.paymentMethod === filterPaymentMethod);
+    if (filterSeller) items = items.filter(r => reservationSellerMap[r.id] === filterSeller);
     return items;
-  }, [reservations, filterStatus, filterPaymentMethod]);
+  }, [reservations, filterStatus, filterPaymentMethod, filterSeller, reservationSellerMap]);
 
   const paymentMethodTotals = useMemo(() => {
     const payments = paymentsData?.data ?? [];
@@ -411,10 +421,10 @@ export default function Revenue() {
           <Select value={period} onValueChange={v => setPeriod(v as GetDashboardRevenueChartPeriod)}>
             <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="3m">Últimos 3 meses</SelectItem>
-              <SelectItem value="6m">Últimos 6 meses</SelectItem>
+              <SelectItem value="7d">Últimos 7 dias</SelectItem>
+              <SelectItem value="30d">Últimos 30 dias</SelectItem>
+              <SelectItem value="90d">Últimos 90 dias</SelectItem>
               <SelectItem value="12m">Últimos 12 meses</SelectItem>
-              <SelectItem value="ytd">Ano atual</SelectItem>
             </SelectContent>
           </Select>
         </div>

@@ -231,10 +231,10 @@ export default function Analytics() {
           <Select value={period} onValueChange={v => setPeriod(v as GetDashboardRevenueChartPeriod)}>
           <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="3m">Ultimos 3 meses</SelectItem>
-            <SelectItem value="6m">Ultimos 6 meses</SelectItem>
-            <SelectItem value="12m">Ultimos 12 meses</SelectItem>
-            <SelectItem value="ytd">Ano atual</SelectItem>
+            <SelectItem value="7d">Últimos 7 dias</SelectItem>
+            <SelectItem value="30d">Últimos 30 dias</SelectItem>
+            <SelectItem value="90d">Últimos 90 dias</SelectItem>
+            <SelectItem value="12m">Últimos 12 meses</SelectItem>
           </SelectContent>
           </Select>
         </div>
