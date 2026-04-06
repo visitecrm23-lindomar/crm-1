@@ -42,9 +42,11 @@ export default function Commissions() {
   const [statusFilter, setStatusFilter] = useState("");
   const [isRuleOpen, setIsRuleOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<CommissionRule | null>(null);
-  const [ruleType, setRuleType] = useState("percentage");
+  const [ruleDisplayType, setRuleDisplayType] = useState("percentage");
   const [appliesTo, setAppliesTo] = useState("all");
   const [selectedTripId, setSelectedTripId] = useState("");
+
+  const ruleType = ruleDisplayType === "tiered" ? "percentage" : ruleDisplayType as "percentage" | "fixed";
 
   const { data: commissionsRaw, isLoading: loadingCommissions, refetch: refetchCommissions } = useListCommissions();
   const { data: rulesData, isLoading: loadingRules, refetch: refetchRules } = useListCommissionRules();
@@ -82,13 +84,14 @@ export default function Commissions() {
   const handleSaveRule = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const effectiveAppliesTo = appliesTo === "trip" ? "trip" : appliesTo;
+    const isTiered = ruleDisplayType === "tiered";
+    const effectiveAppliesTo = isTiered ? "trip" : appliesTo;
     const ruleData = {
       name: fd.get("name") as string,
-      type: ruleType as "percentage" | "fixed",
+      type: ruleType,
       value: fd.get("value") as string,
       appliesTo: effectiveAppliesTo,
-      tripId: appliesTo === "trip" ? selectedTripId || undefined : undefined,
+      tripId: (isTiered || appliesTo === "trip") ? selectedTripId || undefined : undefined,
       isActive: true,
     };
     if (editingRule) {
@@ -183,7 +186,7 @@ export default function Commissions() {
             </Select>
           )}
           {tab === "rules" && (
-            <Button onClick={() => { setEditingRule(null); setRuleType("percentage"); setAppliesTo("all"); setSelectedTripId(""); setIsRuleOpen(true); }}>
+            <Button onClick={() => { setEditingRule(null); setRuleDisplayType("percentage"); setAppliesTo("all"); setSelectedTripId(""); setIsRuleOpen(true); }}>
               <Plus className="w-4 h-4 mr-2" /> Nova Regra
             </Button>
           )}
@@ -268,7 +271,9 @@ export default function Commissions() {
                 ) : rulesData.map(rule => (
                   <TableRow key={rule.id}>
                     <TableCell className="font-medium text-sm">{rule.name}</TableCell>
-                    <TableCell className="text-sm">{rule.type === "percentage" ? "Percentual" : "Fixo"}</TableCell>
+                    <TableCell className="text-sm">
+                      {rule.appliesTo === "trip" && rule.tripId ? "Escalonado por viagem" : rule.type === "percentage" ? "Percentual" : "Valor Fixo"}
+                    </TableCell>
                     <TableCell className="font-medium text-sm">
                       {rule.type === "percentage" ? `${rule.value}%` : fmt(rule.value)}
                     </TableCell>
@@ -286,7 +291,7 @@ export default function Commissions() {
                       <div className="flex justify-end gap-1">
                         <Button
                           variant="ghost" size="icon" className="h-8 w-8"
-                          onClick={() => { setEditingRule(rule); setRuleType(rule.type); setAppliesTo(rule.appliesTo ?? "all"); setSelectedTripId(rule.tripId ?? ""); setIsRuleOpen(true); }}
+                          onClick={() => { setEditingRule(rule); setRuleDisplayType(rule.appliesTo === "trip" && rule.tripId ? "tiered" : rule.type); setAppliesTo(rule.appliesTo ?? "all"); setSelectedTripId(rule.tripId ?? ""); setIsRuleOpen(true); }}
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
@@ -316,50 +321,52 @@ export default function Commissions() {
               <label className="text-sm font-medium">Nome da Regra *</label>
               <Input name="name" required defaultValue={editingRule?.name ?? ""} placeholder="Ex: Comissão Padrão 10%" />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Tipo</label>
-                <Select value={ruleType} onValueChange={setRuleType}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="percentage">Percentual (%)</SelectItem>
-                    <SelectItem value="fixed">Valor Fixo (R$)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">{ruleType === "percentage" ? "Percentual (%)" : "Valor (R$)"}</label>
-                <Input
-                  name="value"
-                  type="number"
-                  step="0.01"
-                  required
-                  defaultValue={editingRule?.value ?? ""}
-                  placeholder={ruleType === "percentage" ? "10" : "150.00"}
-                />
-              </div>
-            </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Aplica a</label>
-              <Select value={appliesTo} onValueChange={v => { setAppliesTo(v); if (v !== "trip") setSelectedTripId(""); }}>
+              <label className="text-sm font-medium">Tipo de Comissão</label>
+              <Select value={ruleDisplayType} onValueChange={v => { setRuleDisplayType(v); if (v !== "tiered") setSelectedTripId(""); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas as viagens</SelectItem>
-                  <SelectItem value="national">Viagens nacionais</SelectItem>
-                  <SelectItem value="international">Viagens internacionais</SelectItem>
-                  <SelectItem value="trip">Viagem específica (por viagem)</SelectItem>
+                  <SelectItem value="percentage">Percentual (%) — geral</SelectItem>
+                  <SelectItem value="fixed">Valor Fixo (R$) — geral</SelectItem>
+                  <SelectItem value="tiered">Escalonado por viagem (%)</SelectItem>
                 </SelectContent>
               </Select>
+              {ruleDisplayType === "tiered" && (
+                <p className="text-xs text-muted-foreground">A taxa percentual se aplica especificamente à viagem selecionada.</p>
+              )}
             </div>
-            {appliesTo === "trip" && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{ruleDisplayType === "fixed" ? "Valor (R$)" : "Percentual (%)"}</label>
+              <Input
+                name="value"
+                type="number"
+                step="0.01"
+                required
+                defaultValue={editingRule?.value ?? ""}
+                placeholder={ruleDisplayType === "fixed" ? "150.00" : "10"}
+              />
+            </div>
+            {ruleDisplayType === "tiered" ? (
               <div className="space-y-2">
-                <label className="text-sm font-medium">Selecionar viagem</label>
+                <label className="text-sm font-medium">Viagem específica *</label>
                 <Select value={selectedTripId} onValueChange={setSelectedTripId}>
                   <SelectTrigger><SelectValue placeholder="Escolha a viagem..." /></SelectTrigger>
                   <SelectContent className="max-h-48">
                     {(tripsData?.data ?? []).map(t => (
                       <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Aplica a</label>
+                <Select value={appliesTo} onValueChange={v => { setAppliesTo(v); if (v !== "trip") setSelectedTripId(""); }}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as viagens</SelectItem>
+                    <SelectItem value="national">Viagens nacionais</SelectItem>
+                    <SelectItem value="international">Viagens internacionais</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

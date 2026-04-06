@@ -145,6 +145,8 @@ export default function Expenses() {
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    const tripIdVal = fd.get("tripId") as string;
+    const supplierIdVal = fd.get("supplierId") as string;
     await createExpense.mutateAsync({
       data: {
         category: fd.get("category") as string || "other",
@@ -152,8 +154,8 @@ export default function Expenses() {
         amount: parseFloat(fd.get("amount") as string || "0"),
         dueDate: fd.get("dueDate") as string,
         paymentMethod: expenseMethod || undefined,
-        tripId: (fd.get("tripId") as string) || undefined,
-        supplierId: (fd.get("supplierId") as string) || undefined,
+        tripId: (tripIdVal && tripIdVal !== "none") ? tripIdVal : undefined,
+        supplierId: (supplierIdVal && supplierIdVal !== "none") ? supplierIdVal : undefined,
         notes: (fd.get("notes") as string) || undefined,
       }
     });
@@ -365,10 +367,10 @@ export default function Expenses() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Fornecedor (opcional)</label>
-              <Select name="supplierId" defaultValue="">
+              <Select name="supplierId" defaultValue="none">
                 <SelectTrigger><SelectValue placeholder="Vincular a um fornecedor..." /></SelectTrigger>
                 <SelectContent className="max-h-48">
-                  <SelectItem value="">Nenhum</SelectItem>
+                  <SelectItem value="none">Nenhum</SelectItem>
                   {(suppliersRaw ?? []).map(s => (
                     <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                   ))}
@@ -377,11 +379,11 @@ export default function Expenses() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Viagem (opcional)</label>
-              <Select name="tripId" defaultValue="">
+              <Select name="tripId" defaultValue="none">
                 <SelectTrigger><SelectValue placeholder="Vincular a uma viagem..." /></SelectTrigger>
                 <SelectContent className="max-h-48">
-                  <SelectItem value="">Nenhuma</SelectItem>
-                  {tripsData?.data.map(t => (
+                  <SelectItem value="none">Nenhuma</SelectItem>
+                  {(tripsData?.data ?? []).map(t => (
                     <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                   ))}
                 </SelectContent>

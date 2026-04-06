@@ -166,6 +166,9 @@ function PaymentMethodChart({ payments }: { payments: Array<{ paymentMethod?: st
 export default function Financial() {
   const [tab, setTab] = useState("receivable");
   const [statusFilter, setStatusFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
   const [isRuleOpen, setIsRuleOpen] = useState(false);
@@ -288,6 +291,22 @@ export default function Financial() {
     return { total, paid, pending };
   }, [commissions]);
 
+  const filteredPayments = useMemo(() => {
+    let all = paymentsData?.data ?? [];
+    if (dateFrom) all = all.filter(p => p.dueDate >= dateFrom);
+    if (dateTo) all = all.filter(p => p.dueDate <= dateTo);
+    return all;
+  }, [paymentsData, dateFrom, dateTo]);
+
+  const filteredExpenses = useMemo(() => {
+    let all = expensesData?.data ?? [];
+    if (statusFilter) all = all.filter(e => e.status === statusFilter);
+    if (categoryFilter) all = all.filter(e => e.category === categoryFilter);
+    if (dateFrom) all = all.filter(e => e.dueDate >= dateFrom);
+    if (dateTo) all = all.filter(e => e.dueDate <= dateTo);
+    return all;
+  }, [expensesData, statusFilter, categoryFilter, dateFrom, dateTo]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -369,25 +388,54 @@ export default function Financial() {
         </div>
       )}
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <div className="flex items-center justify-between">
-          <TabsList>
-            <TabsTrigger value="receivable">A Receber</TabsTrigger>
-            <TabsTrigger value="payable">A Pagar</TabsTrigger>
-            <TabsTrigger value="expenses">Despesas</TabsTrigger>
-            <TabsTrigger value="commissions">Comissões</TabsTrigger>
-            <TabsTrigger value="rules">Regras</TabsTrigger>
-          </TabsList>
-          {(tab === "receivable" || tab === "payable") && (
-            <Select value={statusFilter || "all"} onValueChange={v => setStatusFilter(v === "all" ? "" : v)}>
-              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="pending">Pendente</SelectItem>
-                <SelectItem value="paid">Pago</SelectItem>
-                <SelectItem value="overdue">Vencido</SelectItem>
-              </SelectContent>
-            </Select>
+      <Tabs value={tab} onValueChange={t => { setTab(t); setStatusFilter(""); setCategoryFilter(""); setDateFrom(""); setDateTo(""); }}>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <TabsList>
+              <TabsTrigger value="receivable">A Receber</TabsTrigger>
+              <TabsTrigger value="payable">A Pagar</TabsTrigger>
+              <TabsTrigger value="expenses">Despesas</TabsTrigger>
+              <TabsTrigger value="commissions">Comissões</TabsTrigger>
+              <TabsTrigger value="rules">Regras</TabsTrigger>
+            </TabsList>
+          </div>
+          {(tab === "receivable" || tab === "payable" || tab === "expenses") && (
+            <div className="flex items-center gap-2 flex-wrap bg-card border rounded-lg p-3">
+              <Select value={statusFilter || "all"} onValueChange={v => setStatusFilter(v === "all" ? "" : v)}>
+                <SelectTrigger className="w-[130px] h-8 text-sm"><SelectValue placeholder="Status" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="pending">Pendente</SelectItem>
+                  <SelectItem value="paid">Pago</SelectItem>
+                  <SelectItem value="overdue">Vencido</SelectItem>
+                </SelectContent>
+              </Select>
+              {tab === "expenses" && (
+                <Select value={categoryFilter || "all"} onValueChange={v => setCategoryFilter(v === "all" ? "" : v)}>
+                  <SelectTrigger className="w-[150px] h-8 text-sm"><SelectValue placeholder="Categoria" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as categorias</SelectItem>
+                    <SelectItem value="transport">Transporte</SelectItem>
+                    <SelectItem value="accommodation">Hospedagem</SelectItem>
+                    <SelectItem value="food">Alimentação</SelectItem>
+                    <SelectItem value="marketing">Marketing</SelectItem>
+                    <SelectItem value="administrative">Administrativo</SelectItem>
+                    <SelectItem value="commission">Comissão</SelectItem>
+                    <SelectItem value="other">Outro</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+              <div className="flex items-center gap-1">
+                <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-32 h-8 text-sm" />
+                <span className="text-muted-foreground text-xs">até</span>
+                <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-32 h-8 text-sm" />
+              </div>
+              {(statusFilter || categoryFilter || dateFrom || dateTo) && (
+                <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => { setStatusFilter(""); setCategoryFilter(""); setDateFrom(""); setDateTo(""); }}>
+                  Limpar
+                </Button>
+              )}
+            </div>
           )}
         </div>
 
@@ -410,9 +458,9 @@ export default function Financial() {
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>{Array.from({ length: 7 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
                   ))
-                ) : paymentsData?.data.length === 0 ? (
+                ) : filteredPayments.length === 0 ? (
                   <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum lançamento encontrado.</TableCell></TableRow>
-                ) : paymentsData?.data.map(p => (
+                ) : filteredPayments.map(p => (
                   <TableRow key={p.id}>
                     <TableCell><p className="font-medium text-sm">{p.description || "—"}</p></TableCell>
                     <TableCell><span className="text-xs text-muted-foreground">{p.category}</span></TableCell>
@@ -456,9 +504,9 @@ export default function Financial() {
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>{Array.from({ length: 6 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
                   ))
-                ) : paymentsData?.data.length === 0 ? (
+                ) : filteredPayments.length === 0 ? (
                   <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhum lançamento encontrado.</TableCell></TableRow>
-                ) : paymentsData?.data.map(p => (
+                ) : filteredPayments.map(p => (
                   <TableRow key={p.id}>
                     <TableCell><p className="font-medium text-sm">{p.description || "—"}</p></TableCell>
                     <TableCell className="text-xs text-muted-foreground">{p.category}</TableCell>
@@ -495,6 +543,7 @@ export default function Financial() {
                 <TableRow>
                   <TableHead>Descrição</TableHead>
                   <TableHead>Categoria</TableHead>
+                  <TableHead>Fornecedor</TableHead>
                   <TableHead>Vencimento</TableHead>
                   <TableHead>Valor</TableHead>
                   <TableHead>Status</TableHead>
@@ -504,14 +553,15 @@ export default function Financial() {
               <TableBody>
                 {loadingExpenses ? (
                   Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>{Array.from({ length: 6 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
+                    <TableRow key={i}>{Array.from({ length: 7 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
                   ))
-                ) : expensesData?.data.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhuma despesa registrada.</TableCell></TableRow>
-                ) : expensesData?.data.map(e => (
+                ) : filteredExpenses.length === 0 ? (
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhuma despesa registrada.</TableCell></TableRow>
+                ) : filteredExpenses.map(e => (
                   <TableRow key={e.id}>
                     <TableCell className="font-medium text-sm">{e.description}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{EXPENSE_CATEGORIES[e.category] ?? e.category}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{(e as { supplierName?: string }).supplierName ?? (e.supplierId ? e.supplierId.slice(0, 8) + "…" : "—")}</TableCell>
                     <TableCell className="text-sm">{new Date(e.dueDate).toLocaleDateString("pt-BR")}</TableCell>
                     <TableCell className="font-medium text-sm">{fmt(e.amount)}</TableCell>
                     <TableCell>
