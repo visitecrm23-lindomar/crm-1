@@ -28,6 +28,18 @@ import Expenses from "@/pages/expenses";
 import Revenue from "@/pages/revenue";
 import Settings from "@/pages/settings";
 
+// Task 6 pages
+import Fornecedores from "@/pages/cadastros/fornecedores";
+import Veiculos from "@/pages/cadastros/veiculos";
+import Hospedagens from "@/pages/cadastros/hospedagens";
+import Destinos from "@/pages/cadastros/destinos";
+import Produtos from "@/pages/cadastros/produtos";
+import Vendedores from "@/pages/vendedores";
+import Vouchers from "@/pages/vouchers";
+import Indicacoes from "@/pages/indicacoes";
+import Configuracoes from "@/pages/configuracoes";
+import Downloads from "@/pages/downloads";
+
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -43,8 +55,8 @@ function ClerkQueryClientCacheInvalidator() {
   useEffect(() => {
     const unsubscribe = addListener(({ user }) => {
       const userId = user?.id ?? null;
-      if (prevUserIdRef.current !== undefined && prevUserIdRef.current !== userId) { 
-        qc.clear(); 
+      if (prevUserIdRef.current !== undefined && prevUserIdRef.current !== userId) {
+        qc.clear();
       }
       prevUserIdRef.current = userId;
     });
@@ -64,7 +76,7 @@ function SyncUser() {
         name: user.fullName ?? user.firstName ?? "Usuário",
         email: user.primaryEmailAddress?.emailAddress ?? "",
         avatarUrl: user.imageUrl ?? undefined,
-      }
+      },
     });
   }, [user?.id]);
   return null;
@@ -130,28 +142,89 @@ function Router() {
       <Route path="/trips/calendar" component={() => <ProtectedRoute component={Trips} />} />
       <Route path="/trips/:id/edit" component={() => <ProtectedRoute component={Trips} />} />
       <Route path="/trips/:id/seat-map" component={() => <ProtectedRoute component={Trips} />} />
-      <Route path="/trips/:id/passengers-overview" component={() => <ProtectedRoute component={Trips} />} />
+      <Route
+        path="/trips/:id/passengers-overview"
+        component={() => <ProtectedRoute component={Trips} />}
+      />
       <Route path="/trips/:id/passengers" component={() => <ProtectedRoute component={Trips} />} />
       <Route path="/trips/:id" component={() => <ProtectedRoute component={Trips} />} />
       <Route path="/reservations" component={() => <ProtectedRoute component={Reservations} />} />
-      <Route path="/reservations/:id" component={() => <ProtectedRoute component={Reservations} />} />
+      <Route
+        path="/reservations/:id"
+        component={() => <ProtectedRoute component={Reservations} />}
+      />
       <Route path="/financial" component={() => <Redirect to="/financeiro" />} />
       <Route path="/financeiro" component={() => <ProtectedRoute component={Financial} />} />
-      <Route path="/financeiro/commissions" component={() => <ProtectedRoute component={Commissions} />} />
-      <Route path="/financeiro/expenses" component={() => <ProtectedRoute component={Expenses} />} />
+      <Route
+        path="/financeiro/commissions"
+        component={() => <ProtectedRoute component={Commissions} />}
+      />
+      <Route
+        path="/financeiro/expenses"
+        component={() => <ProtectedRoute component={Expenses} />}
+      />
       <Route path="/comunicacao" component={() => <ProtectedRoute component={Communication} />} />
       <Route path="/communication" component={() => <Redirect to="/comunicacao" />} />
-      <Route path="/comunicacao/campanhas" component={() => <ProtectedRoute component={Campaigns} />} />
+      <Route
+        path="/comunicacao/campanhas"
+        component={() => <ProtectedRoute component={Campaigns} />}
+      />
       <Route path="/automacoes" component={() => <ProtectedRoute component={Automations} />} />
       <Route path="/automations" component={() => <Redirect to="/automacoes" />} />
       <Route path="/marketing" component={() => <ProtectedRoute component={Marketing} />} />
       <Route path="/fidelidade" component={() => <ProtectedRoute component={Loyalty} />} />
       <Route path="/nps" component={() => <ProtectedRoute component={Nps} />} />
-      <Route path="/registrations" component={() => <ProtectedRoute component={Registrations} />} />
+
+      {/* Registrations hub + sub-pages */}
+      <Route path="/registrations" component={() => <Redirect to="/cadastros" />} />
+      <Route path="/cadastros" component={() => <ProtectedRoute component={Registrations} />} />
+      <Route
+        path="/cadastros/fornecedores"
+        component={() => <ProtectedRoute component={Fornecedores} />}
+      />
+      <Route
+        path="/cadastros/veiculos"
+        component={() => <ProtectedRoute component={Veiculos} />}
+      />
+      <Route
+        path="/cadastros/hospedagens"
+        component={() => <ProtectedRoute component={Hospedagens} />}
+      />
+      <Route
+        path="/cadastros/destinos"
+        component={() => <ProtectedRoute component={Destinos} />}
+      />
+      <Route
+        path="/cadastros/produtos"
+        component={() => <ProtectedRoute component={Produtos} />}
+      />
+
+      {/* Analytics */}
       <Route path="/analytics" component={() => <ProtectedRoute component={Analytics} />} />
       <Route path="/analytics/revenue" component={() => <ProtectedRoute component={Revenue} />} />
-      <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
-      <Route component={() => <ProtectedRoute component={() => <Redirect to="/dashboard" />} />} />
+      <Route
+        path="/analytics/vendedores"
+        component={() => <ProtectedRoute component={Vendedores} />}
+      />
+
+      {/* New Task 6 pages */}
+      <Route path="/vouchers" component={() => <ProtectedRoute component={Vouchers} />} />
+      <Route path="/indicacoes" component={() => <ProtectedRoute component={Indicacoes} />} />
+      <Route
+        path="/configuracoes"
+        component={() => <ProtectedRoute component={Configuracoes} />}
+      />
+      <Route
+        path="/downloads"
+        component={() => <ProtectedRoute component={Downloads} />}
+      />
+
+      {/* Legacy redirect */}
+      <Route path="/settings" component={() => <Redirect to="/configuracoes" />} />
+
+      <Route
+        component={() => <ProtectedRoute component={() => <Redirect to="/dashboard" />} />}
+      />
     </Switch>
   );
 }

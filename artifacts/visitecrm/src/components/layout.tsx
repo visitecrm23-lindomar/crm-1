@@ -22,6 +22,11 @@ import {
   Star,
   TrendingUp,
   Megaphone,
+  QrCode,
+  Share2,
+  Download,
+  UserCheck,
+  ChevronRight,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -35,12 +40,20 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
-const NAVIGATION = [
+interface NavItem {
+  name: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  children?: NavItem[];
+}
+
+const NAVIGATION: NavItem[] = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Pipeline", href: "/pipeline", icon: Trello },
   { name: "Clientes", href: "/clients", icon: Users },
   { name: "Viagens", href: "/trips", icon: Map },
   { name: "Reservas", href: "/reservations", icon: CalendarCheck },
+  { name: "Vouchers", href: "/vouchers", icon: QrCode },
   { name: "Financeiro", href: "/financeiro", icon: DollarSign },
   { name: "Comunicação", href: "/comunicacao", icon: MessageSquare },
   { name: "Campanhas", href: "/comunicacao/campanhas", icon: Megaphone },
@@ -48,9 +61,18 @@ const NAVIGATION = [
   { name: "Marketing", href: "/marketing", icon: Target },
   { name: "Fidelidade", href: "/fidelidade", icon: Star },
   { name: "NPS", href: "/nps", icon: TrendingUp },
-  { name: "Cadastros", href: "/registrations", icon: BookOpen },
-  { name: "Analíticos", href: "/analytics", icon: BarChart2 },
-  { name: "Configurações", href: "/settings", icon: Settings },
+  { name: "Cadastros", href: "/cadastros", icon: BookOpen },
+  {
+    name: "Analíticos",
+    href: "/analytics",
+    icon: BarChart2,
+    children: [
+      { name: "Vendedores", href: "/analytics/vendedores", icon: UserCheck },
+    ],
+  },
+  { name: "Indicações", href: "/indicacoes", icon: Share2 },
+  { name: "Downloads", href: "/downloads", icon: Download },
+  { name: "Configurações", href: "/configuracoes", icon: Settings },
 ];
 
 const ROLE_LABELS: Record<string, string> = {
@@ -59,6 +81,54 @@ const ROLE_LABELS: Record<string, string> = {
   vendedor: "Vendedor",
   cliente: "Cliente",
 };
+
+function NavLink({
+  item,
+  location,
+  depth = 0,
+}: {
+  item: NavItem;
+  location: string;
+  depth?: number;
+}) {
+  const isActive =
+    location === item.href ||
+    (item.href !== "/" && location.startsWith(item.href));
+  const hasChildren = item.children && item.children.length > 0;
+  const childActive = item.children?.some(
+    (c) => location === c.href || (c.href !== "/" && location.startsWith(c.href))
+  );
+
+  return (
+    <div>
+      <Link
+        href={item.href}
+        className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+          depth > 0 ? "pl-7" : ""
+        } ${
+          isActive || childActive
+            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+            : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+        }`}
+      >
+        <item.icon className="w-4 h-4 shrink-0" />
+        {item.name}
+        {hasChildren && (
+          <ChevronRight
+            className={`w-3 h-3 ml-auto transition-transform ${childActive ? "rotate-90" : ""}`}
+          />
+        )}
+      </Link>
+      {hasChildren && (isActive || childActive) && (
+        <div className="mt-0.5 space-y-0.5">
+          {item.children!.map((child) => (
+            <NavLink key={child.href} item={child} location={location} depth={depth + 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Layout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
@@ -71,9 +141,24 @@ export default function Layout({ children }: { children: ReactNode }) {
   const tenantPrimaryColor: string = me?.tenant?.primaryColor ?? "#3B82F6";
   const userRole: string | undefined = me?.role;
   const tenantInitial = tenantName.charAt(0).toUpperCase();
-  const currentSection = NAVIGATION.find(
-    (n) => location === n.href || (n.href !== "/" && location.startsWith(n.href))
-  );
+
+  // Find current nav item (including children)
+  let currentSection: NavItem | undefined;
+  for (const item of NAVIGATION) {
+    if (location === item.href || (item.href !== "/" && location.startsWith(item.href))) {
+      currentSection = item;
+      break;
+    }
+    if (item.children) {
+      const child = item.children.find(
+        (c) => location === c.href || (c.href !== "/" && location.startsWith(c.href))
+      );
+      if (child) {
+        currentSection = child;
+        break;
+      }
+    }
+  }
 
   return (
     <div className="flex h-screen bg-muted/30">
@@ -99,23 +184,9 @@ export default function Layout({ children }: { children: ReactNode }) {
 
         {/* Navigation */}
         <div className="flex-1 overflow-y-auto py-3 px-2 flex flex-col gap-0.5">
-          {NAVIGATION.map((item) => {
-            const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  isActive
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-                }`}
-              >
-                <item.icon className="w-4 h-4 shrink-0" />
-                {item.name}
-              </Link>
-            );
-          })}
+          {NAVIGATION.map((item) => (
+            <NavLink key={item.name} item={item} location={location} />
+          ))}
         </div>
 
         {/* User block */}
@@ -128,9 +199,13 @@ export default function Layout({ children }: { children: ReactNode }) {
               </AvatarFallback>
             </Avatar>
             <div className="flex flex-col min-w-0 flex-1">
-              <span className="text-xs font-medium text-sidebar-foreground truncate">{user?.fullName || "Usuário"}</span>
+              <span className="text-xs font-medium text-sidebar-foreground truncate">
+                {user?.fullName || "Usuário"}
+              </span>
               {userRole && (
-                <span className="text-xs text-sidebar-foreground/50">{ROLE_LABELS[userRole] ?? userRole}</span>
+                <span className="text-xs text-sidebar-foreground/50">
+                  {ROLE_LABELS[userRole] ?? userRole}
+                </span>
               )}
             </div>
             <button
@@ -147,7 +222,10 @@ export default function Layout({ children }: { children: ReactNode }) {
       {/* Main area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="h-13 bg-background border-b px-6 flex items-center justify-between shrink-0" style={{ minHeight: "52px" }}>
+        <header
+          className="h-13 bg-background border-b px-6 flex items-center justify-between shrink-0"
+          style={{ minHeight: "52px" }}
+        >
           {/* Current section / breadcrumb */}
           <div className="flex items-center gap-2 text-sm">
             {currentSection ? (
@@ -188,17 +266,21 @@ export default function Layout({ children }: { children: ReactNode }) {
                 <DropdownMenuLabel>
                   <div className="flex flex-col gap-0.5">
                     <span className="font-medium">{user?.fullName}</span>
-                    <span className="text-xs font-normal text-muted-foreground">{user?.primaryEmailAddress?.emailAddress}</span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {user?.primaryEmailAddress?.emailAddress}
+                    </span>
                   </div>
                 </DropdownMenuLabel>
                 {userRole && (
                   <div className="px-2 pb-1">
-                    <Badge variant="secondary" className="text-xs">{ROLE_LABELS[userRole] ?? userRole}</Badge>
+                    <Badge variant="secondary" className="text-xs">
+                      {ROLE_LABELS[userRole] ?? userRole}
+                    </Badge>
                   </div>
                 )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/settings" className="cursor-pointer w-full flex items-center">
+                  <Link href="/configuracoes" className="cursor-pointer w-full flex items-center">
                     <Settings className="w-4 h-4 mr-2" />
                     Configurações
                   </Link>
@@ -217,9 +299,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         </header>
 
         {/* Main content */}
-        <main className="flex-1 overflow-y-auto p-6">
-          {children}
-        </main>
+        <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
     </div>
   );
