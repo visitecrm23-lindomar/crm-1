@@ -32,6 +32,7 @@ function formatTrip(t: typeof tripsTable.$inferSelect) {
     exclusions: t.exclusions ?? [],
     coverImage: t.coverImage,
     gallery: t.gallery ?? [],
+    itinerary: t.itinerary ?? [],
     status: t.status,
     isPublic: t.isPublic,
     isFeatured: t.isFeatured,
@@ -39,6 +40,8 @@ function formatTrip(t: typeof tripsTable.$inferSelect) {
     vehicleType: t.vehicleType,
     driverName: t.driverName,
     seatLayout: t.seatLayout,
+    fixedCosts: t.fixedCosts ? Number(t.fixedCosts) : null,
+    variableCosts: t.variableCosts ? Number(t.variableCosts) : null,
     createdAt: t.createdAt.toISOString(),
     updatedAt: t.updatedAt.toISOString(),
   };
@@ -123,6 +126,10 @@ router.post("/trips", async (req, res): Promise<void> => {
       exclusions: parsed.data.exclusions ?? [],
       coverImage: parsed.data.coverImage ?? null,
       seatLayout: layout,
+      itinerary: parsed.data.itinerary ?? null,
+      fixedCosts: parsed.data.fixedCosts != null ? String(parsed.data.fixedCosts) : null,
+      variableCosts: parsed.data.variableCosts != null ? String(parsed.data.variableCosts) : null,
+      gallery: parsed.data.gallery ?? [],
       seatMap,
       vehiclePlate: parsed.data.vehiclePlate ?? null,
       vehicleType: parsed.data.vehicleType ?? null,
@@ -178,11 +185,17 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
     if (parsed.data.priceSenior !== undefined) updates.priceSenior = parsed.data.priceSenior ? String(parsed.data.priceSenior) : null;
     if (parsed.data.totalCapacity != null) updates.totalCapacity = parsed.data.totalCapacity;
     if (parsed.data.coverImage !== undefined) updates.coverImage = parsed.data.coverImage ?? null;
+    if (parsed.data.seatLayout !== undefined) updates.seatLayout = parsed.data.seatLayout ?? null;
     if (parsed.data.inclusions != null) updates.inclusions = parsed.data.inclusions;
     if (parsed.data.exclusions != null) updates.exclusions = parsed.data.exclusions;
     if (parsed.data.vehiclePlate !== undefined) updates.vehiclePlate = parsed.data.vehiclePlate ?? null;
     if (parsed.data.vehicleType !== undefined) updates.vehicleType = parsed.data.vehicleType ?? null;
     if (parsed.data.driverName !== undefined) updates.driverName = parsed.data.driverName ?? null;
+    if (parsed.data.destination !== undefined) updates.destination = parsed.data.destination ?? "";
+    if (parsed.data.destinationCity !== undefined) updates.destinationCity = parsed.data.destinationCity ?? "";
+    if (parsed.data.destinationState !== undefined) updates.destinationState = parsed.data.destinationState ?? "";
+    if (parsed.data.type !== undefined) updates.type = parsed.data.type ?? "";
+    if (parsed.data.category !== undefined) updates.category = parsed.data.category ?? "";
     if (parsed.data.itinerary !== undefined) updates.itinerary = parsed.data.itinerary ?? null;
     if (parsed.data.fixedCosts !== undefined) updates.fixedCosts = parsed.data.fixedCosts != null ? String(parsed.data.fixedCosts) : null;
     if (parsed.data.variableCosts !== undefined) updates.variableCosts = parsed.data.variableCosts != null ? String(parsed.data.variableCosts) : null;

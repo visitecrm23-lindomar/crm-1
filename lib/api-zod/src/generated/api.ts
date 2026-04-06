@@ -434,6 +434,10 @@ export const CreateTripBody = zod.object({
   vehicleType: zod.string().nullish(),
   driverName: zod.string().nullish(),
   status: zod.string().nullish(),
+  itinerary: zod.array(zod.object({ day: zod.number(), title: zod.string(), description: zod.string() })).nullish(),
+  fixedCosts: zod.number().nullish(),
+  variableCosts: zod.number().nullish(),
+  gallery: zod.array(zod.string()).optional(),
 });
 
 /**
@@ -487,6 +491,11 @@ export const UpdateTripParams = zod.object({
 export const UpdateTripBody = zod.object({
   name: zod.string().nullish(),
   description: zod.string().nullish(),
+  destination: zod.string().nullish(),
+  destinationCity: zod.string().nullish(),
+  destinationState: zod.string().nullish(),
+  type: zod.string().nullish(),
+  category: zod.string().nullish(),
   status: zod.string().nullish(),
   isPublic: zod.boolean().nullish(),
   isFeatured: zod.boolean().nullish(),
@@ -497,6 +506,7 @@ export const UpdateTripBody = zod.object({
   priceSenior: zod.number().nullish(),
   totalCapacity: zod.number().nullish(),
   coverImage: zod.string().nullish(),
+  seatLayout: zod.string().nullish(),
   inclusions: zod.array(zod.string()).nullish(),
   exclusions: zod.array(zod.string()).nullish(),
   vehiclePlate: zod.string().nullish(),
