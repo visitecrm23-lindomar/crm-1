@@ -417,6 +417,8 @@ export interface Reservation {
   checkedInAt?: string | null;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  boardingLocationId?: string | null;
   createdAt: string;
   updatedAt: string;
   trip: TripSummary;

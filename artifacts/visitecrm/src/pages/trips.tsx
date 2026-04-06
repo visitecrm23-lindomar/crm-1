@@ -403,8 +403,6 @@ interface TripFormData {
   fixedCosts: string;
   variableCosts: string;
   gallery: string[];
-  accommodation: string;
-  guide: string;
 }
 
 const newBP = (): BoardingPoint => ({ id: crypto.randomUUID(), name: "", time: "", address: "" });
@@ -417,7 +415,7 @@ const EMPTY_FORM: TripFormData = {
   priceAdult: "", priceChild: "", priceSenior: "",
   inclusions: "", exclusions: "", coverImage: "",
   vehicleType: "", vehiclePlate: "", driverName: "", status: "draft",
-  boardingPoints: [newBP()], itinerary: [newDay(1)], costs: [], fixedCosts: "", variableCosts: "", gallery: [], accommodation: "", guide: "",
+  boardingPoints: [newBP()], itinerary: [newDay(1)], costs: [], fixedCosts: "", variableCosts: "", gallery: [],
 };
 const toTripFormData = (trip: Trip): TripFormData => ({
   name: trip.name,
@@ -447,8 +445,6 @@ const toTripFormData = (trip: Trip): TripFormData => ({
   fixedCosts: trip.fixedCosts != null ? String(trip.fixedCosts) : "",
   variableCosts: trip.variableCosts != null ? String(trip.variableCosts) : "",
   gallery: trip.gallery ?? [],
-  accommodation: "",
-  guide: "",
 });
 
 export function TripForm({ tripId }: { tripId?: string }) {
@@ -483,6 +479,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
     const exclArr = form.exclusions.split("\n").map(s => s.trim()).filter(Boolean);
     const statusToSave = publish ? "active" : form.status;
     const itineraryToSave = form.itinerary.filter(d => d.title || d.description);
+    const boardingPointsToSave = form.boardingPoints.filter(bp => bp.name);
     const fixedCostsNum = form.fixedCosts ? parseFloat(form.fixedCosts) : undefined;
     const variableCostsNum = form.variableCosts ? parseFloat(form.variableCosts) : undefined;
     if (tripId) {
@@ -503,6 +500,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
           vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined,
           status: statusToSave,
           itinerary: itineraryToSave.length ? itineraryToSave : undefined,
+          boardingPoints: boardingPointsToSave.length ? boardingPointsToSave : undefined,
           fixedCosts: fixedCostsNum,
           variableCosts: variableCostsNum,
           gallery: form.gallery.length ? form.gallery : undefined,
@@ -525,6 +523,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
           vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined,
           status: statusToSave,
           itinerary: itineraryToSave.length ? itineraryToSave : undefined,
+          boardingPoints: boardingPointsToSave.length ? boardingPointsToSave : undefined,
           fixedCosts: fixedCostsNum,
           variableCosts: variableCostsNum,
           gallery: form.gallery.length ? form.gallery : undefined,
@@ -833,18 +832,15 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 <Input placeholder="João da Silva" value={form.driverName} onChange={set("driverName")} />
               </div>
               <div className="space-y-2">
-                <Label>Guia Turístico</Label>
-                <Input placeholder="Maria Costa" value={form.guide} onChange={set("guide")} />
+                <Label className="text-muted-foreground">Guia Turístico</Label>
+                <Input placeholder="Maria Costa" disabled className="opacity-50 cursor-not-allowed" />
+                <p className="text-xs text-muted-foreground">Cadastro de guias disponível em módulo futuro.</p>
               </div>
             </div>
           </div>
           <div className="bg-card border rounded-lg p-6 space-y-4">
             <h3 className="font-semibold">Hospedagem</h3>
-            <div className="space-y-2">
-              <Label>Hotel / Pousada</Label>
-              <Input placeholder="Hotel Beira Mar — Natal, RN" value={form.accommodation} onChange={set("accommodation")} />
-            </div>
-            <p className="text-xs text-muted-foreground">Integração com cadastro de hospedagens disponível em breve.</p>
+            <p className="text-sm text-muted-foreground">Integração com cadastro de hospedagens disponível em módulo futuro.</p>
           </div>
         </TabsContent>
 
@@ -1591,7 +1587,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
         if (typeFilter === "senior" && !isSenior) return false;
       }
       if (boardingFilter !== "all") {
-        // boarding location per reservation not yet tracked; skip filter
+        if (r.boardingLocationId !== boardingFilter) return false;
       }
       return true;
     }).map(r => {
@@ -1680,7 +1676,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
           <SelectContent>
             <SelectItem value="all">Todos os embarques</SelectItem>
             {trip?.boardingPoints?.map?.((bp) => (
-              <SelectItem key={bp.name} value={bp.name}>{bp.name}</SelectItem>
+              <SelectItem key={bp.id} value={bp.id}>{bp.name}</SelectItem>
             )) ?? null}
           </SelectContent>
         </Select>
