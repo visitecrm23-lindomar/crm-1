@@ -362,7 +362,12 @@ export function TripList() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{trip.name}</p>
-                <p className="text-sm text-muted-foreground">{trip.destinationCity}, {trip.destinationState} · {formatDate(trip.departureDate)}</p>
+                <p className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
+                  <span>{trip.destinationCity}, {trip.destinationState}</span>
+                  <span>·</span>
+                  <span>{formatDate(trip.departureDate)}</span>
+                  <TripCountdown date={trip.departureDate} />
+                </p>
               </div>
               <div className="hidden md:block w-40">
                 <OccupancyBar reserved={trip.reservedSeats} confirmed={trip.confirmedSeats} total={trip.totalCapacity} />
