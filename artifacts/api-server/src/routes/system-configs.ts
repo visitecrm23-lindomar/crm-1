@@ -8,6 +8,8 @@ import { requireAuth } from "../lib/tenant";
 
 const router = Router();
 
+const ADMIN_ROLES = ["agencia", "superadmin"] as const;
+
 const UpsertSystemConfigBody = z.object({
   key: z.string().min(1),
   value: z.record(z.string(), z.unknown()).nullable().optional(),
@@ -17,6 +19,10 @@ router.get("/system-configs", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role as (typeof ADMIN_ROLES)[number])) {
+      res.status(403).json({ error: "Forbidden: apenas administradores podem acessar configurações" });
+      return;
+    }
     const configs = await db
       .select()
       .from(systemConfigsTable)
@@ -40,6 +46,10 @@ async function upsertHandler(req: Request, res: Response): Promise<void> {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role as (typeof ADMIN_ROLES)[number])) {
+      res.status(403).json({ error: "Forbidden: apenas administradores podem alterar configurações" });
+      return;
+    }
     const parsed = UpsertSystemConfigBody.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.message });
