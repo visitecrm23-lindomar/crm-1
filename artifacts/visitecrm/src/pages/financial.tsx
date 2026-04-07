@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import {
   useGetPaymentsSummary,
   useListPayments,
@@ -30,6 +30,7 @@ import { Link } from "wouter";
 import {
   Plus, TrendingUp, TrendingDown, DollarSign, AlertCircle, CheckCircle,
   Pencil, Trash2, ArrowUpRight, ArrowDownRight, BarChart2, ExternalLink,
+  Paperclip, X as XIcon, FileText, Image,
 } from "lucide-react";
 
 const fmt = (v: number | string) => {
@@ -180,6 +181,20 @@ export default function Financial() {
   const [expenseMethod, setExpenseMethod] = useState("pix");
   const [expenseCategory, setExpenseCategory] = useState("transport");
   const [ruleType, setRuleType] = useState("percentage");
+  const [receiptDataUrl, setReceiptDataUrl] = useState<string | null>(null);
+  const [receiptFileName, setReceiptFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setReceiptDataUrl(ev.target?.result as string);
+      setReceiptFileName(file.name);
+    };
+    reader.readAsDataURL(file);
+  }, []);
 
   const { data: summary, isLoading: loadingSummary, refetch: refetchSummary } = useGetPaymentsSummary();
   const { data: paymentsData, isLoading: loadingPayments, refetch: refetchPayments } = useListPayments({
@@ -232,11 +247,15 @@ export default function Financial() {
         dueDate: fd.get("dueDate") as string,
         description: fd.get("description") as string || undefined,
         installments: parseInt(fd.get("installments") as string || "1"),
-      }
+        ...(receiptDataUrl ? { receiptUrl: receiptDataUrl } : {}),
+      } as Parameters<typeof createPayment.mutateAsync>[0]["data"]
     });
     setIsPaymentOpen(false);
     setPaymentCategory("reservation");
     setPaymentMethodField("pix");
+    setReceiptDataUrl(null);
+    setReceiptFileName(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     refetchPayments();
     refetchSummary();
   };
@@ -802,13 +821,39 @@ export default function Financial() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Comprovante (opcional)</label>
-              <div className="flex items-center gap-2 border rounded-md px-3 py-2 bg-muted/30 cursor-not-allowed opacity-60">
-                <span className="text-xs text-muted-foreground flex-1">Nenhum arquivo selecionado</span>
-                <Button type="button" size="sm" variant="outline" disabled className="text-xs h-7">
-                  Selecionar arquivo
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">Upload de comprovante disponível em breve (PDF, JPG, PNG)</p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.pdf"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              {receiptDataUrl ? (
+                <div className="flex items-center gap-2 border rounded-md px-3 py-2 bg-green-50 border-green-200">
+                  {receiptDataUrl.startsWith("data:image") ? (
+                    <Image className="w-4 h-4 text-green-600 shrink-0" />
+                  ) : (
+                    <FileText className="w-4 h-4 text-green-600 shrink-0" />
+                  )}
+                  <span className="text-xs text-green-700 flex-1 truncate">{receiptFileName}</span>
+                  <Button
+                    type="button" size="icon" variant="ghost"
+                    className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                    onClick={() => { setReceiptDataUrl(null); setReceiptFileName(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                  >
+                    <XIcon className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full flex items-center gap-2 border rounded-md px-3 py-2 bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer text-left"
+                >
+                  <Paperclip className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="text-xs text-muted-foreground flex-1">Clique para selecionar (PDF, JPG, PNG)</span>
+                </button>
+              )}
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setIsPaymentOpen(false)}>Cancelar</Button>

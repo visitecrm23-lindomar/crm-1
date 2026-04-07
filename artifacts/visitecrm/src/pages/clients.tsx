@@ -515,7 +515,70 @@ function Client360Modal({ open, onClose, client }: Client360ModalProps) {
           </TabsContent>
 
           <TabsContent value="history" className="mt-4">
-            <p className="text-sm text-muted-foreground text-center py-8">Histórico de atividades disponível em breve.</p>
+            {(() => {
+              type ActivityEvent = {
+                id: string;
+                date: string;
+                type: "reservation" | "payment";
+                title: string;
+                description: string;
+                badge?: string;
+                badgeColor?: string;
+              };
+              const events: ActivityEvent[] = [];
+              for (const r of (reservations?.data ?? [])) {
+                events.push({
+                  id: `res-${r.id}`, date: r.createdAt ?? r.trip?.departureDate,
+                  type: "reservation", title: "Reserva criada",
+                  description: r.trip?.name ?? `Reserva #${r.id.slice(-6)}`,
+                  badge: r.status === "confirmed" ? "Confirmada" : r.status === "cancelled" ? "Cancelada" : "Pendente",
+                  badgeColor: r.status === "confirmed" ? "bg-green-100 text-green-700" : r.status === "cancelled" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700",
+                });
+              }
+              for (const p of (payments?.data ?? [])) {
+                events.push({
+                  id: `pay-${p.id}`, date: p.paidAt ?? p.createdAt,
+                  type: "payment", title: p.status === "paid" ? "Pagamento recebido" : "Lançamento financeiro",
+                  description: `${p.description ?? p.category} — ${formatCurrency(p.amount)}`,
+                  badge: p.status === "paid" ? "Pago" : p.status === "overdue" ? "Vencido" : "Pendente",
+                  badgeColor: p.status === "paid" ? "bg-green-100 text-green-700" : p.status === "overdue" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700",
+                });
+              }
+              events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+              if (!events.length) {
+                return (
+                  <div className="text-center py-10 text-muted-foreground">
+                    <Calendar className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-medium">Nenhuma atividade registrada</p>
+                    <p className="text-xs mt-1">O histórico aparece automaticamente conforme reservas e pagamentos são criados.</p>
+                  </div>
+                );
+              }
+              return (
+                <div className="relative space-y-0">
+                  {events.map((ev, idx) => (
+                    <div key={ev.id} className="flex gap-3 group">
+                      <div className="flex flex-col items-center">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${ev.type === "payment" ? "bg-green-100" : "bg-blue-100"}`}>
+                          {ev.type === "payment"
+                            ? <TrendingUp className="w-3.5 h-3.5 text-green-600" />
+                            : <Star className="w-3.5 h-3.5 text-blue-600" />}
+                        </div>
+                        {idx < events.length - 1 && <div className="w-px flex-1 bg-border mt-1 mb-1" />}
+                      </div>
+                      <div className="pb-4 min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium">{ev.title}</span>
+                          {ev.badge && <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${ev.badgeColor}`}>{ev.badge}</span>}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">{ev.description}</p>
+                        <p className="text-xs text-muted-foreground/70 mt-0.5">{format(new Date(ev.date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </TabsContent>
 
           <TabsContent value="documents" className="mt-4">

@@ -1,9 +1,9 @@
-import { useMemo, type ElementType } from "react";
+import { useMemo, useState, useEffect, useRef, type ElementType } from "react";
 import {
   useGetDashboardSummary, useGetDashboardRevenueChart, useGetDashboardUpcomingTrips,
   useListPayments, useListClients, useGetMe, useListPipelineStages, useListDeals, useListReservations,
 } from "@workspace/api-client-react";
-import { Users, Map, DollarSign, Star, Briefcase, CalendarCheck, AlertTriangle, ArrowUpRight, Plus, Clock } from "lucide-react";
+import { Users, Map, DollarSign, Star, Briefcase, CalendarCheck, AlertTriangle, ArrowUpRight, Plus, Clock, Check, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,84 @@ import { ptBR } from "date-fns/locale";
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+const TASKS_KEY = "visite-crm-tasks";
+
+interface Task { id: string; text: string; done: boolean; createdAt: number; }
+
+function TasksCard() {
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    try { return JSON.parse(localStorage.getItem(TASKS_KEY) ?? "[]") as Task[]; } catch { return []; }
+  });
+  const [newText, setNewText] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
+  }, [tasks]);
+
+  const addTask = () => {
+    const text = newText.trim();
+    if (!text) return;
+    setTasks(prev => [{ id: crypto.randomUUID(), text, done: false, createdAt: Date.now() }, ...prev]);
+    setNewText("");
+    inputRef.current?.focus();
+  };
+
+  const toggle = (id: string) => setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+  const remove = (id: string) => setTasks(prev => prev.filter(t => t.id !== id));
+
+  const pending = tasks.filter(t => !t.done).length;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">Tarefas do Dia</CardTitle>
+          {pending > 0 && <Badge variant="secondary" className="text-xs">{pending} pendente{pending !== 1 ? "s" : ""}</Badge>}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex gap-2">
+          <Input
+            ref={inputRef}
+            value={newText}
+            onChange={e => setNewText(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") addTask(); }}
+            placeholder="Nova tarefa..."
+            className="h-8 text-sm"
+          />
+          <Button size="icon" className="h-8 w-8 shrink-0" onClick={addTask} disabled={!newText.trim()}>
+            <Plus className="w-4 h-4" />
+          </Button>
+        </div>
+        {tasks.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-3">Nenhuma tarefa. Adicione uma acima!</p>
+        ) : (
+          <div className="space-y-1 max-h-52 overflow-y-auto pr-1">
+            {tasks.map(task => (
+              <div key={task.id} className="flex items-center gap-2 group rounded-md px-2 py-1.5 hover:bg-muted/50 transition-colors">
+                <button
+                  onClick={() => toggle(task.id)}
+                  className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${task.done ? "bg-primary border-primary" : "border-muted-foreground/40 hover:border-primary"}`}
+                >
+                  {task.done && <Check className="w-3 h-3 text-primary-foreground" />}
+                </button>
+                <span className={`text-sm flex-1 min-w-0 truncate ${task.done ? "line-through text-muted-foreground" : ""}`}>{task.text}</span>
+                <button
+                  onClick={() => remove(task.id)}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 const DONUT_COLORS = ["#3B82F6", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#6B7280"];
@@ -512,14 +590,7 @@ function SellerDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Tarefas do Dia</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground text-center py-4">Módulo de tarefas disponível em breve.</p>
-          </CardContent>
-        </Card>
+        <TasksCard />
       </div>
     </div>
   );

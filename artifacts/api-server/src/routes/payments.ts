@@ -75,6 +75,7 @@ function formatPayment(p: typeof paymentsTable.$inferSelect) {
     paymentMethod: p.paymentMethod, installmentNumber: p.installmentNumber,
     totalInstallments: p.totalInstallments, dueDate: p.dueDate.toISOString(),
     paidAt: p.paidAt?.toISOString() ?? null, status: p.status,
+    receiptUrl: p.receiptUrl ?? null,
     description: p.description, notes: p.notes,
     createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString(),
   };
@@ -208,6 +209,7 @@ router.post("/payments", async (req, res): Promise<void> => {
 
     const id = generateId();
     const installments = parsed.data.installments ?? 1;
+    const receiptUrl = typeof req.body.receiptUrl === "string" ? req.body.receiptUrl : null;
 
     for (let i = 1; i <= installments; i++) {
       const dueDate = new Date(parsed.data.dueDate);
@@ -226,6 +228,7 @@ router.post("/payments", async (req, res): Promise<void> => {
         dueDate,
         description: parsed.data.description ?? null,
         notes: parsed.data.notes ?? null,
+        receiptUrl,
       });
     }
 
