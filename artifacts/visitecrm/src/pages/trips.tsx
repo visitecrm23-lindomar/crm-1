@@ -105,11 +105,8 @@ function getCountdownLabel(date: string) {
     const target = parseISO(date);
     const now = new Date();
     const days = differenceInCalendarDays(target, now);
-    const hours = differenceInHours(target, now);
-    const minutes = differenceInMinutes(target, now);
-    if (minutes < 0) return "Encerrado";
     if (days < 0) return "Encerrado";
-    if (days === 0) return hours <= 0 ? "Hoje" : `${hours}h`;
+    if (days === 0) return "Hoje";
     if (days === 1) return "Amanhã";
     if (days < 14) return `${days} dias`;
     return `${Math.round(days / 7)} semanas`;
@@ -988,11 +985,9 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
 
   const { data: allTripsData } = useListTrips({ limit: 100 });
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
-  const { data: seatMap, refetch: refetchSeatMap } = useGetTripSeatMap(tripId);
-  useEffect(() => {
-    const id = window.setInterval(() => refetchSeatMap(), 5000);
-    return () => window.clearInterval(id);
-  }, [refetchSeatMap]);
+  const { data: seatMap } = useGetTripSeatMap(tripId, {
+    query: { refetchInterval: 5000 },
+  });
   const { data: reservations } = useListReservations({ tripId });
   const { data: clientsData } = useListClients({ search: clientSearch || undefined, limit: 8 });
   const createReservation = useCreateReservation();
@@ -1051,7 +1046,6 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
         setOptimisticSeats(prev => ({ ...prev, [selectedSeat.number]: "reserved" }));
         setShowModal(false);
         setSelectedSeat(null);
-        refetchSeatMap();
       } else {
         if (!manualName) { setAssignError("Informe o nome do passageiro."); setIsSaving(false); return; }
         if (!manualEmail) { setAssignError("Informe o e-mail do passageiro."); setIsSaving(false); return; }
@@ -1075,7 +1069,6 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
         setOptimisticSeats(prev => ({ ...prev, [selectedSeat.number]: "reserved" }));
         setShowModal(false);
         setSelectedSeat(null);
-        refetchSeatMap();
       }
     } catch {
       setAssignError("Erro ao salvar reserva. Tente novamente.");
@@ -1105,6 +1098,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
           <h1 className="text-2xl font-bold tracking-tight">Mapa de Assentos</h1>
           <p className="text-muted-foreground text-sm">{trip?.name}</p>
         </div>
+        <Badge variant="outline" className="text-xs">Atualizado agora</Badge>
         <div className="flex items-center gap-2 flex-wrap">
           <Select value={tripId} onValueChange={v => { setTripId(v); setOptimisticSeats({}); }}>
             <SelectTrigger className="w-56">
