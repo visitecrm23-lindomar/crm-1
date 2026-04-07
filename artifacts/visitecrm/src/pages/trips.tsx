@@ -25,7 +25,7 @@ import {
 import {
   format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay,
   addMonths, subMonths, isSameDay, isToday, startOfWeek, addDays,
-  addWeeks, subWeeks,
+  addWeeks, subWeeks, differenceInCalendarDays, differenceInHours, differenceInMinutes,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -98,6 +98,24 @@ function formatCurrency(v: number) {
 function formatDate(d: string) {
   try { return format(parseISO(d), "dd/MM/yyyy", { locale: ptBR }); }
   catch { return d; }
+}
+
+function getCountdownLabel(date: string) {
+  try {
+    const target = parseISO(date);
+    const now = new Date();
+    const days = differenceInCalendarDays(target, now);
+    const hours = differenceInHours(target, now);
+    const minutes = differenceInMinutes(target, now);
+    if (minutes < 0) return "Encerrado";
+    if (days < 0) return "Encerrado";
+    if (days === 0) return hours <= 0 ? "Hoje" : `${hours}h`;
+    if (days === 1) return "Amanhã";
+    if (days < 14) return `${days} dias`;
+    return `${Math.round(days / 7)} semanas`;
+  } catch {
+    return "";
+  }
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
@@ -344,8 +362,14 @@ export function TripList() {
 }
 
 function TripCard({ trip, onDelete, onDuplicate, navigate }: { trip: Trip; onDelete: () => void; onDuplicate: () => void; navigate: (to: string) => void }) {
+  const [nowTick, setNowTick] = useState(Date.now());
   const pct = trip.totalCapacity > 0 ? Math.round((trip.reservedSeats + trip.confirmedSeats) / trip.totalCapacity * 100) : 0;
   const statusInfo = STATUS_MAP[trip.status] ?? { label: trip.status, color: "bg-gray-100 text-gray-600" };
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTick(Date.now()), 60000);
+    return () => window.clearInterval(id);
+  }, []);
+  const countdown = getCountdownLabel(trip.departureDate);
   return (
     <div className="bg-card border rounded-xl overflow-hidden hover:shadow-md transition-shadow">
       <div className="relative h-36 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
@@ -360,6 +384,11 @@ function TripCard({ trip, onDelete, onDuplicate, navigate }: { trip: Trip; onDel
         <div className="flex items-center gap-1 text-sm text-muted-foreground">
           <Calendar className="w-3 h-3" /><span>{formatDate(trip.departureDate)}</span>
           {trip.returnDate && <><span>—</span><span>{formatDate(trip.returnDate)}</span></>}
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant={countdown === "Encerrado" ? "destructive" : "secondary"} className="text-xs">
+            {countdown}
+          </Badge>
         </div>
         <OccupancyBar reserved={trip.reservedSeats} confirmed={trip.confirmedSeats} total={trip.totalCapacity} />
         <div className="flex items-center justify-between text-sm">
@@ -919,6 +948,10 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   const { data: allTripsData } = useListTrips({ limit: 100 });
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
   const { data: seatMap, refetch: refetchSeatMap } = useGetTripSeatMap(tripId);
+  useEffect(() => {
+    const id = window.setInterval(() => refetchSeatMap(), 5000);
+    return () => window.clearInterval(id);
+  }, [refetchSeatMap]);
   const { data: reservations } = useListReservations({ tripId });
   const { data: clientsData } = useListClients({ search: clientSearch || undefined, limit: 8 });
   const createReservation = useCreateReservation();
