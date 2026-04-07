@@ -4,6 +4,7 @@ import {
   useCreateUser,
   useUpdateUser,
   useGetTenant,
+  getGetTenantQueryKey,
   useUpdateTenant,
   useListSystemConfigs,
   useUpsertSystemConfig,
@@ -65,27 +66,35 @@ function AgencyProfileTab() {
   const { toast } = useToast();
   const { data: me, refetch: refetchMe } = useGetMe();
   const tenantId = me?.tenantId ?? null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: fullTenant } = useGetTenant(tenantId ?? "", {
-    query: { enabled: !!tenantId } as any,
+    query: {
+      queryKey: getGetTenantQueryKey(tenantId ?? ""),
+      enabled: !!tenantId,
+    },
   });
   const updateTenant = useUpdateTenant();
 
-  const tenant = fullTenant ?? me?.tenant ?? null;
-
   const [form, setForm] = useState<UpdateTenantBody>({});
   useEffect(() => {
-    if (tenant) {
+    if (fullTenant) {
       setForm({
-        name: tenant.name,
-        logoUrl: tenant.logoUrl ?? "",
-        primaryColor: tenant.primaryColor ?? "#3B82F6",
-        secondaryColor: tenant.secondaryColor ?? "#8B5CF6",
-        whatsapp: (tenant as Record<string, string>).whatsapp ?? "",
-        phone: (tenant as Record<string, string>).phone ?? "",
+        name: fullTenant.name,
+        logoUrl: fullTenant.logoUrl ?? "",
+        primaryColor: fullTenant.primaryColor ?? "#3B82F6",
+        secondaryColor: fullTenant.secondaryColor ?? "#8B5CF6",
+        whatsapp: fullTenant.whatsapp ?? "",
+        phone: fullTenant.phone ?? "",
       });
+    } else if (me?.tenant) {
+      setForm((f) => ({
+        ...f,
+        name: me.tenant!.name,
+        logoUrl: me.tenant!.logoUrl ?? "",
+        primaryColor: me.tenant!.primaryColor ?? "#3B82F6",
+        secondaryColor: me.tenant!.secondaryColor ?? "#8B5CF6",
+      }));
     }
-  }, [tenant?.id]);
+  }, [fullTenant?.id, me?.tenant?.id]);
 
   async function handleSave() {
     if (!tenantId) {
@@ -724,21 +733,26 @@ function NotificationsTab() {
 function CustomizationTab() {
   const { toast } = useToast();
   const { data: me, refetch: refetchMe } = useGetMe();
-  const tenant = me?.tenant;
   const tenantId = me?.tenantId ?? null;
+  const { data: fullTenant } = useGetTenant(tenantId ?? "", {
+    query: {
+      queryKey: getGetTenantQueryKey(tenantId ?? ""),
+      enabled: !!tenantId,
+    },
+  });
   const updateTenant = useUpdateTenant();
 
-  const [primaryColor, setPrimaryColor] = useState(tenant?.primaryColor ?? "#3B82F6");
-  const [secondaryColor, setSecondaryColor] = useState(tenant?.secondaryColor ?? "#8B5CF6");
-  const [logoUrl, setLogoUrl] = useState(tenant?.logoUrl ?? "");
+  const [primaryColor, setPrimaryColor] = useState(me?.tenant?.primaryColor ?? "#3B82F6");
+  const [secondaryColor, setSecondaryColor] = useState(me?.tenant?.secondaryColor ?? "#8B5CF6");
+  const [logoUrl, setLogoUrl] = useState(me?.tenant?.logoUrl ?? "");
 
   useEffect(() => {
-    if (tenant) {
-      setPrimaryColor(tenant.primaryColor ?? "#3B82F6");
-      setSecondaryColor(tenant.secondaryColor ?? "#8B5CF6");
-      setLogoUrl(tenant.logoUrl ?? "");
+    if (fullTenant) {
+      setPrimaryColor(fullTenant.primaryColor ?? "#3B82F6");
+      setSecondaryColor(fullTenant.secondaryColor ?? "#8B5CF6");
+      setLogoUrl(fullTenant.logoUrl ?? "");
     }
-  }, [tenant?.id]);
+  }, [fullTenant?.id]);
 
   async function handleSave() {
     if (!tenantId) {

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { systemConfigsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
@@ -36,8 +36,7 @@ router.post("/system-configs", async (req, res): Promise<void> => {
   return upsertHandler(req, res);
 });
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function upsertHandler(req: any, res: any): Promise<void> {
+async function upsertHandler(req: Request, res: Response): Promise<void> {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
