@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   useListMessages,
   useSendMessage,
@@ -49,7 +49,7 @@ import {
   WholeWord,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { MessageTemplate } from "@workspace/api-client-react";
+import type { MessageTemplate, Message } from "@workspace/api-client-react";
 
 const CHANNELS = [
   { value: "whatsapp", label: "WhatsApp" },
@@ -86,7 +86,7 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function Communication() {
-  const [tab, setTab] = useState("messages");
+  const [tab, setTab] = useState("conversations");
   const [isSendOpen, setIsSendOpen] = useState(false);
   const [isTemplateOpen, setIsTemplateOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<MessageTemplate | null>(null);
@@ -95,8 +95,11 @@ export default function Communication() {
   const [selectedClientId, setSelectedClientId] = useState("");
   const [filterChannel, setFilterChannel] = useState("all");
   const [messageContent, setMessageContent] = useState("");
-
   const [tplChannel, setTplChannel] = useState("whatsapp");
+
+  const [selectedConversationClientId, setSelectedConversationClientId] = useState<string | null>(null);
+  const [inboxChannel, setInboxChannel] = useState("whatsapp");
+  const [inboxMessage, setInboxMessage] = useState("");
 
   const { data: messages, isLoading: loadingMessages, refetch: refetchMessages } =
     useListMessages({ limit: 50 });
@@ -171,6 +174,43 @@ export default function Communication() {
     filterChannel === "all"
       ? (messages ?? [])
       : (messages ?? []).filter((m) => m.channel === filterChannel);
+
+  const conversations = useMemo(() => {
+    const byClient: Record<string, { clientId: string; clientName: string; lastMessage: Message; count: number }> = {};
+    for (const m of messages ?? []) {
+      const cid = m.toClientId;
+      if (!cid) continue;
+      if (!byClient[cid]) {
+        byClient[cid] = { clientId: cid, clientName: m.clientName ?? cid, lastMessage: m, count: 0 };
+      }
+      byClient[cid].count += 1;
+      if (new Date(m.sentAt) > new Date(byClient[cid].lastMessage.sentAt)) {
+        byClient[cid].lastMessage = m;
+      }
+    }
+    return Object.values(byClient).sort((a, b) => new Date(b.lastMessage.sentAt).getTime() - new Date(a.lastMessage.sentAt).getTime());
+  }, [messages]);
+
+  const conversationMessages = useMemo(() => {
+    if (!selectedConversationClientId) return [];
+    return (messages ?? [])
+      .filter(m => m.toClientId === selectedConversationClientId)
+      .sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+  }, [messages, selectedConversationClientId]);
+
+  const handleSendInbox = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!selectedConversationClientId || !inboxMessage.trim()) return;
+    await sendMessage.mutateAsync({
+      data: {
+        toClientId: selectedConversationClientId,
+        channel: inboxChannel,
+        content: inboxMessage,
+      },
+    });
+    setInboxMessage("");
+    refetchMessages();
+  };
 
   return (
     <div className="space-y-6">
@@ -393,9 +433,122 @@ export default function Communication() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
+          <TabsTrigger value="conversations">Conversas</TabsTrigger>
           <TabsTrigger value="messages">Mensagens Enviadas</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="conversations" className="mt-4">
+          {loadingMessages ? (
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
+              <div className="col-span-2"><Skeleton className="h-[400px] w-full" /></div>
+            </div>
+          ) : conversations.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-30" />
+              <p className="font-medium">Nenhuma conversa ainda.</p>
+              <p className="text-sm mt-1">Envie uma mensagem para iniciar uma conversa com um cliente.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-[520px]">
+              <div className="border rounded-lg overflow-hidden flex flex-col">
+                <div className="p-3 border-b bg-muted/30">
+                  <p className="text-sm font-semibold">Clientes ({conversations.length})</p>
+                </div>
+                <div className="flex-1 overflow-y-auto divide-y">
+                  {conversations.map(conv => (
+                    <button
+                      key={conv.clientId}
+                      onClick={() => setSelectedConversationClientId(conv.clientId)}
+                      className={`w-full text-left p-3 hover:bg-muted/40 transition-colors ${selectedConversationClientId === conv.clientId ? "bg-primary/5 border-l-2 border-primary" : ""}`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <p className="font-medium text-sm truncate">{conv.clientName}</p>
+                        <span className="text-xs text-muted-foreground shrink-0 ml-1">
+                          {new Date(conv.lastMessage.sentAt).toLocaleDateString("pt-BR")}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{conv.lastMessage.content}</p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <Badge className={`text-xs ${channelColors[conv.lastMessage.channel] ?? ""}`} variant="secondary">
+                          {CHANNELS.find(c => c.value === conv.lastMessage.channel)?.label ?? conv.lastMessage.channel}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">{conv.count} msg</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="md:col-span-2 border rounded-lg overflow-hidden flex flex-col">
+                {!selectedConversationClientId ? (
+                  <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                    <div className="text-center">
+                      <MessageSquare className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                      <p className="text-sm">Selecione uma conversa para ver as mensagens</p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="p-3 border-b bg-muted/30 flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-sm">
+                          {conversations.find(c => c.clientId === selectedConversationClientId)?.clientName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{conversationMessages.length} mensagem(ns)</p>
+                      </div>
+                      <Select value={inboxChannel} onValueChange={setInboxChannel}>
+                        <SelectTrigger className="w-32 h-7 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CHANNELS.map(ch => (
+                            <SelectItem key={ch.value} value={ch.value}>{ch.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                      {conversationMessages.map(m => (
+                        <div key={m.id} className="flex justify-end">
+                          <div className="max-w-xs">
+                            <div className="bg-primary text-primary-foreground rounded-lg rounded-tr-sm px-3 py-2 text-sm">
+                              {m.content}
+                            </div>
+                            <div className="flex items-center justify-end gap-1.5 mt-0.5">
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(m.sentAt).toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}
+                              </span>
+                              <span className="text-xs">{statusIcons[m.status] ?? null}</span>
+                              <Badge className={`text-xs ${channelColors[m.channel] ?? ""}`} variant="secondary">
+                                {CHANNELS.find(c => c.value === m.channel)?.label ?? m.channel}
+                              </Badge>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="p-3 border-t">
+                      <form onSubmit={handleSendInbox} className="flex gap-2">
+                        <input
+                          type="text"
+                          className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                          placeholder="Digite sua mensagem..."
+                          value={inboxMessage}
+                          onChange={e => setInboxMessage(e.target.value)}
+                        />
+                        <Button type="submit" size="sm" disabled={sendMessage.isPending || !inboxMessage.trim()}>
+                          <Send className="w-4 h-4" />
+                        </Button>
+                      </form>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </TabsContent>
 
         <TabsContent value="messages" className="mt-4 space-y-4">
           <div className="flex items-center gap-2">

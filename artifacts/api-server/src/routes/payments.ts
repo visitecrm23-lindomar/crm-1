@@ -8,6 +8,66 @@ import { CreatePaymentBody, UpdatePaymentBody, CreateExpenseBody, UpdateExpenseB
 
 const router = Router();
 
+router.get("/trips/:tripId/financial-report", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const { tripId } = req.params;
+
+    const tripReservations = await db.select().from(reservationsTable)
+      .where(and(eq(reservationsTable.tenantId, me.tenantId), eq(reservationsTable.tripId, tripId)));
+
+    const reservationIds = tripReservations.map(r => r.id);
+
+    let tripPayments: typeof paymentsTable.$inferSelect[] = [];
+    if (reservationIds.length > 0) {
+      tripPayments = await db.select().from(paymentsTable)
+        .where(and(eq(paymentsTable.tenantId, me.tenantId), inArray(paymentsTable.reservationId, reservationIds)));
+    }
+
+    const tripExpenses = await db.select().from(expensesTable)
+      .where(and(eq(expensesTable.tenantId, me.tenantId), eq(expensesTable.tripId, tripId)));
+
+    const totalRevenue = tripReservations.reduce((s, r) => s + Number(r.totalValue), 0);
+    const totalPaid = tripReservations.reduce((s, r) => s + Number(r.paidValue), 0);
+    const totalPending = tripReservations.reduce((s, r) => s + Math.max(Number(r.balance), 0), 0);
+    const totalExpenses = tripExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    const netProfit = totalPaid - totalExpenses;
+
+    const confirmedCount = tripReservations.filter(r => r.status === "confirmed").length;
+    const pendingCount = tripReservations.filter(r => r.status === "pending").length;
+    const cancelledCount = tripReservations.filter(r => r.status === "cancelled").length;
+
+    const revenueByMethod: Record<string, number> = {};
+    for (const p of tripPayments.filter(p => p.status === "paid")) {
+      const m = p.paymentMethod ?? "other";
+      revenueByMethod[m] = (revenueByMethod[m] ?? 0) + Number(p.amount);
+    }
+
+    const expensesByCategory: Record<string, number> = {};
+    for (const e of tripExpenses) {
+      expensesByCategory[e.category] = (expensesByCategory[e.category] ?? 0) + Number(e.amount);
+    }
+
+    res.json({
+      reservationCount: tripReservations.length,
+      confirmedCount,
+      pendingCount,
+      cancelledCount,
+      totalRevenue,
+      totalPaid,
+      totalPending,
+      totalExpenses,
+      netProfit,
+      revenueByMethod,
+      expensesByCategory,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error fetching trip financial report");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 function formatPayment(p: typeof paymentsTable.$inferSelect) {
   return {
     id: p.id, reservationId: p.reservationId, clientId: p.clientId,

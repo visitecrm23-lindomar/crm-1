@@ -12,8 +12,12 @@ import {
   useListClients,
   useListUsers,
   useListBoardingLocations,
+  useListPassengers,
+  useCreatePassenger,
+  useUpdatePassenger,
+  useDeletePassenger,
 } from "@workspace/api-client-react";
-import type { Reservation } from "@workspace/api-client-react";
+import type { Reservation, Passenger } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,10 +28,19 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   Plus, Search, MoreHorizontal, Eye, DollarSign, QrCode, CheckCircle, XCircle,
-  CalendarCheck, Clock, Users, Tag, Pencil,
+  CalendarCheck, Clock, Users, Tag, Pencil, Trash2, UserPlus,
 } from "lucide-react";
+
+const AGE_CATEGORY_LABELS: Record<string, string> = {
+  adult: "Adulto",
+  child: "Criança",
+  senior: "Sênior",
+  baby: "Bebê (< 2 anos)",
+};
 
 const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
 
@@ -69,6 +82,236 @@ function StatCard({ icon: Icon, label, value, color, sub }: { icon: React.Elemen
   );
 }
 
+function PassengerForm({
+  defaultValues,
+  onSubmit,
+  onCancel,
+  isPending,
+  isEdit,
+}: {
+  defaultValues?: { name?: string; cpf?: string; rg?: string; birthDate?: string; ageCategory?: string; seatNumber?: string };
+  onSubmit: (fd: FormData, ageCategory: string) => Promise<void>;
+  onCancel: () => void;
+  isPending: boolean;
+  isEdit?: boolean;
+}) {
+  const [ageCategory, setAgeCategory] = useState(defaultValues?.ageCategory ?? "adult");
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    await onSubmit(new FormData(e.currentTarget), ageCategory);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2 space-y-1.5">
+          <label className="text-sm font-medium">Nome completo *</label>
+          <Input name="name" required defaultValue={defaultValues?.name ?? ""} placeholder="Nome do passageiro" />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">CPF</label>
+          <Input name="cpf" defaultValue={defaultValues?.cpf ?? ""} placeholder="000.000.000-00" />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">RG</label>
+          <Input name="rg" defaultValue={defaultValues?.rg ?? ""} placeholder="0000000" />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Data de Nascimento</label>
+          <Input name="birthDate" type="date" defaultValue={defaultValues?.birthDate?.slice(0, 10) ?? ""} />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Assento</label>
+          <Input name="seatNumber" defaultValue={defaultValues?.seatNumber ?? ""} placeholder="Ex: 12" />
+        </div>
+        <div className="col-span-2 space-y-1.5">
+          <label className="text-sm font-medium">Categoria de Idade *</label>
+          <Select value={ageCategory} onValueChange={setAgeCategory}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {Object.entries(AGE_CATEGORY_LABELS).map(([k, v]) => (
+                <SelectItem key={k} value={k}>{v}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 pt-1">
+        <Button type="button" variant="outline" size="sm" onClick={onCancel}>Cancelar</Button>
+        <Button type="submit" size="sm" disabled={isPending}>
+          {isPending ? "Salvando..." : isEdit ? "Salvar Alterações" : "Adicionar Passageiro"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function ReservationPassengersTab({ reservationId }: { reservationId: string }) {
+  const [addOpen, setAddOpen] = useState(false);
+  const [editingPassenger, setEditingPassenger] = useState<Passenger | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const { data: passengers, refetch } = useListPassengers(reservationId, {
+    query: { queryKey: ["passengers", reservationId] },
+  });
+  const createPassenger = useCreatePassenger();
+  const updatePassenger = useUpdatePassenger();
+  const deletePassenger = useDeletePassenger();
+
+  const handleAdd = async (fd: FormData, ageCategory: string) => {
+    await createPassenger.mutateAsync({
+      reservationId,
+      data: {
+        name: fd.get("name") as string,
+        cpf: (fd.get("cpf") as string) || undefined,
+        ageCategory,
+        seatNumber: (fd.get("seatNumber") as string) || undefined,
+        isChildUnder7: ageCategory === "baby",
+      },
+    });
+    await refetch();
+    setAddOpen(false);
+  };
+
+  const handleEdit = async (fd: FormData, ageCategory: string) => {
+    if (!editingPassenger) return;
+    await updatePassenger.mutateAsync({
+      reservationId,
+      id: editingPassenger.id,
+      data: {
+        name: (fd.get("name") as string) || undefined,
+        cpf: (fd.get("cpf") as string) || null,
+        ageCategory,
+        seatNumber: (fd.get("seatNumber") as string) || null,
+      },
+    });
+    await refetch();
+    setEditingPassenger(null);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    await deletePassenger.mutateAsync({ reservationId, id: deleteId });
+    await refetch();
+    setDeleteId(null);
+  };
+
+  const list = (passengers ?? []) as Passenger[];
+
+  return (
+    <div className="space-y-4 py-2">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">{list.length} passageiro(s) cadastrado(s)</p>
+        <Button size="sm" variant="outline" onClick={() => setAddOpen(true)}>
+          <UserPlus className="w-4 h-4 mr-1.5" /> Adicionar Passageiro
+        </Button>
+      </div>
+
+      {list.length === 0 ? (
+        <div className="text-center py-10 text-muted-foreground">
+          <Users className="w-10 h-10 mx-auto mb-2 opacity-30" />
+          <p className="text-sm font-medium">Nenhum passageiro cadastrado</p>
+          <p className="text-xs mt-1">Adicione passageiros com CPF/RG para controle de embarque e lista ANTT.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {list.map(p => (
+            <div key={p.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border">
+              <div>
+                <p className="font-medium text-sm">{p.name}</p>
+                <div className="flex gap-3 mt-0.5 flex-wrap">
+                  {p.cpf && <span className="text-xs text-muted-foreground">CPF: {p.cpf}</span>}
+                  {p.seatNumber && <span className="text-xs text-muted-foreground">Assento: {p.seatNumber}</span>}
+                  {p.birthDate && <span className="text-xs text-muted-foreground">{new Date(p.birthDate as string).toLocaleDateString("pt-BR")}</span>}
+                  <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                    p.ageCategory === "adult" ? "bg-blue-100 text-blue-700" :
+                    p.ageCategory === "child" ? "bg-amber-100 text-amber-700" :
+                    p.ageCategory === "senior" ? "bg-purple-100 text-purple-700" :
+                    "bg-pink-100 text-pink-700"
+                  }`}>
+                    {AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory}
+                  </span>
+                </div>
+              </div>
+              <div className="flex gap-1 shrink-0">
+                <Button
+                  size="icon" variant="ghost" className="h-7 w-7"
+                  onClick={() => setEditingPassenger(p)}
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => setDeleteId(p.id)}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Adicionar Passageiro</DialogTitle></DialogHeader>
+          <div className="mt-2">
+            <PassengerForm
+              onSubmit={handleAdd}
+              onCancel={() => setAddOpen(false)}
+              isPending={createPassenger.isPending}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editingPassenger} onOpenChange={(o) => { if (!o) setEditingPassenger(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Editar Passageiro</DialogTitle></DialogHeader>
+          {editingPassenger && (
+            <div className="mt-2">
+              <PassengerForm
+                isEdit
+                defaultValues={{
+                  name: editingPassenger.name,
+                  cpf: editingPassenger.cpf ?? "",
+                  ageCategory: editingPassenger.ageCategory,
+                  seatNumber: editingPassenger.seatNumber ?? "",
+                }}
+                onSubmit={handleEdit}
+                onCancel={() => setEditingPassenger(null)}
+                isPending={updatePassenger.isPending}
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteId} onOpenChange={(o) => { if (!o) setDeleteId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover Passageiro</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja remover este passageiro? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDelete}
+              disabled={deletePassenger.isPending}
+            >
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
 function ReservationDetailModal({ reservationId, open, onClose }: { reservationId: string; open: boolean; onClose: () => void }) {
   const { data, isLoading } = useGetReservation(reservationId, {
     query: {
@@ -86,122 +329,152 @@ function ReservationDetailModal({ reservationId, open, onClose }: { reservationI
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Detalhes da Reserva</DialogTitle>
+          <DialogTitle>
+            {data ? (
+              <span className="flex items-center gap-2">
+                Reserva <code className="text-base font-mono bg-muted px-1.5 py-0.5 rounded">{data.voucherCode}</code>
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[data.status] ?? "bg-gray-100 text-gray-800"}`}>
+                  {STATUS_LABELS[data.status] ?? data.status}
+                </span>
+              </span>
+            ) : "Detalhes da Reserva"}
+          </DialogTitle>
         </DialogHeader>
         {isLoading ? (
           <div className="space-y-4 py-4">
             {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
           </div>
         ) : data ? (
-          <div className="space-y-5 mt-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Voucher</p>
-                <p className="font-mono font-semibold text-lg">{data.voucherCode}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Status</p>
-                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${STATUS_COLORS[data.status] ?? "bg-gray-100 text-gray-800"}`}>
-                  {STATUS_LABELS[data.status] ?? data.status}
-                </span>
-              </div>
-            </div>
-            <Separator />
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Cliente</p>
-                <p className="font-medium">{data.client?.name}</p>
-                <p className="text-sm text-muted-foreground">{data.client?.email}</p>
-                <p className="text-sm text-muted-foreground">{data.client?.whatsapp}</p>
-                {data.client?.cpf && <p className="text-sm text-muted-foreground">CPF: {data.client.cpf}</p>}
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Viagem</p>
-                <p className="font-medium">{data.trip?.name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {data.trip?.departureDate ? new Date(data.trip.departureDate).toLocaleDateString("pt-BR") : "—"}
-                </p>
-                <p className="text-sm text-muted-foreground">{data.trip?.destination}</p>
-              </div>
-            </div>
-            <Separator />
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Valor Total</p>
-                <p className="font-semibold text-lg">{fmt(data.totalValue)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Valor Pago</p>
-                <p className="font-semibold text-lg text-green-600">{fmt(data.paidValue)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Saldo</p>
-                <p className={`font-semibold text-lg ${data.balance > 0 ? "text-destructive" : "text-green-600"}`}>
-                  {fmt(data.balance)}
-                </p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Forma de Pagamento</p>
-                <p className="font-medium">{METHOD_LABELS[data.paymentMethod ?? ""] ?? data.paymentMethod ?? "—"}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Parcelas</p>
-                <p className="font-medium">{data.installments}x</p>
-              </div>
-            </div>
-            {data.seats?.length > 0 && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Assentos</p>
-                <div className="flex flex-wrap gap-1">
-                  {data.seats.map(s => (
-                    <span key={s} className="inline-flex items-center px-2 py-0.5 rounded bg-muted text-sm font-mono">{s}</span>
-                  ))}
+          <Tabs defaultValue="details" className="mt-2">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="details">Detalhes</TabsTrigger>
+              <TabsTrigger value="passengers">Passageiros</TabsTrigger>
+              <TabsTrigger value="payments">Pagamentos</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="details" className="space-y-4 mt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Cliente</p>
+                  <p className="font-medium">{data.client?.name}</p>
+                  <p className="text-sm text-muted-foreground">{data.client?.email}</p>
+                  <p className="text-sm text-muted-foreground">{data.client?.whatsapp}</p>
+                  {data.client?.cpf && <p className="text-sm text-muted-foreground">CPF: {data.client.cpf}</p>}
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Viagem</p>
+                  <p className="font-medium">{data.trip?.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {data.trip?.departureDate ? new Date(data.trip.departureDate).toLocaleDateString("pt-BR") : "—"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">{data.trip?.destination}</p>
                 </div>
               </div>
-            )}
-            {data.notes && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Observações</p>
-                <p className="text-sm">{data.notes}</p>
-              </div>
-            )}
-            {data.checkedInAt && (
-              <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
-                <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
-                <p className="text-sm text-green-700">Check-in realizado em {new Date(data.checkedInAt).toLocaleString("pt-BR")}</p>
-              </div>
-            )}
-            {payments.length > 0 && (
-              <>
-                <Separator />
+              <Separator />
+              <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <p className="text-xs font-medium text-muted-foreground mb-2">Histórico de Pagamentos</p>
-                  <div className="space-y-2">
-                    {payments.map(p => (
-                      <div key={p.id} className="flex items-center justify-between p-2.5 bg-muted rounded-lg text-sm">
-                        <div>
-                          <p className="font-medium">{METHOD_LABELS[p.paymentMethod ?? ""] ?? p.paymentMethod ?? "—"}</p>
-                          <p className="text-xs text-muted-foreground">{new Date(p.dueDate).toLocaleDateString("pt-BR")} · {p.description || p.category}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className={`font-semibold ${p.status === "paid" ? "text-green-600" : ""}`}>{fmt(parseFloat(String(p.amount)))}</p>
-                          <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${p.status === "paid" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
-                            {p.status === "paid" ? "Pago" : "Pendente"}
-                          </span>
-                        </div>
-                      </div>
+                  <p className="text-xs text-muted-foreground mb-1">Valor Total</p>
+                  <p className="font-semibold text-lg">{fmt(data.totalValue)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Valor Pago</p>
+                  <p className="font-semibold text-lg text-green-600">{fmt(data.paidValue)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Saldo</p>
+                  <p className={`font-semibold text-lg ${data.balance > 0 ? "text-destructive" : "text-green-600"}`}>
+                    {fmt(data.balance)}
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Forma de Pagamento</p>
+                  <p className="font-medium">{METHOD_LABELS[data.paymentMethod ?? ""] ?? data.paymentMethod ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Parcelas</p>
+                  <p className="font-medium">{data.installments}x</p>
+                </div>
+              </div>
+              {data.seats?.length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Assentos Reservados</p>
+                  <div className="flex flex-wrap gap-1">
+                    {data.seats.map(s => (
+                      <span key={s} className="inline-flex items-center px-2 py-0.5 rounded bg-muted text-sm font-mono">{s}</span>
                     ))}
                   </div>
                 </div>
-              </>
-            )}
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Criada em</p>
-              <p className="text-sm">{new Date(data.createdAt).toLocaleString("pt-BR")}</p>
-            </div>
-          </div>
+              )}
+              {data.notes && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Observações</p>
+                  <p className="text-sm">{data.notes}</p>
+                </div>
+              )}
+              {data.checkedInAt && (
+                <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
+                  <p className="text-sm text-green-700">Check-in realizado em {new Date(data.checkedInAt).toLocaleString("pt-BR")}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Criada em</p>
+                <p className="text-sm">{new Date(data.createdAt).toLocaleString("pt-BR")}</p>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="passengers">
+              <ReservationPassengersTab reservationId={reservationId} />
+            </TabsContent>
+
+            <TabsContent value="payments" className="space-y-4 mt-4">
+              {payments.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground">
+                  <DollarSign className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">Nenhum pagamento registrado.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {payments.map(p => (
+                    <div key={p.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border text-sm">
+                      <div>
+                        <p className="font-medium">{METHOD_LABELS[p.paymentMethod ?? ""] ?? p.paymentMethod ?? "—"}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Venc: {new Date(p.dueDate).toLocaleDateString("pt-BR")}
+                          {p.description && ` · ${p.description}`}
+                        </p>
+                        {p.paidAt && <p className="text-xs text-green-600 mt-0.5">Pago em {new Date(p.paidAt).toLocaleDateString("pt-BR")}</p>}
+                      </div>
+                      <div className="text-right">
+                        <p className={`font-semibold text-base ${p.status === "paid" ? "text-green-600" : ""}`}>
+                          {fmt(parseFloat(String(p.amount)))}
+                        </p>
+                        <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${p.status === "paid" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+                          {p.status === "paid" ? "Pago" : "Pendente"}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="p-3 bg-muted/30 rounded-lg border">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Total cobrado:</span>
+                  <span className="font-semibold">{fmt(data.totalValue)}</span>
+                </div>
+                <div className="flex justify-between text-sm mt-1">
+                  <span className="text-muted-foreground">Total recebido:</span>
+                  <span className="font-semibold text-green-600">{fmt(data.paidValue)}</span>
+                </div>
+                <div className="flex justify-between text-sm mt-1">
+                  <span className="text-muted-foreground">Saldo pendente:</span>
+                  <span className={`font-semibold ${data.balance > 0 ? "text-destructive" : "text-green-600"}`}>{fmt(data.balance)}</span>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
         ) : (
           <p className="text-muted-foreground py-4">Reserva não encontrada.</p>
         )}

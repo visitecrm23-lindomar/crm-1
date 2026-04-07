@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link, useLocation, useRoute } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   useListTrips, useCreateTrip, useGetTrip, useUpdateTrip, useDeleteTrip,
   useGetTripSeatMap, getGetTripSeatMapQueryKey, useGetDashboardUpcomingTrips, useListReservations, useListClients, useCreateReservation, useUpdateReservation, useCreateClient,
@@ -1322,6 +1323,20 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   );
 }
 
+interface TripFinancialReport {
+  reservationCount: number;
+  confirmedCount: number;
+  pendingCount: number;
+  cancelledCount: number;
+  totalRevenue: number;
+  totalPaid: number;
+  totalPending: number;
+  totalExpenses: number;
+  netProfit: number;
+  revenueByMethod: Record<string, number>;
+  expensesByCategory: Record<string, number>;
+}
+
 export function PassengersOverview({ tripId: initialTripId }: { tripId: string }) {
   const [, navigate] = useLocation();
   const [tripId, setTripId] = useState(initialTripId);
@@ -1329,11 +1344,21 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
   const [editForm, setEditForm] = useState<{ status: string; paymentMethod: string }>({ status: "", paymentMethod: "" });
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "name", dir: "asc" });
   const [statusFilter, setStatusFilter] = useState("all");
+  const [financialReportOpen, setFinancialReportOpen] = useState(false);
 
   const { data: allTripsData } = useListTrips({ limit: 100 });
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
   const { data: reservations, refetch: refetchReservations } = useListReservations({ tripId, limit: 200 });
   const updateReservation = useUpdateReservation();
+  const { data: financialReport, isLoading: loadingReport } = useQuery<TripFinancialReport>({
+    queryKey: ["trip-financial-report", tripId],
+    queryFn: async () => {
+      const res = await fetch(`/api/trips/${tripId}/financial-report`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    enabled: financialReportOpen && !!tripId,
+  });
 
   const filteredReservations = useMemo(() => {
     let data = reservations?.data ?? [];
@@ -1625,10 +1650,95 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
           <Link href={`/reservations?tripId=${tripId}&new=true`}><Button><Plus className="w-4 h-4 mr-2" />Adicionar Passageiro</Button></Link>
           <Button variant="outline"><Download className="w-4 h-4 mr-2" />Exportar PDF</Button>
           <Button variant="outline"><Send className="w-4 h-4 mr-2" />Enviar WhatsApp</Button>
-          <Button variant="outline"><Download className="w-4 h-4 mr-2" />Relatório Financeiro</Button>
+          <Button variant="outline" onClick={() => setFinancialReportOpen(true)}>
+            <DollarSign className="w-4 h-4 mr-2" />Relatório Financeiro
+          </Button>
           <Button variant="outline" className="text-destructive border-destructive/40 hover:bg-destructive/10"><X className="w-4 h-4 mr-2" />Encerrar Viagem</Button>
         </div>
       </div>
+
+      <Dialog open={financialReportOpen} onOpenChange={setFinancialReportOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Relatório Financeiro — {trip?.name}</DialogTitle>
+          </DialogHeader>
+          {loadingReport ? (
+            <div className="space-y-3 py-4">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-10 bg-muted rounded animate-pulse" />)}</div>
+          ) : financialReport ? (
+            <div className="space-y-5 mt-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: "Reservas", value: String(financialReport.reservationCount), color: "text-foreground" },
+                  { label: "Confirmadas", value: String(financialReport.confirmedCount), color: "text-green-600" },
+                  { label: "Pendentes", value: String(financialReport.pendingCount), color: "text-amber-600" },
+                  { label: "Canceladas", value: String(financialReport.cancelledCount), color: "text-red-600" },
+                ].map(s => (
+                  <div key={s.label} className="bg-muted/50 rounded-lg p-3 text-center">
+                    <p className="text-xs text-muted-foreground">{s.label}</p>
+                    <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: "Receita Total", value: financialReport.totalRevenue, color: "text-blue-600" },
+                  { label: "Total Recebido", value: financialReport.totalPaid, color: "text-green-600" },
+                  { label: "A Receber", value: financialReport.totalPending, color: "text-amber-600" },
+                  { label: "Total Despesas", value: financialReport.totalExpenses, color: "text-red-600" },
+                  { label: "Lucro Líquido", value: financialReport.netProfit, color: financialReport.netProfit >= 0 ? "text-green-600" : "text-red-600" },
+                ].map(s => (
+                  <div key={s.label} className="bg-muted/50 rounded-lg p-3">
+                    <p className="text-xs text-muted-foreground">{s.label}</p>
+                    <p className={`text-xl font-bold ${s.color}`}>R$ {s.value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+                  </div>
+                ))}
+              </div>
+              {Object.keys(financialReport.revenueByMethod).length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold">Receita por Forma de Pagamento</h4>
+                  {Object.entries(financialReport.revenueByMethod).map(([method, amount]) => {
+                    const labels: Record<string, string> = { pix: "PIX", credit_card: "Cartão Crédito", debit_card: "Cartão Débito", cash: "Dinheiro", bank_transfer: "Transferência", boleto: "Boleto" };
+                    const total = Object.values(financialReport.revenueByMethod).reduce((s, v) => s + v, 0);
+                    const pct = total > 0 ? Math.round(amount / total * 100) : 0;
+                    return (
+                      <div key={method} className="flex items-center gap-3 text-sm">
+                        <span className="w-36 text-muted-foreground truncate">{labels[method] ?? method}</span>
+                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-primary rounded-full" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="font-medium w-20 text-right">R$ {amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {Object.keys(financialReport.expensesByCategory).length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold">Despesas por Categoria</h4>
+                  {Object.entries(financialReport.expensesByCategory).map(([cat, amount]) => {
+                    const total = financialReport.totalExpenses;
+                    const pct = total > 0 ? Math.round(amount / total * 100) : 0;
+                    return (
+                      <div key={cat} className="flex items-center gap-3 text-sm">
+                        <span className="w-36 text-muted-foreground truncate capitalize">{cat}</span>
+                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-red-400 rounded-full" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="font-medium w-20 text-right">R$ {amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {financialReport.totalExpenses === 0 && Object.keys(financialReport.expensesByCategory).length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-2">Nenhuma despesa registrada para esta viagem.</p>
+              )}
+            </div>
+          ) : (
+            <p className="text-muted-foreground py-4 text-center">Não foi possível carregar o relatório.</p>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
