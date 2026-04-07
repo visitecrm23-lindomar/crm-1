@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import {
   useListTrips, useCreateTrip, useGetTrip, useUpdateTrip, useDeleteTrip,
-  useGetTripSeatMap, useGetDashboardUpcomingTrips, useListReservations, useListClients, useCreateReservation, useUpdateReservation, useCreateClient,
+  useGetTripSeatMap, getGetTripSeatMapQueryKey, useGetDashboardUpcomingTrips, useListReservations, useListClients, useCreateReservation, useUpdateReservation, useCreateClient,
 } from "@workspace/api-client-react";
 import type { Trip, Seat } from "@workspace/api-client-react";
 import { useEditor, EditorContent } from "@tiptap/react";
@@ -104,9 +104,12 @@ function getCountdownLabel(date: string) {
   try {
     const target = parseISO(date);
     const now = new Date();
-    const days = differenceInCalendarDays(target, now);
-    if (days < 0) return "Encerrado";
-    if (days === 0) return "Hoje";
+    const diffMs = target.getTime() - now.getTime();
+    if (diffMs < 0) return "Encerrado";
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const days = Math.floor(hours / 24);
+    if (hours < 1) return "Em breve";
+    if (hours < 24) return `${hours} horas`;
     if (days === 1) return "Amanhã";
     if (days < 14) return `${days} dias`;
     return `${Math.round(days / 7)} semanas`;
@@ -124,7 +127,7 @@ function TripCountdown({ date }: { date: string }) {
   const label = getCountdownLabel(date);
   const urgent = (() => {
     try {
-      return differenceInCalendarDays(parseISO(date), new Date()) < 1;
+      return parseISO(date).getTime() - Date.now() < 1000 * 60 * 60 * 24;
     } catch {
       return false;
     }
@@ -985,8 +988,8 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
 
   const { data: allTripsData } = useListTrips({ limit: 100 });
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
-  const { data: seatMap } = useGetTripSeatMap(tripId, {
-    query: { refetchInterval: 5000 },
+  const { data: seatMap, dataUpdatedAt } = useGetTripSeatMap(tripId, {
+    query: { queryKey: getGetTripSeatMapQueryKey(tripId), refetchInterval: 5000 },
   });
   const { data: reservations } = useListReservations({ tripId });
   const { data: clientsData } = useListClients({ search: clientSearch || undefined, limit: 8 });
@@ -1098,7 +1101,9 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
           <h1 className="text-2xl font-bold tracking-tight">Mapa de Assentos</h1>
           <p className="text-muted-foreground text-sm">{trip?.name}</p>
         </div>
-        <Badge variant="outline" className="text-xs">Atualizado agora</Badge>
+        <Badge variant="outline" className="text-xs">
+          Atualizado há {Math.max(0, Math.floor((Date.now() - dataUpdatedAt) / 60000))} min
+        </Badge>
         <div className="flex items-center gap-2 flex-wrap">
           <Select value={tripId} onValueChange={v => { setTripId(v); setOptimisticSeats({}); }}>
             <SelectTrigger className="w-56">
