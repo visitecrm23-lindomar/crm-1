@@ -127,7 +127,8 @@ function TripCountdown({ date }: { date: string }) {
   const label = getCountdownLabel(date);
   const urgent = (() => {
     try {
-      return parseISO(date).getTime() - Date.now() < 1000 * 60 * 60 * 24;
+      const diff = parseISO(date).getTime() - Date.now();
+      return diff >= 0 && diff < 1000 * 60 * 60 * 24;
     } catch {
       return false;
     }
@@ -991,6 +992,11 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   const { data: seatMap, dataUpdatedAt } = useGetTripSeatMap(tripId, {
     query: { queryKey: getGetTripSeatMapQueryKey(tripId), refetchInterval: 5000 },
   });
+  const [nowTick, setNowTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTick((v) => v + 1), 60000);
+    return () => window.clearInterval(id);
+  }, []);
   const lastUpdatedMinutes = Math.max(0, Math.floor((Date.now() - dataUpdatedAt) / 60000));
   const { data: reservations } = useListReservations({ tripId });
   const { data: clientsData } = useListClients({ search: clientSearch || undefined, limit: 8 });
