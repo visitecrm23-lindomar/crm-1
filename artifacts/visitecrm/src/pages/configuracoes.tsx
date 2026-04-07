@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useListUsers,
   useCreateUser,
@@ -64,6 +65,7 @@ import {
 /* ──────────────────── Agency Profile Tab ──────────────────── */
 function AgencyProfileTab() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { data: me, refetch: refetchMe } = useGetMe();
   const tenantId = me?.tenantId ?? null;
   const { data: fullTenant } = useGetTenant(tenantId ?? "", {
@@ -104,6 +106,7 @@ function AgencyProfileTab() {
     try {
       await updateTenant.mutateAsync({ id: tenantId, data: form });
       toast({ title: "Perfil da agência atualizado" });
+      await queryClient.invalidateQueries({ queryKey: getGetTenantQueryKey(tenantId) });
       refetchMe();
     } catch {
       toast({ title: "Erro ao salvar", variant: "destructive" });
@@ -732,6 +735,7 @@ function NotificationsTab() {
 /* ──────────────────── Customization Tab ──────────────────── */
 function CustomizationTab() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { data: me, refetch: refetchMe } = useGetMe();
   const tenantId = me?.tenantId ?? null;
   const { data: fullTenant } = useGetTenant(tenantId ?? "", {
@@ -762,6 +766,7 @@ function CustomizationTab() {
     try {
       await updateTenant.mutateAsync({ id: tenantId, data: { primaryColor, secondaryColor, logoUrl } });
       toast({ title: "Personalização salva com sucesso" });
+      await queryClient.invalidateQueries({ queryKey: getGetTenantQueryKey(tenantId) });
       refetchMe();
     } catch {
       toast({ title: "Erro ao salvar personalização", variant: "destructive" });
