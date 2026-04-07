@@ -1,0 +1,5132 @@
+═══════════════════════════════════════════════════════════════
+ETAPA 4: VIAGENS E MAPA DE ASSENTOS
+═══════════════════════════════════════════════════════════════
+
+## OBJETIVO
+Implementar sistema completo de gestão de viagens com mapa de 
+assentos interativo em tempo real.
+
+## FUNCIONALIDADES
+✅ CRUD completo de viagens (8 abas)
+✅ Mapa de assentos interativo
+✅ Seleção visual de poltronas
+✅ Sincronização em tempo real (WebSocket)
+✅ Calendário de viagens
+✅ Próximas viagens com countdown
+✅ Lista de passageiros padrão ANTT
+
+═══════════════════════════════════════════════════════════════
+PASSO 4.1: ATUALIZAR SCHEMA PRISMA (ADICIONAR TRIP)
+═══════════════════════════════════════════════════════════════
+
+// Adicionar ao prisma/schema.prisma
+
+model Trip {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  tenant        Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  // Informações Básicas
+  title         String
+  slug          String
+  destination   String
+  type          String   // excursao, bate_volta, pacote_completo, day_use
+  category      String?  // praia, serra, religioso, cultural, aventura
+  
+  // Datas
+  departure_date DateTime
+  return_date   DateTime?
+  departure_time String
+  return_time   String?
+  
+  // Status
+  status        String   @default("rascunho")
+  
+  // Descrição
+  description   String?  @db.Text
+  short_description String?
+  
+  // Preços
+  price_adult   Decimal  @db.Decimal(10, 2)
+  price_child   Decimal? @db.Decimal(10, 2)
+  price_infant  Decimal? @db.Decimal(10, 2)
+  price_senior  Decimal? @db.Decimal(10, 2)
+  booking_fee   Decimal? @db.Decimal(10, 2)
+  
+  // Capacidade
+  total_seats   Int      @default(52)
+  bus_layout    String   @default("2x2")
+  
+  // Mapa de Assentos (JSON)
+  seat_map      Json?
+  
+  // Pontos de Embarque (JSON array)
+  boarding_points Json?
+  
+  // Itinerário (JSON array)
+  itinerary     Json?
+  
+  // Incluso/Não Incluso
+  included      String[]
+  not_included  String[]
+  important_notes String? @db.Text
+  
+  // Financeiro (Custos)
+  cost_transport Decimal? @db.Decimal(10, 2)
+  cost_accommodation Decimal? @db.Decimal(10, 2)
+  cost_food     Decimal? @db.Decimal(10, 2)
+  cost_tickets  Decimal? @db.Decimal(10, 2)
+  cost_marketing Decimal? @db.Decimal(10, 2)
+  cost_operational Decimal? @db.Decimal(10, 2)
+  cost_other    Decimal? @db.Decimal(10, 2)
+  
+  // Transporte/Hospedagem
+  vehicle_id    String?
+  vehicle       Vehicle? @relation(fields: [vehicle_id], references: [id])
+  accommodation_id String?
+  accommodation Accommodation? @relation(fields: [accommodation_id], references: [id])
+  
+  // Mídia
+  cover_image   String?
+  gallery       String[]
+  videos        String[]
+  
+  // Publicação
+  is_public     Boolean  @default(false)
+  is_featured   Boolean  @default(false)
+  
+  // Timestamps
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  
+  // Relações
+  reservations  Reservation[]
+  expenses      Expense[]
+  
+  @@unique([tenant_id, slug])
+  @@map("trips")
+}
+
+model Vehicle {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  tenant        Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  type          String
+  name          String
+  plate         String?
+  capacity      Int
+  layout        String   @default("2x2")
+  
+  amenities     String[]
+  
+  driver_name   String?
+  driver_cnh    String?
+  driver_phone  String?
+  
+  daily_rate    Decimal? @db.Decimal(10, 2)
+  price_per_km  Decimal? @db.Decimal(10, 2)
+  
+  photo         String?
+  
+  status        String   @default("ativo")
+  
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  
+  trips         Trip[]
+  
+  @@map("vehicles")
+}
+
+model Accommodation {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  tenant        Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  name          String
+  type          String
+  
+  address       String?
+  city          String?
+  state         String?
+  
+  contact_name  String?
+  phone         String?
+  email         String?
+  
+  total_rooms   Int?
+  amenities     String[]
+  price_per_night Decimal? @db.Decimal(10, 2)
+  
+  main_image    String?
+  gallery       String[]
+  
+  rating        Decimal? @db.Decimal(2, 1)
+  
+  is_active     Boolean  @default(true)
+  
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  
+  trips         Trip[]
+  
+  @@map("accommodations")
+}
+
+// Atualizar model Tenant
+model Tenant {
+  // ... campos existentes ...
+  
+  trips         Trip[]
+  vehicles      Vehicle[]
+  accommodations Accommodation[]
+  
+  // ... resto do model ...
+}
+
+Executar:
+
+npx prisma generate
+npx prisma db push
+
+═══════════════════════════════════════════════════════════════
+PASSO 4.2: CRIAR API DE VIAGENS
+═══════════════════════════════════════════════════════════════
+
+## app/api/trips/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { z } from 'zod'
+
+const tripSchema = z.object({
+  title: z.string().min(3),
+  destination: z.string().min(3),
+  type: z.string(),
+  category: z.string().optional().nullable(),
+  departure_date: z.string(),
+  return_date: z.string().optional().nullable(),
+  departure_time: z.string(),
+  return_time: z.string().optional().nullable(),
+  status: z.string().default('rascunho'),
+  description: z.string().optional().nullable(),
+  short_description: z.string().optional().nullable(),
+  price_adult: z.number().positive(),
+  price_child: z.number().optional().nullable(),
+  price_infant: z.number().optional().nullable(),
+  price_senior: z.number().optional().nullable(),
+  booking_fee: z.number().optional().nullable(),
+  total_seats: z.number().default(52),
+  bus_layout: z.string().default('2x2'),
+  boarding_points: z.array(z.any()).default([]),
+  itinerary: z.array(z.any()).default([]),
+  included: z.array(z.string()).default([]),
+  not_included: z.array(z.string()).default([]),
+  important_notes: z.string().optional().nullable(),
+  cost_transport: z.number().optional().nullable(),
+  cost_accommodation: z.number().optional().nullable(),
+  cost_food: z.number().optional().nullable(),
+  cost_tickets: z.number().optional().nullable(),
+  cost_marketing: z.number().optional().nullable(),
+  cost_operational: z.number().optional().nullable(),
+  cost_other: z.number().optional().nullable(),
+  vehicle_id: z.string().optional().nullable(),
+  accommodation_id: z.string().optional().nullable(),
+  cover_image: z.string().optional().nullable(),
+  gallery: z.array(z.string()).default([]),
+  videos: z.array(z.string()).default([]),
+  is_public: z.boolean().default(false),
+  is_featured: z.boolean().default(false),
+})
+
+// GET - Listar viagens
+export async function GET(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '20')
+    const search = searchParams.get('search') || ''
+    const status = searchParams.get('status') || ''
+    const type = searchParams.get('type') || ''
+
+    const skip = (page - 1) * limit
+
+    const where: any = {
+      tenant_id: session.user.tenant_id,
+    }
+
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { destination: { contains: search, mode: 'insensitive' } },
+      ]
+    }
+
+    if (status) {
+      where.status = status
+    }
+
+    if (type) {
+      where.type = type
+    }
+
+    const [trips, total] = await Promise.all([
+      prisma.trip.findMany({
+        where,
+        include: {
+          vehicle: true,
+          accommodation: true,
+          _count: {
+            select: {
+              reservations: true,
+            },
+          },
+        },
+        orderBy: {
+          departure_date: 'asc',
+        },
+        skip,
+        take: limit,
+      }),
+      prisma.trip.count({ where }),
+    ])
+
+    return NextResponse.json({
+      trips,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    })
+  } catch (error) {
+    console.error('Erro ao buscar viagens:', error)
+    return NextResponse.json(
+      { error: 'Erro ao buscar viagens' },
+      { status: 500 }
+    )
+  }
+}
+
+// POST - Criar viagem
+export async function POST(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const data = tripSchema.parse(body)
+
+    // Gerar slug único
+    const baseSlug = data.title
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '')
+
+    let slug = baseSlug
+    let counter = 1
+    while (
+      await prisma.trip.findFirst({
+        where: {
+          tenant_id: session.user.tenant_id,
+          slug,
+        },
+      })
+    ) {
+      slug = `${baseSlug}-${counter}`
+      counter++
+    }
+
+    // Inicializar mapa de assentos
+    const seatMap = generateSeatMap(data.total_seats, data.bus_layout)
+
+    const trip = await prisma.trip.create({
+      data: {
+        ...data,
+        slug,
+        tenant_id: session.user.tenant_id,
+        departure_date: new Date(data.departure_date),
+        return_date: data.return_date ? new Date(data.return_date) : null,
+        seat_map: seatMap,
+      },
+    })
+
+    return NextResponse.json(trip, { status: 201 })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Dados inválidos', details: error.errors },
+        { status: 400 }
+      )
+    }
+
+    console.error('Erro ao criar viagem:', error)
+    return NextResponse.json(
+      { error: 'Erro ao criar viagem' },
+      { status: 500 }
+    )
+  }
+}
+
+// Função auxiliar para gerar mapa de assentos
+function generateSeatMap(totalSeats: number, layout: string) {
+  const seats = []
+  const [left, right] = layout.split('x').map(Number)
+  const seatsPerRow = left + right
+
+  for (let i = 1; i <= totalSeats; i++) {
+    seats.push({
+      number: i,
+      status: 'available', // available, reserved, confirmed, blocked
+      passenger: null,
+      reservation_id: null,
+    })
+  }
+
+  return {
+    layout,
+    total: totalSeats,
+    seatsPerRow,
+    seats,
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 4.3: CRIAR API DO MAPA DE ASSENTOS
+═══════════════════════════════════════════════════════════════
+
+## app/api/trips/[id]/seat-map/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+
+// GET - Buscar mapa de assentos
+export async function GET(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const trip = await prisma.trip.findFirst({
+      where: {
+        id: params.id,
+        tenant_id: session.user.tenant_id,
+      },
+      select: {
+        id: true,
+        title: true,
+        departure_date: true,
+        total_seats: true,
+        bus_layout: true,
+        seat_map: true,
+      },
+    })
+
+    if (!trip) {
+      return NextResponse.json(
+        { error: 'Viagem não encontrada' },
+        { status: 404 }
+      )
+    }
+
+    return NextResponse.json(trip)
+  } catch (error) {
+    console.error('Erro ao buscar mapa de assentos:', error)
+    return NextResponse.json(
+      { error: 'Erro ao buscar mapa de assentos' },
+      { status: 500 }
+    )
+  }
+}
+
+// PATCH - Atualizar assento
+export async function PATCH(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const { seatNumber, clientId, clientName, clientPhone, boardingPoint } = body
+
+    const trip = await prisma.trip.findFirst({
+      where: {
+        id: params.id,
+        tenant_id: session.user.tenant_id,
+      },
+    })
+
+    if (!trip) {
+      return NextResponse.json(
+        { error: 'Viagem não encontrada' },
+        { status: 404 }
+      )
+    }
+
+    const seatMap: any = trip.seat_map
+    const seatIndex = seatMap.seats.findIndex(
+      (s: any) => s.number === seatNumber
+    )
+
+    if (seatIndex === -1) {
+      return NextResponse.json(
+        { error: 'Assento não encontrado' },
+        { status: 404 }
+      )
+    }
+
+    // Atualizar assento
+    seatMap.seats[seatIndex] = {
+      ...seatMap.seats[seatIndex],
+      status: 'reserved',
+      passenger: {
+        client_id: clientId,
+        name: clientName,
+        phone: clientPhone,
+        boarding_point: boardingPoint,
+      },
+    }
+
+    // Salvar no banco
+    const updatedTrip = await prisma.trip.update({
+      where: { id: params.id },
+      data: { seat_map: seatMap },
+    })
+
+    // TODO: Emitir evento WebSocket para atualização em tempo real
+    // await emitSeatUpdate(params.id, seatMap)
+
+    return NextResponse.json(updatedTrip.seat_map)
+  } catch (error) {
+    console.error('Erro ao atualizar assento:', error)
+    return NextResponse.json(
+      { error: 'Erro ao atualizar assento' },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 4.4: CRIAR COMPONENTE DE MAPA DE ASSENTOS
+═══════════════════════════════════════════════════════════════
+
+## components/trips/seat-map.tsx
+
+'use client'
+
+import { useState, useEffect } from 'react'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { useToast } from '@/components/ui/use-toast'
+
+interface Seat {
+  number: number
+  status: 'available' | 'reserved' | 'confirmed' | 'blocked'
+  passenger: {
+    client_id?: string
+    name: string
+    phone: string
+    boarding_point: string
+  } | null
+}
+
+interface SeatMapProps {
+  tripId: string
+}
+
+export function SeatMap({ tripId }: SeatMapProps) {
+  const { toast } = useToast()
+  const [seatMap, setSeatMap] = useState<any>(null)
+  const [selectedSeat, setSelectedSeat] = useState<number | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    loadSeatMap()
+  }, [tripId])
+
+  async function loadSeatMap() {
+    try {
+      const res = await fetch(`/api/trips/${tripId}/seat-map`)
+      const data = await res.json()
+      setSeatMap(data.seat_map)
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Erro ao carregar mapa de assentos',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  function handleSeatClick(seatNumber: number) {
+    const seat = seatMap.seats.find((s: Seat) => s.number === seatNumber)
+    
+    if (seat.status === 'available' || seat.status === 'reserved') {
+      setSelectedSeat(seatNumber)
+      setIsModalOpen(true)
+    }
+  }
+
+  async function handleSaveSeat(formData: any) {
+    try {
+      const res = await fetch(`/api/trips/${tripId}/seat-map`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          seatNumber: selectedSeat,
+          ...formData,
+        }),
+      })
+
+      if (!res.ok) throw new Error()
+
+      const updatedSeatMap = await res.json()
+      setSeatMap(updatedSeatMap)
+      setIsModalOpen(false)
+      
+      toast({
+        title: 'Sucesso',
+        description: 'Assento atualizado com sucesso',
+      })
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Erro ao atualizar assento',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  if (isLoading) {
+    return <div>Carregando mapa de assentos...</div>
+  }
+
+  if (!seatMap) {
+    return <div>Mapa de assentos não disponível</div>
+  }
+
+  const [left, right] = seatMap.layout.split('x').map(Number)
+  const rows = Math.ceil(seatMap.total / seatMap.seatsPerRow)
+
+  return (
+    <div className="space-y-6">
+      {/* Legenda */}
+      <div className="flex gap-4 justify-center">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-white border-2 border-gray-300 rounded" />
+          <span className="text-sm">Disponível</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-orange-200 border-2 border-orange-400 rounded" />
+          <span className="text-sm">Reservado</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-green-200 border-2 border-green-400 rounded" />
+          <span className="text-sm">Confirmado</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-gray-300 border-2 border-gray-400 rounded" />
+          <span className="text-sm">Bloqueado</span>
+        </div>
+      </div>
+
+      {/* Resumo */}
+      <div className="bg-gray-100 p-4 rounded-lg">
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div>
+            <div className="text-2xl font-bold">{seatMap.total}</div>
+            <div className="text-sm text-gray-600">Total</div>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-green-600">
+              {seatMap.seats.filter((s: Seat) => 
+                s.status === 'reserved' || s.status === 'confirmed'
+              ).length}
+            </div>
+            <div className="text-sm text-gray-600">Ocupados</div>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-blue-600">
+              {seatMap.seats.filter((s: Seat) => 
+                s.status === 'available'
+              ).length}
+            </div>
+            <div className="text-sm text-gray-600">Disponíveis</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Mapa do Ônibus */}
+      <div className="bg-gray-50 p-8 rounded-lg">
+        <div className="max-w-md mx-auto">
+          {/* Motorista */}
+          <div className="mb-4 flex justify-end">
+            <div className="w-12 h-12 bg-gray-700 rounded-full flex items-center justify-center text-white">
+              🚗
+            </div>
+          </div>
+
+          {/* Assentos */}
+          <div className="space-y-2">
+            {Array.from({ length: rows }).map((_, rowIndex) => {
+              const startSeat = rowIndex * seatMap.seatsPerRow + 1
+              const rowSeats = seatMap.seats.slice(
+                startSeat - 1,
+                startSeat - 1 + seatMap.seatsPerRow
+              )
+
+              return (
+                <div key={rowIndex} className="flex gap-2 justify-center">
+                  {/* Lado esquerdo */}
+                  {rowSeats.slice(0, left).map((seat: Seat) => (
+                    <SeatButton
+                      key={seat.number}
+                      seat={seat}
+                      onClick={() => handleSeatClick(seat.number)}
+                    />
+                  ))}
+
+                  {/* Corredor */}
+                  <div className="w-8" />
+
+                  {/* Lado direito */}
+                  {rowSeats.slice(left).map((seat: Seat) => (
+                    <SeatButton
+                      key={seat.number}
+                      seat={seat}
+                      onClick={() => handleSeatClick(seat.number)}
+                    />
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Modal de Seleção */}
+      <SeatSelectionModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        seatNumber={selectedSeat}
+        onSave={handleSaveSeat}
+      />
+    </div>
+  )
+}
+
+function SeatButton({ seat, onClick }: { seat: Seat; onClick: () => void }) {
+  const colors = {
+    available: 'bg-white border-gray-300 hover:bg-blue-50',
+    reserved: 'bg-orange-200 border-orange-400',
+    confirmed: 'bg-green-200 border-green-400',
+    blocked: 'bg-gray-300 border-gray-400 cursor-not-allowed',
+  }
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={seat.status === 'blocked'}
+      className={`
+        w-12 h-12 border-2 rounded flex flex-col items-center justify-center
+        text-xs transition-colors
+        ${colors[seat.status]}
+      `}
+    >
+      <div className="font-bold">{seat.number}</div>
+      {seat.passenger && (
+        <div className="text-[8px] truncate w-full px-1">
+          {seat.passenger.name.split(' ')[0]}
+        </div>
+      )}
+    </button>
+  )
+}
+
+function SeatSelectionModal({
+  isOpen,
+  onClose,
+  seatNumber,
+  onSave,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  seatNumber: number | null
+  onSave: (data: any) => void
+}) {
+  const [formData, setFormData] = useState({
+    clientName: '',
+    clientPhone: '',
+    boardingPoint: '',
+  })
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    onSave(formData)
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Poltrona {seatNumber}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label>Nome do Passageiro</Label>
+            <Input
+              value={formData.clientName}
+              onChange={(e) =>
+                setFormData({ ...formData, clientName: e.target.value })
+              }
+              required
+            />
+          </div>
+          <div>
+            <Label>Telefone/WhatsApp</Label>
+            <Input
+              value={formData.clientPhone}
+              onChange={(e) =>
+                setFormData({ ...formData, clientPhone: e.target.value })
+              }
+              required
+            />
+          </div>
+          <div>
+            <Label>Local de Embarque</Label>
+            <Select
+              value={formData.boardingPoint}
+              onValueChange={(value) =>
+                setFormData({ ...formData, boardingPoint: value })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ponto1">Ponto 1</SelectItem>
+                <SelectItem value="ponto2">Ponto 2</SelectItem>
+                <SelectItem value="ponto3">Ponto 3</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button type="submit">Salvar</Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 4.5: CRIAR PÁGINA DO MAPA DE ASSENTOS
+═══════════════════════════════════════════════════════════════
+
+## app/(dashboard)/trips/[id]/seat-map/page.tsx
+
+import { SeatMap } from '@/components/trips/seat-map'
+
+export default function SeatMapPage({
+  params,
+}: {
+  params: { id: string }
+}) {
+  return (
+    <div className="container mx-auto py-6">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold">Mapa de Assentos</h1>
+        <p className="text-gray-600">
+          Selecione os assentos e atribua aos passageiros
+        </p>
+      </div>
+
+      <SeatMap tripId={params.id} />
+    </div>
+  )
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 4.6: CRIAR API DE PASSAGEIROS
+═══════════════════════════════════════════════════════════════
+
+## app/api/trips/[id]/passengers/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+
+// GET - Listar passageiros da viagem
+export async function GET(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const trip = await prisma.trip.findFirst({
+      where: {
+        id: params.id,
+        tenant_id: session.user.tenant_id,
+      },
+      include: {
+        reservations: {
+          include: {
+            client: true,
+            seller: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (!trip) {
+      return NextResponse.json(
+        { error: 'Viagem não encontrada' },
+        { status: 404 }
+      )
+    }
+
+    // Extrair todos os passageiros de todas as reservas
+    const passengers = trip.reservations.flatMap((reservation) => {
+      const passengersData = reservation.passengers as any[]
+      return passengersData.map((passenger) => ({
+        ...passenger,
+        reservation_id: reservation.id,
+        client: reservation.client,
+        seller: reservation.seller,
+        payment_status: reservation.status,
+        total_value: reservation.total_value,
+        paid_value: reservation.paid_value,
+      }))
+    })
+
+    return NextResponse.json({
+      trip: {
+        id: trip.id,
+        title: trip.title,
+        departure_date: trip.departure_date,
+        total_seats: trip.total_seats,
+      },
+      passengers,
+      summary: {
+        total: passengers.length,
+        confirmed: passengers.filter((p) => p.payment_status === 'confirmada')
+          .length,
+        pending: passengers.filter((p) => p.payment_status === 'pendente')
+          .length,
+        total_revenue: trip.reservations.reduce(
+          (sum, r) => sum + Number(r.total_value),
+          0
+        ),
+        total_paid: trip.reservations.reduce(
+          (sum, r) => sum + Number(r.paid_value),
+          0
+        ),
+      },
+    })
+  } catch (error) {
+    console.error('Erro ao buscar passageiros:', error)
+    return NextResponse.json(
+      { error: 'Erro ao buscar passageiros' },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 4.7: CRIAR API PARA LISTA PADRÃO ANTT
+═══════════════════════════════════════════════════════════════
+
+## app/api/trips/[id]/passengers-list/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+
+// GET - Gerar lista de passageiros padrão ANTT
+export async function GET(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const format = searchParams.get('format') || 'pdf' // pdf, csv
+
+    const trip = await prisma.trip.findFirst({
+      where: {
+        id: params.id,
+        tenant_id: session.user.tenant_id,
+      },
+      include: {
+        vehicle: true,
+        reservations: {
+          include: {
+            client: true,
+          },
+        },
+        tenant: true,
+      },
+    })
+
+    if (!trip) {
+      return NextResponse.json(
+        { error: 'Viagem não encontrada' },
+        { status: 404 }
+      )
+    }
+
+    // Extrair passageiros
+    const passengers = trip.reservations.flatMap((reservation) => {
+      const passengersData = reservation.passengers as any[]
+      return passengersData.map((passenger, index) => ({
+        number: index + 1,
+        name: passenger.nome || passenger.name,
+        cpf: passenger.cpf,
+        seat: passenger.assento || passenger.seat,
+        boarding_point: passenger.embarque || passenger.boarding_point,
+      }))
+    })
+
+    if (format === 'csv') {
+      // Gerar CSV
+      const csv = generateCSV(trip, passengers)
+      return new NextResponse(csv, {
+        headers: {
+          'Content-Type': 'text/csv',
+          'Content-Disposition': `attachment; filename="passageiros-${trip.slug}.csv"`,
+        },
+      })
+    }
+
+    // Gerar PDF (implementar com biblioteca como PDFKit ou Puppeteer)
+    // Por enquanto, retornar dados estruturados
+    return NextResponse.json({
+      trip: {
+        title: trip.title,
+        destination: trip.destination,
+        departure_date: trip.departure_date,
+        departure_time: trip.departure_time,
+      },
+      agency: {
+        name: trip.tenant.name,
+        cnpj: trip.tenant.cnpj,
+        address: trip.tenant.address,
+        city: trip.tenant.city,
+        state: trip.tenant.state,
+      },
+      vehicle: trip.vehicle
+        ? {
+            name: trip.vehicle.name,
+            plate: trip.vehicle.plate,
+            driver_name: trip.vehicle.driver_name,
+            driver_cnh: trip.vehicle.driver_cnh,
+          }
+        : null,
+      passengers,
+    })
+  } catch (error) {
+    console.error('Erro ao gerar lista de passageiros:', error)
+    return NextResponse.json(
+      { error: 'Erro ao gerar lista' },
+      { status: 500 }
+    )
+  }
+}
+
+function generateCSV(trip: any, passengers: any[]) {
+  const headers = ['Nº', 'Nome', 'CPF', 'Poltrona', 'Embarque']
+  const rows = passengers.map((p) => [
+    p.number,
+    p.name,
+    p.cpf || '',
+    p.seat || '',
+    p.boarding_point || '',
+  ])
+
+  const csv = [
+    headers.join(','),
+    ...rows.map((row) => row.join(',')),
+  ].join('\n')
+
+  return csv
+}
+
+
+═══════════════════════════════════════════════════════════════
+ETAPA 5: RESERVAS E PASSAGEIROS
+═══════════════════════════════════════════════════════════════
+
+## OBJETIVO
+Implementar sistema completo de reservas com fluxo em 4 etapas,
+gestão de passageiros e integração com pagamentos.
+
+## FUNCIONALIDADES
+✅ Fluxo de reserva em 4 etapas
+✅ Múltiplos passageiros por reserva
+✅ Seleção de assentos integrada
+✅ Cálculo automático de valores
+✅ Gestão de pagamentos
+✅ Geração de vouchers
+✅ Check-in de passageiros
+
+═══════════════════════════════════════════════════════════════
+PASSO 5.1: ATUALIZAR SCHEMA PRISMA (ADICIONAR RESERVATION)
+═══════════════════════════════════════════════════════════════
+
+// Adicionar ao prisma/schema.prisma
+
+model Reservation {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  tenant        Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  // Cliente
+  client_id     String
+  client        Client   @relation(fields: [client_id], references: [id])
+  
+  // Viagem
+  trip_id       String
+  trip          Trip     @relation(fields: [trip_id], references: [id])
+  
+  // Passageiros (JSON array)
+  passengers    Json
+  
+  // Assentos
+  seats         Int[]
+  
+  // Financeiro
+  total_value   Decimal  @db.Decimal(10, 2)
+  paid_value    Decimal  @default(0) @db.Decimal(10, 2)
+  balance       Decimal  @db.Decimal(10, 2)
+  discount      Decimal? @db.Decimal(10, 2)
+  
+  // Pagamento
+  payment_method String?
+  installments  Int?
+  installment_value Decimal? @db.Decimal(10, 2)
+  
+  // Status
+  status        String   @default("pendente")
+  
+  // Voucher
+  voucher_code  String?  @unique
+  
+  // Vendedor
+  seller_id     String?
+  seller        User?    @relation(fields: [seller_id], references: [id])
+  
+  // Comissão
+  commission_percentage Decimal? @db.Decimal(5, 2)
+  commission_value Decimal? @db.Decimal(10, 2)
+  
+  // Observações
+  observations  String?
+  
+  // Check-in
+  checked_in    Boolean  @default(false)
+  checked_in_at DateTime?
+  
+  // Timestamps
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  
+  // Relações
+  payments      Payment[]
+  commissions   Commission[]
+  
+  @@map("reservations")
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  reservation_id String
+  reservation   Reservation @relation(fields: [reservation_id], references: [id], onDelete: Cascade)
+  
+  amount        Decimal  @db.Decimal(10, 2)
+  payment_method String
+  payment_date  DateTime
+  
+  // Integração Gateway
+  gateway       String?
+  gateway_id    String?
+  gateway_status String?
+  
+  proof         String?
+  
+  created_at    DateTime @default(now())
+  
+  @@map("payments")
+}
+
+// Atualizar model Client
+model Client {
+  // ... campos existentes ...
+  
+  reservations  Reservation[]
+  
+  // ... resto do model ...
+}
+
+// Atualizar model User
+model User {
+  // ... campos existentes ...
+  
+  reservations  Reservation[]
+  
+  // ... resto do model ...
+}
+
+// Atualizar model Tenant
+model Tenant {
+  // ... campos existentes ...
+  
+  reservations  Reservation[]
+  
+  // ... resto do model ...
+}
+
+Executar:
+
+npx prisma generate
+npx prisma db push
+
+═══════════════════════════════════════════════════════════════
+PASSO 5.2: CRIAR API DE RESERVAS
+═══════════════════════════════════════════════════════════════
+
+## app/api/reservations/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { z } from 'zod'
+
+const passengerSchema = z.object({
+  nome: z.string(),
+  cpf: z.string().optional(),
+  data_nascimento: z.string().optional(),
+  tipo: z.string(), // adulto, crianca, idoso, bebe
+  assento: z.number(),
+  embarque: z.string(),
+  pacote: z.string().optional(),
+})
+
+const reservationSchema = z.object({
+  client_id: z.string(),
+  trip_id: z.string(),
+  passengers: z.array(passengerSchema),
+  seats: z.array(z.number()),
+  total_value: z.number(),
+  paid_value: z.number().default(0),
+  discount: z.number().optional(),
+  payment_method: z.string().optional(),
+  installments: z.number().optional(),
+  seller_id: z.string().optional(),
+  commission_percentage: z.number().optional(),
+  observations: z.string().optional(),
+})
+
+// GET - Listar reservas
+export async function GET(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '20')
+    const status = searchParams.get('status') || ''
+    const tripId = searchParams.get('trip_id') || ''
+
+    const skip = (page - 1) * limit
+
+    const where: any = {
+      tenant_id: session.user.tenant_id,
+    }
+
+    // Se vendedor, mostrar apenas suas reservas
+    if (session.user.role === 'vendedor') {
+      where.seller_id = session.user.id
+    }
+
+    if (status) {
+      where.status = status
+    }
+
+    if (tripId) {
+      where.trip_id = tripId
+    }
+
+    const [reservations, total] = await Promise.all([
+      prisma.reservation.findMany({
+        where,
+        include: {
+          client: true,
+          trip: {
+            select: {
+              id: true,
+              title: true,
+              departure_date: true,
+            },
+          },
+          seller: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: {
+          created_at: 'desc',
+        },
+        skip,
+        take: limit,
+      }),
+      prisma.reservation.count({ where }),
+    ])
+
+    return NextResponse.json({
+      reservations,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    })
+  } catch (error) {
+    console.error('Erro ao buscar reservas:', error)
+    return NextResponse.json(
+      { error: 'Erro ao buscar reservas' },
+      { status: 500 }
+    )
+  }
+}
+
+// POST - Criar reserva
+export async function POST(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const data = reservationSchema.parse(body)
+
+    // Verificar se viagem existe e pertence ao tenant
+    const trip = await prisma.trip.findFirst({
+      where: {
+        id: data.trip_id,
+        tenant_id: session.user.tenant_id,
+      },
+    })
+
+    if (!trip) {
+      return NextResponse.json(
+        { error: 'Viagem não encontrada' },
+        { status: 404 }
+      )
+    }
+
+    // Verificar se assentos estão disponíveis
+    const seatMap: any = trip.seat_map
+    for (const seatNumber of data.seats) {
+      const seat = seatMap.seats.find((s: any) => s.number === seatNumber)
+      if (!seat || seat.status !== 'available') {
+        return NextResponse.json(
+          { error: `Assento ${seatNumber} não está disponível` },
+          { status: 400 }
+        )
+      }
+    }
+
+    // Calcular saldo
+    const balance = data.total_value - data.paid_value
+
+    // Calcular comissão
+    let commissionValue = 0
+    if (data.commission_percentage) {
+      commissionValue = (data.total_value * data.commission_percentage) / 100
+    }
+
+    // Gerar código do voucher
+    const voucherCode = generateVoucherCode()
+
+    // Criar reserva em uma transação
+    const reservation = await prisma.$transaction(async (tx) => {
+      // Criar reserva
+      const newReservation = await tx.reservation.create({
+        data: {
+          tenant_id: session.user.tenant_id,
+          client_id: data.client_id,
+          trip_id: data.trip_id,
+          passengers: data.passengers,
+          seats: data.seats,
+          total_value: data.total_value,
+          paid_value: data.paid_value,
+          balance,
+          discount: data.discount,
+          payment_method: data.payment_method,
+          installments: data.installments,
+          installment_value: data.installments
+            ? data.total_value / data.installments
+            : null,
+          seller_id: data.seller_id || session.user.id,
+          commission_percentage: data.commission_percentage,
+          commission_value: commissionValue,
+          voucher_code: voucherCode,
+          status: data.paid_value >= data.total_value ? 'confirmada' : 'pendente',
+          observations: data.observations,
+        },
+      })
+
+      // Atualizar mapa de assentos
+      for (let i = 0; i < data.seats.length; i++) {
+        const seatNumber = data.seats[i]
+        const passenger = data.passengers[i]
+        const seatIndex = seatMap.seats.findIndex(
+          (s: any) => s.number === seatNumber
+        )
+        seatMap.seats[seatIndex] = {
+          ...seatMap.seats[seatIndex],
+          status: 'reserved',
+          passenger: {
+            name: passenger.nome,
+            cpf: passenger.cpf,
+            boarding_point: passenger.embarque,
+          },
+          reservation_id: newReservation.id,
+        }
+      }
+
+      await tx.trip.update({
+        where: { id: data.trip_id },
+        data: { seat_map: seatMap },
+      })
+
+      // Registrar pagamento se houver valor pago
+      if (data.paid_value > 0) {
+        await tx.payment.create({
+          data: {
+            reservation_id: newReservation.id,
+            amount: data.paid_value,
+            payment_method: data.payment_method || 'dinheiro',
+            payment_date: new Date(),
+          },
+        })
+      }
+
+      // Criar comissão se houver
+      if (commissionValue > 0 && data.seller_id) {
+        await tx.commission.create({
+          data: {
+            tenant_id: session.user.tenant_id,
+            seller_id: data.seller_id,
+            reservation_id: newReservation.id,
+            sale_value: data.total_value,
+            commission_percentage: data.commission_percentage!,
+            commission_value: commissionValue,
+            status: 'pendente',
+          },
+        })
+      }
+
+      // Atualizar total gasto do cliente
+      await tx.client.update({
+        where: { id: data.client_id },
+        data: {
+          total_spent: {
+            increment: data.total_value,
+          },
+        },
+      })
+
+      return newReservation
+    })
+
+    return NextResponse.json(reservation, { status: 201 })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Dados inválidos', details: error.errors },
+        { status: 400 }
+      )
+    }
+
+    console.error('Erro ao criar reserva:', error)
+    return NextResponse.json(
+      { error: 'Erro ao criar reserva' },
+      { status: 500 }
+    )
+  }
+}
+
+function generateVoucherCode() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  let code = ''
+  for (let i = 0; i < 8; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return code
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 5.3: CRIAR API DE PAGAMENTOS
+═══════════════════════════════════════════════════════════════
+
+## app/api/reservations/[id]/payments/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { z } from 'zod'
+
+const paymentSchema = z.object({
+  amount: z.number().positive(),
+  payment_method: z.string(),
+  payment_date: z.string().optional(),
+  proof: z.string().optional(),
+})
+
+// POST - Registrar pagamento
+export async function POST(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const data = paymentSchema.parse(body)
+
+    // Verificar se reserva existe
+    const reservation = await prisma.reservation.findFirst({
+      where: {
+        id: params.id,
+        tenant_id: session.user.tenant_id,
+      },
+    })
+
+    if (!reservation) {
+      return NextResponse.json(
+        { error: 'Reserva não encontrada' },
+        { status: 404 }
+      )
+    }
+
+    // Criar pagamento em uma transação
+    const result = await prisma.$transaction(async (tx) => {
+      // Criar pagamento
+      const payment = await tx.payment.create({
+        data: {
+          reservation_id: params.id,
+          amount: data.amount,
+          payment_method: data.payment_method,
+          payment_date: data.payment_date
+            ? new Date(data.payment_date)
+            : new Date(),
+          proof: data.proof,
+        },
+      })
+
+      // Atualizar valores da reserva
+      const newPaidValue = Number(reservation.paid_value) + data.amount
+      const newBalance = Number(reservation.total_value) - newPaidValue
+
+      const updatedReservation = await tx.reservation.update({
+        where: { id: params.id },
+        data: {
+          paid_value: newPaidValue,
+          balance: newBalance,
+          status: newBalance <= 0 ? 'confirmada' : 'pendente',
+        },
+      })
+
+      return { payment, reservation: updatedReservation }
+    })
+
+    return NextResponse.json(result, { status: 201 })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Dados inválidos', details: error.errors },
+        { status: 400 }
+      )
+    }
+
+    console.error('Erro ao registrar pagamento:', error)
+    return NextResponse.json(
+      { error: 'Erro ao registrar pagamento' },
+      { status: 500 }
+    )
+  }
+}
+
+// GET - Listar pagamentos da reserva
+export async function GET(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const payments = await prisma.payment.findMany({
+      where: {
+        reservation_id: params.id,
+        reservation: {
+          tenant_id: session.user.tenant_id,
+        },
+      },
+      orderBy: {
+        payment_date: 'desc',
+      },
+    })
+
+    return NextResponse.json(payments)
+  } catch (error) {
+    console.error('Erro ao buscar pagamentos:', error)
+    return NextResponse.json(
+      { error: 'Erro ao buscar pagamentos' },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 5.4: CRIAR API DE VOUCHER
+═══════════════════════════════════════════════════════════════
+
+## app/api/reservations/[id]/voucher/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+
+// GET - Gerar voucher
+export async function GET(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const reservation = await prisma.reservation.findFirst({
+      where: {
+        id: params.id,
+        tenant_id: session.user.tenant_id,
+      },
+      include: {
+        client: true,
+        trip: {
+          include: {
+            vehicle: true,
+            accommodation: true,
+          },
+        },
+        seller: {
+          select: {
+            name: true,
+            phone: true,
+          },
+        },
+        tenant: true,
+      },
+    })
+
+    if (!reservation) {
+      return NextResponse.json(
+        { error: 'Reserva não encontrada' },
+        { status: 404 }
+      )
+    }
+
+    // Estruturar dados do voucher
+    const voucherData = {
+      voucher_code: reservation.voucher_code,
+      agency: {
+        name: reservation.tenant.name,
+        logo: reservation.tenant.logo,
+        phone: reservation.tenant.phone,
+        email: reservation.tenant.email,
+      },
+      client: {
+        name: reservation.client.name,
+        email: reservation.client.email,
+        phone: reservation.client.whatsapp || reservation.client.phone,
+      },
+      trip: {
+        title: reservation.trip.title,
+        destination: reservation.trip.destination,
+        departure_date: reservation.trip.departure_date,
+        departure_time: reservation.trip.departure_time,
+        return_date: reservation.trip.return_date,
+        return_time: reservation.trip.return_time,
+      },
+      passengers: reservation.passengers,
+      seats: reservation.seats,
+      financial: {
+        total_value: reservation.total_value,
+        paid_value: reservation.paid_value,
+        balance: reservation.balance,
+      },
+      boarding_points: reservation.trip.boarding_points,
+      included: reservation.trip.included,
+      important_notes: reservation.trip.important_notes,
+      seller: reservation.seller,
+      created_at: reservation.created_at,
+    }
+
+    // TODO: Gerar PDF do voucher com biblioteca como PDFKit
+    // Por enquanto, retornar dados estruturados
+    return NextResponse.json(voucherData)
+  } catch (error) {
+    console.error('Erro ao gerar voucher:', error)
+    return NextResponse.json(
+      { error: 'Erro ao gerar voucher' },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 5.5: CRIAR COMPONENTE DE FLUXO DE RESERVA
+═══════════════════════════════════════════════════════════════
+
+## components/reservations/reservation-wizard.tsx
+
+'use client'
+
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useToast } from '@/components/ui/use-toast'
+
+interface ReservationWizardProps {
+  onComplete: (reservation: any) => void
+}
+
+export function ReservationWizard({ onComplete }: ReservationWizardProps) {
+  const { toast } = useToast()
+  const [currentStep, setCurrentStep] = useState(1)
+  const [formData, setFormData] = useState({
+    trip_id: '',
+    client_id: '',
+    passengers: [],
+    seats: [],
+    total_value: 0,
+    paid_value: 0,
+    payment_method: '',
+    seller_id: '',
+    boarding_point: '',
+  })
+
+  const steps = [
+    { number: 1, title: 'Viagem', description: 'Selecione a viagem' },
+    { number: 2, title: 'Passageiros', description: 'Adicione os passageiros' },
+    { number: 3, title: 'Assentos', description: 'Escolha os assentos' },
+    { number: 4, title: 'Pagamento', description: 'Finalize o pagamento' },
+  ]
+
+  async function handleSubmit() {
+    try {
+      const res = await fetch('/api/reservations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error)
+      }
+
+      const reservation = await res.json()
+      
+      toast({
+        title: 'Sucesso!',
+        description: 'Reserva criada com sucesso',
+      })
+
+      onComplete(reservation)
+    } catch (error: any) {
+      toast({
+        title: 'Erro',
+        description: error.message || 'Erro ao criar reserva',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Progress Steps */}
+      <div className="flex items-center justify-between">
+        {steps.map((step, index) => (
+          <div key={step
+
+
+═══════════════════════════════════════════════════════════════
+ETAPA 6: FINANCEIRO COMPLETO
+═══════════════════════════════════════════════════════════════
+
+## OBJETIVO
+Implementar sistema financeiro completo com gestão de entradas,
+saídas, comissões, despesas e relatórios detalhados.
+
+## FUNCIONALIDADES
+✅ Gestão de transações (entradas e saídas)
+✅ Fluxo de caixa com gráficos
+✅ Comissões por vendedor (regras configuráveis)
+✅ Despesas por categoria e viagem
+✅ Relatórios financeiros completos
+✅ Alertas de vencimento
+✅ Integração com gateways de pagamento
+
+═══════════════════════════════════════════════════════════════
+PASSO 6.1: ATUALIZAR SCHEMA PRISMA (FINANCEIRO)
+═══════════════════════════════════════════════════════════════
+
+// Adicionar ao prisma/schema.prisma
+
+model Transaction {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  tenant        Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  type          String   // income, expense
+  category      String
+  description   String
+  amount        Decimal  @db.Decimal(10, 2)
+  payment_method String?
+  status        String   @default("pendente")
+  due_date      DateTime
+  payment_date  DateTime?
+  trip_id       String?
+  proof         String?
+  notes         String?
+  
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  
+  @@map("transactions")
+}
+
+model Commission {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  tenant        Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  seller_id     String
+  seller        User     @relation(fields: [seller_id], references: [id])
+  
+  reservation_id String
+  reservation   Reservation @relation(fields: [reservation_id], references: [id])
+  
+  sale_value    Decimal  @db.Decimal(10, 2)
+  commission_percentage Decimal @db.Decimal(5, 2)
+  commission_value Decimal @db.Decimal(10, 2)
+  
+  status        String   @default("pendente")
+  paid_at       DateTime?
+  payment_method String?
+  payment_proof String?
+  
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  
+  @@map("commissions")
+}
+
+model CommissionRule {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  tenant        Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  name          String
+  seller_id     String?
+  type          String   // percentage, fixed, tiered
+  value         Decimal  @db.Decimal(10, 2)
+  tiers         Json?    // Para comissão escalonada
+  applies_to    String   // all, trips, products, specific_trip
+  trip_id       String?
+  is_active     Boolean  @default(true)
+  
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  
+  @@map("commission_rules")
+}
+
+model Expense {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  tenant        Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  category      String
+  description   String
+  amount        Decimal  @db.Decimal(10, 2)
+  supplier_id   String?
+  supplier      Supplier? @relation(fields: [supplier_id], references: [id])
+  trip_id       String?
+  trip          Trip?    @relation(fields: [trip_id], references: [id])
+  due_date      DateTime
+  payment_date  DateTime?
+  payment_method String?
+  status        String   @default("pendente")
+  proof         String?
+  notes         String?
+  
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  
+  @@map("expenses")
+}
+
+model Supplier {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  tenant        Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  name          String
+  type          String
+  cnpj          String?
+  contact_name  String?
+  email         String?
+  phone         String?
+  whatsapp      String?
+  address       String?
+  city          String?
+  state         String?
+  bank          String?
+  agency        String?
+  account       String?
+  pix_key       String?
+  is_active     Boolean  @default(true)
+  
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  
+  expenses      Expense[]
+  
+  @@map("suppliers")
+}
+
+// Atualizar models existentes
+model User {
+  // ... campos existentes ...
+  commissions   Commission[]
+}
+
+model Tenant {
+  // ... campos existentes ...
+  transactions  Transaction[]
+  commissions   Commission[]
+  commission_rules CommissionRule[]
+  expenses      Expense[]
+  suppliers     Supplier[]
+}
+
+Executar:
+
+npx prisma generate
+npx prisma db push
+
+═══════════════════════════════════════════════════════════════
+PASSO 6.2: CRIAR API DE TRANSAÇÕES
+═══════════════════════════════════════════════════════════════
+
+## app/api/finance/transactions/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { z } from 'zod'
+
+const transactionSchema = z.object({
+  type: z.enum(['income', 'expense']),
+  category: z.string(),
+  description: z.string(),
+  amount: z.number().positive(),
+  payment_method: z.string().optional(),
+  status: z.string().default('pendente'),
+  due_date: z.string(),
+  payment_date: z.string().optional(),
+  trip_id: z.string().optional(),
+  proof: z.string().optional(),
+  notes: z.string().optional(),
+})
+
+// GET - Listar transações
+export async function GET(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const type = searchParams.get('type') || ''
+    const status = searchParams.get('status') || ''
+    const startDate = searchParams.get('start_date') || ''
+    const endDate = searchParams.get('end_date') || ''
+
+    const where: any = {
+      tenant_id: session.user.tenant_id,
+    }
+
+    if (type) where.type = type
+    if (status) where.status = status
+    if (startDate && endDate) {
+      where.due_date = {
+        gte: new Date(startDate),
+        lte: new Date(endDate),
+      }
+    }
+
+    const transactions = await prisma.transaction.findMany({
+      where,
+      orderBy: { due_date: 'desc' },
+    })
+
+    // Calcular totais
+    const summary = {
+      total_income: transactions
+        .filter((t) => t.type === 'income')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      total_expense: transactions
+        .filter((t) => t.type === 'expense')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      pending_income: transactions
+        .filter((t) => t.type === 'income' && t.status === 'pendente')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      pending_expense: transactions
+        .filter((t) => t.type === 'expense' && t.status === 'pendente')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+    }
+
+    summary.balance = summary.total_income - summary.total_expense
+
+    return NextResponse.json({ transactions, summary })
+  } catch (error) {
+    console.error('Erro ao buscar transações:', error)
+    return NextResponse.json(
+      { error: 'Erro ao buscar transações' },
+      { status: 500 }
+    )
+  }
+}
+
+// POST - Criar transação
+export async function POST(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const data = transactionSchema.parse(body)
+
+    const transaction = await prisma.transaction.create({
+      data: {
+        ...data,
+        tenant_id: session.user.tenant_id,
+        due_date: new Date(data.due_date),
+        payment_date: data.payment_date ? new Date(data.payment_date) : null,
+      },
+    })
+
+    return NextResponse.json(transaction, { status: 201 })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Dados inválidos', details: error.errors },
+        { status: 400 }
+      )
+    }
+
+    console.error('Erro ao criar transação:', error)
+    return NextResponse.json(
+      { error: 'Erro ao criar transação' },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 6.3: CRIAR API DE COMISSÕES
+═══════════════════════════════════════════════════════════════
+
+## app/api/finance/commissions/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+
+// GET - Listar comissões
+export async function GET(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const sellerId = searchParams.get('seller_id') || ''
+    const status = searchParams.get('status') || ''
+
+    const where: any = {
+      tenant_id: session.user.tenant_id,
+    }
+
+    if (sellerId) where.seller_id = sellerId
+    if (status) where.status = status
+
+    // Se vendedor, mostrar apenas suas comissões
+    if (session.user.role === 'vendedor') {
+      where.seller_id = session.user.id
+    }
+
+    const commissions = await prisma.commission.findMany({
+      where,
+      include: {
+        seller: {
+          select: { id: true, name: true },
+        },
+        reservation: {
+          include: {
+            client: {
+              select: { id: true, name: true },
+            },
+            trip: {
+              select: { id: true, title: true },
+            },
+          },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+    })
+
+    // Calcular totais
+    const summary = {
+      total: commissions.reduce((sum, c) => sum + Number(c.commission_value), 0),
+      pending: commissions
+        .filter((c) => c.status === 'pendente')
+        .reduce((sum, c) => sum + Number(c.commission_value), 0),
+      paid: commissions
+        .filter((c) => c.status === 'paga')
+        .reduce((sum, c) => sum + Number(c.commission_value), 0),
+    }
+
+    return NextResponse.json({ commissions, summary })
+  } catch (error) {
+    console.error('Erro ao buscar comissões:', error)
+    return NextResponse.json(
+      { error: 'Erro ao buscar comissões' },
+      { status: 500 }
+    )
+  }
+}
+
+## app/api/finance/commissions/pay/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { z } from 'zod'
+
+const payCommissionsSchema = z.object({
+  commission_ids: z.array(z.string()),
+  payment_method: z.string(),
+  payment_date: z.string(),
+  payment_proof: z.string().optional(),
+})
+
+// POST - Pagar comissões em lote
+export async function POST(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const data = payCommissionsSchema.parse(body)
+
+    // Atualizar comissões em uma transação
+    const result = await prisma.$transaction(
+      data.commission_ids.map((id) =>
+        prisma.commission.update({
+          where: { id },
+          data: {
+            status: 'paga',
+            paid_at: new Date(data.payment_date),
+            payment_method: data.payment_method,
+            payment_proof: data.payment_proof,
+          },
+        })
+      )
+    )
+
+    return NextResponse.json({
+      message: 'Comissões pagas com sucesso',
+      count: result.length,
+    })
+  } catch (error) {
+    console.error('Erro ao pagar comissões:', error)
+    return NextResponse.json(
+      { error: 'Erro ao pagar comissões' },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 6.4: CRIAR API DE DESPESAS
+═══════════════════════════════════════════════════════════════
+
+## app/api/finance/expenses/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { z } from 'zod'
+
+const expenseSchema = z.object({
+  category: z.string(),
+  description: z.string(),
+  amount: z.number().positive(),
+  supplier_id: z.string().optional(),
+  trip_id: z.string().optional(),
+  due_date: z.string(),
+  payment_date: z.string().optional(),
+  payment_method: z.string().optional(),
+  status: z.string().default('pendente'),
+  proof: z.string().optional(),
+  notes: z.string().optional(),
+})
+
+// GET - Listar despesas
+export async function GET(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const category = searchParams.get('category') || ''
+    const tripId = searchParams.get('trip_id') || ''
+    const status = searchParams.get('status') || ''
+
+    const where: any = {
+      tenant_id: session.user.tenant_id,
+    }
+
+    if (category) where.category = category
+    if (tripId) where.trip_id = tripId
+    if (status) where.status = status
+
+    const expenses = await prisma.expense.findMany({
+      where,
+      include: {
+        supplier: true,
+        trip: {
+          select: { id: true, title: true },
+        },
+      },
+      orderBy: { due_date: 'desc' },
+    })
+
+    // Calcular totais por categoria
+    const byCategory = expenses.reduce((acc: any, expense) => {
+      if (!acc[expense.category]) {
+        acc[expense.category] = 0
+      }
+      acc[expense.category] += Number(expense.amount)
+      return acc
+    }, {})
+
+    const summary = {
+      total: expenses.reduce((sum, e) => sum + Number(e.amount), 0),
+      pending: expenses
+        .filter((e) => e.status === 'pendente')
+        .reduce((sum, e) => sum + Number(e.amount), 0),
+      paid: expenses
+        .filter((e) => e.status === 'pago')
+        .reduce((sum, e) => sum + Number(e.amount), 0),
+      by_category: byCategory,
+    }
+
+    return NextResponse.json({ expenses, summary })
+  } catch (error) {
+    console.error('Erro ao buscar despesas:', error)
+    return NextResponse.json(
+      { error: 'Erro ao buscar despesas' },
+      { status: 500 }
+    )
+  }
+}
+
+// POST - Criar despesa
+export async function POST(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const data = expenseSchema.parse(body)
+
+    const expense = await prisma.expense.create({
+      data: {
+        ...data,
+        tenant_id: session.user.tenant_id,
+        due_date: new Date(data.due_date),
+        payment_date: data.payment_date ? new Date(data.payment_date) : null,
+      },
+    })
+
+    return NextResponse.json(expense, { status: 201 })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Dados inválidos', details: error.errors },
+        { status: 400 }
+      )
+    }
+
+    console.error('Erro ao criar despesa:', error)
+    return NextResponse.json(
+      { error: 'Erro ao criar despesa' },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 6.5: CRIAR API DE RELATÓRIOS FINANCEIROS
+═══════════════════════════════════════════════════════════════
+
+## app/api/finance/reports/cash-flow/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns'
+
+// GET - Relatório de fluxo de caixa
+export async function GET(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const months = parseInt(searchParams.get('months') || '6')
+
+    // Buscar dados dos últimos N meses
+    const data = []
+    for (let i = months - 1; i >= 0; i--) {
+      const date = subMonths(new Date(), i)
+      const start = startOfMonth(date)
+      const end = endOfMonth(date)
+
+      // Entradas (receitas de reservas)
+      const income = await prisma.reservation.aggregate({
+        where: {
+          tenant_id: session.user.tenant_id,
+          created_at: {
+            gte: start,
+            lte: end,
+          },
+        },
+        _sum: {
+          total_value: true,
+        },
+      })
+
+      // Saídas (despesas)
+      const expenses = await prisma.expense.aggregate({
+        where: {
+          tenant_id: session.user.tenant_id,
+          due_date: {
+            gte: start,
+            lte: end,
+          },
+        },
+        _sum: {
+          amount: true,
+        },
+      })
+
+      data.push({
+        month: format(date, 'MMM/yyyy'),
+        income: Number(income._sum.total_value || 0),
+        expenses: Number(expenses._sum.amount || 0),
+        balance:
+          Number(income._sum.total_value || 0) -
+          Number(expenses._sum.amount || 0),
+      })
+    }
+
+    return NextResponse.json(data)
+  } catch (error) {
+    console.error('Erro ao gerar relatório:', error)
+    return NextResponse.json(
+      { error: 'Erro ao gerar relatório' },
+      { status: 500 }
+    )
+  }
+}
+
+## app/api/finance/reports/trip/[id]/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+
+// GET - Relatório financeiro por viagem
+export async function GET(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const trip = await prisma.trip.findFirst({
+      where: {
+        id: params.id,
+        tenant_id: session.user.tenant_id,
+      },
+      include: {
+        reservations: true,
+        expenses: true,
+      },
+    })
+
+    if (!trip) {
+      return NextResponse.json(
+        { error: 'Viagem não encontrada' },
+        { status: 404 }
+      )
+    }
+
+    // Calcular receitas
+    const totalRevenue = trip.reservations.reduce(
+      (sum, r) => sum + Number(r.total_value),
+      0
+    )
+    const totalPaid = trip.reservations.reduce(
+      (sum, r) => sum + Number(r.paid_value),
+      0
+    )
+    const totalPending = totalRevenue - totalPaid
+
+    // Calcular despesas por categoria
+    const expensesByCategory = trip.expenses.reduce((acc: any, expense) => {
+      if (!acc[expense.category]) {
+        acc[expense.category] = {
+          category: expense.category,
+          total: 0,
+          items: [],
+        }
+      }
+      acc[expense.category].total += Number(expense.amount)
+      acc[expense.category].items.push({
+        description: expense.description,
+        amount: Number(expense.amount),
+      })
+      return acc
+    }, {})
+
+    const totalExpenses = trip.expenses.reduce(
+      (sum, e) => sum + Number(e.amount),
+      0
+    )
+
+    // Calcular lucro
+    const profit = totalRevenue - totalExpenses
+    const margin = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0
+
+    return NextResponse.json({
+      trip: {
+        id: trip.id,
+        title: trip.title,
+        departure_date: trip.departure_date,
+      },
+      revenue: {
+        total: totalRevenue,
+        paid: totalPaid,
+        pending: totalPending,
+        reservations_count: trip.reservations.length,
+      },
+      expenses: {
+        total: totalExpenses,
+        by_category: Object.values(expensesByCategory),
+      },
+      profit: {
+        value: profit,
+        margin: margin.toFixed(2),
+      },
+    })
+  } catch (error) {
+    console.error('Erro ao gerar relatório:', error)
+    return NextResponse.json(
+      { error: 'Erro ao gerar relatório' },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+ETAPA 7: COMUNICAÇÃO OMNICHANNEL
+═══════════════════════════════════════════════════════════════
+
+## OBJETIVO
+Implementar sistema de comunicação omnichannel com WhatsApp,
+Email, Instagram e chat interno em tempo real.
+
+## FUNCIONALIDADES
+✅ Integração WhatsApp (Evolution API)
+✅ Envio de emails (SMTP)
+✅ Chat interno em tempo real (WebSocket)
+✅ Templates de mensagens
+✅ Histórico completo de conversas
+✅ Respostas rápidas
+✅ Anexos e mídias
+
+═══════════════════════════════════════════════════════════════
+PASSO 7.1: ATUALIZAR SCHEMA PRISMA (COMUNICAÇÃO)
+═══════════════════════════════════════════════════════════════
+
+// Adicionar ao prisma/schema.prisma
+
+model Communication {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  tenant        Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  client_id     String?
+  client        Client?  @relation(fields: [client_id], references: [id])
+  
+  channel       String   // whatsapp, email, instagram, telegram, interno
+  direction     String   // inbound, outbound
+  
+  subject       String?
+  message       String   @db.Text
+  attachments   String[]
+  
+  status        String   @default("sent")
+  
+  sent_by_id    String?
+  sent_by       User?    @relation("SentBy", fields: [sent_by_id], references: [id])
+  
+  metadata      Json?
+  
+  created_at    DateTime @default(now())
+  read_at       DateTime?
+  
+  @@map("communications")
+}
+
+model MessageTemplate {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  tenant        Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  name          String
+  channel       String
+  subject       String?
+  content       String   @db.Text
+  variables     String[] // {{nome}}, {{viagem}}, etc
+  category      String?  // confirmacao, lembrete, promocao, etc
+  is_active     Boolean  @default(true)
+  
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  
+  @@map("message_templates")
+}
+
+model QuickReply {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  tenant        Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  shortcut      String   // /oi, /preco, /horario
+  message       String   @db.Text
+  is_active     Boolean  @default(true)
+  
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  
+  @@unique([tenant_id, shortcut])
+  @@map("quick_replies")
+}
+
+// Atualizar models existentes
+model Client {
+  // ... campos existentes ...
+  communications Communication[]
+}
+
+model User {
+  // ... campos existentes ...
+  messages_sent Communication[] @relation("SentBy")
+}
+
+model Tenant {
+  // ... campos existentes ...
+  communications Communication[]
+  message_templates MessageTemplate[]
+  quick_replies QuickReply[]
+}
+
+Executar:
+
+npx prisma generate
+npx prisma db push
+
+═══════════════════════════════════════════════════════════════
+PASSO 7.2: INSTALAR DEPENDÊNCIAS DE COMUNICAÇÃO
+═══════════════════════════════════════════════════════════════
+
+npm install nodemailer
+npm install @types/nodemailer -D
+npm install axios
+npm install pusher pusher-js
+npm install socket.io socket.io-client
+
+═══════════════════════════════════════════════════════════════
+PASSO 7.3: CRIAR SERVIÇO DE WHATSAPP (EVOLUTION API)
+═══════════════════════════════════════════════════════════════
+
+## lib/services/whatsapp.ts
+
+import axios from 'axios'
+
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY
+const EVOLUTION_INSTANCE_NAME = process.env.EVOLUTION_INSTANCE_NAME
+
+export class WhatsAppService {
+  private api = axios.create({
+    baseURL: EVOLUTION_API_URL,
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: EVOLUTION_API_KEY,
+    },
+  })
+
+  async sendText(to: string, message: string) {
+    try {
+      const response = await this.api.post(
+        `/message/sendText/${EVOLUTION_INSTANCE_NAME}`,
+        {
+          number: to.replace(/\D/g, ''),
+          text: message,
+        }
+      )
+      return response.data
+    } catch (error) {
+      console.error('Erro ao enviar mensagem WhatsApp:', error)
+      throw error
+    }
+  }
+
+  async sendMedia(to: string, mediaUrl: string, caption?: string) {
+    try {
+      const response = await this.api.post(
+        `/message/sendMedia/${EVOLUTION_INSTANCE_NAME}`,
+        {
+          number: to.replace(/\D/g, ''),
+          mediaUrl,
+          caption,
+        }
+      )
+      return response.data
+    } catch (error) {
+      console.error('Erro ao enviar mídia WhatsApp:', error)
+      throw error
+    }
+  }
+
+  async getMessages(limit = 50) {
+    try {
+      const response = await this.api.get(
+        `/chat/findMessages/${EVOLUTION_INSTANCE_NAME}`,
+        {
+          params: { limit },
+        }
+      )
+      return response.data
+    } catch (error) {
+      console.error('Erro ao buscar mensagens WhatsApp:', error)
+      throw error
+    }
+  }
+
+  async getInstanceStatus() {
+    try {
+      const response = await this.api.get(
+        `/instance/connectionState/${EVOLUTION_INSTANCE_NAME}`
+      )
+      return response.data
+    } catch (error) {
+      console.error('Erro ao verificar status da instância:', error)
+      throw error
+    }
+  }
+}
+
+export const whatsappService = new WhatsAppService()
+
+═══════════════════════════════════════════════════════════════
+PASSO 7.4: CRIAR SERVIÇO DE EMAIL
+═══════════════════════════════════════════════════════════════
+
+## lib/services/email.ts
+
+import nodemailer from 'nodemailer'
+
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: parseInt(process.env.SMTP_PORT || '587'),
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASSWORD,
+  },
+})
+
+export class EmailService {
+  async sendEmail({
+    to,
+    subject,
+    html,
+    text,
+    attachments,
+  }: {
+    to: string
+    subject: string
+    html?: string
+    text?: string
+    attachments?: any[]
+  }) {
+    try {
+      const info = await transporter.sendMail({
+        from: process.env.SMTP_FROM,
+        to,
+        subject,
+        text,
+        html,
+        attachments,
+      })
+
+      console.log('Email enviado:', info.messageId)
+      return info
+    } catch (error) {
+      console.error('Erro ao enviar email:', error)
+      throw error
+    }
+  }
+
+  async sendTemplate({
+    to,
+    template,
+    variables,
+  }: {
+    to: string
+    template: {
+      subject: string
+      content: string
+    }
+    variables: Record<string, string>
+  }) {
+    let content = template.content
+    let subject = template.subject
+
+    // Substituir variáveis
+    Object.entries(variables).forEach(([key, value]) => {
+      const regex = new RegExp(`{{${key}}}`, 'g')
+      content = content.replace(regex, value)
+      subject = subject.replace(regex, value)
+    })
+
+    return this.sendEmail({
+      to,
+      subject,
+      html: content,
+    })
+  }
+}
+
+export const emailService = new EmailService()
+
+═══════════════════════════════════════════════════════════════
+PASSO 7.5: CRIAR API DE COMUNICAÇÃO
+═══════════════════════════════════════════════════════════════
+
+## app/api/communication/messages/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { z } from 'zod'
+
+const messageSchema = z.object({
+  client_id: z.string().optional(),
+  channel: z.enum(['whatsapp', 'email', 'instagram', 'telegram', 'interno']),
+  subject: z.string().optional(),
+  message: z.string(),
+  attachments: z.array(z.string()).default([]),
+})
+
+// GET - Listar mensagens
+export async function GET(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const clientId = searchParams.get('client_id') || ''
+    const channel = searchParams.get('channel') || ''
+
+    const where: any = {
+      tenant_id: session.user.tenant_id,
+    }
+
+    if (clientId) where.client_id = clientId
+    if (channel) where.channel = channel
+
+    const messages = await prisma.communication.findMany({
+      where,
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            photo: true,
+            whatsapp: true,
+            email: true,
+          },
+        },
+        sent_by: {
+          select: {
+            id: true,
+            name: true,
+            avatar: true,
+          },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+      take: 100,
+    })
+
+    return NextResponse.json(messages)
+  } catch (error) {
+    console.error('Erro ao buscar mensagens:', error)
+    return NextResponse.json(
+      { error: 'Erro ao buscar mensagens' },
+      { status: 500 }
+    )
+  }
+}
+
+// POST - Enviar mensagem
+export async function POST(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const data = messageSchema.parse(body)
+
+    // Buscar cliente se fornecido
+    let client = null
+    if (data.client_id) {
+      client = await prisma.client.findFirst({
+        where: {
+          id: data.client_id,
+          tenant_id: session.user.tenant_id,
+        },
+      })
+
+      if (!client) {
+        return NextResponse.json(
+          { error: 'Cliente não encontrado' },
+          { status: 404 }
+        )
+      }
+    }
+
+    // Enviar mensagem de acordo com o canal
+    let status = 'sent'
+    let metadata: any = {}
+
+    switch (data.channel) {
+      case 'whatsapp':
+        if (client?.whatsapp) {
+          const { whatsappService } = await import('@/lib/services/whatsapp')
+          const result = await whatsappService.sendText(
+            client.whatsapp,
+            data.message
+          )
+          metadata = { whatsapp_message_id: result.key?.id }
+        }
+        break
+
+      case 'email':
+        if (client?.email) {
+          const { emailService } = await import('@/lib/services/email')
+          await emailService.sendEmail({
+            to: client.email,
+            subject: data.subject || 'Mensagem',
+            text: data.message,
+          })
+        }
+        break
+
+      case 'interno':
+        // Chat interno - apenas salvar no banco
+        break
+
+      default:
+        return NextResponse.json(
+          { error: 'Canal não suportado' },
+          { status: 400 }
+        )
+    }
+
+    // Salvar mensagem no banco
+    const message = await prisma.communication.create({
+      data: {
+        tenant_id: session.user.tenant_id,
+        client_id: data.client_id,
+        channel: data.channel,
+        direction: 'outbound',
+        subject: data.subject,
+        message: data.message,
+        attachments: data.attachments,
+        status,
+        sent_by_id: session.user.id,
+        metadata,
+      },
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            photo: true,
+          },
+        },
+        sent_by: {
+          select: {
+            id: true,
+            name: true,
+            avatar: true,
+          },
+        },
+      },
+    })
+
+    // TODO: Emitir evento WebSocket para atualização em tempo real
+    // await emitNewMessage(message)
+
+    return NextResponse.json(message, { status: 201 })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Dados inválidos', details: error.errors },
+        { status: 400 }
+      )
+    }
+
+    console.error('Erro ao enviar mensagem:', error)
+    return NextResponse.json(
+      { error: 'Erro ao enviar mensagem' },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 7.6: CRIAR API DE TEMPLATES
+═══════════════════════════════════════════════════════════════
+
+## app/api/communication/templates/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { z } from 'zod'
+
+const templateSchema = z.object({
+  name: z.string(),
+  channel: z.string(),
+  subject: z.string().optional(),
+  content: z.string(),
+  variables: z.array(z.string()).default([]),
+  category: z.string().optional(),
+})
+
+// GET - Listar templates
+export async function GET(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const channel = searchParams.get('channel') || ''
+
+    const where: any = {
+      tenant_id: session.user.tenant_id,
+      is_active: true,
+    }
+
+    if (channel) where.channel = channel
+
+    const templates = await prisma.messageTemplate.findMany({
+      where,
+      orderBy: { name: 'asc' },
+    })
+
+    return NextResponse.json(templates)
+  } catch (error) {
+    console.error('Erro ao buscar templates:', error)
+    return NextResponse.json(
+      { error: 'Erro ao buscar templates' },
+      { status: 500 }
+    )
+  }
+}
+
+// POST - Criar template
+export async function POST(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const data = templateSchema.parse(body)
+
+    const template = await prisma.messageTemplate.create({
+      data: {
+        ...data,
+        tenant_id: session.user.tenant_id,
+      },
+    })
+
+    return NextResponse.json(template, { status: 201 })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Dados inválidos', details: error.errors },
+        { status: 400 }
+      )
+    }
+
+    console.error('Erro ao criar template:', error)
+    return NextResponse.json(
+      { error: 'Erro ao criar template' },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 7.7: CRIAR WEBHOOK PARA WHATSAPP
+═══════════════════════════════════════════════════════════════
+
+## app/api/webhooks/whatsapp/route.ts
+
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+
+// POST - Receber mensagens do WhatsApp
+export async function POST(req: Request) {
+  try {
+    const body = await req.json()
+
+    // Validar webhook (implementar validação de assinatura)
+    // ...
+
+    const { event, data } = body
+
+    if (event === 'messages.upsert') {
+      const message = data.messages[0]
+
+      if (!message.key.fromMe) {
+        // Mensagem recebida (inbound)
+        const phoneNumber = message.key.remoteJid.replace('@s.whatsapp.net', '')
+
+        // Buscar cliente pelo WhatsApp
+        const client = await prisma.client.findFirst({
+          where: {
+            whatsapp: {
+              contains: phoneNumber,
+            },
+          },
+        })
+
+        if (client) {
+          // Salvar mensagem no banco
+          await prisma.communication.create({
+            data: {
+              tenant_id: client.tenant_id,
+              client_id: client.id,
+              channel: 'whatsapp',
+              direction: 'inbound',
+              message:
+                message.message?.conversation ||
+                message.message?.extendedTextMessage?.text ||
+                '[Mídia]',
+              status: 'received',
+              metadata: {
+                whatsapp_message_id: message.key.id,
+                from: phoneNumber,
+              },
+            },
+          })
+
+          // TODO: Emitir evento WebSocket
+          // await emitNewMessage(...)
+        }
+      }
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Erro no webhook WhatsApp:', error)
+    return NextResponse.json(
+      { error: 'Erro ao processar webhook' },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 7.8: CRIAR COMPONENTE DE CHAT
+═══════════════════════════════════════════════════════════════
+
+## components/communication/chat-interface.tsx
+
+'use client'
+
+import { useState, useEffect, useRef } from 'react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Send, Paperclip, Smile } from 'lucide-react'
+import { useToast } from '@/components/ui/use-toast'
+import { format } from 'date-fns'
+
+interface Message {
+  id: string
+  message: string
+  direction: 'inbound' | 'outbound'
+  created_at: string
+  sent_by?: {
+    name: string
+    avatar?: string
+  }
+}
+
+interface ChatInterfaceProps {
+  clientId: string
+  channel: string
+}
+
+export function ChatInterface({ clientId, channel }: ChatInterfaceProps) {
+  const { toast } = useToast()
+  const [messages, setMessages] = useState<Message[]>([])
+  const [newMessage, setNewMessage] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    loadMessages()
+  }, [clientId, channel])
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages])
+
+  async function loadMessages() {
+    try {
+      const res = await fetch(
+        `/api/communication/messages?client_id=${clientId}&channel=${channel}`
+      )
+      const data = await res.json()
+      setMessages(data)
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Erro ao carregar mensagens',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  async function handleSendMessage() {
+    if (!newMessage.trim()) return
+
+    setIsLoading(true)
+    try {
+      const res = await fetch('/api/communication/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: clientId,
+          channel,
+          message: newMessage,
+        }),
+      })
+
+      if (!res.ok) throw new Error()
+
+      const message = await res.json()
+      setMessages([...messages, message])
+      setNewMessage('')
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Erro ao enviar mensagem',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  function scrollToBottom() {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Messages Area */}
+      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+        <div className="space-y-4">
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex ${
+                message.direction === 'outbound'
+                  ? 'justify-end'
+                  : 'justify-start'
+              }`}
+            >
+              <div
+                className={`flex gap-2 max-w-[70%] ${
+                  message.direction === 'outbound'
+                    ? 'flex-row-reverse'
+                    : 'flex-row'
+                }`}
+              >
+                {message.direction === 'inbound' && (
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src="" />
+                    <AvatarFallback>C</AvatarFallback>
+                  </Avatar>
+                )}
+
+                <div>
+                  <div
+                    className={`rounded-lg p-3 ${
+                      message.direction === 'outbound'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-100'
+                    }`}
+                  >
+                    {message.message}
+                  </div>
+                  <div
+                    className={`text-xs text-gray-500 mt-1 ${
+                      message.direction === 'outbound'
+                        ? 'text-right'
+                        : 'text-left'
+                    }`}
+                  >
+                    {format(new Date(message.created_at), 'HH:mm')}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </ScrollArea>
+
+      {/* Input Area */}
+      <div className="border-t p-4">
+        <div className="flex gap-2">
+          <Button variant="ghost" size="icon">
+            <Paperclip className="h-5 w-5" />
+          </Button>
+          <Button variant="ghost" size="icon">
+            <Smile className="h-5 w-5" />
+          </Button>
+          <Input
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+            placeholder="Digite sua mensagem..."
+            disabled={isLoading}
+          />
+          <Button onClick={handleSendMessage} disabled={isLoading}>
+            <Send className="h-5 w-5" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+═══════════════════════════════════════════════════════════════
+ETAPA 8: MARKETING E AUTOMAÇÕES
+═══════════════════════════════════════════════════════════════
+
+## OBJETIVO
+Implementar sistema completo de marketing com campanhas,
+automações, cupons e programa de fidelidade.
+
+## FUNCIONALIDADES
+✅ Campanhas multi-canal (Email, WhatsApp, SMS)
+✅ Automações com gatilhos e condições
+✅ Cupons de desconto
+✅ Programa de fidelidade com pontos
+✅ Landing pages (básico)
+✅ Segmentação de clientes
+
+═══════════════════════════════════════════════════════════════
+PASSO 8.1: ATUALIZAR SCHEMA PRISMA (MARKETING)
+═══════════════════════════════════════════════════════════════
+
+// Adicionar ao prisma/schema.prisma
+
+model Campaign {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  tenant        Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  name          String
+  type          String   // email, whatsapp, sms
+  subject       String?
+  message       String   @db.Text
+  media         String?
+  segment       Json?    // Critérios de segmentação
+  
+  status        String   @default("rascunho")
+  scheduled_at  DateTime?
+  sent_at       DateTime?
+  
+  // Métricas
+  total_sent    Int      @default(0)
+  total_delivered Int    @default(0)
+  total_opened  Int      @default(0)
+  total_clicked Int      @default(0)
+  total_conversions Int  @default(0)
+  revenue       Decimal? @db.Decimal(10, 2)
+  
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  
+  @@map("campaigns")
+}
+
+model Automation {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  tenant        Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  name          String
+  description   String?
+  trigger       String   // novo_cliente, pagamento_pendente, aniversario, etc
+  conditions    Json?    // Condições IF/ELSE
+  actions       Json     // Array de ações
+  is_active     Boolean  @default(true)
+  
+  execution_count Int    @default(0)
+  last_executed_at DateTime?
+  
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  
+  logs          AutomationLog[]
+  
+  @@map("automations")
+}
+
+model AutomationLog {
+  id            String   @id @default(cuid())
+  automation_id String
+  automation    Automation @relation(fields: [automation_id], references: [id], onDelete: Cascade)
+  
+  status        String   // success, failed
+  error_message String?
+  metadata      Json?
+  executed_at   DateTime @default(now())
+  
+  @@map("automation_logs")
+}
+
+model Coupon {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  tenant        Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  code          String
+  description   String?
+  discount_type String   // percentage, fixed
+  discount_value Decimal @db.Decimal(10, 2)
+  min_purchase  Decimal? @db.Decimal(10, 2)
+  max_discount  Decimal? @db.Decimal(10, 2)
+  usage_limit   Int?
+  usage_count   Int      @default(0)
+  valid_from    DateTime
+  valid_until   DateTime?
+  applies_to_trips Boolean @default(true)
+  applies_to_products Boolean @default(true)
+  is_active     Boolean  @default(true)
+  
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  
+  @@unique([tenant_id, code])
+  @@map("coupons")
+}
+
+model LoyaltyTransaction {
+  id            String   @id @default(cuid())
+  client_id     String
+  client        Client   @relation(fields: [client_id], references: [id], onDelete: Cascade)
+  
+  type          String   // earn, redeem, bonus, expire
+  points        Int
+  description   String
+  reference_id  String?
+  reference_type String? // reservation, product, birthday, referral
+  balance_after Int
+  
+  created_at    DateTime @default(now())
+  
+  @@map("loyalty_transactions")
+}
+
+// Atualizar model User
+model User {
+  // ... campos existentes ...
+  loyalty_points Int     @default(0)
+  loyalty_tier   String? // bronze, prata, ouro, diamante
+  referral_code  String?  @unique
+  referred_by_id String?
+  referred_by    User?    @relation("Referrals", fields: [referred_by_id], references: [id])
+  referrals      User[]   @relation("Referrals")
+}
+
+// Atualizar model Client
+model Client {
+  // ... campos existentes ...
+  loyalty_transactions LoyaltyTransaction[]
+}
+
+// Atualizar model Tenant
+model Tenant {
+  // ... campos existentes ...
+  campaigns     Campaign[]
+  automations   Automation[]
+  coupons       Coupon[]
+}
+
+Executar:
+
+npx prisma generate
+npx prisma db push
+
+═══════════════════════════════════════════════════════════════
+PASSO 8.2: CRIAR API DE CAMPANHAS
+═══════════════════════════════════════════════════════════════
+
+## app/api/marketing/campaigns/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { z } from 'zod'
+
+const campaignSchema = z.object({
+  name: z.string(),
+  type: z.enum(['email', 'whatsapp', 'sms']),
+  subject: z.string().optional(),
+  message: z.string(),
+  media: z.string().optional(),
+  segment: z.any().optional(),
+  scheduled_at: z.string().optional(),
+})
+
+// GET - Listar campanhas
+export async function GET(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const campaigns = await prisma.campaign.findMany({
+      where: {
+        tenant_id: session.user.tenant_id,
+      },
+      orderBy: { created_at: 'desc' },
+    })
+
+    return NextResponse.json(campaigns)
+  } catch (error) {
+    console.error('Erro ao buscar campanhas:', error)
+    return NextResponse.json(
+      { error: 'Erro ao buscar campanhas' },
+      { status: 500 }
+    )
+  }
+}
+
+// POST - Criar campanha
+export async function POST(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const data = campaignSchema.parse(body)
+
+    const campaign = await prisma.campaign.create({
+      data: {
+        ...data,
+        tenant_id: session.user.tenant_id,
+        scheduled_at: data.scheduled_at ? new Date(data.scheduled_at) : null,
+        status: data.scheduled_at ? 'agendada' : 'rascunho',
+      },
+    })
+
+    // Se não tem agendamento, enviar imediatamente
+    if (!data.scheduled_at) {
+      // TODO: Processar envio da campanha
+      // await processCampaign(campaign.id)
+    }
+
+    return NextResponse.json(campaign, { status: 201 })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Dados inválidos', details: error.errors },
+        { status: 400 }
+      )
+    }
+
+    console.error('Erro ao criar campanha:', error)
+    return NextResponse.json(
+      { error: 'Erro ao criar campanha' },
+      { status: 500 }
+    )
+  }
+}
+
+## app/api/marketing/campaigns/[id]/send/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { whatsappService } from '@/lib/services/whatsapp'
+import { emailService } from '@/lib/services/email'
+
+// POST - Enviar campanha
+export async function POST(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const campaign = await prisma.campaign.findFirst({
+      where: {
+        id: params.id,
+        tenant_id: session.user.tenant_id,
+      },
+    })
+
+    if (!campaign) {
+      return NextResponse.json(
+        { error: 'Campanha não encontrada' },
+        { status: 404 }
+      )
+    }
+
+    // Buscar destinatários baseado na segmentação
+    const segment: any = campaign.segment || {}
+    const where: any = {
+      tenant_id: session.user.tenant_id,
+      is_active: true,
+    }
+
+    if (segment.origin) where.origin = segment.origin
+    if (segment.city) where.city = segment.city
+    if (segment.pipeline_stage) where.pipeline_stage = segment.pipeline_stage
+
+    const clients = await prisma.client.findMany({ where })
+
+    let sent = 0
+    let delivered = 0
+    let failed = 0
+
+    // Enviar mensagens
+    for (const client of clients) {
+      try {
+        // Substituir variá
+
+═══════════════════════════════════════════════════════════════
+ETAPA 9: INTEGRAÇÕES E WEBHOOKS
+═══════════════════════════════════════════════════════════════
+
+## OBJETIVO
+Implementar integrações com serviços externos (Mercado Pago,
+Typebot, Hurb) e sistema de webhooks para sincronização.
+
+## FUNCIONALIDADES
+✅ Integração Mercado Pago (pagamentos)
+✅ Integração Stripe (pagamentos internacionais)
+✅ Integração Typebot (chatbot)
+✅ Integração Hurb (marketplace)
+✅ Sistema de webhooks
+✅ Logs de integrações
+✅ Configuração de APIs
+
+═══════════════════════════════════════════════════════════════
+PASSO 9.1: ATUALIZAR SCHEMA PRISMA (INTEGRAÇÕES)
+═══════════════════════════════════════════════════════════════
+
+// Adicionar ao prisma/schema.prisma
+
+model Integration {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  
+  type          String   // whatsapp, mercadopago, stripe, hurb, typebot
+  name          String
+  config        Json     // Configurações específicas
+  is_active     Boolean  @default(true)
+  
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  
+  @@unique([tenant_id, type])
+  @@map("integrations")
+}
+
+model WebhookLog {
+  id            String   @id @default(cuid())
+  
+  source        String   // mercadopago, whatsapp, typebot, hurb
+  event         String
+  payload       Json
+  
+  status_code   Int?
+  response      Json?
+  
+  processed     Boolean  @default(false)
+  processed_at  DateTime?
+  error_message String?
+  
+  created_at    DateTime @default(now())
+  
+  @@map("webhook_logs")
+}
+
+model PaymentGatewayTransaction {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  
+  gateway       String   // mercadopago, stripe
+  gateway_id    String   // ID da transação no gateway
+  
+  reservation_id String?
+  amount        Decimal  @db.Decimal(10, 2)
+  currency      String   @default("BRL")
+  
+  status        String   // pending, approved, rejected, refunded
+  payment_method String?
+  
+  metadata      Json?
+  
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  
+  @@unique([gateway, gateway_id])
+  @@map("payment_gateway_transactions")
+}
+
+Executar:
+
+npx prisma generate
+npx prisma db push
+
+═══════════════════════════════════════════════════════════════
+PASSO 9.2: INSTALAR DEPENDÊNCIAS DE INTEGRAÇÕES
+═══════════════════════════════════════════════════════════════
+
+npm install mercadopago
+npm install stripe
+npm install crypto
+
+═══════════════════════════════════════════════════════════════
+PASSO 9.3: CRIAR SERVIÇO MERCADO PAGO
+═══════════════════════════════════════════════════════════════
+
+## lib/services/mercadopago.ts
+
+import { MercadoPagoConfig, Payment, Preference } from 'mercadopago'
+
+const client = new MercadoPagoConfig({
+  accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN!,
+})
+
+export class MercadoPagoService {
+  private payment = new Payment(client)
+  private preference = new Preference(client)
+
+  async createPayment({
+    amount,
+    description,
+    payerEmail,
+    paymentMethodId,
+    installments = 1,
+  }: {
+    amount: number
+    description: string
+    payerEmail: string
+    paymentMethodId: string
+    installments?: number
+  }) {
+    try {
+      const payment = await this.payment.create({
+        body: {
+          transaction_amount: amount,
+          description,
+          payment_method_id: paymentMethodId,
+          installments,
+          payer: {
+            email: payerEmail,
+          },
+        },
+      })
+
+      return payment
+    } catch (error) {
+      console.error('Erro ao criar pagamento Mercado Pago:', error)
+      throw error
+    }
+  }
+
+  async createPreference({
+    items,
+    payer,
+    backUrls,
+    externalReference,
+  }: {
+    items: Array<{
+      title: string
+      quantity: number
+      unit_price: number
+    }>
+    payer: {
+      name: string
+      email: string
+      phone?: {
+        area_code: string
+        number: string
+      }
+    }
+    backUrls?: {
+      success: string
+      failure: string
+      pending: string
+    }
+    externalReference?: string
+  }) {
+    try {
+      const preference = await this.preference.create({
+        body: {
+          items,
+          payer,
+          back_urls: backUrls,
+          external_reference: externalReference,
+          auto_return: 'approved',
+          notification_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/mercadopago`,
+        },
+      })
+
+      return preference
+    } catch (error) {
+      console.error('Erro ao criar preferência Mercado Pago:', error)
+      throw error
+    }
+  }
+
+  async getPayment(id: string) {
+    try {
+      const payment = await this.payment.get({ id })
+      return payment
+    } catch (error) {
+      console.error('Erro ao buscar pagamento Mercado Pago:', error)
+      throw error
+    }
+  }
+
+  async refundPayment(id: string) {
+    try {
+      const refund = await this.payment.refund({ id })
+      return refund
+    } catch (error) {
+      console.error('Erro ao estornar pagamento Mercado Pago:', error)
+      throw error
+    }
+  }
+}
+
+export const mercadoPagoService = new MercadoPagoService()
+
+═══════════════════════════════════════════════════════════════
+PASSO 9.4: CRIAR SERVIÇO STRIPE
+═══════════════════════════════════════════════════════════════
+
+## lib/services/stripe.ts
+
+import Stripe from 'stripe'
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2024-11-20.acacia',
+})
+
+export class StripeService {
+  async createPaymentIntent({
+    amount,
+    currency = 'brl',
+    description,
+    metadata,
+  }: {
+    amount: number
+    currency?: string
+    description: string
+    metadata?: Record<string, string>
+  }) {
+    try {
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(amount * 100), // Converter para centavos
+        currency,
+        description,
+        metadata,
+      })
+
+      return paymentIntent
+    } catch (error) {
+      console.error('Erro ao criar PaymentIntent Stripe:', error)
+      throw error
+    }
+  }
+
+  async createCheckoutSession({
+    lineItems,
+    successUrl,
+    cancelUrl,
+    customerEmail,
+    metadata,
+  }: {
+    lineItems: Array<{
+      price_data: {
+        currency: string
+        product_data: {
+          name: string
+          description?: string
+        }
+        unit_amount: number
+      }
+      quantity: number
+    }>
+    successUrl: string
+    cancelUrl: string
+    customerEmail?: string
+    metadata?: Record<string, string>
+  }) {
+    try {
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: lineItems,
+        mode: 'payment',
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        customer_email: customerEmail,
+        metadata,
+      })
+
+      return session
+    } catch (error) {
+      console.error('Erro ao criar Checkout Session Stripe:', error)
+      throw error
+    }
+  }
+
+  async retrievePaymentIntent(id: string) {
+    try {
+      const paymentIntent = await stripe.paymentIntents.retrieve(id)
+      return paymentIntent
+    } catch (error) {
+      console.error('Erro ao buscar PaymentIntent Stripe:', error)
+      throw error
+    }
+  }
+
+  async refundPayment(paymentIntentId: string, amount?: number) {
+    try {
+      const refund = await stripe.refunds.create({
+        payment_intent: paymentIntentId,
+        amount: amount ? Math.round(amount * 100) : undefined,
+      })
+
+      return refund
+    } catch (error) {
+      console.error('Erro ao estornar pagamento Stripe:', error)
+      throw error
+    }
+  }
+
+  verifyWebhookSignature(payload: string, signature: string): any {
+    try {
+      const event = stripe.webhooks.constructEvent(
+        payload,
+        signature,
+        process.env.STRIPE_WEBHOOK_SECRET!
+      )
+      return event
+    } catch (error) {
+      console.error('Erro ao verificar assinatura webhook Stripe:', error)
+      throw error
+    }
+  }
+}
+
+export const stripeService = new StripeService()
+
+═══════════════════════════════════════════════════════════════
+PASSO 9.5: CRIAR API DE INTEGRAÇÕES
+═══════════════════════════════════════════════════════════════
+
+## app/api/integrations/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { z } from 'zod'
+
+const integrationSchema = z.object({
+  type: z.string(),
+  name: z.string(),
+  config: z.any(),
+})
+
+// GET - Listar integrações
+export async function GET(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const integrations = await prisma.integration.findMany({
+      where: {
+        tenant_id: session.user.tenant_id,
+      },
+    })
+
+    // Ocultar dados sensíveis
+    const sanitized = integrations.map((integration) => ({
+      ...integration,
+      config: {
+        ...integration.config,
+        // Ocultar chaves de API
+        api_key: integration.config.api_key
+          ? '***' + integration.config.api_key.slice(-4)
+          : undefined,
+        access_token: integration.config.access_token
+          ? '***' + integration.config.access_token.slice(-4)
+          : undefined,
+      },
+    }))
+
+    return NextResponse.json(sanitized)
+  } catch (error) {
+    console.error('Erro ao buscar integrações:', error)
+    return NextResponse.json(
+      { error: 'Erro ao buscar integrações' },
+      { status: 500 }
+    )
+  }
+}
+
+// POST - Criar/Atualizar integração
+export async function POST(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const data = integrationSchema.parse(body)
+
+    const integration = await prisma.integration.upsert({
+      where: {
+        tenant_id_type: {
+          tenant_id: session.user.tenant_id,
+          type: data.type,
+        },
+      },
+      update: {
+        name: data.name,
+        config: data.config,
+        is_active: true,
+      },
+      create: {
+        tenant_id: session.user.tenant_id,
+        type: data.type,
+        name: data.name,
+        config: data.config,
+        is_active: true,
+      },
+    })
+
+    return NextResponse.json(integration)
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Dados inválidos', details: error.errors },
+        { status: 400 }
+      )
+    }
+
+    console.error('Erro ao salvar integração:', error)
+    return NextResponse.json(
+      { error: 'Erro ao salvar integração' },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 9.6: CRIAR WEBHOOKS
+═══════════════════════════════════════════════════════════════
+
+## app/api/webhooks/mercadopago/route.ts
+
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { mercadoPagoService } from '@/lib/services/mercadopago'
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json()
+
+    // Registrar webhook
+    await prisma.webhookLog.create({
+      data: {
+        source: 'mercadopago',
+        event: body.type || 'unknown',
+        payload: body,
+        processed: false,
+      },
+    })
+
+    // Processar notificação
+    if (body.type === 'payment') {
+      const paymentId = body.data.id
+
+      // Buscar detalhes do pagamento
+      const payment = await mercadoPagoService.getPayment(paymentId)
+
+      // Buscar transação no banco
+      const transaction = await prisma.paymentGatewayTransaction.findUnique({
+        where: {
+          gateway_gateway_id: {
+            gateway: 'mercadopago',
+            gateway_id: paymentId,
+          },
+        },
+      })
+
+      if (transaction) {
+        // Atualizar status
+        await prisma.paymentGatewayTransaction.update({
+          where: { id: transaction.id },
+          data: {
+            status: payment.status,
+            metadata: payment,
+          },
+        })
+
+        // Se aprovado, atualizar reserva
+        if (payment.status === 'approved' && transaction.reservation_id) {
+          const reservation = await prisma.reservation.findUnique({
+            where: { id: transaction.reservation_id },
+          })
+
+          if (reservation) {
+            const newPaidValue =
+              Number(reservation.paid_value) + Number(payment.transaction_amount)
+            const newBalance = Number(reservation.total_value) - newPaidValue
+
+            await prisma.reservation.update({
+              where: { id: transaction.reservation_id },
+              data: {
+                paid_value: newPaidValue,
+                balance: newBalance,
+                status: newBalance <= 0 ? 'confirmada' : 'pendente',
+              },
+            })
+
+            // Registrar pagamento
+            await prisma.payment.create({
+              data: {
+                reservation_id: transaction.reservation_id,
+                amount: payment.transaction_amount,
+                payment_method: payment.payment_method_id,
+                payment_date: new Date(),
+                gateway: 'mercadopago',
+                gateway_id: paymentId,
+                gateway_status: payment.status,
+              },
+            })
+          }
+        }
+      }
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Erro ao processar webhook Mercado Pago:', error)
+    return NextResponse.json(
+      { error: 'Erro ao processar webhook' },
+      { status: 500 }
+    )
+  }
+}
+
+## app/api/webhooks/stripe/route.ts
+
+import { NextResponse } from 'next/server'
+import { headers } from 'next/headers'
+import { prisma } from '@/lib/prisma'
+import { stripeService } from '@/lib/services/stripe'
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.text()
+    const signature = headers().get('stripe-signature')
+
+    if (!signature) {
+      return NextResponse.json(
+        { error: 'Assinatura não encontrada' },
+        { status: 400 }
+      )
+    }
+
+    // Verificar assinatura
+    const event = stripeService.verifyWebhookSignature(body, signature)
+
+    // Registrar webhook
+    await prisma.webhookLog.create({
+      data: {
+        source: 'stripe',
+        event: event.type,
+        payload: event,
+        processed: false,
+      },
+    })
+
+    // Processar evento
+    switch (event.type) {
+      case 'payment_intent.succeeded':
+        const paymentIntent = event.data.object
+
+        // Buscar transação
+        const transaction = await prisma.paymentGatewayTransaction.findUnique({
+          where: {
+            gateway_gateway_id: {
+              gateway: 'stripe',
+              gateway_id: paymentIntent.id,
+            },
+          },
+        })
+
+        if (transaction && transaction.reservation_id) {
+          const reservation = await prisma.reservation.findUnique({
+            where: { id: transaction.reservation_id },
+          })
+
+          if (reservation) {
+            const amount = paymentIntent.amount / 100 // Converter de centavos
+
+            const newPaidValue = Number(reservation.paid_value) + amount
+            const newBalance = Number(reservation.total_value) - newPaidValue
+
+            await prisma.reservation.update({
+              where: { id: transaction.reservation_id },
+              data: {
+                paid_value: newPaidValue,
+                balance: newBalance,
+                status: newBalance <= 0 ? 'confirmada' : 'pendente',
+              },
+            })
+
+            // Registrar pagamento
+            await prisma.payment.create({
+              data: {
+                reservation_id: transaction.reservation_id,
+                amount,
+                payment_method: 'card',
+                payment_date: new Date(),
+                gateway: 'stripe',
+                gateway_id: paymentIntent.id,
+                gateway_status: paymentIntent.status,
+              },
+            })
+          }
+        }
+        break
+
+      case 'payment_intent.payment_failed':
+        // Tratar falha no pagamento
+        break
+    }
+
+    return NextResponse.json({ received: true })
+  } catch (error) {
+    console.error('Erro ao processar webhook Stripe:', error)
+    return NextResponse.json(
+      { error: 'Erro ao processar webhook' },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 9.7: CRIAR API DE PAGAMENTO
+═══════════════════════════════════════════════════════════════
+
+## app/api/payments/create-preference/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { mercadoPagoService } from '@/lib/services/mercadopago'
+import { z } from 'zod'
+
+const preferenceSchema = z.object({
+  reservation_id: z.string(),
+  gateway: z.enum(['mercadopago', 'stripe']),
+})
+
+export async function POST(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const data = preferenceSchema.parse(body)
+
+    // Buscar reserva
+    const reservation = await prisma.reservation.findFirst({
+      where: {
+        id: data.reservation_id,
+        tenant_id: session.user.tenant_id,
+      },
+      include: {
+        client: true,
+        trip: true,
+      },
+    })
+
+    if (!reservation) {
+      return NextResponse.json(
+        { error: 'Reserva não encontrada' },
+        { status: 404 }
+      )
+    }
+
+    if (data.gateway === 'mercadopago') {
+      // Criar preferência Mercado Pago
+      const preference = await mercadoPagoService.createPreference({
+        items: [
+          {
+            title: reservation.trip.title,
+            quantity: 1,
+            unit_price: Number(reservation.balance),
+          },
+        ],
+        payer: {
+          name: reservation.client.name,
+          email: reservation.client.email || 'noemail@example.com',
+          phone: reservation.client.whatsapp
+            ? {
+                area_code: reservation.client.whatsapp.substring(0, 2),
+                number: reservation.client.whatsapp.substring(2),
+              }
+            : undefined,
+        },
+        backUrls: {
+          success: `${process.env.NEXT_PUBLIC_APP_URL}/payment/success`,
+          failure: `${process.env.NEXT_PUBLIC_APP_URL}/payment/failure`,
+          pending: `${process.env.NEXT_PUBLIC_APP_URL}/payment/pending`,
+        },
+        externalReference: reservation.id,
+      })
+
+      // Registrar transação
+      await prisma.paymentGatewayTransaction.create({
+        data: {
+          tenant_id: session.user.tenant_id,
+          gateway: 'mercadopago',
+          gateway_id: preference.id!,
+          reservation_id: reservation.id,
+          amount: reservation.balance,
+          currency: 'BRL',
+          status: 'pending',
+        },
+      })
+
+      return NextResponse.json({
+        preference_id: preference.id,
+        init_point: preference.init_point,
+      })
+    }
+
+    // Implementar Stripe se necessário
+    return NextResponse.json({ error: 'Gateway não implementado' }, { status: 400 })
+  } catch (error) {
+    console.error('Erro ao criar preferência de pagamento:', error)
+    return NextResponse.json(
+      { error: 'Erro ao criar preferência de pagamento' },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+ETAPA 10: IA, ANALYTICS E PWA (FINAL)
+═══════════════════════════════════════════════════════════════
+
+## OBJETIVO
+Implementar análise preditiva com IA, dashboards analíticos
+avançados e PWA completo com offline first.
+
+## FUNCIONALIDADES
+✅ Previsão de vendas (IA)
+✅ Detecção de churn (IA)
+✅ Recomendação de produtos (IA)
+✅ Análise de sentimento (IA)
+✅ Dashboard de vendas avançado
+✅ Dashboard de vendedores
+✅ PWA com Service Worker
+✅ Notificações Push
+✅ Modo Offline
+
+═══════════════════════════════════════════════════════════════
+PASSO 10.1: INSTALAR DEPENDÊNCIAS DE IA E PWA
+═══════════════════════════════════════════════════════════════
+
+npm install openai
+npm install @tensorflow/tfjs
+npm install chart.js react-chartjs-2
+npm install workbox-webpack-plugin
+npm install next-pwa
+
+═══════════════════════════════════════════════════════════════
+PASSO 10.2: CRIAR SERVIÇO DE IA (OPENAI)
+═══════════════════════════════════════════════════════════════
+
+## lib/services/ai.ts
+
+import OpenAI from 'openai'
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+})
+
+export class AIService {
+  // Previsão de vendas
+  async predictSales(historicalData: any[]) {
+    try {
+      const prompt = `
+        Baseado nos dados históricos de vendas abaixo, faça uma previsão
+        para os próximos 30 dias. Considere tendências, sazonalidade e
+        padrões identificados.
+        
+        Dados históricos (últimos 6 meses):
+        ${JSON.stringify(historicalData, null, 2)}
+        
+        Retorne a resposta em JSON com o formato:
+        {
+          "prediction": número estimado de vendas,
+          "confidence": percentual de confiança (0-100),
+          "factors": ["fator1", "fator2"],
+          "recommendations": ["recomendação1", "recomendação2"]
+        }
+      `
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+      })
+
+      const content = response.choices[0].message.content
+      return JSON.parse(content || '{}')
+    } catch (error) {
+      console.error('Erro na previsão de vendas:', error)
+      throw error
+    }
+  }
+
+  // Detecção de churn
+  async detectChurn(clientData: any) {
+    try {
+      const prompt = `
+        Analise os dados do cliente abaixo e determine a probabilidade
+        de churn (abandono). Considere: última compra, frequência,
+        valor gasto, engajamento.
+        
+        Dados do cliente:
+        ${JSON.stringify(clientData, null, 2)}
+        
+        Retorne em JSON:
+        {
+          "churn_probability": número de 0 a 100,
+          "risk_level": "baixo" | "médio" | "alto",
+          "reasons": ["motivo1", "motivo2"],
+          "recommended_actions": ["ação1", "ação2"]
+        }
+      `
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+      })
+
+      const content = response.choices[0].message.content
+      return JSON.parse(content || '{}')
+    } catch (error) {
+      console.error('Erro na detecção de churn:', error)
+      throw error
+    }
+  }
+
+  // Recomendação de produtos
+  async recommendProducts(clientHistory: any, availableProducts: any[]) {
+    try {
+      const prompt = `
+        Baseado no histórico de compras do cliente e nos produtos
+        disponíveis, recomende os 3 produtos mais adequados.
+        
+        Histórico do cliente:
+        ${JSON.stringify(clientHistory, null, 2)}
+        
+        Produtos disponíveis:
+        ${JSON.stringify(availableProducts, null, 2)}
+        
+        Retorne em JSON:
+        {
+          "recommendations": [
+            {
+              "product_id": "id",
+              "product_name": "nome",
+              "probability": número de 0 a 100,
+              "reason": "motivo da recomendação"
+            }
+          ]
+        }
+      `
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+      })
+
+      const content = response.choices[0].message.content
+      return JSON.parse(content || '{}')
+    } catch (error) {
+      console.error('Erro na recomendação de produtos:', error)
+      throw error
+    }
+  }
+
+  // Análise de sentimento
+  async analyzeSentiment(reviews: string[]) {
+    try {
+      const prompt = `
+        Analise o sentimento das avaliações abaixo e identifique
+        os principais temas positivos e negativos.
+        
+        Avaliações:
+        ${reviews.join('\n---\n')}
+        
+        Retorne em JSON:
+        {
+          "overall_sentiment": "positivo" | "neutro" | "negativo",
+          "positive_percentage": número de 0 a 100,
+          "positive_themes": ["tema1", "tema2"],
+          "negative_themes": ["tema1", "tema2"],
+          "action_items": ["ação1", "ação2"]
+        }
+      `
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+      })
+
+      const content = response.choices[0].message.content
+      return JSON.parse(content || '{}')
+    } catch (error) {
+      console.error('Erro na análise de sentimento:', error)
+      throw error
+    }
+  }
+
+  // Otimização de preços
+  async optimizePrice(productData: any, marketData: any) {
+    try {
+      const prompt = `
+        Analise os dados do produto e do mercado para sugerir o
+        preço ideal que maximize receita e ocupação.
+        
+        Dados do produto:
+        ${JSON.stringify(productData, null, 2)}
+        
+        Dados do mercado:
+        ${JSON.stringify(marketData, null, 2)}
+        
+        Retorne em JSON:
+        {
+          "current_price": número,
+          "recommended_price": número,
+          "expected_impact": {
+            "revenue_increase": percentual,
+            "occupancy_rate": percentual
+          },
+          "confidence": número de 0 a 100,
+          "reasoning": "explicação"
+        }
+      `
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+      })
+
+      const content = response.choices[0].message.content
+      return JSON.parse(content || '{}')
+    } catch (error) {
+      console.error('Erro na otimização de preços:', error)
+      throw error
+    }
+  }
+}
+
+export const aiService = new AIService()
+
+═══════════════════════════════════════════════════════════════
+PASSO 10.3: CRIAR API DE IA INSIGHTS
+═══════════════════════════════════════════════════════════════
+
+## app/api/ai/predict-sales/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { aiService } from '@/lib/services/ai'
+import { subMonths, startOfMonth, endOfMonth } from 'date-fns'
+
+export async function GET(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    // Buscar dados históricos (últimos 6 meses)
+    const historicalData = []
+    for (let i = 5; i >= 0; i--) {
+      const date = subMonths(new Date(), i)
+      const start = startOfMonth(date)
+      const end = endOfMonth(date)
+
+      const reservations = await prisma.reservation.aggregate({
+        where: {
+          tenant_id: session.user.tenant_id,
+          created_at: {
+            gte: start,
+            lte: end,
+          },
+        },
+        _count: true,
+        _sum: {
+          total_value: true,
+        },
+      })
+
+      historicalData.push({
+        month: date.toISOString(),
+        sales_count: reservations._count,
+        revenue: Number(reservations._sum.total_value || 0),
+      })
+    }
+
+    // Fazer previsão com IA
+    const prediction = await aiService.predictSales(historicalData)
+
+    return NextResponse.json({
+      historical: historicalData,
+      prediction,
+    })
+  } catch (error) {
+    console.error('Erro ao prever vendas:', error)
+    return NextResponse.json(
+      { error: 'Erro ao prever vendas' },
+      { status: 500 }
+    )
+  }
+}
+
+## app/api/ai/churn-detection/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { aiService } from '@/lib/services/ai'
+import { differenceInDays } from 'date-fns'
+
+export async function GET(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    // Buscar clientes com última compra há mais de 90 dias
+    const clients = await prisma.client.findMany({
+      where: {
+        tenant_id: session.user.tenant_id,
+        is_active: true,
+      },
+      include: {
+        reservations: {
+          orderBy: { created_at: 'desc' },
+          take: 1,
+        },
+      },
+    })
+
+    const atRiskClients = []
+
+    for (const client of clients) {
+      if (client.reservations.length > 0) {
+        const lastPurchase = client.reservations[0].created_at
+        const daysSinceLastPurchase = differenceInDays(new Date(), lastPurchase)
+
+        if (daysSinceLastPurchase > 90) {
+          // Analisar com IA
+          const analysis = await aiService.detectChurn({
+            client_id: client.id,
+            name: client.name,
+            days_since_last_purchase: daysSinceLastPurchase,
+            total_spent: Number(client.total_spent),
+            purchase_count: client.reservations.length,
+          })
+
+          if (analysis.risk_level !== 'baixo') {
+            atRiskClients.push({
+              client,
+              analysis,
+            })
+          }
+        }
+      }
+    }
+
+    return NextResponse.json(atRiskClients)
+  } catch (error) {
+    console.error('Erro na detecção de churn:', error)
+    return NextResponse.json(
+      { error: 'Erro na detecção de churn' },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 10.4: CRIAR API DE ANALYTICS
+═══════════════════════════════════════════════════════════════
+
+## app/api/analytics/sales/route.ts
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { subDays, startOfDay, endOfDay } from 'date-fns'
+
+export async function GET(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const days = parseInt(searchParams.get('days') || '30')
+
+    const startDate = startOfDay(subDays(new Date(), days))
+    const endDate = endOfDay(new Date())
+
+    // KPIs
+    const [
+      totalRevenue,
+      totalSales,
+      newClients,
+      avgTicket,
+    ] = await Promise.all([
+      prisma.reservation.aggregate({
+        where: {
+          tenant_id: session.user.tenant_id,
+          created_at: { gte: startDate, lte: endDate },
+        },
+        _sum: { total_value: true },
+      }),
+      prisma.reservation.count({
+        where: {
+          tenant_id: session.user.tenant_id,
+          created_at: { gte: startDate, lte: endDate },
+        },
+      }),
+      prisma.client.count({
+        where: {
+          tenant_id: session.user.tenant_id,
+          created_at: { gte: startDate, lte: endDate },
+        },
+      }),
+      prisma.reservation.aggregate({
+        where: {
+          tenant_id: session.user.tenant_id,
+          created_at: { gte: startDate, lte: endDate },
+        },
+        _avg: { total_value: true },
+      }),
+    ])
+
+    // Vendas por origem
+    const salesByOrigin = await prisma.client.groupBy({
+      by: ['origin'],
+      where: {
+        tenant_id: session.user.tenant_id,
+        created_at: { gte: startDate, lte: endDate },
+      },
+      _count: true,
+    })
+
+    // Top produtos
+    const topTrips = await prisma.reservation.groupBy({
+      by: ['trip_id'],
+      where: {
+        tenant_id: session.user.tenant_id,
+        created_at: { gte: startDate, lte: endDate },
+      },
+      _count: true,
+      _sum: { total_value: true },
+      orderBy: { _count: { trip_id: 'desc' } },
+      take: 10,
+    })
+
+    // Buscar nomes das viagens
+    const tripIds = topTrips.map((t) => t.trip_id)
+    const trips = await prisma.trip.findMany({
+      where: { id: { in: tripIds } },
+      select: { id: true, title: true },
+    })
+
+    const topTripsWithNames = topTrips.map((t) => ({
+      ...t,
+      trip_name: trips.find((trip) => trip.id === t.trip_id)?.title,
+    }))
+
+    return NextResponse.json({
+      kpis: {
+        total_revenue: Number(totalRevenue._sum.total_value || 0),
+        total_sales: totalSales,
+        new_clients: newClients,
+        avg_ticket: Number(avgTicket._avg.total_value || 0),
+      },
+      sales_by_origin: salesByOrigin,
+      top_trips: topTripsWithNames,
+    })
+  } catch (error) {
+    console.error('Erro ao buscar analytics:', error)
+    return NextResponse.json(
+      { error: 'Erro ao buscar analytics' },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 10.5: CONFIGURAR PWA
+═══════════════════════════════════════════════════════════════
+
+## next.config.js
+
+const withPWA = require('next-pwa')({
+  dest: 'public',
+  register: true,
+  skipWaiting: true,
+  disable: process.env.NODE_ENV === 'development',
+})
+
+module.exports = withPWA({
+  reactStrictMode: true,
+  // ... outras configurações
+})
+
+## public/manifest.json
+
+{
+  "name": "VisiteCRM - Sistema de Gestão para Agências de Turismo",
+  "short_name": "VisiteCRM",
+  "description": "CRM completo para agências de turismo especializadas em excursões",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3B82F6",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Novo Cliente",
+      "short_name": "Cliente",
+      "url": "/clients/new",
+      "icons": [{ "src": "/icon-client-96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Nova Viagem",
+      "short_name": "Viagem",
+      "url": "/trips/new",
+      "icons": [{ "src": "/icon-trip-96.png", "sizes": "96x96" }]
+    }
+  ]
+}
+
+## public/sw.js (Service Worker)
+
+const CACHE_NAME = 'visitecrm-v1'
+const urlsToCache = [
+  '/',
+  '/dashboard',
+  '/clients',
+  '/trips',
+  '/offline',
+]
+
+// Instalação
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(urlsToCache))
+  )
+  self.skipWaiting()
+})
+
+// Ativação
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            return caches.delete(cacheName)
+          }
+        })
+      )
+    })
+  )
+  self.clients.claim()
+})
+
+// Fetch (Network First, fallback para Cache)
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    fetch(event.request)
+      .then((response) => {
+        const responseClone = response.clone()
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, responseClone)
+        })
+        return response
+      })
+      .catch(() => caches.match(event.request))
+  )
+})
+
+// Push Notifications
+self.addEventListener('push', (event) => {
+  const data = event.data.json()
+
+  const options = {
+    body: data.body,
+    icon: '/icon-192.png',
+    badge: '/badge-72.png',
+    data: data.url,
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, options)
+  )
+})
+
+// Notification Click
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  event.waitUntil(clients.openWindow(event.notification.data))
+})
+
+═══════════════════════════════════════════════════════════════
+PASSO 10.6: CRIAR COMPONENTE DE INSTALAÇÃO PWA
+═══════════════════════════════════════════════════════════════
+
+## components/pwa/install-prompt.tsx
+
+'use client'
+
+import { useState, useEffect } from 'react'
+import { Button } from '@/components/ui/button'
+import { X } from 'lucide-react'
+
+export function InstallPrompt() {
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
+  const [showPrompt, setShowPrompt] = useState(false)
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault()
+      setDeferredPrompt(e)
+      setShowPrompt(true)
+    }
+
+    window.addEventListener('beforeinstallprompt', handler)
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler)
+    }
+  }, [])
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) return
+
+    deferredPrompt.prompt()
+    const { outcome } = await deferredPrompt.userChoice
+
+    if (outcome === 'accepted') {
+      console.log('PWA instalado')
+    }
+
+    setDeferredPrompt(null)
+    setShowPrompt(false)
+  }
+
+  if (!showPrompt) return null
+
+  return (
+    <div className="fixed bottom-4 left-4 right-4 bg-white p-4 rounded-lg shadow-lg z-50 md:left-auto md:right-4 md:max-w-md">
+      <button
+        onClick={() => setShowPrompt(false)}
+        className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
+      >
+        <X className="h-5 w-5" />
+      </button>
+
+      <div className="flex items-start gap-4">
+        <img src="/icon-192.png" alt="VisiteCRM" className="h-16 w-16 rounded-lg" />
+        <div className="flex-1">
+          <h3 className="font-bold text-lg">Instalar VisiteCRM</h3>
+          <p className="text-sm text-gray-600 mt-1">
+            Adicione à tela inicial para acesso rápido e offline
+          </p>
+          <div className="flex gap-2 mt-3">
+            <Button variant="outline" size="sm" onClick={() => setShowPrompt(false)}>
+              Depois
+            </Button>
+            <Button size="sm" onClick={handleInstall}>
+              Instalar
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+═══════════════════════════════════════════════════════════════
+PASSO 10.7: CRIAR PÁGINA OFFLINE
+═══════════════════════════════════════════════════════════════
+
+## app/offline/page.tsx
+
+export default function OfflinePage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="text-center">
+        <div className="text-6xl mb-4">📡</div>
+        <h1 className="text-3xl font-bold mb-2">Você está offline</h1>
+        <p className="text-gray-600 mb-4">
+          Verifique sua conexão com a internet
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    </div>
+  )
+}
