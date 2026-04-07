@@ -22,9 +22,11 @@ import tenantsRouter from "./tenants";
 import catalogRouter from "./catalog";
 import automationExtrasRouter from "./automation-extras";
 import systemConfigsRouter from "./system-configs";
+import adminRouter from "./admin";
 
 const router: IRouter = Router();
 
+router.use(adminRouter);
 router.use(healthRouter);
 router.use(dashboardRouter);
 router.use(tenantsRouter);

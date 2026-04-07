@@ -42,6 +42,13 @@ import Configuracoes from "@/pages/configuracoes";
 import Downloads from "@/pages/downloads";
 import AdminDashboard from "@/pages/admin/index";
 import AdminTenants from "@/pages/admin/tenants";
+import AdminTenantDetail from "@/pages/admin/tenant-detail";
+import AdminPlans from "@/pages/admin/plans";
+import AdminBilling from "@/pages/admin/billing";
+import AdminMetrics from "@/pages/admin/metrics";
+import AdminUsers from "@/pages/admin/users";
+import AdminLogs from "@/pages/admin/logs";
+import AdminSettings from "@/pages/admin/settings";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
@@ -249,6 +256,13 @@ function Router() {
       {/* Super Admin */}
       <Route path="/admin" component={() => <AdminRoute component={AdminDashboard} />} />
       <Route path="/admin/tenants" component={() => <AdminRoute component={AdminTenants} />} />
+      <Route path="/admin/tenants/:id" component={() => <AdminRoute component={AdminTenantDetail} />} />
+      <Route path="/admin/plans" component={() => <AdminRoute component={AdminPlans} />} />
+      <Route path="/admin/billing" component={() => <AdminRoute component={AdminBilling} />} />
+      <Route path="/admin/metrics" component={() => <AdminRoute component={AdminMetrics} />} />
+      <Route path="/admin/users" component={() => <AdminRoute component={AdminUsers} />} />
+      <Route path="/admin/logs" component={() => <AdminRoute component={AdminLogs} />} />
+      <Route path="/admin/settings" component={() => <AdminRoute component={AdminSettings} />} />
 
       <Route
         component={() => <ProtectedRoute component={() => <Redirect to="/dashboard" />} />}

@@ -1,8 +1,19 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useUser, useClerk } from "@clerk/react";
-import { useGetMe } from "@workspace/api-client-react";
-import { LayoutDashboard, Users, LogOut, ShieldCheck, ChevronDown } from "lucide-react";
+import {
+  LayoutDashboard,
+  Building2,
+  CreditCard,
+  BarChart3,
+  Users,
+  ScrollText,
+  Settings,
+  LogOut,
+  ShieldCheck,
+  ChevronDown,
+  Layers,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -15,8 +26,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const NAV_ITEMS = [
-  { name: "Visão Geral", href: "/admin", icon: LayoutDashboard },
-  { name: "Tenants", href: "/admin/tenants", icon: Users },
+  { name: "Visão Geral", href: "/admin", icon: LayoutDashboard, exact: true },
+  { name: "Agências", href: "/admin/tenants", icon: Building2, exact: false },
+  { name: "Planos", href: "/admin/plans", icon: Layers, exact: false },
+  { name: "Faturamento", href: "/admin/billing", icon: CreditCard, exact: false },
+  { name: "Métricas", href: "/admin/metrics", icon: BarChart3, exact: false },
+  { name: "Usuários", href: "/admin/users", icon: Users, exact: false },
+  { name: "Logs de Auditoria", href: "/admin/logs", icon: ScrollText, exact: false },
+  { name: "Configurações", href: "/admin/settings", icon: Settings, exact: false },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
@@ -37,12 +54,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <nav className="flex-1 py-3 px-2 flex flex-col gap-0.5">
+        <nav className="flex-1 py-3 px-2 flex flex-col gap-0.5 overflow-y-auto">
           {NAV_ITEMS.map((item) => {
-            const isActive =
-              item.href === "/admin"
-                ? location === "/admin"
-                : location.startsWith(item.href);
+            const isActive = item.exact
+              ? location === item.href
+              : location.startsWith(item.href);
             return (
               <Link
                 key={item.href}

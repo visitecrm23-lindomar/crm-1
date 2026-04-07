@@ -22,7 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Pencil, Users, ChevronLeft, ChevronRight } from "lucide-react";
+import { Pencil, Users, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListTenantsQueryKey } from "@workspace/api-client-react";
 
@@ -144,6 +145,7 @@ export default function AdminTenants() {
   const { data: tenants = [], isLoading } = useListTenants();
   const [page, setPage] = useState(1);
   const [editingTenant, setEditingTenant] = useState<TenantWithCount | null>(null);
+  const [, navigate] = useLocation();
 
   const totalPages = Math.max(1, Math.ceil(tenants.length / PAGE_SIZE));
   const paginated = tenants.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -208,14 +210,26 @@ export default function AdminTenants() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setEditingTenant(tenant)}
-                            className="h-7 w-7 p-0"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => navigate(`/admin/tenants/${tenant.id}`)}
+                              className="h-7 w-7 p-0"
+                              title="Ver detalhes"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditingTenant(tenant)}
+                              className="h-7 w-7 p-0"
+                              title="Editar"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
