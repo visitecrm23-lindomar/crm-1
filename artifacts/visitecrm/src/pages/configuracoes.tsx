@@ -1,9 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  useListUsers,
-  useCreateUser,
-  useUpdateUser,
   useGetTenant,
   getGetTenantQueryKey,
   useUpdateTenant,
@@ -12,10 +9,7 @@ import {
   useGetMe,
 } from "@workspace/api-client-react";
 import type {
-  UserProfile,
   UpdateTenantBody,
-  CreateUserBody,
-  UpdateUserBody,
   SystemConfig,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,27 +32,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Building2,
-  Users,
   CreditCard,
   Puzzle,
   Bell,
   Palette,
   Key,
   CheckCircle2,
-  Pencil,
-  UserPlus,
   Wifi,
 } from "lucide-react";
 
@@ -191,215 +174,6 @@ function AgencyProfileTab() {
       <Button onClick={handleSave} disabled={updateTenant.isPending}>
         Salvar Perfil
       </Button>
-    </div>
-  );
-}
-
-/* ──────────────────── Users Tab ──────────────────── */
-const ROLE_LABELS: Record<string, string> = {
-  superadmin: "Super Admin",
-  agencia: "Agência",
-  vendedor: "Vendedor",
-  cliente: "Cliente",
-};
-
-function UsersTab() {
-  const { toast } = useToast();
-  const { data: users = [], refetch } = useListUsers();
-  const createUser = useCreateUser();
-  const updateUser = useUpdateUser();
-
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [editUser, setEditUser] = useState<UserProfile | null>(null);
-  const [inviteForm, setInviteForm] = useState<CreateUserBody>({ name: "", email: "", role: "vendedor" });
-  const [editForm, setEditForm] = useState<UpdateUserBody>({});
-
-  async function handleInvite() {
-    try {
-      await createUser.mutateAsync({ data: inviteForm });
-      toast({ title: "Usuário convidado com sucesso" });
-      setInviteOpen(false);
-      setInviteForm({ name: "", email: "", role: "vendedor" });
-      refetch();
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : "Erro ao convidar usuário";
-      toast({ title: msg, variant: "destructive" });
-    }
-  }
-
-  async function handleEditSave() {
-    if (!editUser) return;
-    try {
-      await updateUser.mutateAsync({ id: editUser.id, data: editForm });
-      toast({ title: "Usuário atualizado" });
-      setEditUser(null);
-      refetch();
-    } catch {
-      toast({ title: "Erro ao atualizar", variant: "destructive" });
-    }
-  }
-
-  function openEdit(u: UserProfile) {
-    setEditUser(u);
-    setEditForm({ name: u.name, role: u.role, isActive: u.isActive });
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{users.length} usuário(s) cadastrado(s)</p>
-        <Button onClick={() => setInviteOpen(true)}>
-          <UserPlus className="w-4 h-4 mr-2" />
-          Convidar Usuário
-        </Button>
-      </div>
-
-      <div className="rounded-md border bg-background">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>E-mail</TableHead>
-              <TableHead>Função</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Saldo de Indicação</TableHead>
-              <TableHead className="w-20"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.map((u) => (
-              <TableRow key={u.id}>
-                <TableCell className="font-medium">{u.name}</TableCell>
-                <TableCell>{u.email}</TableCell>
-                <TableCell>
-                  <Badge variant="secondary" className="text-xs">
-                    {ROLE_LABELS[u.role] ?? u.role}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  {u.isActive ? (
-                    <Badge className="text-xs">Ativo</Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-xs text-muted-foreground">
-                      Inativo
-                    </Badge>
-                  )}
-                </TableCell>
-                <TableCell>R$ {(u.referralBalance ?? 0).toFixed(2)}</TableCell>
-                <TableCell>
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(u)}>
-                    <Pencil className="w-4 h-4" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-
-      {/* Invite modal */}
-      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Convidar Usuário</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div className="space-y-1">
-              <Label>Nome</Label>
-              <Input
-                value={inviteForm.name}
-                onChange={(e) => setInviteForm((f) => ({ ...f, name: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>E-mail</Label>
-              <Input
-                type="email"
-                value={inviteForm.email}
-                onChange={(e) => setInviteForm((f) => ({ ...f, email: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Função</Label>
-              <Select
-                value={inviteForm.role}
-                onValueChange={(v) => setInviteForm((f) => ({ ...f, role: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(ROLE_LABELS).map(([k, v]) => (
-                    <SelectItem key={k} value={k}>
-                      {v}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setInviteOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleInvite} disabled={createUser.isPending}>
-              Convidar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit modal */}
-      <Dialog open={!!editUser} onOpenChange={() => setEditUser(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Editar Usuário</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div className="space-y-1">
-              <Label>Nome</Label>
-              <Input
-                value={editForm.name ?? ""}
-                onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Função</Label>
-              <Select
-                value={editForm.role ?? "vendedor"}
-                onValueChange={(v) => setEditForm((f) => ({ ...f, role: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(ROLE_LABELS).map(([k, v]) => (
-                    <SelectItem key={k} value={k}>
-                      {v}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={editForm.isActive ?? true}
-                onCheckedChange={(v) => setEditForm((f) => ({ ...f, isActive: v }))}
-              />
-              <Label>Ativo</Label>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditUser(null)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleEditSave} disabled={updateUser.isPending}>
-              Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
@@ -930,10 +704,6 @@ export default function Configuracoes() {
             <Building2 className="w-3.5 h-3.5" />
             Agência
           </TabsTrigger>
-          <TabsTrigger value="users" className="flex items-center gap-1.5">
-            <Users className="w-3.5 h-3.5" />
-            Usuários
-          </TabsTrigger>
           <TabsTrigger value="plan" className="flex items-center gap-1.5">
             <CreditCard className="w-3.5 h-3.5" />
             Plano
@@ -967,20 +737,6 @@ export default function Configuracoes() {
               </CardHeader>
               <CardContent>
                 <AgencyProfileTab />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="users">
-            <Card>
-              <CardHeader>
-                <CardTitle>Gerenciamento de Usuários</CardTitle>
-                <CardDescription>
-                  Convide usuários, altere funções e desative acessos
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <UsersTab />
               </CardContent>
             </Card>
           </TabsContent>
