@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import {
   useListTrips, useCreateTrip, useGetTrip, useUpdateTrip, useDeleteTrip,
-  useGetTripSeatMap, useListReservations, useListClients, useCreateReservation, useUpdateReservation, useCreateClient,
+  useGetTripSeatMap, useGetDashboardUpcomingTrips, useListReservations, useListClients, useCreateReservation, useUpdateReservation, useCreateClient,
 } from "@workspace/api-client-react";
 import type { Trip, Seat } from "@workspace/api-client-react";
 import { useEditor, EditorContent } from "@tiptap/react";
@@ -118,6 +118,27 @@ function getCountdownLabel(date: string) {
   }
 }
 
+function TripCountdown({ date }: { date: string }) {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setTick((v) => v + 1), 60000);
+    return () => window.clearInterval(id);
+  }, []);
+  const label = getCountdownLabel(date);
+  const urgent = (() => {
+    try {
+      return differenceInCalendarDays(parseISO(date), new Date()) < 1;
+    } catch {
+      return false;
+    }
+  })();
+  return (
+    <Badge variant={label === "Encerrado" || urgent ? "destructive" : "secondary"} className="text-xs">
+      {label || "Em breve"}
+    </Badge>
+  );
+}
+
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
   draft:      { label: "Rascunho",   color: "bg-gray-100 text-gray-600" },
   active:     { label: "Ativa",      color: "bg-green-100 text-green-700" },
@@ -166,6 +187,7 @@ export function TripList() {
   });
   const createTrip = useCreateTrip();
   const deleteTrip = useDeleteTrip();
+  const { data: upcomingTrips = [] } = useGetDashboardUpcomingTrips();
 
   const { data: allTrips } = useListTrips({ limit: 100 });
 
@@ -257,6 +279,30 @@ export function TripList() {
             <p className="text-2xl font-bold">{s.value}</p>
           </div>
         ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2" />
+        <div className="bg-card border rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold">Próximas Partidas</h2>
+            <Badge variant="outline" className="text-xs">{upcomingTrips.length}</Badge>
+          </div>
+          <div className="space-y-3">
+            {upcomingTrips.slice(0, 3).map((trip) => (
+              <div key={trip.id} className="rounded-md border p-3 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{trip.name}</p>
+                    <p className="text-xs text-muted-foreground">{trip.destination}</p>
+                  </div>
+                  <TripCountdown date={trip.departureDate} />
+                </div>
+                <OccupancyBar reserved={trip.totalCapacity - trip.availableSeats} confirmed={0} total={trip.totalCapacity} />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3 items-center">
@@ -362,14 +408,8 @@ export function TripList() {
 }
 
 function TripCard({ trip, onDelete, onDuplicate, navigate }: { trip: Trip; onDelete: () => void; onDuplicate: () => void; navigate: (to: string) => void }) {
-  const [nowTick, setNowTick] = useState(Date.now());
   const pct = trip.totalCapacity > 0 ? Math.round((trip.reservedSeats + trip.confirmedSeats) / trip.totalCapacity * 100) : 0;
   const statusInfo = STATUS_MAP[trip.status] ?? { label: trip.status, color: "bg-gray-100 text-gray-600" };
-  useEffect(() => {
-    const id = window.setInterval(() => setNowTick(Date.now()), 60000);
-    return () => window.clearInterval(id);
-  }, []);
-  const countdown = getCountdownLabel(trip.departureDate);
   return (
     <div className="bg-card border rounded-xl overflow-hidden hover:shadow-md transition-shadow">
       <div className="relative h-36 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
@@ -385,11 +425,7 @@ function TripCard({ trip, onDelete, onDuplicate, navigate }: { trip: Trip; onDel
           <Calendar className="w-3 h-3" /><span>{formatDate(trip.departureDate)}</span>
           {trip.returnDate && <><span>—</span><span>{formatDate(trip.returnDate)}</span></>}
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant={countdown === "Encerrado" ? "destructive" : "secondary"} className="text-xs">
-            {countdown}
-          </Badge>
-        </div>
+        <TripCountdown date={trip.departureDate} />
         <OccupancyBar reserved={trip.reservedSeats} confirmed={trip.confirmedSeats} total={trip.totalCapacity} />
         <div className="flex items-center justify-between text-sm">
           <span className="font-semibold text-primary">{formatCurrency(trip.priceAdult)}<span className="text-xs text-muted-foreground font-normal">/pessoa</span></span>
