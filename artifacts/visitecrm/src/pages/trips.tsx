@@ -991,6 +991,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   const { data: seatMap, dataUpdatedAt } = useGetTripSeatMap(tripId, {
     query: { queryKey: getGetTripSeatMapQueryKey(tripId), refetchInterval: 5000 },
   });
+  const lastUpdatedMinutes = Math.max(0, Math.floor((Date.now() - dataUpdatedAt) / 60000));
   const { data: reservations } = useListReservations({ tripId });
   const { data: clientsData } = useListClients({ search: clientSearch || undefined, limit: 8 });
   const createReservation = useCreateReservation();
@@ -1102,7 +1103,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
           <p className="text-muted-foreground text-sm">{trip?.name}</p>
         </div>
         <Badge variant="outline" className="text-xs">
-          Atualizado há {Math.max(0, Math.floor((Date.now() - dataUpdatedAt) / 60000))} min
+          {lastUpdatedMinutes < 1 ? "Atualizado agora" : `Atualizado há ${lastUpdatedMinutes} min`}
         </Badge>
         <div className="flex items-center gap-2 flex-wrap">
           <Select value={tripId} onValueChange={v => { setTripId(v); setOptimisticSeats({}); }}>
