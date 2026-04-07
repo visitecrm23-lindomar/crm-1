@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import {
   useListClients, useCreateClient, useUpdateClient,
@@ -8,7 +8,7 @@ import type { Client } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,13 +22,240 @@ import {
 import {
   Plus, Search, Users, TrendingUp, UserCheck, MoreHorizontal,
   Phone, Mail, MapPin, Calendar, Download, Upload, ChevronLeft, ChevronRight,
-  X, Star, ArrowUpDown, ArrowUp, ArrowDown
+  X, Star, ArrowUpDown, ArrowUp, ArrowDown, FileText, Trash2, AlertCircle
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useToast } from "@/hooks/use-toast";
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function downloadCsv(rows: string[][], filename: string) {
+  const content = rows.map(r => r.map(cell => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob(["\uFEFF" + content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportClientsCsv(clients: Client[]) {
+  const headers = ["Nome", "E-mail", "WhatsApp", "Telefone", "CPF", "Nascimento", "Gênero", "Cidade", "Estado", "Instagram", "Classificação", "Status", "Pipeline", "Total Gasto", "Saldo Devedor", "Tags", "Destinos Sonhados", "Observações", "Cadastrado em"];
+  const rows = clients.map(c => [
+    c.name, c.email, c.whatsapp, c.phone ?? "", c.cpf ?? "",
+    c.birthDate ? format(parseISO(c.birthDate), "dd/MM/yyyy") : "",
+    c.gender ?? "", c.addressCity ?? "", c.addressState ?? "", c.instagram ?? "",
+    c.classification ?? "", c.status ?? "", c.pipelineStage ?? "",
+    String(c.totalSpent), String(c.outstandingBalance),
+    (c.tags ?? []).join("; "), (c.dreamDestinations ?? []).join("; "),
+    c.observations ?? "",
+    format(parseISO(c.createdAt), "dd/MM/yyyy"),
+  ]);
+  downloadCsv([headers, ...rows], `clientes_${format(new Date(), "yyyyMMdd")}.csv`);
+}
+
+interface StoredDocument { id: string; name: string; type: string; size: number; uploadedAt: string; data: string; }
+
+function useClientDocuments(clientId: string) {
+  const key = `visite-crm-docs-${clientId}`;
+  const [docs, setDocs] = useState<StoredDocument[]>(() => {
+    try { return JSON.parse(localStorage.getItem(key) ?? "[]"); } catch { return []; }
+  });
+  const save = (updated: StoredDocument[]) => { setDocs(updated); localStorage.setItem(key, JSON.stringify(updated)); };
+  const add = (doc: StoredDocument) => save([doc, ...docs]);
+  const remove = (id: string) => save(docs.filter(d => d.id !== id));
+  return { docs, add, remove };
+}
+
+function ClientDocumentsTab({ clientId }: { clientId: string }) {
+  const { docs, add, remove } = useClientDocuments(clientId);
+  const { toast } = useToast();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { toast({ title: "Arquivo muito grande", description: "Máximo 10 MB.", variant: "destructive" }); return; }
+    setUploading(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      add({ id: crypto.randomUUID(), name: file.name, type: file.type, size: file.size, uploadedAt: new Date().toISOString(), data: reader.result as string });
+      setUploading(false);
+      toast({ title: "Documento enviado com sucesso!" });
+      if (inputRef.current) inputRef.current.value = "";
+    };
+    reader.onerror = () => { setUploading(false); toast({ title: "Erro ao ler arquivo", variant: "destructive" }); };
+    reader.readAsDataURL(file);
+  }
+
+  function formatSize(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  return (
+    <div className="space-y-3 mt-2">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-muted-foreground">{docs.length} documento(s)</p>
+        <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={uploading}>
+          <Upload className="w-4 h-4 mr-2" />{uploading ? "Enviando..." : "Enviar Documento"}
+        </Button>
+        <input ref={inputRef} type="file" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" className="hidden" onChange={handleFile} />
+      </div>
+      {docs.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground text-sm border rounded-lg bg-muted/20">
+          <FileText className="w-8 h-8 mx-auto mb-2 opacity-40" />
+          Nenhum documento enviado ainda.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {docs.map(doc => (
+            <div key={doc.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
+              <div className="w-9 h-9 rounded-md bg-muted flex items-center justify-center shrink-0">
+                {doc.type.startsWith("image/") ? <span className="text-xs font-bold text-blue-600">IMG</span> : <FileText className="w-4 h-4 text-muted-foreground" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{doc.name}</p>
+                <p className="text-xs text-muted-foreground">{formatSize(doc.size)} · {format(parseISO(doc.uploadedAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+              </div>
+              <div className="flex gap-1 shrink-0">
+                <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                  <a href={doc.data} download={doc.name} title="Baixar"><Download className="w-3.5 h-3.5" /></a>
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => remove(doc.id)} title="Remover">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface CsvImportModalProps { open: boolean; onClose: () => void; onImported: () => void; }
+
+function CsvImportModal({ open, onClose, onImported }: CsvImportModalProps) {
+  const { toast } = useToast();
+  const createClient = useCreateClient();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string[][]>([]);
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [errors, setErrors] = useState<string[]>([]);
+
+  const CSV_COLUMNS = ["nome", "email", "whatsapp", "telefone", "cpf", "cidade", "estado", "instagram", "observacoes"];
+
+  function parseCsv(text: string): string[][] {
+    return text.split("\n").filter(l => l.trim()).map(line => {
+      const cells: string[] = [];
+      let inside = false, cell = "";
+      for (const ch of line) {
+        if (ch === '"') { inside = !inside; }
+        else if (ch === "," && !inside) { cells.push(cell.trim()); cell = ""; }
+        else { cell += ch; }
+      }
+      cells.push(cell.trim());
+      return cells;
+    });
+  }
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const rows = parseCsv(reader.result as string);
+      if (rows.length < 2) { toast({ title: "CSV inválido", variant: "destructive" }); return; }
+      setHeaders(rows[0]);
+      setPreview(rows.slice(1, 6));
+      setErrors([]);
+    };
+    reader.readAsText(file, "UTF-8");
+  }
+
+  function colIdx(h: string) { return headers.findIndex(x => x.toLowerCase().includes(h)); }
+
+  async function handleImport() {
+    if (!inputRef.current?.files?.[0]) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const rows = parseCsv(reader.result as string).slice(1).filter(r => r.some(c => c.trim()));
+      setImporting(true); setProgress(0); setErrors([]);
+      const errs: string[] = [];
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const get = (h: string) => { const idx = colIdx(h); return idx >= 0 ? (r[idx] ?? "").trim() : ""; };
+        const name = get("nome"); const email = get("email"); const whatsapp = get("whatsapp") || get("celular") || get("tel");
+        if (!name || !email || !whatsapp) { errs.push(`Linha ${i + 2}: nome, e-mail e WhatsApp são obrigatórios`); setProgress(Math.round(((i + 1) / rows.length) * 100)); continue; }
+        try {
+          await createClient.mutateAsync({ data: { name, email, whatsapp, phone: get("telefone") || undefined, cpf: get("cpf") || undefined, addressCity: get("cidade") || undefined, addressState: get("estado") || undefined, observations: get("observacoes") || undefined } });
+        } catch { errs.push(`Linha ${i + 2}: ${name} — erro ao criar`); }
+        setProgress(Math.round(((i + 1) / rows.length) * 100));
+      }
+      setImporting(false); setErrors(errs);
+      if (errs.length === 0) { toast({ title: `${rows.length} clientes importados com sucesso!` }); onImported(); onClose(); }
+      else { toast({ title: `Importação concluída com ${errs.length} erro(s)`, variant: "destructive" }); onImported(); }
+    };
+    reader.readAsText(inputRef.current.files[0], "UTF-8");
+  }
+
+  function handleClose() { if (!importing) { setPreview([]); setHeaders([]); setErrors([]); setProgress(0); onClose(); } }
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) handleClose(); }}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Importar Clientes via CSV</DialogTitle>
+          <DialogDescription>O arquivo deve ter cabeçalhos: Nome, Email, WhatsApp (obrigatórios) + Telefone, CPF, Cidade, Estado, Instagram, Observacoes.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/20 transition-colors" onClick={() => inputRef.current?.click()}>
+            <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Clique para selecionar um arquivo CSV</p>
+            <input ref={inputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
+          </div>
+          {headers.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Pré-visualização (primeiros 5 registros)</p>
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="text-xs w-full">
+                  <thead className="bg-muted"><tr>{headers.slice(0, 6).map(h => <th key={h} className="px-2 py-1 text-left font-medium">{h}</th>)}</tr></thead>
+                  <tbody>{preview.map((row, i) => <tr key={i} className="border-t">{row.slice(0, 6).map((cell, j) => <td key={j} className="px-2 py-1 truncate max-w-[120px]">{cell}</td>)}</tr>)}</tbody>
+                </table>
+              </div>
+              <p className="text-xs text-muted-foreground">Colunas detectadas: {headers.join(", ")}</p>
+            </div>
+          )}
+          {importing && (
+            <div className="space-y-1">
+              <div className="w-full bg-muted rounded-full h-2"><div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${progress}%` }} /></div>
+              <p className="text-xs text-muted-foreground text-center">Importando... {progress}%</p>
+            </div>
+          )}
+          {errors.length > 0 && (
+            <div className="space-y-1 max-h-32 overflow-y-auto border rounded-lg p-2 bg-destructive/10">
+              {errors.map((e, i) => <p key={i} className="text-xs text-destructive flex items-center gap-1"><AlertCircle className="w-3 h-3 shrink-0" />{e}</p>)}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose} disabled={importing}>Cancelar</Button>
+          <Button onClick={handleImport} disabled={importing || preview.length === 0}>
+            {importing ? `Importando ${progress}%...` : "Importar Clientes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -582,10 +809,7 @@ function Client360Modal({ open, onClose, client }: Client360ModalProps) {
           </TabsContent>
 
           <TabsContent value="documents" className="mt-4">
-            <div className="text-center py-8 space-y-3">
-              <p className="text-sm text-muted-foreground">Nenhum documento enviado.</p>
-              <Button variant="outline" size="sm" disabled><Upload className="w-4 h-4 mr-2" /> Enviar Documento</Button>
-            </div>
+            <ClientDocumentsTab clientId={client.id} />
           </TabsContent>
         </Tabs>
       </DialogContent>
@@ -637,8 +861,10 @@ export default function Clients() {
   const [sortBy, setSortBy] = useState<SortField>("createdAt");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [editClient, setEditClient] = useState<Client | null>(null);
   const [viewClient, setViewClient] = useState<Client | null>(null);
+  const { toast } = useToast();
   const LIMIT = 12;
 
   const { data: stages } = useListPipelineStages();
@@ -703,11 +929,16 @@ export default function Clients() {
           <p className="text-muted-foreground text-sm">Gerencie sua carteira de clientes.</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" disabled title="Em breve">
+          <Button variant="outline" size="sm" onClick={() => setIsImportOpen(true)}>
             <Upload className="w-4 h-4 mr-1" /> Importar CSV
           </Button>
-          <Button variant="outline" size="sm" disabled title="Em breve">
-            <Download className="w-4 h-4 mr-1" /> Exportar
+          <Button variant="outline" size="sm" onClick={() => {
+            const clients = allClients?.data ?? [];
+            if (clients.length === 0) { toast({ title: "Nenhum cliente para exportar" }); return; }
+            exportClientsCsv(clients);
+            toast({ title: `${clients.length} clientes exportados!` });
+          }}>
+            <Download className="w-4 h-4 mr-1" /> Exportar CSV
           </Button>
           <Button size="sm" onClick={() => { setEditClient(null); setIsCreateOpen(true); }}>
             <Plus className="w-4 h-4 mr-1" /> Novo Cliente
@@ -921,6 +1152,7 @@ export default function Clients() {
         }}
       />
       {viewClient && <Client360Modal open={!!viewClient} onClose={() => setViewClient(null)} client={viewClient} />}
+      <CsvImportModal open={isImportOpen} onClose={() => setIsImportOpen(false)} onImported={() => refetch()} />
     </div>
   );
 }
