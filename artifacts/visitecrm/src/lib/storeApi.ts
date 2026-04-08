@@ -1,10 +1,20 @@
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+export interface VariantOption {
+  label: string;
+  price: number;
+}
+
+export interface VariantItem {
+  name: string;
+  options: VariantOption[];
+}
+
 async function authHeaders(): Promise<HeadersInit> {
   return { "Content-Type": "application/json" };
 }
 
-async function req<T>(
+async function req<T = void>(
   method: string,
   path: string,
   body?: unknown
@@ -20,7 +30,12 @@ async function req<T>(
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error ?? "Request failed");
   }
-  return res.json();
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
+    return undefined as unknown as T;
+  }
+  const text = await res.text();
+  if (!text) return undefined as unknown as T;
+  return JSON.parse(text) as T;
 }
 
 export const storeApi = {
@@ -28,7 +43,7 @@ export const storeApi = {
   updateSettings: (data: Partial<StoreSettings>) =>
     req<StoreSettings>("PUT", "/store/settings", data),
   initStore: (data: InitStoreInput) =>
-    req<StoreSettings>("POST", "/store/init", data),
+    req<StoreSettings>("PUT", "/store/settings", data),
 
   getCategories: () => req<StoreCategory[]>("GET", "/store/categories"),
   createCategory: (data: CategoryInput) =>
@@ -36,7 +51,7 @@ export const storeApi = {
   updateCategory: (id: string, data: Partial<CategoryInput>) =>
     req<StoreCategory>("PUT", `/store/categories/${id}`, data),
   deleteCategory: (id: string) =>
-    req<{ success: boolean }>("DELETE", `/store/categories/${id}`),
+    req<void>("DELETE", `/store/categories/${id}`),
 
   getProducts: () => req<StoreProduct[]>("GET", "/store/products"),
   createProduct: (data: ProductInput) =>
@@ -44,7 +59,7 @@ export const storeApi = {
   updateProduct: (id: string, data: Partial<ProductInput>) =>
     req<StoreProduct>("PUT", `/store/products/${id}`, data),
   deleteProduct: (id: string) =>
-    req<{ success: boolean }>("DELETE", `/store/products/${id}`),
+    req<void>("DELETE", `/store/products/${id}`),
 
   getOrders: () => req<StoreOrder[]>("GET", "/store/orders"),
   getOrder: (id: string) => req<StoreOrder>("GET", `/store/orders/${id}`),
@@ -155,33 +170,74 @@ export interface StoreSettings {
   tenantId: string;
   name: string;
   slug: string;
+  tagline?: string | null;
   description?: string | null;
-  logoUrl?: string | null;
-  bannerUrl?: string | null;
+
+  logo?: string | null;
+  logoDark?: string | null;
+  favicon?: string | null;
+  bannerHome?: string | null;
+  bannerMobile?: string | null;
+
   primaryColor: string;
   secondaryColor: string;
   accentColor: string;
-  contactEmail?: string | null;
-  contactPhone?: string | null;
-  contactWhatsapp?: string | null;
-  contactAddress?: string | null;
-  socialInstagram?: string | null;
-  socialFacebook?: string | null;
-  socialYoutube?: string | null;
-  seoTitle?: string | null;
-  seoDescription?: string | null;
+
   customDomain?: string | null;
+  domainVerified: boolean;
+  sslEnabled: boolean;
+
+  email: string;
+  phone?: string | null;
+  whatsapp?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zipCode?: string | null;
+
+  facebookUrl?: string | null;
+  instagramUrl?: string | null;
+  twitterUrl?: string | null;
+  youtubeUrl?: string | null;
+  linkedinUrl?: string | null;
+  tiktokUrl?: string | null;
+
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  metaKeywords?: string | null;
+  googleAnalyticsId?: string | null;
+  facebookPixelId?: string | null;
+  googleTagManagerId?: string | null;
+
+  requireLogin: boolean;
+  guestCheckout: boolean;
+
   paymentMethods: string[];
-  paymentSettings: Record<string, string>;
-  shippingPolicy?: string | null;
-  returnPolicy?: string | null;
-  privacyPolicy?: string | null;
+  stripeEnabled: boolean;
+  stripePublicKey?: string | null;
+  stripeSecretKey?: string | null;
+  mpEnabled: boolean;
+  mpPublicKey?: string | null;
+  mpAccessToken?: string | null;
+  pixEnabled: boolean;
+  pixKey?: string | null;
+  pixKeyType?: string | null;
+  boletoEnabled: boolean;
+
   termsOfService?: string | null;
+  privacyPolicy?: string | null;
+  refundPolicy?: string | null;
+  cancellationPolicy?: string | null;
+  termsUrl?: string | null;
+  privacyUrl?: string | null;
+
+  notificationEmail?: string | null;
+  orderNotificationEnabled: boolean;
+
   isActive: boolean;
   maintenanceMode: boolean;
   maintenanceMessage?: string | null;
-  notifyNewOrders: boolean;
-  notifyEmail?: string | null;
+
   createdAt: string;
   updatedAt: string;
 }
@@ -232,7 +288,6 @@ export interface StoreCategory {
 export interface StoreProduct {
   id: string;
   storeId: string;
-  tenantId: string;
   categoryId?: string | null;
   tripId?: string | null;
   type: string;
@@ -241,25 +296,44 @@ export interface StoreProduct {
   shortDescription?: string | null;
   description?: string | null;
   price: string;
+  comparePrice?: string | null;
+  costPrice?: string | null;
+  onSale: boolean;
   salePrice?: string | null;
-  stock?: number | null;
+  saleStartsAt?: string | null;
+  saleEndsAt?: string | null;
+  trackInventory: boolean;
+  stockQuantity?: number | null;
+  allowBackorder: boolean;
+  hasDates: boolean;
+  startDate?: string | null;
+  endDate?: string | null;
   images: string[];
+  thumbnail?: string | null;
+  gallery: string[];
   features: string[];
   includes: string[];
   excludes: string[];
-  variants: Array<{
-    name: string;
-    options: Array<{ label: string; price: number }>;
-  }>;
+  requirements: string[];
   destination?: string | null;
-  departureDate?: string | null;
-  returnDate?: string | null;
-  duration?: number | null;
-  status: string;
-  isPublished: boolean;
+  durationDays?: number | null;
+  durationNights?: number | null;
+  productCity?: string | null;
+  productState?: string | null;
+  country?: string | null;
+  hasVariants: boolean;
+  variants: VariantItem[];
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  metaKeywords?: string | null;
   isFeatured: boolean;
-  seoTitle?: string | null;
-  seoDescription?: string | null;
+  order: number;
+  ratingAverage?: string | null;
+  ratingCount: number;
+  status: string;
+  publishedAt?: string | null;
+  viewsCount: number;
+  salesCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -296,16 +370,21 @@ export interface StoreOrder {
 export interface StoreCoupon {
   id: string;
   storeId: string;
-  tenantId: string;
   code: string;
   type: string;
   value: string;
-  minOrderValue?: string | null;
-  maxUses?: number | null;
-  usedCount: number;
-  applicableProductIds: string[];
+  description?: string | null;
+  minPurchaseAmount?: string | null;
+  maxDiscountAmount?: string | null;
+  usageLimit?: number | null;
+  usageLimitPerCustomer?: number | null;
+  usageCount: number;
+  startsAt: string;
+  expiresAt: string;
+  applicableProducts: string[];
+  applicableCategories: string[];
+  minimumItems?: number | null;
   isActive: boolean;
-  expiresAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -329,8 +408,8 @@ export interface StoreReview {
 export interface InitStoreInput {
   name: string;
   slug: string;
-  contactEmail?: string;
-  contactWhatsapp?: string;
+  email?: string;
+  whatsapp?: string;
   paymentMethods?: string[];
 }
 
@@ -352,37 +431,55 @@ export interface ProductInput {
   tripId?: string;
   shortDescription?: string;
   description?: string;
-  price?: number;
-  salePrice?: number;
-  stock?: number;
+  price?: string;
+  comparePrice?: string;
+  costPrice?: string;
+  onSale?: boolean;
+  salePrice?: string;
+  trackInventory?: boolean;
+  stockQuantity?: number;
+  allowBackorder?: boolean;
+  hasDates?: boolean;
+  startDate?: string;
+  endDate?: string;
   images?: string[];
+  thumbnail?: string;
+  gallery?: string[];
   features?: string[];
   includes?: string[];
   excludes?: string[];
-  variants?: Array<{
-    name: string;
-    options: Array<{ label: string; price: number }>;
-  }>;
+  requirements?: string[];
+  variants?: VariantItem[];
   destination?: string;
-  departureDate?: string;
-  returnDate?: string;
-  duration?: number;
+  durationDays?: number;
+  durationNights?: number;
+  productCity?: string;
+  productState?: string;
+  country?: string;
+  hasVariants?: boolean;
+  metaTitle?: string;
+  metaDescription?: string;
+  metaKeywords?: string;
   status?: string;
-  isPublished?: boolean;
   isFeatured?: boolean;
-  seoTitle?: string;
-  seoDescription?: string;
+  order?: number;
 }
 
 export interface CouponInput {
   code: string;
-  type: "percentage" | "fixed";
-  value: number;
-  minOrderValue?: number;
-  maxUses?: number;
-  applicableProductIds?: string[];
+  type: "percentage" | "fixed" | "free_shipping";
+  value: string;
+  description?: string;
+  minPurchaseAmount?: string;
+  maxDiscountAmount?: string;
+  usageLimit?: number;
+  usageLimitPerCustomer?: number;
+  startsAt: string;
+  expiresAt: string;
+  applicableProducts?: string[];
+  applicableCategories?: string[];
+  minimumItems?: number;
   isActive?: boolean;
-  expiresAt?: string;
 }
 
 export interface CreateOrderInput {

@@ -204,6 +204,8 @@ export default function LojaPedidos() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [selected, setSelected] = useState<StoreOrder | null>(null);
 
   async function load() {
@@ -229,7 +231,10 @@ export default function LojaPedidos() {
       o.customerName.toLowerCase().includes(search.toLowerCase()) ||
       o.customerEmail.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === "all" || o.status === statusFilter;
-    return matchSearch && matchStatus;
+    const orderDate = new Date(o.createdAt);
+    const matchFrom = !dateFrom || orderDate >= new Date(dateFrom);
+    const matchTo = !dateTo || orderDate <= new Date(dateTo + "T23:59:59");
+    return matchSearch && matchStatus && matchFrom && matchTo;
   });
 
   const stats = {
@@ -277,8 +282,8 @@ export default function LojaPedidos() {
         </Card>
       </div>
 
-      <div className="flex gap-3">
-        <div className="relative flex-1">
+      <div className="flex gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             className="pl-9"
@@ -300,6 +305,34 @@ export default function LojaPedidos() {
             ))}
           </SelectContent>
         </Select>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-muted-foreground whitespace-nowrap">De:</label>
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="w-40"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-muted-foreground whitespace-nowrap">Até:</label>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="w-40"
+          />
+        </div>
+        {(dateFrom || dateTo) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { setDateFrom(""); setDateTo(""); }}
+            className="text-muted-foreground"
+          >
+            Limpar datas
+          </Button>
+        )}
       </div>
 
       {loading ? (

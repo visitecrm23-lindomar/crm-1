@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { storeApi, StoreProduct, StoreCategory, ProductInput } from "@/lib/storeApi";
+import { storeApi, StoreProduct, StoreCategory, ProductInput, VariantItem } from "@/lib/storeApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -42,7 +43,206 @@ import {
   Eye,
   EyeOff,
   Star,
+  X,
+  Archive,
 } from "lucide-react";
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+const PRODUCT_TYPES = [
+  { value: "package", label: "Pacote de Viagem" },
+  { value: "tour", label: "Passeio / Tour" },
+  { value: "service", label: "Serviço" },
+  { value: "hotel", label: "Hospedagem" },
+  { value: "transfer", label: "Transfer" },
+  { value: "insurance", label: "Seguro" },
+  { value: "product", label: "Produto" },
+];
+
+const PRODUCT_STATUSES = [
+  { value: "draft", label: "Rascunho" },
+  { value: "active", label: "Ativo" },
+  { value: "archived", label: "Arquivado" },
+];
+
+function TagInput({
+  label,
+  values,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  values: string[];
+  onChange: (v: string[]) => void;
+  placeholder?: string;
+}) {
+  const [input, setInput] = useState("");
+  function add() {
+    const trimmed = input.trim();
+    if (trimmed && !values.includes(trimmed)) {
+      onChange([...values, trimmed]);
+    }
+    setInput("");
+  }
+  function remove(item: string) {
+    onChange(values.filter((v) => v !== item));
+  }
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="flex gap-2">
+        <Input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+          placeholder={placeholder ?? "Digite e pressione Enter"}
+        />
+        <Button type="button" variant="outline" size="sm" onClick={add}>
+          Adicionar
+        </Button>
+      </div>
+      {values.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {values.map((v) => (
+            <span
+              key={v}
+              className="flex items-center gap-1 bg-muted px-2 py-1 rounded-md text-xs"
+            >
+              {v}
+              <button onClick={() => remove(v)} className="text-muted-foreground hover:text-destructive">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VariantsEditor({
+  variants,
+  basePrice,
+  onChange,
+}: {
+  variants: VariantItem[];
+  basePrice: number;
+  onChange: (v: VariantItem[]) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <Label>Variantes</Label>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            onChange([...variants, { name: "Nova Variante", options: [{ label: "Opção 1", price: basePrice }] }])
+          }
+        >
+          <Plus className="w-3 h-3 mr-1" />
+          Adicionar Variante
+        </Button>
+      </div>
+      {variants.map((variant, vi) => (
+        <Card key={vi}>
+          <CardContent className="pt-4 space-y-3">
+            <div className="flex gap-2 items-center">
+              <Input
+                value={variant.name}
+                onChange={(e) => {
+                  const v = variants.map((x, i) => i === vi ? { ...x, name: e.target.value } : x);
+                  onChange(v);
+                }}
+                placeholder="Ex: Tipo de Quarto"
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-destructive"
+                onClick={() => onChange(variants.filter((_, i) => i !== vi))}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+            {variant.options.map((opt, oi) => (
+              <div key={oi} className="flex gap-2 items-center pl-4">
+                <Input
+                  value={opt.label}
+                  onChange={(e) => {
+                    const v = variants.map((x, i) =>
+                      i === vi
+                        ? { ...x, options: x.options.map((o, j) => j === oi ? { ...o, label: e.target.value } : o) }
+                        : x
+                    );
+                    onChange(v);
+                  }}
+                  placeholder="Nome da opção"
+                  className="flex-1"
+                />
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">R$</span>
+                  <Input
+                    type="number"
+                    value={opt.price}
+                    onChange={(e) => {
+                      const v = variants.map((x, i) =>
+                        i === vi
+                          ? { ...x, options: x.options.map((o, j) => j === oi ? { ...o, price: parseFloat(e.target.value) || 0 } : o) }
+                          : x
+                      );
+                      onChange(v);
+                    }}
+                    className="w-28"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground"
+                  onClick={() => {
+                    const v = variants.map((x, i) =>
+                      i === vi ? { ...x, options: x.options.filter((_, j) => j !== oi) } : x
+                    );
+                    onChange(v);
+                  }}
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="ml-4 h-7 text-xs"
+              onClick={() => {
+                const v = variants.map((x, i) =>
+                  i === vi ? { ...x, options: [...x.options, { label: "", price: basePrice }] } : x
+                );
+                onChange(v);
+              }}
+            >
+              <Plus className="w-3 h-3 mr-1" />
+              Adicionar opção
+            </Button>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
 
 function ProductForm({
   product,
@@ -59,34 +259,52 @@ function ProductForm({
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState<ProductInput>({
     name: product?.name ?? "",
+    slug: product?.slug ?? "",
     type: product?.type ?? "package",
     categoryId: product?.categoryId ?? undefined,
     shortDescription: product?.shortDescription ?? "",
     description: product?.description ?? "",
-    price: product?.price ? parseFloat(product.price) : 0,
-    salePrice: product?.salePrice ? parseFloat(product.salePrice) : undefined,
-    stock: product?.stock ?? undefined,
+    price: product?.price ?? "",
+    salePrice: product?.salePrice ?? undefined,
+    stockQuantity: product?.stockQuantity ?? undefined,
     destination: product?.destination ?? "",
-    departureDate: product?.departureDate ?? "",
-    returnDate: product?.returnDate ?? "",
-    duration: product?.duration ?? undefined,
+    startDate: product?.startDate ?? "",
+    endDate: product?.endDate ?? "",
+    durationDays: product?.durationDays ?? undefined,
     images: product?.images ?? [],
     features: product?.features ?? [],
     includes: product?.includes ?? [],
     excludes: product?.excludes ?? [],
-    isPublished: product?.isPublished ?? false,
+    variants: product?.variants ?? [],
     isFeatured: product?.isFeatured ?? false,
     status: product?.status ?? "draft",
+    metaTitle: product?.metaTitle ?? "",
+    metaDescription: product?.metaDescription ?? "",
   });
 
   function set(field: string, value: unknown) {
-    setForm((p) => ({ ...p, [field]: value }));
+    if (field === "name" && !product) {
+      setForm((p) => ({
+        ...p,
+        name: value as string,
+        slug: !p.slug ? slugify(value as string) : p.slug,
+      }));
+    } else {
+      setForm((p) => ({ ...p, [field]: value }));
+    }
   }
 
   async function handleSave() {
     if (!form.name) {
       toast({ title: "Nome é obrigatório", variant: "destructive" });
       return;
+    }
+    if (!form.price || parseFloat(form.price) <= 0) {
+      toast({ title: "Preço é obrigatório e deve ser maior que zero", variant: "destructive" });
+      return;
+    }
+    if (!form.slug) {
+      setForm((p) => ({ ...p, slug: slugify(form.name) }));
     }
     setLoading(true);
     try {
@@ -108,173 +326,264 @@ function ProductForm({
     }
   }
 
-  function listEdit(field: "features" | "includes" | "excludes" | "images", value: string) {
-    set(field, value.split("\n").filter(Boolean));
-  }
+  const isTrip = ["package", "tour", "transfer"].includes(form.type ?? "");
 
   return (
-    <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2 col-span-2">
-          <Label>Nome *</Label>
-          <Input value={form.name} onChange={(e) => set("name", e.target.value)} />
-        </div>
-        <div className="space-y-2">
-          <Label>Tipo</Label>
-          <Select value={form.type ?? "package"} onValueChange={(v) => set("type", v)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="package">Pacote de Viagem</SelectItem>
-              <SelectItem value="product">Produto</SelectItem>
-              <SelectItem value="service">Serviço</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label>Categoria</Label>
-          <Select
-            value={form.categoryId ?? "none"}
-            onValueChange={(v) => set("categoryId", v === "none" ? undefined : v)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Nenhuma" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Nenhuma</SelectItem>
-              {categories.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2 col-span-2">
-          <Label>Descrição Curta</Label>
-          <Input
-            value={form.shortDescription ?? ""}
-            onChange={(e) => set("shortDescription", e.target.value)}
-          />
-        </div>
-        <div className="space-y-2 col-span-2">
-          <Label>Descrição Completa</Label>
-          <Textarea
-            value={form.description ?? ""}
-            onChange={(e) => set("description", e.target.value)}
-            rows={4}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Preço (R$)</Label>
-          <Input
-            type="number"
-            min="0"
-            step="0.01"
-            value={form.price ?? ""}
-            onChange={(e) => set("price", parseFloat(e.target.value) || 0)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Preço Promocional (R$)</Label>
-          <Input
-            type="number"
-            min="0"
-            step="0.01"
-            value={form.salePrice ?? ""}
-            onChange={(e) =>
-              set("salePrice", e.target.value ? parseFloat(e.target.value) : undefined)
-            }
-          />
-        </div>
-        {form.type === "package" && (
-          <>
-            <div className="space-y-2">
-              <Label>Destino</Label>
-              <Input
-                value={form.destination ?? ""}
-                onChange={(e) => set("destination", e.target.value)}
-              />
+    <div className="max-h-[80vh] overflow-y-auto pr-1">
+      <Tabs defaultValue="info">
+        <TabsList className="mb-4">
+          <TabsTrigger value="info">Informações</TabsTrigger>
+          <TabsTrigger value="preco">Preço e Estoque</TabsTrigger>
+          <TabsTrigger value="detalhes">Detalhes</TabsTrigger>
+          <TabsTrigger value="seo">SEO</TabsTrigger>
+        </TabsList>
+
+        {/* ── INFORMAÇÕES BÁSICAS ── */}
+        <TabsContent value="info" className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2 col-span-2">
+              <Label>Nome do Produto *</Label>
+              <Input value={form.name} onChange={(e) => set("name", e.target.value)} />
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label>Slug (URL)</Label>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">/produto/</span>
+                <Input
+                  value={form.slug ?? ""}
+                  onChange={(e) => set("slug", slugify(e.target.value))}
+                  placeholder="nome-do-produto"
+                  className="font-mono text-sm"
+                />
+              </div>
             </div>
             <div className="space-y-2">
-              <Label>Duração (dias)</Label>
+              <Label>Tipo</Label>
+              <Select value={form.type ?? "package"} onValueChange={(v) => set("type", v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRODUCT_TYPES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Categoria</Label>
+              <Select
+                value={form.categoryId ?? "none"}
+                onValueChange={(v) => set("categoryId", v === "none" ? undefined : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Nenhuma" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhuma</SelectItem>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label>Descrição Curta</Label>
+              <Input
+                value={form.shortDescription ?? ""}
+                onChange={(e) => set("shortDescription", e.target.value)}
+                placeholder="Resumo exibido na listagem"
+              />
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label>Descrição Completa</Label>
+              <Textarea
+                value={form.description ?? ""}
+                onChange={(e) => set("description", e.target.value)}
+                rows={5}
+                placeholder="Descrição detalhada do produto..."
+              />
+            </div>
+
+            {isTrip && (
+              <>
+                <div className="space-y-2">
+                  <Label>Destino</Label>
+                  <Input
+                    value={form.destination ?? ""}
+                    onChange={(e) => set("destination", e.target.value)}
+                    placeholder="Ex: Paris, França"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Duração (dias)</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={form.durationDays ?? ""}
+                    onChange={(e) => set("durationDays", e.target.value ? parseInt(e.target.value) : undefined)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Data de Saída</Label>
+                  <Input
+                    type="date"
+                    value={form.startDate ?? ""}
+                    onChange={(e) => set("startDate", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Data de Retorno</Label>
+                  <Input
+                    type="date"
+                    value={form.endDate ?? ""}
+                    onChange={(e) => set("endDate", e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Images */}
+            <div className="col-span-2 space-y-2">
+              <Label>Imagens (URLs, uma por linha)</Label>
+              <Textarea
+                value={(form.images ?? []).join("\n")}
+                onChange={(e) => set("images", e.target.value.split("\n").filter(Boolean))}
+                rows={3}
+                placeholder="https://exemplo.com/imagem1.jpg"
+              />
+              {(form.images ?? []).length > 0 && (
+                <div className="flex gap-2 flex-wrap">
+                  {(form.images ?? []).slice(0, 4).map((url, i) => (
+                    <img key={i} src={url} alt="" className="w-16 h-16 object-cover rounded border" />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Switches */}
+            <div className="col-span-2 flex gap-6 pt-2">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={form.isFeatured ?? false}
+                  onCheckedChange={(v) => set("isFeatured", v)}
+                />
+                <Label>Destaque</Label>
+              </div>
+              <div className="space-y-0 flex items-center gap-2">
+                <Label>Status:</Label>
+                <Select value={form.status ?? "draft"} onValueChange={(v) => set("status", v)}>
+                  <SelectTrigger className="w-36 h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRODUCT_STATUSES.map((s) => (
+                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ── PREÇO E ESTOQUE ── */}
+        <TabsContent value="preco" className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Preço (R$)</Label>
               <Input
                 type="number"
-                min="1"
-                value={form.duration ?? ""}
-                onChange={(e) =>
-                  set("duration", e.target.value ? parseInt(e.target.value) : undefined)
-                }
+                min="0"
+                step="0.01"
+                value={form.price ?? ""}
+                onChange={(e) => set("price", e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label>Data de Saída</Label>
+              <Label>Preço Promocional (R$)</Label>
               <Input
-                type="date"
-                value={form.departureDate ?? ""}
-                onChange={(e) => set("departureDate", e.target.value)}
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.salePrice ?? ""}
+                onChange={(e) => set("salePrice", e.target.value || undefined)}
+                placeholder="Deixe vazio se sem promoção"
               />
             </div>
             <div className="space-y-2">
-              <Label>Data de Retorno</Label>
+              <Label>Estoque (vagas)</Label>
               <Input
-                type="date"
-                value={form.returnDate ?? ""}
-                onChange={(e) => set("returnDate", e.target.value)}
+                type="number"
+                min="0"
+                value={form.stockQuantity ?? ""}
+                onChange={(e) => set("stockQuantity", e.target.value ? parseInt(e.target.value) : undefined)}
+                placeholder="Ilimitado se vazio"
               />
             </div>
-          </>
-        )}
-        <div className="space-y-2 col-span-2">
-          <Label>Imagens (uma URL por linha)</Label>
-          <Textarea
-            value={(form.images ?? []).join("\n")}
-            onChange={(e) => listEdit("images", e.target.value)}
-            rows={2}
-            placeholder="https://..."
-          />
-        </div>
-        <div className="space-y-2 col-span-2">
-          <Label>O que está incluído (um por linha)</Label>
-          <Textarea
-            value={(form.includes ?? []).join("\n")}
-            onChange={(e) => listEdit("includes", e.target.value)}
-            rows={3}
-          />
-        </div>
-        <div className="space-y-2 col-span-2">
-          <Label>O que não está incluído (um por linha)</Label>
-          <Textarea
-            value={(form.excludes ?? []).join("\n")}
-            onChange={(e) => listEdit("excludes", e.target.value)}
-            rows={2}
-          />
-        </div>
-        <div className="col-span-2 flex gap-6">
-          <div className="flex items-center gap-2">
-            <Switch
-              checked={form.isPublished ?? false}
-              onCheckedChange={(v) => set("isPublished", v)}
-            />
-            <Label>Publicado</Label>
           </div>
-          <div className="flex items-center gap-2">
-            <Switch
-              checked={form.isFeatured ?? false}
-              onCheckedChange={(v) => set("isFeatured", v)}
+
+          {/* Variants */}
+          <VariantsEditor
+            variants={form.variants ?? []}
+            basePrice={parseFloat(form.price ?? "0") || 0}
+            onChange={(v) => set("variants", v)}
+          />
+        </TabsContent>
+
+        {/* ── DETALHES ── */}
+        <TabsContent value="detalhes" className="space-y-4">
+          <TagInput
+            label="Características / Diferenciais"
+            values={form.features ?? []}
+            onChange={(v) => set("features", v)}
+            placeholder="Ex: Wi-Fi incluído, Guia bilíngue..."
+          />
+          <TagInput
+            label="O que está incluído"
+            values={form.includes ?? []}
+            onChange={(v) => set("includes", v)}
+            placeholder="Ex: Passagens aéreas, Café da manhã..."
+          />
+          <TagInput
+            label="O que NÃO está incluído"
+            values={form.excludes ?? []}
+            onChange={(v) => set("excludes", v)}
+            placeholder="Ex: Seguro viagem, Despesas pessoais..."
+          />
+        </TabsContent>
+
+        {/* ── SEO ── */}
+        <TabsContent value="seo" className="space-y-4">
+          <div className="space-y-2">
+            <Label>Título SEO</Label>
+            <Input
+              value={form.metaTitle ?? ""}
+              onChange={(e) => set("metaTitle", e.target.value)}
+              placeholder={form.name || "Título para mecanismos de busca"}
             />
-            <Label>Destaque</Label>
+            <p className="text-xs text-muted-foreground">Ideal: 50–60 caracteres. ({(form.metaTitle ?? "").length}/60)</p>
           </div>
-        </div>
-      </div>
-      <div className="flex justify-end gap-2 pt-2">
+          <div className="space-y-2">
+            <Label>Meta Descrição</Label>
+            <Textarea
+              value={form.metaDescription ?? ""}
+              onChange={(e) => set("metaDescription", e.target.value)}
+              rows={3}
+              placeholder="Descrição exibida nos resultados de busca..."
+            />
+            <p className="text-xs text-muted-foreground">Ideal: 120–160 caracteres. ({(form.metaDescription ?? "").length}/160)</p>
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      <div className="flex justify-end gap-2 pt-4 border-t mt-4">
         <Button variant="outline" onClick={onClose}>
           Cancelar
         </Button>
         <Button onClick={handleSave} disabled={loading}>
           {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-          Salvar
+          {product ? "Salvar Alterações" : "Criar Produto"}
         </Button>
       </div>
     </div>
@@ -287,6 +596,9 @@ export default function LojaProdutos() {
   const [categories, setCategories] = useState<StoreCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [editingProduct, setEditingProduct] = useState<StoreProduct | undefined>();
   const [showDialog, setShowDialog] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -335,7 +647,7 @@ export default function LojaProdutos() {
   async function togglePublish(product: StoreProduct) {
     try {
       const updated = await storeApi.updateProduct(product.id, {
-        isPublished: !product.isPublished,
+        status: product.status === "active" ? "draft" : "active",
       });
       setProducts((p) => p.map((x) => (x.id === updated.id ? updated : x)));
     } catch (err: unknown) {
@@ -347,13 +659,36 @@ export default function LojaProdutos() {
     }
   }
 
-  const filtered = products.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    (p.destination ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  async function toggleArchive(product: StoreProduct) {
+    const newStatus = product.status === "archived" ? "active" : "archived";
+    try {
+      const updated = await storeApi.updateProduct(product.id, { status: newStatus });
+      setProducts((p) => p.map((x) => (x.id === updated.id ? updated : x)));
+      toast({ title: newStatus === "archived" ? "Produto arquivado" : "Produto reativado" });
+    } catch (err: unknown) {
+      toast({
+        title: "Erro",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    }
+  }
+
+  const filtered = products.filter((p) => {
+    const matchSearch =
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      (p.destination ?? "").toLowerCase().includes(search.toLowerCase());
+    const matchType = typeFilter === "all" || p.type === typeFilter;
+    const matchStatus = statusFilter === "all" || p.status === statusFilter;
+    const matchCategory = categoryFilter === "all" || p.categoryId === categoryFilter || (categoryFilter === "none" && !p.categoryId);
+    return matchSearch && matchType && matchStatus && matchCategory;
+  });
 
   const getCategoryName = (id?: string | null) =>
     categories.find((c) => c.id === id)?.name ?? "—";
+
+  const getTypeLabel = (type: string) =>
+    PRODUCT_TYPES.find((t) => t.value === type)?.label ?? type;
 
   return (
     <div className="space-y-6">
@@ -375,14 +710,50 @@ export default function LojaProdutos() {
         </Button>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          className="pl-9"
-          placeholder="Buscar produtos..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      <div className="flex gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Buscar produtos..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Tipo" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os tipos</SelectItem>
+            {PRODUCT_TYPES.map((t) => (
+              <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            <SelectItem value="active">Ativos</SelectItem>
+            <SelectItem value="draft">Rascunhos</SelectItem>
+            <SelectItem value="archived">Arquivados</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Categoria" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas as categorias</SelectItem>
+            <SelectItem value="none">Sem categoria</SelectItem>
+            {categories.map((c) => (
+              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {loading ? (
@@ -390,20 +761,32 @@ export default function LojaProdutos() {
           <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
         </div>
       ) : filtered.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
+        <div className="rounded-lg border overflow-hidden">
+          <div className="py-12 text-center text-muted-foreground">
             <Package className="w-12 h-12 mx-auto mb-3 opacity-30" />
             <p>Nenhum produto encontrado.</p>
-          </CardContent>
-        </Card>
+            {search || typeFilter !== "all" || statusFilter !== "all" ? (
+              <p className="text-sm mt-1">Tente ajustar os filtros.</p>
+            ) : (
+              <Button
+                variant="outline"
+                className="mt-3"
+                onClick={() => { setEditingProduct(undefined); setShowDialog(true); }}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Criar Primeiro Produto
+              </Button>
+            )}
+          </div>
+        </div>
       ) : (
         <div className="rounded-lg border overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Produto</TableHead>
-                <TableHead>Categoria</TableHead>
                 <TableHead>Tipo</TableHead>
+                <TableHead>Categoria</TableHead>
                 <TableHead>Preço</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-32">Ações</TableHead>
@@ -428,27 +811,28 @@ export default function LojaProdutos() {
                       <div>
                         <div className="font-medium text-sm">{product.name}</div>
                         {product.destination && (
+                          <div className="text-xs text-muted-foreground">{product.destination}</div>
+                        )}
+                        {product.startDate && (
                           <div className="text-xs text-muted-foreground">
-                            {product.destination}
+                            Saída: {new Date(product.startDate).toLocaleDateString("pt-BR")}
                           </div>
                         )}
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="text-sm">{getCategoryName(product.categoryId)}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className="text-xs">
-                      {product.type === "package"
-                        ? "Pacote"
-                        : product.type === "service"
-                        ? "Serviço"
-                        : "Produto"}
+                      {getTypeLabel(product.type)}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {getCategoryName(product.categoryId)}
                   </TableCell>
                   <TableCell className="text-sm">
                     {product.salePrice ? (
                       <div>
-                        <span className="line-through text-muted-foreground mr-1">
+                        <span className="line-through text-muted-foreground mr-1 text-xs">
                           R$ {parseFloat(product.price).toFixed(2)}
                         </span>
                         <span className="text-green-600 font-medium">
@@ -460,12 +844,12 @@ export default function LojaProdutos() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="flex gap-1">
-                      <Badge variant={product.isPublished ? "default" : "secondary"}>
-                        {product.isPublished ? "Publicado" : "Rascunho"}
+                    <div className="flex flex-col gap-1">
+                      <Badge variant={product.status === "active" ? "default" : "secondary"} className="text-xs w-fit">
+                        {product.status === "active" ? "Publicado" : product.status === "archived" ? "Arquivado" : "Rascunho"}
                       </Badge>
                       {product.isFeatured && (
-                        <Badge variant="outline" className="text-yellow-600">
+                        <Badge variant="outline" className="text-yellow-600 text-xs w-fit">
                           <Star className="w-3 h-3 mr-1" />
                           Destaque
                         </Badge>
@@ -479,13 +863,22 @@ export default function LojaProdutos() {
                         size="icon"
                         className="h-8 w-8"
                         onClick={() => togglePublish(product)}
-                        title={product.isPublished ? "Despublicar" : "Publicar"}
+                        title={product.status === "active" ? "Despublicar" : "Publicar"}
                       >
-                        {product.isPublished ? (
+                        {product.status === "active" ? (
                           <EyeOff className="w-4 h-4" />
                         ) : (
                           <Eye className="w-4 h-4" />
                         )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`h-8 w-8 ${product.status === "archived" ? "text-amber-600 hover:text-amber-700" : "text-muted-foreground"}`}
+                        onClick={() => toggleArchive(product)}
+                        title={product.status === "archived" ? "Reativar" : "Arquivar"}
+                      >
+                        <Archive className="w-4 h-4" />
                       </Button>
                       <Button
                         variant="ghost"

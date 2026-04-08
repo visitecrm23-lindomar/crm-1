@@ -237,9 +237,3 @@ export default function AdminLogsPage() {
     </div>
   );
 }
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}

@@ -335,6 +335,3 @@ export default function AdminBilling() {
     </div>
   );
 }
-    </div>
-  );
-}
