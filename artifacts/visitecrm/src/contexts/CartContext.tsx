@@ -15,6 +15,8 @@ export interface CartItem {
   image?: string;
 }
 
+export const CART_ITEM_NONE = "__none__";
+
 interface CartContextType {
   items: CartItem[];
   addItem: (item: Omit<CartItem, "quantity"> & { quantity?: number }) => void;
@@ -38,14 +40,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const addItem = useCallback(
     (item: Omit<CartItem, "quantity"> & { quantity?: number }) => {
       setItems((prev) => {
-        const key = `${item.productId}::${item.variantLabel ?? ""}`;
+        const key = `${item.productId}::${item.variantLabel ?? CART_ITEM_NONE}`;
         const existing = prev.find(
           (i) =>
-            `${i.productId}::${i.variantLabel ?? ""}` === key
+            `${i.productId}::${i.variantLabel ?? CART_ITEM_NONE}` === key
         );
         if (existing) {
           return prev.map((i) =>
-            `${i.productId}::${i.variantLabel ?? ""}` === key
+            `${i.productId}::${i.variantLabel ?? CART_ITEM_NONE}` === key
               ? { ...i, quantity: i.quantity + (item.quantity ?? 1) }
               : i
           );
@@ -59,14 +61,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const updateQuantity = useCallback(
     (productId: string, variantLabel: string | undefined, quantity: number) => {
       setItems((prev) => {
-        const key = `${productId}::${variantLabel ?? ""}`;
+        const key = `${productId}::${variantLabel ?? CART_ITEM_NONE}`;
         if (quantity <= 0) {
           return prev.filter(
-            (i) => `${i.productId}::${i.variantLabel ?? ""}` !== key
+            (i) => `${i.productId}::${i.variantLabel ?? CART_ITEM_NONE}` !== key
           );
         }
         return prev.map((i) =>
-          `${i.productId}::${i.variantLabel ?? ""}` === key
+          `${i.productId}::${i.variantLabel ?? CART_ITEM_NONE}` === key
             ? { ...i, quantity }
             : i
         );
@@ -77,9 +79,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const removeItem = useCallback(
     (productId: string, variantLabel?: string) => {
-      const key = `${productId}::${variantLabel ?? ""}`;
+      const key = `${productId}::${variantLabel ?? CART_ITEM_NONE}`;
       setItems((prev) =>
-        prev.filter((i) => `${i.productId}::${i.variantLabel ?? ""}` !== key)
+        prev.filter((i) => `${i.productId}::${i.variantLabel ?? CART_ITEM_NONE}` !== key)
       );
     },
     []
