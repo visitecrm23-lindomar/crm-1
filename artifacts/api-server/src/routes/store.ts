@@ -190,7 +190,12 @@ router.post("/store/init", async (req, res): Promise<void> => {
     });
     const [store] = await db.select().from(storesTable).where(eq(storesTable.id, id)).limit(1);
     res.status(201).json(store);
-  } catch (err) {
+  } catch (err: unknown) {
+    const dbErr = err as { code?: string };
+    if (dbErr?.code === "23505") {
+      res.status(409).json({ error: "Slug já está em uso. Escolha outro URL para sua loja." });
+      return;
+    }
     req.log.error({ err }, "Error initializing store");
     res.status(500).json({ error: "Internal server error" });
   }
