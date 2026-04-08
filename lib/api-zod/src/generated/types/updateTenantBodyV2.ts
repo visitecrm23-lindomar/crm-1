@@ -15,4 +15,9 @@ export interface UpdateTenantBodyV2 {
   secondaryColor?: string;
   whatsapp?: string;
   phone?: string;
+  cnpj?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
 }

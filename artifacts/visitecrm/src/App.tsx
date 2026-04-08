@@ -48,7 +48,18 @@ import AdminBilling from "@/pages/admin/billing";
 import AdminMetrics from "@/pages/admin/metrics";
 import AdminUsers from "@/pages/admin/users";
 import AdminLogs from "@/pages/admin/logs";
-import AdminSettings from "@/pages/admin/settings";
+import AdminSettings from "@/pages/admin/admin-settings";
+
+// Store admin pages
+import LojaConfiguracoes from "@/pages/loja/configuracoes";
+import LojaProdutos from "@/pages/loja/produtos";
+import LojaCategorias from "@/pages/loja/categorias";
+import LojaPedidos from "@/pages/loja/pedidos";
+import LojaCupons from "@/pages/loja/cupons";
+import LojaAvaliacoes from "@/pages/loja/avaliacoes";
+
+// Public vitrine
+import Vitrine from "@/pages/vitrine";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
@@ -263,6 +274,37 @@ function Router() {
       <Route path="/admin/users" component={() => <AdminRoute component={AdminUsers} />} />
       <Route path="/admin/logs" component={() => <AdminRoute component={AdminLogs} />} />
       <Route path="/admin/settings" component={() => <AdminRoute component={AdminSettings} />} />
+
+      {/* Store admin pages */}
+      <Route path="/loja" component={() => <Redirect to="/loja/configuracoes" />} />
+      <Route
+        path="/loja/configuracoes"
+        component={() => <ProtectedRoute component={LojaConfiguracoes} />}
+      />
+      <Route
+        path="/loja/produtos"
+        component={() => <ProtectedRoute component={LojaProdutos} />}
+      />
+      <Route
+        path="/loja/categorias"
+        component={() => <ProtectedRoute component={LojaCategorias} />}
+      />
+      <Route
+        path="/loja/pedidos"
+        component={() => <ProtectedRoute component={LojaPedidos} />}
+      />
+      <Route
+        path="/loja/cupons"
+        component={() => <ProtectedRoute component={LojaCupons} />}
+      />
+      <Route
+        path="/loja/avaliacoes"
+        component={() => <ProtectedRoute component={LojaAvaliacoes} />}
+      />
+
+      {/* Public vitrine — must be after admin routes */}
+      <Route path="/loja/:slug" component={Vitrine} />
+      <Route path="/loja/:slug/:rest*" component={Vitrine} />
 
       <Route
         component={() => <ProtectedRoute component={() => <Redirect to="/dashboard" />} />}

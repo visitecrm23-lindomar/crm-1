@@ -1,17 +1,11 @@
 import { Router } from "express";
-import { db, tenantsTable, usersTable } from "@workspace/db";
+import { db, tenantsTable, usersTable, plansTable } from "@workspace/db";
 import { eq, desc, count } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 
 const router = Router();
-
-const PLAN_MRR: Record<string, number> = {
-  starter: 0,
-  pro: 297,
-  enterprise: 997,
-};
 
 const UpdateTenantBody = z.object({
   name: z.string().min(1).optional(),
@@ -22,6 +16,14 @@ const UpdateTenantBody = z.object({
   secondaryColor: z.string().optional(),
   whatsapp: z.string().optional(),
   phone: z.string().optional(),
+  cnpj: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zipCode: z.string().optional(),
+  maxUsersOverride: z.number().int().nullable().optional(),
+  maxClientsOverride: z.number().int().nullable().optional(),
+  maxTripsOverride: z.number().int().nullable().optional(),
 });
 
 router.get("/admin/stats", async (req, res): Promise<void> => {
@@ -30,7 +32,17 @@ router.get("/admin/stats", async (req, res): Promise<void> => {
     if (!me) return;
     if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden: superadmin only" }); return; }
 
-    const tenants = await db.select().from(tenantsTable);
+    const [tenants, allPlans] = await Promise.all([
+      db.select().from(tenantsTable),
+      db.select({ id: plansTable.id, slug: plansTable.slug, monthlyPrice: plansTable.monthlyPrice }).from(plansTable),
+    ]);
+
+    const planPriceMap: Record<string, number> = {};
+    for (const p of allPlans) {
+      const price = Number(p.monthlyPrice) || 0;
+      planPriceMap[p.id] = price;
+      if (p.slug) planPriceMap[p.slug] = price;
+    }
 
     const totalTenants = tenants.length;
     const byStatus: Record<string, number> = {};
@@ -41,7 +53,7 @@ router.get("/admin/stats", async (req, res): Promise<void> => {
       byStatus[t.status] = (byStatus[t.status] ?? 0) + 1;
       byPlan[t.planId] = (byPlan[t.planId] ?? 0) + 1;
       if (t.status === "active") {
-        mrr += PLAN_MRR[t.planId] ?? 0;
+        mrr += planPriceMap[t.planId] ?? 0;
       }
     }
 

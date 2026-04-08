@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Building2,
   CreditCard,
+  Receipt,
   BarChart3,
   Users,
   ScrollText,
@@ -15,6 +16,7 @@ import {
   Layers,
   AlertTriangle,
   RefreshCw,
+  Package,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -30,8 +32,8 @@ import {
 const NAV_ITEMS = [
   { name: "Visão Geral", href: "/admin", icon: LayoutDashboard, exact: true },
   { name: "Agências", href: "/admin/tenants", icon: Building2, exact: false },
-  { name: "Planos", href: "/admin/plans", icon: Layers, exact: false },
-  { name: "Faturamento", href: "/admin/billing", icon: CreditCard, exact: false },
+  { name: "Planos", href: "/admin/plans", icon: Package, exact: false },
+  { name: "Faturamento", href: "/admin/billing", icon: Receipt, exact: false },
   { name: "Métricas", href: "/admin/metrics", icon: BarChart3, exact: false },
   { name: "Usuários", href: "/admin/users", icon: Users, exact: false },
   { name: "Logs de Auditoria", href: "/admin/logs", icon: ScrollText, exact: false },

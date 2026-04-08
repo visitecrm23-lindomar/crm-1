@@ -20,3 +20,4 @@ export * from "./chatbot";
 export * from "./automation_extras";
 export * from "./catalog";
 export * from "./plans";
+export * from "./store";

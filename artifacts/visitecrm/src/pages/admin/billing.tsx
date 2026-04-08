@@ -1,11 +1,11 @@
 import { useState } from "react";
 import {
-  useAdminInvoices,
-  useCreateInvoice,
-  useUpdateInvoice,
-  type AdminInvoice,
-} from "@/hooks/use-admin";
-import { useListTenants } from "@workspace/api-client-react";
+  useListAdminInvoices,
+  useCreateAdminInvoice,
+  useUpdateAdminInvoice,
+  useListTenants,
+  type InvoiceWithTenant,
+} from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,69 +27,146 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, DollarSign, Clock, CheckCircle2, AlertCircle, Check } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { getListAdminInvoicesQueryKey } from "@workspace/api-client-react";
 
-const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  paid: { label: "Pago", variant: "default" },
-  pending: { label: "Pendente", variant: "secondary" },
-  overdue: { label: "Vencido", variant: "destructive" },
-  cancelled: { label: "Cancelado", variant: "outline" },
+const STATUS_LABELS: Record<string, string> = {
+  paid: "Pago",
+  pending: "Pendente",
+  overdue: "Vencido",
+  cancelled: "Cancelado",
 };
 
-function fmt(date: string | null) {
-  if (!date) return "—";
-  return new Date(date).toLocaleDateString("pt-BR");
+const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+  paid: "default",
+  pending: "secondary",
+  overdue: "destructive",
+  cancelled: "outline",
+};
+
+function formatCurrency(value: string | number | null) {
+  if (value === null || value === undefined) return "R$ 0,00";
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value));
 }
 
-function fmtCurrency(val: string | null) {
-  if (!val) return "R$ 0,00";
-  return Number(val).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+function formatDate(dateStr: string | null | undefined) {
+  if (!dateStr) return "—";
+  return new Date(dateStr).toLocaleDateString("pt-BR");
 }
 
-export default function AdminBillingPage() {
+interface CreateInvoiceModalProps {
+  onClose: () => void;
+}
+
+function CreateInvoiceModal({ onClose }: CreateInvoiceModalProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const createInvoice = useCreateAdminInvoice();
+  const { data: tenants = [] } = useListTenants();
+
+  const [tenantId, setTenantId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [status, setStatus] = useState("pending");
+
+  async function handleSave() {
+    if (!tenantId || !amount) return;
+    try {
+      await createInvoice.mutateAsync({
+        data: { tenantId, amount, description: description || undefined, dueDate: dueDate || undefined, status },
+      });
+      await queryClient.invalidateQueries({ queryKey: getListAdminInvoicesQueryKey() });
+      toast({ title: "Fatura criada com sucesso" });
+      onClose();
+    } catch {
+      toast({ title: "Erro ao criar fatura", variant: "destructive" });
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Nova Fatura</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div>
+            <Label className="text-sm font-medium">Agência *</Label>
+            <Select value={tenantId} onValueChange={setTenantId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecionar agência..." />
+              </SelectTrigger>
+              <SelectContent>
+                {tenants.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-sm font-medium">Descrição *</Label>
+            <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex: Assinatura Pro – Maio 2026" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-sm font-medium">Valor (R$) *</Label>
+              <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="297.00" />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Vencimento</Label>
+              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <Label className="text-sm font-medium">Status</Label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pending">Pendente</SelectItem>
+                <SelectItem value="paid">Pago</SelectItem>
+                <SelectItem value="overdue">Vencido</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={createInvoice.isPending}>Cancelar</Button>
+          <Button onClick={handleSave} disabled={createInvoice.isPending || !tenantId || !amount}>
+            {createInvoice.isPending ? "Salvando..." : "Criar Fatura"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export default function AdminBilling() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [tenantFilter, setTenantFilter] = useState("all");
   const [showCreate, setShowCreate] = useState(false);
+  const { data: tenants = [] } = useListTenants();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const updateInvoice = useUpdateAdminInvoice();
 
-  const { data: invoices = [], isLoading, isError } = useAdminInvoices({
-    status: statusFilter !== "all" ? statusFilter : undefined,
-    tenantId: tenantFilter !== "all" ? tenantFilter : undefined,
-  });
-  const { data: tenantsData = [] } = useListTenants();
-  const createInvoice = useCreateInvoice();
-  const updateInvoice = useUpdateInvoice();
+  const params: Record<string, string> = {};
+  if (statusFilter !== "all") params.status = statusFilter;
+  if (tenantFilter !== "all") params.tenantId = tenantFilter;
 
-  const [form, setForm] = useState({
-    tenantId: "",
-    description: "",
-    amount: "",
-    dueDate: "",
-    notes: "",
-  });
+  const { data: invoices = [], isLoading, isError } = useListAdminInvoices(
+    Object.keys(params).length > 0 ? params as Parameters<typeof useListAdminInvoices>[0] : undefined
+  );
 
   const totalPaid = invoices.filter(i => i.status === "paid").reduce((s, i) => s + Number(i.amount), 0);
   const totalPending = invoices.filter(i => i.status === "pending").reduce((s, i) => s + Number(i.amount), 0);
   const countOverdue = invoices.filter(i => i.status === "overdue").length;
   const countPending = invoices.filter(i => i.status === "pending").length;
 
-  async function handleCreate() {
-    if (!form.tenantId || !form.description || !form.amount) {
-      toast({ title: "Preencha os campos obrigatórios", variant: "destructive" });
-      return;
-    }
+  async function handleMarkPaid(id: string) {
     try {
-      await createInvoice.mutateAsync({ tenantId: form.tenantId, description: form.description, amount: form.amount, dueDate: form.dueDate || undefined, notes: form.notes || undefined });
-      setShowCreate(false);
-      setForm({ tenantId: "", description: "", amount: "", dueDate: "", notes: "" });
-      toast({ title: "Fatura criada" });
-    } catch {
-      toast({ title: "Erro ao criar fatura", variant: "destructive" });
-    }
-  }
-
-  async function handleMarkPaid(inv: AdminInvoice) {
-    try {
-      await updateInvoice.mutateAsync({ id: inv.id, status: "paid" });
+      await updateInvoice.mutateAsync({ id, data: { status: "paid" } });
+      await queryClient.invalidateQueries({ queryKey: getListAdminInvoicesQueryKey() });
       toast({ title: "Fatura marcada como paga" });
     } catch {
       toast({ title: "Erro ao atualizar fatura", variant: "destructive" });
@@ -101,7 +178,9 @@ export default function AdminBillingPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Faturamento</h1>
-          <p className="text-sm text-muted-foreground mt-1">Faturas de assinatura de todas as agências</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {invoices.length} fatura{invoices.length !== 1 ? "s" : ""} de assinatura de todas as agências
+          </p>
         </div>
         <Button onClick={() => setShowCreate(true)}>
           <Plus className="w-4 h-4 mr-2" />
@@ -118,7 +197,7 @@ export default function AdminBillingPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {totalPaid.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+              {formatCurrency(totalPaid)}
             </div>
           </CardContent>
         </Card>
@@ -129,7 +208,7 @@ export default function AdminBillingPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-amber-600">
-              {totalPending.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+              {formatCurrency(totalPending)}
             </div>
           </CardContent>
         </Card>
@@ -160,9 +239,9 @@ export default function AdminBillingPage() {
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todos</SelectItem>
-            <SelectItem value="paid">Pago</SelectItem>
+            <SelectItem value="all">Todos status</SelectItem>
             <SelectItem value="pending">Pendente</SelectItem>
+            <SelectItem value="paid">Pago</SelectItem>
             <SelectItem value="overdue">Vencido</SelectItem>
             <SelectItem value="cancelled">Cancelado</SelectItem>
           </SelectContent>
@@ -173,7 +252,7 @@ export default function AdminBillingPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas as agências</SelectItem>
-            {tenantsData.map((t) => (
+            {tenants.map((t) => (
               <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
             ))}
           </SelectContent>
@@ -187,63 +266,64 @@ export default function AdminBillingPage() {
 
       {/* Table */}
       <Card>
-        <CardContent className="pt-4">
+        <CardContent className="p-0">
           {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground animate-pulse">Carregando...</div>
+            <div className="flex items-center justify-center h-48">
+              <div className="animate-pulse text-muted-foreground">Carregando faturas...</div>
+            </div>
           ) : isError ? (
             <div className="text-center py-12 text-muted-foreground">
               <AlertCircle className="w-8 h-8 mx-auto mb-2 text-destructive opacity-60" />
               <p className="text-sm">Erro ao carregar faturas. Verifique suas permissões.</p>
             </div>
           ) : invoices.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">Nenhuma fatura encontrada.</div>
+            <div className="flex items-center justify-center h-48">
+              <p className="text-muted-foreground">Nenhuma fatura encontrada</p>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2 font-medium text-muted-foreground">Agência</th>
-                    <th className="text-left py-2 font-medium text-muted-foreground">Descrição</th>
-                    <th className="text-right py-2 font-medium text-muted-foreground">Valor</th>
-                    <th className="text-left py-2 font-medium text-muted-foreground">Status</th>
-                    <th className="text-left py-2 font-medium text-muted-foreground">Vencimento</th>
-                    <th className="text-left py-2 font-medium text-muted-foreground">Pago em</th>
-                    <th className="text-left py-2 font-medium text-muted-foreground">Ações</th>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Agência</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Descrição</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Valor</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Vencimento</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
+                    <th className="px-4 py-3" />
                   </tr>
                 </thead>
                 <tbody>
-                  {invoices.map((inv) => {
-                    const statusInfo = STATUS_MAP[inv.status] ?? STATUS_MAP.pending;
-                    return (
-                      <tr key={inv.id} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="py-2">
-                          <div className="font-medium">{inv.tenantName ?? inv.tenantId}</div>
-                          <div className="text-xs text-muted-foreground">{inv.tenantEmail}</div>
-                        </td>
-                        <td className="py-2">{inv.description}</td>
-                        <td className="py-2 text-right font-medium">{fmtCurrency(inv.amount)}</td>
-                        <td className="py-2">
-                          <Badge variant={statusInfo.variant} className="text-xs">{statusInfo.label}</Badge>
-                        </td>
-                        <td className="py-2 text-muted-foreground">{fmt(inv.dueDate)}</td>
-                        <td className="py-2 text-muted-foreground">{fmt(inv.paidAt)}</td>
-                        <td className="py-2">
-                          {inv.status !== "paid" && inv.status !== "cancelled" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={() => handleMarkPaid(inv)}
-                              disabled={updateInvoice.isPending}
-                            >
-                              <Check className="w-3.5 h-3.5 mr-1" />
-                              Pago
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {invoices.map((invoice) => (
+                    <tr key={invoice.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="font-medium">{invoice.tenantName ?? invoice.tenantId}</div>
+                        {invoice.tenantEmail && <div className="text-xs text-muted-foreground">{invoice.tenantEmail}</div>}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{invoice.description ?? "—"}</td>
+                      <td className="px-4 py-3 font-medium">{formatCurrency(invoice.amount)}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{formatDate(invoice.dueDate)}</td>
+                      <td className="px-4 py-3">
+                        <Badge variant={STATUS_VARIANTS[invoice.status] ?? "outline"}>
+                          {STATUS_LABELS[invoice.status] ?? invoice.status}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {invoice.status !== "paid" && invoice.status !== "cancelled" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1 text-xs text-green-600 hover:text-green-700"
+                            onClick={() => handleMarkPaid(invoice.id)}
+                            disabled={updateInvoice.isPending}
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Pago
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -251,52 +331,10 @@ export default function AdminBillingPage() {
         </CardContent>
       </Card>
 
-      {/* Create Dialog */}
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Nova Fatura</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label className="text-xs">Agência *</Label>
-              <Select value={form.tenantId || "none"} onValueChange={v => setForm(f => ({ ...f, tenantId: v === "none" ? "" : v }))}>
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="Selecionar agência" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none" disabled>Selecionar agência</SelectItem>
-                  {tenantsData.map(t => (
-                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Descrição *</Label>
-              <Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="h-8 text-sm" placeholder="Ex: Assinatura Pro – Maio 2026" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs">Valor (R$) *</Label>
-                <Input value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} className="h-8 text-sm" type="number" placeholder="297" />
-              </div>
-              <div>
-                <Label className="text-xs">Vencimento</Label>
-                <Input value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} className="h-8 text-sm" type="date" />
-              </div>
-            </div>
-            <div>
-              <Label className="text-xs">Observações</Label>
-              <Input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="h-8 text-sm" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
-            <Button onClick={handleCreate} disabled={createInvoice.isPending}>Criar Fatura</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {showCreate && <CreateInvoiceModal onClose={() => setShowCreate(false)} />}
+    </div>
+  );
+}
     </div>
   );
 }

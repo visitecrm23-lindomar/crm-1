@@ -1,0 +1,136 @@
+import { Router } from "express";
+import { db, invoicesTable, tenantsTable } from "@workspace/db";
+import { eq, desc, and } from "drizzle-orm";
+import { z } from "zod/v4";
+import { generateId } from "../lib/id";
+import { requireAuth } from "../lib/tenant";
+
+const router = Router();
+
+const InvoiceBody = z.object({
+  tenantId: z.string().min(1),
+  planId: z.string().optional(),
+  amount: z.string(),
+  currency: z.string().optional(),
+  status: z.string().optional(),
+  dueDate: z.string().optional(),
+  description: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+const UpdateInvoiceBody = z.object({
+  status: z.string().optional(),
+  paidAt: z.string().optional(),
+  notes: z.string().optional(),
+  amount: z.string().optional(),
+  dueDate: z.string().optional(),
+});
+
+router.get("/admin/invoices", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+
+    let query = db.select({
+      id: invoicesTable.id,
+      tenantId: invoicesTable.tenantId,
+      planId: invoicesTable.planId,
+      amount: invoicesTable.amount,
+      currency: invoicesTable.currency,
+      status: invoicesTable.status,
+      dueDate: invoicesTable.dueDate,
+      paidAt: invoicesTable.paidAt,
+      description: invoicesTable.description,
+      notes: invoicesTable.notes,
+      createdAt: invoicesTable.createdAt,
+      updatedAt: invoicesTable.updatedAt,
+      tenantName: tenantsTable.name,
+    })
+      .from(invoicesTable)
+      .leftJoin(tenantsTable, eq(invoicesTable.tenantId, tenantsTable.id))
+      .orderBy(desc(invoicesTable.createdAt))
+      .$dynamic();
+
+    const conditions = [];
+    if (req.query.tenantId) {
+      conditions.push(eq(invoicesTable.tenantId, req.query.tenantId as string));
+    }
+    if (req.query.status) {
+      conditions.push(eq(invoicesTable.status, req.query.status as string));
+    }
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    const invoices = await query;
+    res.json(invoices);
+  } catch (err) {
+    req.log.error({ err }, "Error listing invoices");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/admin/invoices", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    const parsed = InvoiceBody.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    const id = generateId();
+    await db.insert(invoicesTable).values({
+      id,
+      tenantId: parsed.data.tenantId,
+      planId: parsed.data.planId,
+      amount: parsed.data.amount,
+      currency: parsed.data.currency,
+      status: parsed.data.status,
+      dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : undefined,
+      description: parsed.data.description,
+      notes: parsed.data.notes,
+    });
+    const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id)).limit(1);
+    res.status(201).json(invoice);
+  } catch (err) {
+    req.log.error({ err }, "Error creating invoice");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/admin/invoices/:id", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    const parsed = UpdateInvoiceBody.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const update: {
+      status?: string;
+      paidAt?: Date;
+      notes?: string;
+      amount?: string;
+      dueDate?: Date;
+    } = {};
+
+    if (parsed.data.status) update.status = parsed.data.status;
+    if (parsed.data.notes !== undefined) update.notes = parsed.data.notes;
+    if (parsed.data.amount) update.amount = parsed.data.amount;
+    if (parsed.data.paidAt) update.paidAt = new Date(parsed.data.paidAt);
+    if (parsed.data.dueDate) update.dueDate = new Date(parsed.data.dueDate);
+    if (parsed.data.status === "paid" && !parsed.data.paidAt) {
+      update.paidAt = new Date();
+    }
+
+    await db.update(invoicesTable).set(update).where(eq(invoicesTable.id, req.params.id));
+    const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
+    if (!invoice) { res.status(404).json({ error: "Not found" }); return; }
+    res.json(invoice);
+  } catch (err) {
+    req.log.error({ err }, "Error updating invoice");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+export default router;

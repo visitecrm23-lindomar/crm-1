@@ -25,6 +25,469 @@ export const GetAdminStatsResponse = zod.object({
 });
 
 /**
+ * @summary List all invoices (superadmin only)
+ */
+export const ListAdminInvoicesQueryParams = zod.object({
+  tenantId: zod.coerce.string().optional(),
+  status: zod.coerce.string().optional(),
+});
+
+export const ListAdminInvoicesResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  planId: zod.string().nullish(),
+  amount: zod.string(),
+  currency: zod.string(),
+  status: zod.string(),
+  dueDate: zod.string().nullish(),
+  paidAt: zod.string().nullish(),
+  description: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+  tenantName: zod.string().nullish(),
+});
+export const ListAdminInvoicesResponse = zod.array(
+  ListAdminInvoicesResponseItem,
+);
+
+/**
+ * @summary Create a new invoice (superadmin only)
+ */
+export const CreateAdminInvoiceBody = zod.object({
+  tenantId: zod.string(),
+  planId: zod.string().optional(),
+  amount: zod.string(),
+  currency: zod.string().optional(),
+  status: zod.string().optional(),
+  dueDate: zod.string().optional(),
+  description: zod.string().optional(),
+  notes: zod.string().optional(),
+});
+
+/**
+ * @summary Update an invoice (superadmin only)
+ */
+export const UpdateAdminInvoiceParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateAdminInvoiceBody = zod.object({
+  status: zod.string().optional(),
+  paidAt: zod.string().optional(),
+  notes: zod.string().optional(),
+  amount: zod.string().optional(),
+  dueDate: zod.string().optional(),
+});
+
+export const UpdateAdminInvoiceResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  planId: zod.string().nullish(),
+  amount: zod.string(),
+  currency: zod.string(),
+  status: zod.string(),
+  dueDate: zod.string().nullish(),
+  paidAt: zod.string().nullish(),
+  description: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary List feature flags (superadmin only)
+ */
+export const ListFeatureFlagsResponseItem = zod.object({
+  id: zod.string(),
+  key: zod.string(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  isEnabled: zod.boolean(),
+  rolloutPercent: zod.number(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+export const ListFeatureFlagsResponse = zod.array(ListFeatureFlagsResponseItem);
+
+/**
+ * @summary Create a feature flag (superadmin only)
+ */
+export const CreateFeatureFlagBody = zod.object({
+  key: zod.string(),
+  name: zod.string(),
+  description: zod.string().optional(),
+  isEnabled: zod.boolean().optional(),
+  rolloutPercent: zod.number().optional(),
+});
+
+/**
+ * @summary Update a feature flag (superadmin only)
+ */
+export const UpdateFeatureFlagParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateFeatureFlagBody = zod.object({
+  key: zod.string().optional(),
+  name: zod.string().optional(),
+  description: zod.string().optional(),
+  isEnabled: zod.boolean().optional(),
+  rolloutPercent: zod.number().optional(),
+});
+
+export const UpdateFeatureFlagResponse = zod.object({
+  id: zod.string(),
+  key: zod.string(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  isEnabled: zod.boolean(),
+  rolloutPercent: zod.number(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Get historical MRR series (superadmin only)
+ */
+export const GetMetricsMrrResponseItem = zod.object({
+  label: zod.string(),
+  value: zod.number(),
+});
+export const GetMetricsMrrResponse = zod.array(GetMetricsMrrResponseItem);
+
+/**
+ * @summary Get historical churn rate series (superadmin only)
+ */
+export const GetMetricsChurnResponseItem = zod.object({
+  label: zod.string(),
+  value: zod.number(),
+});
+export const GetMetricsChurnResponse = zod.array(GetMetricsChurnResponseItem);
+
+/**
+ * @summary Get historical agency growth series (superadmin only)
+ */
+export const GetMetricsGrowthResponseItem = zod.object({
+  label: zod.string(),
+  value: zod.number(),
+});
+export const GetMetricsGrowthResponse = zod.array(GetMetricsGrowthResponseItem);
+
+/**
+ * @summary List all platform users (superadmin only)
+ */
+export const ListAdminUsersQueryParams = zod.object({
+  tenantId: zod.coerce.string().optional(),
+  role: zod.coerce.string().optional(),
+});
+
+export const ListAdminUsersResponseItem = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  email: zod.string(),
+  role: zod.string(),
+  isActive: zod.boolean(),
+  tenantId: zod.string().nullish(),
+  tenantName: zod.string().nullish(),
+  tenantStatus: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListAdminUsersResponse = zod.array(ListAdminUsersResponseItem);
+
+/**
+ * @summary List all platform settings (superadmin only)
+ */
+export const ListPlatformSettingsResponseItem = zod.object({
+  id: zod.string(),
+  key: zod.string(),
+  value: zod.string().nullish(),
+  label: zod.string(),
+  description: zod.string().nullish(),
+  type: zod.string(),
+  updatedAt: zod.string(),
+});
+export const ListPlatformSettingsResponse = zod.array(
+  ListPlatformSettingsResponseItem,
+);
+
+/**
+ * @summary Update a platform setting value (superadmin only)
+ */
+export const UpdatePlatformSettingParams = zod.object({
+  key: zod.coerce.string(),
+});
+
+export const UpdatePlatformSettingBody = zod.object({
+  value: zod.string().nullable(),
+});
+
+export const UpdatePlatformSettingResponse = zod.object({
+  id: zod.string(),
+  key: zod.string(),
+  value: zod.string().nullish(),
+  label: zod.string(),
+  description: zod.string().nullish(),
+  type: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary List all audit logs (superadmin only)
+ */
+export const ListAdminAuditLogsQueryParams = zod.object({
+  tenantId: zod.coerce.string().optional(),
+  action: zod.coerce.string().optional(),
+  entityType: zod.coerce.string().optional(),
+});
+
+export const ListAdminAuditLogsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  userId: zod.string().nullish(),
+  action: zod.string(),
+  entityType: zod.string(),
+  entityId: zod.string(),
+  before: zod.object({}).passthrough().nullish(),
+  after: zod.object({}).passthrough().nullish(),
+  ipAddress: zod.string().nullish(),
+  createdAt: zod.string(),
+  tenantName: zod.string().nullish(),
+  userName: zod.string().nullish(),
+  userEmail: zod.string().nullish(),
+});
+export const ListAdminAuditLogsResponse = zod.array(
+  ListAdminAuditLogsResponseItem,
+);
+
+/**
+ * @summary List all plans (superadmin only)
+ */
+export const ListPlansResponseItem = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  slug: zod.string(),
+  description: zod.string().nullish(),
+  monthlyPrice: zod.string(),
+  annualPrice: zod.string(),
+  maxUsers: zod.number(),
+  maxClients: zod.number(),
+  maxTrips: zod.number(),
+  features: zod.array(zod.string()),
+  isActive: zod.boolean(),
+  isFeatured: zod.boolean(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+export const ListPlansResponse = zod.array(ListPlansResponseItem);
+
+/**
+ * @summary Create a plan (superadmin only)
+ */
+export const CreatePlanBody = zod.object({
+  name: zod.string(),
+  slug: zod.string(),
+  description: zod.string().optional(),
+  monthlyPrice: zod.string().optional(),
+  annualPrice: zod.string().optional(),
+  maxUsers: zod.number().optional(),
+  maxClients: zod.number().optional(),
+  maxTrips: zod.number().optional(),
+  features: zod.array(zod.string()).optional(),
+  isActive: zod.boolean().optional(),
+  isFeatured: zod.boolean().optional(),
+});
+
+/**
+ * @summary Get plan by ID (superadmin only)
+ */
+export const GetPlanParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetPlanResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  slug: zod.string(),
+  description: zod.string().nullish(),
+  monthlyPrice: zod.string(),
+  annualPrice: zod.string(),
+  maxUsers: zod.number(),
+  maxClients: zod.number(),
+  maxTrips: zod.number(),
+  features: zod.array(zod.string()),
+  isActive: zod.boolean(),
+  isFeatured: zod.boolean(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Update a plan (superadmin only)
+ */
+export const UpdatePlanParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdatePlanBody = zod.object({
+  name: zod.string().optional(),
+  slug: zod.string().optional(),
+  description: zod.string().optional(),
+  monthlyPrice: zod.string().optional(),
+  annualPrice: zod.string().optional(),
+  maxUsers: zod.number().optional(),
+  maxClients: zod.number().optional(),
+  maxTrips: zod.number().optional(),
+  features: zod.array(zod.string()).optional(),
+  isActive: zod.boolean().optional(),
+  isFeatured: zod.boolean().optional(),
+});
+
+export const UpdatePlanResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  slug: zod.string(),
+  description: zod.string().nullish(),
+  monthlyPrice: zod.string(),
+  annualPrice: zod.string(),
+  maxUsers: zod.number(),
+  maxClients: zod.number(),
+  maxTrips: zod.number(),
+  features: zod.array(zod.string()),
+  isActive: zod.boolean(),
+  isFeatured: zod.boolean(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Archive a plan (superadmin only)
+ */
+export const ArchivePlanParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ArchivePlanResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary Get detailed tenant info with counts (superadmin only)
+ */
+export const GetTenantDetailsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetTenantDetailsResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  slug: zod.string(),
+  email: zod.string(),
+  whatsapp: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  logoUrl: zod.string().nullish(),
+  primaryColor: zod.string().nullish(),
+  secondaryColor: zod.string().nullish(),
+  planId: zod.string(),
+  status: zod.string(),
+  cnpj: zod.string().nullish(),
+  address: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  zipCode: zod.string().nullish(),
+  userCount: zod.number(),
+  clientCount: zod.number(),
+  tripCount: zod.number(),
+  reservationCount: zod.number(),
+  planMaxUsers: zod.number().nullish(),
+  planMaxClients: zod.number().nullish(),
+  planMaxTrips: zod.number().nullish(),
+  maxUsersOverride: zod.number().nullish(),
+  maxClientsOverride: zod.number().nullish(),
+  maxTripsOverride: zod.number().nullish(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary List users of a tenant (superadmin only)
+ */
+export const ListTenantUsersParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListTenantUsersResponseItem = zod.object({
+  id: zod.string(),
+  clerkId: zod.string(),
+  name: zod.string(),
+  email: zod.string(),
+  role: zod.string(),
+  avatarUrl: zod.string().nullish(),
+  isActive: zod.boolean(),
+  tenantId: zod.string().nullish(),
+  referralCode: zod.string(),
+  referralBalance: zod.number(),
+  createdAt: zod.string(),
+  tenant: zod
+    .object({
+      id: zod.string(),
+      name: zod.string(),
+      slug: zod.string(),
+      logoUrl: zod.string().nullish(),
+      primaryColor: zod.string().nullish(),
+      secondaryColor: zod.string().nullish(),
+      status: zod.string(),
+      planId: zod.string(),
+    })
+    .nullish(),
+});
+export const ListTenantUsersResponse = zod.array(ListTenantUsersResponseItem);
+
+/**
+ * @summary Suspend a tenant (superadmin only)
+ */
+export const SuspendTenantParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const SuspendTenantResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  slug: zod.string(),
+  email: zod.string(),
+  whatsapp: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  planId: zod.string(),
+  status: zod.string(),
+  logoUrl: zod.string().nullish(),
+  primaryColor: zod.string().nullish(),
+  secondaryColor: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Activate a tenant (superadmin only)
+ */
+export const ActivateTenantParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ActivateTenantResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  slug: zod.string(),
+  email: zod.string(),
+  whatsapp: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  planId: zod.string(),
+  status: zod.string(),
+  logoUrl: zod.string().nullish(),
+  primaryColor: zod.string().nullish(),
+  secondaryColor: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
  * @summary Get dashboard summary stats
  */
 export const GetDashboardSummaryResponse = zod.object({
@@ -410,6 +873,19 @@ export const ListTripsResponse = zod.object({
       vehicleType: zod.string().nullish(),
       driverName: zod.string().nullish(),
       seatLayout: zod.string().nullish(),
+      boardingPoints: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            name: zod.string(),
+            time: zod.string().nullish(),
+            address: zod.string().nullish(),
+          }),
+        )
+        .optional(),
+      itinerary: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+      fixedCosts: zod.number().nullish(),
+      variableCosts: zod.number().nullish(),
       createdAt: zod.string(),
       updatedAt: zod.string(),
     }),
@@ -422,9 +898,6 @@ export const ListTripsResponse = zod.object({
 /**
  * @summary Create a trip
  */
-const BoardingPointSchema = zod.object({ id: zod.string(), name: zod.string(), time: zod.string(), address: zod.string() });
-const ItineraryDaySchema = zod.object({ day: zod.number(), title: zod.string(), description: zod.string() });
-
 export const CreateTripBody = zod.object({
   name: zod.string(),
   description: zod.string().nullish(),
@@ -446,12 +919,12 @@ export const CreateTripBody = zod.object({
   vehiclePlate: zod.string().nullish(),
   vehicleType: zod.string().nullish(),
   driverName: zod.string().nullish(),
-  status: zod.string().nullish(),
-  itinerary: zod.array(ItineraryDaySchema).nullish(),
+  status: zod.string().optional(),
+  gallery: zod.array(zod.string()).optional(),
+  boardingPoints: zod.array(zod.unknown()).optional(),
+  itinerary: zod.array(zod.unknown()).optional(),
   fixedCosts: zod.number().nullish(),
   variableCosts: zod.number().nullish(),
-  gallery: zod.array(zod.string()).optional(),
-  boardingPoints: zod.array(BoardingPointSchema).nullish(),
 });
 
 /**
@@ -484,10 +957,6 @@ export const GetTripResponse = zod.object({
   exclusions: zod.array(zod.string()),
   coverImage: zod.string().nullish(),
   gallery: zod.array(zod.string()),
-  itinerary: zod.array(ItineraryDaySchema).nullish(),
-  boardingPoints: zod.array(BoardingPointSchema).nullish(),
-  fixedCosts: zod.number().nullish(),
-  variableCosts: zod.number().nullish(),
   status: zod.string(),
   isPublic: zod.boolean(),
   isFeatured: zod.boolean(),
@@ -495,6 +964,19 @@ export const GetTripResponse = zod.object({
   vehicleType: zod.string().nullish(),
   driverName: zod.string().nullish(),
   seatLayout: zod.string().nullish(),
+  boardingPoints: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        name: zod.string(),
+        time: zod.string().nullish(),
+        address: zod.string().nullish(),
+      }),
+    )
+    .optional(),
+  itinerary: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+  fixedCosts: zod.number().nullish(),
+  variableCosts: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -509,11 +991,6 @@ export const UpdateTripParams = zod.object({
 export const UpdateTripBody = zod.object({
   name: zod.string().nullish(),
   description: zod.string().nullish(),
-  destination: zod.string().nullish(),
-  destinationCity: zod.string().nullish(),
-  destinationState: zod.string().nullish(),
-  type: zod.string().nullish(),
-  category: zod.string().nullish(),
   status: zod.string().nullish(),
   isPublic: zod.boolean().nullish(),
   isFeatured: zod.boolean().nullish(),
@@ -524,17 +1001,22 @@ export const UpdateTripBody = zod.object({
   priceSenior: zod.number().nullish(),
   totalCapacity: zod.number().nullish(),
   coverImage: zod.string().nullish(),
-  seatLayout: zod.string().nullish(),
   inclusions: zod.array(zod.string()).nullish(),
   exclusions: zod.array(zod.string()).nullish(),
   vehiclePlate: zod.string().nullish(),
   vehicleType: zod.string().nullish(),
   driverName: zod.string().nullish(),
-  itinerary: zod.array(ItineraryDaySchema).nullish(),
+  seatLayout: zod.string().nullish(),
+  destination: zod.string().nullish(),
+  destinationCity: zod.string().nullish(),
+  destinationState: zod.string().nullish(),
+  type: zod.string().nullish(),
+  category: zod.string().nullish(),
+  gallery: zod.array(zod.string()).optional(),
+  boardingPoints: zod.array(zod.unknown()).optional(),
+  itinerary: zod.array(zod.unknown()).optional(),
   fixedCosts: zod.number().nullish(),
   variableCosts: zod.number().nullish(),
-  gallery: zod.array(zod.string()).nullish(),
-  boardingPoints: zod.array(BoardingPointSchema).nullish(),
 });
 
 export const UpdateTripResponse = zod.object({
@@ -560,10 +1042,6 @@ export const UpdateTripResponse = zod.object({
   exclusions: zod.array(zod.string()),
   coverImage: zod.string().nullish(),
   gallery: zod.array(zod.string()),
-  itinerary: zod.array(ItineraryDaySchema).nullish(),
-  boardingPoints: zod.array(BoardingPointSchema).nullish(),
-  fixedCosts: zod.number().nullish(),
-  variableCosts: zod.number().nullish(),
   status: zod.string(),
   isPublic: zod.boolean(),
   isFeatured: zod.boolean(),
@@ -571,6 +1049,19 @@ export const UpdateTripResponse = zod.object({
   vehicleType: zod.string().nullish(),
   driverName: zod.string().nullish(),
   seatLayout: zod.string().nullish(),
+  boardingPoints: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        name: zod.string(),
+        time: zod.string().nullish(),
+        address: zod.string().nullish(),
+      }),
+    )
+    .optional(),
+  itinerary: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+  fixedCosts: zod.number().nullish(),
+  variableCosts: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -645,6 +1136,7 @@ export const ListReservationsResponse = zod.object({
       qrCode: zod.string(),
       checkedInAt: zod.string().nullish(),
       notes: zod.string().nullish(),
+      boardingLocationId: zod.string().nullish(),
       createdAt: zod.string(),
       updatedAt: zod.string(),
       trip: zod.object({
@@ -662,6 +1154,8 @@ export const ListReservationsResponse = zod.object({
         name: zod.string(),
         email: zod.string(),
         whatsapp: zod.string(),
+        cpf: zod.string().nullish(),
+        birthDate: zod.string().nullish(),
       }),
     }),
   ),
@@ -713,6 +1207,7 @@ export const GetReservationResponse = zod.object({
   qrCode: zod.string(),
   checkedInAt: zod.string().nullish(),
   notes: zod.string().nullish(),
+  boardingLocationId: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
   trip: zod.object({
@@ -730,6 +1225,8 @@ export const GetReservationResponse = zod.object({
     name: zod.string(),
     email: zod.string(),
     whatsapp: zod.string(),
+    cpf: zod.string().nullish(),
+    birthDate: zod.string().nullish(),
   }),
 });
 
@@ -766,6 +1263,7 @@ export const UpdateReservationResponse = zod.object({
   qrCode: zod.string(),
   checkedInAt: zod.string().nullish(),
   notes: zod.string().nullish(),
+  boardingLocationId: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
   trip: zod.object({
@@ -783,6 +1281,8 @@ export const UpdateReservationResponse = zod.object({
     name: zod.string(),
     email: zod.string(),
     whatsapp: zod.string(),
+    cpf: zod.string().nullish(),
+    birthDate: zod.string().nullish(),
   }),
 });
 
@@ -812,6 +1312,7 @@ export const CheckInReservationResponse = zod.object({
   qrCode: zod.string(),
   checkedInAt: zod.string().nullish(),
   notes: zod.string().nullish(),
+  boardingLocationId: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
   trip: zod.object({
@@ -829,6 +1330,8 @@ export const CheckInReservationResponse = zod.object({
     name: zod.string(),
     email: zod.string(),
     whatsapp: zod.string(),
+    cpf: zod.string().nullish(),
+    birthDate: zod.string().nullish(),
   }),
 });
 
@@ -2332,6 +2835,14 @@ export const UpdateTenantBody = zod.object({
   secondaryColor: zod.string().optional(),
   whatsapp: zod.string().optional(),
   phone: zod.string().optional(),
+  cnpj: zod.string().optional(),
+  address: zod.string().optional(),
+  city: zod.string().optional(),
+  state: zod.string().optional(),
+  zipCode: zod.string().optional(),
+  maxUsersOverride: zod.number().nullish(),
+  maxClientsOverride: zod.number().nullish(),
+  maxTripsOverride: zod.number().nullish(),
 });
 
 export const UpdateTenantResponse = zod.object({

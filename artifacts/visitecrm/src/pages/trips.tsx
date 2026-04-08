@@ -518,7 +518,7 @@ const toTripFormData = (trip: Trip): TripFormData => ({
   driverName: trip.driverName ?? "",
   status: trip.status,
   boardingPoints: trip.boardingPoints?.length ? (trip.boardingPoints as BoardingPoint[]) : [newBP()],
-  itinerary: trip.itinerary?.length ? (trip.itinerary as ItineraryDay[]) : [newDay(1)],
+  itinerary: trip.itinerary?.length ? (trip.itinerary as unknown as ItineraryDay[]) : [newDay(1)],
   costs: [],
   fixedCosts: trip.fixedCosts != null ? String(trip.fixedCosts) : "",
   variableCosts: trip.variableCosts != null ? String(trip.variableCosts) : "",

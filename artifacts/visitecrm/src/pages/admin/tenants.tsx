@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import {
   useListTenants,
   useUpdateTenant,
+  useListPlans,
   type TenantWithCount,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,8 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Pencil, Users, ChevronLeft, ChevronRight, Eye } from "lucide-react";
-import { useLocation } from "wouter";
+import { Pencil, Users, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListTenantsQueryKey } from "@workspace/api-client-react";
 
@@ -70,8 +71,9 @@ function EditTenantModal({ tenant, onClose }: EditModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const updateTenant = useUpdateTenant();
+  const { data: plans = [] } = useListPlans();
 
-  const [planId, setPlanId] = useState(tenant?.planId ?? "starter");
+  const [planId, setPlanId] = useState(tenant?.planId ?? "");
   const [status, setStatus] = useState(tenant?.status ?? "trial");
 
   if (!tenant) return null;
@@ -107,9 +109,20 @@ function EditTenantModal({ tenant, onClose }: EditModalProps) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="starter">Starter</SelectItem>
-                <SelectItem value="pro">Pro — R$ 297/mês</SelectItem>
-                <SelectItem value="enterprise">Enterprise — R$ 997/mês</SelectItem>
+                {plans.length > 0
+                  ? plans.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}{p.monthlyPrice != null ? ` — R$ ${Number(p.monthlyPrice).toLocaleString("pt-BR", { minimumFractionDigits: 0 })}/mês` : ""}
+                      </SelectItem>
+                    ))
+                  : (
+                    <>
+                      <SelectItem value="starter">Starter</SelectItem>
+                      <SelectItem value="pro">Pro</SelectItem>
+                      <SelectItem value="enterprise">Enterprise</SelectItem>
+                    </>
+                  )
+                }
               </SelectContent>
             </Select>
           </div>
@@ -143,9 +156,16 @@ function EditTenantModal({ tenant, onClose }: EditModalProps) {
 
 export default function AdminTenants() {
   const { data: tenants = [], isLoading } = useListTenants();
+  const { data: plans = [] } = useListPlans();
   const [page, setPage] = useState(1);
   const [editingTenant, setEditingTenant] = useState<TenantWithCount | null>(null);
   const [, navigate] = useLocation();
+
+  const planNameMap: Record<string, string> = {};
+  for (const p of plans) {
+    planNameMap[p.id] = p.name;
+    if (p.slug) planNameMap[p.slug] = p.name;
+  }
 
   const totalPages = Math.max(1, Math.ceil(tenants.length / PAGE_SIZE));
   const paginated = tenants.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -192,7 +212,7 @@ export default function AdminTenants() {
                         </td>
                         <td className="px-4 py-3">
                           <Badge variant={PLAN_VARIANTS[tenant.planId] ?? "outline"}>
-                            {PLAN_LABELS[tenant.planId] ?? tenant.planId}
+                            {planNameMap[tenant.planId] ?? PLAN_LABELS[tenant.planId] ?? tenant.planId}
                           </Badge>
                         </td>
                         <td className="px-4 py-3">
@@ -218,14 +238,13 @@ export default function AdminTenants() {
                               className="h-7 w-7 p-0"
                               title="Ver detalhes"
                             >
-                              <Eye className="w-3.5 h-3.5" />
+                              <ExternalLink className="w-3.5 h-3.5" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => setEditingTenant(tenant)}
                               className="h-7 w-7 p-0"
-                              title="Editar"
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </Button>

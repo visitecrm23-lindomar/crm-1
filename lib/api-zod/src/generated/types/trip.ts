@@ -5,6 +5,8 @@
  * VisiteCRM API - SaaS CRM for tourism agencies
  * OpenAPI spec version: 0.1.0
  */
+import type { TripBoardingPointsItem } from "./tripBoardingPointsItem";
+import type { TripItineraryItem } from "./tripItineraryItem";
 
 export interface Trip {
   id: string;
@@ -45,6 +47,12 @@ export interface Trip {
   driverName?: string | null;
   /** @nullable */
   seatLayout?: string | null;
+  boardingPoints?: TripBoardingPointsItem[];
+  itinerary?: TripItineraryItem[];
+  /** @nullable */
+  fixedCosts?: number | null;
+  /** @nullable */
+  variableCosts?: number | null;
   createdAt: string;
   updatedAt: string;
 }

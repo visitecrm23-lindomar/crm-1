@@ -11,4 +11,8 @@ export type ReservationClient = {
   name: string;
   email: string;
   whatsapp: string;
+  /** @nullable */
+  cpf?: string | null;
+  /** @nullable */
+  birthDate?: string | null;
 };

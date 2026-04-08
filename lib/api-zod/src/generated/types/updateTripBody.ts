@@ -41,4 +41,23 @@ export interface UpdateTripBody {
   vehicleType?: string | null;
   /** @nullable */
   driverName?: string | null;
+  /** @nullable */
+  seatLayout?: string | null;
+  /** @nullable */
+  destination?: string | null;
+  /** @nullable */
+  destinationCity?: string | null;
+  /** @nullable */
+  destinationState?: string | null;
+  /** @nullable */
+  type?: string | null;
+  /** @nullable */
+  category?: string | null;
+  gallery?: string[];
+  boardingPoints?: unknown[];
+  itinerary?: unknown[];
+  /** @nullable */
+  fixedCosts?: number | null;
+  /** @nullable */
+  variableCosts?: number | null;
 }

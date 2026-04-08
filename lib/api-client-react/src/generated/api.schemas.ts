@@ -192,18 +192,16 @@ export interface CreateNoteBody {
   isPrivate?: boolean;
 }
 
-export interface TripBoardingPoint {
+export type TripBoardingPointsItem = {
   id: string;
   name: string;
-  time: string;
-  address: string;
-}
+  /** @nullable */
+  time?: string | null;
+  /** @nullable */
+  address?: string | null;
+};
 
-export interface TripItineraryDay {
-  day: number;
-  title: string;
-  description: string;
-}
+export type TripItineraryItem = { [key: string]: unknown };
 
 export interface Trip {
   id: string;
@@ -233,14 +231,6 @@ export interface Trip {
   /** @nullable */
   coverImage?: string | null;
   gallery: string[];
-  /** @nullable */
-  itinerary?: TripItineraryDay[] | null;
-  /** @nullable */
-  boardingPoints?: TripBoardingPoint[] | null;
-  /** @nullable */
-  fixedCosts?: number | null;
-  /** @nullable */
-  variableCosts?: number | null;
   status: string;
   isPublic: boolean;
   isFeatured: boolean;
@@ -252,6 +242,12 @@ export interface Trip {
   driverName?: string | null;
   /** @nullable */
   seatLayout?: string | null;
+  boardingPoints?: TripBoardingPointsItem[];
+  itinerary?: TripItineraryItem[];
+  /** @nullable */
+  fixedCosts?: number | null;
+  /** @nullable */
+  variableCosts?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -292,16 +288,14 @@ export interface CreateTripBody {
   vehicleType?: string | null;
   /** @nullable */
   driverName?: string | null;
-  /** @nullable */
-  status?: string | null;
-  itinerary?: TripItineraryDay[] | null;
+  status?: string;
+  gallery?: string[];
+  boardingPoints?: unknown[];
+  itinerary?: unknown[];
   /** @nullable */
   fixedCosts?: number | null;
   /** @nullable */
   variableCosts?: number | null;
-  gallery?: string[];
-  /** @nullable */
-  boardingPoints?: TripBoardingPoint[] | null;
 }
 
 export interface UpdateTripBody {
@@ -309,16 +303,6 @@ export interface UpdateTripBody {
   name?: string | null;
   /** @nullable */
   description?: string | null;
-  /** @nullable */
-  destination?: string | null;
-  /** @nullable */
-  destinationCity?: string | null;
-  /** @nullable */
-  destinationState?: string | null;
-  /** @nullable */
-  type?: string | null;
-  /** @nullable */
-  category?: string | null;
   /** @nullable */
   status?: string | null;
   /** @nullable */
@@ -340,8 +324,6 @@ export interface UpdateTripBody {
   /** @nullable */
   coverImage?: string | null;
   /** @nullable */
-  seatLayout?: string | null;
-  /** @nullable */
   inclusions?: string[] | null;
   /** @nullable */
   exclusions?: string[] | null;
@@ -352,15 +334,24 @@ export interface UpdateTripBody {
   /** @nullable */
   driverName?: string | null;
   /** @nullable */
-  itinerary?: TripItineraryDay[] | null;
+  seatLayout?: string | null;
+  /** @nullable */
+  destination?: string | null;
+  /** @nullable */
+  destinationCity?: string | null;
+  /** @nullable */
+  destinationState?: string | null;
+  /** @nullable */
+  type?: string | null;
+  /** @nullable */
+  category?: string | null;
+  gallery?: string[];
+  boardingPoints?: unknown[];
+  itinerary?: unknown[];
   /** @nullable */
   fixedCosts?: number | null;
   /** @nullable */
   variableCosts?: number | null;
-  /** @nullable */
-  gallery?: string[] | null;
-  /** @nullable */
-  boardingPoints?: TripBoardingPoint[] | null;
 }
 
 export interface Seat {
@@ -1287,6 +1278,17 @@ export interface UpdateTenantBody {
   secondaryColor?: string;
   whatsapp?: string;
   phone?: string;
+  cnpj?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  /** @nullable */
+  maxUsersOverride?: number | null;
+  /** @nullable */
+  maxClientsOverride?: number | null;
+  /** @nullable */
+  maxTripsOverride?: number | null;
 }
 
 export interface BoardingLocation {
@@ -1753,7 +1755,291 @@ export interface UpdateTenantBodyV2 {
   secondaryColor?: string;
   whatsapp?: string;
   phone?: string;
+  cnpj?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
 }
+
+export interface Plan {
+  id: string;
+  name: string;
+  slug: string;
+  /** @nullable */
+  description?: string | null;
+  monthlyPrice: string;
+  annualPrice: string;
+  maxUsers: number;
+  maxClients: number;
+  maxTrips: number;
+  features: string[];
+  isActive: boolean;
+  isFeatured: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreatePlanBody {
+  name: string;
+  slug: string;
+  description?: string;
+  monthlyPrice?: string;
+  annualPrice?: string;
+  maxUsers?: number;
+  maxClients?: number;
+  maxTrips?: number;
+  features?: string[];
+  isActive?: boolean;
+  isFeatured?: boolean;
+}
+
+export interface UpdatePlanBody {
+  name?: string;
+  slug?: string;
+  description?: string;
+  monthlyPrice?: string;
+  annualPrice?: string;
+  maxUsers?: number;
+  maxClients?: number;
+  maxTrips?: number;
+  features?: string[];
+  isActive?: boolean;
+  isFeatured?: boolean;
+}
+
+export interface Invoice {
+  id: string;
+  tenantId: string;
+  /** @nullable */
+  planId?: string | null;
+  amount: string;
+  currency: string;
+  status: string;
+  /** @nullable */
+  dueDate?: string | null;
+  /** @nullable */
+  paidAt?: string | null;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InvoiceWithTenant {
+  id: string;
+  tenantId: string;
+  /** @nullable */
+  planId?: string | null;
+  amount: string;
+  currency: string;
+  status: string;
+  /** @nullable */
+  dueDate?: string | null;
+  /** @nullable */
+  paidAt?: string | null;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** @nullable */
+  tenantName?: string | null;
+}
+
+export interface CreateInvoiceBody {
+  tenantId: string;
+  planId?: string;
+  amount: string;
+  currency?: string;
+  status?: string;
+  dueDate?: string;
+  description?: string;
+  notes?: string;
+}
+
+export interface UpdateInvoiceBody {
+  status?: string;
+  paidAt?: string;
+  notes?: string;
+  amount?: string;
+  dueDate?: string;
+}
+
+export interface FeatureFlag {
+  id: string;
+  key: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  isEnabled: boolean;
+  rolloutPercent: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateFeatureFlagBody {
+  key: string;
+  name: string;
+  description?: string;
+  isEnabled?: boolean;
+  rolloutPercent?: number;
+}
+
+export interface UpdateFeatureFlagBody {
+  key?: string;
+  name?: string;
+  description?: string;
+  isEnabled?: boolean;
+  rolloutPercent?: number;
+}
+
+export interface MetricPoint {
+  label: string;
+  value: number;
+}
+
+export interface TenantDetails {
+  id: string;
+  name: string;
+  slug: string;
+  email: string;
+  /** @nullable */
+  whatsapp?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  logoUrl?: string | null;
+  /** @nullable */
+  primaryColor?: string | null;
+  /** @nullable */
+  secondaryColor?: string | null;
+  planId: string;
+  status: string;
+  /** @nullable */
+  cnpj?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  state?: string | null;
+  /** @nullable */
+  zipCode?: string | null;
+  userCount: number;
+  clientCount: number;
+  tripCount: number;
+  reservationCount: number;
+  /** @nullable */
+  planMaxUsers?: number | null;
+  /** @nullable */
+  planMaxClients?: number | null;
+  /** @nullable */
+  planMaxTrips?: number | null;
+  /** @nullable */
+  maxUsersOverride?: number | null;
+  /** @nullable */
+  maxClientsOverride?: number | null;
+  /** @nullable */
+  maxTripsOverride?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminUserItem {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+  /** @nullable */
+  tenantId?: string | null;
+  /** @nullable */
+  tenantName?: string | null;
+  /** @nullable */
+  tenantStatus?: string | null;
+  createdAt: string;
+}
+
+export type AuditLogWithTenantBefore = { [key: string]: unknown } | null;
+
+export type AuditLogWithTenantAfter = { [key: string]: unknown } | null;
+
+export interface AuditLogWithTenant {
+  id: string;
+  tenantId: string;
+  /** @nullable */
+  userId?: string | null;
+  action: string;
+  entityType: string;
+  entityId: string;
+  before?: AuditLogWithTenantBefore;
+  after?: AuditLogWithTenantAfter;
+  /** @nullable */
+  ipAddress?: string | null;
+  createdAt: string;
+  /** @nullable */
+  tenantName?: string | null;
+  /** @nullable */
+  userName?: string | null;
+  /** @nullable */
+  userEmail?: string | null;
+}
+
+export interface Subscription {
+  id: string;
+  tenantId: string;
+  planId: string;
+  status: string;
+  billingCycle: string;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  cancelAtPeriodEnd: boolean;
+  /** @nullable */
+  canceledAt?: string | null;
+  /** @nullable */
+  trialEnd?: string | null;
+  /** @nullable */
+  externalId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlatformSetting {
+  id: string;
+  key: string;
+  /** @nullable */
+  value?: string | null;
+  label: string;
+  /** @nullable */
+  description?: string | null;
+  type: string;
+  updatedAt: string;
+}
+
+export type ListAdminInvoicesParams = {
+  tenantId?: string;
+  status?: string;
+};
+
+export type ListAdminUsersParams = {
+  tenantId?: string;
+  role?: string;
+};
+
+export type UpdatePlatformSettingBody = {
+  /** @nullable */
+  value: string | null;
+};
+
+export type ListAdminAuditLogsParams = {
+  tenantId?: string;
+  action?: string;
+  entityType?: string;
+};
 
 export type GetDashboardRevenueChartParams = {
   period?: GetDashboardRevenueChartPeriod;

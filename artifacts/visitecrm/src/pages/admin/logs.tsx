@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { useAdminAuditLogs } from "@/hooks/use-admin";
-import { useListTenants } from "@workspace/api-client-react";
+import { useListAdminAuditLogs, useListTenants } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -12,7 +11,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Download, AlertCircle } from "lucide-react";
+import { Search, Download, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+
+const PAGE_SIZE = 30;
 
 const ACTION_COLORS: Record<string, string> = {
   create: "bg-green-100 text-green-800",
@@ -41,12 +42,16 @@ export default function AdminLogsPage() {
   const [actionFilter, setActionFilter] = useState("all");
   const [entityFilter, setEntityFilter] = useState("all");
   const [tenantFilter, setTenantFilter] = useState("all");
+  const [page, setPage] = useState(1);
 
-  const { data: logs = [], isLoading, isError } = useAdminAuditLogs({
-    tenantId: tenantFilter !== "all" ? tenantFilter : undefined,
-    entityType: entityFilter !== "all" ? entityFilter : undefined,
-    action: actionFilter !== "all" ? actionFilter : undefined,
-  });
+  const params: Record<string, string> = {};
+  if (tenantFilter !== "all") params.tenantId = tenantFilter;
+  if (actionFilter !== "all") params.action = actionFilter;
+  if (entityFilter !== "all") params.entityType = entityFilter;
+
+  const { data: logs = [], isLoading, isError } = useListAdminAuditLogs(
+    Object.keys(params).length > 0 ? params as Parameters<typeof useListAdminAuditLogs>[0] : undefined
+  );
   const { data: tenants = [] } = useListTenants();
 
   const filtered = logs.filter(l => {
@@ -58,6 +63,14 @@ export default function AdminLogsPage() {
       (l.tenantName ?? "").toLowerCase().includes(s)
     );
   });
+
+  const entityTypes = Array.from(new Set(logs.map((l) => l.entityType))).sort();
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  function handleFilterChange(setter: (v: string) => void) {
+    return (v: string) => { setter(v); setPage(1); };
+  }
 
   function handleExport() {
     const headers = ["Data", "Ação", "Entidade", "ID Entidade", "Usuário", "Agência"];
@@ -104,10 +117,10 @@ export default function AdminLogsPage() {
             className="pl-9"
             placeholder="Buscar por usuário, entidade ou ID..."
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
-        <Select value={actionFilter} onValueChange={setActionFilter}>
+        <Select value={actionFilter} onValueChange={handleFilterChange(setActionFilter)}>
           <SelectTrigger className="w-36">
             <SelectValue placeholder="Ação" />
           </SelectTrigger>
@@ -121,42 +134,39 @@ export default function AdminLogsPage() {
             <SelectItem value="activate">Ativar</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={entityFilter} onValueChange={setEntityFilter}>
-          <SelectTrigger className="w-36">
+        <Select value={entityFilter} onValueChange={handleFilterChange(setEntityFilter)}>
+          <SelectTrigger className="w-40">
             <SelectValue placeholder="Entidade" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas</SelectItem>
-            <SelectItem value="client">Cliente</SelectItem>
-            <SelectItem value="trip">Viagem</SelectItem>
-            <SelectItem value="reservation">Reserva</SelectItem>
-            <SelectItem value="user">Usuário</SelectItem>
-            <SelectItem value="tenant">Agência</SelectItem>
-            <SelectItem value="payment">Pagamento</SelectItem>
+            {entityTypes.map((e) => (
+              <SelectItem key={e} value={e}>{ENTITY_LABELS[e] ?? e}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
-        <Select value={tenantFilter} onValueChange={setTenantFilter}>
+        <Select value={tenantFilter} onValueChange={handleFilterChange(setTenantFilter)}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Agência" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todas</SelectItem>
-            {tenants.map(t => (
+            <SelectItem value="all">Todas agências</SelectItem>
+            {tenants.map((t) => (
               <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
         {hasFilters && (
-          <Button variant="ghost" onClick={() => { setSearch(""); setActionFilter("all"); setEntityFilter("all"); setTenantFilter("all"); }}>
+          <Button variant="ghost" onClick={() => { setSearch(""); setActionFilter("all"); setEntityFilter("all"); setTenantFilter("all"); setPage(1); }}>
             Limpar
           </Button>
         )}
       </div>
 
       <Card>
-        <CardContent className="pt-4">
+        <CardContent className="p-0">
           {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground animate-pulse">Carregando...</div>
+            <div className="text-center py-12 text-muted-foreground animate-pulse">Carregando logs...</div>
           ) : isError ? (
             <div className="text-center py-12 text-muted-foreground">
               <AlertCircle className="w-8 h-8 mx-auto mb-2 text-destructive opacity-60" />
@@ -165,40 +175,68 @@ export default function AdminLogsPage() {
           ) : filtered.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">Nenhum log encontrado.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2 font-medium text-muted-foreground">Data</th>
-                    <th className="text-left py-2 font-medium text-muted-foreground">Ação</th>
-                    <th className="text-left py-2 font-medium text-muted-foreground">Entidade</th>
-                    <th className="text-left py-2 font-medium text-muted-foreground">ID</th>
-                    <th className="text-left py-2 font-medium text-muted-foreground">Usuário</th>
-                    <th className="text-left py-2 font-medium text-muted-foreground">Agência</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map(log => (
-                    <tr key={log.id} className="border-b last:border-0 hover:bg-muted/30">
-                      <td className="py-2 text-muted-foreground whitespace-nowrap">{fmtDate(log.createdAt)}</td>
-                      <td className="py-2">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ACTION_COLORS[log.action] ?? "bg-muted text-muted-foreground"}`}>
-                          {log.action}
-                        </span>
-                      </td>
-                      <td className="py-2">
-                        <Badge variant="outline" className="text-xs">
-                          {ENTITY_LABELS[log.entityType] ?? log.entityType}
-                        </Badge>
-                      </td>
-                      <td className="py-2 font-mono text-xs text-muted-foreground truncate max-w-[120px]">{log.entityId}</td>
-                      <td className="py-2 text-muted-foreground">{log.userName ?? "—"}</td>
-                      <td className="py-2 text-muted-foreground">{log.tenantName ?? log.tenantId}</td>
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Data</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Ação</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Recurso</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">ID do Recurso</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Usuário</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Agência</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {paginated.map((log) => (
+                      <tr key={log.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{fmtDate(log.createdAt)}</td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ACTION_COLORS[log.action] ?? "bg-muted text-muted-foreground"}`}>
+                            {log.action}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{log.entityType}</td>
+                        <td className="px-4 py-3 text-muted-foreground font-mono text-xs truncate max-w-[140px]">{log.entityId}</td>
+                        <td className="px-4 py-3">
+                          {log.userName ? (
+                            <div>
+                              <div className="text-xs font-medium">{log.userName}</div>
+                              {log.userEmail && <div className="text-xs text-muted-foreground">{log.userEmail}</div>}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{log.tenantName ?? log.tenantId}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <span className="text-xs text-muted-foreground">
+                    {filtered.length} logs · Página {page} de {totalPages}
+                  </span>
+                  <div className="flex gap-1">
+                    <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
           )}
         </CardContent>
       </Card>

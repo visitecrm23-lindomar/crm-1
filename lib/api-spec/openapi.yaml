@@ -86,6 +86,439 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminStats"
 
+  /admin/invoices:
+    get:
+      operationId: listAdminInvoices
+      tags: [admin]
+      summary: List all invoices (superadmin only)
+      parameters:
+        - name: tenantId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Invoice list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InvoiceWithTenant"
+    post:
+      operationId: createAdminInvoice
+      tags: [admin]
+      summary: Create a new invoice (superadmin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvoiceBody"
+      responses:
+        "201":
+          description: Created invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /admin/invoices/{id}:
+    patch:
+      operationId: updateAdminInvoice
+      tags: [admin]
+      summary: Update an invoice (superadmin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInvoiceBody"
+      responses:
+        "200":
+          description: Updated invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /admin/feature-flags:
+    get:
+      operationId: listFeatureFlags
+      tags: [admin]
+      summary: List feature flags (superadmin only)
+      responses:
+        "200":
+          description: Feature flag list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FeatureFlag"
+    post:
+      operationId: createFeatureFlag
+      tags: [admin]
+      summary: Create a feature flag (superadmin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFeatureFlagBody"
+      responses:
+        "201":
+          description: Created feature flag
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureFlag"
+
+  /admin/feature-flags/{id}:
+    patch:
+      operationId: updateFeatureFlag
+      tags: [admin]
+      summary: Update a feature flag (superadmin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFeatureFlagBody"
+      responses:
+        "200":
+          description: Updated feature flag
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureFlag"
+
+  /admin/metrics/mrr:
+    get:
+      operationId: getMetricsMrr
+      tags: [admin]
+      summary: Get historical MRR series (superadmin only)
+      responses:
+        "200":
+          description: MRR series
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MetricPoint"
+
+  /admin/metrics/churn:
+    get:
+      operationId: getMetricsChurn
+      tags: [admin]
+      summary: Get historical churn rate series (superadmin only)
+      responses:
+        "200":
+          description: Churn series
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MetricPoint"
+
+  /admin/metrics/growth:
+    get:
+      operationId: getMetricsGrowth
+      tags: [admin]
+      summary: Get historical agency growth series (superadmin only)
+      responses:
+        "200":
+          description: Growth series
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MetricPoint"
+
+  /admin/users:
+    get:
+      operationId: listAdminUsers
+      tags: [admin]
+      summary: List all platform users (superadmin only)
+      parameters:
+        - name: tenantId
+          in: query
+          schema:
+            type: string
+        - name: role
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminUserItem"
+
+  /admin/platform-settings:
+    get:
+      operationId: listPlatformSettings
+      tags: [admin]
+      summary: List all platform settings (superadmin only)
+      responses:
+        "200":
+          description: Platform settings list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PlatformSetting"
+
+  /admin/platform-settings/{key}:
+    put:
+      operationId: updatePlatformSetting
+      tags: [admin]
+      summary: Update a platform setting value (superadmin only)
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value:
+                  type: ["string", "null"]
+              required: [value]
+      responses:
+        "200":
+          description: Updated setting
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformSetting"
+
+  /admin/audit-logs:
+    get:
+      operationId: listAdminAuditLogs
+      tags: [admin]
+      summary: List all audit logs (superadmin only)
+      parameters:
+        - name: tenantId
+          in: query
+          schema:
+            type: string
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: entityType
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Audit log list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditLogWithTenant"
+
+  /plans:
+    get:
+      operationId: listPlans
+      tags: [admin]
+      summary: List all plans (superadmin only)
+      responses:
+        "200":
+          description: Plan list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Plan"
+    post:
+      operationId: createPlan
+      tags: [admin]
+      summary: Create a plan (superadmin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePlanBody"
+      responses:
+        "201":
+          description: Created plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Plan"
+
+  /plans/{id}:
+    get:
+      operationId: getPlan
+      tags: [admin]
+      summary: Get plan by ID (superadmin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Plan"
+    patch:
+      operationId: updatePlan
+      tags: [admin]
+      summary: Update a plan (superadmin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePlanBody"
+      responses:
+        "200":
+          description: Updated plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Plan"
+    delete:
+      operationId: archivePlan
+      tags: [admin]
+      summary: Archive a plan (superadmin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /tenants/{id}/details:
+    get:
+      operationId: getTenantDetails
+      tags: [tenants]
+      summary: Get detailed tenant info with counts (superadmin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tenant details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantDetails"
+
+  /tenants/{id}/users:
+    get:
+      operationId: listTenantUsers
+      tags: [tenants]
+      summary: List users of a tenant (superadmin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Users list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserProfile"
+
+  /tenants/{id}/suspend:
+    post:
+      operationId: suspendTenant
+      tags: [tenants]
+      summary: Suspend a tenant (superadmin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated tenant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tenant"
+
+  /tenants/{id}/activate:
+    post:
+      operationId: activateTenant
+      tags: [tenants]
+      summary: Activate a tenant (superadmin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated tenant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tenant"
+
   # ─── DASHBOARD ───────────────────────────────────────────────────
   /dashboard/summary:
     get:
@@ -3382,6 +3815,29 @@ components:
           type: ["string", "null"]
         seatLayout:
           type: ["string", "null"]
+        boardingPoints:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              time:
+                type: ["string", "null"]
+              address:
+                type: ["string", "null"]
+            required: [id, name]
+        itinerary:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        fixedCosts:
+          type: ["number", "null"]
+        variableCosts:
+          type: ["number", "null"]
         createdAt:
           type: string
         updatedAt:
@@ -3472,6 +3928,22 @@ components:
           type: ["string", "null"]
         driverName:
           type: ["string", "null"]
+        status:
+          type: string
+        gallery:
+          type: array
+          items:
+            type: string
+        boardingPoints:
+          type: array
+          items: {}
+        itinerary:
+          type: array
+          items: {}
+        fixedCosts:
+          type: ["number", "null"]
+        variableCosts:
+          type: ["number", "null"]
       required:
         - name
         - destination
@@ -3524,6 +3996,32 @@ components:
           type: ["string", "null"]
         driverName:
           type: ["string", "null"]
+        seatLayout:
+          type: ["string", "null"]
+        destination:
+          type: ["string", "null"]
+        destinationCity:
+          type: ["string", "null"]
+        destinationState:
+          type: ["string", "null"]
+        type:
+          type: ["string", "null"]
+        category:
+          type: ["string", "null"]
+        gallery:
+          type: array
+          items:
+            type: string
+        boardingPoints:
+          type: array
+          items: {}
+        itinerary:
+          type: array
+          items: {}
+        fixedCosts:
+          type: ["number", "null"]
+        variableCosts:
+          type: ["number", "null"]
 
     SeatMap:
       type: object
@@ -3599,6 +4097,8 @@ components:
           type: ["string", "null"]
         notes:
           type: ["string", "null"]
+        boardingLocationId:
+          type: ["string", "null"]
         createdAt:
           type: string
         updatedAt:
@@ -3616,6 +4116,10 @@ components:
               type: string
             whatsapp:
               type: string
+            cpf:
+              type: ["string", "null"]
+            birthDate:
+              type: ["string", "null"]
           required: [id, name, email, whatsapp]
       required:
         - id
@@ -4916,6 +5420,22 @@ components:
           type: string
         phone:
           type: string
+        cnpj:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        zipCode:
+          type: string
+        maxUsersOverride:
+          type: ["integer", "null"]
+        maxClientsOverride:
+          type: ["integer", "null"]
+        maxTripsOverride:
+          type: ["integer", "null"]
 
     # ─── BOARDING LOCATION ─────────────────────────────────────────
     BoardingLocation:
@@ -5649,3 +6169,435 @@ components:
           type: string
         phone:
           type: string
+        cnpj:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        zipCode:
+          type: string
+
+    # ─── PLANS ──────────────────────────────────────────────────────
+    Plan:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: ["string", "null"]
+        monthlyPrice:
+          type: string
+        annualPrice:
+          type: string
+        maxUsers:
+          type: integer
+        maxClients:
+          type: integer
+        maxTrips:
+          type: integer
+        features:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+        isFeatured:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, name, slug, monthlyPrice, annualPrice, maxUsers, maxClients, maxTrips, features, isActive, isFeatured, createdAt, updatedAt]
+
+    CreatePlanBody:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        monthlyPrice:
+          type: string
+        annualPrice:
+          type: string
+        maxUsers:
+          type: integer
+        maxClients:
+          type: integer
+        maxTrips:
+          type: integer
+        features:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+        isFeatured:
+          type: boolean
+      required: [name, slug]
+
+    UpdatePlanBody:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        monthlyPrice:
+          type: string
+        annualPrice:
+          type: string
+        maxUsers:
+          type: integer
+        maxClients:
+          type: integer
+        maxTrips:
+          type: integer
+        features:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+        isFeatured:
+          type: boolean
+
+    # ─── INVOICES ───────────────────────────────────────────────────
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        planId:
+          type: ["string", "null"]
+        amount:
+          type: string
+        currency:
+          type: string
+        status:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+        paidAt:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, tenantId, amount, currency, status, createdAt, updatedAt]
+
+    InvoiceWithTenant:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        planId:
+          type: ["string", "null"]
+        amount:
+          type: string
+        currency:
+          type: string
+        status:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+        paidAt:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        tenantName:
+          type: ["string", "null"]
+      required: [id, tenantId, amount, currency, status, createdAt, updatedAt]
+
+    CreateInvoiceBody:
+      type: object
+      properties:
+        tenantId:
+          type: string
+        planId:
+          type: string
+        amount:
+          type: string
+        currency:
+          type: string
+        status:
+          type: string
+        dueDate:
+          type: string
+        description:
+          type: string
+        notes:
+          type: string
+      required: [tenantId, amount]
+
+    UpdateInvoiceBody:
+      type: object
+      properties:
+        status:
+          type: string
+        paidAt:
+          type: string
+        notes:
+          type: string
+        amount:
+          type: string
+        dueDate:
+          type: string
+
+    # ─── FEATURE FLAGS ──────────────────────────────────────────────
+    FeatureFlag:
+      type: object
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        isEnabled:
+          type: boolean
+        rolloutPercent:
+          type: integer
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, key, name, isEnabled, rolloutPercent, createdAt, updatedAt]
+
+    CreateFeatureFlagBody:
+      type: object
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        isEnabled:
+          type: boolean
+        rolloutPercent:
+          type: integer
+      required: [key, name]
+
+    UpdateFeatureFlagBody:
+      type: object
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        isEnabled:
+          type: boolean
+        rolloutPercent:
+          type: integer
+
+    # ─── METRICS ────────────────────────────────────────────────────
+    MetricPoint:
+      type: object
+      properties:
+        label:
+          type: string
+        value:
+          type: number
+      required: [label, value]
+
+    # ─── TENANT DETAILS ─────────────────────────────────────────────
+    TenantDetails:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        email:
+          type: string
+        whatsapp:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        logoUrl:
+          type: ["string", "null"]
+        primaryColor:
+          type: ["string", "null"]
+        secondaryColor:
+          type: ["string", "null"]
+        planId:
+          type: string
+        status:
+          type: string
+        cnpj:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        city:
+          type: ["string", "null"]
+        state:
+          type: ["string", "null"]
+        zipCode:
+          type: ["string", "null"]
+        userCount:
+          type: integer
+        clientCount:
+          type: integer
+        tripCount:
+          type: integer
+        reservationCount:
+          type: integer
+        planMaxUsers:
+          type: ["integer", "null"]
+        planMaxClients:
+          type: ["integer", "null"]
+        planMaxTrips:
+          type: ["integer", "null"]
+        maxUsersOverride:
+          type: ["integer", "null"]
+        maxClientsOverride:
+          type: ["integer", "null"]
+        maxTripsOverride:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, name, slug, email, planId, status, userCount, clientCount, tripCount, reservationCount, createdAt, updatedAt]
+
+    # ─── ADMIN USER ─────────────────────────────────────────────────
+    AdminUserItem:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        isActive:
+          type: boolean
+        tenantId:
+          type: ["string", "null"]
+        tenantName:
+          type: ["string", "null"]
+        tenantStatus:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, name, email, role, isActive, createdAt]
+
+    # ─── AUDIT LOG WITH TENANT ──────────────────────────────────────
+    AuditLogWithTenant:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        userId:
+          type: ["string", "null"]
+        action:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: string
+        before:
+          type: object
+          nullable: true
+        after:
+          type: object
+          nullable: true
+        ipAddress:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        tenantName:
+          type: ["string", "null"]
+        userName:
+          type: ["string", "null"]
+        userEmail:
+          type: ["string", "null"]
+      required: [id, tenantId, action, entityType, entityId, createdAt]
+
+    # ─── SUBSCRIPTION ───────────────────────────────────────────────
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        planId:
+          type: string
+        status:
+          type: string
+        billingCycle:
+          type: string
+        currentPeriodStart:
+          type: string
+        currentPeriodEnd:
+          type: string
+        cancelAtPeriodEnd:
+          type: boolean
+        canceledAt:
+          type: ["string", "null"]
+        trialEnd:
+          type: ["string", "null"]
+        externalId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, tenantId, planId, status, billingCycle, currentPeriodStart, currentPeriodEnd, cancelAtPeriodEnd, createdAt, updatedAt]
+
+    # ─── PLATFORM SETTING ───────────────────────────────────────────
+    PlatformSetting:
+      type: object
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+        value:
+          type: ["string", "null"]
+        label:
+          type: string
+        description:
+          type: ["string", "null"]
+        type:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, key, label, type, updatedAt]

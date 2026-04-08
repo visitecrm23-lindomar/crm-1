@@ -49,6 +49,15 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 | `/marketing` | Marketing | Campaigns + NPS tracking |
 | `/registrations` | Cadastros | Suppliers, Vehicles, Accommodations, Destinations |
 | `/settings` | Configurações | User profile + team management |
+| `/admin` | Super Admin | Dashboard with stats cards |
+| `/admin/tenants` | Agências | Full tenant list with search/filter, create, suspend/activate actions |
+| `/admin/tenants/:id` | Detalhe Agência | Info edit (CNPJ, address, city, state, zipCode, plan, whatsapp, phone), users tab, audit log tab, suspend/activate controls |
+| `/admin/plans` | Planos | Full CRUD for SaaS plans (name, price, limits, features list) |
+| `/admin/billing` | Faturamento | Invoice list with status badges, amount display, create/update/delete |
+| `/admin/metrics` | Métricas SaaS | MRR/growth/churn KPIs + Recharts area chart (historical data), top tenants table |
+| `/admin/users` | Usuários | All platform users across all tenants, role badges, search |
+| `/admin/logs` | Logs de Auditoria | Global audit log feed with tenant/action/user filtering |
+| `/admin/settings` | Configurações | Feature flags management (enable/disable per-flag) |
 
 ## Key API Routes
 
@@ -66,10 +75,68 @@ All routes under `/api/`:
 - `GET/POST /api/suppliers`, `/api/vehicles`, `/api/accommodations`, `/api/destinations` — registrations
 - `POST /api/users/me/sync` — sync Clerk user to DB
 - `GET /api/users/me` — get current user profile
+- `GET/POST/PUT/DELETE /api/plans` — SaaS plan CRUD (superadmin only)
+- `GET/POST/PUT/DELETE /api/invoices` — invoice CRUD (superadmin only)
+- `GET /api/admin/metrics` — SaaS KPIs (MRR, churn, growth, top tenants)
+- `GET /api/admin/metrics/history` — historical MRR/churn over time
+- `GET /api/admin/tenants/:id` — tenant detail with plan info
+- `GET /api/admin/tenants/:id/users` — tenant user list
+- `POST /api/tenants/:id/suspend` / `/activate` — tenant suspension
+- `GET /api/admin/users` — all platform users
+- `GET /api/admin/audit-logs` — global audit log feed
+- `GET/PUT /api/admin/feature-flags` — feature flags management
+
+## Multi-Tenant Online Store (Tasks #15–17)
+
+### Admin Panel (authenticated, `/loja/*`)
+| Route | Page |
+|-------|------|
+| `/loja/configuracoes` | Store settings + activation wizard (3-step) |
+| `/loja/produtos` | Product CRUD (packages, products, services) |
+| `/loja/categorias` | Category management with parent/child |
+| `/loja/pedidos` | Order list + detail + status updates |
+| `/loja/cupons` | Coupon CRUD (percentage / fixed) |
+| `/loja/avaliacoes` | Review moderation + reply |
+
+### Public Vitrine (unauthenticated, `/loja/:slug/*`)
+| Route | Page |
+|-------|------|
+| `/loja/:slug` | Home — banner, featured products, categories |
+| `/loja/:slug/catalogo` | Product catalog with search/filter/pagination |
+| `/loja/:slug/produto/:productSlug` | Product detail + gallery + variants + reviews |
+| `/loja/:slug/checkout` | Checkout form + coupon validation + order creation |
+| `/loja/:slug/pedido/:orderNumber` | Order tracking page |
+
+### Store API Routes
+- `GET/PUT /api/store/settings` — store settings (admin)
+- `POST /api/store/init` — create store (wizard)
+- `GET/POST/PUT/DELETE /api/store/categories` — category CRUD
+- `GET/POST/PUT/DELETE /api/store/products` — product CRUD
+- `GET/GET/PUT /api/store/orders` — order management
+- `GET/POST/PUT/DELETE /api/store/coupons` — coupon CRUD
+- `GET/PUT /api/store/reviews/:id/status` — review moderation
+- `GET /api/public/store/:slug` — public store info
+- `GET /api/public/store/:slug/categories` — public categories
+- `GET /api/public/store/:slug/products` — public products (search/filter/paginate)
+- `GET /api/public/store/:slug/products/:slug` — public product detail + reviews
+- `POST /api/public/store/:slug/orders` — create order (with coupon auto-apply)
+- `GET /api/public/store/:slug/orders/:orderNumber` — track order
+- `POST /api/public/store/:slug/coupons/validate` — coupon validation
+- `POST /api/public/store/:slug/reviews` — submit review (goes to moderation)
+
+### Frontend Architecture
+- `lib/storeApi.ts` — typed fetch client for store API (admin + public)
+- `contexts/CartContext.tsx` — cart state + drawer open/close
+- `pages/vitrine/` — public storefront components (no Clerk auth)
+- `pages/loja/` — admin store management pages
 
 ## Database Schema (Drizzle)
 
-Schema in `lib/db/src/schema/`: tenants, users, clients, trips, reservations, passengers, seats, payments, expenses, pipeline_stages, deals, messages, message_templates, automations, suppliers, vehicles, accommodations, destinations, campaigns, nps_responses, loyalty_points, referrals.
+Schema in `lib/db/src/schema/`: tenants, users, clients, trips, reservations, passengers, seats, payments, expenses, pipeline_stages, deals, messages, message_templates, automations, suppliers, vehicles, accommodations, destinations, campaigns, nps_responses, loyalty_points, referrals, plans, invoices, feature_flags.
+
+Store tables: **stores**, **store_categories**, **store_products**, **store_orders**, **store_coupons**, **store_reviews** (all using text IDs via `generateId()`).
+
+The `tenants` table was extended via raw SQL with: `cnpj`, `address`, `city`, `state`, `zip_code` columns.
 
 ## Key Commands
 

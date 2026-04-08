@@ -15,4 +15,15 @@ export interface UpdateTenantBody {
   secondaryColor?: string;
   whatsapp?: string;
   phone?: string;
+  cnpj?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  /** @nullable */
+  maxUsersOverride?: number | null;
+  /** @nullable */
+  maxClientsOverride?: number | null;
+  /** @nullable */
+  maxTripsOverride?: number | null;
 }

@@ -23,6 +23,12 @@ import catalogRouter from "./catalog";
 import automationExtrasRouter from "./automation-extras";
 import systemConfigsRouter from "./system-configs";
 import adminRouter from "./admin";
+import plansRouter from "./plans";
+import invoicesRouter from "./invoices";
+import adminMetricsRouter from "./admin-metrics";
+import platformSettingsRouter from "./platform-settings";
+import storeRouter from "./store";
+import storePublicRouter from "./store-public";
 
 const router: IRouter = Router();
 
@@ -50,5 +56,11 @@ router.use(auditRouter);
 router.use(catalogRouter);
 router.use(automationExtrasRouter);
 router.use(systemConfigsRouter);
+router.use(plansRouter);
+router.use(invoicesRouter);
+router.use(adminMetricsRouter);
+router.use(platformSettingsRouter);
+router.use(storeRouter);
+router.use(storePublicRouter);
 
 export default router;

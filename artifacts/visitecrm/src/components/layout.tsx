@@ -27,6 +27,12 @@ import {
   Download,
   UserCheck,
   ChevronRight,
+  ShoppingBag,
+  Package,
+  FolderOpen,
+  ShoppingCart,
+  Tag,
+  MessageCircle,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -68,6 +74,19 @@ const NAVIGATION: NavItem[] = [
     icon: BarChart2,
     children: [
       { name: "Vendedores", href: "/analytics/vendedores", icon: UserCheck },
+    ],
+  },
+  {
+    name: "Minha Loja",
+    href: "/loja",
+    icon: ShoppingBag,
+    children: [
+      { name: "Configurações", href: "/loja/configuracoes", icon: Settings },
+      { name: "Produtos", href: "/loja/produtos", icon: Package },
+      { name: "Categorias", href: "/loja/categorias", icon: FolderOpen },
+      { name: "Pedidos", href: "/loja/pedidos", icon: ShoppingCart },
+      { name: "Cupons", href: "/loja/cupons", icon: Tag },
+      { name: "Avaliações", href: "/loja/avaliacoes", icon: MessageCircle },
     ],
   },
   { name: "Indicações", href: "/indicacoes", icon: Share2 },

@@ -20,7 +20,9 @@ import type {
   Accommodation,
   ActivityItem,
   AdminStats,
+  AdminUserItem,
   AuditLog,
+  AuditLogWithTenant,
   Automation,
   AutomationAction,
   AutomationLog,
@@ -50,6 +52,8 @@ import type {
   CreateDestinationBody,
   CreateDocumentBody,
   CreateExpenseBody,
+  CreateFeatureFlagBody,
+  CreateInvoiceBody,
   CreateLoyaltyMemberBody,
   CreateLoyaltyProgramBody,
   CreateLoyaltyTransactionBody,
@@ -58,6 +62,7 @@ import type {
   CreatePassengerBody,
   CreatePaymentBody,
   CreatePipelineBody,
+  CreatePlanBody,
   CreateProductBody,
   CreateProductCategoryBody,
   CreateProductImageBody,
@@ -74,9 +79,15 @@ import type {
   Document,
   Expense,
   ExpenseListResponse,
+  FeatureFlag,
   FinancialSummary,
   GetDashboardRevenueChartParams,
   HealthStatus,
+  Invoice,
+  InvoiceWithTenant,
+  ListAdminAuditLogsParams,
+  ListAdminInvoicesParams,
+  ListAdminUsersParams,
   ListClientsParams,
   ListDealsParams,
   ListExpensesParams,
@@ -92,6 +103,7 @@ import type {
   LoyaltyTransaction,
   Message,
   MessageTemplate,
+  MetricPoint,
   MoveDealBody,
   Note,
   NpsResponse,
@@ -102,6 +114,8 @@ import type {
   PaymentListResponse,
   Pipeline,
   PipelineStage,
+  Plan,
+  PlatformSetting,
   Product,
   ProductCategory,
   ProductImage,
@@ -115,6 +129,7 @@ import type {
   SyncUserBody,
   SystemConfig,
   Tenant,
+  TenantDetails,
   TenantWithCount,
   Trip,
   TripListResponse,
@@ -129,11 +144,15 @@ import type {
   UpdateDealBody,
   UpdateDestinationBody,
   UpdateExpenseBody,
+  UpdateFeatureFlagBody,
+  UpdateInvoiceBody,
   UpdateMessageTemplateBody,
   UpdateOrderBody,
   UpdatePassengerBody,
   UpdatePaymentBody,
   UpdatePipelineBody,
+  UpdatePlanBody,
+  UpdatePlatformSettingBody,
   UpdateProductBody,
   UpdateReferralBody,
   UpdateReservationBody,
@@ -305,6 +324,1844 @@ export function useGetAdminStats<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List all invoices (superadmin only)
+ */
+export const getListAdminInvoicesUrl = (params?: ListAdminInvoicesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/invoices?${stringifiedParams}`
+    : `/api/admin/invoices`;
+};
+
+export const listAdminInvoices = async (
+  params?: ListAdminInvoicesParams,
+  options?: RequestInit,
+): Promise<InvoiceWithTenant[]> => {
+  return customFetch<InvoiceWithTenant[]>(getListAdminInvoicesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAdminInvoicesQueryKey = (
+  params?: ListAdminInvoicesParams,
+) => {
+  return [`/api/admin/invoices`, ...(params ? [params] : [])] as const;
+};
+
+export const getListAdminInvoicesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminInvoices>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAdminInvoicesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminInvoices>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAdminInvoicesQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAdminInvoices>>
+  > = ({ signal }) => listAdminInvoices(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminInvoices>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminInvoicesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminInvoices>>
+>;
+export type ListAdminInvoicesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all invoices (superadmin only)
+ */
+
+export function useListAdminInvoices<
+  TData = Awaited<ReturnType<typeof listAdminInvoices>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAdminInvoicesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminInvoices>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminInvoicesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a new invoice (superadmin only)
+ */
+export const getCreateAdminInvoiceUrl = () => {
+  return `/api/admin/invoices`;
+};
+
+export const createAdminInvoice = async (
+  createInvoiceBody: CreateInvoiceBody,
+  options?: RequestInit,
+): Promise<Invoice> => {
+  return customFetch<Invoice>(getCreateAdminInvoiceUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createInvoiceBody),
+  });
+};
+
+export const getCreateAdminInvoiceMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAdminInvoice>>,
+    TError,
+    { data: BodyType<CreateInvoiceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createAdminInvoice>>,
+  TError,
+  { data: BodyType<CreateInvoiceBody> },
+  TContext
+> => {
+  const mutationKey = ["createAdminInvoice"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createAdminInvoice>>,
+    { data: BodyType<CreateInvoiceBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createAdminInvoice(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateAdminInvoiceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createAdminInvoice>>
+>;
+export type CreateAdminInvoiceMutationBody = BodyType<CreateInvoiceBody>;
+export type CreateAdminInvoiceMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a new invoice (superadmin only)
+ */
+export const useCreateAdminInvoice = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAdminInvoice>>,
+    TError,
+    { data: BodyType<CreateInvoiceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createAdminInvoice>>,
+  TError,
+  { data: BodyType<CreateInvoiceBody> },
+  TContext
+> => {
+  return useMutation(getCreateAdminInvoiceMutationOptions(options));
+};
+
+/**
+ * @summary Update an invoice (superadmin only)
+ */
+export const getUpdateAdminInvoiceUrl = (id: string) => {
+  return `/api/admin/invoices/${id}`;
+};
+
+export const updateAdminInvoice = async (
+  id: string,
+  updateInvoiceBody: UpdateInvoiceBody,
+  options?: RequestInit,
+): Promise<Invoice> => {
+  return customFetch<Invoice>(getUpdateAdminInvoiceUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateInvoiceBody),
+  });
+};
+
+export const getUpdateAdminInvoiceMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAdminInvoice>>,
+    TError,
+    { id: string; data: BodyType<UpdateInvoiceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAdminInvoice>>,
+  TError,
+  { id: string; data: BodyType<UpdateInvoiceBody> },
+  TContext
+> => {
+  const mutationKey = ["updateAdminInvoice"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAdminInvoice>>,
+    { id: string; data: BodyType<UpdateInvoiceBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateAdminInvoice(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAdminInvoiceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAdminInvoice>>
+>;
+export type UpdateAdminInvoiceMutationBody = BodyType<UpdateInvoiceBody>;
+export type UpdateAdminInvoiceMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update an invoice (superadmin only)
+ */
+export const useUpdateAdminInvoice = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAdminInvoice>>,
+    TError,
+    { id: string; data: BodyType<UpdateInvoiceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAdminInvoice>>,
+  TError,
+  { id: string; data: BodyType<UpdateInvoiceBody> },
+  TContext
+> => {
+  return useMutation(getUpdateAdminInvoiceMutationOptions(options));
+};
+
+/**
+ * @summary List feature flags (superadmin only)
+ */
+export const getListFeatureFlagsUrl = () => {
+  return `/api/admin/feature-flags`;
+};
+
+export const listFeatureFlags = async (
+  options?: RequestInit,
+): Promise<FeatureFlag[]> => {
+  return customFetch<FeatureFlag[]>(getListFeatureFlagsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListFeatureFlagsQueryKey = () => {
+  return [`/api/admin/feature-flags`] as const;
+};
+
+export const getListFeatureFlagsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listFeatureFlags>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listFeatureFlags>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListFeatureFlagsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listFeatureFlags>>
+  > = ({ signal }) => listFeatureFlags({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listFeatureFlags>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListFeatureFlagsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listFeatureFlags>>
+>;
+export type ListFeatureFlagsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List feature flags (superadmin only)
+ */
+
+export function useListFeatureFlags<
+  TData = Awaited<ReturnType<typeof listFeatureFlags>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listFeatureFlags>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListFeatureFlagsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a feature flag (superadmin only)
+ */
+export const getCreateFeatureFlagUrl = () => {
+  return `/api/admin/feature-flags`;
+};
+
+export const createFeatureFlag = async (
+  createFeatureFlagBody: CreateFeatureFlagBody,
+  options?: RequestInit,
+): Promise<FeatureFlag> => {
+  return customFetch<FeatureFlag>(getCreateFeatureFlagUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createFeatureFlagBody),
+  });
+};
+
+export const getCreateFeatureFlagMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createFeatureFlag>>,
+    TError,
+    { data: BodyType<CreateFeatureFlagBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createFeatureFlag>>,
+  TError,
+  { data: BodyType<CreateFeatureFlagBody> },
+  TContext
+> => {
+  const mutationKey = ["createFeatureFlag"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createFeatureFlag>>,
+    { data: BodyType<CreateFeatureFlagBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createFeatureFlag(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateFeatureFlagMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createFeatureFlag>>
+>;
+export type CreateFeatureFlagMutationBody = BodyType<CreateFeatureFlagBody>;
+export type CreateFeatureFlagMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a feature flag (superadmin only)
+ */
+export const useCreateFeatureFlag = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createFeatureFlag>>,
+    TError,
+    { data: BodyType<CreateFeatureFlagBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createFeatureFlag>>,
+  TError,
+  { data: BodyType<CreateFeatureFlagBody> },
+  TContext
+> => {
+  return useMutation(getCreateFeatureFlagMutationOptions(options));
+};
+
+/**
+ * @summary Update a feature flag (superadmin only)
+ */
+export const getUpdateFeatureFlagUrl = (id: string) => {
+  return `/api/admin/feature-flags/${id}`;
+};
+
+export const updateFeatureFlag = async (
+  id: string,
+  updateFeatureFlagBody: UpdateFeatureFlagBody,
+  options?: RequestInit,
+): Promise<FeatureFlag> => {
+  return customFetch<FeatureFlag>(getUpdateFeatureFlagUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateFeatureFlagBody),
+  });
+};
+
+export const getUpdateFeatureFlagMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateFeatureFlag>>,
+    TError,
+    { id: string; data: BodyType<UpdateFeatureFlagBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateFeatureFlag>>,
+  TError,
+  { id: string; data: BodyType<UpdateFeatureFlagBody> },
+  TContext
+> => {
+  const mutationKey = ["updateFeatureFlag"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateFeatureFlag>>,
+    { id: string; data: BodyType<UpdateFeatureFlagBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateFeatureFlag(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateFeatureFlagMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateFeatureFlag>>
+>;
+export type UpdateFeatureFlagMutationBody = BodyType<UpdateFeatureFlagBody>;
+export type UpdateFeatureFlagMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a feature flag (superadmin only)
+ */
+export const useUpdateFeatureFlag = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateFeatureFlag>>,
+    TError,
+    { id: string; data: BodyType<UpdateFeatureFlagBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateFeatureFlag>>,
+  TError,
+  { id: string; data: BodyType<UpdateFeatureFlagBody> },
+  TContext
+> => {
+  return useMutation(getUpdateFeatureFlagMutationOptions(options));
+};
+
+/**
+ * @summary Get historical MRR series (superadmin only)
+ */
+export const getGetMetricsMrrUrl = () => {
+  return `/api/admin/metrics/mrr`;
+};
+
+export const getMetricsMrr = async (
+  options?: RequestInit,
+): Promise<MetricPoint[]> => {
+  return customFetch<MetricPoint[]>(getGetMetricsMrrUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMetricsMrrQueryKey = () => {
+  return [`/api/admin/metrics/mrr`] as const;
+};
+
+export const getGetMetricsMrrQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMetricsMrr>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMetricsMrr>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMetricsMrrQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMetricsMrr>>> = ({
+    signal,
+  }) => getMetricsMrr({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMetricsMrr>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMetricsMrrQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMetricsMrr>>
+>;
+export type GetMetricsMrrQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get historical MRR series (superadmin only)
+ */
+
+export function useGetMetricsMrr<
+  TData = Awaited<ReturnType<typeof getMetricsMrr>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMetricsMrr>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMetricsMrrQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get historical churn rate series (superadmin only)
+ */
+export const getGetMetricsChurnUrl = () => {
+  return `/api/admin/metrics/churn`;
+};
+
+export const getMetricsChurn = async (
+  options?: RequestInit,
+): Promise<MetricPoint[]> => {
+  return customFetch<MetricPoint[]>(getGetMetricsChurnUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMetricsChurnQueryKey = () => {
+  return [`/api/admin/metrics/churn`] as const;
+};
+
+export const getGetMetricsChurnQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMetricsChurn>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMetricsChurn>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMetricsChurnQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMetricsChurn>>> = ({
+    signal,
+  }) => getMetricsChurn({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMetricsChurn>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMetricsChurnQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMetricsChurn>>
+>;
+export type GetMetricsChurnQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get historical churn rate series (superadmin only)
+ */
+
+export function useGetMetricsChurn<
+  TData = Awaited<ReturnType<typeof getMetricsChurn>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMetricsChurn>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMetricsChurnQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get historical agency growth series (superadmin only)
+ */
+export const getGetMetricsGrowthUrl = () => {
+  return `/api/admin/metrics/growth`;
+};
+
+export const getMetricsGrowth = async (
+  options?: RequestInit,
+): Promise<MetricPoint[]> => {
+  return customFetch<MetricPoint[]>(getGetMetricsGrowthUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMetricsGrowthQueryKey = () => {
+  return [`/api/admin/metrics/growth`] as const;
+};
+
+export const getGetMetricsGrowthQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMetricsGrowth>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMetricsGrowth>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMetricsGrowthQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getMetricsGrowth>>
+  > = ({ signal }) => getMetricsGrowth({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMetricsGrowth>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMetricsGrowthQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMetricsGrowth>>
+>;
+export type GetMetricsGrowthQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get historical agency growth series (superadmin only)
+ */
+
+export function useGetMetricsGrowth<
+  TData = Awaited<ReturnType<typeof getMetricsGrowth>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMetricsGrowth>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMetricsGrowthQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List all platform users (superadmin only)
+ */
+export const getListAdminUsersUrl = (params?: ListAdminUsersParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/users?${stringifiedParams}`
+    : `/api/admin/users`;
+};
+
+export const listAdminUsers = async (
+  params?: ListAdminUsersParams,
+  options?: RequestInit,
+): Promise<AdminUserItem[]> => {
+  return customFetch<AdminUserItem[]>(getListAdminUsersUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAdminUsersQueryKey = (params?: ListAdminUsersParams) => {
+  return [`/api/admin/users`, ...(params ? [params] : [])] as const;
+};
+
+export const getListAdminUsersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminUsers>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAdminUsersParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminUsers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAdminUsersQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminUsers>>> = ({
+    signal,
+  }) => listAdminUsers(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminUsers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminUsersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminUsers>>
+>;
+export type ListAdminUsersQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all platform users (superadmin only)
+ */
+
+export function useListAdminUsers<
+  TData = Awaited<ReturnType<typeof listAdminUsers>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAdminUsersParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminUsers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminUsersQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List all platform settings (superadmin only)
+ */
+export const getListPlatformSettingsUrl = () => {
+  return `/api/admin/platform-settings`;
+};
+
+export const listPlatformSettings = async (
+  options?: RequestInit,
+): Promise<PlatformSetting[]> => {
+  return customFetch<PlatformSetting[]>(getListPlatformSettingsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListPlatformSettingsQueryKey = () => {
+  return [`/api/admin/platform-settings`] as const;
+};
+
+export const getListPlatformSettingsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPlatformSettings>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPlatformSettings>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListPlatformSettingsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listPlatformSettings>>
+  > = ({ signal }) => listPlatformSettings({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPlatformSettings>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListPlatformSettingsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPlatformSettings>>
+>;
+export type ListPlatformSettingsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all platform settings (superadmin only)
+ */
+
+export function useListPlatformSettings<
+  TData = Awaited<ReturnType<typeof listPlatformSettings>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPlatformSettings>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPlatformSettingsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update a platform setting value (superadmin only)
+ */
+export const getUpdatePlatformSettingUrl = (key: string) => {
+  return `/api/admin/platform-settings/${key}`;
+};
+
+export const updatePlatformSetting = async (
+  key: string,
+  updatePlatformSettingBody: UpdatePlatformSettingBody,
+  options?: RequestInit,
+): Promise<PlatformSetting> => {
+  return customFetch<PlatformSetting>(getUpdatePlatformSettingUrl(key), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updatePlatformSettingBody),
+  });
+};
+
+export const getUpdatePlatformSettingMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePlatformSetting>>,
+    TError,
+    { key: string; data: BodyType<UpdatePlatformSettingBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updatePlatformSetting>>,
+  TError,
+  { key: string; data: BodyType<UpdatePlatformSettingBody> },
+  TContext
+> => {
+  const mutationKey = ["updatePlatformSetting"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updatePlatformSetting>>,
+    { key: string; data: BodyType<UpdatePlatformSettingBody> }
+  > = (props) => {
+    const { key, data } = props ?? {};
+
+    return updatePlatformSetting(key, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdatePlatformSettingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updatePlatformSetting>>
+>;
+export type UpdatePlatformSettingMutationBody =
+  BodyType<UpdatePlatformSettingBody>;
+export type UpdatePlatformSettingMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a platform setting value (superadmin only)
+ */
+export const useUpdatePlatformSetting = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePlatformSetting>>,
+    TError,
+    { key: string; data: BodyType<UpdatePlatformSettingBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updatePlatformSetting>>,
+  TError,
+  { key: string; data: BodyType<UpdatePlatformSettingBody> },
+  TContext
+> => {
+  return useMutation(getUpdatePlatformSettingMutationOptions(options));
+};
+
+/**
+ * @summary List all audit logs (superadmin only)
+ */
+export const getListAdminAuditLogsUrl = (params?: ListAdminAuditLogsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/audit-logs?${stringifiedParams}`
+    : `/api/admin/audit-logs`;
+};
+
+export const listAdminAuditLogs = async (
+  params?: ListAdminAuditLogsParams,
+  options?: RequestInit,
+): Promise<AuditLogWithTenant[]> => {
+  return customFetch<AuditLogWithTenant[]>(getListAdminAuditLogsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAdminAuditLogsQueryKey = (
+  params?: ListAdminAuditLogsParams,
+) => {
+  return [`/api/admin/audit-logs`, ...(params ? [params] : [])] as const;
+};
+
+export const getListAdminAuditLogsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminAuditLogs>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAdminAuditLogsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminAuditLogs>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAdminAuditLogsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAdminAuditLogs>>
+  > = ({ signal }) => listAdminAuditLogs(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminAuditLogs>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminAuditLogsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminAuditLogs>>
+>;
+export type ListAdminAuditLogsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all audit logs (superadmin only)
+ */
+
+export function useListAdminAuditLogs<
+  TData = Awaited<ReturnType<typeof listAdminAuditLogs>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAdminAuditLogsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminAuditLogs>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminAuditLogsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List all plans (superadmin only)
+ */
+export const getListPlansUrl = () => {
+  return `/api/plans`;
+};
+
+export const listPlans = async (options?: RequestInit): Promise<Plan[]> => {
+  return customFetch<Plan[]>(getListPlansUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListPlansQueryKey = () => {
+  return [`/api/plans`] as const;
+};
+
+export const getListPlansQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPlans>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listPlans>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListPlansQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listPlans>>> = ({
+    signal,
+  }) => listPlans({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPlans>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListPlansQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPlans>>
+>;
+export type ListPlansQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all plans (superadmin only)
+ */
+
+export function useListPlans<
+  TData = Awaited<ReturnType<typeof listPlans>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listPlans>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPlansQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a plan (superadmin only)
+ */
+export const getCreatePlanUrl = () => {
+  return `/api/plans`;
+};
+
+export const createPlan = async (
+  createPlanBody: CreatePlanBody,
+  options?: RequestInit,
+): Promise<Plan> => {
+  return customFetch<Plan>(getCreatePlanUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createPlanBody),
+  });
+};
+
+export const getCreatePlanMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPlan>>,
+    TError,
+    { data: BodyType<CreatePlanBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createPlan>>,
+  TError,
+  { data: BodyType<CreatePlanBody> },
+  TContext
+> => {
+  const mutationKey = ["createPlan"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createPlan>>,
+    { data: BodyType<CreatePlanBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createPlan(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreatePlanMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createPlan>>
+>;
+export type CreatePlanMutationBody = BodyType<CreatePlanBody>;
+export type CreatePlanMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a plan (superadmin only)
+ */
+export const useCreatePlan = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPlan>>,
+    TError,
+    { data: BodyType<CreatePlanBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createPlan>>,
+  TError,
+  { data: BodyType<CreatePlanBody> },
+  TContext
+> => {
+  return useMutation(getCreatePlanMutationOptions(options));
+};
+
+/**
+ * @summary Get plan by ID (superadmin only)
+ */
+export const getGetPlanUrl = (id: string) => {
+  return `/api/plans/${id}`;
+};
+
+export const getPlan = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Plan> => {
+  return customFetch<Plan>(getGetPlanUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPlanQueryKey = (id: string) => {
+  return [`/api/plans/${id}`] as const;
+};
+
+export const getGetPlanQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPlan>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getPlan>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPlanQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlan>>> = ({
+    signal,
+  }) => getPlan(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getPlan>>, TError, TData> & {
+    queryKey: QueryKey;
+  };
+};
+
+export type GetPlanQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPlan>>
+>;
+export type GetPlanQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get plan by ID (superadmin only)
+ */
+
+export function useGetPlan<
+  TData = Awaited<ReturnType<typeof getPlan>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getPlan>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPlanQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update a plan (superadmin only)
+ */
+export const getUpdatePlanUrl = (id: string) => {
+  return `/api/plans/${id}`;
+};
+
+export const updatePlan = async (
+  id: string,
+  updatePlanBody: UpdatePlanBody,
+  options?: RequestInit,
+): Promise<Plan> => {
+  return customFetch<Plan>(getUpdatePlanUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updatePlanBody),
+  });
+};
+
+export const getUpdatePlanMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePlan>>,
+    TError,
+    { id: string; data: BodyType<UpdatePlanBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updatePlan>>,
+  TError,
+  { id: string; data: BodyType<UpdatePlanBody> },
+  TContext
+> => {
+  const mutationKey = ["updatePlan"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updatePlan>>,
+    { id: string; data: BodyType<UpdatePlanBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updatePlan(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdatePlanMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updatePlan>>
+>;
+export type UpdatePlanMutationBody = BodyType<UpdatePlanBody>;
+export type UpdatePlanMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a plan (superadmin only)
+ */
+export const useUpdatePlan = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePlan>>,
+    TError,
+    { id: string; data: BodyType<UpdatePlanBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updatePlan>>,
+  TError,
+  { id: string; data: BodyType<UpdatePlanBody> },
+  TContext
+> => {
+  return useMutation(getUpdatePlanMutationOptions(options));
+};
+
+/**
+ * @summary Archive a plan (superadmin only)
+ */
+export const getArchivePlanUrl = (id: string) => {
+  return `/api/plans/${id}`;
+};
+
+export const archivePlan = async (
+  id: string,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getArchivePlanUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getArchivePlanMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof archivePlan>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof archivePlan>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["archivePlan"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof archivePlan>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return archivePlan(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ArchivePlanMutationResult = NonNullable<
+  Awaited<ReturnType<typeof archivePlan>>
+>;
+
+export type ArchivePlanMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Archive a plan (superadmin only)
+ */
+export const useArchivePlan = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof archivePlan>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof archivePlan>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getArchivePlanMutationOptions(options));
+};
+
+/**
+ * @summary Get detailed tenant info with counts (superadmin only)
+ */
+export const getGetTenantDetailsUrl = (id: string) => {
+  return `/api/tenants/${id}/details`;
+};
+
+export const getTenantDetails = async (
+  id: string,
+  options?: RequestInit,
+): Promise<TenantDetails> => {
+  return customFetch<TenantDetails>(getGetTenantDetailsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetTenantDetailsQueryKey = (id: string) => {
+  return [`/api/tenants/${id}/details`] as const;
+};
+
+export const getGetTenantDetailsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTenantDetails>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTenantDetails>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetTenantDetailsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTenantDetails>>
+  > = ({ signal }) => getTenantDetails(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTenantDetails>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTenantDetailsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTenantDetails>>
+>;
+export type GetTenantDetailsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get detailed tenant info with counts (superadmin only)
+ */
+
+export function useGetTenantDetails<
+  TData = Awaited<ReturnType<typeof getTenantDetails>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTenantDetails>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTenantDetailsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List users of a tenant (superadmin only)
+ */
+export const getListTenantUsersUrl = (id: string) => {
+  return `/api/tenants/${id}/users`;
+};
+
+export const listTenantUsers = async (
+  id: string,
+  options?: RequestInit,
+): Promise<UserProfile[]> => {
+  return customFetch<UserProfile[]>(getListTenantUsersUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListTenantUsersQueryKey = (id: string) => {
+  return [`/api/tenants/${id}/users`] as const;
+};
+
+export const getListTenantUsersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listTenantUsers>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listTenantUsers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListTenantUsersQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listTenantUsers>>> = ({
+    signal,
+  }) => listTenantUsers(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listTenantUsers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListTenantUsersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listTenantUsers>>
+>;
+export type ListTenantUsersQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List users of a tenant (superadmin only)
+ */
+
+export function useListTenantUsers<
+  TData = Awaited<ReturnType<typeof listTenantUsers>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listTenantUsers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListTenantUsersQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Suspend a tenant (superadmin only)
+ */
+export const getSuspendTenantUrl = (id: string) => {
+  return `/api/tenants/${id}/suspend`;
+};
+
+export const suspendTenant = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Tenant> => {
+  return customFetch<Tenant>(getSuspendTenantUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getSuspendTenantMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof suspendTenant>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof suspendTenant>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["suspendTenant"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof suspendTenant>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return suspendTenant(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SuspendTenantMutationResult = NonNullable<
+  Awaited<ReturnType<typeof suspendTenant>>
+>;
+
+export type SuspendTenantMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Suspend a tenant (superadmin only)
+ */
+export const useSuspendTenant = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof suspendTenant>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof suspendTenant>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getSuspendTenantMutationOptions(options));
+};
+
+/**
+ * @summary Activate a tenant (superadmin only)
+ */
+export const getActivateTenantUrl = (id: string) => {
+  return `/api/tenants/${id}/activate`;
+};
+
+export const activateTenant = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Tenant> => {
+  return customFetch<Tenant>(getActivateTenantUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getActivateTenantMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof activateTenant>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof activateTenant>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["activateTenant"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof activateTenant>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return activateTenant(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ActivateTenantMutationResult = NonNullable<
+  Awaited<ReturnType<typeof activateTenant>>
+>;
+
+export type ActivateTenantMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Activate a tenant (superadmin only)
+ */
+export const useActivateTenant = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof activateTenant>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof activateTenant>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getActivateTenantMutationOptions(options));
+};
 
 /**
  * @summary Get dashboard summary stats
