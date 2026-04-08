@@ -211,28 +211,28 @@ export default function VitrineProduct({
                 {product.destination}
               </div>
             )}
-            {product.duration && (
+            {product.durationDays && (
               <div className="flex items-center gap-1">
                 <Clock className="w-4 h-4" />
-                {product.duration} dia(s)
+                {product.durationDays} dia(s)
               </div>
             )}
-            {product.departureDate && (
+            {product.startDate && (
               <div className="flex items-center gap-1">
                 <Calendar className="w-4 h-4" />
                 Saída:{" "}
-                {new Date(product.departureDate + "T12:00:00").toLocaleDateString("pt-BR", {
+                {new Date(product.startDate.length <= 10 ? product.startDate + "T12:00:00" : product.startDate).toLocaleDateString("pt-BR", {
                   day: "2-digit",
                   month: "long",
                   year: "numeric",
                 })}
               </div>
             )}
-            {product.returnDate && (
+            {product.endDate && (
               <div className="flex items-center gap-1">
                 <Calendar className="w-4 h-4" />
                 Volta:{" "}
-                {new Date(product.returnDate + "T12:00:00").toLocaleDateString("pt-BR", {
+                {new Date(product.endDate.length <= 10 ? product.endDate + "T12:00:00" : product.endDate).toLocaleDateString("pt-BR", {
                   day: "2-digit",
                   month: "long",
                   year: "numeric",

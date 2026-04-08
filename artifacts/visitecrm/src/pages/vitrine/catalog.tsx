@@ -87,15 +87,15 @@ function ProductCard({
               <MapPin className="w-3 h-3" /> {product.destination}
             </span>
           )}
-          {product.duration && (
+          {product.durationDays && (
             <span className="flex items-center gap-1">
-              <Clock className="w-3 h-3" /> {product.duration}d
+              <Clock className="w-3 h-3" /> {product.durationDays}d
             </span>
           )}
-          {product.departureDate && (
+          {product.startDate && (
             <span className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />{" "}
-              {new Date(product.departureDate + "T12:00:00").toLocaleDateString("pt-BR", {
+              {new Date(product.startDate.length <= 10 ? product.startDate + "T12:00:00" : product.startDate).toLocaleDateString("pt-BR", {
                 day: "2-digit",
                 month: "short",
               })}

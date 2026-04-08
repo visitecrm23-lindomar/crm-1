@@ -298,7 +298,6 @@ export default function AdminBilling() {
                     <tr key={invoice.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-3">
                         <div className="font-medium">{invoice.tenantName ?? invoice.tenantId}</div>
-                        {invoice.tenantEmail && <div className="text-xs text-muted-foreground">{invoice.tenantEmail}</div>}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{invoice.description ?? "—"}</td>
                       <td className="px-4 py-3 font-medium">{formatCurrency(invoice.amount)}</td>
