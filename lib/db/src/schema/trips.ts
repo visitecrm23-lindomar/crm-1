@@ -67,3 +67,4 @@ export type Trip = typeof tripsTable.$inferSelect;
 export const tripsRelations = relations(tripsTable, ({ one }) => ({
   tenant: one(tenantsTable, { fields: [tripsTable.tenantId], references: [tenantsTable.id] }),
 }));
+

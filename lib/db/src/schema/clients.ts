@@ -52,6 +52,6 @@ export const insertClientSchema = createInsertSchema(clientsTable).omit({ create
 export type InsertClient = z.infer<typeof insertClientSchema>;
 export type Client = typeof clientsTable.$inferSelect;
 
-export const clientsRelations = relations(clientsTable, ({ one }) => ({
+export const clientsRelations = relations(clientsTable, ({ one, many }) => ({
   tenant: one(tenantsTable, { fields: [clientsTable.tenantId], references: [tenantsTable.id] }),
 }));

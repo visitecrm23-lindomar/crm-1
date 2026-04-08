@@ -33,6 +33,7 @@ export const reservationsTable = pgTable("reservations", {
   confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
   cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
   createdById: text("created_by_id").notNull().references(() => usersTable.id),
+  storeOrderId: text("store_order_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
