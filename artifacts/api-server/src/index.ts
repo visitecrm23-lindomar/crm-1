@@ -22,6 +22,28 @@ async function runMigrations() {
     await client.query(`
       ALTER TABLE trips ADD COLUMN IF NOT EXISTS boarding_points json DEFAULT '[]'::json;
     `);
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'feature_flags' AND column_name = 'enabled'
+        ) THEN
+          ALTER TABLE feature_flags RENAME COLUMN enabled TO is_enabled;
+        END IF;
+      END $$;
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS platform_settings (
+        id text PRIMARY KEY,
+        key text NOT NULL UNIQUE,
+        value text,
+        label text NOT NULL DEFAULT '',
+        description text,
+        type text NOT NULL DEFAULT 'string',
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    `);
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");
