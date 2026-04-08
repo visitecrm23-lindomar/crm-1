@@ -48,8 +48,8 @@ function StoreWizard({ onCreated }: { onCreated: (s: StoreSettings) => void }) {
   const [form, setForm] = useState<InitStoreInput & { paymentMethods: string[] }>({
     name: "",
     slug: "",
-    email: "",
-    whatsapp: "",
+    contactEmail: "",
+    contactWhatsapp: "",
     paymentMethods: [],
   });
 
@@ -75,15 +75,17 @@ function StoreWizard({ onCreated }: { onCreated: (s: StoreSettings) => void }) {
       toast({ title: "Preencha nome e slug", variant: "destructive" });
       return;
     }
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+    if (form.contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contactEmail)) {
       toast({ title: "E-mail inválido", variant: "destructive" });
       return;
     }
     setLoading(true);
     const payload: InitStoreInput = {
-      ...form,
-      email: form.email || undefined,
-      whatsapp: form.whatsapp || undefined,
+      name: form.name,
+      slug: form.slug,
+      contactEmail: form.contactEmail || undefined,
+      contactWhatsapp: form.contactWhatsapp || undefined,
+      paymentMethods: form.paymentMethods,
     };
     try {
       const store = await storeApi.initStore(payload);
@@ -182,16 +184,16 @@ function StoreWizard({ onCreated }: { onCreated: (s: StoreSettings) => void }) {
               <Label>E-mail de Contato</Label>
               <Input
                 type="email"
-                value={form.email ?? ""}
-                onChange={(e) => set("email", e.target.value)}
+                value={form.contactEmail ?? ""}
+                onChange={(e) => set("contactEmail", e.target.value)}
                 placeholder="contato@agencia.com"
               />
             </div>
             <div className="space-y-2">
               <Label>WhatsApp</Label>
               <Input
-                value={form.whatsapp ?? ""}
-                onChange={(e) => set("whatsapp", e.target.value)}
+                value={form.contactWhatsapp ?? ""}
+                onChange={(e) => set("contactWhatsapp", e.target.value)}
                 placeholder="(11) 99999-9999"
               />
             </div>

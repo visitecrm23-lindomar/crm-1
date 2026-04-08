@@ -161,6 +161,41 @@ async function getStoreForTenant(tenantId: string) {
   return store;
 }
 
+const InitStoreBody = z.object({
+  name: z.string().min(1),
+  slug: z.string().min(1),
+  contactEmail: z.string().email().optional(),
+  contactWhatsapp: z.string().optional(),
+  paymentMethods: z.array(z.string()).optional(),
+});
+
+router.post("/store/init", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    const existing = await getStoreForTenant(me.tenantId);
+    if (existing) { res.status(409).json({ error: "Store already exists", store: existing }); return; }
+    const parsed = InitStoreBody.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    const id = generateId();
+    await db.insert(storesTable).values({
+      id,
+      tenantId: me.tenantId,
+      name: parsed.data.name,
+      slug: parsed.data.slug,
+      email: parsed.data.contactEmail ?? me.email,
+      ...(parsed.data.contactWhatsapp && { whatsapp: parsed.data.contactWhatsapp }),
+      ...(parsed.data.paymentMethods && { paymentMethods: parsed.data.paymentMethods }),
+    });
+    const [store] = await db.select().from(storesTable).where(eq(storesTable.id, id)).limit(1);
+    res.status(201).json(store);
+  } catch (err) {
+    req.log.error({ err }, "Error initializing store");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/store/settings", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);

@@ -43,7 +43,7 @@ export const storeApi = {
   updateSettings: (data: Partial<StoreSettings>) =>
     req<StoreSettings>("PUT", "/store/settings", data),
   initStore: (data: InitStoreInput) =>
-    req<StoreSettings>("PUT", "/store/settings", data),
+    req<StoreSettings>("POST", "/store/init", data),
 
   getCategories: () => req<StoreCategory[]>("GET", "/store/categories"),
   createCategory: (data: CategoryInput) =>
@@ -409,8 +409,8 @@ export interface StoreReview {
 export interface InitStoreInput {
   name: string;
   slug: string;
-  email?: string;
-  whatsapp?: string;
+  contactEmail?: string;
+  contactWhatsapp?: string;
   paymentMethods?: string[];
 }
 
