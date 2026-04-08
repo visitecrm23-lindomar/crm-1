@@ -38,19 +38,35 @@ const NAV_ITEMS = [
   { name: "Configurações", href: "/admin/settings", icon: Settings, exact: false },
 ];
 
+interface ErrorBoundaryProps {
+  children: ReactNode;
+  location: string;
+}
+
 interface ErrorBoundaryState {
   hasError: boolean;
   errorMessage: string;
+  errorLocation: string;
 }
 
-class AdminErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
-  constructor(props: { children: ReactNode }) {
+class AdminErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false, errorMessage: "" };
+    this.state = { hasError: false, errorMessage: "", errorLocation: props.location };
   }
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     return { hasError: true, errorMessage: error.message };
+  }
+
+  static getDerivedStateFromProps(
+    props: ErrorBoundaryProps,
+    state: ErrorBoundaryState,
+  ): Partial<ErrorBoundaryState> | null {
+    if (state.hasError && props.location !== state.errorLocation) {
+      return { hasError: false, errorMessage: "", errorLocation: props.location };
+    }
+    return null;
   }
 
   render() {
@@ -172,7 +188,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </header>
 
         <main className="flex-1 overflow-y-auto p-6">
-          <AdminErrorBoundary>{children}</AdminErrorBoundary>
+          <AdminErrorBoundary location={location}>{children}</AdminErrorBoundary>
         </main>
       </div>
     </div>
