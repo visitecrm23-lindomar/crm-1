@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search } from "lucide-react";
+import { Search, AlertCircle } from "lucide-react";
 
 const ROLE_LABELS: Record<string, string> = {
   superadmin: "Super Admin",
@@ -35,12 +35,12 @@ function fmt(date: string | null) {
 
 export default function AdminUsersPage() {
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("");
-  const [tenantFilter, setTenantFilter] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [tenantFilter, setTenantFilter] = useState("all");
 
-  const { data: users = [], isLoading } = useAdminUsers({
-    tenantId: tenantFilter || undefined,
-    role: roleFilter || undefined,
+  const { data: users = [], isLoading, isError } = useAdminUsers({
+    tenantId: tenantFilter !== "all" ? tenantFilter : undefined,
+    role: roleFilter !== "all" ? roleFilter : undefined,
   });
   const { data: tenants = [] } = useListTenants();
 
@@ -75,7 +75,7 @@ export default function AdminUsersPage() {
             <SelectValue placeholder="Perfil" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todos os perfis</SelectItem>
+            <SelectItem value="all">Todos os perfis</SelectItem>
             <SelectItem value="superadmin">Super Admin</SelectItem>
             <SelectItem value="agencia">Admin Agência</SelectItem>
             <SelectItem value="vendedor">Vendedor</SelectItem>
@@ -87,14 +87,14 @@ export default function AdminUsersPage() {
             <SelectValue placeholder="Agência" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todas as agências</SelectItem>
+            <SelectItem value="all">Todas as agências</SelectItem>
             {tenants.map(t => (
               <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
-        {(search || roleFilter || tenantFilter) && (
-          <Button variant="ghost" onClick={() => { setSearch(""); setRoleFilter(""); setTenantFilter(""); }}>
+        {(search || roleFilter !== "all" || tenantFilter !== "all") && (
+          <Button variant="ghost" onClick={() => { setSearch(""); setRoleFilter("all"); setTenantFilter("all"); }}>
             Limpar
           </Button>
         )}
@@ -104,6 +104,11 @@ export default function AdminUsersPage() {
         <CardContent className="pt-4">
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground animate-pulse">Carregando...</div>
+          ) : isError ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <AlertCircle className="w-8 h-8 mx-auto mb-2 text-destructive opacity-60" />
+              <p className="text-sm">Erro ao carregar usuários. Verifique suas permissões.</p>
+            </div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">Nenhum usuário encontrado.</div>
           ) : (

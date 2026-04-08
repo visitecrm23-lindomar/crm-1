@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { Component, ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useUser, useClerk } from "@clerk/react";
 import {
@@ -13,6 +13,8 @@ import {
   ShieldCheck,
   ChevronDown,
   Layers,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -35,6 +37,47 @@ const NAV_ITEMS = [
   { name: "Logs de Auditoria", href: "/admin/logs", icon: ScrollText, exact: false },
   { name: "Configurações", href: "/admin/settings", icon: Settings, exact: false },
 ];
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  errorMessage: string;
+}
+
+class AdminErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, errorMessage: "" };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, errorMessage: error.message };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full py-20 text-center px-4">
+          <AlertTriangle className="w-12 h-12 text-destructive opacity-60 mb-4" />
+          <h2 className="text-lg font-semibold mb-2">Erro ao renderizar esta página</h2>
+          <p className="text-sm text-muted-foreground mb-6 max-w-sm">
+            {this.state.errorMessage || "Ocorreu um erro inesperado. Tente recarregar a página."}
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              this.setState({ hasError: false, errorMessage: "" });
+              window.location.reload();
+            }}
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Recarregar
+          </Button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
@@ -128,7 +171,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-6">
+          <AdminErrorBoundary>{children}</AdminErrorBoundary>
+        </main>
       </div>
     </div>
   );

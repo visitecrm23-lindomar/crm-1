@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Download } from "lucide-react";
+import { Search, Download, AlertCircle } from "lucide-react";
 
 const ACTION_COLORS: Record<string, string> = {
   create: "bg-green-100 text-green-800",
@@ -38,14 +38,14 @@ function fmtDate(date: string) {
 
 export default function AdminLogsPage() {
   const [search, setSearch] = useState("");
-  const [actionFilter, setActionFilter] = useState("");
-  const [entityFilter, setEntityFilter] = useState("");
-  const [tenantFilter, setTenantFilter] = useState("");
+  const [actionFilter, setActionFilter] = useState("all");
+  const [entityFilter, setEntityFilter] = useState("all");
+  const [tenantFilter, setTenantFilter] = useState("all");
 
-  const { data: logs = [], isLoading } = useAdminAuditLogs({
-    tenantId: tenantFilter || undefined,
-    entityType: entityFilter || undefined,
-    action: actionFilter || undefined,
+  const { data: logs = [], isLoading, isError } = useAdminAuditLogs({
+    tenantId: tenantFilter !== "all" ? tenantFilter : undefined,
+    entityType: entityFilter !== "all" ? entityFilter : undefined,
+    action: actionFilter !== "all" ? actionFilter : undefined,
   });
   const { data: tenants = [] } = useListTenants();
 
@@ -79,6 +79,8 @@ export default function AdminLogsPage() {
     URL.revokeObjectURL(url);
   }
 
+  const hasFilters = search || actionFilter !== "all" || entityFilter !== "all" || tenantFilter !== "all";
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -110,7 +112,7 @@ export default function AdminLogsPage() {
             <SelectValue placeholder="Ação" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todas</SelectItem>
+            <SelectItem value="all">Todas</SelectItem>
             <SelectItem value="create">Criar</SelectItem>
             <SelectItem value="update">Atualizar</SelectItem>
             <SelectItem value="delete">Excluir</SelectItem>
@@ -124,7 +126,7 @@ export default function AdminLogsPage() {
             <SelectValue placeholder="Entidade" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todas</SelectItem>
+            <SelectItem value="all">Todas</SelectItem>
             <SelectItem value="client">Cliente</SelectItem>
             <SelectItem value="trip">Viagem</SelectItem>
             <SelectItem value="reservation">Reserva</SelectItem>
@@ -138,14 +140,14 @@ export default function AdminLogsPage() {
             <SelectValue placeholder="Agência" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todas</SelectItem>
+            <SelectItem value="all">Todas</SelectItem>
             {tenants.map(t => (
               <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
-        {(search || actionFilter || entityFilter || tenantFilter) && (
-          <Button variant="ghost" onClick={() => { setSearch(""); setActionFilter(""); setEntityFilter(""); setTenantFilter(""); }}>
+        {hasFilters && (
+          <Button variant="ghost" onClick={() => { setSearch(""); setActionFilter("all"); setEntityFilter("all"); setTenantFilter("all"); }}>
             Limpar
           </Button>
         )}
@@ -155,6 +157,11 @@ export default function AdminLogsPage() {
         <CardContent className="pt-4">
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground animate-pulse">Carregando...</div>
+          ) : isError ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <AlertCircle className="w-8 h-8 mx-auto mb-2 text-destructive opacity-60" />
+              <p className="text-sm">Erro ao carregar logs. Verifique suas permissões.</p>
+            </div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">Nenhum log encontrado.</div>
           ) : (

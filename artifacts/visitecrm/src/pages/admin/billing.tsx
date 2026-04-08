@@ -47,13 +47,13 @@ function fmtCurrency(val: string | null) {
 
 export default function AdminBillingPage() {
   const { toast } = useToast();
-  const [statusFilter, setStatusFilter] = useState("");
-  const [tenantFilter, setTenantFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [tenantFilter, setTenantFilter] = useState("all");
   const [showCreate, setShowCreate] = useState(false);
 
-  const { data: invoices = [], isLoading } = useAdminInvoices({
-    status: statusFilter || undefined,
-    tenantId: tenantFilter || undefined,
+  const { data: invoices = [], isLoading, isError } = useAdminInvoices({
+    status: statusFilter !== "all" ? statusFilter : undefined,
+    tenantId: tenantFilter !== "all" ? tenantFilter : undefined,
   });
   const { data: tenantsData = [] } = useListTenants();
   const createInvoice = useCreateInvoice();
@@ -160,7 +160,7 @@ export default function AdminBillingPage() {
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todos</SelectItem>
+            <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="paid">Pago</SelectItem>
             <SelectItem value="pending">Pendente</SelectItem>
             <SelectItem value="overdue">Vencido</SelectItem>
@@ -172,14 +172,14 @@ export default function AdminBillingPage() {
             <SelectValue placeholder="Agência" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todas as agências</SelectItem>
+            <SelectItem value="all">Todas as agências</SelectItem>
             {tenantsData.map((t) => (
               <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
-        {(statusFilter || tenantFilter) && (
-          <Button variant="ghost" onClick={() => { setStatusFilter(""); setTenantFilter(""); }}>
+        {(statusFilter !== "all" || tenantFilter !== "all") && (
+          <Button variant="ghost" onClick={() => { setStatusFilter("all"); setTenantFilter("all"); }}>
             Limpar filtros
           </Button>
         )}
@@ -190,6 +190,11 @@ export default function AdminBillingPage() {
         <CardContent className="pt-4">
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground animate-pulse">Carregando...</div>
+          ) : isError ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <AlertCircle className="w-8 h-8 mx-auto mb-2 text-destructive opacity-60" />
+              <p className="text-sm">Erro ao carregar faturas. Verifique suas permissões.</p>
+            </div>
           ) : invoices.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">Nenhuma fatura encontrada.</div>
           ) : (
@@ -255,11 +260,12 @@ export default function AdminBillingPage() {
           <div className="space-y-3">
             <div>
               <Label className="text-xs">Agência *</Label>
-              <Select value={form.tenantId} onValueChange={v => setForm(f => ({ ...f, tenantId: v }))}>
+              <Select value={form.tenantId || "none"} onValueChange={v => setForm(f => ({ ...f, tenantId: v === "none" ? "" : v }))}>
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Selecionar agência" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none" disabled>Selecionar agência</SelectItem>
                   {tenantsData.map(t => (
                     <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                   ))}

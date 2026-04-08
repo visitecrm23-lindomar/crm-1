@@ -13,7 +13,8 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { TrendingUp, Building2, AlertCircle } from "lucide-react";
+import { TrendingUp, Building2, AlertCircle, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 function formatBRL(val: number) {
   return val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -21,9 +22,10 @@ function formatBRL(val: number) {
 
 export default function AdminMetricsPage() {
   const { data: stats } = useGetAdminStats();
-  const { data: growth = [], isLoading: growthLoading } = useAdminGrowthMetrics();
-  const { data: mrr = [], isLoading: mrrLoading } = useAdminMrrMetrics();
-  const { data: churn = [], isLoading: churnLoading } = useAdminChurnMetrics();
+  const { data: growth = [], isLoading: growthLoading, isError: growthError } = useAdminGrowthMetrics();
+  const { data: mrr = [], isLoading: mrrLoading, isError: mrrError } = useAdminMrrMetrics();
+  const { data: churn = [], isLoading: churnLoading, isError: churnError } = useAdminChurnMetrics();
+  const anyError = growthError || mrrError || churnError;
 
   const currentMrr = mrr[mrr.length - 1]?.mrr ?? 0;
   const previousMrr = mrr[mrr.length - 2]?.mrr ?? 0;
@@ -40,6 +42,17 @@ export default function AdminMetricsPage() {
         <h1 className="text-2xl font-bold">Métricas do SaaS</h1>
         <p className="text-sm text-muted-foreground mt-1">Análise de crescimento, receita e churn dos últimos 12 meses</p>
       </div>
+
+      {anyError && (
+        <div className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>Erro ao carregar algumas métricas. Verifique suas permissões ou</span>
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-destructive" onClick={() => window.location.reload()}>
+            <RefreshCw className="w-3 h-3 mr-1" />
+            tente novamente
+          </Button>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

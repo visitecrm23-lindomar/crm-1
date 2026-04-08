@@ -20,7 +20,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Settings, Zap } from "lucide-react";
+import { Plus, Trash2, Settings, Zap, AlertCircle } from "lucide-react";
 
 const EMPTY_FLAG = {
   key: "",
@@ -32,7 +32,7 @@ const EMPTY_FLAG = {
 
 export default function AdminSettingsPage() {
   const { toast } = useToast();
-  const { data: flags = [], isLoading } = useFeatureFlags();
+  const { data: flags = [], isLoading, isError } = useFeatureFlags();
   const createFlag = useCreateFeatureFlag();
   const updateFlag = useUpdateFeatureFlag();
   const deleteFlag = useDeleteFeatureFlag();
@@ -108,6 +108,11 @@ export default function AdminSettingsPage() {
         <CardContent>
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground animate-pulse">Carregando...</div>
+          ) : isError ? (
+            <div className="text-center py-10 text-muted-foreground">
+              <AlertCircle className="w-8 h-8 mx-auto mb-2 text-destructive opacity-60" />
+              <p className="text-sm">Erro ao carregar feature flags. Verifique suas permissões.</p>
+            </div>
           ) : flags.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground">
               <Zap className="w-8 h-8 mx-auto mb-2 opacity-30" />
