@@ -19,7 +19,7 @@
  *
  * Usage in app.ts:
  *   import { CLERK_PROXY_PATH, clerkProxyMiddleware } from "./middlewares/clerkProxyMiddleware";
- *   app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
+ *   app.use(CLERK_PROXY_PATH, clerkProxyMiddleware(isAllowedOrigin));
  */
 
 import { createProxyMiddleware } from "http-proxy-middleware";
@@ -28,14 +28,16 @@ import type { RequestHandler } from "express";
 const CLERK_FAPI = "https://frontend-api.clerk.dev";
 export const CLERK_PROXY_PATH = "/api/__clerk";
 
-export function clerkProxyMiddleware(allowedOrigins?: Set<string>): RequestHandler {
+export function clerkProxyMiddleware(isAllowedOrigin?: (origin: string) => boolean): RequestHandler {
   const secretKey = process.env.CLERK_SECRET_KEY;
   if (!secretKey) {
+    console.warn("[clerkProxy] CLERK_SECRET_KEY is not set. Clerk proxy disabled — auth will not work.");
     return (_req, _res, next) => next();
   }
 
   const configuredProxyUrl = process.env.CLERK_PROXY_URL;
   if (!configuredProxyUrl) {
+    console.warn("[clerkProxy] CLERK_PROXY_URL is not set. Clerk proxy disabled — auth will not work.");
     return (_req, _res, next) => next();
   }
 
@@ -69,7 +71,7 @@ export function clerkProxyMiddleware(allowedOrigins?: Set<string>): RequestHandl
       },
       proxyRes: (proxyRes, req) => {
         const browserOrigin = (req as { headers: Record<string, string> }).headers["origin"];
-        if (browserOrigin && (!allowedOrigins || allowedOrigins.has(browserOrigin))) {
+        if (browserOrigin && (!isAllowedOrigin || isAllowedOrigin(browserOrigin))) {
           proxyRes.headers["access-control-allow-origin"] = browserOrigin;
           proxyRes.headers["access-control-allow-credentials"] = "true";
           proxyRes.headers["vary"] = "origin";
