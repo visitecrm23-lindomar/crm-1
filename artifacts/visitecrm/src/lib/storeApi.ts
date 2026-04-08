@@ -136,7 +136,7 @@ export const publicStoreApi = {
   getOrder: (slug: string, orderNumber: string) =>
     publicReq<StoreOrder>(
       "GET",
-      `/public/store/${slug}/orders/${orderNumber}`
+      `/public/store/${slug}/orders/${encodeURIComponent(orderNumber)}`
     ),
   validateCoupon: (
     slug: string,
@@ -363,6 +363,7 @@ export interface StoreOrder {
   paymentStatus: string;
   paymentData?: Record<string, unknown> | null;
   notes?: string | null;
+  customerNotes?: string | null;
   createdAt: string;
   updatedAt: string;
 }

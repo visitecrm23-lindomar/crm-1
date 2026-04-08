@@ -3,6 +3,7 @@ import {
   useContext,
   useState,
   useCallback,
+  useEffect,
   ReactNode,
 } from "react";
 
@@ -33,9 +34,47 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | null>(null);
 
-export function CartProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<CartItem[]>([]);
+function storageKey(slug: string) {
+  return `cart_${slug}`;
+}
+
+function loadItems(slug: string): CartItem[] {
+  try {
+    const raw = localStorage.getItem(storageKey(slug));
+    if (!raw) return [];
+    return JSON.parse(raw) as CartItem[];
+  } catch {
+    return [];
+  }
+}
+
+function saveItems(slug: string, items: CartItem[]) {
+  try {
+    localStorage.setItem(storageKey(slug), JSON.stringify(items));
+  } catch {
+    // ignore
+  }
+}
+
+export function CartProvider({ children, slug }: { children: ReactNode; slug?: string }) {
+  const [items, setItems] = useState<CartItem[]>(() =>
+    slug ? loadItems(slug) : []
+  );
   const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (slug) {
+      setItems(loadItems(slug));
+    } else {
+      setItems([]);
+    }
+  }, [slug]);
+
+  useEffect(() => {
+    if (slug) {
+      saveItems(slug, items);
+    }
+  }, [items, slug]);
 
   const addItem = useCallback(
     (item: Omit<CartItem, "quantity"> & { quantity?: number }) => {

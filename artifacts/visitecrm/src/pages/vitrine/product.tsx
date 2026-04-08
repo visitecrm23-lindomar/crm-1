@@ -16,6 +16,7 @@ import {
   Loader2,
   ChevronLeft as PrevIcon,
   ChevronRight as NextIcon,
+  MessageCircle,
 } from "lucide-react";
 
 function StarRating({ rating }: { rating: number }) {
@@ -50,6 +51,7 @@ export default function VitrineProduct({
   const [imgIndex, setImgIndex] = useState(0);
   const [selectedVariant, setSelectedVariant] = useState<{ variantName: string; label: string; price: number } | null>(null);
   const [qty, setQty] = useState(1);
+  const [activeTab, setActiveTab] = useState<"descricao" | "inclui" | "nao_inclui" | "requisitos" | "destaques">("descricao");
 
   useEffect(() => {
     setLoading(true);
@@ -72,7 +74,7 @@ export default function VitrineProduct({
     return (
       <div className="max-w-4xl mx-auto px-4 py-20 text-center">
         <h2 className="text-2xl font-bold mb-2">Produto não encontrado</h2>
-        <Button variant="outline" onClick={() => navigate(`/loja/${slug}/catalogo`)}>
+        <Button variant="outline" onClick={() => navigate(`/loja/${slug}/produtos`)}>
           Ver Catálogo
         </Button>
       </div>
@@ -94,15 +96,36 @@ export default function VitrineProduct({
     openCart();
   }
 
+  function handleWhatsApp() {
+    const phone = store.contactWhatsapp?.replace(/\D/g, "");
+    if (!phone) return;
+    const variant = selectedVariant ? ` (${selectedVariant.label})` : "";
+    const text = encodeURIComponent(
+      `Olá! Tenho interesse no pacote *${product!.name}*${variant} — R$ ${effectivePrice.toFixed(2)}. Poderia me dar mais informações?`
+    );
+    window.open(`https://wa.me/${phone}?text=${text}`, "_blank", "noopener,noreferrer");
+  }
+
   const avgRating =
     product.reviews.length > 0
       ? product.reviews.reduce((a, r) => a + r.rating, 0) / product.reviews.length
       : 0;
 
+  const tabs = [
+    { key: "descricao" as const, label: "Descrição", show: !!product.description },
+    { key: "inclui" as const, label: "O que inclui", show: product.includes.length > 0 },
+    { key: "nao_inclui" as const, label: "Não inclui", show: product.excludes.length > 0 },
+    { key: "requisitos" as const, label: "Requisitos", show: product.requirements.length > 0 },
+    { key: "destaques" as const, label: "Destaques", show: product.features.length > 0 },
+  ].filter((t) => t.show);
+
+  const defaultTab = tabs[0]?.key ?? "descricao";
+  const currentTab = tabs.find((t) => t.key === activeTab) ? activeTab : defaultTab;
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       <button
-        onClick={() => navigate(`/loja/${slug}/catalogo`)}
+        onClick={() => navigate(`/loja/${slug}/produtos`)}
         className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6"
       >
         <ChevronLeft className="w-4 h-4" />
@@ -205,7 +228,29 @@ export default function VitrineProduct({
                 })}
               </div>
             )}
+            {product.returnDate && (
+              <div className="flex items-center gap-1">
+                <Calendar className="w-4 h-4" />
+                Volta:{" "}
+                {new Date(product.returnDate + "T12:00:00").toLocaleDateString("pt-BR", {
+                  day: "2-digit",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </div>
+            )}
           </div>
+
+          {product.trackInventory && product.stockQuantity != null && product.stockQuantity <= 10 && product.stockQuantity > 0 && (
+            <p className="text-sm text-orange-500 font-medium mb-3">
+              ⚡ Apenas {product.stockQuantity} vagas disponíveis!
+            </p>
+          )}
+          {product.trackInventory && product.stockQuantity != null && product.stockQuantity <= 0 && (
+            <p className="text-sm text-red-500 font-medium mb-3">
+              Esgotado
+            </p>
+          )}
 
           {product.variants.length > 0 && (
             <div className="mb-4">
@@ -257,7 +302,7 @@ export default function VitrineProduct({
             </span>
           </div>
 
-          <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center gap-3 mb-4">
             <div className="flex items-center border rounded-lg">
               <button
                 onClick={() => setQty((q) => Math.max(1, q - 1))}
@@ -277,11 +322,23 @@ export default function VitrineProduct({
               className="flex-1 h-11 text-white font-semibold"
               style={{ backgroundColor: store.primaryColor }}
               onClick={handleAddToCart}
+              disabled={product.trackInventory && product.stockQuantity != null && product.stockQuantity <= 0}
             >
               <ShoppingCart className="w-5 h-5 mr-2" />
               Adicionar ao Carrinho
             </Button>
           </div>
+
+          {store.contactWhatsapp && (
+            <Button
+              variant="outline"
+              className="w-full h-11 font-semibold border-green-500 text-green-600 hover:bg-green-50 mb-4"
+              onClick={handleWhatsApp}
+            >
+              <MessageCircle className="w-5 h-5 mr-2" />
+              Comprar pelo WhatsApp
+            </Button>
+          )}
 
           {product.reviews.length > 0 && (
             <div className="flex items-center gap-2 text-sm">
@@ -295,20 +352,32 @@ export default function VitrineProduct({
         </div>
       </div>
 
-      <div className="mt-10 grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          {product.description && (
-            <section>
-              <h2 className="text-xl font-bold mb-4">Sobre o Pacote</h2>
+      {tabs.length > 0 && (
+        <div className="mt-10">
+          <div className="border-b flex gap-0 overflow-x-auto">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`px-5 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                  currentTab === tab.key
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="pt-6">
+            {currentTab === "descricao" && product.description && (
               <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed whitespace-pre-wrap">
                 {product.description}
               </div>
-            </section>
-          )}
+            )}
 
-          {product.includes.length > 0 && (
-            <section>
-              <h2 className="text-xl font-bold mb-4">O que está incluído</h2>
+            {currentTab === "inclui" && product.includes.length > 0 && (
               <ul className="space-y-2">
                 {product.includes.map((item, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm">
@@ -317,12 +386,9 @@ export default function VitrineProduct({
                   </li>
                 ))}
               </ul>
-            </section>
-          )}
+            )}
 
-          {product.excludes.length > 0 && (
-            <section>
-              <h2 className="text-xl font-bold mb-4">Não incluído</h2>
+            {currentTab === "nao_inclui" && product.excludes.length > 0 && (
               <ul className="space-y-2">
                 {product.excludes.map((item, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm">
@@ -331,42 +397,20 @@ export default function VitrineProduct({
                   </li>
                 ))}
               </ul>
-            </section>
-          )}
+            )}
 
-          {product.reviews.length > 0 && (
-            <section>
-              <h2 className="text-xl font-bold mb-4">Avaliações dos Clientes</h2>
-              <div className="space-y-4">
-                {product.reviews.map((r) => (
-                  <div key={r.id} className="p-4 rounded-xl border">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm">{r.customerName}</span>
-                        <StarRating rating={r.rating} />
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(r.createdAt).toLocaleDateString("pt-BR")}
-                      </span>
-                    </div>
-                    {r.comment && <p className="text-sm text-muted-foreground">{r.comment}</p>}
-                    {r.reply && (
-                      <div className="mt-3 pl-3 border-l-2 border-primary/30">
-                        <p className="text-xs font-medium text-primary mb-1">Resposta da Agência:</p>
-                        <p className="text-sm text-muted-foreground">{r.reply}</p>
-                      </div>
-                    )}
-                  </div>
+            {currentTab === "requisitos" && product.requirements.length > 0 && (
+              <ul className="space-y-2">
+                {product.requirements.map((r, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                    {r}
+                  </li>
                 ))}
-              </div>
-            </section>
-          )}
-        </div>
+              </ul>
+            )}
 
-        {product.features.length > 0 && (
-          <aside>
-            <div className="sticky top-20 rounded-xl border p-5 space-y-3">
-              <h3 className="font-bold">Destaques do Pacote</h3>
+            {currentTab === "destaques" && product.features.length > 0 && (
               <ul className="space-y-2">
                 {product.features.map((f, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm">
@@ -375,10 +419,38 @@ export default function VitrineProduct({
                   </li>
                 ))}
               </ul>
-            </div>
-          </aside>
-        )}
-      </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {product.reviews.length > 0 && (
+        <div className="mt-10">
+          <h2 className="text-xl font-bold mb-4">Avaliações dos Clientes</h2>
+          <div className="space-y-4">
+            {product.reviews.map((r) => (
+              <div key={r.id} className="p-4 rounded-xl border">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm">{r.customerName}</span>
+                    <StarRating rating={r.rating} />
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(r.createdAt).toLocaleDateString("pt-BR")}
+                  </span>
+                </div>
+                {r.comment && <p className="text-sm text-muted-foreground">{r.comment}</p>}
+                {r.reply && (
+                  <div className="mt-3 pl-3 border-l-2 border-primary/30">
+                    <p className="text-xs font-medium text-primary mb-1">Resposta da Agência:</p>
+                    <p className="text-sm text-muted-foreground">{r.reply}</p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

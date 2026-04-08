@@ -1,4 +1,4 @@
-import { useState, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { useParams } from "wouter";
 import { publicStoreApi, PublicStore, StoreOrder } from "@/lib/storeApi";
 import { Button } from "@/components/ui/button";
@@ -57,14 +57,14 @@ export default function VitrineOrderTracking({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function search(e?: FormEvent) {
-    e?.preventDefault();
-    if (!orderNumber.trim()) return;
+  async function searchByNumber(num: string) {
+    const trimmed = num.trim().toUpperCase();
+    if (!trimmed) return;
     setLoading(true);
     setError(null);
     setOrder(null);
     try {
-      const o = await publicStoreApi.getOrder(slug, orderNumber.trim().toUpperCase());
+      const o = await publicStoreApi.getOrder(slug, trimmed);
       setOrder(o);
     } catch {
       setError("Pedido não encontrado. Verifique o número e tente novamente.");
@@ -72,6 +72,17 @@ export default function VitrineOrderTracking({
       setLoading(false);
     }
   }
+
+  async function search(e?: FormEvent) {
+    e?.preventDefault();
+    await searchByNumber(orderNumber);
+  }
+
+  useEffect(() => {
+    if (initialOrderNumber) {
+      searchByNumber(initialOrderNumber);
+    }
+  }, [initialOrderNumber]);
 
   const statusInfo = order
     ? STATUS_INFO[order.status] ?? {
@@ -124,7 +135,7 @@ export default function VitrineOrderTracking({
             {statusInfo.icon}
             <div>
               <p className="font-bold">{statusInfo.label}</p>
-              <p className="text-sm opacity-75">Pedido #{order.orderNumber}</p>
+              <p className="text-sm opacity-75">Pedido {order.orderNumber}</p>
             </div>
           </div>
 
@@ -215,11 +226,11 @@ export default function VitrineOrderTracking({
             </CardContent>
           </Card>
 
-          {order.notes && (
+          {(order.notes || order.customerNotes) && (
             <Card>
               <CardContent className="pt-4">
                 <p className="text-sm text-muted-foreground">
-                  <strong>Observações:</strong> {order.notes}
+                  <strong>Observações:</strong> {order.notes || order.customerNotes}
                 </p>
               </CardContent>
             </Card>

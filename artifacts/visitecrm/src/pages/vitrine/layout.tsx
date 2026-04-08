@@ -1,19 +1,60 @@
 import { ReactNode, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useCart } from "@/contexts/CartContext";
-import { PublicStore } from "@/lib/storeApi";
+import { publicStoreApi, PublicStore, CouponValidation } from "@/lib/storeApi";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { ShoppingCart, X, Minus, Plus, Trash2, Phone, Mail, Instagram, Facebook, Youtube, MapPin } from "lucide-react";
+import {
+  ShoppingCart,
+  X,
+  Minus,
+  Plus,
+  Trash2,
+  Phone,
+  Mail,
+  Instagram,
+  Facebook,
+  Youtube,
+  MapPin,
+  Tag,
+  CheckCircle,
+  Loader2,
+  Menu,
+} from "lucide-react";
 
 function CartDrawer({ slug, store }: { slug: string; store: PublicStore }) {
   const { items, isOpen, closeCart, updateQuantity, removeItem, total, clearCart } = useCart();
   const [, navigate] = useLocation();
+  const [couponCode, setCouponCode] = useState("");
+  const [couponResult, setCouponResult] = useState<CouponValidation | null>(null);
+  const [validating, setValidating] = useState(false);
+
+  const discount = couponResult?.valid ? Number(couponResult.discountAmount ?? 0) : 0;
+  const finalTotal = Math.max(0, total - discount);
+
+  async function validateCoupon() {
+    if (!couponCode) return;
+    setValidating(true);
+    try {
+      const res = await publicStoreApi.validateCoupon(slug, couponCode, total);
+      setCouponResult(res);
+    } catch {
+      setCouponResult({ valid: false, error: "Cupom inválido" });
+    } finally {
+      setValidating(false);
+    }
+  }
+
+  function removeCoupon() {
+    setCouponResult(null);
+    setCouponCode("");
+  }
 
   function goCheckout() {
     closeCart();
@@ -89,10 +130,62 @@ function CartDrawer({ slug, store }: { slug: string; store: PublicStore }) {
                 );
               })}
             </div>
+
             <div className="border-t pt-4 space-y-3">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                  <Tag className="w-3 h-3" /> Cupom de Desconto
+                </p>
+                {couponResult?.valid ? (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+                    <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-xs font-bold text-green-700 font-mono">{couponResult.code}</p>
+                      <p className="text-xs text-green-600">
+                        -R$ {(couponResult.discountAmount ?? 0).toFixed(2)}
+                      </p>
+                    </div>
+                    <button onClick={removeCoupon} className="text-green-600 hover:text-green-800">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                      placeholder="CUPOM"
+                      className="font-mono uppercase h-8 text-sm"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={validateCoupon}
+                      disabled={!couponCode || validating}
+                      className="h-8 px-3"
+                    >
+                      {validating ? <Loader2 className="w-3 h-3 animate-spin" /> : "Aplicar"}
+                    </Button>
+                  </div>
+                )}
+                {couponResult && !couponResult.valid && (
+                  <p className="text-xs text-red-500">{couponResult.error}</p>
+                )}
+              </div>
+
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>Subtotal</span>
+                <span>R$ {total.toFixed(2)}</span>
+              </div>
+              {discount > 0 && (
+                <div className="flex justify-between text-sm text-green-600">
+                  <span>Desconto</span>
+                  <span>-R$ {discount.toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between font-bold text-lg">
                 <span>Total</span>
-                <span>R$ {total.toFixed(2)}</span>
+                <span>R$ {finalTotal.toFixed(2)}</span>
               </div>
               <Button
                 className="w-full"
@@ -101,7 +194,7 @@ function CartDrawer({ slug, store }: { slug: string; store: PublicStore }) {
               >
                 Finalizar Pedido
               </Button>
-              <Button variant="outline" className="w-full" onClick={clearCart}>
+              <Button variant="outline" className="w-full text-sm" onClick={clearCart}>
                 Limpar Carrinho
               </Button>
             </div>
@@ -123,6 +216,7 @@ export default function VitrineLayout({
 }) {
   const { itemCount, openCart } = useCart();
   const [, navigate] = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -159,10 +253,16 @@ export default function VitrineLayout({
               Início
             </a>
             <a
-              href={`/loja/${slug}/catalogo`}
+              href={`/loja/${slug}/produtos`}
               className="text-white/90 hover:text-white text-sm font-medium transition-colors"
             >
               Pacotes
+            </a>
+            <a
+              href={`/loja/${slug}/consultar-pedido`}
+              className="text-white/90 hover:text-white text-sm font-medium transition-colors"
+            >
+              Meu Pedido
             </a>
             {store.contactWhatsapp && (
               <a
@@ -171,32 +271,76 @@ export default function VitrineLayout({
                 rel="noopener noreferrer"
                 className="text-white/90 hover:text-white text-sm font-medium transition-colors"
               >
-                Contato
+                WhatsApp
               </a>
             )}
           </nav>
 
-          <button
-            onClick={openCart}
-            className="relative flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            <ShoppingCart className="w-5 h-5" />
-            <span className="hidden sm:block text-sm font-medium">Carrinho</span>
-            {itemCount > 0 && (
-              <span
-                className="absolute -top-2 -right-2 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                style={{ backgroundColor: store.accentColor }}
-              >
-                {itemCount}
-              </span>
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={openCart}
+              className="relative flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              <ShoppingCart className="w-5 h-5" />
+              <span className="hidden sm:block text-sm font-medium">Carrinho</span>
+              {itemCount > 0 && (
+                <span
+                  className="absolute -top-2 -right-2 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                  style={{ backgroundColor: store.accentColor }}
+                >
+                  {itemCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg bg-white/10 hover:bg-white/20 text-white"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+          </div>
         </div>
+
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-white/10 px-4 py-3 space-y-2">
+            <a
+              href={`/loja/${slug}`}
+              className="block text-white/90 hover:text-white text-sm font-medium py-1"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Início
+            </a>
+            <a
+              href={`/loja/${slug}/produtos`}
+              className="block text-white/90 hover:text-white text-sm font-medium py-1"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Pacotes
+            </a>
+            <a
+              href={`/loja/${slug}/consultar-pedido`}
+              className="block text-white/90 hover:text-white text-sm font-medium py-1"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Meu Pedido
+            </a>
+            {store.contactWhatsapp && (
+              <a
+                href={`https://wa.me/${store.contactWhatsapp.replace(/\D/g, "")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-white/90 hover:text-white text-sm font-medium py-1"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                WhatsApp
+              </a>
+            )}
+          </div>
+        )}
       </header>
 
-      <main className="flex-1">
-        {children}
-      </main>
+      <main className="flex-1">{children}</main>
 
       <footer className="border-t bg-gray-900 text-gray-300">
         <div className="max-w-6xl mx-auto px-4 py-10 grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -205,35 +349,7 @@ export default function VitrineLayout({
             {store.description && (
               <p className="text-sm leading-relaxed">{store.description}</p>
             )}
-          </div>
-          <div>
-            <h3 className="text-white font-bold mb-3">Contato</h3>
-            <div className="space-y-2 text-sm">
-              {store.contactEmail && (
-                <div className="flex items-center gap-2">
-                  <Mail className="w-4 h-4" />
-                  <a href={`mailto:${store.contactEmail}`} className="hover:text-white">
-                    {store.contactEmail}
-                  </a>
-                </div>
-              )}
-              {store.contactPhone && (
-                <div className="flex items-center gap-2">
-                  <Phone className="w-4 h-4" />
-                  <span>{store.contactPhone}</span>
-                </div>
-              )}
-              {store.contactAddress && (
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4" />
-                  <span>{store.contactAddress}</span>
-                </div>
-              )}
-            </div>
-          </div>
-          <div>
-            <h3 className="text-white font-bold mb-3">Redes Sociais</h3>
-            <div className="flex gap-3">
+            <div className="flex gap-3 mt-4">
               {store.socialInstagram && (
                 <a
                   href={`https://instagram.com/${store.socialInstagram.replace("@", "")}`}
@@ -266,9 +382,56 @@ export default function VitrineLayout({
               )}
             </div>
           </div>
+          <div>
+            <h3 className="text-white font-bold mb-3">Links Rápidos</h3>
+            <div className="space-y-2 text-sm">
+              <div>
+                <a href={`/loja/${slug}`} className="hover:text-white">
+                  Início
+                </a>
+              </div>
+              <div>
+                <a href={`/loja/${slug}/produtos`} className="hover:text-white">
+                  Ver Pacotes
+                </a>
+              </div>
+              <div>
+                <a href={`/loja/${slug}/consultar-pedido`} className="hover:text-white">
+                  Consultar Pedido
+                </a>
+              </div>
+            </div>
+          </div>
+          <div>
+            <h3 className="text-white font-bold mb-3">Contato</h3>
+            <div className="space-y-2 text-sm">
+              {store.contactEmail && (
+                <div className="flex items-center gap-2">
+                  <Mail className="w-4 h-4" />
+                  <a href={`mailto:${store.contactEmail}`} className="hover:text-white">
+                    {store.contactEmail}
+                  </a>
+                </div>
+              )}
+              {store.contactPhone && (
+                <div className="flex items-center gap-2">
+                  <Phone className="w-4 h-4" />
+                  <a href={`tel:${store.contactPhone}`} className="hover:text-white">
+                    {store.contactPhone}
+                  </a>
+                </div>
+              )}
+              {store.contactAddress && (
+                <div className="flex items-start gap-2">
+                  <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>{store.contactAddress}</span>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
         <div className="border-t border-gray-800 text-center py-4 text-xs text-gray-500">
-          {store.name} · Powered by VisiteCRM
+          © {new Date().getFullYear()} {store.name} · Powered by VisiteCRM
         </div>
       </footer>
 

@@ -45,7 +45,7 @@ function ProductCard({
     <div className="bg-white rounded-xl border shadow-sm overflow-hidden hover:shadow-md transition-shadow group">
       <div
         className="relative h-48 bg-gradient-to-br from-blue-400 to-blue-600 cursor-pointer overflow-hidden"
-        onClick={() => navigate(`/loja/${slug}/produto/${product.slug}`)}
+        onClick={() => navigate(`/loja/${slug}/produtos/${product.slug}`)}
       >
         {product.images[0] ? (
           <img
@@ -78,7 +78,7 @@ function ProductCard({
       <div className="p-4">
         <h3
           className="font-bold text-sm mb-1 line-clamp-2 cursor-pointer hover:underline"
-          onClick={() => navigate(`/loja/${slug}/produto/${product.slug}`)}
+          onClick={() => navigate(`/loja/${slug}/produtos/${product.slug}`)}
         >
           {product.name}
         </h3>
@@ -172,7 +172,7 @@ export default function VitrineHome({
             )}
             <Button
               size="lg"
-              onClick={() => navigate(`/loja/${slug}/catalogo`)}
+              onClick={() => navigate(`/loja/${slug}/produtos`)}
               className="text-white font-bold"
               style={{ backgroundColor: store.accentColor }}
             >
@@ -198,7 +198,7 @@ export default function VitrineHome({
           )}
           <Button
             size="lg"
-            onClick={() => navigate(`/loja/${slug}/catalogo`)}
+            onClick={() => navigate(`/loja/${slug}/produtos`)}
             className="bg-white font-bold"
             style={{ color: store.primaryColor }}
           >
@@ -217,7 +217,7 @@ export default function VitrineHome({
                 <button
                   key={cat.id}
                   onClick={() =>
-                    navigate(`/loja/${slug}/catalogo?categoryId=${cat.id}`)
+                    navigate(`/loja/${slug}/produtos?categoryId=${cat.id}`)
                   }
                   className="px-4 py-2 rounded-full border hover:bg-muted transition-colors text-sm font-medium flex items-center gap-2"
                 >
@@ -242,7 +242,7 @@ export default function VitrineHome({
               <h2 className="text-2xl font-bold">Pacotes em Destaque</h2>
               <Button
                 variant="ghost"
-                onClick={() => navigate(`/loja/${slug}/catalogo`)}
+                onClick={() => navigate(`/loja/${slug}/produtos`)}
                 className="gap-1"
               >
                 Ver todos

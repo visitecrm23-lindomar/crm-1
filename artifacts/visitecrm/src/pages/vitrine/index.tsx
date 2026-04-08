@@ -68,10 +68,10 @@ function StoreRouter({ slug }: { slug: string }) {
         <Route path={`/loja/${slug}`}>
           <VitrineHome slug={slug} store={store} />
         </Route>
-        <Route path={`/loja/${slug}/catalogo`}>
+        <Route path={`/loja/${slug}/produtos`}>
           <VitrineCatalog slug={slug} store={store} />
         </Route>
-        <Route path={`/loja/${slug}/produto/:productSlug`}>
+        <Route path={`/loja/${slug}/produtos/:productSlug`}>
           {(params: Record<string, string>) => (
             <VitrineProduct
               slug={slug}
@@ -88,7 +88,7 @@ function StoreRouter({ slug }: { slug: string }) {
             <VitrineOrderTracking
               slug={slug}
               store={store}
-              initialOrderNumber={params.orderNumber}
+              initialOrderNumber={decodeURIComponent(params.orderNumber ?? "")}
             />
           )}
         </Route>
@@ -112,7 +112,7 @@ export default function Vitrine() {
   }
 
   return (
-    <CartProvider>
+    <CartProvider slug={slug}>
       <StoreRouter slug={slug} />
     </CartProvider>
   );

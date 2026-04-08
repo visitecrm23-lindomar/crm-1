@@ -8,7 +8,7 @@ import {
   storeOrderItemsTable,
   storeCouponsTable,
 } from "@workspace/db";
-import { eq, and, desc, asc, ilike, or } from "drizzle-orm";
+import { eq, and, desc, asc, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 
@@ -112,12 +112,17 @@ router.get("/public/store/:slug/products", async (req, res): Promise<void> => {
       res.status(503).json({ error: "Store is under maintenance", message: store.maintenanceMessage });
       return;
     }
-    const { category, type, featured, search, sort = "newest" } = req.query;
+    const {
+      category, categoryId, type, featured, search, sort = "newest",
+      destination, minPrice, maxPrice,
+      page: pageStr, limit: limitStr,
+    } = req.query;
     const conditions = [
       eq(storeProductsTable.storeId, store.id),
       eq(storeProductsTable.status, "active"),
     ];
-    if (category) conditions.push(eq(storeProductsTable.categoryId, category as string));
+    const categoryFilter = (categoryId ?? category) as string | undefined;
+    if (categoryFilter) conditions.push(eq(storeProductsTable.categoryId, categoryFilter));
     if (type) conditions.push(eq(storeProductsTable.type, type as string));
     if (featured === "true") conditions.push(eq(storeProductsTable.isFeatured, true));
     if (search) {
@@ -126,12 +131,19 @@ router.get("/public/store/:slug/products", async (req, res): Promise<void> => {
         ilike(storeProductsTable.description, `%${search}%`),
       )!);
     }
+    if (destination && destination !== "all") {
+      conditions.push(eq(storeProductsTable.destination, destination as string));
+    }
+    const minPriceNum = minPrice ? Number(minPrice) : NaN;
+    const maxPriceNum = maxPrice ? Number(maxPrice) : NaN;
+    if (!isNaN(minPriceNum) && isFinite(minPriceNum)) conditions.push(sql`CAST(${storeProductsTable.price} AS NUMERIC) >= ${minPriceNum}`);
+    if (!isNaN(maxPriceNum) && isFinite(maxPriceNum)) conditions.push(sql`CAST(${storeProductsTable.price} AS NUMERIC) <= ${maxPriceNum}`);
     let orderBy;
     if (sort === "price_asc") orderBy = asc(storeProductsTable.price);
     else if (sort === "price_desc") orderBy = desc(storeProductsTable.price);
     else if (sort === "popular") orderBy = desc(storeProductsTable.salesCount);
     else orderBy = desc(storeProductsTable.publishedAt);
-    const products = await db.select({
+    const selectFields = {
       id: storeProductsTable.id,
       type: storeProductsTable.type,
       name: storeProductsTable.name,
@@ -157,10 +169,18 @@ router.get("/public/store/:slug/products", async (req, res): Promise<void> => {
       trackInventory: storeProductsTable.trackInventory,
       stockQuantity: storeProductsTable.stockQuantity,
       publishedAt: storeProductsTable.publishedAt,
-    }).from(storeProductsTable)
-      .where(and(...conditions))
-      .orderBy(orderBy);
-    res.json(products);
+    };
+    const whereClause = and(...conditions);
+    const limit = limitStr ? Math.min(Number(limitStr) || 20, 200) : undefined;
+    const page = limit ? Math.max(Number(pageStr) || 1, 1) : 1;
+    const offset = limit ? (page - 1) * limit : 0;
+    const [countResult, products] = await Promise.all([
+      db.select({ count: sql<number>`COUNT(*)` }).from(storeProductsTable).where(whereClause),
+      limit
+        ? db.select(selectFields).from(storeProductsTable).where(whereClause).orderBy(orderBy).limit(limit).offset(offset)
+        : db.select(selectFields).from(storeProductsTable).where(whereClause).orderBy(orderBy),
+    ]);
+    res.json({ data: products, total: Number(countResult[0]?.count ?? 0), page, limit: limit ?? products.length });
   } catch (err) {
     req.log.error({ err }, "Error listing public store products");
     res.status(500).json({ error: "Internal server error" });
@@ -192,18 +212,22 @@ router.get("/public/store/:slug/products/:productSlug", async (req, res): Promis
 const CreateOrderBody = z.object({
   customerName: z.string().min(1),
   customerEmail: z.string().email(),
-  customerPhone: z.string().min(1),
+  customerPhone: z.string().optional(),
   customerCpf: z.string().optional(),
   customerAddress: z.record(z.string(), z.unknown()).optional(),
   items: z.array(z.object({
     productId: z.string(),
+    productName: z.string().optional(),
     quantity: z.number().int().min(1),
+    unitPrice: z.number().nonnegative().optional(),
+    variantLabel: z.string().optional(),
     variantData: z.record(z.string(), z.unknown()).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   })).min(1),
   couponCode: z.string().optional(),
-  paymentMethod: z.string().min(1),
-  paymentProvider: z.string().min(1),
+  paymentMethod: z.string().optional(),
+  paymentProvider: z.string().optional(),
+  notes: z.string().optional(),
   customerNotes: z.string().optional(),
   ipAddress: z.string().optional(),
   userAgent: z.string().optional(),
@@ -257,7 +281,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
         productName: product.name,
         productType: product.type,
         productImage: product.thumbnail,
-        variant: item.variantData || null,
+        variant: item.variantData || (item.variantLabel ? { label: item.variantLabel } : null),
         price: price.toFixed(2),
         quantity: item.quantity,
         subtotal: lineTotal.toFixed(2),
@@ -302,7 +326,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
       orderNumber,
       customerName: data.customerName,
       customerEmail: data.customerEmail,
-      customerPhone: data.customerPhone,
+      customerPhone: data.customerPhone ?? "",
       ...(data.customerCpf && { customerCpf: data.customerCpf }),
       ...(data.customerAddress && { customerAddress: data.customerAddress }),
       subtotal: subtotal.toFixed(2),
@@ -310,9 +334,10 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
       totalAmount: totalAmount.toFixed(2),
       ...(couponId && { couponId }),
       ...(data.couponCode && { couponCode: data.couponCode }),
-      paymentMethod: data.paymentMethod,
-      paymentProvider: data.paymentProvider,
+      paymentMethod: data.paymentMethod ?? "pending",
+      paymentProvider: data.paymentProvider ?? "manual",
       ...(data.customerNotes && { customerNotes: data.customerNotes }),
+      ...((data.notes && !data.customerNotes) && { customerNotes: data.notes }),
       ...(data.ipAddress && { ipAddress: data.ipAddress }),
       ...(data.userAgent && { userAgent: data.userAgent }),
     });
@@ -379,7 +404,7 @@ router.get("/public/store/:slug/orders/:orderNumber", async (req, res): Promise<
         eq(storeOrdersTable.orderNumber, req.params.orderNumber),
       )).limit(1);
     if (!order) { res.status(404).json({ error: "Order not found" }); return; }
-    const items = await db.select({
+    const rawItems = await db.select({
       id: storeOrderItemsTable.id,
       productId: storeOrderItemsTable.productId,
       productName: storeOrderItemsTable.productName,
@@ -392,6 +417,17 @@ router.get("/public/store/:slug/orders/:orderNumber", async (req, res): Promise<
       total: storeOrderItemsTable.total,
     }).from(storeOrderItemsTable)
       .where(eq(storeOrderItemsTable.orderId, order.id));
+    const items = rawItems.map((item) => {
+      const variantObj = item.variant as Record<string, string> | null;
+      const variantLabel = variantObj
+        ? Object.values(variantObj).join(" / ")
+        : null;
+      return {
+        ...item,
+        unitPrice: parseFloat(item.price ?? "0"),
+        variantLabel,
+      };
+    });
     res.json({ ...order, items });
   } catch (err) {
     req.log.error({ err }, "Error getting public store order");
@@ -405,11 +441,13 @@ router.post("/public/store/:slug/coupons/validate", async (req, res): Promise<vo
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
     const parsed = z.object({
       code: z.string().min(1),
-      cartTotal: z.number().positive(),
+      cartTotal: z.number().nonnegative().optional(),
+      orderTotal: z.number().nonnegative().optional(),
       items: z.array(z.object({ productId: z.string(), quantity: z.number().int() })).optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const { code, cartTotal } = parsed.data;
+    const { code } = parsed.data;
+    const cartTotal = parsed.data.cartTotal ?? parsed.data.orderTotal ?? 0;
     const [coupon] = await db.select().from(storeCouponsTable)
       .where(and(
         eq(storeCouponsTable.storeId, store.id),
@@ -455,7 +493,7 @@ router.post("/public/store/:slug/coupons/validate", async (req, res): Promise<vo
       code: coupon.code,
       type: coupon.type,
       value: coupon.value,
-      discountAmount: discountAmount.toFixed(2),
+      discountAmount: Math.round(discountAmount * 100) / 100,
       description: coupon.description,
     });
   } catch (err) {
