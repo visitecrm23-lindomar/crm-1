@@ -309,7 +309,7 @@ router.delete("/reservations/:id", async (req, res): Promise<void> => {
     if (!existing) return;
 
     await db.transaction(async (tx) => {
-      if (ACTIVE_STATUSES.includes(existing.status)) {
+      if (!CANCELLING_STATUSES.includes(existing.status)) {
         const seatsCount = existing.seats.length;
         if (seatsCount > 0) {
           const wasConfirmed = existing.status === "confirmed";
