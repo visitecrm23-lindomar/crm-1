@@ -321,23 +321,25 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
         total: lineTotal.toFixed(2),
         metadata: item.metadata || null,
       });
-      // Track trip-linked products: accumulate quantity+value per tripId
-      // (storeProductsTable.tripId is UNIQUE so each trip maps to at most one product,
-      // but we aggregate defensively in case that constraint is ever relaxed.)
-      if (product.tripId) {
-        const totalQty = quantityByProductId.get(product.id) ?? item.quantity;
-        const productPrice = parseFloat(product.onSale && product.salePrice ? product.salePrice : product.price);
-        const existing = tripLinkedProducts.get(product.tripId);
-        if (existing) {
-          existing.totalQty += totalQty;
-          existing.totalValue += productPrice * totalQty;
-        } else {
-          tripLinkedProducts.set(product.tripId, {
-            product,
-            totalQty,
-            totalValue: productPrice * totalQty,
-          });
-        }
+    }
+
+    // Build tripLinkedProducts AFTER the items loop, using already-aggregated quantityByProductId.
+    // This prevents double-counting when the same productId appears on multiple lines of data.items.
+    for (const [productId, product] of fetchedProducts) {
+      if (!product.tripId) continue;
+      const totalQty = quantityByProductId.get(productId) ?? 0;
+      if (totalQty <= 0) continue;
+      const productPrice = parseFloat(product.onSale && product.salePrice ? product.salePrice : product.price);
+      const existing = tripLinkedProducts.get(product.tripId);
+      if (existing) {
+        existing.totalQty += totalQty;
+        existing.totalValue += productPrice * totalQty;
+      } else {
+        tripLinkedProducts.set(product.tripId, {
+          product,
+          totalQty,
+          totalValue: productPrice * totalQty,
+        });
       }
     }
 
