@@ -245,7 +245,13 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const data = parsed.data;
 
-    // Phase 1: Validate products, preliminary stock check, build order items
+    // Phase 1: Aggregate quantities per product, validate products, preliminary stock check
+    // Aggregate total requested quantity per productId (handles duplicate lines for same product)
+    const quantityByProductId = new Map<string, number>();
+    for (const item of data.items) {
+      quantityByProductId.set(item.productId, (quantityByProductId.get(item.productId) ?? 0) + item.quantity);
+    }
+
     let subtotal = 0;
     const orderItemsData: Array<{
       id: string;
@@ -265,27 +271,32 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
     const fetchedProducts = new Map<string, typeof storeProductsTable.$inferSelect>();
 
     for (const item of data.items) {
-      const [product] = await db.select().from(storeProductsTable)
-        .where(and(
-          eq(storeProductsTable.id, item.productId),
-          eq(storeProductsTable.storeId, store.id),
-          eq(storeProductsTable.status, "active"),
-        )).limit(1);
-      if (!product) {
-        res.status(400).json({ error: `Product ${item.productId} not found or unavailable` });
-        return;
-      }
-      // Preliminary stock check (fast early rejection; re-validated atomically below)
-      if (product.trackInventory && !product.allowBackorder) {
-        const available = product.stockQuantity ?? 0;
-        if (available < item.quantity) {
-          res.status(400).json({
-            error: `Estoque insuficiente para "${product.name}". Disponível: ${available}`,
-          });
+      // Only fetch product once per unique productId
+      if (!fetchedProducts.has(item.productId)) {
+        const [product] = await db.select().from(storeProductsTable)
+          .where(and(
+            eq(storeProductsTable.id, item.productId),
+            eq(storeProductsTable.storeId, store.id),
+            eq(storeProductsTable.status, "active"),
+          )).limit(1);
+        if (!product) {
+          res.status(400).json({ error: `Product ${item.productId} not found or unavailable` });
           return;
         }
+        // Preliminary stock check using AGGREGATED quantity across all lines (fast early rejection)
+        if (product.trackInventory && !product.allowBackorder) {
+          const totalRequested = quantityByProductId.get(product.id) ?? item.quantity;
+          const available = product.stockQuantity ?? 0;
+          if (available < totalRequested) {
+            res.status(400).json({
+              error: `Estoque insuficiente para "${product.name}". Disponível: ${available}`,
+            });
+            return;
+          }
+        }
+        fetchedProducts.set(product.id, product);
       }
-      fetchedProducts.set(product.id, product);
+      const product = fetchedProducts.get(item.productId)!;
       const price = parseFloat(product.onSale && product.salePrice ? product.salePrice : product.price);
       const lineTotal = price * item.quantity;
       subtotal += lineTotal;
@@ -341,17 +352,21 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
     // Phase 3: Atomic transaction — lock products, validate stock, write everything
     try {
       await db.transaction(async (tx) => {
-        // Re-validate stock with row-level locks to prevent race conditions
+        // Re-validate stock with row-level locks to prevent race conditions.
+        // Lock each unique product once and validate against AGGREGATED quantity.
+        const lockedProductIds = new Set<string>();
         for (const item of data.items) {
           const product = fetchedProducts.get(item.productId)!;
-          if (product.trackInventory && !product.allowBackorder) {
+          if (product.trackInventory && !product.allowBackorder && !lockedProductIds.has(product.id)) {
+            lockedProductIds.add(product.id);
             const lockResult = await tx.execute(
               // Drizzle's tx.execute() returns raw node-postgres QueryResult; cast to access .rows
               sql`SELECT id, stock_quantity FROM store_products WHERE id = ${product.id} FOR UPDATE`
             );
             const row = (lockResult as unknown as { rows: Array<{ id: string; stock_quantity: number | null }> }).rows[0];
             const currentStock = Number(row?.stock_quantity ?? 0);
-            if (currentStock < item.quantity) {
+            const totalRequested = quantityByProductId.get(product.id) ?? 0;
+            if (currentStock < totalRequested) {
               const stockErr = new Error("insufficient_stock");
               (stockErr as Error & Record<string, unknown>).productName = product.name;
               (stockErr as Error & Record<string, unknown>).available = currentStock;
@@ -390,17 +405,21 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
           await tx.insert(storeOrderItemsTable).values(itemData);
         }
 
-        // Decrement stock and update salesCount for each product
+        // Decrement stock and update salesCount — once per unique product using aggregated quantity
+        const updatedProductIds = new Set<string>();
         for (const item of data.items) {
           const product = fetchedProducts.get(item.productId)!;
+          if (updatedProductIds.has(product.id)) continue;
+          updatedProductIds.add(product.id);
+          const totalQty = quantityByProductId.get(product.id) ?? 0;
           if (product.trackInventory) {
             await tx.update(storeProductsTable).set({
-              stockQuantity: sql`GREATEST(0, COALESCE(stock_quantity, 0) - ${item.quantity})`,
-              salesCount: sql`sales_count + ${item.quantity}`,
+              stockQuantity: sql`GREATEST(0, COALESCE(stock_quantity, 0) - ${totalQty})`,
+              salesCount: sql`sales_count + ${totalQty}`,
             }).where(eq(storeProductsTable.id, product.id));
           } else {
             await tx.update(storeProductsTable).set({
-              salesCount: sql`sales_count + ${item.quantity}`,
+              salesCount: sql`sales_count + ${totalQty}`,
             }).where(eq(storeProductsTable.id, product.id));
           }
         }
