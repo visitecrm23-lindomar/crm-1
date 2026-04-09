@@ -188,7 +188,7 @@ export default function AdminSettingsPage() {
             </div>
             <div>
               <Label className="text-xs">URL da Plataforma</Label>
-              <Input defaultValue="https://visite-crm.replit.app" className="h-8 text-sm" readOnly />
+              <Input defaultValue={typeof window !== "undefined" ? window.location.origin : "https://visitecrm.com"} className="h-8 text-sm" readOnly />
             </div>
             <div>
               <Label className="text-xs">Versão</Label>

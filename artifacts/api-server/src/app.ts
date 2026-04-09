@@ -31,10 +31,16 @@ app.use(
 
 const isDev = process.env["NODE_ENV"] !== "production";
 
+const additionalOrigins = (process.env["ADDITIONAL_ORIGINS"] ?? "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 const ALLOWED_ORIGINS = new Set(
   [
     process.env["FRONTEND_URL"],
     process.env["REPLIT_DEV_DOMAIN"] ? `https://${process.env["REPLIT_DEV_DOMAIN"]}` : undefined,
+    ...additionalOrigins,
   ].filter(Boolean) as string[]
 );
 
@@ -90,6 +96,7 @@ const authorizedParties = [
   process.env["FRONTEND_URL"],
   clerkProxyOrigin,
   process.env["REPLIT_DEV_DOMAIN"] ? `https://${process.env["REPLIT_DEV_DOMAIN"]}` : undefined,
+  ...additionalOrigins,
 ].filter(Boolean) as string[];
 
 app.use(clerkMiddleware(authorizedParties.length > 0 ? { authorizedParties } : {}));
