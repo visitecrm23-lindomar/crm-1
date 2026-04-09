@@ -706,7 +706,7 @@ function NewReservationModal({ open, onClose, onSuccess }: { open: boolean; onCl
             </div>
           )}
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button type="button" variant="outline" onClick={() => { setCreateError(null); onClose(); }}>Cancelar</Button>
             <Button type="submit" disabled={createReservation.isPending || !selectedTripId || !selectedClientId}>
               {createReservation.isPending ? "Criando..." : "Criar Reserva"}
             </Button>

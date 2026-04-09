@@ -168,6 +168,7 @@ router.post("/reservations", async (req, res): Promise<void> => {
       const lockResult = await tx.execute(
         sql`SELECT id, available_seats FROM trips WHERE id = ${parsed.data.tripId} AND tenant_id = ${me.tenantId} FOR UPDATE`
       );
+      // Drizzle's tx.execute() returns the raw node-postgres QueryResult; cast to access .rows
       const tripRow = (lockResult as unknown as { rows: Array<{ id: string; available_seats: number }> }).rows[0];
       if (!tripRow) return { error: "Trip not found or not in tenant", status: 400 };
 
