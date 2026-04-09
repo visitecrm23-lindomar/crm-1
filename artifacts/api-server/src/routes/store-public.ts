@@ -321,15 +321,23 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
         total: lineTotal.toFixed(2),
         metadata: item.metadata || null,
       });
-      // Track trip-linked products (accumulate totals across duplicate lines)
+      // Track trip-linked products: accumulate quantity+value per tripId
+      // (storeProductsTable.tripId is UNIQUE so each trip maps to at most one product,
+      // but we aggregate defensively in case that constraint is ever relaxed.)
       if (product.tripId) {
         const totalQty = quantityByProductId.get(product.id) ?? item.quantity;
         const productPrice = parseFloat(product.onSale && product.salePrice ? product.salePrice : product.price);
-        tripLinkedProducts.set(product.tripId, {
-          product,
-          totalQty,
-          totalValue: productPrice * totalQty,
-        });
+        const existing = tripLinkedProducts.get(product.tripId);
+        if (existing) {
+          existing.totalQty += totalQty;
+          existing.totalValue += productPrice * totalQty;
+        } else {
+          tripLinkedProducts.set(product.tripId, {
+            product,
+            totalQty,
+            totalValue: productPrice * totalQty,
+          });
+        }
       }
     }
 
@@ -414,7 +422,8 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
           reservationClientId = newClientId;
         }
       } else {
-        req.log.warn({ tenantId: store.tenantId }, "No active user found for tenant — trip reservation will be skipped");
+        res.status(500).json({ error: "Não foi possível criar a reserva: nenhum usuário ativo encontrado para esta agência" });
+        return;
       }
     }
 
@@ -536,7 +545,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
               status: "pending",
               voucherCode,
               qrCode: `QR-${voucherCode}`,
-              storeOrderId: orderId,
+              storeOrderId: orderNumber,
               createdById: reservationCreatedById,
             });
             // Decrement trip available_seats and increment reserved_seats

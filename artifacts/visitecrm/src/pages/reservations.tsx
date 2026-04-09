@@ -419,7 +419,7 @@ function ReservationDetailModal({ reservationId, open, onClose }: { reservationI
                   <div>
                     <p className="text-xs text-blue-600 font-medium">Origem: Vitrine Online</p>
                     <p className="text-sm text-blue-700">
-                      Pedido: <span className="font-mono font-semibold">{(data as { storeOrderId?: string | null }).storeOrderId}</span>
+                      N° do pedido: <span className="font-mono font-semibold">{(data as { storeOrderId?: string | null }).storeOrderId}</span>
                     </p>
                   </div>
                 </div>
