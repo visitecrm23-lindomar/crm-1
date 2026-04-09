@@ -856,6 +856,14 @@ export interface Supplier {
   addressState?: string | null;
   /** @nullable */
   pixKey?: string | null;
+  /** @nullable */
+  pixType?: string | null;
+  /** @nullable */
+  bankName?: string | null;
+  /** @nullable */
+  bankAgency?: string | null;
+  /** @nullable */
+  bankAccount?: string | null;
   status: string;
   createdAt: string;
 }
@@ -877,6 +885,14 @@ export interface CreateSupplierBody {
   addressState?: string | null;
   /** @nullable */
   pixKey?: string | null;
+  /** @nullable */
+  pixType?: string | null;
+  /** @nullable */
+  bankName?: string | null;
+  /** @nullable */
+  bankAgency?: string | null;
+  /** @nullable */
+  bankAccount?: string | null;
 }
 
 export interface UpdateSupplierBody {
@@ -889,7 +905,17 @@ export interface UpdateSupplierBody {
   /** @nullable */
   email?: string | null;
   /** @nullable */
+  whatsapp?: string | null;
+  /** @nullable */
   pixKey?: string | null;
+  /** @nullable */
+  pixType?: string | null;
+  /** @nullable */
+  bankName?: string | null;
+  /** @nullable */
+  bankAgency?: string | null;
+  /** @nullable */
+  bankAccount?: string | null;
 }
 
 export interface Vehicle {
@@ -907,6 +933,14 @@ export interface Vehicle {
   dailyRate?: number | null;
   /** @nullable */
   photoUrl?: string | null;
+  /** @nullable */
+  driverName?: string | null;
+  /** @nullable */
+  driverPhone?: string | null;
+  /** @nullable */
+  seatLayout?: string | null;
+  /** @nullable */
+  notes?: string | null;
   status: string;
   createdAt: string;
 }
@@ -925,6 +959,14 @@ export interface CreateVehicleBody {
   dailyRate?: number | null;
   /** @nullable */
   photoUrl?: string | null;
+  /** @nullable */
+  driverName?: string | null;
+  /** @nullable */
+  driverPhone?: string | null;
+  /** @nullable */
+  seatLayout?: string | null;
+  /** @nullable */
+  notes?: string | null;
 }
 
 export interface UpdateVehicleBody {
@@ -936,6 +978,15 @@ export interface UpdateVehicleBody {
   capacity?: number | null;
   /** @nullable */
   dailyRate?: number | null;
+  amenities?: string[];
+  /** @nullable */
+  driverName?: string | null;
+  /** @nullable */
+  driverPhone?: string | null;
+  /** @nullable */
+  seatLayout?: string | null;
+  /** @nullable */
+  notes?: string | null;
 }
 
 export interface Accommodation {
@@ -963,6 +1014,7 @@ export interface Accommodation {
   coverImage?: string | null;
   /** @nullable */
   rating?: number | null;
+  gallery?: string[];
   status: string;
   createdAt: string;
 }
@@ -987,6 +1039,7 @@ export interface CreateAccommodationBody {
   amenities?: string[];
   /** @nullable */
   pricePerNight?: number | null;
+  galleryUrls?: string[];
 }
 
 export interface UpdateAccommodationBody {
@@ -998,6 +1051,8 @@ export interface UpdateAccommodationBody {
   pricePerNight?: number | null;
   /** @nullable */
   totalRooms?: number | null;
+  amenities?: string[];
+  galleryUrls?: string[];
 }
 
 export interface Destination {

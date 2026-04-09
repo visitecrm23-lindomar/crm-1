@@ -63,22 +63,6 @@ interface VehicleExtra {
   layoutNotes?: string;
 }
 
-const STORAGE_KEY = "vehicle_extras";
-
-function loadExtras(): Record<string, VehicleExtra> {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
-  } catch {
-    return {};
-  }
-}
-
-function saveExtra(vehicleId: string, extra: VehicleExtra) {
-  const all = loadExtras();
-  all[vehicleId] = extra;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
-}
-
 function fmtCurrency(v: number | null | undefined) {
   if (v == null) return "—";
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -101,21 +85,41 @@ function VehicleDetailModal({
   open: boolean;
   onClose: () => void;
 }) {
+  const { toast } = useToast();
   const { data: tripsData } = useListTrips({ limit: 200 });
   const allTrips = tripsData?.data ?? [];
   const linkedTrips = allTrips.filter((t) => t.vehiclePlate === vehicle?.plate);
   const [extra, setExtra] = useState<VehicleExtra>({});
+  const updateVehicle = useUpdateVehicle();
 
   useEffect(() => {
     if (vehicle) {
-      const all = loadExtras();
-      setExtra(all[vehicle.id] ?? {});
+      setExtra({
+        driverName: vehicle.driverName ?? "",
+        driverPhone: vehicle.driverPhone ?? "",
+        driverLicense: "",
+        seatLayout: vehicle.seatLayout ?? "",
+        layoutNotes: vehicle.notes ?? "",
+      });
     }
   }, [vehicle]);
 
-  function handleSaveExtra() {
+  async function handleSaveExtra() {
     if (!vehicle) return;
-    saveExtra(vehicle.id, extra);
+    try {
+      await updateVehicle.mutateAsync({ id: vehicle.id, data: {
+        driverName: extra.driverName ?? null,
+        driverPhone: extra.driverPhone ?? null,
+        seatLayout: extra.seatLayout ?? null,
+        notes: extra.layoutNotes ?? null,
+      } });
+      toast({ title: "Informações salvas" });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
+        || (err as { message?: string })?.message
+        || "Erro ao salvar";
+      toast({ title: msg, variant: "destructive" });
+    }
   }
 
   if (!vehicle) return null;
@@ -350,8 +354,12 @@ export default function Veiculos() {
       status: v.status,
     });
     setAmenitiesInput(v.amenities ?? []);
-    const all = loadExtras();
-    setCreateExtra(all[v.id] ?? {});
+    setCreateExtra({
+      driverName: v.driverName ?? "",
+      driverPhone: v.driverPhone ?? "",
+      seatLayout: v.seatLayout ?? "",
+      layoutNotes: v.notes ?? "",
+    });
     setModalOpen(true);
   }
 
@@ -369,9 +377,13 @@ export default function Veiculos() {
           capacity: form.capacity ?? undefined,
           dailyRate: form.dailyRate ?? undefined,
           status: (form as UpdateVehicleBody).status ?? undefined,
+          amenities: amenitiesInput,
+          driverName: createExtra.driverName ?? null,
+          driverPhone: createExtra.driverPhone ?? null,
+          seatLayout: createExtra.seatLayout ?? null,
+          notes: createExtra.layoutNotes ?? null,
         };
         await updateVehicle.mutateAsync({ id: editing.id, data: body });
-        saveExtra(editing.id, createExtra);
         toast({ title: "Veículo atualizado" });
       } else {
         const body: CreateVehicleBody = {
@@ -383,21 +395,25 @@ export default function Veiculos() {
           year: (form as CreateVehicleBody).year ?? undefined,
           dailyRate: form.dailyRate ?? undefined,
           amenities: amenitiesInput,
+          driverName: createExtra.driverName ?? null,
+          driverPhone: createExtra.driverPhone ?? null,
+          seatLayout: createExtra.seatLayout ?? null,
+          notes: createExtra.layoutNotes ?? null,
         };
         if (!body.name || !body.type || !body.plate || !body.capacity) {
           toast({ title: "Preencha nome, tipo, placa e capacidade", variant: "destructive" });
           return;
         }
-        const created = await createVehicle.mutateAsync({ data: body });
-        if (created?.id && Object.keys(createExtra).some((k) => createExtra[k as keyof VehicleExtra])) {
-          saveExtra(created.id, createExtra);
-        }
+        await createVehicle.mutateAsync({ data: body });
         toast({ title: "Veículo criado" });
       }
       setModalOpen(false);
       refetch();
-    } catch {
-      toast({ title: "Erro ao salvar veículo", variant: "destructive" });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
+        || (err as { message?: string })?.message
+        || "Erro ao salvar veículo";
+      toast({ title: msg, variant: "destructive" });
     }
   }
 
@@ -407,8 +423,11 @@ export default function Veiculos() {
       toast({ title: "Veículo excluído" });
       setDeleteId(null);
       refetch();
-    } catch {
-      toast({ title: "Erro ao excluir", variant: "destructive" });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
+        || (err as { message?: string })?.message
+        || "Erro ao excluir";
+      toast({ title: msg, variant: "destructive" });
     }
   }
 

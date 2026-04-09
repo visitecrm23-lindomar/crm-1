@@ -26,4 +26,5 @@ export interface CreateAccommodationBody {
   amenities?: string[];
   /** @nullable */
   pricePerNight?: number | null;
+  galleryUrls?: string[];
 }

@@ -114,8 +114,11 @@ export default function Destinos() {
       }
       setModalOpen(false);
       refetch();
-    } catch {
-      toast({ title: "Erro ao salvar destino", variant: "destructive" });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
+        || (err as { message?: string })?.message
+        || "Erro ao salvar destino";
+      toast({ title: msg, variant: "destructive" });
     }
   }
 
@@ -125,8 +128,11 @@ export default function Destinos() {
       toast({ title: "Destino excluído" });
       setDeleteId(null);
       refetch();
-    } catch {
-      toast({ title: "Erro ao excluir", variant: "destructive" });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
+        || (err as { message?: string })?.message
+        || "Erro ao excluir";
+      toast({ title: msg, variant: "destructive" });
     }
   }
 

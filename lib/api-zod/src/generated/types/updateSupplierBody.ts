@@ -16,5 +16,15 @@ export interface UpdateSupplierBody {
   /** @nullable */
   email?: string | null;
   /** @nullable */
+  whatsapp?: string | null;
+  /** @nullable */
   pixKey?: string | null;
+  /** @nullable */
+  pixType?: string | null;
+  /** @nullable */
+  bankName?: string | null;
+  /** @nullable */
+  bankAgency?: string | null;
+  /** @nullable */
+  bankAccount?: string | null;
 }

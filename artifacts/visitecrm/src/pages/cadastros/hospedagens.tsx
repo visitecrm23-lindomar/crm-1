@@ -99,7 +99,7 @@ export default function Hospedagens() {
       status: a.status,
     });
     setAmenities(a.amenities ?? []);
-    setGalleryUrls([]);
+    setGalleryUrls(a.gallery ?? []);
     setGalleryInput("");
     setModalOpen(true);
   }
@@ -126,6 +126,8 @@ export default function Hospedagens() {
             pricePerNight: form.pricePerNight ?? undefined,
             status: (form as UpdateAccommodationBody).status ?? undefined,
             totalRooms: form.totalRooms ?? undefined,
+            amenities,
+            galleryUrls,
           },
         });
         toast({ title: "Hospedagem atualizada" });
@@ -147,14 +149,18 @@ export default function Hospedagens() {
             totalRooms: form.totalRooms ?? undefined,
             pricePerNight: form.pricePerNight ?? undefined,
             amenities,
+            galleryUrls,
           },
         });
         toast({ title: "Hospedagem criada" });
       }
       setModalOpen(false);
       refetch();
-    } catch {
-      toast({ title: "Erro ao salvar hospedagem", variant: "destructive" });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
+        || (err as { message?: string })?.message
+        || "Erro ao salvar hospedagem";
+      toast({ title: msg, variant: "destructive" });
     }
   }
 
@@ -164,8 +170,11 @@ export default function Hospedagens() {
       toast({ title: "Hospedagem excluída" });
       setDeleteId(null);
       refetch();
-    } catch {
-      toast({ title: "Erro ao excluir", variant: "destructive" });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
+        || (err as { message?: string })?.message
+        || "Erro ao excluir";
+      toast({ title: msg, variant: "destructive" });
     }
   }
 

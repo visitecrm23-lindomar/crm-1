@@ -42,32 +42,6 @@ const BANK_OPTIONS = ["Nubank", "Bradesco", "Itaú", "Santander", "Caixa", "BB",
 const PIX_TYPES = ["CPF/CNPJ", "E-mail", "Telefone", "Chave aleatória"];
 const STATUS_OPTIONS = ["active", "inactive"];
 
-const SUPPLIER_BANK_KEY = "supplier_bank_info";
-
-interface SupplierBankInfo {
-  bankName?: string;
-  bankAgency?: string;
-  bankAccount?: string;
-  pixType?: string;
-}
-
-function loadSupplierBanks(): Record<string, SupplierBankInfo> {
-  try {
-    return JSON.parse(localStorage.getItem(SUPPLIER_BANK_KEY) ?? "{}");
-  } catch {
-    return {};
-  }
-}
-
-function saveSupplierBank(supplierId: string, info: SupplierBankInfo) {
-  const all = loadSupplierBanks();
-  all[supplierId] = info;
-  localStorage.setItem(SUPPLIER_BANK_KEY, JSON.stringify(all));
-}
-
-function getSupplierBank(supplierId: string): SupplierBankInfo {
-  return loadSupplierBanks()[supplierId] ?? {};
-}
 
 const statusLabel: Record<string, string> = {
   active: "Ativo",
@@ -100,7 +74,7 @@ function SupplierDetailModal({
   if (!supplier) return null;
 
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
-  const bank = getSupplierBank(supplier.id);
+  const pixType = supplier.pixType;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -164,19 +138,19 @@ function SupplierDetailModal({
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <p className="text-muted-foreground text-xs">Banco</p>
-                <p className="font-medium">{bank.bankName ?? "—"}</p>
+                <p className="font-medium">{supplier.bankName ?? "—"}</p>
               </div>
               <div>
                 <p className="text-muted-foreground text-xs">Agência</p>
-                <p className="font-medium font-mono">{bank.bankAgency ?? "—"}</p>
+                <p className="font-medium font-mono">{supplier.bankAgency ?? "—"}</p>
               </div>
               <div>
                 <p className="text-muted-foreground text-xs">Conta</p>
-                <p className="font-medium font-mono">{bank.bankAccount ?? "—"}</p>
+                <p className="font-medium font-mono">{supplier.bankAccount ?? "—"}</p>
               </div>
               <div>
                 <p className="text-muted-foreground text-xs">Tipo de chave PIX</p>
-                <p className="font-medium">{bank.pixType ?? "—"}</p>
+                <p className="font-medium">{pixType ?? "—"}</p>
               </div>
               <div className="col-span-2">
                 <p className="text-muted-foreground text-xs">Chave PIX</p>
@@ -278,28 +252,21 @@ export default function Fornecedores() {
 
   function openEdit(s: Supplier) {
     setEditing(s);
-    const bank = getSupplierBank(s.id);
     setForm({
       name: s.name,
       contactName: s.contactName ?? "",
       email: s.email ?? "",
       pixKey: s.pixKey ?? "",
       status: s.status,
-      bankName: bank.bankName ?? "",
-      bankAgency: bank.bankAgency ?? "",
-      bankAccount: bank.bankAccount ?? "",
-      pixType: bank.pixType ?? "",
+      bankName: s.bankName ?? "",
+      bankAgency: s.bankAgency ?? "",
+      bankAccount: s.bankAccount ?? "",
+      pixType: s.pixType ?? "",
     });
     setModalOpen(true);
   }
 
   async function handleSave() {
-    const bankInfo: SupplierBankInfo = {
-      bankName: form.bankName || undefined,
-      bankAgency: form.bankAgency || undefined,
-      bankAccount: form.bankAccount || undefined,
-      pixType: form.pixType || undefined,
-    };
     try {
       if (editing) {
         await updateSupplier.mutateAsync({ id: editing.id, data: {
@@ -308,15 +275,18 @@ export default function Fornecedores() {
           contactName: form.contactName ?? undefined,
           email: form.email ?? undefined,
           pixKey: form.pixKey ?? undefined,
+          pixType: form.pixType ?? undefined,
+          bankName: form.bankName ?? undefined,
+          bankAgency: form.bankAgency ?? undefined,
+          bankAccount: form.bankAccount ?? undefined,
         } as UpdateSupplierBody });
-        saveSupplierBank(editing.id, bankInfo);
         toast({ title: "Fornecedor atualizado" });
       } else {
         if (!form.name || !(form as CreateSupplierBody).type) {
           toast({ title: "Preencha nome e tipo", variant: "destructive" });
           return;
         }
-        const created = await createSupplier.mutateAsync({ data: {
+        await createSupplier.mutateAsync({ data: {
           name: form.name!,
           type: (form as CreateSupplierBody).type!,
           cnpj: (form as CreateSupplierBody).cnpj ?? undefined,
@@ -326,16 +296,20 @@ export default function Fornecedores() {
           addressCity: (form as CreateSupplierBody).addressCity ?? undefined,
           addressState: (form as CreateSupplierBody).addressState ?? undefined,
           pixKey: form.pixKey ?? undefined,
+          pixType: form.pixType ?? undefined,
+          bankName: form.bankName ?? undefined,
+          bankAgency: form.bankAgency ?? undefined,
+          bankAccount: form.bankAccount ?? undefined,
         } as CreateSupplierBody });
-        if (created?.id) {
-          saveSupplierBank(created.id, bankInfo);
-        }
         toast({ title: "Fornecedor criado" });
       }
       setModalOpen(false);
       refetch();
-    } catch {
-      toast({ title: "Erro ao salvar fornecedor", variant: "destructive" });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
+        || (err as { message?: string })?.message
+        || "Erro ao salvar fornecedor";
+      toast({ title: msg, variant: "destructive" });
     }
   }
 
@@ -345,8 +319,11 @@ export default function Fornecedores() {
       toast({ title: "Fornecedor excluído" });
       setDeleteId(null);
       refetch();
-    } catch {
-      toast({ title: "Erro ao excluir", variant: "destructive" });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
+        || (err as { message?: string })?.message
+        || "Erro ao excluir";
+      toast({ title: msg, variant: "destructive" });
     }
   }
 
@@ -450,7 +427,7 @@ export default function Fornecedores() {
           <Tabs defaultValue="dados">
             <TabsList className="mb-2">
               <TabsTrigger value="dados">Dados gerais</TabsTrigger>
-              {!editing && <TabsTrigger value="banco">Dados bancários</TabsTrigger>}
+              <TabsTrigger value="banco">Dados bancários</TabsTrigger>
             </TabsList>
             <TabsContent value="dados">
               <div className="grid grid-cols-2 gap-4 py-2">
@@ -565,68 +542,62 @@ export default function Fornecedores() {
                 )}
               </div>
             </TabsContent>
-            {!editing && (
-              <TabsContent value="banco">
-                <div className="grid grid-cols-2 gap-4 py-2">
-                  <div className="col-span-2 space-y-1">
-                    <Label>Banco</Label>
-                    <Select
-                      value={form.bankName ?? ""}
-                      onValueChange={(v) => setForm((f) => ({ ...f, bankName: v }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecionar banco" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {BANK_OPTIONS.map((b) => (
-                          <SelectItem key={b} value={b}>
-                            {b}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Agência</Label>
-                    <Input
-                      value={form.bankAgency ?? ""}
-                      onChange={(e) => setForm((f) => ({ ...f, bankAgency: e.target.value }))}
-                      placeholder="0000"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Conta</Label>
-                    <Input
-                      value={form.bankAccount ?? ""}
-                      onChange={(e) => setForm((f) => ({ ...f, bankAccount: e.target.value }))}
-                      placeholder="00000-0"
-                    />
-                  </div>
-                  <div className="col-span-2 space-y-1">
-                    <Label>Tipo de chave PIX</Label>
-                    <Select
-                      value={form.pixType ?? ""}
-                      onValueChange={(v) => setForm((f) => ({ ...f, pixType: v }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecionar tipo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PIX_TYPES.map((t) => (
-                          <SelectItem key={t} value={t}>
-                            {t}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="col-span-2 text-xs text-muted-foreground bg-muted/40 p-2 rounded">
-                    A chave PIX é salva no sistema. Os demais dados bancários (banco, agência, conta)
-                    são armazenados localmente neste dispositivo.
-                  </div>
+            <TabsContent value="banco">
+              <div className="grid grid-cols-2 gap-4 py-2">
+                <div className="col-span-2 space-y-1">
+                  <Label>Banco</Label>
+                  <Select
+                    value={form.bankName ?? ""}
+                    onValueChange={(v) => setForm((f) => ({ ...f, bankName: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecionar banco" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {BANK_OPTIONS.map((b) => (
+                        <SelectItem key={b} value={b}>
+                          {b}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </TabsContent>
-            )}
+                <div className="space-y-1">
+                  <Label>Agência</Label>
+                  <Input
+                    value={form.bankAgency ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, bankAgency: e.target.value }))}
+                    placeholder="0000"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Conta</Label>
+                  <Input
+                    value={form.bankAccount ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, bankAccount: e.target.value }))}
+                    placeholder="00000-0"
+                  />
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <Label>Tipo de chave PIX</Label>
+                  <Select
+                    value={form.pixType ?? ""}
+                    onValueChange={(v) => setForm((f) => ({ ...f, pixType: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecionar tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PIX_TYPES.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </TabsContent>
           </Tabs>
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalOpen(false)}>

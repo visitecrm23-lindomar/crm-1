@@ -356,6 +356,7 @@ interface ClientModalProps {
 function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
   const [tab, setTab] = useState("personal");
   const [form, setForm] = useState<ClientFormData>(EMPTY_CLIENT);
+  const { toast } = useToast();
   const { data: stages } = useListPipelineStages();
   const createClient = useCreateClient();
   const updateClient = useUpdateClient();
@@ -386,25 +387,32 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
       origin: form.origin || undefined,
     };
 
-    let savedId: string | undefined;
-    if (isEditing && editClient) {
-      await updateClient.mutateAsync({
-        id: editClient.id,
-        data: {
-          ...base,
-          pipelineStage: form.pipelineStage !== "none" ? form.pipelineStage : undefined,
-          classification: form.classification || undefined,
-          npsScore: form.npsScore ? parseFloat(form.npsScore) : undefined,
-          status: form.status || undefined,
-        },
-      });
-      savedId = editClient.id;
-    } else {
-      const result = await createClient.mutateAsync({ data: base });
-      savedId = result.id;
+    try {
+      let savedId: string | undefined;
+      if (isEditing && editClient) {
+        await updateClient.mutateAsync({
+          id: editClient.id,
+          data: {
+            ...base,
+            pipelineStage: form.pipelineStage !== "none" ? form.pipelineStage : undefined,
+            classification: form.classification || undefined,
+            npsScore: form.npsScore ? parseFloat(form.npsScore) : undefined,
+            status: form.status || undefined,
+          },
+        });
+        savedId = editClient.id;
+      } else {
+        const result = await createClient.mutateAsync({ data: base });
+        savedId = result.id;
+      }
+      onSave(withReservation, savedId);
+      onClose();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
+        || (err as { message?: string })?.message
+        || "Erro ao salvar cliente";
+      toast({ title: msg, variant: "destructive" });
     }
-    onSave(withReservation, savedId);
-    onClose();
   };
 
   return (

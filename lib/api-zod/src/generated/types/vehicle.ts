@@ -21,6 +21,14 @@ export interface Vehicle {
   dailyRate?: number | null;
   /** @nullable */
   photoUrl?: string | null;
+  /** @nullable */
+  driverName?: string | null;
+  /** @nullable */
+  driverPhone?: string | null;
+  /** @nullable */
+  seatLayout?: string | null;
+  /** @nullable */
+  notes?: string | null;
   status: string;
   createdAt: string;
 }

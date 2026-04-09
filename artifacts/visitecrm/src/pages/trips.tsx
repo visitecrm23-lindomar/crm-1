@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -527,6 +528,7 @@ const toTripFormData = (trip: Trip): TripFormData => ({
 
 export function TripForm({ tripId }: { tripId?: string }) {
   const [, navigate] = useLocation();
+  const { toast } = useToast();
   const [tab, setTab] = useState("basico");
   const [form, setForm] = useState<TripFormData>(EMPTY_FORM);
 
@@ -553,6 +555,10 @@ export function TripForm({ tripId }: { tripId?: string }) {
   const marginPct = grossRevenue > 0 ? Math.round(margin / grossRevenue * 100) : 0;
 
   const handleSave = async (publish = false) => {
+    if (!form.name || !form.destination || !form.destinationCity || !form.destinationState || !form.departureDate || !form.priceAdult) {
+      toast({ title: "Preencha os campos obrigatórios: nome, destino, cidade, estado, data de saída e preço adulto", variant: "destructive" });
+      return;
+    }
     const inclArr = form.inclusions.split("\n").map(s => s.trim()).filter(Boolean);
     const exclArr = form.exclusions.split("\n").map(s => s.trim()).filter(Boolean);
     const statusToSave = publish ? "active" : form.status;
@@ -560,55 +566,62 @@ export function TripForm({ tripId }: { tripId?: string }) {
     const boardingPointsToSave = form.boardingPoints.filter(bp => bp.name);
     const fixedCostsNum = form.fixedCosts ? parseFloat(form.fixedCosts) : undefined;
     const variableCostsNum = form.variableCosts ? parseFloat(form.variableCosts) : undefined;
-    if (tripId) {
-      await updateTrip.mutateAsync({
-        id: tripId,
-        data: {
-          name: form.name, description: form.description || undefined,
-          destination: form.destination, destinationCity: form.destinationCity, destinationState: form.destinationState,
-          type: form.type, category: form.category,
-          departureDate: form.departureDate, returnDate: form.returnDate || undefined,
-          totalCapacity: parseInt(form.totalCapacity),
-          priceAdult: parseFloat(form.priceAdult),
-          priceChild: form.priceChild ? parseFloat(form.priceChild) : undefined,
-          priceSenior: form.priceSenior ? parseFloat(form.priceSenior) : undefined,
-          inclusions: inclArr, exclusions: exclArr,
-          coverImage: form.coverImage || undefined,
-          seatLayout: form.seatLayout,
-          vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined,
-          status: statusToSave,
-          itinerary: itineraryToSave.length ? itineraryToSave : undefined,
-          boardingPoints: boardingPointsToSave.length ? boardingPointsToSave : undefined,
-          fixedCosts: fixedCostsNum,
-          variableCosts: variableCostsNum,
-          gallery: form.gallery.length ? form.gallery : undefined,
-        },
-      });
-    } else {
-      await createTrip.mutateAsync({
-        data: {
-          name: form.name, description: form.description || undefined,
-          destination: form.destination, destinationCity: form.destinationCity, destinationState: form.destinationState,
-          type: form.type, category: form.category,
-          departureDate: form.departureDate, returnDate: form.returnDate || undefined,
-          totalCapacity: parseInt(form.totalCapacity),
-          priceAdult: parseFloat(form.priceAdult),
-          priceChild: form.priceChild ? parseFloat(form.priceChild) : undefined,
-          priceSenior: form.priceSenior ? parseFloat(form.priceSenior) : undefined,
-          inclusions: inclArr, exclusions: exclArr,
-          coverImage: form.coverImage || undefined,
-          seatLayout: form.seatLayout,
-          vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined,
-          status: statusToSave,
-          itinerary: itineraryToSave.length ? itineraryToSave : undefined,
-          boardingPoints: boardingPointsToSave.length ? boardingPointsToSave : undefined,
-          fixedCosts: fixedCostsNum,
-          variableCosts: variableCostsNum,
-          gallery: form.gallery.length ? form.gallery : undefined,
-        },
-      });
+    try {
+      if (tripId) {
+        await updateTrip.mutateAsync({
+          id: tripId,
+          data: {
+            name: form.name, description: form.description || undefined,
+            destination: form.destination, destinationCity: form.destinationCity, destinationState: form.destinationState,
+            type: form.type, category: form.category,
+            departureDate: form.departureDate, returnDate: form.returnDate || undefined,
+            totalCapacity: parseInt(form.totalCapacity),
+            priceAdult: parseFloat(form.priceAdult),
+            priceChild: form.priceChild ? parseFloat(form.priceChild) : undefined,
+            priceSenior: form.priceSenior ? parseFloat(form.priceSenior) : undefined,
+            inclusions: inclArr, exclusions: exclArr,
+            coverImage: form.coverImage || undefined,
+            seatLayout: form.seatLayout,
+            vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined,
+            status: statusToSave,
+            itinerary: itineraryToSave.length ? itineraryToSave : undefined,
+            boardingPoints: boardingPointsToSave.length ? boardingPointsToSave : undefined,
+            fixedCosts: fixedCostsNum,
+            variableCosts: variableCostsNum,
+            gallery: form.gallery.length ? form.gallery : undefined,
+          },
+        });
+      } else {
+        await createTrip.mutateAsync({
+          data: {
+            name: form.name, description: form.description || undefined,
+            destination: form.destination, destinationCity: form.destinationCity, destinationState: form.destinationState,
+            type: form.type, category: form.category,
+            departureDate: form.departureDate, returnDate: form.returnDate || undefined,
+            totalCapacity: parseInt(form.totalCapacity),
+            priceAdult: parseFloat(form.priceAdult),
+            priceChild: form.priceChild ? parseFloat(form.priceChild) : undefined,
+            priceSenior: form.priceSenior ? parseFloat(form.priceSenior) : undefined,
+            inclusions: inclArr, exclusions: exclArr,
+            coverImage: form.coverImage || undefined,
+            seatLayout: form.seatLayout,
+            vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined,
+            status: statusToSave,
+            itinerary: itineraryToSave.length ? itineraryToSave : undefined,
+            boardingPoints: boardingPointsToSave.length ? boardingPointsToSave : undefined,
+            fixedCosts: fixedCostsNum,
+            variableCosts: variableCostsNum,
+            gallery: form.gallery.length ? form.gallery : undefined,
+          },
+        });
+      }
+      navigate("/trips");
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
+        || (err as { message?: string })?.message
+        || "Erro ao salvar viagem";
+      toast({ title: msg, variant: "destructive" });
     }
-    navigate("/trips");
   };
 
   const TABS = [
@@ -622,7 +635,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
     { id: "midia", label: "Mídia" },
   ];
 
-  const canSave = !!form.name && !!form.destination && !!form.departureDate && !!form.priceAdult;
+  const canSave = !!form.name && !!form.destination && !!form.destinationCity && !!form.destinationState && !!form.departureDate && !!form.priceAdult;
 
   return (
     <div className="space-y-6 max-w-4xl">

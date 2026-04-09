@@ -245,6 +245,7 @@ router.patch("/clients/:id", async (req, res): Promise<void> => {
     if (parsed.data.pipelineStage != null) updates.pipelineStage = parsed.data.pipelineStage;
     if (parsed.data.lastContactAt !== undefined) updates.lastContactAt = parsed.data.lastContactAt ? new Date(parsed.data.lastContactAt) : null;
     if (parsed.data.photoUrl !== undefined) updates.photoUrl = parsed.data.photoUrl ?? null;
+    if (parsed.data.instagram !== undefined) updates.instagram = parsed.data.instagram ?? null;
     if (parsed.data.origin !== undefined) updates.origin = parsed.data.origin ?? null;
 
     await db.update(clientsTable).set(updates)

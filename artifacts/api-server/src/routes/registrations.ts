@@ -24,6 +24,7 @@ const CreateSupplierBody = z.object({
   bankAgency: z.string().optional(),
   bankAccount: z.string().optional(),
   pixKey: z.string().optional(),
+  pixType: z.string().optional(),
 });
 
 const UpdateSupplierBody = z.object({
@@ -31,9 +32,14 @@ const UpdateSupplierBody = z.object({
   type: z.string().optional(),
   email: z.string().optional().nullable(),
   phone: z.string().optional().nullable(),
+  whatsapp: z.string().optional().nullable(),
   contactName: z.string().optional().nullable(),
   status: z.string().optional(),
   pixKey: z.string().optional().nullable(),
+  pixType: z.string().optional().nullable(),
+  bankName: z.string().optional().nullable(),
+  bankAgency: z.string().optional().nullable(),
+  bankAccount: z.string().optional().nullable(),
 });
 
 const CreateVehicleBody = z.object({
@@ -46,6 +52,10 @@ const CreateVehicleBody = z.object({
   amenities: z.array(z.string()).optional(),
   dailyRate: z.number().optional(),
   ratePerKm: z.number().optional(),
+  driverName: z.string().optional(),
+  driverPhone: z.string().optional(),
+  seatLayout: z.string().optional(),
+  notes: z.string().optional(),
 });
 
 const UpdateVehicleBody = z.object({
@@ -54,6 +64,10 @@ const UpdateVehicleBody = z.object({
   capacity: z.number().int().optional(),
   dailyRate: z.number().optional().nullable(),
   amenities: z.array(z.string()).optional(),
+  driverName: z.string().optional().nullable(),
+  driverPhone: z.string().optional().nullable(),
+  seatLayout: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
 });
 
 const CreateAccommodationBody = z.object({
@@ -68,14 +82,17 @@ const CreateAccommodationBody = z.object({
   totalRooms: z.number().optional(),
   amenities: z.array(z.string()).optional(),
   pricePerNight: z.number().optional(),
+  galleryUrls: z.array(z.string()).optional(),
 });
 
 const UpdateAccommodationBody = z.object({
   name: z.string().optional(),
   pricePerNight: z.number().optional(),
+  totalRooms: z.number().optional(),
   status: z.string().optional(),
   totalRooms: z.number().int().optional().nullable(),
   amenities: z.array(z.string()).optional(),
+  galleryUrls: z.array(z.string()).optional(),
 });
 
 const CreateDestinationBody = z.object({
@@ -103,7 +120,7 @@ function formatSupplier(s: typeof suppliersTable.$inferSelect) {
     contactName: s.contactName, addressStreet: s.addressStreet,
     addressCity: s.addressCity, addressState: s.addressState,
     bankName: s.bankName, bankAgency: s.bankAgency, bankAccount: s.bankAccount,
-    pixKey: s.pixKey, status: s.status,
+    pixKey: s.pixKey, pixType: s.pixType ?? null, status: s.status,
     createdAt: s.createdAt.toISOString(), updatedAt: s.updatedAt.toISOString(),
   };
 }
@@ -115,7 +132,12 @@ function formatVehicle(v: typeof vehiclesTable.$inferSelect) {
     amenities: v.amenities ?? [],
     dailyRate: v.dailyRate ? Number(v.dailyRate) : null,
     ratePerKm: v.ratePerKm ? Number(v.ratePerKm) : null,
-    photoUrl: v.photoUrl, status: v.status,
+    photoUrl: v.photoUrl,
+    driverName: v.driverName ?? null,
+    driverPhone: v.driverPhone ?? null,
+    seatLayout: v.seatLayout ?? null,
+    notes: v.notes ?? null,
+    status: v.status,
     createdAt: v.createdAt.toISOString(), updatedAt: v.updatedAt.toISOString(),
   };
 }
@@ -130,6 +152,7 @@ function formatAccommodation(a: typeof accommodationsTable.$inferSelect) {
     phone: a.phone, email: a.email, status: a.status,
     rating: a.rating ? Number(a.rating) : null,
     coverImage: a.coverImage,
+    gallery: a.gallery ?? [],
     createdAt: a.createdAt.toISOString(), updatedAt: a.updatedAt.toISOString(),
   };
 }
@@ -181,6 +204,7 @@ router.post("/suppliers", async (req, res): Promise<void> => {
       bankAgency: parsed.data.bankAgency ?? null,
       bankAccount: parsed.data.bankAccount ?? null,
       pixKey: parsed.data.pixKey ?? null,
+      pixType: parsed.data.pixType ?? null,
     });
     const [supplier] = await db.select().from(suppliersTable)
       .where(and(eq(suppliersTable.id, id), eq(suppliersTable.tenantId, me.tenantId)))
@@ -205,9 +229,14 @@ router.patch("/suppliers/:id", async (req, res): Promise<void> => {
     if (parsed.data.type != null) updates.type = parsed.data.type;
     if (parsed.data.email !== undefined) updates.email = parsed.data.email ?? null;
     if (parsed.data.phone !== undefined) updates.phone = parsed.data.phone ?? null;
+    if (parsed.data.whatsapp !== undefined) updates.whatsapp = parsed.data.whatsapp ?? null;
     if (parsed.data.contactName !== undefined) updates.contactName = parsed.data.contactName ?? null;
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.pixKey !== undefined) updates.pixKey = parsed.data.pixKey ?? null;
+    if (parsed.data.pixType !== undefined) updates.pixType = parsed.data.pixType ?? null;
+    if (parsed.data.bankName !== undefined) updates.bankName = parsed.data.bankName ?? null;
+    if (parsed.data.bankAgency !== undefined) updates.bankAgency = parsed.data.bankAgency ?? null;
+    if (parsed.data.bankAccount !== undefined) updates.bankAccount = parsed.data.bankAccount ?? null;
     await db.update(suppliersTable).set(updates)
       .where(and(eq(suppliersTable.id, req.params.id), eq(suppliersTable.tenantId, me.tenantId)));
     const [supplier] = await db.select().from(suppliersTable)
@@ -265,6 +294,10 @@ router.post("/vehicles", async (req, res): Promise<void> => {
       amenities: parsed.data.amenities ?? [],
       dailyRate: parsed.data.dailyRate ? String(parsed.data.dailyRate) : null,
       ratePerKm: parsed.data.ratePerKm ? String(parsed.data.ratePerKm) : null,
+      driverName: parsed.data.driverName ?? null,
+      driverPhone: parsed.data.driverPhone ?? null,
+      seatLayout: parsed.data.seatLayout ?? null,
+      notes: parsed.data.notes ?? null,
     });
     const [vehicle] = await db.select().from(vehiclesTable)
       .where(and(eq(vehiclesTable.id, id), eq(vehiclesTable.tenantId, me.tenantId)))
@@ -290,6 +323,10 @@ router.patch("/vehicles/:id", async (req, res): Promise<void> => {
     if (parsed.data.capacity != null) updates.capacity = parsed.data.capacity;
     if (parsed.data.dailyRate !== undefined) updates.dailyRate = parsed.data.dailyRate != null ? String(parsed.data.dailyRate) : null;
     if (parsed.data.amenities != null) updates.amenities = parsed.data.amenities;
+    if (parsed.data.driverName !== undefined) updates.driverName = parsed.data.driverName ?? null;
+    if (parsed.data.driverPhone !== undefined) updates.driverPhone = parsed.data.driverPhone ?? null;
+    if (parsed.data.seatLayout !== undefined) updates.seatLayout = parsed.data.seatLayout ?? null;
+    if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
     await db.update(vehiclesTable).set(updates)
       .where(and(eq(vehiclesTable.id, req.params.id), eq(vehiclesTable.tenantId, me.tenantId)));
     const [vehicle] = await db.select().from(vehiclesTable)
@@ -349,6 +386,7 @@ router.post("/accommodations", async (req, res): Promise<void> => {
       amenities: parsed.data.amenities ?? [],
       contactName: parsed.data.contactName ?? null,
       phone: parsed.data.phone ?? null, email: parsed.data.email ?? null,
+      gallery: parsed.data.galleryUrls ?? [],
     });
     const [accommodation] = await db.select().from(accommodationsTable)
       .where(and(eq(accommodationsTable.id, id), eq(accommodationsTable.tenantId, me.tenantId)))
@@ -371,9 +409,11 @@ router.patch("/accommodations/:id", async (req, res): Promise<void> => {
     const updates: Partial<typeof accommodationsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.pricePerNight != null) updates.pricePerNight = String(parsed.data.pricePerNight);
+    if (parsed.data.totalRooms != null) updates.totalRooms = parsed.data.totalRooms;
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.totalRooms !== undefined) updates.totalRooms = parsed.data.totalRooms ?? null;
     if (parsed.data.amenities != null) updates.amenities = parsed.data.amenities;
+    if (parsed.data.galleryUrls != null) updates.gallery = parsed.data.galleryUrls;
     await db.update(accommodationsTable).set(updates)
       .where(and(eq(accommodationsTable.id, req.params.id), eq(accommodationsTable.tenantId, me.tenantId)));
     const [accommodation] = await db.select().from(accommodationsTable)

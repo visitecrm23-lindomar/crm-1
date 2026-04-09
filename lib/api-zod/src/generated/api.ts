@@ -2055,6 +2055,10 @@ export const ListSuppliersResponseItem = zod.object({
   addressCity: zod.string().nullish(),
   addressState: zod.string().nullish(),
   pixKey: zod.string().nullish(),
+  pixType: zod.string().nullish(),
+  bankName: zod.string().nullish(),
+  bankAgency: zod.string().nullish(),
+  bankAccount: zod.string().nullish(),
   status: zod.string(),
   createdAt: zod.string(),
 });
@@ -2073,6 +2077,10 @@ export const CreateSupplierBody = zod.object({
   addressCity: zod.string().nullish(),
   addressState: zod.string().nullish(),
   pixKey: zod.string().nullish(),
+  pixType: zod.string().nullish(),
+  bankName: zod.string().nullish(),
+  bankAgency: zod.string().nullish(),
+  bankAccount: zod.string().nullish(),
 });
 
 /**
@@ -2087,7 +2095,12 @@ export const UpdateSupplierBody = zod.object({
   status: zod.string().nullish(),
   contactName: zod.string().nullish(),
   email: zod.string().nullish(),
+  whatsapp: zod.string().nullish(),
   pixKey: zod.string().nullish(),
+  pixType: zod.string().nullish(),
+  bankName: zod.string().nullish(),
+  bankAgency: zod.string().nullish(),
+  bankAccount: zod.string().nullish(),
 });
 
 export const UpdateSupplierResponse = zod.object({
@@ -2102,6 +2115,10 @@ export const UpdateSupplierResponse = zod.object({
   addressCity: zod.string().nullish(),
   addressState: zod.string().nullish(),
   pixKey: zod.string().nullish(),
+  pixType: zod.string().nullish(),
+  bankName: zod.string().nullish(),
+  bankAgency: zod.string().nullish(),
+  bankAccount: zod.string().nullish(),
   status: zod.string(),
   createdAt: zod.string(),
 });
@@ -2131,6 +2148,10 @@ export const ListVehiclesResponseItem = zod.object({
   amenities: zod.array(zod.string()),
   dailyRate: zod.number().nullish(),
   photoUrl: zod.string().nullish(),
+  driverName: zod.string().nullish(),
+  driverPhone: zod.string().nullish(),
+  seatLayout: zod.string().nullish(),
+  notes: zod.string().nullish(),
   status: zod.string(),
   createdAt: zod.string(),
 });
@@ -2149,6 +2170,10 @@ export const CreateVehicleBody = zod.object({
   amenities: zod.array(zod.string()).optional(),
   dailyRate: zod.number().nullish(),
   photoUrl: zod.string().nullish(),
+  driverName: zod.string().nullish(),
+  driverPhone: zod.string().nullish(),
+  seatLayout: zod.string().nullish(),
+  notes: zod.string().nullish(),
 });
 
 /**
@@ -2163,6 +2188,11 @@ export const UpdateVehicleBody = zod.object({
   status: zod.string().nullish(),
   capacity: zod.number().nullish(),
   dailyRate: zod.number().nullish(),
+  amenities: zod.array(zod.string()).optional(),
+  driverName: zod.string().nullish(),
+  driverPhone: zod.string().nullish(),
+  seatLayout: zod.string().nullish(),
+  notes: zod.string().nullish(),
 });
 
 export const UpdateVehicleResponse = zod.object({
@@ -2176,6 +2206,10 @@ export const UpdateVehicleResponse = zod.object({
   amenities: zod.array(zod.string()),
   dailyRate: zod.number().nullish(),
   photoUrl: zod.string().nullish(),
+  driverName: zod.string().nullish(),
+  driverPhone: zod.string().nullish(),
+  seatLayout: zod.string().nullish(),
+  notes: zod.string().nullish(),
   status: zod.string(),
   createdAt: zod.string(),
 });
@@ -2209,6 +2243,7 @@ export const ListAccommodationsResponseItem = zod.object({
   pricePerNight: zod.number().nullish(),
   coverImage: zod.string().nullish(),
   rating: zod.number().nullish(),
+  gallery: zod.array(zod.string()).optional(),
   status: zod.string(),
   createdAt: zod.string(),
 });
@@ -2231,6 +2266,7 @@ export const CreateAccommodationBody = zod.object({
   totalRooms: zod.number().nullish(),
   amenities: zod.array(zod.string()).optional(),
   pricePerNight: zod.number().nullish(),
+  galleryUrls: zod.array(zod.string()).optional(),
 });
 
 /**
@@ -2245,6 +2281,8 @@ export const UpdateAccommodationBody = zod.object({
   status: zod.string().nullish(),
   pricePerNight: zod.number().nullish(),
   totalRooms: zod.number().nullish(),
+  amenities: zod.array(zod.string()).optional(),
+  galleryUrls: zod.array(zod.string()).optional(),
 });
 
 export const UpdateAccommodationResponse = zod.object({
@@ -2262,6 +2300,7 @@ export const UpdateAccommodationResponse = zod.object({
   pricePerNight: zod.number().nullish(),
   coverImage: zod.string().nullish(),
   rating: zod.number().nullish(),
+  gallery: zod.array(zod.string()).optional(),
   status: zod.string(),
   createdAt: zod.string(),
 });
