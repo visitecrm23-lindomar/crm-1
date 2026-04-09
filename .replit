@@ -31,10 +31,10 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.production]
-VITE_CLERK_PROXY_URL = "https://visite-crm.replit.app/api/__clerk"
 FRONTEND_URL = "https://visitecrm.com"
 ADDITIONAL_ORIGINS = "https://visite-crm.replit.app"
 CLERK_PROXY_URL = "https://visitecrm.com/api/__clerk"
+VITE_APP_URL = "https://visitecrm.com"
 
 [userenv.shared]
 

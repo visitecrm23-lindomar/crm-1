@@ -216,6 +216,10 @@ function SettingRow({ setting }: { setting: PlatformSetting }) {
   );
 }
 
+const platformUrl: string =
+  (import.meta.env.VITE_APP_URL as string | undefined) ||
+  (typeof window !== "undefined" ? window.location.origin : "https://visitecrm.com");
+
 export default function AdminSettings() {
   const { data: flags = [], isLoading: flagsLoading } = useListFeatureFlags();
   const { data: platformSettings = [], isLoading: settingsLoading } = useListPlatformSettings();
@@ -227,6 +231,28 @@ export default function AdminSettings() {
         <h1 className="text-2xl font-bold text-foreground">Configurações</h1>
         <p className="text-muted-foreground text-sm mt-1">Configurações globais da plataforma e feature flags</p>
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Globe className="w-4 h-4" />
+            Informações da Plataforma
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">Dados gerais sobre a instância atual</p>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Nome da Plataforma</label>
+              <Input defaultValue="VisiteCRM" className="h-8 text-sm mt-1" readOnly />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">URL da Plataforma</label>
+              <Input defaultValue={platformUrl} className="h-8 text-sm mt-1" readOnly />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-3">
