@@ -30,7 +30,10 @@ function ProductCard({
   const displayPrice = product.salePrice ?? product.price;
   const hasDiscount = !!product.salePrice;
 
+  const isOutOfStock = product.trackInventory && (product.stockQuantity ?? 0) <= 0;
+
   function handleAdd() {
+    if (isOutOfStock) return;
     addItem({
       productId: product.id,
       productName: product.name,
@@ -57,7 +60,12 @@ function ProductCard({
             <MapPin className="w-12 h-12" />
           </div>
         )}
-        {hasDiscount && (
+        {isOutOfStock && (
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+            <span className="text-white text-sm font-bold bg-black/60 px-3 py-1 rounded-full">Esgotado</span>
+          </div>
+        )}
+        {hasDiscount && !isOutOfStock && (
           <span
             className="absolute top-2 left-2 text-xs font-bold text-white px-2 py-0.5 rounded-full"
             style={{ backgroundColor: accentColor }}
@@ -65,7 +73,7 @@ function ProductCard({
             PROMO
           </span>
         )}
-        {product.isFeatured && (
+        {product.isFeatured && !isOutOfStock && (
           <span
             className="absolute top-2 right-2 text-xs font-bold text-white px-2 py-0.5 rounded-full flex items-center gap-1"
             style={{ backgroundColor: "#FBBF24" }}
@@ -116,10 +124,11 @@ function ProductCard({
           <Button
             size="sm"
             onClick={handleAdd}
-            style={{ backgroundColor: primaryColor }}
-            className="text-white h-8 px-3"
+            disabled={isOutOfStock}
+            style={!isOutOfStock ? { backgroundColor: primaryColor } : undefined}
+            className={`h-8 px-3 ${isOutOfStock ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "text-white"}`}
           >
-            <ShoppingCart className="w-3 h-3" />
+            {isOutOfStock ? <span className="text-xs">Esgotado</span> : <ShoppingCart className="w-3 h-3" />}
           </Button>
         </div>
       </div>

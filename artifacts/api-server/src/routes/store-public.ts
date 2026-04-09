@@ -244,6 +244,8 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
     const parsed = CreateOrderBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const data = parsed.data;
+
+    // Phase 1: Validate products, preliminary stock check, build order items
     let subtotal = 0;
     const orderItemsData: Array<{
       id: string;
@@ -260,6 +262,8 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
       total: string;
       metadata: Record<string, unknown> | null;
     }> = [];
+    const fetchedProducts = new Map<string, typeof storeProductsTable.$inferSelect>();
+
     for (const item of data.items) {
       const [product] = await db.select().from(storeProductsTable)
         .where(and(
@@ -271,6 +275,17 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
         res.status(400).json({ error: `Product ${item.productId} not found or unavailable` });
         return;
       }
+      // Preliminary stock check (fast early rejection; re-validated atomically below)
+      if (product.trackInventory && !product.allowBackorder) {
+        const available = product.stockQuantity ?? 0;
+        if (available < item.quantity) {
+          res.status(400).json({
+            error: `Estoque insuficiente para "${product.name}". Disponível: ${available}`,
+          });
+          return;
+        }
+      }
+      fetchedProducts.set(product.id, product);
       const price = parseFloat(product.onSale && product.salePrice ? product.salePrice : product.price);
       const lineTotal = price * item.quantity;
       subtotal += lineTotal;
@@ -290,6 +305,8 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
         metadata: item.metadata || null,
       });
     }
+
+    // Phase 2: Coupon handling (outside transaction)
     let discountAmount = 0;
     let couponId: string | undefined;
     if (data.couponCode) {
@@ -316,46 +333,101 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
         }
       }
     }
+
     const totalAmount = Math.max(0, subtotal - discountAmount);
     const orderId = generateId();
     const orderNumber = `#${new Date().getFullYear()}-${String(Math.floor(Math.random() * 99999)).padStart(5, "0")}`;
-    await db.insert(storeOrdersTable).values({
-      id: orderId,
-      storeId: store.id,
-      tenantId: store.tenantId,
-      orderNumber,
-      customerName: data.customerName,
-      customerEmail: data.customerEmail,
-      customerPhone: data.customerPhone ?? "",
-      ...(data.customerCpf && { customerCpf: data.customerCpf }),
-      ...(data.customerAddress && { customerAddress: data.customerAddress }),
-      subtotal: subtotal.toFixed(2),
-      discountAmount: discountAmount.toFixed(2),
-      totalAmount: totalAmount.toFixed(2),
-      ...(couponId && { couponId }),
-      ...(data.couponCode && { couponCode: data.couponCode }),
-      paymentMethod: data.paymentMethod ?? "pending",
-      paymentProvider: data.paymentProvider ?? "manual",
-      ...(data.customerNotes && { customerNotes: data.customerNotes }),
-      ...((data.notes && !data.customerNotes) && { customerNotes: data.notes }),
-      ...(data.ipAddress && { ipAddress: data.ipAddress }),
-      ...(data.userAgent && { userAgent: data.userAgent }),
-    });
-    for (const itemData of orderItemsData) {
-      itemData.orderId = orderId;
-      await db.insert(storeOrderItemsTable).values(itemData);
-    }
-    if (couponId) {
-      const [coupon] = await db.select().from(storeCouponsTable)
-        .where(eq(storeCouponsTable.id, couponId)).limit(1);
-      if (coupon) {
-        await db.update(storeCouponsTable)
-          .set({ usageCount: coupon.usageCount + 1 })
-          .where(eq(storeCouponsTable.id, couponId));
+
+    // Phase 3: Atomic transaction — lock products, validate stock, write everything
+    try {
+      await db.transaction(async (tx) => {
+        // Re-validate stock with row-level locks to prevent race conditions
+        for (const item of data.items) {
+          const product = fetchedProducts.get(item.productId)!;
+          if (product.trackInventory && !product.allowBackorder) {
+            const lockResult = await tx.execute(
+              // Drizzle's tx.execute() returns raw node-postgres QueryResult; cast to access .rows
+              sql`SELECT id, stock_quantity FROM store_products WHERE id = ${product.id} FOR UPDATE`
+            );
+            const row = (lockResult as unknown as { rows: Array<{ id: string; stock_quantity: number | null }> }).rows[0];
+            const currentStock = Number(row?.stock_quantity ?? 0);
+            if (currentStock < item.quantity) {
+              const stockErr = new Error("insufficient_stock");
+              (stockErr as Error & Record<string, unknown>).productName = product.name;
+              (stockErr as Error & Record<string, unknown>).available = currentStock;
+              throw stockErr;
+            }
+          }
+        }
+
+        // Insert order
+        await tx.insert(storeOrdersTable).values({
+          id: orderId,
+          storeId: store.id,
+          tenantId: store.tenantId,
+          orderNumber,
+          customerName: data.customerName,
+          customerEmail: data.customerEmail,
+          customerPhone: data.customerPhone ?? "",
+          ...(data.customerCpf && { customerCpf: data.customerCpf }),
+          ...(data.customerAddress && { customerAddress: data.customerAddress }),
+          subtotal: subtotal.toFixed(2),
+          discountAmount: discountAmount.toFixed(2),
+          totalAmount: totalAmount.toFixed(2),
+          ...(couponId && { couponId }),
+          ...(data.couponCode && { couponCode: data.couponCode }),
+          paymentMethod: data.paymentMethod ?? "pending",
+          paymentProvider: data.paymentProvider ?? "manual",
+          ...(data.customerNotes && { customerNotes: data.customerNotes }),
+          ...((data.notes && !data.customerNotes) && { customerNotes: data.notes }),
+          ...(data.ipAddress && { ipAddress: data.ipAddress }),
+          ...(data.userAgent && { userAgent: data.userAgent }),
+        });
+
+        // Insert order items
+        for (const itemData of orderItemsData) {
+          itemData.orderId = orderId;
+          await tx.insert(storeOrderItemsTable).values(itemData);
+        }
+
+        // Decrement stock and update salesCount for each product
+        for (const item of data.items) {
+          const product = fetchedProducts.get(item.productId)!;
+          if (product.trackInventory) {
+            await tx.update(storeProductsTable).set({
+              stockQuantity: sql`GREATEST(0, COALESCE(stock_quantity, 0) - ${item.quantity})`,
+              salesCount: sql`sales_count + ${item.quantity}`,
+            }).where(eq(storeProductsTable.id, product.id));
+          } else {
+            await tx.update(storeProductsTable).set({
+              salesCount: sql`sales_count + ${item.quantity}`,
+            }).where(eq(storeProductsTable.id, product.id));
+          }
+        }
+
+        // Update coupon usage count atomically
+        if (couponId) {
+          await tx.update(storeCouponsTable)
+            .set({ usageCount: sql`usage_count + 1` })
+            .where(eq(storeCouponsTable.id, couponId));
+        }
+
+        // Update store order count atomically
+        await tx.update(storesTable)
+          .set({ totalOrders: sql`total_orders + 1` })
+          .where(eq(storesTable.id, store.id));
+      });
+    } catch (txErr: unknown) {
+      if (txErr instanceof Error && txErr.message === "insufficient_stock") {
+        const e = txErr as Error & { productName?: string; available?: number };
+        res.status(400).json({
+          error: `Estoque insuficiente para "${e.productName}". Disponível: ${e.available ?? 0}`,
+        });
+        return;
       }
+      throw txErr;
     }
-    await db.update(storesTable).set({ totalOrders: store.totalOrders + 1 })
-      .where(eq(storesTable.id, store.id));
+
     const [order] = await db.select().from(storeOrdersTable)
       .where(eq(storeOrdersTable.id, orderId)).limit(1);
     const items = await db.select().from(storeOrderItemsTable)
