@@ -311,7 +311,7 @@ router.get("/trips/:id/seat-map", async (req, res): Promise<void> => {
       number: num,
       row: data.row,
       col: data.col,
-      status: occupiedSeats[num] ? occupiedSeats[num].seatStatus : data.status,
+      status: occupiedSeats[num] ? occupiedSeats[num].seatStatus : "available",
       passengerName: occupiedSeats[num]?.passengerName ?? null,
       reservationId: occupiedSeats[num]?.reservationId ?? null,
     }));

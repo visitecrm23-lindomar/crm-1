@@ -269,24 +269,28 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
     const isBeingCancelled = parsed.data.status != null && CANCELLING_STATUSES.includes(parsed.data.status);
     const wasActive = ACTIVE_STATUSES.includes(existing.status);
 
-    if (isBeingCancelled && wasActive) {
-      const seatsCount = existing.seats.length;
-      if (seatsCount > 0) {
-        const wasConfirmed = existing.status === "confirmed";
-        await db.update(tripsTable).set({
-          availableSeats: sql`GREATEST(0, available_seats + ${seatsCount})`,
-          ...(wasConfirmed
-            ? { confirmedSeats: sql`GREATEST(0, confirmed_seats - ${seatsCount})` }
-            : { reservedSeats: sql`GREATEST(0, reserved_seats - ${seatsCount})` }),
-        }).where(and(eq(tripsTable.id, existing.tripId), eq(tripsTable.tenantId, me.tenantId)));
+    const reservation = await db.transaction(async (tx) => {
+      if (isBeingCancelled && wasActive) {
+        const seatsCount = existing.seats.length;
+        if (seatsCount > 0) {
+          const wasConfirmed = existing.status === "confirmed";
+          await tx.update(tripsTable).set({
+            availableSeats: sql`LEAST(total_capacity, GREATEST(0, available_seats + ${seatsCount}))`,
+            ...(wasConfirmed
+              ? { confirmedSeats: sql`GREATEST(0, confirmed_seats - ${seatsCount})` }
+              : { reservedSeats: sql`GREATEST(0, reserved_seats - ${seatsCount})` }),
+          }).where(and(eq(tripsTable.id, existing.tripId), eq(tripsTable.tenantId, me.tenantId)));
+        }
       }
-    }
 
-    await db.update(reservationsTable).set(updates)
-      .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)));
-    const [reservation] = await db.select().from(reservationsTable)
-      .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)))
-      .limit(1);
+      await tx.update(reservationsTable).set(updates)
+        .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)));
+      const [updated] = await tx.select().from(reservationsTable)
+        .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)))
+        .limit(1);
+      return updated ?? null;
+    });
+
     if (!reservation) { res.status(404).json({ error: "Not found" }); return; }
     const formatted = await formatReservation(reservation);
     res.json(formatted);
@@ -304,21 +308,22 @@ router.delete("/reservations/:id", async (req, res): Promise<void> => {
     const existing = await requireReservationAccess(me, req.params.id, res);
     if (!existing) return;
 
-    if (ACTIVE_STATUSES.includes(existing.status)) {
-      const seatsCount = existing.seats.length;
-      if (seatsCount > 0) {
-        const wasConfirmed = existing.status === "confirmed";
-        await db.update(tripsTable).set({
-          availableSeats: sql`GREATEST(0, available_seats + ${seatsCount})`,
-          ...(wasConfirmed
-            ? { confirmedSeats: sql`GREATEST(0, confirmed_seats - ${seatsCount})` }
-            : { reservedSeats: sql`GREATEST(0, reserved_seats - ${seatsCount})` }),
-        }).where(and(eq(tripsTable.id, existing.tripId), eq(tripsTable.tenantId, me.tenantId)));
+    await db.transaction(async (tx) => {
+      if (ACTIVE_STATUSES.includes(existing.status)) {
+        const seatsCount = existing.seats.length;
+        if (seatsCount > 0) {
+          const wasConfirmed = existing.status === "confirmed";
+          await tx.update(tripsTable).set({
+            availableSeats: sql`LEAST(total_capacity, GREATEST(0, available_seats + ${seatsCount}))`,
+            ...(wasConfirmed
+              ? { confirmedSeats: sql`GREATEST(0, confirmed_seats - ${seatsCount})` }
+              : { reservedSeats: sql`GREATEST(0, reserved_seats - ${seatsCount})` }),
+          }).where(and(eq(tripsTable.id, existing.tripId), eq(tripsTable.tenantId, me.tenantId)));
+        }
       }
-    }
-
-    await db.delete(reservationsTable)
-      .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)));
+      await tx.delete(reservationsTable)
+        .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)));
+    });
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Error deleting reservation");
