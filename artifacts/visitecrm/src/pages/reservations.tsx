@@ -573,6 +573,7 @@ function NewReservationModal({ open, onClose, onSuccess }: { open: boolean; onCl
   const [paymentMethod, setPaymentMethod] = useState("pix");
   const [clientSearch, setClientSearch] = useState("");
   const [tripSearch, setTripSearch] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const filteredClients = useMemo(() =>
     (clientsData?.data ?? []).filter(c =>
@@ -591,31 +592,38 @@ function NewReservationModal({ open, onClose, onSuccess }: { open: boolean; onCl
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setCreateError(null);
     const fd = new FormData(e.currentTarget);
     const seatsRaw = (fd.get("seats") as string || "").trim();
     const seats = seatsRaw ? seatsRaw.split(",").map(s => s.trim()).filter(Boolean) : ["1"];
-    await createReservation.mutateAsync({
-      data: {
-        tripId: selectedTripId,
-        clientId: selectedClientId,
-        seats,
-        totalValue: parseFloat(fd.get("totalValue") as string || "0"),
-        paymentMethod,
-        installments: parseInt(fd.get("installments") as string || "1"),
-        notes: (fd.get("notes") as string) || undefined,
-        hasInsurance: fd.get("hasInsurance") === "on",
-      }
-    });
-    setSelectedTripId("");
-    setSelectedClientId("");
-    setClientSearch("");
-    setTripSearch("");
-    onSuccess();
-    onClose();
+    try {
+      await createReservation.mutateAsync({
+        data: {
+          tripId: selectedTripId,
+          clientId: selectedClientId,
+          seats,
+          totalValue: parseFloat(fd.get("totalValue") as string || "0"),
+          paymentMethod,
+          installments: parseInt(fd.get("installments") as string || "1"),
+          notes: (fd.get("notes") as string) || undefined,
+          hasInsurance: fd.get("hasInsurance") === "on",
+        }
+      });
+      setSelectedTripId("");
+      setSelectedClientId("");
+      setClientSearch("");
+      setTripSearch("");
+      onSuccess();
+      onClose();
+    } catch (err: unknown) {
+      const apiError = (err as { data?: { error?: string } })?.data?.error;
+      const msg = apiError ?? (err instanceof Error ? err.message : null) ?? "Erro ao criar reserva";
+      setCreateError(msg);
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { setCreateError(null); onClose(); } }}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nova Reserva</DialogTitle>
@@ -691,6 +699,12 @@ function NewReservationModal({ open, onClose, onSuccess }: { open: boolean; onCl
             <input type="checkbox" name="hasInsurance" id="hasInsurance" className="rounded" />
             <label htmlFor="hasInsurance" className="text-sm">Incluir seguro de viagem</label>
           </div>
+          {createError && (
+            <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+              <XCircle className="w-4 h-4 shrink-0" />
+              <span>{createError}</span>
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
             <Button type="submit" disabled={createReservation.isPending || !selectedTripId || !selectedClientId}>

@@ -153,11 +153,6 @@ router.post("/reservations", async (req, res): Promise<void> => {
     const parsed = CreateReservationBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-    const [trip] = await db.select().from(tripsTable)
-      .where(and(eq(tripsTable.id, parsed.data.tripId), eq(tripsTable.tenantId, me.tenantId)))
-      .limit(1);
-    if (!trip) { res.status(400).json({ error: "Trip not found or not in tenant" }); return; }
-
     const [client] = await db.select().from(clientsTable)
       .where(and(eq(clientsTable.id, parsed.data.clientId), eq(clientsTable.tenantId, me.tenantId)))
       .limit(1);
@@ -165,35 +160,56 @@ router.post("/reservations", async (req, res): Promise<void> => {
 
     const id = generateId();
     const voucherCode = generateVoucherCode();
-    const balance = parsed.data.totalValue;
+    const seatsCount = parsed.data.seats.length;
 
-    await db.insert(reservationsTable).values({
-      id,
-      tenantId: me.tenantId,
-      tripId: parsed.data.tripId,
-      clientId: parsed.data.clientId,
-      seats: parsed.data.seats,
-      tripType: parsed.data.tripType ?? null,
-      packageType: parsed.data.packageType ?? null,
-      hasInsurance: parsed.data.hasInsurance ?? false,
-      totalValue: String(parsed.data.totalValue),
-      paidValue: "0",
-      balance: String(balance),
-      paymentMethod: parsed.data.paymentMethod ?? null,
-      installments: parsed.data.installments ?? 1,
-      commissionPercentage: parsed.data.commissionPercentage ? String(parsed.data.commissionPercentage) : null,
-      status: "pending",
-      voucherCode,
-      qrCode: `QR-${voucherCode}`,
-      notes: parsed.data.notes ?? null,
-      createdById: me.id,
+    type TxResult = { error: string; status: number } | { ok: true };
+
+    const txResult: TxResult = await db.transaction(async (tx) => {
+      const lockResult = await tx.execute(
+        sql`SELECT id, available_seats FROM trips WHERE id = ${parsed.data.tripId} AND tenant_id = ${me.tenantId} FOR UPDATE`
+      );
+      const tripRow = (lockResult as unknown as { rows: Array<{ id: string; available_seats: number }> }).rows[0];
+      if (!tripRow) return { error: "Trip not found or not in tenant", status: 400 };
+
+      const availableSeats = Number(tripRow.available_seats);
+      if (availableSeats < seatsCount) {
+        return { error: "Não há vagas suficientes nesta viagem", status: 400 };
+      }
+
+      await tx.insert(reservationsTable).values({
+        id,
+        tenantId: me.tenantId,
+        tripId: parsed.data.tripId,
+        clientId: parsed.data.clientId,
+        seats: parsed.data.seats,
+        tripType: parsed.data.tripType ?? null,
+        packageType: parsed.data.packageType ?? null,
+        hasInsurance: parsed.data.hasInsurance ?? false,
+        totalValue: String(parsed.data.totalValue),
+        paidValue: "0",
+        balance: String(parsed.data.totalValue),
+        paymentMethod: parsed.data.paymentMethod ?? null,
+        installments: parsed.data.installments ?? 1,
+        commissionPercentage: parsed.data.commissionPercentage ? String(parsed.data.commissionPercentage) : null,
+        status: "pending",
+        voucherCode,
+        qrCode: `QR-${voucherCode}`,
+        notes: parsed.data.notes ?? null,
+        createdById: me.id,
+      });
+
+      await tx.update(tripsTable).set({
+        reservedSeats: sql`reserved_seats + ${seatsCount}`,
+        availableSeats: sql`available_seats - ${seatsCount}`,
+      }).where(and(eq(tripsTable.id, parsed.data.tripId), eq(tripsTable.tenantId, me.tenantId)));
+
+      return { ok: true };
     });
 
-    const seatsCount = parsed.data.seats.length;
-    await db.update(tripsTable).set({
-      reservedSeats: sql`reserved_seats + ${seatsCount}`,
-      availableSeats: sql`available_seats - ${seatsCount}`,
-    }).where(and(eq(tripsTable.id, parsed.data.tripId), eq(tripsTable.tenantId, me.tenantId)));
+    if ("error" in txResult) {
+      res.status(txResult.status).json({ error: txResult.error });
+      return;
+    }
 
     const [reservation] = await db.select().from(reservationsTable)
       .where(and(eq(reservationsTable.id, id), eq(reservationsTable.tenantId, me.tenantId)))

@@ -49,6 +49,20 @@ async function runMigrations() {
       ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_clients_override integer;
       ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_trips_override integer;
     `);
+    await client.query(`
+      UPDATE trips SET available_seats = 0 WHERE available_seats < 0;
+    `);
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'trips_available_seats_non_negative'
+        ) THEN
+          ALTER TABLE trips ADD CONSTRAINT trips_available_seats_non_negative CHECK (available_seats >= 0);
+        END IF;
+      END $$;
+    `);
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");
