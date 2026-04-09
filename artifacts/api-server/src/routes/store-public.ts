@@ -353,25 +353,26 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
     try {
       await db.transaction(async (tx) => {
         // Re-validate stock with row-level locks to prevent race conditions.
-        // Lock each unique product once and validate against AGGREGATED quantity.
-        const lockedProductIds = new Set<string>();
-        for (const item of data.items) {
-          const product = fetchedProducts.get(item.productId)!;
-          if (product.trackInventory && !product.allowBackorder && !lockedProductIds.has(product.id)) {
-            lockedProductIds.add(product.id);
-            const lockResult = await tx.execute(
-              // Drizzle's tx.execute() returns raw node-postgres QueryResult; cast to access .rows
-              sql`SELECT id, stock_quantity FROM store_products WHERE id = ${product.id} FOR UPDATE`
-            );
-            const row = (lockResult as unknown as { rows: Array<{ id: string; stock_quantity: number | null }> }).rows[0];
-            const currentStock = Number(row?.stock_quantity ?? 0);
-            const totalRequested = quantityByProductId.get(product.id) ?? 0;
-            if (currentStock < totalRequested) {
-              const stockErr = new Error("insufficient_stock");
-              (stockErr as Error & Record<string, unknown>).productName = product.name;
-              (stockErr as Error & Record<string, unknown>).available = currentStock;
-              throw stockErr;
-            }
+        // Sort product IDs before locking to establish a consistent lock ordering across
+        // concurrent transactions, which eliminates A→B vs B→A deadlock scenarios.
+        const trackedProductIds = Array.from(fetchedProducts.values())
+          .filter((p) => p.trackInventory && !p.allowBackorder)
+          .map((p) => p.id)
+          .sort();
+        for (const productId of trackedProductIds) {
+          const product = fetchedProducts.get(productId)!;
+          const lockResult = await tx.execute(
+            // Drizzle's tx.execute() returns raw node-postgres QueryResult; cast to access .rows
+            sql`SELECT id, stock_quantity FROM store_products WHERE id = ${product.id} FOR UPDATE`
+          );
+          const row = (lockResult as unknown as { rows: Array<{ id: string; stock_quantity: number | null }> }).rows[0];
+          const currentStock = Number(row?.stock_quantity ?? 0);
+          const totalRequested = quantityByProductId.get(product.id) ?? 0;
+          if (currentStock < totalRequested) {
+            const stockErr = new Error("insufficient_stock");
+            (stockErr as Error & Record<string, unknown>).productName = product.name;
+            (stockErr as Error & Record<string, unknown>).available = currentStock;
+            throw stockErr;
           }
         }
 
