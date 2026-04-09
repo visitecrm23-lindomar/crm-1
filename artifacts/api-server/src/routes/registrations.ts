@@ -88,7 +88,6 @@ const CreateAccommodationBody = z.object({
 const UpdateAccommodationBody = z.object({
   name: z.string().optional(),
   pricePerNight: z.number().optional(),
-  totalRooms: z.number().optional(),
   status: z.string().optional(),
   totalRooms: z.number().int().optional().nullable(),
   amenities: z.array(z.string()).optional(),

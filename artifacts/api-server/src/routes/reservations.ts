@@ -246,6 +246,9 @@ router.get("/reservations/:id", async (req, res): Promise<void> => {
   }
 });
 
+const CANCELLING_STATUSES = ["cancelled", "refunded"];
+const ACTIVE_STATUSES = ["pending", "confirmed"];
+
 router.patch("/reservations/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
@@ -263,6 +266,22 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
     if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
     if (parsed.data.seats != null) updates.seats = parsed.data.seats;
 
+    const isBeingCancelled = parsed.data.status != null && CANCELLING_STATUSES.includes(parsed.data.status);
+    const wasActive = ACTIVE_STATUSES.includes(existing.status);
+
+    if (isBeingCancelled && wasActive) {
+      const seatsCount = existing.seats.length;
+      if (seatsCount > 0) {
+        const wasConfirmed = existing.status === "confirmed";
+        await db.update(tripsTable).set({
+          availableSeats: sql`GREATEST(0, available_seats + ${seatsCount})`,
+          ...(wasConfirmed
+            ? { confirmedSeats: sql`GREATEST(0, confirmed_seats - ${seatsCount})` }
+            : { reservedSeats: sql`GREATEST(0, reserved_seats - ${seatsCount})` }),
+        }).where(and(eq(tripsTable.id, existing.tripId), eq(tripsTable.tenantId, me.tenantId)));
+      }
+    }
+
     await db.update(reservationsTable).set(updates)
       .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)));
     const [reservation] = await db.select().from(reservationsTable)
@@ -273,6 +292,36 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
     res.json(formatted);
   } catch (err) {
     req.log.error({ err }, "Error updating reservation");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/reservations/:id", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    const existing = await requireReservationAccess(me, req.params.id, res);
+    if (!existing) return;
+
+    if (ACTIVE_STATUSES.includes(existing.status)) {
+      const seatsCount = existing.seats.length;
+      if (seatsCount > 0) {
+        const wasConfirmed = existing.status === "confirmed";
+        await db.update(tripsTable).set({
+          availableSeats: sql`GREATEST(0, available_seats + ${seatsCount})`,
+          ...(wasConfirmed
+            ? { confirmedSeats: sql`GREATEST(0, confirmed_seats - ${seatsCount})` }
+            : { reservedSeats: sql`GREATEST(0, reserved_seats - ${seatsCount})` }),
+        }).where(and(eq(tripsTable.id, existing.tripId), eq(tripsTable.tenantId, me.tenantId)));
+      }
+    }
+
+    await db.delete(reservationsTable)
+      .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)));
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Error deleting reservation");
     res.status(500).json({ error: "Internal server error" });
   }
 });
