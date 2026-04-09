@@ -273,12 +273,9 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
       if (isBeingCancelled && wasActive) {
         const seatsCount = existing.seats.length;
         if (seatsCount > 0) {
-          const wasConfirmed = existing.status === "confirmed";
           await tx.update(tripsTable).set({
             availableSeats: sql`LEAST(total_capacity, GREATEST(0, available_seats + ${seatsCount}))`,
-            ...(wasConfirmed
-              ? { confirmedSeats: sql`GREATEST(0, confirmed_seats - ${seatsCount})` }
-              : { reservedSeats: sql`GREATEST(0, reserved_seats - ${seatsCount})` }),
+            reservedSeats: sql`GREATEST(0, reserved_seats - ${seatsCount})`,
           }).where(and(eq(tripsTable.id, existing.tripId), eq(tripsTable.tenantId, me.tenantId)));
         }
       }
@@ -312,12 +309,9 @@ router.delete("/reservations/:id", async (req, res): Promise<void> => {
       if (!CANCELLING_STATUSES.includes(existing.status)) {
         const seatsCount = existing.seats.length;
         if (seatsCount > 0) {
-          const wasConfirmed = existing.status === "confirmed";
           await tx.update(tripsTable).set({
             availableSeats: sql`LEAST(total_capacity, GREATEST(0, available_seats + ${seatsCount}))`,
-            ...(wasConfirmed
-              ? { confirmedSeats: sql`GREATEST(0, confirmed_seats - ${seatsCount})` }
-              : { reservedSeats: sql`GREATEST(0, reserved_seats - ${seatsCount})` }),
+            reservedSeats: sql`GREATEST(0, reserved_seats - ${seatsCount})`,
           }).where(and(eq(tripsTable.id, existing.tripId), eq(tripsTable.tenantId, me.tenantId)));
         }
       }
