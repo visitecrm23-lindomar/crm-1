@@ -120,11 +120,15 @@ export interface CreateClientBody {
   /** @nullable */
   cpf?: string | null;
   /** @nullable */
+  rg?: string | null;
+  /** @nullable */
   birthDate?: string | null;
   /** @nullable */
   gender?: string | null;
   /** @nullable */
   photoUrl?: string | null;
+  /** @nullable */
+  instagram?: string | null;
   /** @nullable */
   addressCity?: string | null;
   /** @nullable */
@@ -149,11 +153,15 @@ export interface UpdateClientBody {
   /** @nullable */
   cpf?: string | null;
   /** @nullable */
+  rg?: string | null;
+  /** @nullable */
   birthDate?: string | null;
   /** @nullable */
   gender?: string | null;
   /** @nullable */
   photoUrl?: string | null;
+  /** @nullable */
+  instagram?: string | null;
   /** @nullable */
   status?: string | null;
   /** @nullable */

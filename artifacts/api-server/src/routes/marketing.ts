@@ -52,6 +52,7 @@ const UpdateProductBody = z.object({
   promotionalPrice: z.number().optional().nullable(),
   stock: z.number().optional(),
   active: z.boolean().optional(),
+  featured: z.boolean().optional(),
   description: z.string().optional().nullable(),
 });
 
@@ -320,6 +321,7 @@ router.patch("/products/:id", async (req, res): Promise<void> => {
     if (parsed.data.promotionalPrice !== undefined) updates.promotionalPrice = parsed.data.promotionalPrice ? String(parsed.data.promotionalPrice) : null;
     if (parsed.data.stock != null) updates.stock = parsed.data.stock;
     if (parsed.data.active != null) updates.active = parsed.data.active;
+    if (parsed.data.featured != null) updates.featured = parsed.data.featured;
     if (parsed.data.description !== undefined) updates.description = parsed.data.description ?? null;
     await db.update(productsTable).set(updates)
       .where(and(eq(productsTable.id, req.params.id), eq(productsTable.tenantId, me.tenantId)));

@@ -31,6 +31,7 @@ const UpdateSupplierBody = z.object({
   type: z.string().optional(),
   email: z.string().optional().nullable(),
   phone: z.string().optional().nullable(),
+  contactName: z.string().optional().nullable(),
   status: z.string().optional(),
   pixKey: z.string().optional().nullable(),
 });
@@ -50,6 +51,8 @@ const CreateVehicleBody = z.object({
 const UpdateVehicleBody = z.object({
   status: z.string().optional(),
   name: z.string().optional(),
+  capacity: z.number().int().optional(),
+  dailyRate: z.number().optional().nullable(),
   amenities: z.array(z.string()).optional(),
 });
 
@@ -71,6 +74,7 @@ const UpdateAccommodationBody = z.object({
   name: z.string().optional(),
   pricePerNight: z.number().optional(),
   status: z.string().optional(),
+  totalRooms: z.number().int().optional().nullable(),
   amenities: z.array(z.string()).optional(),
 });
 
@@ -201,6 +205,7 @@ router.patch("/suppliers/:id", async (req, res): Promise<void> => {
     if (parsed.data.type != null) updates.type = parsed.data.type;
     if (parsed.data.email !== undefined) updates.email = parsed.data.email ?? null;
     if (parsed.data.phone !== undefined) updates.phone = parsed.data.phone ?? null;
+    if (parsed.data.contactName !== undefined) updates.contactName = parsed.data.contactName ?? null;
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.pixKey !== undefined) updates.pixKey = parsed.data.pixKey ?? null;
     await db.update(suppliersTable).set(updates)
@@ -282,6 +287,8 @@ router.patch("/vehicles/:id", async (req, res): Promise<void> => {
     const updates: Partial<typeof vehiclesTable.$inferInsert> = {};
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.name != null) updates.name = parsed.data.name;
+    if (parsed.data.capacity != null) updates.capacity = parsed.data.capacity;
+    if (parsed.data.dailyRate !== undefined) updates.dailyRate = parsed.data.dailyRate != null ? String(parsed.data.dailyRate) : null;
     if (parsed.data.amenities != null) updates.amenities = parsed.data.amenities;
     await db.update(vehiclesTable).set(updates)
       .where(and(eq(vehiclesTable.id, req.params.id), eq(vehiclesTable.tenantId, me.tenantId)));
@@ -365,6 +372,7 @@ router.patch("/accommodations/:id", async (req, res): Promise<void> => {
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.pricePerNight != null) updates.pricePerNight = String(parsed.data.pricePerNight);
     if (parsed.data.status != null) updates.status = parsed.data.status;
+    if (parsed.data.totalRooms !== undefined) updates.totalRooms = parsed.data.totalRooms ?? null;
     if (parsed.data.amenities != null) updates.amenities = parsed.data.amenities;
     await db.update(accommodationsTable).set(updates)
       .where(and(eq(accommodationsTable.id, req.params.id), eq(accommodationsTable.tenantId, me.tenantId)));

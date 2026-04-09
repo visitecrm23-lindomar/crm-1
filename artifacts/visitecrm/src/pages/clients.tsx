@@ -281,7 +281,7 @@ const GENDER_OPTIONS = [
 ];
 
 interface ClientFormData {
-  name: string; email: string; whatsapp: string; phone: string; cpf: string;
+  name: string; email: string; whatsapp: string; phone: string; cpf: string; rg: string;
   birthDate: string; gender: string; addressCity: string; addressState: string;
   instagram: string; observations: string; tags: string; dreamDestinations: string;
   pipelineStage: string; classification: string; npsScore: string; status: string;
@@ -289,7 +289,7 @@ interface ClientFormData {
 }
 
 const EMPTY_CLIENT: ClientFormData = {
-  name: "", email: "", whatsapp: "", phone: "", cpf: "", birthDate: "", gender: "none",
+  name: "", email: "", whatsapp: "", phone: "", cpf: "", rg: "", birthDate: "", gender: "none",
   addressCity: "", addressState: "", instagram: "", observations: "", tags: "",
   dreamDestinations: "", pipelineStage: "none", classification: "lead", npsScore: "", status: "active",
   origin: "",
@@ -298,7 +298,7 @@ const EMPTY_CLIENT: ClientFormData = {
 function clientToForm(c: Client): ClientFormData {
   return {
     name: c.name, email: c.email, whatsapp: c.whatsapp, phone: c.phone ?? "",
-    cpf: c.cpf ?? "", birthDate: c.birthDate ? c.birthDate.split("T")[0] : "",
+    cpf: c.cpf ?? "", rg: c.rg ?? "", birthDate: c.birthDate ? c.birthDate.split("T")[0] : "",
     gender: c.gender ?? "none", addressCity: c.addressCity ?? "", addressState: c.addressState ?? "",
     instagram: c.instagram ?? "", observations: c.observations ?? "",
     tags: (c.tags ?? []).join(", "), dreamDestinations: (c.dreamDestinations ?? []).join(", "),
@@ -375,6 +375,7 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
     const base = {
       name: form.name, email: form.email, whatsapp: form.whatsapp,
       phone: form.phone || undefined, cpf: form.cpf || undefined,
+      rg: form.rg || undefined,
       birthDate: form.birthDate ? new Date(form.birthDate).toISOString() : undefined,
       gender: form.gender !== "none" ? form.gender : undefined,
       addressCity: form.addressCity || undefined,
@@ -443,6 +444,10 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
               <div className="space-y-2">
                 <Label>CPF</Label>
                 <Input placeholder="000.000.000-00" value={form.cpf} onChange={e => set("cpf")(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>RG</Label>
+                <Input placeholder="MG-00.000.000" value={form.rg} onChange={e => set("rg")(e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Data de Nascimento</Label>
@@ -665,6 +670,7 @@ function Client360Modal({ open, onClose, client }: Client360ModalProps) {
                 { label: "Cidade", value: client.addressCity ? `${client.addressCity}/${client.addressState}` : "—", icon: MapPin },
                 { label: "Aniversário", value: client.birthDate ? format(parseISO(client.birthDate), "dd/MM/yyyy", { locale: ptBR }) : "—", icon: Calendar },
                 { label: "CPF", value: client.cpf ?? "—", icon: null },
+                { label: "RG", value: client.rg ?? "—", icon: null },
                 { label: "Instagram", value: client.instagram ?? "—", icon: null },
                 { label: "Classificação", value: CLASSIFICATION_LABELS[client.classification] ?? client.classification, icon: null },
                 { label: "Pipeline", value: client.pipelineStage ?? "—", icon: null },

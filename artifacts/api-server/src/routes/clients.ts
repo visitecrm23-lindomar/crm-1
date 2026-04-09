@@ -162,9 +162,11 @@ router.post("/clients", async (req, res): Promise<void> => {
       whatsapp: parsed.data.whatsapp,
       phone: parsed.data.phone ?? null,
       cpf: parsed.data.cpf ?? null,
+      rg: parsed.data.rg ?? null,
       birthDate: parsed.data.birthDate ? new Date(parsed.data.birthDate) : null,
       gender: parsed.data.gender ?? null,
       photoUrl: parsed.data.photoUrl ?? null,
+      instagram: parsed.data.instagram ?? null,
       addressCity: parsed.data.addressCity ?? null,
       addressState: parsed.data.addressState ?? null,
       observations: parsed.data.observations ?? null,
@@ -228,8 +230,10 @@ router.patch("/clients/:id", async (req, res): Promise<void> => {
     if (parsed.data.whatsapp != null) updates.whatsapp = parsed.data.whatsapp;
     if (parsed.data.phone !== undefined) updates.phone = parsed.data.phone ?? null;
     if (parsed.data.cpf !== undefined) updates.cpf = parsed.data.cpf ?? null;
+    if (parsed.data.rg !== undefined) updates.rg = parsed.data.rg ?? null;
     if (parsed.data.birthDate !== undefined) updates.birthDate = parsed.data.birthDate ? new Date(parsed.data.birthDate) : null;
     if (parsed.data.gender !== undefined) updates.gender = parsed.data.gender ?? null;
+    if (parsed.data.instagram !== undefined) updates.instagram = parsed.data.instagram ?? null;
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.classification != null) updates.classification = parsed.data.classification;
     if (parsed.data.tags != null) updates.tags = parsed.data.tags;
