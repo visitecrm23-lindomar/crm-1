@@ -4107,6 +4107,8 @@ components:
           type: ["string", "null"]
         boardingLocationId:
           type: ["string", "null"]
+        storeOrderId:
+          type: ["string", "null"]
         createdAt:
           type: string
         updatedAt:

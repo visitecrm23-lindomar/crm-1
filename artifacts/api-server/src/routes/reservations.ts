@@ -31,6 +31,7 @@ async function formatReservation(r: typeof reservationsTable.$inferSelect) {
     checkedInAt: r.checkedInAt?.toISOString() ?? null,
     notes: r.notes,
     boardingLocationId: r.boardingLocationId ?? null,
+    storeOrderId: r.storeOrderId ?? null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
     trip: trip ? {

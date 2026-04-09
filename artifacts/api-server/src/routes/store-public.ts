@@ -7,10 +7,14 @@ import {
   storeOrdersTable,
   storeOrderItemsTable,
   storeCouponsTable,
+  reservationsTable,
+  tripsTable,
+  clientsTable,
+  usersTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod/v4";
-import { generateId } from "../lib/id";
+import { generateId, generateVoucherCode } from "../lib/id";
 
 const router = Router();
 
@@ -269,6 +273,8 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
       metadata: Record<string, unknown> | null;
     }> = [];
     const fetchedProducts = new Map<string, typeof storeProductsTable.$inferSelect>();
+    // Map tripId -> { product, totalQty, totalValue } for products linked to a trip
+    const tripLinkedProducts = new Map<string, { product: typeof storeProductsTable.$inferSelect; totalQty: number; totalValue: number }>();
 
     for (const item of data.items) {
       // Only fetch product once per unique productId
@@ -315,6 +321,34 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
         total: lineTotal.toFixed(2),
         metadata: item.metadata || null,
       });
+      // Track trip-linked products (accumulate totals across duplicate lines)
+      if (product.tripId) {
+        const totalQty = quantityByProductId.get(product.id) ?? item.quantity;
+        const productPrice = parseFloat(product.onSale && product.salePrice ? product.salePrice : product.price);
+        tripLinkedProducts.set(product.tripId, {
+          product,
+          totalQty,
+          totalValue: productPrice * totalQty,
+        });
+      }
+    }
+
+    // Phase 1.5: Preliminary trip seat availability check (fast early rejection)
+    for (const [tripId, { product, totalQty }] of tripLinkedProducts) {
+      const [trip] = await db.select({ availableSeats: tripsTable.availableSeats })
+        .from(tripsTable)
+        .where(and(eq(tripsTable.id, tripId), eq(tripsTable.tenantId, store.tenantId)))
+        .limit(1);
+      if (!trip) {
+        res.status(400).json({ error: `Viagem vinculada ao produto "${product.name}" não encontrada` });
+        return;
+      }
+      if (trip.availableSeats < totalQty) {
+        res.status(400).json({
+          error: `Sem vagas suficientes para "${product.name}". Disponível: ${trip.availableSeats} vaga(s)`,
+        });
+        return;
+      }
     }
 
     // Phase 2: Coupon handling (outside transaction)
@@ -349,12 +383,69 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
     const orderId = generateId();
     const orderNumber = `#${new Date().getFullYear()}-${String(Math.floor(Math.random() * 99999)).padStart(5, "0")}`;
 
-    // Phase 3: Atomic transaction — lock products, validate stock, write everything
+    // Phase 2.5: Find/create client and admin user for trip-linked reservation(s)
+    let reservationClientId: string | null = null;
+    let reservationCreatedById: string | null = null;
+    if (tripLinkedProducts.size > 0) {
+      // Find the first active user in the tenant (needed for reservation.createdById)
+      const [adminUser] = await db.select({ id: usersTable.id })
+        .from(usersTable)
+        .where(and(eq(usersTable.tenantId, store.tenantId), eq(usersTable.isActive, true)))
+        .limit(1);
+      if (adminUser) {
+        reservationCreatedById = adminUser.id;
+        // Find existing client by email, or create a new one
+        const [existingClient] = await db.select({ id: clientsTable.id })
+          .from(clientsTable)
+          .where(and(eq(clientsTable.tenantId, store.tenantId), eq(clientsTable.email, data.customerEmail)))
+          .limit(1);
+        if (existingClient) {
+          reservationClientId = existingClient.id;
+        } else {
+          const newClientId = generateId();
+          await db.insert(clientsTable).values({
+            id: newClientId,
+            tenantId: store.tenantId,
+            name: data.customerName,
+            email: data.customerEmail,
+            whatsapp: data.customerPhone ?? "",
+            createdById: adminUser.id,
+          });
+          reservationClientId = newClientId;
+        }
+      } else {
+        req.log.warn({ tenantId: store.tenantId }, "No active user found for tenant — trip reservation will be skipped");
+      }
+    }
+
+    // Phase 3: Atomic transaction — lock trips, lock products, validate, write everything
     try {
       await db.transaction(async (tx) => {
+        // Lock trips FIRST (sorted by tripId) to prevent deadlocks with concurrent checkouts
+        // and with the internal reservations route which also locks trips.
+        const sortedTripIds = Array.from(tripLinkedProducts.keys()).sort();
+        for (const tripId of sortedTripIds) {
+          const { product, totalQty } = tripLinkedProducts.get(tripId)!;
+          const lockResult = await tx.execute(
+            sql`SELECT id, available_seats FROM trips WHERE id = ${tripId} AND tenant_id = ${store.tenantId} FOR UPDATE`
+          );
+          const row = (lockResult as unknown as { rows: Array<{ id: string; available_seats: number }> }).rows[0];
+          if (!row) {
+            const tripErr = new Error("trip_not_found");
+            (tripErr as Error & Record<string, unknown>).productName = product.name;
+            throw tripErr;
+          }
+          const currentSeats = Number(row.available_seats);
+          if (currentSeats < totalQty) {
+            const seatErr = new Error("no_seats");
+            (seatErr as Error & Record<string, unknown>).productName = product.name;
+            (seatErr as Error & Record<string, unknown>).available = currentSeats;
+            throw seatErr;
+          }
+        }
+
+        // Then lock products (sorted by productId for deadlock prevention)
         // Re-validate stock with row-level locks to prevent race conditions.
-        // Sort product IDs before locking to establish a consistent lock ordering across
-        // concurrent transactions, which eliminates A→B vs B→A deadlock scenarios.
         const trackedProductIds = Array.from(fetchedProducts.values())
           .filter((p) => p.trackInventory && !p.allowBackorder)
           .map((p) => p.id)
@@ -425,6 +516,37 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
           }
         }
 
+        // Create reservations for trip-linked products + decrement available_seats
+        if (tripLinkedProducts.size > 0 && reservationClientId && reservationCreatedById) {
+          for (const [tripId, { totalQty, totalValue }] of tripLinkedProducts) {
+            const voucherCode = generateVoucherCode();
+            const reservationId = generateId();
+            // Use sequential placeholder seat IDs so cancellation logic can return the correct
+            // number of seats to the trip (reservation cancel uses seats.length for the decrement).
+            const placeholderSeats = Array.from({ length: totalQty }, (_, i) => String(i + 1));
+            await tx.insert(reservationsTable).values({
+              id: reservationId,
+              tenantId: store.tenantId,
+              tripId,
+              clientId: reservationClientId,
+              seats: placeholderSeats,
+              totalValue: totalValue.toFixed(2),
+              paidValue: "0",
+              balance: totalValue.toFixed(2),
+              status: "pending",
+              voucherCode,
+              qrCode: `QR-${voucherCode}`,
+              storeOrderId: orderId,
+              createdById: reservationCreatedById,
+            });
+            // Decrement trip available_seats and increment reserved_seats
+            await tx.update(tripsTable).set({
+              availableSeats: sql`available_seats - ${totalQty}`,
+              reservedSeats: sql`reserved_seats + ${totalQty}`,
+            }).where(and(eq(tripsTable.id, tripId), eq(tripsTable.tenantId, store.tenantId)));
+          }
+        }
+
         // Update coupon usage count atomically
         if (couponId) {
           await tx.update(storeCouponsTable)
@@ -442,6 +564,20 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
         const e = txErr as Error & { productName?: string; available?: number };
         res.status(400).json({
           error: `Estoque insuficiente para "${e.productName}". Disponível: ${e.available ?? 0}`,
+        });
+        return;
+      }
+      if (txErr instanceof Error && txErr.message === "no_seats") {
+        const e = txErr as Error & { productName?: string; available?: number };
+        res.status(400).json({
+          error: `Sem vagas suficientes para "${e.productName ?? ""}". Disponível: ${e.available ?? 0} vaga(s)`,
+        });
+        return;
+      }
+      if (txErr instanceof Error && txErr.message === "trip_not_found") {
+        const e = txErr as Error & { productName?: string };
+        res.status(400).json({
+          error: `Viagem vinculada ao produto "${e.productName ?? ""}" não encontrada`,
         });
         return;
       }

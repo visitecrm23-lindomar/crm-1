@@ -413,6 +413,17 @@ function ReservationDetailModal({ reservationId, open, onClose }: { reservationI
                   <p className="text-sm">{data.notes}</p>
                 </div>
               )}
+              {(data as { storeOrderId?: string | null }).storeOrderId && (
+                <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <Tag className="w-4 h-4 text-blue-600 shrink-0" />
+                  <div>
+                    <p className="text-xs text-blue-600 font-medium">Origem: Vitrine Online</p>
+                    <p className="text-sm text-blue-700">
+                      Pedido: <span className="font-mono font-semibold">{(data as { storeOrderId?: string | null }).storeOrderId}</span>
+                    </p>
+                  </div>
+                </div>
+              )}
               {data.checkedInAt && (
                 <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
                   <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
@@ -901,9 +912,16 @@ export default function Reservations() {
               reservations.map(r => (
                 <TableRow key={r.id} className="cursor-pointer hover:bg-muted/50">
                   <TableCell>
-                    <div className="flex items-center gap-1.5">
-                      <Tag className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="font-mono text-xs font-semibold">{r.voucherCode}</span>
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <Tag className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="font-mono text-xs font-semibold">{r.voucherCode}</span>
+                      </div>
+                      {(r as { storeOrderId?: string | null }).storeOrderId && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 w-fit">
+                          Vitrine
+                        </span>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell>
