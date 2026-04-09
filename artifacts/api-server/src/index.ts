@@ -44,6 +44,11 @@ async function runMigrations() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
     `);
+    await client.query(`
+      ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_users_override integer;
+      ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_clients_override integer;
+      ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_trips_override integer;
+    `);
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");
