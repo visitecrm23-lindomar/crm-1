@@ -78,18 +78,25 @@ async function runMigrations() {
       );
     `);
     // Rename plans columns to match Drizzle schema (price_monthly → monthly_price, price_yearly → annual_price)
+    // Guard: only rename when OLD column exists AND NEW column does not, preventing errors in partial-state envs.
     await client.query(`
       DO $$
       BEGIN
         IF EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_name = 'plans' AND column_name = 'price_monthly'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'plans' AND column_name = 'monthly_price'
         ) THEN
           ALTER TABLE plans RENAME COLUMN price_monthly TO monthly_price;
         END IF;
         IF EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_name = 'plans' AND column_name = 'price_yearly'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'plans' AND column_name = 'annual_price'
         ) THEN
           ALTER TABLE plans RENAME COLUMN price_yearly TO annual_price;
         END IF;
