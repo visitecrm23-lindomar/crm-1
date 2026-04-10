@@ -22,3 +22,4 @@ export * from "./catalog";
 export * from "./plans";
 export * from "./store";
 export * from "./hurb";
+export * from "./invites";

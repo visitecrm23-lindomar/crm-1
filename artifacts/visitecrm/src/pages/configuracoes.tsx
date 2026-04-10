@@ -43,7 +43,14 @@ import {
   Key,
   CheckCircle2,
   Wifi,
+  Users,
+  UserPlus,
+  Mail,
+  Loader2,
+  Trash2,
 } from "lucide-react";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 /* ──────────────────── Agency Profile Tab ──────────────────── */
 function AgencyProfileTab() {
@@ -636,6 +643,283 @@ function CustomizationTab() {
   );
 }
 
+/* ──────────────────── Team Tab ──────────────────── */
+const roleLabels: Record<string, string> = {
+  agencia: "Gestor",
+  vendedor: "Vendedor",
+  superadmin: "Super Admin",
+  cliente: "Cliente",
+};
+
+const roleColors: Record<string, string> = {
+  agencia: "bg-blue-100 text-blue-800",
+  vendedor: "bg-green-100 text-green-800",
+  superadmin: "bg-purple-100 text-purple-800",
+  cliente: "bg-gray-100 text-gray-800",
+};
+
+interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+  createdAt: string;
+  avatarUrl?: string | null;
+}
+
+interface PendingInvite {
+  id: string;
+  email: string;
+  role: string;
+  accepted: boolean;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+function TeamTab() {
+  const { toast } = useToast();
+  const { data: me } = useGetMe();
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [invites, setInvites] = useState<PendingInvite[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole] = useState<"vendedor">("vendedor");
+  const [inviting, setInviting] = useState(false);
+
+  async function loadTeam() {
+    setLoading(true);
+    try {
+      const [membersRes, invitesRes] = await Promise.all([
+        fetch(`${BASE}/api/team/members`, { credentials: "include" }),
+        fetch(`${BASE}/api/team/invites`, { credentials: "include" }),
+      ]);
+      if (membersRes.ok) setMembers(await membersRes.json());
+      if (invitesRes.ok) {
+        const all: PendingInvite[] = await invitesRes.json();
+        setInvites(all.filter((i) => !i.accepted));
+      }
+    } catch {
+      toast({ title: "Erro ao carregar equipe", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadTeam();
+  }, []);
+
+  async function handleInvite() {
+    if (!inviteEmail.trim()) {
+      toast({ title: "Informe o e-mail do convidado", variant: "destructive" });
+      return;
+    }
+    setInviting(true);
+    try {
+      const res = await fetch(`${BASE}/api/team/invite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: data.error ?? "Erro ao convidar", variant: "destructive" });
+        return;
+      }
+      toast({
+        title: "Convite registrado!",
+        description: `${inviteEmail} receberá acesso ao criar uma conta com este e-mail.`,
+      });
+      setInviteOpen(false);
+      setInviteEmail("");
+      loadTeam();
+    } catch {
+      toast({ title: "Erro de conexão", variant: "destructive" });
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  async function handleRemove(id: string) {
+    try {
+      await fetch(`${BASE}/api/team/members/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      toast({ title: "Membro desativado" });
+      loadTeam();
+    } catch {
+      toast({ title: "Erro ao remover membro", variant: "destructive" });
+    }
+  }
+
+  async function handleCancelInvite(id: string) {
+    try {
+      await fetch(`${BASE}/api/team/invites/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      toast({ title: "Convite cancelado" });
+      loadTeam();
+    } catch {
+      toast({ title: "Erro ao cancelar convite", variant: "destructive" });
+    }
+  }
+
+  const isManager = me?.role === "agencia" || me?.role === "superadmin";
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-muted-foreground">
+            Gerencie os membros da sua equipe e convide vendedores.
+          </p>
+        </div>
+        {isManager && (
+          <Button onClick={() => setInviteOpen(true)}>
+            <UserPlus className="w-4 h-4 mr-2" />
+            Convidar Vendedor
+          </Button>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 py-8 text-muted-foreground text-sm justify-center">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Carregando equipe...
+        </div>
+      ) : (
+        <>
+          {members.length === 0 && invites.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-8 text-center">
+              <Users className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm text-muted-foreground">Nenhum membro na equipe ainda.</p>
+              {isManager && (
+                <Button variant="outline" className="mt-3" onClick={() => setInviteOpen(true)}>
+                  Convidar primeiro vendedor
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {members.length > 0 && (
+                <div className="rounded-md border divide-y">
+                  {members.map((m) => (
+                    <div key={m.id} className="flex items-center gap-4 px-4 py-3">
+                      <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0 font-semibold text-primary text-sm">
+                        {m.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{m.name}</p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Mail className="w-3 h-3" />
+                          {m.email}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge className={`text-xs ${roleColors[m.role] ?? "bg-gray-100 text-gray-800"}`}>
+                          {roleLabels[m.role] ?? m.role}
+                        </Badge>
+                        <Badge variant={m.isActive ? "default" : "outline"} className={`text-xs ${m.isActive ? "bg-green-100 text-green-800" : ""}`}>
+                          {m.isActive ? "Ativo" : "Inativo"}
+                        </Badge>
+                      </div>
+                      {isManager && m.id !== me?.id && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
+                          onClick={() => handleRemove(m.id)}
+                          title="Desativar membro"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {invites.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                    Convites Pendentes
+                  </p>
+                  <div className="rounded-md border divide-y bg-muted/20">
+                    {invites.map((inv) => (
+                      <div key={inv.id} className="flex items-center gap-4 px-4 py-3">
+                        <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                          <Mail className="w-4 h-4 text-amber-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate text-muted-foreground">{inv.email}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Convite enviado · expira em {inv.expiresAt ? new Date(inv.expiresAt).toLocaleDateString("pt-BR") : "7 dias"}
+                          </p>
+                        </div>
+                        <Badge className="text-xs bg-amber-100 text-amber-800">
+                          {roleLabels[inv.role] ?? inv.role}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs text-amber-700 border-amber-300">
+                          Aguardando
+                        </Badge>
+                        {isManager && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
+                            onClick={() => handleCancelInvite(inv.id)}
+                            title="Cancelar convite"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Convidar Vendedor</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>E-mail do convidado</Label>
+              <Input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="vendedor@agencia.com"
+                onKeyDown={(e) => e.key === "Enter" && handleInvite()}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              O convidado será convidado como <strong>Vendedor</strong> e deverá criar uma conta no VisiteCRM com este e-mail para ter acesso automático à sua agência.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInviteOpen(false)}>Cancelar</Button>
+            <Button onClick={handleInvite} disabled={inviting}>
+              {inviting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Convidando...</> : "Convidar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 /* ──────────────────── API Keys Tab ──────────────────── */
 function ApiKeysTab() {
   const [keys] = useState([
@@ -720,6 +1004,10 @@ export default function Configuracoes() {
             <Palette className="w-3.5 h-3.5" />
             Personalização
           </TabsTrigger>
+          <TabsTrigger value="team" className="flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5" />
+            Equipe
+          </TabsTrigger>
           <TabsTrigger value="apikeys" className="flex items-center gap-1.5">
             <Key className="w-3.5 h-3.5" />
             Chaves API
@@ -789,6 +1077,20 @@ export default function Configuracoes() {
               </CardHeader>
               <CardContent>
                 <CustomizationTab />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="team">
+            <Card>
+              <CardHeader>
+                <CardTitle>Equipe da Agência</CardTitle>
+                <CardDescription>
+                  Gerencie os membros da sua equipe e convide novos vendedores
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TeamTab />
               </CardContent>
             </Card>
           </TabsContent>

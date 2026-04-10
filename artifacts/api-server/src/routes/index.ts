@@ -29,6 +29,8 @@ import adminMetricsRouter from "./admin-metrics";
 import platformSettingsRouter from "./platform-settings";
 import storeRouter from "./store";
 import storePublicRouter from "./store-public";
+import onboardingRouter from "./onboarding";
+import teamRouter from "./team";
 
 const router: IRouter = Router();
 
@@ -62,5 +64,7 @@ router.use(adminMetricsRouter);
 router.use(platformSettingsRouter);
 router.use(storeRouter);
 router.use(storePublicRouter);
+router.use(onboardingRouter);
+router.use(teamRouter);
 
 export default router;

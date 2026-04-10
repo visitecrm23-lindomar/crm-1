@@ -59,9 +59,25 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 | `/admin/logs` | Logs de Auditoria | Global audit log feed with tenant/action/user filtering |
 | `/admin/settings` | Configurações | Feature flags management (enable/disable per-flag) |
 
+## Authentication & Onboarding Flow (Task 30)
+
+- **Sign-in page** (`/sign-in`): Split-screen layout — left branded panel (blue gradient, benefits list, testimonial), right Clerk form.
+- **Sign-up page** (`/sign-up`): Split-screen layout — left branded panel (green gradient, agency-only notice, stats), right Clerk form.
+- **Onboarding** (`/onboarding`): Multi-step stepper for new agencies: Step 1 (Agency name, CNPJ, phone, slug with real-time uniqueness check), Step 2 (Plan selection with pricing). Creates tenant in DB via `POST /api/onboarding/agency`.
+- **Role-based redirect** (`HomeRedirect`/`RoleRedirect`): After login, syncs user then redirects by role: `superadmin → /admin`, `agencia/vendedor → /dashboard` (or `/onboarding` if no tenant), `cliente → /loja/:slug`.
+- **syncMe modified**: New Clerk users are created in DB WITHOUT auto-creating a tenant (they must go through onboarding).
+- **Team management** (`/configuracoes` → Equipe tab): Lists team members, invite by email via `POST /api/team/invite`, deactivate via `DELETE /api/team/members/:id`.
+
 ## Key API Routes
 
 All routes under `/api/`:
+- `GET /api/onboarding/status` — check if user completed onboarding
+- `POST /api/onboarding/agency` — create tenant + link user (first-time setup)
+- `GET /api/onboarding/plans` — list active plans for onboarding selection
+- `GET /api/onboarding/check-slug` — validate slug uniqueness
+- `GET /api/team/members` — list team members for current tenant
+- `POST /api/team/invite` — invite a new vendedor by email
+- `DELETE /api/team/members/:id` — deactivate a team member
 - `GET/POST /api/dashboard/*` — dashboard stats
 - `GET/POST/PUT /api/clients` — client CRUD
 - `GET/POST/PUT /api/trips` — trip CRUD

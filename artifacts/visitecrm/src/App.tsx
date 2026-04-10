@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { ClerkProvider, SignIn, SignUp, Show, useClerk, useUser } from "@clerk/react";
+import { useEffect, useRef, useState } from "react";
+import { ClerkProvider, Show, useClerk, useUser } from "@clerk/react";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
@@ -10,6 +10,9 @@ import { useSyncMe, useGetMe } from "@workspace/api-client-react";
 import Layout from "@/components/layout";
 import AdminLayout from "@/components/admin-layout";
 import Landing from "@/pages/landing";
+import SignInPage from "@/pages/sign-in";
+import SignUpPage from "@/pages/sign-up";
+import OnboardingPage from "@/pages/onboarding";
 import Dashboard from "@/pages/dashboard";
 import Pipeline from "@/pages/pipeline";
 import Clients from "@/pages/clients";
@@ -88,6 +91,76 @@ function ClerkQueryClientCacheInvalidator() {
   return null;
 }
 
+function RoleRedirect() {
+  const syncMe = useSyncMe();
+  const { data: me, isLoading, refetch } = useGetMe();
+  const { user } = useUser();
+  const qc = useQueryClient();
+  const [, setLocation] = useLocation();
+  const [synced, setSynced] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setTimedOut(true), 10000);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    syncMe.mutate(
+      {
+        data: {
+          clerkId: user.id,
+          name: user.fullName ?? user.firstName ?? "Usuário",
+          email: user.primaryEmailAddress?.emailAddress ?? "",
+          avatarUrl: user.imageUrl ?? undefined,
+        },
+      },
+      {
+        onSettled: () => {
+          qc.invalidateQueries({ queryKey: ["/api/users/me"] });
+          refetch().then(() => setSynced(true));
+        },
+        onError: () => setSynced(true),
+      }
+    );
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (timedOut && !synced) {
+      setLocation("/sign-in");
+      return;
+    }
+    if (!synced || isLoading) return;
+    if (!me) {
+      setLocation("/sign-in");
+      return;
+    }
+
+    if (me.role === "superadmin") {
+      setLocation("/admin");
+    } else if (!me.tenantId) {
+      setLocation("/onboarding");
+    } else if (me.role === "agencia" || me.role === "vendedor") {
+      setLocation("/dashboard");
+    } else if (me.role === "cliente") {
+      if (me.tenant?.slug) {
+        setLocation(`/loja/${me.tenant.slug}`);
+      } else {
+        setLocation("/dashboard");
+      }
+    } else {
+      setLocation("/dashboard");
+    }
+  }, [synced, me, isLoading, timedOut]);
+
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="animate-pulse text-muted-foreground text-sm">Carregando...</div>
+    </div>
+  );
+}
+
 function SyncUser() {
   const syncMe = useSyncMe();
   const { user } = useUser();
@@ -109,8 +182,7 @@ function HomeRedirect() {
   return (
     <>
       <Show when="signed-in">
-        <SyncUser />
-        <Redirect to="/dashboard" />
+        <RoleRedirect />
       </Show>
       <Show when="signed-out">
         <Landing />
@@ -120,6 +192,16 @@ function HomeRedirect() {
 }
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+  const { data: me, isLoading } = useGetMe();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (isLoading || !me) return;
+    if (!me.tenantId && me.role !== "superadmin") {
+      setLocation("/onboarding");
+    }
+  }, [me, isLoading]);
+
   return (
     <>
       <Show when="signed-in">
@@ -155,19 +237,31 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
   );
 }
 
-function SignInPage() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
-    </div>
-  );
-}
+function OnboardingRoute() {
+  const { data: me, isLoading } = useGetMe();
+  const [, setLocation] = useLocation();
 
-function SignUpPage() {
+  useEffect(() => {
+    if (isLoading || !me) return;
+    if (me.tenantId) {
+      if (me.role === "superadmin") {
+        setLocation("/admin");
+      } else {
+        setLocation("/dashboard");
+      }
+    }
+  }, [me, isLoading]);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
-    </div>
+    <>
+      <Show when="signed-in">
+        <SyncUser />
+        {!isLoading && <OnboardingPage />}
+      </Show>
+      <Show when="signed-out">
+        <Redirect to="/" />
+      </Show>
+    </>
   );
 }
 
@@ -177,6 +271,7 @@ function Router() {
       <Route path="/" component={HomeRedirect} />
       <Route path="/sign-in/*?" component={SignInPage} />
       <Route path="/sign-up/*?" component={SignUpPage} />
+      <Route path="/onboarding" component={OnboardingRoute} />
       <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} />} />
       <Route path="/pipeline" component={() => <ProtectedRoute component={Pipeline} />} />
       <Route path="/clients" component={() => <ProtectedRoute component={Clients} />} />

@@ -63,6 +63,20 @@ async function runMigrations() {
         END IF;
       END $$;
     `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS invites (
+        id text PRIMARY KEY,
+        tenant_id text NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        email text NOT NULL,
+        role text NOT NULL DEFAULT 'vendedor',
+        invited_by text,
+        token text NOT NULL UNIQUE,
+        accepted boolean NOT NULL DEFAULT false,
+        accepted_at TIMESTAMPTZ,
+        expires_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    `);
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");

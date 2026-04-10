@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { usersTable, tenantsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { usersTable, tenantsTable, invitesTable } from "@workspace/db";
+import { eq, and, gt } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import {
@@ -11,7 +11,7 @@ import {
   GetMeResponse,
   SyncMeResponse,
 } from "@workspace/api-zod";
-import { getAuth } from "@clerk/express";
+import { getAuth, clerkClient } from "@clerk/express";
 
 const router = Router();
 
@@ -54,6 +54,34 @@ router.get("/users/me", async (req, res): Promise<void> => {
   }
 });
 
+async function resolveInviteForUser(
+  clerkId: string,
+  canonicalEmail: string,
+  inviteIdFromMeta: string | undefined,
+  log: import("pino").Logger,
+): Promise<typeof invitesTable.$inferSelect | undefined> {
+  if (inviteIdFromMeta) {
+    const [byId] = await db.select().from(invitesTable)
+      .where(and(
+        eq(invitesTable.id, inviteIdFromMeta),
+        eq(invitesTable.accepted, false),
+        eq(invitesTable.email, canonicalEmail),
+      ))
+      .limit(1);
+    if (byId) return byId;
+    log.warn({ clerkId, inviteIdFromMeta }, "Clerk metadata inviteId found but email mismatch — ignoring for security");
+  }
+
+  const [byEmail] = await db.select().from(invitesTable)
+    .where(and(
+      eq(invitesTable.email, canonicalEmail),
+      eq(invitesTable.accepted, false),
+      gt(invitesTable.expiresAt, new Date()),
+    ))
+    .limit(1);
+  return byEmail;
+}
+
 router.post("/users/me/sync", async (req, res): Promise<void> => {
   try {
     const { userId: clerkId } = getAuth(req);
@@ -62,38 +90,52 @@ router.post("/users/me/sync", async (req, res): Promise<void> => {
     const parsed = SyncMeBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-    const { name, email, avatarUrl } = parsed.data;
+    const { name, avatarUrl } = parsed.data;
+
+    let canonicalEmail = parsed.data.email;
+    let inviteIdFromMeta: string | undefined;
+    let clerkFetchFailed = false;
+
+    try {
+      const clerkUser = await clerkClient.users.getUser(clerkId);
+      const primaryEmail = clerkUser.emailAddresses.find(e => e.id === clerkUser.primaryEmailAddressId);
+      if (primaryEmail?.emailAddress) {
+        canonicalEmail = primaryEmail.emailAddress;
+      }
+      inviteIdFromMeta = (clerkUser.publicMetadata as Record<string, string> | undefined)?.inviteId;
+    } catch (clerkErr) {
+      req.log.warn({ clerkErr, clerkId }, "Failed to fetch Clerk user; using client-supplied email for profile update only (no invite reconciliation)");
+      clerkFetchFailed = true;
+    }
 
     const [existing] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId)).limit(1);
-
-    let tenantId: string;
-    if (existing) {
-      if (!existing.tenantId) { res.status(500).json({ error: "User has no tenant assigned" }); return; }
-      tenantId = existing.tenantId;
-    } else {
-      tenantId = generateId();
-      const tenantSlug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + tenantId.slice(0, 4);
-      await db.insert(tenantsTable).values({
-        id: tenantId,
-        name: name + "'s Agency",
-        slug: tenantSlug,
-        email,
-        planId: "starter",
-        status: "trial",
-        limits: { users: 10, clients: 1000, trips: 50 },
-      });
-    }
 
     if (!existing) {
       const userId = generateId();
       const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+      let pendingInvite: typeof invitesTable.$inferSelect | undefined;
+      if (!clerkFetchFailed) {
+        pendingInvite = await resolveInviteForUser(clerkId, canonicalEmail, inviteIdFromMeta, req.log);
+      }
+
+      const linkedTenantId = pendingInvite?.tenantId ?? null;
+      const assignedRole = pendingInvite?.role ?? "agencia";
+
       await db.insert(usersTable).values({
-        id: userId, clerkId, tenantId, name, email,
-        avatarUrl: avatarUrl ?? null, role: "agencia",
+        id: userId, clerkId, tenantId: linkedTenantId, name, email: canonicalEmail,
+        avatarUrl: avatarUrl ?? null, role: assignedRole,
         referralCode, referralBalance: "0",
       });
+
+      if (pendingInvite) {
+        await db.update(invitesTable)
+          .set({ accepted: true, acceptedAt: new Date() })
+          .where(eq(invitesTable.id, pendingInvite.id));
+      }
+
       const [newUser] = await db.select().from(usersTable)
-        .where(and(eq(usersTable.id, userId), eq(usersTable.tenantId, tenantId)))
+        .where(eq(usersTable.id, userId))
         .limit(1);
       if (!newUser) { res.status(500).json({ error: "Failed to create user" }); return; }
       res.json(SyncMeResponse.parse({
@@ -103,7 +145,25 @@ router.post("/users/me/sync", async (req, res): Promise<void> => {
         referralBalance: Number(newUser.referralBalance), createdAt: newUser.createdAt.toISOString(),
       }));
     } else {
-      await db.update(usersTable).set({ name, email, avatarUrl: avatarUrl ?? null, lastLoginAt: new Date() })
+      const updateSet: Record<string, unknown> = {
+        name,
+        email: canonicalEmail,
+        avatarUrl: avatarUrl ?? null,
+        lastLoginAt: new Date(),
+      };
+
+      if (!existing.tenantId && !clerkFetchFailed) {
+        const reconcileInvite = await resolveInviteForUser(clerkId, canonicalEmail, inviteIdFromMeta, req.log);
+        if (reconcileInvite) {
+          updateSet.tenantId = reconcileInvite.tenantId;
+          updateSet.role = reconcileInvite.role;
+          await db.update(invitesTable)
+            .set({ accepted: true, acceptedAt: new Date() })
+            .where(eq(invitesTable.id, reconcileInvite.id));
+        }
+      }
+
+      await db.update(usersTable).set(updateSet)
         .where(eq(usersTable.clerkId, clerkId));
       const [updatedUser] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId)).limit(1);
       if (!updatedUser) { res.status(500).json({ error: "User not found after update" }); return; }
