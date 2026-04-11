@@ -648,7 +648,6 @@ export default function Vouchers() {
           setVoucherDownloadOpen(false);
           setVoucherDownloadRes(null);
         }}
-        autoDownload
       />
     </div>
   );
