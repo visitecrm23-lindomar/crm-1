@@ -501,6 +501,7 @@ router.post("/reservations", async (req, res): Promise<void> => {
         ageCategory: deriveAgeCategory(client.birthDate ?? null),
         seatNumber: parsed.data.seats[0] ?? null,
         isChildUnder7: getAgeYears(client.birthDate ?? null) < 7,
+        isPrimary: true,
       });
 
       await tx.update(tripsTable).set({
@@ -673,13 +674,15 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
     }
     if (parsed.data.seats != null) {
       const newSeat = parsed.data.seats[0] ?? null;
-      const existingPassengers = await db.select().from(passengersTable)
-        .where(eq(passengersTable.reservationId, req.params.id))
-        .orderBy(asc(passengersTable.id))
+      const [principalPassenger] = await db.select().from(passengersTable)
+        .where(and(
+          eq(passengersTable.reservationId, req.params.id),
+          eq(passengersTable.isPrimary, true),
+        ))
         .limit(1);
-      if (existingPassengers.length > 0) {
+      if (principalPassenger) {
         await db.update(passengersTable).set({ seatNumber: newSeat })
-          .where(eq(passengersTable.id, existingPassengers[0].id));
+          .where(eq(passengersTable.id, principalPassenger.id));
       } else if (existing.clientId) {
         const [clientData] = await db.select().from(clientsTable)
           .where(and(eq(clientsTable.id, existing.clientId), eq(clientsTable.tenantId, me.tenantId)))
@@ -695,6 +698,7 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
             ageCategory: deriveAgeCategory(clientData.birthDate ?? null),
             seatNumber: newSeat,
             isChildUnder7: getAgeYears(clientData.birthDate ?? null) < 7,
+            isPrimary: true,
           });
         }
       }

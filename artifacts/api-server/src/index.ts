@@ -178,6 +178,9 @@ async function runMigrations() {
       ALTER TABLE clients ADD COLUMN IF NOT EXISTS internal_rating integer;
       ALTER TABLE clients ADD COLUMN IF NOT EXISTS company_nps integer;
     `);
+    await client.query(`
+      ALTER TABLE passengers ADD COLUMN IF NOT EXISTS is_primary BOOLEAN NOT NULL DEFAULT FALSE;
+    `);
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");
