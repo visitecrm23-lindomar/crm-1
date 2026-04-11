@@ -595,6 +595,7 @@ export function VoucherModal({ reservation, open, onClose, autoDownload }: { res
 }
 
 function ReservationDetailModal({ reservationId, open, onClose }: { reservationId: string; open: boolean; onClose: () => void }) {
+  const [client360Id, setClient360Id] = useState<string | null>(null);
   const { data, isLoading } = useGetReservation(reservationId, {
     query: {
       queryKey: ["reservation", reservationId],
@@ -638,7 +639,13 @@ function ReservationDetailModal({ reservationId, open, onClose }: { reservationI
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Cliente</p>
-                  <p className="font-medium">{data.client?.name}</p>
+                  {data.client?.id ? (
+                    <button className="font-medium hover:underline text-left" onClick={() => setClient360Id(data.client!.id)}>
+                      {data.client?.name}
+                    </button>
+                  ) : (
+                    <p className="font-medium">{data.client?.name}</p>
+                  )}
                   <p className="text-sm text-muted-foreground">{data.client?.email}</p>
                   <p className="text-sm text-muted-foreground">{data.client?.whatsapp}</p>
                   {data.client?.cpf && <p className="text-sm text-muted-foreground">CPF: {data.client.cpf}</p>}
@@ -772,6 +779,7 @@ function ReservationDetailModal({ reservationId, open, onClose }: { reservationI
           <p className="text-muted-foreground py-4">Reserva não encontrada.</p>
         )}
       </DialogContent>
+      <Client360Modal open={!!client360Id} onClose={() => setClient360Id(null)} clientId={client360Id} />
     </Dialog>
   );
 }

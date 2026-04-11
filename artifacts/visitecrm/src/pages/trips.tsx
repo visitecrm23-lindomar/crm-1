@@ -25,7 +25,7 @@ import { getSeatColor } from "@/components/SeatMapPicker";
 import {
   Plus, Search, MapPin, Calendar, Users, Bus, Edit, Trash2, Eye, ChevronsLeft, ChevronsRight,
   LayoutGrid, List, ChevronLeft, ChevronRight, ArrowLeft, Check, X, Download, Send, Copy,
-  AlertCircle, DollarSign, ClipboardList, LogIn, RotateCcw, CheckCircle,
+  AlertCircle, DollarSign, ClipboardList, LogIn, RotateCcw, CheckCircle, UserRound,
 } from "lucide-react";
 import {
   format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay,
@@ -323,11 +323,10 @@ function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: strin
                     <div className="shrink-0 ml-2 flex items-center gap-1">
                       {reservationClientMap.get(p.reservationId) && (
                         <Button
-                          size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground"
+                          size="sm" variant="outline" className="h-8 text-xs gap-1"
                           onClick={() => setClient360Id(reservationClientMap.get(p.reservationId)!)}
-                          title="Perfil 360°"
                         >
-                          <Eye className="w-3.5 h-3.5" />
+                          <UserRound className="w-3.5 h-3.5" /> Perfil 360°
                         </Button>
                       )}
                       {isCheckedIn ? (
@@ -1804,7 +1803,12 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
                           <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditingId(null)}><X className="w-3 h-3" /></Button>
                         </div>
                       ) : (
-                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEdit(r)} title="Editar"><Edit className="w-3 h-3" /></Button>
+                        <div className="flex items-center gap-1">
+                          <Button size="sm" variant="ghost" className="h-6 text-xs gap-1 px-2" onClick={() => setClient360Id(r.client.id)}>
+                            <UserRound className="w-3 h-3" /> Perfil 360°
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEdit(r)} title="Editar"><Edit className="w-3 h-3" /></Button>
+                        </div>
                       )}
                     </td>
                   </tr>
