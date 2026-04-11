@@ -302,11 +302,13 @@ router.post("/payments", async (req, res): Promise<void> => {
     const parsed = CreatePaymentBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
+    let reservationClientId: string | null = null;
     if (parsed.data.reservationId) {
       const [reservation] = await db.select().from(reservationsTable)
         .where(and(eq(reservationsTable.id, parsed.data.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
         .limit(1);
       if (!reservation) { res.status(400).json({ error: "Reservation not found or not in tenant" }); return; }
+      reservationClientId = reservation.clientId;
     }
     if (parsed.data.clientId) {
       const [client] = await db.select().from(clientsTable)
@@ -357,9 +359,10 @@ router.post("/payments", async (req, res): Promise<void> => {
       await autoCreateCommission(parsed.data.reservationId, me.tenantId);
     }
     res.status(201).json(formatPayment(payment));
-    if (parsed.data.clientId && parsed.data.reservationId && explicitStatus === "paid") {
+    const effectiveClientId = parsed.data.clientId ?? reservationClientId;
+    if (effectiveClientId && parsed.data.reservationId && explicitStatus === "paid") {
       const amountFormatted = Number(parsed.data.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-      writeClientActivity(parsed.data.clientId, "payment", `Pagamento de ${amountFormatted} recebido`, me.id, { amount: parsed.data.amount, reservationId: parsed.data.reservationId })
+      writeClientActivity(effectiveClientId, "payment", `Pagamento de ${amountFormatted} recebido`, me.id, { amount: parsed.data.amount, reservationId: parsed.data.reservationId })
         .catch(() => {});
     }
   } catch (err) {

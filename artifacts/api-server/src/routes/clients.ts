@@ -356,6 +356,11 @@ router.post("/clients/:clientId/activities", async (req, res): Promise<void> => 
     if (!client) return;
     const { type, content, metadata } = req.body as { type?: string; content?: string; metadata?: Record<string, unknown> | null };
     if (!type || !content) { res.status(400).json({ error: "type and content are required" }); return; }
+    const MANUAL_ACTIVITY_TYPES = ["note", "call", "whatsapp", "email", "meeting"];
+    if (!MANUAL_ACTIVITY_TYPES.includes(type)) {
+      res.status(400).json({ error: `Invalid activity type. Must be one of: ${MANUAL_ACTIVITY_TYPES.join(", ")}` });
+      return;
+    }
     const id = generateId();
     await db.insert(notesTable).values({
       id,
