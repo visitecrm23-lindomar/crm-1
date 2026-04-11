@@ -314,72 +314,86 @@ function ReservationPassengersTab({ reservationId }: { reservationId: string }) 
 }
 
 function VoucherModal({ reservation, open, onClose }: { reservation: Reservation | null; open: boolean; onClose: () => void }) {
+  const reservationId = reservation?.id ?? "";
+  const { data: fullData, isLoading } = useGetReservation(reservationId, {
+    query: { queryKey: ["voucher", reservationId], enabled: open && !!reservationId },
+  });
+  const r = fullData ?? reservation;
+
   if (!reservation) return null;
-  const trip = reservation.trip;
-  const client = reservation.client;
+  const trip = r?.trip;
+  const client = r?.client;
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Voucher de Reserva</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div className="flex flex-col items-center gap-2 p-6 bg-muted/30 rounded-xl border-2 border-dashed">
-            <p className="text-xs text-muted-foreground uppercase tracking-widest">Código do Voucher</p>
-            <p className="text-3xl font-mono font-bold tracking-wider">{reservation.voucherCode}</p>
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[reservation.status] ?? "bg-gray-100 text-gray-800"}`}>
-              {STATUS_LABELS[reservation.status] ?? reservation.status}
-            </span>
+        {isLoading ? (
+          <div className="space-y-3 py-4">
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Cliente</p>
-              <p className="font-semibold text-sm">{client?.name ?? "—"}</p>
-              {client?.whatsapp && <p className="text-xs text-muted-foreground">{client.whatsapp}</p>}
-              {client?.cpf && <p className="text-xs text-muted-foreground">CPF: {client.cpf}</p>}
+        ) : (
+          <div className="space-y-4 py-2">
+            <div className="flex flex-col items-center gap-2 p-6 bg-muted/30 rounded-xl border-2 border-dashed">
+              <p className="text-xs text-muted-foreground uppercase tracking-widest">Código do Voucher</p>
+              <p className="text-3xl font-mono font-bold tracking-wider">{r?.voucherCode}</p>
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[r?.status ?? ""] ?? "bg-gray-100 text-gray-800"}`}>
+                {STATUS_LABELS[r?.status ?? ""] ?? r?.status}
+              </span>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Viagem</p>
-              <p className="font-semibold text-sm">{trip?.name ?? "—"}</p>
-              {trip?.destination && <p className="text-xs text-muted-foreground">{trip.destination}</p>}
-              {trip?.departureDate && (
-                <p className="text-xs text-muted-foreground">
-                  {new Date(trip.departureDate).toLocaleDateString("pt-BR")}
-                </p>
-              )}
-            </div>
-          </div>
-          <Separator />
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div>
-              <p className="text-xs text-muted-foreground">Valor Total</p>
-              <p className="font-bold text-sm">{fmt(reservation.totalValue)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Pago</p>
-              <p className="font-bold text-sm text-green-600">{fmt(reservation.paidValue)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Saldo</p>
-              <p className={`font-bold text-sm ${reservation.balance > 0 ? "text-destructive" : "text-green-600"}`}>
-                {fmt(reservation.balance)}
-              </p>
-            </div>
-          </div>
-          {reservation.seats?.length > 0 && (
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Assentos</p>
-              <div className="flex flex-wrap gap-1">
-                {reservation.seats.map(s => (
-                  <span key={s} className="font-mono text-xs bg-muted px-2 py-1 rounded">{s}</span>
-                ))}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Cliente</p>
+                <p className="font-semibold text-sm">{client?.name ?? "—"}</p>
+                {client?.whatsapp && <p className="text-xs text-muted-foreground">{client.whatsapp}</p>}
+                {client?.cpf && <p className="text-xs text-muted-foreground">CPF: {client.cpf}</p>}
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Viagem</p>
+                <p className="font-semibold text-sm">{trip?.name ?? "—"}</p>
+                {trip?.destination && <p className="text-xs text-muted-foreground">{trip.destination}</p>}
+                {trip?.departureDate && (
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(trip.departureDate).toLocaleDateString("pt-BR")}
+                  </p>
+                )}
               </div>
             </div>
-          )}
-          <p className="text-xs text-center text-muted-foreground">
-            Emitido em {new Date(reservation.createdAt).toLocaleString("pt-BR")}
-          </p>
-        </div>
+            <Separator />
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div>
+                <p className="text-xs text-muted-foreground">Valor Total</p>
+                <p className="font-bold text-sm">{fmt(r?.totalValue ?? 0)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Pago</p>
+                <p className="font-bold text-sm text-green-600">{fmt(r?.paidValue ?? 0)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Saldo</p>
+                <p className={`font-bold text-sm ${(r?.balance ?? 0) > 0 ? "text-destructive" : "text-green-600"}`}>
+                  {fmt(r?.balance ?? 0)}
+                </p>
+              </div>
+            </div>
+            {(r?.seats?.length ?? 0) > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Assentos</p>
+                <div className="flex flex-wrap gap-1">
+                  {r!.seats.map(s => (
+                    <span key={s} className="font-mono text-xs bg-muted px-2 py-1 rounded">{s}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            <p className="text-xs text-center text-muted-foreground">
+              Emitido em {new Date(r?.createdAt ?? "").toLocaleString("pt-BR")}
+            </p>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
