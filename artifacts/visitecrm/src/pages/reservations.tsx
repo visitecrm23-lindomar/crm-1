@@ -484,7 +484,7 @@ function VoucherContent({ r, qrDataUrl }: { r: Reservation | null | undefined; q
   );
 }
 
-export function VoucherModal({ reservation, open, onClose }: { reservation: Reservation | null; open: boolean; onClose: () => void }) {
+export function VoucherModal({ reservation, open, onClose, autoDownload }: { reservation: Reservation | null; open: boolean; onClose: () => void; autoDownload?: boolean }) {
   const reservationId = reservation?.id ?? "";
   const { data: fullData, isLoading } = useGetReservation(reservationId, {
     query: { queryKey: ["voucher", reservationId], enabled: open && !!reservationId },
@@ -493,6 +493,7 @@ export function VoucherModal({ reservation, open, onClose }: { reservation: Rese
   const voucherRef = useRef<HTMLDivElement>(null);
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const hasAutoDownloaded = useRef(false);
 
   useEffect(() => {
     const code = r?.voucherCode ?? r?.id ?? "";
@@ -522,6 +523,16 @@ export function VoucherModal({ reservation, open, onClose }: { reservation: Rese
       setIsGeneratingPdf(false);
     }
   }, [r?.voucherCode, reservationId]);
+
+  useEffect(() => {
+    if (autoDownload && open && !isLoading && r && qrDataUrl && !hasAutoDownloaded.current) {
+      hasAutoDownloaded.current = true;
+      setTimeout(() => handleDownloadPDF(), 100);
+    }
+    if (!open) {
+      hasAutoDownloaded.current = false;
+    }
+  }, [autoDownload, open, isLoading, r, qrDataUrl, handleDownloadPDF]);
 
   const handlePrint = useCallback(() => {
     if (!voucherRef.current) { window.print(); return; }

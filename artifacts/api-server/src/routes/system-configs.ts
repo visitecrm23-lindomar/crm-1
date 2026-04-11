@@ -10,9 +10,18 @@ const router = Router();
 
 const ADMIN_ROLES = ["agencia", "superadmin"] as const;
 
+const anyJsonValue = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+  z.record(z.string(), z.unknown()),
+  z.array(z.unknown()),
+]).optional();
+
 const UpsertSystemConfigBody = z.object({
   key: z.string().min(1),
-  value: z.record(z.string(), z.unknown()).nullable().optional(),
+  value: anyJsonValue,
 });
 
 router.get("/system-configs", async (req, res): Promise<void> => {

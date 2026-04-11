@@ -604,6 +604,7 @@ function ClientDashboard() {
   const { data: pendingPayments, isLoading: loadingPayments } = useListPayments({ status: "pending", limit: 5 });
   const { data: me } = useGetMe();
   const [voucherOpen, setVoucherOpen] = useState(false);
+  const [voucherAutoDownload, setVoucherAutoDownload] = useState(false);
   const [voucherReservation, setVoucherReservation] = useState<Reservation | null>(null);
 
   const nextTrip = upcomingTrips?.[0];
@@ -651,7 +652,7 @@ function ClientDashboard() {
                   variant="outline"
                   size="sm"
                   disabled={!myReservation}
-                  onClick={() => { setVoucherReservation(myReservation); setVoucherOpen(true); }}
+                  onClick={() => { setVoucherReservation(myReservation); setVoucherAutoDownload(false); setVoucherOpen(true); }}
                 >
                   Ver Voucher
                 </Button>
@@ -659,7 +660,7 @@ function ClientDashboard() {
                   variant="outline"
                   size="sm"
                   disabled={!myReservation}
-                  onClick={() => { setVoucherReservation(myReservation); setVoucherOpen(true); }}
+                  onClick={() => { setVoucherReservation(myReservation); setVoucherAutoDownload(true); setVoucherOpen(true); }}
                 >
                   Baixar PDF
                 </Button>
@@ -669,7 +670,7 @@ function ClientDashboard() {
         </Card>
       )}
 
-      <VoucherModal reservation={voucherReservation} open={voucherOpen} onClose={() => setVoucherOpen(false)} />
+      <VoucherModal reservation={voucherReservation} open={voucherOpen} onClose={() => { setVoucherOpen(false); setVoucherAutoDownload(false); }} autoDownload={voucherAutoDownload} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

@@ -538,6 +538,9 @@ function NotificationsTab() {
     { key: "referralConverted", label: "Indicação convertida" },
     { key: "tripReminder", label: "Lembrete de viagem (7 dias)" },
     { key: "birthdayAlert", label: "Alerta de aniversário" },
+    { key: "overduePayment", label: "Pagamentos vencidos" },
+    { key: "unpaidReservation", label: "Reservas confirmadas sem pagamento" },
+    { key: "lowOccupancy", label: "Viagens com baixa ocupação (<50%)" },
   ];
 
   async function handleToggle(key: string, value: boolean) {
