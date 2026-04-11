@@ -896,7 +896,7 @@ function WizardStepIndicator({ step }: { step: number }) {
 }
 
 function NewReservationWizard({ open, onClose, onSuccess, initialTripId }: { open: boolean; onClose: () => void; onSuccess: () => void; initialTripId?: string }) {
-  const { data: tripsData } = useListTrips({ limit: 200, status: "published" });
+  const { data: tripsData } = useListTrips({ limit: 200 });
   const { data: clientsData } = useListClients({ limit: 300 });
   const { data: boardingRaw } = useListBoardingLocations();
   const createReservation = useCreateReservation();
