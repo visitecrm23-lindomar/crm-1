@@ -4,6 +4,7 @@ import { tripsTable, reservationsTable, passengersTable, clientsTable } from "@w
 import { eq, and, ilike, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
+import { deriveAgeCategory } from "../lib/passenger";
 import { CreateTripBody, UpdateTripBody } from "@workspace/api-zod";
 
 const router = Router();
@@ -401,14 +402,6 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
   }
 });
 
-function deriveTripAgeCategory(birthDate: Date | null): "child" | "adult" | "senior" {
-  if (!birthDate) return "adult";
-  const age = Math.floor((Date.now() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
-  if (age < 12) return "child";
-  if (age >= 60) return "senior";
-  return "adult";
-}
-
 router.post("/trips/:id/sync-passengers", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
@@ -455,19 +448,19 @@ router.post("/trips/:id/sync-passengers", async (req, res): Promise<void> => {
     for (const r of reservationsNeedingPassenger) {
       const client = clientMap.get(r.clientId);
       if (!client) continue;
-      await db.insert(passengersTable).values({
+      const inserted = await db.insert(passengersTable).values({
         id: generateId(),
         reservationId: r.id,
         name: client.name,
         cpf: client.cpf ?? null,
         rg: client.rg ?? null,
         birthDate: client.birthDate ?? null,
-        ageCategory: deriveTripAgeCategory(client.birthDate ?? null),
+        ageCategory: deriveAgeCategory(client.birthDate ?? null),
         seatNumber: r.seats?.[0] ?? null,
         isChildUnder7: client.birthDate ? Math.floor((Date.now() - client.birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000)) < 7 : false,
         isPrimary: true,
-      }).onConflictDoNothing();
-      created++;
+      }).onConflictDoNothing().returning({ id: passengersTable.id });
+      if (inserted.length > 0) created++;
     }
 
     res.json({ created });
