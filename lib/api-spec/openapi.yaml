@@ -4836,6 +4836,14 @@ components:
           type: ["string", "null"]
         pixKey:
           type: ["string", "null"]
+        pixType:
+          type: ["string", "null"]
+        bankName:
+          type: ["string", "null"]
+        bankAgency:
+          type: ["string", "null"]
+        bankAccount:
+          type: ["string", "null"]
         status:
           type: string
         createdAt:
@@ -4863,6 +4871,14 @@ components:
           type: ["string", "null"]
         pixKey:
           type: ["string", "null"]
+        pixType:
+          type: ["string", "null"]
+        bankName:
+          type: ["string", "null"]
+        bankAgency:
+          type: ["string", "null"]
+        bankAccount:
+          type: ["string", "null"]
       required: [name, type]
 
     UpdateSupplierBody:
@@ -4877,6 +4893,14 @@ components:
         email:
           type: ["string", "null"]
         pixKey:
+          type: ["string", "null"]
+        pixType:
+          type: ["string", "null"]
+        bankName:
+          type: ["string", "null"]
+        bankAgency:
+          type: ["string", "null"]
+        bankAccount:
           type: ["string", "null"]
 
     # ─── VEHICLE ───────────────────────────────────────────────────
@@ -4904,6 +4928,14 @@ components:
         dailyRate:
           type: ["number", "null"]
         photoUrl:
+          type: ["string", "null"]
+        driverName:
+          type: ["string", "null"]
+        driverPhone:
+          type: ["string", "null"]
+        seatLayout:
+          type: ["string", "null"]
+        notes:
           type: ["string", "null"]
         status:
           type: string
@@ -4934,6 +4966,14 @@ components:
           type: ["number", "null"]
         photoUrl:
           type: ["string", "null"]
+        driverName:
+          type: ["string", "null"]
+        driverPhone:
+          type: ["string", "null"]
+        seatLayout:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
       required: [name, type, plate, capacity]
 
     UpdateVehicleBody:
@@ -4947,6 +4987,18 @@ components:
           type: ["integer", "null"]
         dailyRate:
           type: ["number", "null"]
+        amenities:
+          type: array
+          items:
+            type: string
+        driverName:
+          type: ["string", "null"]
+        driverPhone:
+          type: ["string", "null"]
+        seatLayout:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
 
     # ─── ACCOMMODATION ─────────────────────────────────────────────
     Accommodation:
@@ -4982,6 +5034,11 @@ components:
           type: ["string", "null"]
         rating:
           type: ["number", "null"]
+        gallery:
+          type: array
+          items:
+            type: string
+          nullable: true
         status:
           type: string
         createdAt:
@@ -5013,6 +5070,10 @@ components:
           type: array
           items:
             type: string
+        galleryUrls:
+          type: array
+          items:
+            type: string
         pricePerNight:
           type: ["number", "null"]
       required: [name, type]
@@ -5028,6 +5089,14 @@ components:
           type: ["number", "null"]
         totalRooms:
           type: ["integer", "null"]
+        amenities:
+          type: array
+          items:
+            type: string
+        galleryUrls:
+          type: array
+          items:
+            type: string
 
     # ─── DESTINATION ───────────────────────────────────────────────
     Destination:

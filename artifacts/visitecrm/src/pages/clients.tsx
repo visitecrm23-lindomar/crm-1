@@ -335,7 +335,7 @@ function clientToForm(c: Client): ClientFormData {
     professionalArea: c.professionalArea ?? "", favoriteDrink: c.favoriteDrink ?? "",
     musicalPreferences: c.musicalPreferences ?? "", foodPreferences: c.foodPreferences ?? "",
     dreamDestinations: (c.dreamDestinations ?? []).join(", "), tags: (c.tags ?? []).join(", "),
-    npsScore: c.npsScore != null ? String(c.npsScore) : "",
+    npsScore: c.companyNps != null ? String(c.companyNps) : (c.npsScore != null ? String(c.npsScore) : ""),
     companyFeedback: c.companyFeedback ?? "",
   };
 }
@@ -442,9 +442,11 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
       musicalPreferences: form.musicalPreferences || undefined,
       foodPreferences: form.foodPreferences || undefined,
       internalRating: form.internalRating > 0 ? form.internalRating : undefined,
-      npsScore: form.npsScore ? parseInt(form.npsScore) : undefined,
       companyFeedback: form.companyFeedback || undefined,
       companyNps: form.npsScore ? parseInt(form.npsScore) : undefined,
+      pipelineStage: form.pipelineStage !== "none" ? form.pipelineStage : undefined,
+      classification: form.classification || undefined,
+      status: form.status || undefined,
     };
 
     try {
@@ -452,12 +454,7 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
       if (isEditing && editClient) {
         await updateClient.mutateAsync({
           id: editClient.id,
-          data: {
-            ...base,
-            pipelineStage: form.pipelineStage !== "none" ? form.pipelineStage : undefined,
-            classification: form.classification || undefined,
-            status: form.status || undefined,
-          },
+          data: { ...base },
         });
         savedId = editClient.id;
       } else {
