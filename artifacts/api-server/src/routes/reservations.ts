@@ -314,6 +314,7 @@ router.post("/reservations", async (req, res): Promise<void> => {
     let serverLoyaltyMemberId: string | null = null;
     let serverLoyaltyPoints = 0;
     let serverLoyaltyAmount = 0;
+    let serverRealPerPoint = 0;
 
     if (parsed.data.discountLoyaltyPoints && parsed.data.discountLoyaltyPoints > 0) {
       const [member] = await db.select().from(loyaltyMembersTable)
@@ -336,7 +337,8 @@ router.post("/reservations", async (req, res): Promise<void> => {
       }
       serverLoyaltyMemberId = member.id;
       serverLoyaltyPoints = requestedPoints;
-      serverLoyaltyAmount = Math.round(Math.min(requestedPoints * Number(program.realPerPoint ?? "0"), baseValue) * 100) / 100;
+      serverRealPerPoint = Number(program.realPerPoint ?? "0");
+      serverLoyaltyAmount = Math.round(requestedPoints * serverRealPerPoint * 100) / 100;
     }
 
     let serverReferralCode: string | null = null;
@@ -353,11 +355,26 @@ router.post("/reservations", async (req, res): Promise<void> => {
         res.status(400).json({ error: "Código de indicação inválido ou já utilizado" }); return;
       }
       serverReferralCode = referral.code;
-      serverReferralAmount = Math.round(Math.min(Number(referral.bonusAmount ?? "0"), baseValue) * 100) / 100;
+      serverReferralAmount = Number(referral.bonusAmount ?? "0");
     }
 
-    const serverDiscountTotal = Math.round((serverCouponAmount + serverLoyaltyAmount + serverReferralAmount) * 100) / 100;
-    const serverFinalTotal = Math.round(Math.max(0, baseValue - serverDiscountTotal) * 100) / 100;
+    // Apply discounts in priority order against running remaining balance
+    // Priority: coupon → loyalty → referral
+    let remaining = baseValue;
+    const appliedCouponAmount = Math.round(Math.min(serverCouponAmount, remaining) * 100) / 100;
+    remaining = Math.round((remaining - appliedCouponAmount) * 100) / 100;
+
+    const appliedLoyaltyAmount = Math.round(Math.min(serverLoyaltyAmount, remaining) * 100) / 100;
+    const effectiveLoyaltyPoints = serverRealPerPoint > 0
+      ? Math.min(serverLoyaltyPoints, Math.ceil(appliedLoyaltyAmount / serverRealPerPoint))
+      : 0;
+    remaining = Math.round((remaining - appliedLoyaltyAmount) * 100) / 100;
+
+    const appliedReferralAmount = Math.round(Math.min(serverReferralAmount, remaining) * 100) / 100;
+    remaining = Math.round((remaining - appliedReferralAmount) * 100) / 100;
+
+    const serverDiscountTotal = Math.round((appliedCouponAmount + appliedLoyaltyAmount + appliedReferralAmount) * 100) / 100;
+    const serverFinalTotal = Math.max(0, Math.round((baseValue - serverDiscountTotal) * 100) / 100);
 
     const id = generateId();
     const voucherCode = generateVoucherCode();
@@ -411,12 +428,12 @@ router.post("/reservations", async (req, res): Promise<void> => {
         qrCode: `QR-${voucherCode}`,
         notes: parsed.data.notes ?? null,
         createdById: me.id,
-        discountCouponCode: serverCouponCode,
-        discountCouponAmount: serverCouponAmount > 0 ? String(serverCouponAmount) : null,
-        discountLoyaltyPoints: serverLoyaltyPoints > 0 ? serverLoyaltyPoints : null,
-        discountLoyaltyAmount: serverLoyaltyAmount > 0 ? String(serverLoyaltyAmount) : null,
-        discountReferralCode: serverReferralCode,
-        discountReferralAmount: serverReferralAmount > 0 ? String(serverReferralAmount) : null,
+        discountCouponCode: appliedCouponAmount > 0 ? serverCouponCode : null,
+        discountCouponAmount: appliedCouponAmount > 0 ? String(appliedCouponAmount) : null,
+        discountLoyaltyPoints: effectiveLoyaltyPoints > 0 ? effectiveLoyaltyPoints : null,
+        discountLoyaltyAmount: appliedLoyaltyAmount > 0 ? String(appliedLoyaltyAmount) : null,
+        discountReferralCode: appliedReferralAmount > 0 ? serverReferralCode : null,
+        discountReferralAmount: appliedReferralAmount > 0 ? String(appliedReferralAmount) : null,
         discountTotal: serverDiscountTotal > 0 ? String(serverDiscountTotal) : null,
       });
 
@@ -425,16 +442,16 @@ router.post("/reservations", async (req, res): Promise<void> => {
         availableSeats: sql`available_seats - ${seatsCount}`,
       }).where(and(eq(tripsTable.id, parsed.data.tripId), eq(tripsTable.tenantId, me.tenantId)));
 
-      if (serverLoyaltyMemberId && serverLoyaltyPoints > 0) {
+      if (serverLoyaltyMemberId && effectiveLoyaltyPoints > 0) {
         const memberLock = await tx.execute(
           sql`SELECT id, available_points FROM loyalty_members WHERE id = ${serverLoyaltyMemberId} FOR UPDATE`
         );
         const memberRow = (memberLock as unknown as { rows: Array<{ id: string; available_points: number }> }).rows[0];
-        if (!memberRow || memberRow.available_points < serverLoyaltyPoints) {
+        if (!memberRow || memberRow.available_points < effectiveLoyaltyPoints) {
           return { error: "Pontos de fidelidade insuficientes (corrida detectada)", status: 400 };
         }
         const loyaltyResult = await tx.execute(
-          sql`UPDATE loyalty_members SET available_points = available_points - ${serverLoyaltyPoints} WHERE id = ${serverLoyaltyMemberId} AND available_points >= ${serverLoyaltyPoints}`
+          sql`UPDATE loyalty_members SET available_points = available_points - ${effectiveLoyaltyPoints} WHERE id = ${serverLoyaltyMemberId} AND available_points >= ${effectiveLoyaltyPoints}`
         );
         const loyaltyAffected = (loyaltyResult as unknown as { rowCount: number }).rowCount ?? 0;
         if (loyaltyAffected === 0) {
@@ -445,14 +462,14 @@ router.post("/reservations", async (req, res): Promise<void> => {
           tenantId: me.tenantId,
           memberId: serverLoyaltyMemberId,
           type: "redeem",
-          points: -serverLoyaltyPoints,
+          points: -effectiveLoyaltyPoints,
           description: `Resgate de pontos na reserva ${voucherCode}`,
           referenceId: id,
           referenceType: "reservation",
         });
       }
 
-      if (serverReferralCode) {
+      if (serverReferralCode && appliedReferralAmount > 0) {
         const referralLock = await tx.execute(
           sql`SELECT id, status FROM referrals WHERE tenant_id = ${me.tenantId} AND code = ${serverReferralCode} AND status = 'pending' FOR UPDATE`
         );
