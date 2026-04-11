@@ -678,11 +678,16 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
           await tx.update(passengersTable).set({ seatNumber: newSeat })
             .where(eq(passengersTable.id, principalPassenger.id));
         } else {
-          const [anyPassenger] = await tx.select({ id: passengersTable.id })
+          const [anyPassenger] = await tx.select()
             .from(passengersTable)
             .where(eq(passengersTable.reservationId, req.params.id))
+            .orderBy(asc(passengersTable.id))
             .limit(1);
-          if (!anyPassenger && existing.clientId) {
+          if (anyPassenger) {
+            await tx.update(passengersTable)
+              .set({ seatNumber: newSeat, isPrimary: true })
+              .where(eq(passengersTable.id, anyPassenger.id));
+          } else if (existing.clientId) {
             const [clientData] = await tx.select().from(clientsTable)
               .where(and(eq(clientsTable.id, existing.clientId), eq(clientsTable.tenantId, me.tenantId)))
               .limit(1);
