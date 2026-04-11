@@ -6,6 +6,7 @@ import {
   useListTrips,
 } from "@workspace/api-client-react";
 import type { Reservation } from "@workspace/api-client-react";
+import { VoucherModal } from "./reservations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -65,7 +66,7 @@ function paymentStatus(r: Reservation): string {
   return "pending";
 }
 
-function VoucherCard({ reservation }: { reservation: Reservation }) {
+function VoucherCard({ reservation, onDownload }: { reservation: Reservation; onDownload?: (r: Reservation) => void }) {
   const { toast } = useToast();
   const checkIn = useCheckInReservation();
   const isCheckedIn = !!reservation.checkedInAt;
@@ -180,7 +181,7 @@ function VoucherCard({ reservation }: { reservation: Reservation }) {
               {checkIn.isPending ? "Realizando..." : "Realizar Check-in"}
             </Button>
           )}
-          <Button variant="outline" size="icon" title="Baixar voucher">
+          <Button variant="outline" size="icon" title="Baixar voucher" onClick={() => onDownload?.(reservation)}>
             <Download className="w-4 h-4" />
           </Button>
         </div>
@@ -331,7 +332,7 @@ function BulkCheckIn() {
   );
 }
 
-function VoucherGenerator() {
+function VoucherGenerator({ onDownload }: { onDownload?: (r: Reservation) => void }) {
   const { toast } = useToast();
   const { data: reservationsData } = useListReservations({ limit: 500, status: "confirmed" });
   const reservations = reservationsData?.data ?? [];
@@ -423,7 +424,13 @@ function VoucherGenerator() {
                         <FileText className="w-3 h-3 mr-1" />
                         {generated.has(r.id) ? "Re-gerar" : "Gerar"}
                       </Button>
-                      <Button size="sm" variant="ghost">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={!generated.has(r.id)}
+                        title={generated.has(r.id) ? "Baixar voucher" : "Gere o voucher primeiro"}
+                        onClick={() => generated.has(r.id) && onDownload?.(r)}
+                      >
                         <Download className="w-3 h-3" />
                       </Button>
                     </div>
@@ -442,6 +449,14 @@ export default function Vouchers() {
   const [searchCode, setSearchCode] = useState("");
   const [filterTrip, setFilterTrip] = useState("__all__");
   const [filterStatus, setFilterStatus] = useState("__all__");
+
+  const [voucherDownloadRes, setVoucherDownloadRes] = useState<Reservation | null>(null);
+  const [voucherDownloadOpen, setVoucherDownloadOpen] = useState(false);
+
+  function handleDownload(r: Reservation) {
+    setVoucherDownloadRes(r);
+    setVoucherDownloadOpen(true);
+  }
 
   const { data: reservationsData } = useListReservations({ limit: 200 });
   const reservations = reservationsData?.data ?? [];
@@ -606,7 +621,7 @@ export default function Vouchers() {
             {/* Voucher card */}
             <div>
               {selectedReservation ? (
-                <VoucherCard key={selectedReservation.id} reservation={selectedReservation} />
+                <VoucherCard key={selectedReservation.id} reservation={selectedReservation} onDownload={handleDownload} />
               ) : (
                 <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground h-full flex flex-col items-center justify-center">
                   <QrCode className="w-10 h-10 mb-3 opacity-30" />
@@ -622,9 +637,19 @@ export default function Vouchers() {
         </TabsContent>
 
         <TabsContent value="generator" className="mt-4">
-          <VoucherGenerator />
+          <VoucherGenerator onDownload={handleDownload} />
         </TabsContent>
       </Tabs>
+
+      <VoucherModal
+        reservation={voucherDownloadRes}
+        open={voucherDownloadOpen}
+        onClose={() => {
+          setVoucherDownloadOpen(false);
+          setVoucherDownloadRes(null);
+        }}
+        autoDownload
+      />
     </div>
   );
 }

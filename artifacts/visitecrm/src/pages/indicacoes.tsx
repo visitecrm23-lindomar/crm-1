@@ -3,6 +3,7 @@ import {
   useListReferrals,
   useGetMe,
   useUpdateReferral,
+  useUpsertSystemConfig,
 } from "@workspace/api-client-react";
 import type { Referral } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,7 @@ export default function Indicacoes() {
   const { data: me } = useGetMe();
   const { data: referrals = [], refetch } = useListReferrals();
   const updateReferral = useUpdateReferral();
+  const upsertConfig = useUpsertSystemConfig();
 
   const [copied, setCopied] = useState(false);
   const [bonusModalOpen, setBonusModalOpen] = useState(false);
@@ -75,6 +77,20 @@ export default function Indicacoes() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  }
+
+  async function shareLink() {
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Meu link de indicação", url: referralLink });
+      } catch {
+        // user cancelled or error — do nothing
+      }
+    } else {
+      navigator.clipboard.writeText(referralLink).then(() => {
+        toast({ title: "Link copiado!", description: "Cole e envie para quem quiser indicar." });
+      });
+    }
   }
 
   // Leaderboard: group all referrals by referrerId
@@ -144,7 +160,7 @@ export default function Indicacoes() {
                     <Copy className="w-4 h-4" />
                   )}
                 </Button>
-                <Button size="sm" variant="outline">
+                <Button size="sm" variant="outline" onClick={shareLink}>
                   <Share2 className="w-4 h-4 mr-1" />
                   Compartilhar
                 </Button>
@@ -368,12 +384,23 @@ export default function Indicacoes() {
               Cancelar
             </Button>
             <Button
-              onClick={() => {
-                toast({ title: "Configurações de bônus salvas" });
-                setBonusModalOpen(false);
+              disabled={upsertConfig.isPending}
+              onClick={async () => {
+                try {
+                  await upsertConfig.mutateAsync({
+                    data: {
+                      key: "referral_bonus_config",
+                      value: { bonusPerReferral, discountForReferred },
+                    },
+                  });
+                  toast({ title: "Configurações de bônus salvas" });
+                  setBonusModalOpen(false);
+                } catch {
+                  toast({ title: "Erro ao salvar configurações", variant: "destructive" });
+                }
               }}
             >
-              Salvar
+              {upsertConfig.isPending ? "Salvando..." : "Salvar"}
             </Button>
           </DialogFooter>
         </DialogContent>
