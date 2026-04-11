@@ -664,44 +664,47 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
       const [updated] = await tx.select().from(reservationsTable)
         .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)))
         .limit(1);
-      return updated ?? null;
+      if (!updated) return null;
+
+      if (parsed.data.seats != null) {
+        const newSeat = parsed.data.seats[0] ?? null;
+        const [principalPassenger] = await tx.select().from(passengersTable)
+          .where(and(
+            eq(passengersTable.reservationId, req.params.id),
+            eq(passengersTable.isPrimary, true),
+          ))
+          .limit(1);
+        if (principalPassenger) {
+          await tx.update(passengersTable).set({ seatNumber: newSeat })
+            .where(eq(passengersTable.id, principalPassenger.id));
+        } else if (existing.clientId) {
+          const [clientData] = await tx.select().from(clientsTable)
+            .where(and(eq(clientsTable.id, existing.clientId), eq(clientsTable.tenantId, me.tenantId)))
+            .limit(1);
+          if (clientData) {
+            await tx.insert(passengersTable).values({
+              id: generateId(),
+              reservationId: req.params.id,
+              name: clientData.name,
+              cpf: clientData.cpf ?? null,
+              rg: clientData.rg ?? null,
+              birthDate: clientData.birthDate ?? null,
+              ageCategory: deriveAgeCategory(clientData.birthDate ?? null),
+              seatNumber: newSeat,
+              isChildUnder7: getAgeYears(clientData.birthDate ?? null) < 7,
+              isPrimary: true,
+            }).onConflictDoNothing();
+          }
+        }
+      }
+
+      return updated;
     });
 
     if (!reservation) { res.status(404).json({ error: "Not found" }); return; }
     if (parsed.data.totalValue != null && existing.clientId) {
       syncClientDeal(existing.clientId, me.tenantId, existing.tripId, parsed.data.totalValue, me.id)
         .catch((err) => req.log.error({ err }, "Error syncing deal after reservation update"));
-    }
-    if (parsed.data.seats != null) {
-      const newSeat = parsed.data.seats[0] ?? null;
-      const [principalPassenger] = await db.select().from(passengersTable)
-        .where(and(
-          eq(passengersTable.reservationId, req.params.id),
-          eq(passengersTable.isPrimary, true),
-        ))
-        .limit(1);
-      if (principalPassenger) {
-        await db.update(passengersTable).set({ seatNumber: newSeat })
-          .where(eq(passengersTable.id, principalPassenger.id));
-      } else if (existing.clientId) {
-        const [clientData] = await db.select().from(clientsTable)
-          .where(and(eq(clientsTable.id, existing.clientId), eq(clientsTable.tenantId, me.tenantId)))
-          .limit(1);
-        if (clientData) {
-          await db.insert(passengersTable).values({
-            id: generateId(),
-            reservationId: req.params.id,
-            name: clientData.name,
-            cpf: clientData.cpf ?? null,
-            rg: clientData.rg ?? null,
-            birthDate: clientData.birthDate ?? null,
-            ageCategory: deriveAgeCategory(clientData.birthDate ?? null),
-            seatNumber: newSeat,
-            isChildUnder7: getAgeYears(clientData.birthDate ?? null) < 7,
-            isPrimary: true,
-          });
-        }
-      }
     }
     const formatted = await formatReservation(reservation);
     res.json(formatted);

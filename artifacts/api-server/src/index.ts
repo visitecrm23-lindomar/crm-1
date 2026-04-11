@@ -181,6 +181,11 @@ async function runMigrations() {
     await client.query(`
       ALTER TABLE passengers ADD COLUMN IF NOT EXISTS is_primary BOOLEAN NOT NULL DEFAULT FALSE;
     `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_passengers_one_primary_per_reservation
+        ON passengers (reservation_id)
+        WHERE is_primary = TRUE;
+    `);
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");
