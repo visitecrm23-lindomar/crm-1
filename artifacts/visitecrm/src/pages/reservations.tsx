@@ -322,68 +322,94 @@ function VoucherContent({ r, qrDataUrl }: { r: Reservation | null | undefined; q
   const trip = r?.trip;
   const client = r?.client;
   return (
-    <div className="space-y-4 py-2">
-      <div className="flex flex-col items-center gap-2 p-6 bg-muted/30 rounded-xl border-2 border-dashed">
-        <p className="text-xs text-muted-foreground uppercase tracking-widest">Código do Voucher</p>
-        <p className="text-3xl font-mono font-bold tracking-wider">{r?.voucherCode}</p>
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[r?.status ?? ""] ?? "bg-gray-100 text-gray-800"}`}>
+    <div className="bg-white text-gray-900 font-sans" style={{ fontFamily: "system-ui, Arial, sans-serif" }}>
+      <div className="flex items-center justify-between pb-3 border-b-2 border-gray-800 mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center text-white font-black text-sm">V</div>
+          <div>
+            <p className="font-black text-sm text-gray-900 leading-none">VisiteCRM</p>
+            <p className="text-xs text-gray-500 leading-none">Gestão de Agência de Turismo</p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-gray-500 uppercase tracking-wider">Voucher de Viagem</p>
+          <p className="text-xs text-gray-400">
+            {new Date(r?.createdAt ?? "").toLocaleDateString("pt-BR")}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-col items-center gap-1.5 py-4 mb-4 bg-gray-50 rounded-lg border border-gray-200">
+        <p className="text-xs text-gray-500 uppercase tracking-widest font-medium">Código do Voucher</p>
+        <p className="text-3xl font-mono font-black tracking-wider text-gray-900">{r?.voucherCode}</p>
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${STATUS_COLORS[r?.status ?? ""] ?? "bg-gray-100 text-gray-800"}`}>
           {STATUS_LABELS[r?.status ?? ""] ?? r?.status}
         </span>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+
+      <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-4">
         <div>
-          <p className="text-xs text-muted-foreground mb-1">Cliente</p>
-          <p className="font-semibold text-sm">{client?.name ?? "—"}</p>
-          {client?.whatsapp && <p className="text-xs text-muted-foreground">{client.whatsapp}</p>}
-          {client?.cpf && <p className="text-xs text-muted-foreground">CPF: {client.cpf}</p>}
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Passageiro</p>
+          <p className="font-bold text-sm text-gray-900">{client?.name ?? "—"}</p>
+          {client?.whatsapp && <p className="text-xs text-gray-500">{client.whatsapp}</p>}
+          {client?.cpf && <p className="text-xs text-gray-500">CPF: {client.cpf}</p>}
         </div>
         <div>
-          <p className="text-xs text-muted-foreground mb-1">Viagem</p>
-          <p className="font-semibold text-sm">{trip?.name ?? "—"}</p>
-          {trip?.destination && <p className="text-xs text-muted-foreground">{trip.destination}</p>}
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Viagem</p>
+          <p className="font-bold text-sm text-gray-900">{trip?.name ?? "—"}</p>
+          {trip?.destination && <p className="text-xs text-gray-500">{trip.destination}</p>}
           {trip?.departureDate && (
-            <p className="text-xs text-muted-foreground">
-              {new Date(trip.departureDate).toLocaleDateString("pt-BR")}
+            <p className="text-xs text-gray-500">
+              Partida: {new Date(trip.departureDate).toLocaleDateString("pt-BR")}
             </p>
           )}
         </div>
       </div>
-      <Separator />
-      <div className="grid grid-cols-3 gap-3 text-center">
-        <div>
-          <p className="text-xs text-muted-foreground">Valor Total</p>
-          <p className="font-bold text-sm">{fmt(r?.totalValue ?? 0)}</p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Pago</p>
-          <p className="font-bold text-sm text-green-600">{fmt(r?.paidValue ?? 0)}</p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Saldo</p>
-          <p className={`font-bold text-sm ${(r?.balance ?? 0) > 0 ? "text-destructive" : "text-green-600"}`}>
-            {fmt(r?.balance ?? 0)}
-          </p>
-        </div>
-      </div>
+
       {(r?.seats?.length ?? 0) > 0 && (
-        <div>
-          <p className="text-xs text-muted-foreground mb-1">Assentos</p>
+        <div className="mb-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Assentos</p>
           <div className="flex flex-wrap gap-1">
             {r!.seats.map(s => (
-              <span key={s} className="font-mono text-xs bg-muted px-2 py-1 rounded">{s}</span>
+              <span key={s} className="font-mono text-xs bg-gray-100 border border-gray-300 text-gray-800 px-2 py-1 rounded font-bold">{s}</span>
             ))}
           </div>
         </div>
       )}
+
+      <div className="border-t border-dashed border-gray-300 pt-3 mb-4">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Resumo Financeiro</p>
+        <div className="grid grid-cols-3 gap-3 text-center">
+          <div className="bg-gray-50 rounded p-2">
+            <p className="text-xs text-gray-500 mb-0.5">Total</p>
+            <p className="font-bold text-sm text-gray-900">{fmt(r?.totalValue ?? 0)}</p>
+          </div>
+          <div className="bg-green-50 rounded p-2">
+            <p className="text-xs text-gray-500 mb-0.5">Pago</p>
+            <p className="font-bold text-sm text-green-700">{fmt(r?.paidValue ?? 0)}</p>
+          </div>
+          <div className={`rounded p-2 ${(r?.balance ?? 0) > 0 ? "bg-red-50" : "bg-green-50"}`}>
+            <p className="text-xs text-gray-500 mb-0.5">Saldo</p>
+            <p className={`font-bold text-sm ${(r?.balance ?? 0) > 0 ? "text-red-600" : "text-green-700"}`}>
+              {fmt(r?.balance ?? 0)}
+            </p>
+          </div>
+        </div>
+      </div>
+
       {qrDataUrl && (
-        <div className="flex flex-col items-center gap-2">
-          <p className="text-xs text-muted-foreground">QR Code</p>
-          <img src={qrDataUrl} alt="QR Code do voucher" className="w-28 h-28" />
+        <div className="flex flex-col items-center gap-1.5 border-t border-dashed border-gray-300 pt-3 mb-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Verificação</p>
+          <img src={qrDataUrl} alt="QR Code de verificação" className="w-24 h-24" />
+          <p className="text-xs text-gray-400">Aponte a câmera para verificar o voucher</p>
         </div>
       )}
-      <p className="text-xs text-center text-muted-foreground">
-        Emitido em {new Date(r?.createdAt ?? "").toLocaleString("pt-BR")} · VisiteCRM
-      </p>
+
+      <div className="border-t border-gray-200 pt-2 text-center">
+        <p className="text-xs text-gray-400">
+          Emitido em {new Date(r?.createdAt ?? "").toLocaleString("pt-BR")} · Este voucher é válido mediante apresentação de documento de identidade.
+        </p>
+      </div>
     </div>
   );
 }
@@ -428,7 +454,21 @@ function VoucherModal({ reservation, open, onClose }: { reservation: Reservation
   }, [r?.voucherCode, reservationId]);
 
   const handlePrint = useCallback(() => {
+    if (!voucherRef.current) { window.print(); return; }
+    const printEl = document.createElement("div");
+    printEl.setAttribute("data-voucher-print", "true");
+    printEl.style.cssText = "display:none;position:fixed;inset:0;background:white;z-index:99999;padding:20mm;box-sizing:border-box;";
+    printEl.innerHTML = voucherRef.current.outerHTML;
+    document.body.appendChild(printEl);
+
+    const styleEl = document.createElement("style");
+    styleEl.textContent = `@media print { body > *:not([data-voucher-print]) { display: none !important; } [data-voucher-print] { display: block !important; } }`;
+    document.head.appendChild(styleEl);
+
     window.print();
+
+    document.body.removeChild(printEl);
+    document.head.removeChild(styleEl);
   }, []);
 
   if (!reservation) return null;
@@ -446,7 +486,7 @@ function VoucherModal({ reservation, open, onClose }: { reservation: Reservation
           </div>
         ) : (
           <>
-            <div ref={voucherRef} className="bg-white">
+            <div ref={voucherRef} className="bg-white p-4 rounded-lg border">
               <VoucherContent r={r} qrDataUrl={qrDataUrl} />
             </div>
             <div className="flex gap-2 pt-2">
