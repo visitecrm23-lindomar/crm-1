@@ -1593,7 +1593,10 @@ export default function Reservations() {
     if (openNew || tripId) {
       setInitialTripId(tripId);
       setIsCreateOpen(true);
-      history.replaceState(null, "", window.location.pathname);
+      params.delete("tripId");
+      params.delete("new");
+      const remaining = params.toString();
+      history.replaceState(null, "", window.location.pathname + (remaining ? `?${remaining}` : ""));
     }
   }, []);
 
