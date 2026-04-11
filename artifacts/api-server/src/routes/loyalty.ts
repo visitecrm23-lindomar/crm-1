@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, loyaltyProgramsTable, loyaltyMembersTable, loyaltyTransactionsTable } from "@workspace/db";
+import { db, loyaltyProgramsTable, loyaltyMembersTable, loyaltyTransactionsTable, clientsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
@@ -87,6 +87,26 @@ router.get("/clients/:clientId/loyalty", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
     const { clientId } = req.params;
+
+    if (me.role === "cliente") {
+      const [ownClient] = await db.select({ id: clientsTable.id })
+        .from(clientsTable)
+        .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.userId, me.id)))
+        .limit(1);
+      if (!ownClient || ownClient.id !== clientId) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+    } else if (me.role === "vendedor") {
+      const [targetClient] = await db.select({ createdById: clientsTable.createdById })
+        .from(clientsTable)
+        .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.id, clientId)))
+        .limit(1);
+      if (!targetClient || targetClient.createdById !== me.id) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+    }
 
     const [member] = await db.select().from(loyaltyMembersTable)
       .where(and(

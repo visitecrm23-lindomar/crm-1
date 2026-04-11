@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable } from "@workspace/db";
+import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, loyaltyMembersTable, loyaltyTransactionsTable, referralsTable } from "@workspace/db";
 import { eq, and, sql, desc, inArray, or, ilike } from "drizzle-orm";
 import { generateId, generateVoucherCode } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -329,6 +329,44 @@ router.post("/reservations", async (req, res): Promise<void> => {
         reservedSeats: sql`reserved_seats + ${seatsCount}`,
         availableSeats: sql`available_seats - ${seatsCount}`,
       }).where(and(eq(tripsTable.id, parsed.data.tripId), eq(tripsTable.tenantId, me.tenantId)));
+
+      if (parsed.data.discountLoyaltyPoints && parsed.data.discountLoyaltyPoints > 0) {
+        const [member] = await tx.select().from(loyaltyMembersTable)
+          .where(and(
+            eq(loyaltyMembersTable.tenantId, me.tenantId),
+            eq(loyaltyMembersTable.clientId, parsed.data.clientId),
+          )).limit(1);
+        if (member) {
+          const pointsToDeduct = parsed.data.discountLoyaltyPoints;
+          if ((member.availablePoints ?? 0) < pointsToDeduct) {
+            return { error: "Pontos de fidelidade insuficientes", status: 400 };
+          }
+          await tx.update(loyaltyMembersTable).set({
+            availablePoints: sql`available_points - ${pointsToDeduct}`,
+          }).where(eq(loyaltyMembersTable.id, member.id));
+          await tx.insert(loyaltyTransactionsTable).values({
+            id: generateId(),
+            tenantId: me.tenantId,
+            memberId: member.id,
+            type: "redeem",
+            points: -pointsToDeduct,
+            description: `Resgate de pontos na reserva ${voucherCode}`,
+            referenceId: id,
+            referenceType: "reservation",
+          });
+        }
+      }
+
+      if (parsed.data.discountReferralCode) {
+        await tx.update(referralsTable).set({
+          status: "converted",
+          convertedAt: new Date(),
+        }).where(and(
+          eq(referralsTable.tenantId, me.tenantId),
+          eq(referralsTable.code, parsed.data.discountReferralCode),
+          eq(referralsTable.status, "pending"),
+        ));
+      }
 
       return { ok: true };
     });
