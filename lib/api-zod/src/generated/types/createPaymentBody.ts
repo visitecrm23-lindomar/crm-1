@@ -21,4 +21,8 @@ export interface CreatePaymentBody {
   description?: string | null;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  status?: string | null;
+  /** @nullable */
+  paidAt?: string | null;
 }

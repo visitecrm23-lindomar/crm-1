@@ -4733,6 +4733,10 @@ components:
           type: ["string", "null"]
         notes:
           type: ["string", "null"]
+        status:
+          type: ["string", "null"]
+        paidAt:
+          type: ["string", "null"]
       required: [type, category, amount, paymentMethod, dueDate]
 
     UpdatePaymentBody:

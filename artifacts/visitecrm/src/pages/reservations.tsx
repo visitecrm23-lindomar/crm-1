@@ -798,6 +798,7 @@ function PaymentModal({ reservation, open, onClose, onSuccess }: { reservation: 
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const amount = parseFloat(fd.get("amount") as string || "0");
+    const now = new Date().toISOString();
     await createPayment.mutateAsync({
       data: {
         reservationId: reservation.id,
@@ -806,9 +807,11 @@ function PaymentModal({ reservation, open, onClose, onSuccess }: { reservation: 
         category: "reservation",
         amount,
         paymentMethod: method,
-        dueDate: new Date().toISOString().split("T")[0],
+        dueDate: now.split("T")[0],
         description: `Pagamento reserva ${reservation.voucherCode}`,
         installments: parseInt(fd.get("installments") as string || "1"),
+        status: "paid",
+        paidAt: now,
       }
     });
     await queryClient.invalidateQueries({ queryKey: ["reservations"] });

@@ -1693,6 +1693,8 @@ export const CreatePaymentBody = zod.object({
   dueDate: zod.string(),
   description: zod.string().nullish(),
   notes: zod.string().nullish(),
+  status: zod.string().nullish(),
+  paidAt: zod.string().nullish(),
 });
 
 /**

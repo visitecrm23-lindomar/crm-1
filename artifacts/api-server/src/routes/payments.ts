@@ -317,8 +317,8 @@ router.post("/payments", async (req, res): Promise<void> => {
     const id = generateId();
     const installments = parsed.data.installments ?? 1;
     const receiptUrl = typeof req.body.receiptUrl === "string" ? req.body.receiptUrl : null;
-    const isReservationPayment = !!parsed.data.reservationId && parsed.data.type === "receivable";
-    const now = new Date();
+    const explicitStatus = parsed.data.status ?? undefined;
+    const explicitPaidAt = parsed.data.paidAt ? new Date(parsed.data.paidAt) : undefined;
 
     for (let i = 1; i <= installments; i++) {
       const dueDate = new Date(parsed.data.dueDate);
@@ -338,7 +338,8 @@ router.post("/payments", async (req, res): Promise<void> => {
         description: parsed.data.description ?? null,
         notes: parsed.data.notes ?? null,
         receiptUrl,
-        ...(isReservationPayment ? { status: "paid", paidAt: now } : {}),
+        ...(explicitStatus ? { status: explicitStatus } : {}),
+        ...(explicitPaidAt ? { paidAt: explicitPaidAt } : {}),
       });
     }
 
