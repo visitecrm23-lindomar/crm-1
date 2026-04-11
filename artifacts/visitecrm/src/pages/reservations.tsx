@@ -31,6 +31,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Search, MoreHorizontal, Eye, DollarSign, QrCode, CheckCircle, XCircle,
   CalendarCheck, Clock, Users, Tag, Pencil, Trash2, UserPlus, TrendingDown,
@@ -859,6 +860,7 @@ export default function Reservations() {
   const { data: boardingRaw } = useListBoardingLocations();
   const updateReservation = useUpdateReservation();
   const checkInReservation = useCheckInReservation();
+  const { toast } = useToast();
 
   const sellers = useMemo(() => (usersRaw ?? []).filter(u => u.role === "vendedor" || u.role === "agencia"), [usersRaw]);
   const boardingMap = useMemo(() => {
@@ -872,14 +874,22 @@ export default function Reservations() {
   const totalPages = Math.ceil(total / 20);
 
   const handleCheckin = async (r: Reservation) => {
-    await checkInReservation.mutateAsync({ id: r.id });
-    refetch();
-    refetchStats();
+    try {
+      await checkInReservation.mutateAsync({ id: r.id });
+      refetch();
+      refetchStats();
+    } catch {
+      toast({ title: "Não foi possível confirmar o check-in", description: "Tente novamente ou contate o suporte.", variant: "destructive" });
+    }
   };
   const handleCancel = async (id: string) => {
-    await updateReservation.mutateAsync({ id, data: { status: "cancelled" } });
-    refetch();
-    refetchStats();
+    try {
+      await updateReservation.mutateAsync({ id, data: { status: "cancelled" } });
+      refetch();
+      refetchStats();
+    } catch {
+      toast({ title: "Não foi possível cancelar a reserva", description: "Tente novamente ou contate o suporte.", variant: "destructive" });
+    }
   };
 
   return (
