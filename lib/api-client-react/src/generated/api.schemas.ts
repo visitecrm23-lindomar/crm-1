@@ -496,6 +496,8 @@ export interface CreateReservationBody {
   installments?: number;
   /** @nullable */
   commissionPercentage?: number | null;
+  /** Amount already paid at the time of booking */
+  paidValue?: number;
   /** @nullable */
   notes?: string | null;
 }

@@ -786,7 +786,7 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
   const [clientSearch, setClientSearch] = useState("");
 
   const [totalValue, setTotalValue] = useState<number>(0);
-  const [_paidValue, _setPaidValue] = useState<number>(0);
+  const [paidValue, setPaidValue] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState("pix");
   const [installments, setInstallments] = useState(1);
   const [hasInsurance, setHasInsurance] = useState(false);
@@ -833,7 +833,7 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
     setStep(1);
     setSelectedTripId(""); setSelectedClientId(""); setBoardingLocationId("");
     setSelectedSeats([]); setManualSeats(""); setTripSearch(""); setClientSearch("");
-    setTotalValue(0); setPaymentMethod("pix"); setInstallments(1);
+    setTotalValue(0); setPaidValue(0); setPaymentMethod("pix"); setInstallments(1);
     setHasInsurance(false); setNotes(""); setCreateError(null);
   };
 
@@ -851,16 +851,18 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
           clientId: selectedClientId,
           seats,
           totalValue,
+          paidValue: paidValue || undefined,
           paymentMethod,
           installments,
           notes: notes || undefined,
           hasInsurance,
         },
       });
-      if (boardingLocationId && created?.id) {
+      const effectiveBoardingId = boardingLocationId && boardingLocationId !== "__none__" ? boardingLocationId : null;
+      if (effectiveBoardingId && created?.id) {
         await updateReservation.mutateAsync({
           id: created.id,
-          data: { boardingLocationId },
+          data: { boardingLocationId: effectiveBoardingId },
         });
       }
       resetWizard();
@@ -872,7 +874,7 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
     }
   };
 
-  const balance = totalValue;
+  const balance = Math.max(0, totalValue - paidValue);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
@@ -921,7 +923,7 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
                 <Select onValueChange={setBoardingLocationId} value={boardingLocationId}>
                   <SelectTrigger><SelectValue placeholder="Selecionar ponto de embarque..." /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhum</SelectItem>
+                    <SelectItem value="__none__">Nenhum</SelectItem>
                     {(boardingRaw ?? []).map(b => (
                       <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
                     ))}
@@ -966,20 +968,33 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
 
         {step === 2 && (
           <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Valor Total (R$) *</label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={totalValue}
-                onChange={e => setTotalValue(parseFloat(e.target.value) || 0)}
-              />
-              {selectedTripFull && (
-                <p className="text-xs text-muted-foreground">
-                  Preço base: R$ {(selectedTripFull.priceAdult ?? 0).toFixed(2)}/pessoa × {effectiveSeats.length || 1} assento(s)
-                </p>
-              )}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Valor Total (R$) *</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={totalValue}
+                  onChange={e => setTotalValue(parseFloat(e.target.value) || 0)}
+                />
+                {selectedTripFull && (
+                  <p className="text-xs text-muted-foreground">
+                    Preço base: R$ {(selectedTripFull.priceAdult ?? 0).toFixed(2)}/pessoa × {effectiveSeats.length || 1} assento(s)
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Valor Pago (R$)</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={paidValue}
+                  onChange={e => setPaidValue(parseFloat(e.target.value) || 0)}
+                />
+                <p className="text-xs text-muted-foreground">Valor já recebido no ato</p>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -1065,14 +1080,20 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
 
               <Separator />
 
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-3 gap-3 text-sm">
                 <div className="text-center">
                   <p className="text-muted-foreground text-xs mb-0.5">Valor Total</p>
                   <p className="font-bold text-base">R$ {totalValue.toFixed(2)}</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-muted-foreground text-xs mb-0.5">Saldo a Pagar</p>
-                  <p className="font-bold text-base text-destructive">R$ {balance.toFixed(2)}</p>
+                  <p className="text-muted-foreground text-xs mb-0.5">Valor Pago</p>
+                  <p className="font-bold text-base text-green-600">R$ {paidValue.toFixed(2)}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-muted-foreground text-xs mb-0.5">Saldo</p>
+                  <p className={`font-bold text-base ${balance > 0 ? "text-destructive" : "text-green-600"}`}>
+                    R$ {balance.toFixed(2)}
+                  </p>
                 </div>
               </div>
 

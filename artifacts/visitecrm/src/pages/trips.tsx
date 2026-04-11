@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { getSeatColor } from "@/components/SeatMapPicker";
 import {
   Plus, Search, MapPin, Calendar, Users, Bus, Edit, Trash2, Eye, ChevronsLeft, ChevronsRight,
   LayoutGrid, List, ChevronLeft, ChevronRight, ArrowLeft, Check, X, Download, Send, Copy,
@@ -1101,17 +1102,6 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
     }
   };
 
-  function getSeatColor(status: string) {
-    switch (status) {
-      case "available": return "bg-white border-2 border-gray-200 hover:border-primary hover:bg-primary/5 cursor-pointer";
-      case "reserved":
-      case "occupied": return "bg-orange-400 border-2 border-orange-500 text-white cursor-not-allowed";
-      case "confirmed": return "bg-green-500 border-2 border-green-600 text-white cursor-not-allowed";
-      case "blocked": return "bg-gray-300 border-2 border-gray-400 text-gray-600 cursor-not-allowed";
-      default: return "bg-gray-100 border-2 border-gray-200";
-    }
-  }
-
   const selectedClient = clientsData?.data?.find(c => c.id === selectedClientId);
 
   return (
@@ -1162,7 +1152,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
                       {leftSeats.map(seat => (
                         <button
                           key={seat.number}
-                          className={`w-10 h-10 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(getEffectiveStatus(seat))}`}
+                          className={`w-10 h-10 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(getEffectiveStatus(seat), false)}`}
                           onClick={() => handleSeatClick(seat)}
                           title={`Assento ${seat.number} — ${getEffectiveStatus(seat)}`}
                           disabled={getEffectiveStatus(seat) !== "available"}
@@ -1176,7 +1166,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
                       {rightSeats.map(seat => (
                         <button
                           key={seat.number}
-                          className={`w-10 h-10 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(getEffectiveStatus(seat))}`}
+                          className={`w-10 h-10 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(getEffectiveStatus(seat), false)}`}
                           onClick={() => handleSeatClick(seat)}
                           title={`Assento ${seat.number} — ${getEffectiveStatus(seat)}`}
                           disabled={getEffectiveStatus(seat) !== "available"}

@@ -10,7 +10,7 @@ interface SeatMapPickerProps {
   maxSeats?: number;
 }
 
-function getSeatColor(status: string, selected: boolean) {
+export function getSeatColor(status: string, selected: boolean) {
   if (selected) return "bg-primary border-2 border-primary text-primary-foreground cursor-pointer";
   switch (status) {
     case "available": return "bg-white border-2 border-gray-200 hover:border-primary hover:bg-primary/10 cursor-pointer";

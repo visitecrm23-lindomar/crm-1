@@ -1245,6 +1245,10 @@ export const CreateReservationBody = zod.object({
   paymentMethod: zod.string().nullish(),
   installments: zod.number().optional(),
   commissionPercentage: zod.number().nullish(),
+  paidValue: zod
+    .number()
+    .optional()
+    .describe("Amount already paid at the time of booking"),
   notes: zod.string().nullish(),
 });
 

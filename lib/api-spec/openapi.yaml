@@ -4262,6 +4262,9 @@ components:
           type: integer
         commissionPercentage:
           type: ["number", "null"]
+        paidValue:
+          type: number
+          description: Amount already paid at the time of booking
         notes:
           type: ["string", "null"]
       required: [tripId, clientId, seats, totalValue]
