@@ -389,6 +389,12 @@ function VoucherModal({ reservation, open, onClose }: { reservation: Reservation
                 </div>
               </div>
             )}
+            {r?.qrCode && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">QR Code</p>
+                <p className="font-mono text-xs bg-muted p-2 rounded break-all select-all">{r.qrCode}</p>
+              </div>
+            )}
             <p className="text-xs text-center text-muted-foreground">
               Emitido em {new Date(r?.createdAt ?? "").toLocaleString("pt-BR")}
             </p>
