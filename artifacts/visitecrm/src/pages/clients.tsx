@@ -476,6 +476,8 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
                 title: hasTrip ? `${form.name} — ${tripName}` : `${form.name} — Lead`,
                 value: hasTrip ? (valorTotal ?? 0) : 0,
                 clientId: savedId,
+                leadName: form.name,
+                leadWhatsapp: form.whatsapp,
               },
             });
           }

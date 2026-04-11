@@ -163,7 +163,7 @@ export default function Pipeline() {
 
   const { data: stages, isLoading: loadingStages, refetch: refetchStages } = useListPipelineStages();
   const { data: deals, isLoading: loadingDeals, refetch: refetchDeals } = useListDeals({ status: "open" });
-  const { data: allClients } = useListClients({ limit: 500, page: 1 });
+  const { data: allClients, refetch: refetchClients } = useListClients({ limit: 500, page: 1 });
   const { data: tripsData } = useListTrips({ limit: 200 });
   const moveDeal = useMoveDeal();
   const deleteDeal = useDeleteDeal();
@@ -260,6 +260,7 @@ export default function Pipeline() {
   };
 
   const handleSave = () => {
+    refetchClients();
     refetchDeals();
     refetchStages();
   };
