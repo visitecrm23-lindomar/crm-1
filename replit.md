@@ -42,7 +42,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 | `/trips/:id/passengers-overview` | Visão Geral | Trip selector, 6 KPI cards, status breakdown bars, payment method bars, sortable reservations table, client origin chart, guide/vehicle info, full quick-actions (Add, Export PDF, WhatsApp, Financial Report, Close Trip) |
 | `/trips/:id/passengers` | Lista ANTT | Full passenger table with search, status/payment/type/boarding-point filters, select-all/bulk check-in/vouchers/WhatsApp, CSV/PDF/Excel export |
 | `/trips/calendar` | Calendário | Month/week/day views with trip events, color by status, click-to-detail modal |
-| `/reservations` | Reservas | Reservation management + vouchers |
+| `/reservations` | Reservas | Reservation management; 3-step wizard (trip/client/seats → payment → confirmation summary); seat map picker; PDF voucher download + print |
 | `/financial` | Financeiro | Receivables, payables, expenses |
 | `/communication` | Comunicação | Messages + templates |
 | `/automations` | Automações | Rule-based automation triggers |

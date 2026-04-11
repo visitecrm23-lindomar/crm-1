@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useLocation, useRoute } from "wouter";
 import {
   useListReservations,
@@ -10,6 +10,7 @@ import {
   useCreatePayment,
   useListPayments,
   useListTrips,
+  useGetTrip,
   useListClients,
   useListUsers,
   useListBoardingLocations,
@@ -19,6 +20,7 @@ import {
   useDeletePassenger,
 } from "@workspace/api-client-react";
 import type { Reservation, Passenger } from "@workspace/api-client-react";
+import { SeatMapPicker } from "@/components/SeatMapPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,7 +37,9 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Search, MoreHorizontal, Eye, DollarSign, QrCode, CheckCircle, XCircle,
   CalendarCheck, Clock, Users, Tag, Pencil, Trash2, UserPlus, TrendingDown,
+  Download, Printer,
 } from "lucide-react";
+import QRCodeLib from "qrcode";
 
 const AGE_CATEGORY_LABELS: Record<string, string> = {
   adult: "Adulto",
@@ -314,16 +318,120 @@ function ReservationPassengersTab({ reservationId }: { reservationId: string }) 
   );
 }
 
+function VoucherContent({ r, qrDataUrl }: { r: Reservation | null | undefined; qrDataUrl: string }) {
+  const trip = r?.trip;
+  const client = r?.client;
+  return (
+    <div className="space-y-4 py-2">
+      <div className="flex flex-col items-center gap-2 p-6 bg-muted/30 rounded-xl border-2 border-dashed">
+        <p className="text-xs text-muted-foreground uppercase tracking-widest">Código do Voucher</p>
+        <p className="text-3xl font-mono font-bold tracking-wider">{r?.voucherCode}</p>
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[r?.status ?? ""] ?? "bg-gray-100 text-gray-800"}`}>
+          {STATUS_LABELS[r?.status ?? ""] ?? r?.status}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <p className="text-xs text-muted-foreground mb-1">Cliente</p>
+          <p className="font-semibold text-sm">{client?.name ?? "—"}</p>
+          {client?.whatsapp && <p className="text-xs text-muted-foreground">{client.whatsapp}</p>}
+          {client?.cpf && <p className="text-xs text-muted-foreground">CPF: {client.cpf}</p>}
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground mb-1">Viagem</p>
+          <p className="font-semibold text-sm">{trip?.name ?? "—"}</p>
+          {trip?.destination && <p className="text-xs text-muted-foreground">{trip.destination}</p>}
+          {trip?.departureDate && (
+            <p className="text-xs text-muted-foreground">
+              {new Date(trip.departureDate).toLocaleDateString("pt-BR")}
+            </p>
+          )}
+        </div>
+      </div>
+      <Separator />
+      <div className="grid grid-cols-3 gap-3 text-center">
+        <div>
+          <p className="text-xs text-muted-foreground">Valor Total</p>
+          <p className="font-bold text-sm">{fmt(r?.totalValue ?? 0)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Pago</p>
+          <p className="font-bold text-sm text-green-600">{fmt(r?.paidValue ?? 0)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Saldo</p>
+          <p className={`font-bold text-sm ${(r?.balance ?? 0) > 0 ? "text-destructive" : "text-green-600"}`}>
+            {fmt(r?.balance ?? 0)}
+          </p>
+        </div>
+      </div>
+      {(r?.seats?.length ?? 0) > 0 && (
+        <div>
+          <p className="text-xs text-muted-foreground mb-1">Assentos</p>
+          <div className="flex flex-wrap gap-1">
+            {r!.seats.map(s => (
+              <span key={s} className="font-mono text-xs bg-muted px-2 py-1 rounded">{s}</span>
+            ))}
+          </div>
+        </div>
+      )}
+      {qrDataUrl && (
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-xs text-muted-foreground">QR Code</p>
+          <img src={qrDataUrl} alt="QR Code do voucher" className="w-28 h-28" />
+        </div>
+      )}
+      <p className="text-xs text-center text-muted-foreground">
+        Emitido em {new Date(r?.createdAt ?? "").toLocaleString("pt-BR")} · VisiteCRM
+      </p>
+    </div>
+  );
+}
+
 function VoucherModal({ reservation, open, onClose }: { reservation: Reservation | null; open: boolean; onClose: () => void }) {
   const reservationId = reservation?.id ?? "";
   const { data: fullData, isLoading } = useGetReservation(reservationId, {
     query: { queryKey: ["voucher", reservationId], enabled: open && !!reservationId },
   });
   const r = fullData ?? reservation;
+  const voucherRef = useRef<HTMLDivElement>(null);
+  const [qrDataUrl, setQrDataUrl] = useState("");
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  useEffect(() => {
+    const code = r?.voucherCode ?? r?.id ?? "";
+    if (code) {
+      QRCodeLib.toDataURL(code, { width: 112, margin: 1 })
+        .then(url => setQrDataUrl(url))
+        .catch(() => {});
+    }
+  }, [r?.voucherCode, r?.id]);
+
+  const handleDownloadPDF = useCallback(async () => {
+    if (!voucherRef.current) return;
+    setIsGeneratingPdf(true);
+    try {
+      const [html2canvas, { default: jsPDF }] = await Promise.all([
+        import("html2canvas").then(m => m.default),
+        import("jspdf"),
+      ]);
+      const canvas = await html2canvas(voucherRef.current, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`voucher-${r?.voucherCode ?? reservationId}.pdf`);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  }, [r?.voucherCode, reservationId]);
+
+  const handlePrint = useCallback(() => {
+    window.print();
+  }, []);
 
   if (!reservation) return null;
-  const trip = r?.trip;
-  const client = r?.client;
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
@@ -337,69 +445,21 @@ function VoucherModal({ reservation, open, onClose }: { reservation: Reservation
             <Skeleton className="h-12 w-full" />
           </div>
         ) : (
-          <div className="space-y-4 py-2">
-            <div className="flex flex-col items-center gap-2 p-6 bg-muted/30 rounded-xl border-2 border-dashed">
-              <p className="text-xs text-muted-foreground uppercase tracking-widest">Código do Voucher</p>
-              <p className="text-3xl font-mono font-bold tracking-wider">{r?.voucherCode}</p>
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[r?.status ?? ""] ?? "bg-gray-100 text-gray-800"}`}>
-                {STATUS_LABELS[r?.status ?? ""] ?? r?.status}
-              </span>
+          <>
+            <div ref={voucherRef} className="bg-white">
+              <VoucherContent r={r} qrDataUrl={qrDataUrl} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Cliente</p>
-                <p className="font-semibold text-sm">{client?.name ?? "—"}</p>
-                {client?.whatsapp && <p className="text-xs text-muted-foreground">{client.whatsapp}</p>}
-                {client?.cpf && <p className="text-xs text-muted-foreground">CPF: {client.cpf}</p>}
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Viagem</p>
-                <p className="font-semibold text-sm">{trip?.name ?? "—"}</p>
-                {trip?.destination && <p className="text-xs text-muted-foreground">{trip.destination}</p>}
-                {trip?.departureDate && (
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(trip.departureDate).toLocaleDateString("pt-BR")}
-                  </p>
-                )}
-              </div>
+            <div className="flex gap-2 pt-2">
+              <Button variant="outline" className="flex-1" onClick={handlePrint} disabled={isGeneratingPdf}>
+                <Printer className="mr-2 h-4 w-4" />
+                Imprimir
+              </Button>
+              <Button className="flex-1" onClick={handleDownloadPDF} disabled={isGeneratingPdf}>
+                <Download className="mr-2 h-4 w-4" />
+                {isGeneratingPdf ? "Gerando..." : "Baixar PDF"}
+              </Button>
             </div>
-            <Separator />
-            <div className="grid grid-cols-3 gap-3 text-center">
-              <div>
-                <p className="text-xs text-muted-foreground">Valor Total</p>
-                <p className="font-bold text-sm">{fmt(r?.totalValue ?? 0)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Pago</p>
-                <p className="font-bold text-sm text-green-600">{fmt(r?.paidValue ?? 0)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Saldo</p>
-                <p className={`font-bold text-sm ${(r?.balance ?? 0) > 0 ? "text-destructive" : "text-green-600"}`}>
-                  {fmt(r?.balance ?? 0)}
-                </p>
-              </div>
-            </div>
-            {(r?.seats?.length ?? 0) > 0 && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Assentos</p>
-                <div className="flex flex-wrap gap-1">
-                  {r!.seats.map(s => (
-                    <span key={s} className="font-mono text-xs bg-muted px-2 py-1 rounded">{s}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {r?.qrCode && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">QR Code</p>
-                <p className="font-mono text-xs bg-muted p-2 rounded break-all select-all">{r.qrCode}</p>
-              </div>
-            )}
-            <p className="text-xs text-center text-muted-foreground">
-              Emitido em {new Date(r?.createdAt ?? "").toLocaleString("pt-BR")}
-            </p>
-          </div>
+          </>
         )}
       </DialogContent>
     </Dialog>
@@ -669,17 +729,79 @@ function PaymentModal({ reservation, open, onClose, onSuccess }: { reservation: 
   );
 }
 
-function NewReservationModal({ open, onClose, onSuccess }: { open: boolean; onClose: () => void; onSuccess: () => void }) {
-  const { data: tripsData } = useListTrips({ limit: 100, status: "published" });
-  const { data: clientsData } = useListClients({ limit: 200 });
+const PAYMENT_LABELS: Record<string, string> = {
+  pix: "PIX",
+  credit_card: "Cartão de Crédito",
+  debit_card: "Cartão de Débito",
+  bank_transfer: "Transferência",
+  cash: "Dinheiro",
+  boleto: "Boleto",
+};
+
+function WizardStepIndicator({ step }: { step: number }) {
+  const steps = ["Seleção", "Pagamento", "Confirmação"];
+  return (
+    <div className="flex items-center gap-0 mb-6">
+      {steps.map((label, idx) => {
+        const n = idx + 1;
+        const active = n === step;
+        const done = n < step;
+        return (
+          <div key={n} className="flex items-center flex-1">
+            <div className="flex flex-col items-center gap-1">
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors ${
+                done ? "bg-primary border-primary text-primary-foreground" :
+                active ? "border-primary text-primary bg-primary/10" :
+                "border-muted-foreground/30 text-muted-foreground"
+              }`}>
+                {done ? "✓" : n}
+              </div>
+              <span className={`text-xs whitespace-nowrap ${active ? "text-primary font-semibold" : "text-muted-foreground"}`}>{label}</span>
+            </div>
+            {idx < steps.length - 1 && (
+              <div className={`flex-1 h-0.5 mx-1 mt-[-12px] transition-colors ${done ? "bg-primary" : "bg-muted"}`} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onClose: () => void; onSuccess: () => void }) {
+  const { data: tripsData } = useListTrips({ limit: 200, status: "published" });
+  const { data: clientsData } = useListClients({ limit: 300 });
+  const { data: boardingRaw } = useListBoardingLocations();
   const createReservation = useCreateReservation();
+  const updateReservation = useUpdateReservation();
+
+  const [step, setStep] = useState(1);
+
   const [selectedTripId, setSelectedTripId] = useState("");
   const [selectedClientId, setSelectedClientId] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("pix");
-  const [clientSearch, setClientSearch] = useState("");
+  const [boardingLocationId, setBoardingLocationId] = useState("");
+  const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
+  const [manualSeats, setManualSeats] = useState("");
   const [tripSearch, setTripSearch] = useState("");
+  const [clientSearch, setClientSearch] = useState("");
+
+  const [totalValue, setTotalValue] = useState<number>(0);
+  const [_paidValue, _setPaidValue] = useState<number>(0);
+  const [paymentMethod, setPaymentMethod] = useState("pix");
+  const [installments, setInstallments] = useState(1);
+  const [hasInsurance, setHasInsurance] = useState(false);
+  const [notes, setNotes] = useState("");
+
   const [createError, setCreateError] = useState<string | null>(null);
 
+  const { data: selectedTripFull } = useGetTrip(selectedTripId, {
+    query: { queryKey: ["wizard-trip", selectedTripId], enabled: !!selectedTripId },
+  });
+
+  const filteredTrips = useMemo(() =>
+    (tripsData?.data ?? []).filter(t => t.name.toLowerCase().includes(tripSearch.toLowerCase())),
+    [tripsData, tripSearch]
+  );
   const filteredClients = useMemo(() =>
     (clientsData?.data ?? []).filter(c =>
       c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
@@ -687,136 +809,312 @@ function NewReservationModal({ open, onClose, onSuccess }: { open: boolean; onCl
     ),
     [clientsData, clientSearch]
   );
-  const filteredTrips = useMemo(() =>
-    (tripsData?.data ?? []).filter(t =>
-      t.name.toLowerCase().includes(tripSearch.toLowerCase())
-    ),
-    [tripsData, tripSearch]
-  );
-  const selectedTrip = tripsData?.data.find(t => t.id === selectedTripId);
 
-  const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const selectedTrip = tripsData?.data.find(t => t.id === selectedTripId);
+  const selectedClient = clientsData?.data.find(c => c.id === selectedClientId);
+  const selectedBoarding = (boardingRaw ?? []).find(b => b.id === boardingLocationId);
+
+  const effectiveSeats = useMemo(() => {
+    if (selectedSeats.length > 0) return selectedSeats;
+    if (manualSeats.trim()) return manualSeats.split(",").map(s => s.trim()).filter(Boolean);
+    return [];
+  }, [selectedSeats, manualSeats]);
+
+  useEffect(() => {
+    if (selectedTripFull && effectiveSeats.length > 0) {
+      const price = selectedTripFull.priceAdult ?? 0;
+      setTotalValue(price * effectiveSeats.length);
+    } else if (selectedTripFull && effectiveSeats.length === 0) {
+      setTotalValue(selectedTripFull.priceAdult ?? 0);
+    }
+  }, [selectedTripFull, effectiveSeats.length]);
+
+  const resetWizard = () => {
+    setStep(1);
+    setSelectedTripId(""); setSelectedClientId(""); setBoardingLocationId("");
+    setSelectedSeats([]); setManualSeats(""); setTripSearch(""); setClientSearch("");
+    setTotalValue(0); setPaymentMethod("pix"); setInstallments(1);
+    setHasInsurance(false); setNotes(""); setCreateError(null);
+  };
+
+  const handleClose = () => { resetWizard(); onClose(); };
+
+  const canGoNext1 = !!selectedTripId && !!selectedClientId;
+
+  const handleConfirm = async () => {
     setCreateError(null);
-    const fd = new FormData(e.currentTarget);
-    const seatsRaw = (fd.get("seats") as string || "").trim();
-    const seats = seatsRaw ? seatsRaw.split(",").map(s => s.trim()).filter(Boolean) : ["1"];
+    const seats = effectiveSeats.length > 0 ? effectiveSeats : ["1"];
     try {
-      await createReservation.mutateAsync({
+      const created = await createReservation.mutateAsync({
         data: {
           tripId: selectedTripId,
           clientId: selectedClientId,
           seats,
-          totalValue: parseFloat(fd.get("totalValue") as string || "0"),
+          totalValue,
           paymentMethod,
-          installments: parseInt(fd.get("installments") as string || "1"),
-          notes: (fd.get("notes") as string) || undefined,
-          hasInsurance: fd.get("hasInsurance") === "on",
-        }
+          installments,
+          notes: notes || undefined,
+          hasInsurance,
+        },
       });
-      setSelectedTripId("");
-      setSelectedClientId("");
-      setClientSearch("");
-      setTripSearch("");
+      if (boardingLocationId && created?.id) {
+        await updateReservation.mutateAsync({
+          id: created.id,
+          data: { boardingLocationId },
+        });
+      }
+      resetWizard();
       onSuccess();
       onClose();
     } catch (err: unknown) {
       const apiError = (err as { data?: { error?: string } })?.data?.error;
-      const msg = apiError ?? (err instanceof Error ? err.message : null) ?? "Erro ao criar reserva";
-      setCreateError(msg);
+      setCreateError(apiError ?? (err instanceof Error ? err.message : null) ?? "Erro ao criar reserva");
     }
   };
 
+  const balance = totalValue;
+
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) { setCreateError(null); onClose(); } }}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nova Reserva</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleCreate} className="space-y-4 mt-2">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Viagem *</label>
-            <Input placeholder="Buscar viagem..." value={tripSearch} onChange={e => setTripSearch(e.target.value)} className="mb-1" />
-            <Select onValueChange={setSelectedTripId} value={selectedTripId}>
-              <SelectTrigger><SelectValue placeholder="Selecionar viagem..." /></SelectTrigger>
-              <SelectContent className="max-h-48">
-                {filteredTrips.map(t => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name} — {t.availableSeats} vagas
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Cliente *</label>
-            <Input placeholder="Buscar cliente..." value={clientSearch} onChange={e => setClientSearch(e.target.value)} className="mb-1" />
-            <Select onValueChange={setSelectedClientId} value={selectedClientId}>
-              <SelectTrigger><SelectValue placeholder="Selecionar cliente..." /></SelectTrigger>
-              <SelectContent className="max-h-48">
-                {filteredClients.map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.name} — {c.whatsapp}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Assentos</label>
-              <Input name="seats" placeholder="1,2,3 (separados por vírgula)" />
+
+        <WizardStepIndicator step={step} />
+
+        {step === 1 && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Viagem *</label>
+                <Input placeholder="Buscar viagem..." value={tripSearch} onChange={e => setTripSearch(e.target.value)} />
+                <Select onValueChange={v => { setSelectedTripId(v); setSelectedSeats([]); setManualSeats(""); }} value={selectedTripId}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar viagem..." /></SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    {filteredTrips.map(t => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}{t.availableSeats != null ? ` — ${t.availableSeats} vagas` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Cliente *</label>
+                <Input placeholder="Buscar cliente..." value={clientSearch} onChange={e => setClientSearch(e.target.value)} />
+                <Select onValueChange={setSelectedClientId} value={selectedClientId}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar cliente..." /></SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    {filteredClients.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name} — {c.whatsapp}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+
+            {(boardingRaw ?? []).length > 0 && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Ponto de Embarque</label>
+                <Select onValueChange={setBoardingLocationId} value={boardingLocationId}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar ponto de embarque..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Nenhum</SelectItem>
+                    {(boardingRaw ?? []).map(b => (
+                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <Separator />
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Seleção de Assentos</label>
+              {selectedTripId ? (
+                <SeatMapPicker
+                  tripId={selectedTripId}
+                  selectedSeats={selectedSeats}
+                  onSeatsChange={seats => { setSelectedSeats(seats); setManualSeats(""); }}
+                />
+              ) : (
+                <div className="text-sm text-muted-foreground py-4 text-center border rounded-lg bg-muted/20">
+                  Selecione uma viagem para ver o mapa de assentos.
+                </div>
+              )}
+              <div className="mt-2">
+                <label className="text-xs text-muted-foreground">Ou informe manualmente (separados por vírgula)</label>
+                <Input
+                  placeholder="Ex: 12, 13, 14"
+                  value={manualSeats}
+                  onChange={e => { setManualSeats(e.target.value); setSelectedSeats([]); }}
+                  className="mt-1"
+                  disabled={selectedSeats.length > 0}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={handleClose}>Cancelar</Button>
+              <Button onClick={() => setStep(2)} disabled={!canGoNext1}>Próximo →</Button>
+            </div>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Valor Total (R$) *</label>
               <Input
-                name="totalValue"
                 type="number"
                 step="0.01"
-                required
-                placeholder={selectedTrip ? String(selectedTrip.availableSeats > 0 ? "0.00" : "—") : "0.00"}
+                min="0"
+                value={totalValue}
+                onChange={e => setTotalValue(parseFloat(e.target.value) || 0)}
+              />
+              {selectedTripFull && (
+                <p className="text-xs text-muted-foreground">
+                  Preço base: R$ {(selectedTripFull.priceAdult ?? 0).toFixed(2)}/pessoa × {effectiveSeats.length || 1} assento(s)
+                </p>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Forma de Pagamento</label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pix">PIX</SelectItem>
+                    <SelectItem value="credit_card">Cartão de Crédito</SelectItem>
+                    <SelectItem value="debit_card">Cartão de Débito</SelectItem>
+                    <SelectItem value="bank_transfer">Transferência</SelectItem>
+                    <SelectItem value="cash">Dinheiro</SelectItem>
+                    <SelectItem value="boleto">Boleto</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Parcelas</label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="12"
+                  value={installments}
+                  onChange={e => setInstallments(parseInt(e.target.value) || 1)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Observações</label>
+              <Input
+                placeholder="Observações sobre a reserva..."
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
               />
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Forma de Pagamento</label>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pix">PIX</SelectItem>
-                  <SelectItem value="credit_card">Cartão de Crédito</SelectItem>
-                  <SelectItem value="debit_card">Cartão de Débito</SelectItem>
-                  <SelectItem value="bank_transfer">Transferência</SelectItem>
-                  <SelectItem value="cash">Dinheiro</SelectItem>
-                  <SelectItem value="boleto">Boleto</SelectItem>
-                </SelectContent>
-              </Select>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="hasInsuranceWizard"
+                className="rounded"
+                checked={hasInsurance}
+                onChange={e => setHasInsurance(e.target.checked)}
+              />
+              <label htmlFor="hasInsuranceWizard" className="text-sm">Incluir seguro de viagem</label>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Parcelas</label>
-              <Input name="installments" type="number" defaultValue="1" min="1" max="12" />
+
+            <div className="flex justify-between gap-2 pt-2">
+              <Button variant="outline" onClick={() => setStep(1)}>← Anterior</Button>
+              <Button onClick={() => setStep(3)} disabled={totalValue <= 0}>Próximo →</Button>
             </div>
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Observações</label>
-            <Input name="notes" placeholder="Observações sobre a reserva..." />
-          </div>
-          <div className="flex items-center gap-2">
-            <input type="checkbox" name="hasInsurance" id="hasInsurance" className="rounded" />
-            <label htmlFor="hasInsurance" className="text-sm">Incluir seguro de viagem</label>
-          </div>
-          {createError && (
-            <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-              <XCircle className="w-4 h-4 shrink-0" />
-              <span>{createError}</span>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-4">
+            <div className="bg-muted/30 rounded-xl border p-4 space-y-3">
+              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Resumo da Reserva</h3>
+
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-muted-foreground text-xs mb-0.5">Viagem</p>
+                  <p className="font-semibold">{selectedTrip?.name ?? "—"}</p>
+                  {selectedTrip?.destination && <p className="text-xs text-muted-foreground">{selectedTrip.destination}</p>}
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs mb-0.5">Cliente</p>
+                  <p className="font-semibold">{selectedClient?.name ?? "—"}</p>
+                  {selectedClient?.whatsapp && <p className="text-xs text-muted-foreground">{selectedClient.whatsapp}</p>}
+                </div>
+                {selectedBoarding && (
+                  <div>
+                    <p className="text-muted-foreground text-xs mb-0.5">Ponto de Embarque</p>
+                    <p className="font-semibold">{selectedBoarding.name}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-muted-foreground text-xs mb-0.5">Assentos</p>
+                  <p className="font-semibold">{effectiveSeats.length > 0 ? effectiveSeats.join(", ") : "A definir"}</p>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="text-center">
+                  <p className="text-muted-foreground text-xs mb-0.5">Valor Total</p>
+                  <p className="font-bold text-base">R$ {totalValue.toFixed(2)}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-muted-foreground text-xs mb-0.5">Saldo a Pagar</p>
+                  <p className="font-bold text-base text-destructive">R$ {balance.toFixed(2)}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-muted-foreground text-xs mb-0.5">Forma de Pagamento</p>
+                  <p className="font-semibold">{PAYMENT_LABELS[paymentMethod] ?? paymentMethod}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs mb-0.5">Parcelas</p>
+                  <p className="font-semibold">{installments}×</p>
+                </div>
+                {hasInsurance && (
+                  <div>
+                    <p className="text-muted-foreground text-xs mb-0.5">Seguro</p>
+                    <p className="font-semibold">Incluso</p>
+                  </div>
+                )}
+                {notes && (
+                  <div className="col-span-2">
+                    <p className="text-muted-foreground text-xs mb-0.5">Observações</p>
+                    <p className="font-semibold">{notes}</p>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => { setCreateError(null); onClose(); }}>Cancelar</Button>
-            <Button type="submit" disabled={createReservation.isPending || !selectedTripId || !selectedClientId}>
-              {createReservation.isPending ? "Criando..." : "Criar Reserva"}
-            </Button>
+
+            {createError && (
+              <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                <XCircle className="w-4 h-4 shrink-0" />
+                <span>{createError}</span>
+              </div>
+            )}
+
+            <div className="flex justify-between gap-2 pt-2">
+              <Button variant="outline" onClick={() => setStep(2)}>← Anterior</Button>
+              <Button onClick={handleConfirm} disabled={createReservation.isPending}>
+                {createReservation.isPending ? "Criando..." : "Confirmar Reserva"}
+              </Button>
+            </div>
           </div>
-        </form>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -1129,7 +1427,7 @@ export default function Reservations() {
         onClose={() => setPaymentRes(null)}
         onSuccess={() => { refetch(); refetchStats(); }}
       />
-      <NewReservationModal
+      <NewReservationWizard
         open={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
         onSuccess={() => { refetch(); refetchStats(); }}
