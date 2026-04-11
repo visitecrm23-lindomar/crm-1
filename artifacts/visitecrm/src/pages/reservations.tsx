@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useRoute } from "wouter";
 import {
   useListReservations,
@@ -786,6 +787,7 @@ function ReservationDetailModal({ reservationId, open, onClose }: { reservationI
 
 function PaymentModal({ reservation, open, onClose, onSuccess }: { reservation: Reservation | null; open: boolean; onClose: () => void; onSuccess: () => void }) {
   const createPayment = useCreatePayment();
+  const queryClient = useQueryClient();
   const [method, setMethod] = useState("pix");
 
   if (!reservation) return null;
@@ -809,6 +811,10 @@ function PaymentModal({ reservation, open, onClose, onSuccess }: { reservation: 
         installments: parseInt(fd.get("installments") as string || "1"),
       }
     });
+    await queryClient.invalidateQueries({ queryKey: ["reservations"] });
+    await queryClient.invalidateQueries({ queryKey: ["reservation", reservation.id] });
+    await queryClient.invalidateQueries({ queryKey: ["voucher", reservation.id] });
+    await queryClient.invalidateQueries({ queryKey: ["payments"] });
     onSuccess();
     onClose();
   };

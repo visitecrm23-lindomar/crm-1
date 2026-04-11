@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { paymentsTable, expensesTable, reservationsTable, clientsTable, commissionRulesTable, commissionsTable } from "@workspace/db";
+import { paymentsTable, expensesTable, reservationsTable, clientsTable, commissionRulesTable, commissionsTable, usersTable } from "@workspace/db";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -29,11 +29,12 @@ async function syncReservationPaymentStatus(reservationId: string, tenantId: str
     .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)))
     .limit(1);
   if (!reservation) return;
+  if (reservation.status === "cancelled" || reservation.status === "completed") return;
 
   const result = await db.execute(sql`
     SELECT COALESCE(SUM(amount::numeric), 0) AS total_paid
     FROM payments
-    WHERE reservation_id = ${reservationId} AND tenant_id = ${tenantId} AND status != 'cancelled'
+    WHERE reservation_id = ${reservationId} AND tenant_id = ${tenantId} AND status = 'paid'
   `);
   const row = (result as unknown as { rows: Array<{ total_paid: string }> }).rows[0];
   const paidValue = parseFloat(row?.total_paid ?? "0");
@@ -45,9 +46,11 @@ async function syncReservationPaymentStatus(reservationId: string, tenantId: str
     balance: String(balance),
   };
 
-  if (paidValue >= totalValue && reservation.status === "pending") {
+  if (paidValue >= totalValue) {
     updates.status = "confirmed";
-    updates.confirmedAt = new Date();
+    if (!reservation.confirmedAt) updates.confirmedAt = new Date();
+  } else if (reservation.status === "confirmed") {
+    updates.status = "pending";
   }
 
   await db.update(reservationsTable).set(updates)
@@ -64,10 +67,11 @@ async function autoCreateCommission(reservationId: string, tenantId: string): Pr
   const totalValue = parseFloat(String(reservation.totalValue));
   if (paidValue < totalValue) return;
 
-  const [existing] = await db.select().from(commissionsTable)
-    .where(and(eq(commissionsTable.reservationId, reservationId), eq(commissionsTable.tenantId, tenantId)))
+  const [creator] = await db.select({ id: usersTable.id, role: usersTable.role })
+    .from(usersTable)
+    .where(and(eq(usersTable.id, reservation.createdById), eq(usersTable.tenantId, tenantId)))
     .limit(1);
-  if (existing) return;
+  if (!creator || creator.role !== "vendedor") return;
 
   const rules = await db.select().from(commissionRulesTable)
     .where(and(eq(commissionRulesTable.tenantId, tenantId), eq(commissionRulesTable.isActive, true)));
@@ -82,16 +86,33 @@ async function autoCreateCommission(reservationId: string, tenantId: string): Pr
     ? (baseAmount * parseFloat(String(rule.value))) / 100
     : parseFloat(String(rule.value));
 
-  await db.insert(commissionsTable).values({
-    id: generateId(),
-    tenantId,
-    ruleId: rule.id,
-    userId: reservation.createdById,
-    reservationId,
-    baseAmount: String(baseAmount),
-    commissionAmount: String(commissionAmount.toFixed(2)),
-    status: "pending",
-  });
+  const [existing] = await db.select({ id: commissionsTable.id, status: commissionsTable.status })
+    .from(commissionsTable)
+    .where(and(
+      eq(commissionsTable.reservationId, reservationId),
+      eq(commissionsTable.tenantId, tenantId),
+      eq(commissionsTable.userId, creator.id),
+    ))
+    .limit(1);
+
+  if (existing) {
+    if (existing.status === "pending") {
+      await db.update(commissionsTable)
+        .set({ ruleId: rule.id, baseAmount: String(baseAmount), commissionAmount: String(commissionAmount.toFixed(2)) })
+        .where(eq(commissionsTable.id, existing.id));
+    }
+  } else {
+    await db.insert(commissionsTable).values({
+      id: generateId(),
+      tenantId,
+      ruleId: rule.id,
+      userId: creator.id,
+      reservationId,
+      baseAmount: String(baseAmount),
+      commissionAmount: String(commissionAmount.toFixed(2)),
+      status: "pending",
+    });
+  }
 }
 
 router.get("/trips/:tripId/financial-report", async (req, res): Promise<void> => {
@@ -296,6 +317,8 @@ router.post("/payments", async (req, res): Promise<void> => {
     const id = generateId();
     const installments = parsed.data.installments ?? 1;
     const receiptUrl = typeof req.body.receiptUrl === "string" ? req.body.receiptUrl : null;
+    const isReservationPayment = !!parsed.data.reservationId && parsed.data.type === "receivable";
+    const now = new Date();
 
     for (let i = 1; i <= installments; i++) {
       const dueDate = new Date(parsed.data.dueDate);
@@ -315,6 +338,7 @@ router.post("/payments", async (req, res): Promise<void> => {
         description: parsed.data.description ?? null,
         notes: parsed.data.notes ?? null,
         receiptUrl,
+        ...(isReservationPayment ? { status: "paid", paidAt: now } : {}),
       });
     }
 
