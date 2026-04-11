@@ -326,6 +326,58 @@ router.patch("/clients/:id/pipeline-stage", async (req, res): Promise<void> => {
   }
 });
 
+router.get("/clients/:clientId/activities", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const client = await requireClientAccess(me, req.params.clientId, res);
+    if (!client) return;
+    const activities = await db.select().from(notesTable)
+      .where(eq(notesTable.clientId, req.params.clientId))
+      .orderBy(desc(notesTable.createdAt));
+    res.json(activities.map(n => ({
+      id: n.id, clientId: n.clientId, type: n.type,
+      content: n.content, isPrivate: n.isPrivate, createdById: n.createdById,
+      createdAt: n.createdAt.toISOString(),
+    })));
+  } catch (err) {
+    req.log.error({ err }, "Error listing activities");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/clients/:clientId/activities", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const client = await requireClientAccess(me, req.params.clientId, res);
+    if (!client) return;
+    const { type, content } = req.body as { type?: string; content?: string };
+    if (!type || !content) { res.status(400).json({ error: "type and content are required" }); return; }
+    const id = generateId();
+    await db.insert(notesTable).values({
+      id,
+      clientId: req.params.clientId,
+      type,
+      content,
+      isPrivate: false,
+      createdById: me.id,
+    });
+    const [activity] = await db.select().from(notesTable)
+      .where(and(eq(notesTable.id, id), eq(notesTable.clientId, req.params.clientId)))
+      .limit(1);
+    if (!activity) { res.status(500).json({ error: "Failed to create activity" }); return; }
+    res.status(201).json({
+      id: activity.id, clientId: activity.clientId, type: activity.type,
+      content: activity.content, isPrivate: activity.isPrivate, createdById: activity.createdById,
+      createdAt: activity.createdAt.toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error creating activity");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/clients/:clientId/notes", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);

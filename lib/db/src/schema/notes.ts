@@ -5,6 +5,7 @@ import { z } from "zod/v4";
 export const notesTable = pgTable("notes", {
   id: text("id").primaryKey(),
   clientId: text("client_id").notNull(),
+  type: text("type").notNull().default("note"),
   content: text("content").notNull(),
   isPrivate: boolean("is_private").notNull().default(false),
   createdById: text("created_by_id").notNull(),

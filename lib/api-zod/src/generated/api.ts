@@ -857,6 +857,38 @@ export const UpdateClientPipelineStageResponse = zod.object({
 });
 
 /**
+ * @summary List client activities (timeline)
+ */
+export const ListClientActivitiesParams = zod.object({
+  clientId: zod.coerce.string(),
+});
+
+export const ListClientActivitiesResponseItem = zod.object({
+  id: zod.string(),
+  clientId: zod.string(),
+  type: zod.string(),
+  content: zod.string(),
+  isPrivate: zod.boolean(),
+  createdById: zod.string(),
+  createdAt: zod.string(),
+});
+export const ListClientActivitiesResponse = zod.array(
+  ListClientActivitiesResponseItem,
+);
+
+/**
+ * @summary Create a manual activity
+ */
+export const CreateClientActivityParams = zod.object({
+  clientId: zod.coerce.string(),
+});
+
+export const CreateClientActivityBody = zod.object({
+  type: zod.string(),
+  content: zod.string(),
+});
+
+/**
  * @summary List client notes
  */
 export const ListClientNotesParams = zod.object({

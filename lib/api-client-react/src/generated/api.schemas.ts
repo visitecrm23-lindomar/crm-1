@@ -234,6 +234,21 @@ export interface UpdateClientBody {
   companyNps?: number | null;
 }
 
+export interface ClientActivity {
+  id: string;
+  clientId: string;
+  type: string;
+  content: string;
+  isPrivate: boolean;
+  createdById: string;
+  createdAt: string;
+}
+
+export interface CreateClientActivityBody {
+  type: string;
+  content: string;
+}
+
 export interface Note {
   id: string;
   clientId: string;

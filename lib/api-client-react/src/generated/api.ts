@@ -34,6 +34,7 @@ import type {
   ChatbotConversation,
   ChatbotMessage,
   Client,
+  ClientActivity,
   ClientListResponse,
   ClientLoyaltyInfo,
   Commission,
@@ -48,6 +49,7 @@ import type {
   CreateCartItemBody,
   CreateChatbotConversationBody,
   CreateChatbotMessageBody,
+  CreateClientActivityBody,
   CreateClientBody,
   CreateCommissionRuleBody,
   CreateCouponBody,
@@ -3109,6 +3111,183 @@ export const useUpdateClientPipelineStage = <
   TContext
 > => {
   return useMutation(getUpdateClientPipelineStageMutationOptions(options));
+};
+
+/**
+ * @summary List client activities (timeline)
+ */
+export const getListClientActivitiesUrl = (clientId: string) => {
+  return `/api/clients/${clientId}/activities`;
+};
+
+export const listClientActivities = async (
+  clientId: string,
+  options?: RequestInit,
+): Promise<ClientActivity[]> => {
+  return customFetch<ClientActivity[]>(getListClientActivitiesUrl(clientId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListClientActivitiesQueryKey = (clientId: string) => {
+  return [`/api/clients/${clientId}/activities`] as const;
+};
+
+export const getListClientActivitiesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listClientActivities>>,
+  TError = ErrorType<unknown>,
+>(
+  clientId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listClientActivities>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListClientActivitiesQueryKey(clientId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listClientActivities>>
+  > = ({ signal }) =>
+    listClientActivities(clientId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clientId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listClientActivities>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListClientActivitiesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listClientActivities>>
+>;
+export type ListClientActivitiesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List client activities (timeline)
+ */
+
+export function useListClientActivities<
+  TData = Awaited<ReturnType<typeof listClientActivities>>,
+  TError = ErrorType<unknown>,
+>(
+  clientId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listClientActivities>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListClientActivitiesQueryOptions(clientId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a manual activity
+ */
+export const getCreateClientActivityUrl = (clientId: string) => {
+  return `/api/clients/${clientId}/activities`;
+};
+
+export const createClientActivity = async (
+  clientId: string,
+  createClientActivityBody: CreateClientActivityBody,
+  options?: RequestInit,
+): Promise<ClientActivity> => {
+  return customFetch<ClientActivity>(getCreateClientActivityUrl(clientId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createClientActivityBody),
+  });
+};
+
+export const getCreateClientActivityMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createClientActivity>>,
+    TError,
+    { clientId: string; data: BodyType<CreateClientActivityBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createClientActivity>>,
+  TError,
+  { clientId: string; data: BodyType<CreateClientActivityBody> },
+  TContext
+> => {
+  const mutationKey = ["createClientActivity"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createClientActivity>>,
+    { clientId: string; data: BodyType<CreateClientActivityBody> }
+  > = (props) => {
+    const { clientId, data } = props ?? {};
+
+    return createClientActivity(clientId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateClientActivityMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createClientActivity>>
+>;
+export type CreateClientActivityMutationBody =
+  BodyType<CreateClientActivityBody>;
+export type CreateClientActivityMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a manual activity
+ */
+export const useCreateClientActivity = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createClientActivity>>,
+    TError,
+    { clientId: string; data: BodyType<CreateClientActivityBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createClientActivity>>,
+  TError,
+  { clientId: string; data: BodyType<CreateClientActivityBody> },
+  TContext
+> => {
+  return useMutation(getCreateClientActivityMutationOptions(options));
 };
 
 /**

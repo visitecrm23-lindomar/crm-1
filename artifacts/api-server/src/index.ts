@@ -186,6 +186,9 @@ async function runMigrations() {
         ON passengers (reservation_id)
         WHERE is_primary = TRUE;
     `);
+    await client.query(`
+      ALTER TABLE notes ADD COLUMN IF NOT EXISTS type text NOT NULL DEFAULT 'note';
+    `);
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");

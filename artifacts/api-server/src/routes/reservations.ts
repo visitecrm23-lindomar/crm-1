@@ -7,6 +7,7 @@ import { requireAuth, getTenantUser } from "../lib/tenant";
 import { deriveAgeCategory, getAgeYears } from "../lib/passenger";
 import { CreateReservationBody, UpdateReservationBody, CreatePassengerBody, UpdatePassengerBody } from "@workspace/api-zod";
 import { z } from "zod/v4";
+import { writeClientActivity } from "../lib/activities";
 
 const router = Router();
 
@@ -557,6 +558,9 @@ router.post("/reservations", async (req, res): Promise<void> => {
     if (reservation.clientId) {
       syncClientDeal(reservation.clientId, me.tenantId, reservation.tripId, Number(reservation.totalValue), me.id)
         .catch((err) => req.log.error({ err }, "Error syncing deal after reservation creation"));
+      const totalFormatted = Number(reservation.totalValue).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+      writeClientActivity(reservation.clientId, "auto", `Reserva ${voucherCode} criada — ${totalFormatted}`, me.id)
+        .catch((err) => req.log.error({ err }, "Error writing reservation creation activity"));
     }
   } catch (err) {
     req.log.error({ err }, "Error creating reservation");
@@ -704,6 +708,11 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
       syncClientDeal(existing.clientId, me.tenantId, existing.tripId, parsed.data.totalValue, me.id)
         .catch((err) => req.log.error({ err }, "Error syncing deal after reservation update"));
     }
+    if (isBeingCancelled && existing.clientId) {
+      const code = existing.voucherCode ?? req.params.id.slice(-8).toUpperCase();
+      writeClientActivity(existing.clientId, "auto", `Reserva ${code} cancelada`, me.id)
+        .catch((err) => req.log.error({ err }, "Error writing cancellation activity"));
+    }
     const formatted = await formatReservation(reservation);
     res.json(formatted);
   } catch (err) {
@@ -757,6 +766,13 @@ router.post("/reservations/:id/check-in", async (req, res): Promise<void> => {
     if (!reservation) { res.status(404).json({ error: "Not found" }); return; }
     const formatted = await formatReservation(reservation);
     res.json(formatted);
+    if (existing.clientId) {
+      const [trip] = await db.select({ name: tripsTable.name }).from(tripsTable)
+        .where(eq(tripsTable.id, existing.tripId)).limit(1);
+      const tripName = trip?.name ?? "viagem";
+      writeClientActivity(existing.clientId, "auto", `Check-in realizado na viagem ${tripName}`, me.id)
+        .catch((err) => req.log.error({ err }, "Error writing check-in activity"));
+    }
   } catch (err) {
     req.log.error({ err }, "Error checking in reservation");
     res.status(500).json({ error: "Internal server error" });

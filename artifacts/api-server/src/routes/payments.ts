@@ -5,6 +5,7 @@ import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { CreatePaymentBody, UpdatePaymentBody, CreateExpenseBody, UpdateExpenseBody } from "@workspace/api-zod";
+import { writeClientActivity } from "../lib/activities";
 
 const router = Router();
 
@@ -356,6 +357,11 @@ router.post("/payments", async (req, res): Promise<void> => {
       await autoCreateCommission(parsed.data.reservationId, me.tenantId);
     }
     res.status(201).json(formatPayment(payment));
+    if (parsed.data.clientId && explicitStatus === "paid") {
+      const amountFormatted = Number(parsed.data.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+      writeClientActivity(parsed.data.clientId, "auto", `Pagamento de ${amountFormatted} recebido`, me.id)
+        .catch(() => {});
+    }
   } catch (err) {
     req.log.error({ err }, "Error creating payment");
     res.status(500).json({ error: "Internal server error" });

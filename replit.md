@@ -88,6 +88,7 @@ All routes under `/api/`:
 - `GET/POST/PUT /api/automations` — automations
 - `GET/POST /api/campaigns` — marketing campaigns
 - `GET/POST /api/nps-responses`, `/api/nps/summary` — NPS
+- `GET/POST /api/clients/:id/activities` — Client activity timeline (auto + manual)
 - `GET/POST /api/suppliers`, `/api/vehicles`, `/api/accommodations`, `/api/destinations` — registrations
 - `POST /api/users/me/sync` — sync Clerk user to DB
 - `GET /api/users/me` — get current user profile
