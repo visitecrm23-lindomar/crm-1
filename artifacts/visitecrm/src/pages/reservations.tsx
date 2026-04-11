@@ -912,6 +912,7 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
   const [couponError, setCouponError] = useState<string | null>(null);
   const [couponLoading, setCouponLoading] = useState(false);
 
+  const [redeemLoyalty, setRedeemLoyalty] = useState(false);
   const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState<number>(0);
   const [loyaltyAmountApplied, setLoyaltyAmountApplied] = useState<number>(0);
 
@@ -919,6 +920,8 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
   const [referralApplied, setReferralApplied] = useState<{ id: string; code: string; amount: number } | null>(null);
   const [referralError, setReferralError] = useState<string | null>(null);
   const [referralLoading, setReferralLoading] = useState(false);
+
+  const [discountsOpen, setDiscountsOpen] = useState(false);
 
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -961,8 +964,15 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
     }
   }, [selectedTripFull, effectiveSeats.length]);
 
-  const totalDiscount = (couponApplied?.amount ?? 0) + loyaltyAmountApplied + (referralApplied?.amount ?? 0);
-  const finalTotal = Math.max(0, totalValue - totalDiscount);
+  // Mirror backend sequential cap: coupon → loyalty → referral, each capped to remaining
+  const uiRemaining0 = totalValue;
+  const uiCouponApplied = Math.round(Math.min(couponApplied?.amount ?? 0, uiRemaining0) * 100) / 100;
+  const uiRemaining1 = Math.round((uiRemaining0 - uiCouponApplied) * 100) / 100;
+  const uiLoyaltyApplied = Math.round(Math.min(loyaltyAmountApplied, uiRemaining1) * 100) / 100;
+  const uiRemaining2 = Math.round((uiRemaining1 - uiLoyaltyApplied) * 100) / 100;
+  const uiReferralApplied = Math.round(Math.min(referralApplied?.amount ?? 0, uiRemaining2) * 100) / 100;
+  const totalDiscount = Math.round((uiCouponApplied + uiLoyaltyApplied + uiReferralApplied) * 100) / 100;
+  const finalTotal = Math.max(0, Math.round((totalValue - totalDiscount) * 100) / 100);
 
   const resetWizard = () => {
     setStep(1);
@@ -971,8 +981,9 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
     setTotalValue(0); setPaidValue(0); setPaymentMethod("pix"); setInstallments(1);
     setHasInsurance(false); setNotes(""); setCreateError(null);
     setCouponCode(""); setCouponApplied(null); setCouponError(null);
-    setLoyaltyPointsToRedeem(0); setLoyaltyAmountApplied(0);
+    setRedeemLoyalty(false); setLoyaltyPointsToRedeem(0); setLoyaltyAmountApplied(0);
     setReferralCode(""); setReferralApplied(null); setReferralError(null);
+    setDiscountsOpen(false);
   };
 
   const handleClose = () => { resetWizard(); onClose(); };
@@ -1234,12 +1245,24 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
               <label htmlFor="hasInsuranceWizard" className="text-sm">Incluir seguro de viagem</label>
             </div>
 
-            <div className="border rounded-lg p-4 space-y-4 bg-muted/20">
-              <h4 className="text-sm font-semibold flex items-center gap-2">
-                <Tag className="w-4 h-4 text-primary" />
-                Descontos e Benefícios
-              </h4>
+            <div className="border rounded-lg bg-muted/20">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold"
+                onClick={() => setDiscountsOpen(v => !v)}
+              >
+                <span className="flex items-center gap-2">
+                  <Tag className="w-4 h-4 text-primary" />
+                  Descontos e Benefícios
+                  {totalDiscount > 0 && (
+                    <span className="text-xs font-normal text-green-600 ml-1">−R$ {totalDiscount.toFixed(2)}</span>
+                  )}
+                </span>
+                <span className="text-muted-foreground text-xs">{discountsOpen ? "▲" : "▼"}</span>
+              </button>
 
+              {discountsOpen && (
+                <div className="px-4 pb-4 space-y-4 border-t pt-4">
               <div className="space-y-2">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Cupom de Desconto</label>
                 <div className="flex gap-2">
@@ -1259,43 +1282,57 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
                   )}
                 </div>
                 {couponApplied && (
-                  <p className="text-xs text-green-600 font-medium">✓ Cupom aplicado: −R$ {couponApplied.amount.toFixed(2)}</p>
+                  <p className="text-xs text-green-600 font-medium">✓ Cupom aplicado: −R$ {uiCouponApplied.toFixed(2)}</p>
                 )}
                 {couponError && <p className="text-xs text-destructive">{couponError}</p>}
               </div>
 
               {loyaltyInfo ? (
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Pontos de Fidelidade
-                    <span className="ml-2 text-primary font-semibold">{loyaltyInfo.availablePoints} pts disponíveis</span>
-                  </label>
-                  <div className="flex gap-2 items-center">
-                    <Input
-                      type="number"
-                      min="0"
-                      max={loyaltyInfo.availablePoints}
-                      step={loyaltyInfo.minRedeemPoints}
-                      placeholder={`Mín. ${loyaltyInfo.minRedeemPoints} pts`}
-                      value={loyaltyPointsToRedeem || ""}
+                  <div className="flex items-center gap-3">
+                    <input
+                      id="redeemLoyaltyCheck"
+                      type="checkbox"
+                      checked={redeemLoyalty}
                       onChange={e => {
-                        const pts = parseInt(e.target.value) || 0;
-                        const capped = Math.min(pts, loyaltyInfo.availablePoints);
-                        setLoyaltyPointsToRedeem(capped);
-                        const amount = Math.round(capped * loyaltyInfo.realPerPoint * 100) / 100;
-                        setLoyaltyAmountApplied(Math.min(amount, totalValue));
+                        setRedeemLoyalty(e.target.checked);
+                        if (!e.target.checked) { setLoyaltyPointsToRedeem(0); setLoyaltyAmountApplied(0); }
                       }}
-                      className="flex-1"
                     />
-                    {loyaltyPointsToRedeem > 0 && (
-                      <Button variant="outline" size="sm" onClick={() => { setLoyaltyPointsToRedeem(0); setLoyaltyAmountApplied(0); }}>Remover</Button>
-                    )}
+                    <label htmlFor="redeemLoyaltyCheck" className="text-xs font-medium cursor-pointer">
+                      Resgatar pontos de fidelidade
+                      <span className="ml-2 text-primary font-semibold">{loyaltyInfo.availablePoints} pts disponíveis</span>
+                    </label>
                   </div>
-                  {loyaltyAmountApplied > 0 && (
-                    <p className="text-xs text-green-600 font-medium">✓ Desconto fidelidade: −R$ {loyaltyAmountApplied.toFixed(2)}</p>
-                  )}
-                  {loyaltyPointsToRedeem > 0 && loyaltyPointsToRedeem < loyaltyInfo.minRedeemPoints && (
-                    <p className="text-xs text-destructive">Mínimo de {loyaltyInfo.minRedeemPoints} pontos para resgate</p>
+                  {redeemLoyalty && (
+                    <>
+                      <div className="flex gap-2 items-center">
+                        <Input
+                          type="number"
+                          min={loyaltyInfo.minRedeemPoints}
+                          max={loyaltyInfo.availablePoints}
+                          step={loyaltyInfo.minRedeemPoints}
+                          placeholder={`Mín. ${loyaltyInfo.minRedeemPoints} pts`}
+                          value={loyaltyPointsToRedeem || ""}
+                          onChange={e => {
+                            const pts = parseInt(e.target.value) || 0;
+                            const capped = Math.min(pts, loyaltyInfo.availablePoints);
+                            setLoyaltyPointsToRedeem(capped);
+                            setLoyaltyAmountApplied(Math.round(capped * loyaltyInfo.realPerPoint * 100) / 100);
+                          }}
+                          className="flex-1"
+                        />
+                        {loyaltyPointsToRedeem > 0 && (
+                          <Button variant="outline" size="sm" onClick={() => { setLoyaltyPointsToRedeem(0); setLoyaltyAmountApplied(0); }}>Limpar</Button>
+                        )}
+                      </div>
+                      {uiLoyaltyApplied > 0 && (
+                        <p className="text-xs text-green-600 font-medium">✓ Desconto fidelidade: −R$ {uiLoyaltyApplied.toFixed(2)}</p>
+                      )}
+                      {loyaltyPointsToRedeem > 0 && loyaltyPointsToRedeem < loyaltyInfo.minRedeemPoints && (
+                        <p className="text-xs text-destructive">Mínimo de {loyaltyInfo.minRedeemPoints} pontos para resgate</p>
+                      )}
+                    </>
                   )}
                 </div>
               ) : selectedClientId ? (
@@ -1321,7 +1358,7 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
                   )}
                 </div>
                 {referralApplied && (
-                  <p className="text-xs text-green-600 font-medium">✓ Indicação aplicada: −R$ {referralApplied.amount.toFixed(2)}</p>
+                  <p className="text-xs text-green-600 font-medium">✓ Indicação aplicada: −R$ {uiReferralApplied.toFixed(2)}</p>
                 )}
                 {referralError && <p className="text-xs text-destructive">{referralError}</p>}
               </div>
@@ -1330,6 +1367,8 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
                 <div className="pt-2 border-t flex justify-between text-sm font-semibold">
                   <span>Total com desconto:</span>
                   <span className="text-primary">R$ {finalTotal.toFixed(2)} <span className="text-muted-foreground line-through text-xs font-normal ml-1">R$ {totalValue.toFixed(2)}</span></span>
+                </div>
+              )}
                 </div>
               )}
             </div>
@@ -1391,22 +1430,22 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
               {totalDiscount > 0 && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-1.5 text-sm">
                   <p className="font-semibold text-green-800 text-xs uppercase tracking-wide">Descontos Aplicados</p>
-                  {couponApplied && (
+                  {uiCouponApplied > 0 && couponApplied && (
                     <div className="flex justify-between text-green-700">
                       <span>Cupom ({couponApplied.code})</span>
-                      <span>−R$ {couponApplied.amount.toFixed(2)}</span>
+                      <span>−R$ {uiCouponApplied.toFixed(2)}</span>
                     </div>
                   )}
-                  {loyaltyAmountApplied > 0 && (
+                  {uiLoyaltyApplied > 0 && (
                     <div className="flex justify-between text-green-700">
                       <span>Fidelidade ({loyaltyPointsToRedeem} pts)</span>
-                      <span>−R$ {loyaltyAmountApplied.toFixed(2)}</span>
+                      <span>−R$ {uiLoyaltyApplied.toFixed(2)}</span>
                     </div>
                   )}
-                  {referralApplied && (
+                  {uiReferralApplied > 0 && referralApplied && (
                     <div className="flex justify-between text-green-700">
                       <span>Indicação ({referralApplied.code})</span>
-                      <span>−R$ {referralApplied.amount.toFixed(2)}</span>
+                      <span>−R$ {uiReferralApplied.toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between font-bold text-green-800 pt-1 border-t border-green-200">
