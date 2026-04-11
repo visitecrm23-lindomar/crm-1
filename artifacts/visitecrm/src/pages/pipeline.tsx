@@ -10,6 +10,7 @@ import {
 } from "@workspace/api-client-react";
 import type { Deal, PipelineStage, Client } from "@workspace/api-client-react";
 import { ClientModal } from "./clients";
+import { Client360Modal } from "@/components/client360-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Search, Trash2, Phone, Calendar, MapPin, X, Pencil, UserPen } from "lucide-react";
+import { Plus, Search, Trash2, Phone, Calendar, MapPin, X, Pencil, UserPen, Eye } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -35,11 +36,12 @@ interface ClientCardProps {
   clientsById: Map<string, Client>;
   tripsById: Map<string, string>;
   onEditClient: (client: Client) => void;
+  onView360: (clientId: string) => void;
   onDelete: (id: string) => void;
   isDragging?: boolean;
 }
 
-function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onDelete, isDragging }: ClientCardProps) {
+function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView360, onDelete, isDragging }: ClientCardProps) {
   const client = deal.clientId ? clientsById.get(deal.clientId) : undefined;
   const name = client?.name ?? deal.leadName ?? "Lead Desconhecido";
   const whatsapp = client?.whatsapp ?? deal.leadWhatsapp;
@@ -70,10 +72,16 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onDelet
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-[160px]">
               {client ? (
-                <DropdownMenuItem onClick={() => onEditClient(client)}>
-                  <UserPen className="w-3.5 h-3.5 mr-2" />
-                  Editar Cliente
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem onClick={() => onView360(client.id)}>
+                    <Eye className="w-3.5 h-3.5 mr-2" />
+                    Ver 360°
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onEditClient(client)}>
+                    <UserPen className="w-3.5 h-3.5 mr-2" />
+                    Editar Cliente
+                  </DropdownMenuItem>
+                </>
               ) : (
                 <DropdownMenuItem disabled className="text-muted-foreground">
                   <UserPen className="w-3.5 h-3.5 mr-2" />
@@ -137,11 +145,11 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onDelet
   );
 }
 
-function DraggableCard({ deal, clientsById, tripsById, onEditClient, onDelete }: Omit<ClientCardProps, "isDragging">) {
+function DraggableCard({ deal, clientsById, tripsById, onEditClient, onView360, onDelete }: Omit<ClientCardProps, "isDragging">) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: deal.id });
   return (
     <div ref={setNodeRef} {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing">
-      <ClientCardContent deal={deal} clientsById={clientsById} tripsById={tripsById} onEditClient={onEditClient} onDelete={onDelete} isDragging={isDragging} />
+      <ClientCardContent deal={deal} clientsById={clientsById} tripsById={tripsById} onEditClient={onEditClient} onView360={onView360} onDelete={onDelete} isDragging={isDragging} />
     </div>
   );
 }
@@ -167,6 +175,7 @@ export default function Pipeline() {
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [defaultStageId, setDefaultStageId] = useState<string | undefined>(undefined);
   const [activeDragDeal, setActiveDragDeal] = useState<Deal | null>(null);
+  const [client360Id, setClient360Id] = useState<string | null>(null);
 
   const { data: stages, isLoading: loadingStages, refetch: refetchStages } = useListPipelineStages();
   const { data: deals, isLoading: loadingDeals, refetch: refetchDeals } = useListDeals({ status: "open" });
@@ -361,6 +370,7 @@ export default function Pipeline() {
                         clientsById={clientsById}
                         tripsById={tripsById}
                         onEditClient={handleEditClient}
+                        onView360={setClient360Id}
                         onDelete={handleDelete}
                       />
                     ))}
@@ -386,6 +396,7 @@ export default function Pipeline() {
                   clientsById={clientsById}
                   tripsById={tripsById}
                   onEditClient={() => {}}
+                  onView360={() => {}}
                   onDelete={() => {}}
                 />
               </div>
@@ -401,6 +412,7 @@ export default function Pipeline() {
         onSave={handleSave}
         defaultStageId={defaultStageId}
       />
+      <Client360Modal open={!!client360Id} onClose={() => setClient360Id(null)} clientId={client360Id} />
     </div>
   );
 }

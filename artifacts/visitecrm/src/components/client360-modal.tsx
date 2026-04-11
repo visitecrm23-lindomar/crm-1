@@ -1,0 +1,478 @@
+import { useState, useRef, useMemo } from "react";
+import {
+  useGetClient,
+  useListReservations,
+  useListPayments,
+  useGetClientLoyalty,
+  useListLoyaltyMembers,
+  useListLoyaltyTransactions,
+} from "@workspace/api-client-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Phone, Mail, MapPin, Calendar, FileText, Download, Upload, Trash2,
+  Star, TrendingUp, Gift, Award,
+} from "lucide-react";
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { useToast } from "@/hooks/use-toast";
+
+function formatCurrency(value: number) {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  active:    { label: "Ativo",    color: "bg-green-100 text-green-800 border-green-200" },
+  inactive:  { label: "Inativo",  color: "bg-gray-100 text-gray-800 border-gray-200" },
+  lead:      { label: "Lead",     color: "bg-blue-100 text-blue-800 border-blue-200" },
+  blocked:   { label: "Bloqueado",color: "bg-red-100 text-red-800 border-red-200" },
+};
+
+const CLASSIFICATION_LABELS: Record<string, string> = {
+  lead: "Lead", prospect: "Prospecto", client: "Cliente", vip: "VIP", inactive: "Inativo",
+};
+
+const TIER_LABELS: Record<string, { label: string; color: string }> = {
+  bronze:   { label: "Bronze",   color: "bg-amber-100 text-amber-800" },
+  silver:   { label: "Prata",    color: "bg-gray-100 text-gray-700" },
+  gold:     { label: "Ouro",     color: "bg-yellow-100 text-yellow-800" },
+  diamond:  { label: "Diamante", color: "bg-blue-100 text-blue-800" },
+};
+
+interface StoredDocument {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  uploadedAt: string;
+  data: string;
+}
+
+function useClientDocuments(clientId: string) {
+  const key = `visite-crm-docs-${clientId}`;
+  const [docs, setDocs] = useState<StoredDocument[]>(() => {
+    try { return JSON.parse(localStorage.getItem(key) ?? "[]"); } catch { return []; }
+  });
+  const save = (updated: StoredDocument[]) => { setDocs(updated); localStorage.setItem(key, JSON.stringify(updated)); };
+  const add = (doc: StoredDocument) => save([doc, ...docs]);
+  const remove = (id: string) => save(docs.filter(d => d.id !== id));
+  return { docs, add, remove };
+}
+
+function ClientDocumentsTab({ clientId }: { clientId: string }) {
+  const { docs, add, remove } = useClientDocuments(clientId);
+  const { toast } = useToast();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: "Arquivo muito grande", description: "Máximo 10 MB.", variant: "destructive" });
+      return;
+    }
+    setUploading(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      add({ id: crypto.randomUUID(), name: file.name, type: file.type, size: file.size, uploadedAt: new Date().toISOString(), data: reader.result as string });
+      setUploading(false);
+      toast({ title: "Documento enviado com sucesso!" });
+      if (inputRef.current) inputRef.current.value = "";
+    };
+    reader.onerror = () => { setUploading(false); toast({ title: "Erro ao ler arquivo", variant: "destructive" }); };
+    reader.readAsDataURL(file);
+  }
+
+  function formatSize(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  return (
+    <div className="space-y-3 mt-2">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-muted-foreground">{docs.length} documento(s)</p>
+        <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={uploading}>
+          <Upload className="w-4 h-4 mr-2" />{uploading ? "Enviando..." : "Enviar Documento"}
+        </Button>
+        <input ref={inputRef} type="file" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" className="hidden" onChange={handleFile} />
+      </div>
+      {docs.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground text-sm border rounded-lg bg-muted/20">
+          <FileText className="w-8 h-8 mx-auto mb-2 opacity-40" />
+          Nenhum documento enviado ainda.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {docs.map(doc => (
+            <div key={doc.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
+              <div className="w-9 h-9 rounded-md bg-muted flex items-center justify-center shrink-0">
+                {doc.type.startsWith("image/") ? <span className="text-xs font-bold text-blue-600">IMG</span> : <FileText className="w-4 h-4 text-muted-foreground" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{doc.name}</p>
+                <p className="text-xs text-muted-foreground">{formatSize(doc.size)} · {format(parseISO(doc.uploadedAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+              </div>
+              <div className="flex gap-1 shrink-0">
+                <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                  <a href={doc.data} download={doc.name} title="Baixar"><Download className="w-3.5 h-3.5" /></a>
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => remove(doc.id)} title="Remover">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface Client360ModalProps {
+  open: boolean;
+  onClose: () => void;
+  clientId: string | null;
+}
+
+export function Client360Modal({ open, onClose, clientId }: Client360ModalProps) {
+  const id = clientId ?? "";
+
+  const { data: client, isLoading: loadingClient } = useGetClient(id, {
+    query: { enabled: open && !!id },
+  });
+
+  const { data: reservations } = useListReservations(
+    { clientId: id, limit: 20 },
+    { query: { enabled: open && !!id } }
+  );
+
+  const { data: payments } = useListPayments(
+    { clientId: id, limit: 20 },
+    { query: { enabled: open && !!id } }
+  );
+
+  const { data: loyaltyInfo } = useGetClientLoyalty(id, {
+    query: { enabled: open && !!id },
+  });
+
+  const { data: loyaltyMembers } = useListLoyaltyMembers({
+    query: { enabled: open && !!id },
+  });
+
+  const { data: loyaltyTransactions } = useListLoyaltyTransactions({
+    query: { enabled: open && !!id && !!loyaltyInfo?.memberId },
+  });
+
+  const member = useMemo(() => {
+    if (!loyaltyMembers || !id) return null;
+    return (loyaltyMembers as { id: string; clientId: string; tier: string; totalPoints: number; availablePoints: number; joinedAt: string }[]).find(m => m.clientId === id) ?? null;
+  }, [loyaltyMembers, id]);
+
+  const memberTransactions = useMemo(() => {
+    const memberId = loyaltyInfo?.memberId ?? member?.id;
+    if (!loyaltyTransactions || !memberId) return [];
+    return (loyaltyTransactions as { id: string; memberId: string; type: string; points: number; description: string; createdAt: string }[])
+      .filter(t => t.memberId === memberId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [loyaltyTransactions, loyaltyInfo, member]);
+
+  const isOpen = open && !!id;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        {loadingClient || !client ? (
+          <div className="space-y-4 py-4">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-6 w-2/3" />
+            <div className="grid grid-cols-3 gap-3">
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          </div>
+        ) : (
+          <>
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary text-lg font-bold">
+                  {client.name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <DialogTitle className="text-left">{client.name}</DialogTitle>
+                  <p className="text-sm text-muted-foreground">{client.email}</p>
+                </div>
+                {(() => {
+                  const s = STATUS_LABELS[client.status];
+                  return s ? <Badge className={`${s.color} border ml-auto`}>{s.label}</Badge> : null;
+                })()}
+              </div>
+            </DialogHeader>
+
+            <div className="grid grid-cols-3 gap-3 py-2">
+              <Card className="p-3">
+                <p className="text-xs text-muted-foreground">Total Gasto</p>
+                <p className="text-lg font-bold">{formatCurrency(client.totalSpent)}</p>
+              </Card>
+              <Card className="p-3">
+                <p className="text-xs text-muted-foreground">Saldo Devedor</p>
+                <p className={`text-lg font-bold ${client.outstandingBalance > 0 ? "text-destructive" : "text-green-600"}`}>
+                  {formatCurrency(client.outstandingBalance)}
+                </p>
+              </Card>
+              <Card className="p-3">
+                <p className="text-xs text-muted-foreground">NPS</p>
+                <p className="text-lg font-bold">{client.npsScore != null ? `${client.npsScore}/10` : "—"}</p>
+              </Card>
+            </div>
+
+            <Tabs defaultValue="data">
+              <TabsList className="grid w-full grid-cols-6">
+                <TabsTrigger value="data">Dados</TabsTrigger>
+                <TabsTrigger value="trips">Viagens</TabsTrigger>
+                <TabsTrigger value="financial">Financeiro</TabsTrigger>
+                <TabsTrigger value="loyalty">Fidelidade</TabsTrigger>
+                <TabsTrigger value="history">Histórico</TabsTrigger>
+                <TabsTrigger value="documents">Docs</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="data" className="space-y-3 mt-4">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  {[
+                    { label: "WhatsApp", value: client.whatsapp, icon: Phone },
+                    { label: "E-mail", value: client.email, icon: Mail },
+                    { label: "Cidade", value: client.addressCity ? `${client.addressCity}/${client.addressState}` : "—", icon: MapPin },
+                    { label: "Aniversário", value: client.birthDate ? format(parseISO(client.birthDate), "dd/MM/yyyy", { locale: ptBR }) : "—", icon: Calendar },
+                    { label: "CPF", value: client.cpf ?? "—", icon: null },
+                    { label: "RG", value: client.rg ?? "—", icon: null },
+                    { label: "Instagram", value: client.instagram ?? "—", icon: null },
+                    { label: "Classificação", value: CLASSIFICATION_LABELS[client.classification] ?? client.classification, icon: null },
+                    { label: "Pipeline", value: client.pipelineStage ?? "—", icon: null },
+                  ].map(({ label, value, icon: Icon }) => (
+                    <div key={label} className="flex items-center gap-2">
+                      {Icon && <Icon className="w-4 h-4 text-muted-foreground shrink-0" />}
+                      <div><p className="text-xs text-muted-foreground">{label}</p><p className="font-medium">{value}</p></div>
+                    </div>
+                  ))}
+                </div>
+                {(client.tags ?? []).length > 0 && (
+                  <div><p className="text-xs text-muted-foreground mb-1">Tags</p>
+                    <div className="flex flex-wrap gap-1">{client.tags.map(tag => <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>)}</div>
+                  </div>
+                )}
+                {(client.dreamDestinations ?? []).length > 0 && (
+                  <div><p className="text-xs text-muted-foreground mb-1">Destinos Sonhados</p>
+                    <div className="flex flex-wrap gap-1">{client.dreamDestinations.map(d => <Badge key={d} variant="secondary" className="text-xs">{d}</Badge>)}</div>
+                  </div>
+                )}
+                {client.observations && (
+                  <div><p className="text-xs text-muted-foreground mb-1">Observações</p>
+                    <p className="text-sm bg-muted/50 rounded-lg p-3">{client.observations}</p>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="trips" className="mt-4">
+                {!reservations?.data.length ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">Nenhuma viagem encontrada.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {reservations.data.map(r => (
+                      <div key={r.id} className="flex items-center justify-between p-3 rounded-lg border">
+                        <div>
+                          <p className="font-medium text-sm">{r.trip.name}</p>
+                          <p className="text-xs text-muted-foreground">{format(parseISO(r.trip.departureDate), "dd/MM/yyyy", { locale: ptBR })} · {r.seats.length} lugar(es)</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-sm">{formatCurrency(r.totalValue)}</p>
+                          <Badge
+                            variant={r.status === "confirmed" || r.status === "completed" ? "default" : r.status === "cancelled" ? "destructive" : "secondary"}
+                            className="text-xs"
+                          >
+                            {r.status === "confirmed" ? "Confirmada" : r.status === "pending" ? "Pendente" : r.status === "completed" ? "Concluída" : r.status === "cancelled" ? "Cancelada" : r.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="financial" className="mt-4">
+                {!payments?.data.length ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">Nenhum pagamento encontrado.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {payments.data.map(p => (
+                      <div key={p.id} className="flex items-center justify-between p-3 rounded-lg border">
+                        <div>
+                          <p className="font-medium text-sm">{p.description ?? p.category}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Vence {format(parseISO(p.dueDate), "dd/MM/yyyy", { locale: ptBR })}
+                            {p.paidAt && ` · Pago ${format(parseISO(p.paidAt), "dd/MM/yyyy", { locale: ptBR })}`}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-sm">{formatCurrency(p.amount)}</p>
+                          <Badge variant={p.status === "paid" ? "default" : p.status === "overdue" ? "destructive" : "secondary"} className="text-xs">
+                            {p.status === "paid" ? "Pago" : p.status === "overdue" ? "Vencido" : "Pendente"}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="loyalty" className="mt-4 space-y-4">
+                {!loyaltyInfo && !member ? (
+                  <div className="text-center py-10 text-muted-foreground">
+                    <Gift className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-medium">Cliente não inscrito no programa de fidelidade</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      {loyaltyInfo && (
+                        <Card className="p-4 space-y-1">
+                          <p className="text-xs text-muted-foreground">Programa</p>
+                          <p className="font-semibold">{loyaltyInfo.programName}</p>
+                          <p className="text-xs text-muted-foreground mt-2">Pontos Disponíveis</p>
+                          <p className="text-2xl font-bold text-primary">{loyaltyInfo.availablePoints.toLocaleString("pt-BR")}</p>
+                          <p className="text-xs text-muted-foreground">≈ {formatCurrency(loyaltyInfo.availablePoints * loyaltyInfo.realPerPoint)}</p>
+                        </Card>
+                      )}
+                      {member && (
+                        <Card className="p-4 space-y-1">
+                          <p className="text-xs text-muted-foreground">Tier</p>
+                          {(() => {
+                            const tier = TIER_LABELS[member.tier] ?? { label: member.tier, color: "bg-gray-100 text-gray-700" };
+                            return (
+                              <div className="flex items-center gap-2 mt-1">
+                                <Award className="w-5 h-5 text-primary" />
+                                <Badge className={`${tier.color} border font-semibold`}>{tier.label}</Badge>
+                              </div>
+                            );
+                          })()}
+                          <p className="text-xs text-muted-foreground mt-2">Total Acumulado</p>
+                          <p className="text-xl font-bold">{member.totalPoints.toLocaleString("pt-BR")} pts</p>
+                          <p className="text-xs text-muted-foreground">Membro desde {format(parseISO(member.joinedAt), "dd/MM/yyyy", { locale: ptBR })}</p>
+                        </Card>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-semibold mb-2">Histórico de Transações</p>
+                      {memberTransactions.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-6">Nenhuma transação encontrada.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {memberTransactions.slice(0, 20).map(t => (
+                            <div key={t.id} className="flex items-center justify-between p-3 rounded-lg border">
+                              <div className="flex items-center gap-2">
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${t.type === "earn" || t.type === "bonus" ? "bg-green-100" : "bg-red-100"}`}>
+                                  {t.type === "earn" || t.type === "bonus"
+                                    ? <Star className="w-3.5 h-3.5 text-green-600" />
+                                    : <TrendingUp className="w-3.5 h-3.5 text-red-500" />}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium">{t.description}</p>
+                                  <p className="text-xs text-muted-foreground">{format(parseISO(t.createdAt), "dd/MM/yyyy", { locale: ptBR })}</p>
+                                </div>
+                              </div>
+                              <span className={`text-sm font-bold ${t.type === "earn" || t.type === "bonus" ? "text-green-600" : "text-red-600"}`}>
+                                {t.type === "earn" || t.type === "bonus" ? "+" : "-"}{Math.abs(t.points)} pts
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </TabsContent>
+
+              <TabsContent value="history" className="mt-4">
+                {(() => {
+                  type ActivityEvent = {
+                    id: string;
+                    date: string;
+                    type: "reservation" | "payment";
+                    title: string;
+                    description: string;
+                    badge?: string;
+                    badgeColor?: string;
+                  };
+                  const events: ActivityEvent[] = [];
+                  for (const r of (reservations?.data ?? [])) {
+                    events.push({
+                      id: `res-${r.id}`, date: r.createdAt ?? r.trip?.departureDate,
+                      type: "reservation", title: "Reserva criada",
+                      description: r.trip?.name ?? `Reserva #${r.id.slice(-6)}`,
+                      badge: r.status === "confirmed" ? "Confirmada" : r.status === "cancelled" ? "Cancelada" : "Pendente",
+                      badgeColor: r.status === "confirmed" ? "bg-green-100 text-green-700" : r.status === "cancelled" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700",
+                    });
+                  }
+                  for (const p of (payments?.data ?? [])) {
+                    events.push({
+                      id: `pay-${p.id}`, date: p.paidAt ?? p.createdAt,
+                      type: "payment", title: p.status === "paid" ? "Pagamento recebido" : "Lançamento financeiro",
+                      description: `${p.description ?? p.category} — ${formatCurrency(p.amount)}`,
+                      badge: p.status === "paid" ? "Pago" : p.status === "overdue" ? "Vencido" : "Pendente",
+                      badgeColor: p.status === "paid" ? "bg-green-100 text-green-700" : p.status === "overdue" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700",
+                    });
+                  }
+                  events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                  if (!events.length) {
+                    return (
+                      <div className="text-center py-10 text-muted-foreground">
+                        <Calendar className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                        <p className="text-sm font-medium">Nenhuma atividade registrada</p>
+                        <p className="text-xs mt-1">O histórico aparece automaticamente conforme reservas e pagamentos são criados.</p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="relative space-y-0">
+                      {events.map((ev, idx) => (
+                        <div key={ev.id} className="flex gap-3 group">
+                          <div className="flex flex-col items-center">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${ev.type === "payment" ? "bg-green-100" : "bg-blue-100"}`}>
+                              {ev.type === "payment"
+                                ? <TrendingUp className="w-3.5 h-3.5 text-green-600" />
+                                : <Star className="w-3.5 h-3.5 text-blue-600" />}
+                            </div>
+                            {idx < events.length - 1 && <div className="w-px flex-1 bg-border mt-1 mb-1" />}
+                          </div>
+                          <div className="pb-4 min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-medium">{ev.title}</span>
+                              {ev.badge && <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${ev.badgeColor}`}>{ev.badge}</span>}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5 truncate">{ev.description}</p>
+                            <p className="text-xs text-muted-foreground/70 mt-0.5">{format(new Date(ev.date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </TabsContent>
+
+              <TabsContent value="documents" className="mt-4">
+                <ClientDocumentsTab clientId={id} />
+              </TabsContent>
+            </Tabs>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}

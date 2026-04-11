@@ -8,6 +8,7 @@ import {
   useGetTripBoardingPanel, useCheckInPassenger, useUndoCheckInPassenger,
 } from "@workspace/api-client-react";
 import type { Trip, Seat, BoardingPassenger } from "@workspace/api-client-react";
+import { Client360Modal } from "@/components/client360-modal";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Button } from "@/components/ui/button";
@@ -177,11 +178,24 @@ function OccupancyBar({ reserved, confirmed, total }: { reserved: number; confir
 
 function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: string; tripName: string; open: boolean; onClose: () => void }) {
   const [search, setSearch] = useState("");
+  const [client360Id, setClient360Id] = useState<string | null>(null);
   const { toast } = useToast();
 
   const { data: panel, isLoading, refetch } = useGetTripBoardingPanel(tripId, {
     query: { queryKey: ["boarding-panel", tripId], enabled: open && !!tripId },
   });
+
+  const { data: reservationsData } = useListReservations({ tripId, limit: 200 }, {
+    query: { queryKey: ["reservations-boarding", tripId], enabled: open && !!tripId },
+  });
+
+  const reservationClientMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of reservationsData?.data ?? []) {
+      if (r.clientId) map.set(r.id, r.clientId);
+    }
+    return map;
+  }, [reservationsData]);
 
   const checkIn = useCheckInPassenger();
   const undoCheckIn = useUndoCheckInPassenger();
@@ -306,7 +320,16 @@ function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: strin
                         <span className="font-mono opacity-70">{p.voucherCode}</span>
                       </div>
                     </div>
-                    <div className="shrink-0 ml-2">
+                    <div className="shrink-0 ml-2 flex items-center gap-1">
+                      {reservationClientMap.get(p.reservationId) && (
+                        <Button
+                          size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground"
+                          onClick={() => setClient360Id(reservationClientMap.get(p.reservationId)!)}
+                          title="Perfil 360°"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
                       {isCheckedIn ? (
                         <Button
                           size="sm" variant="outline" className="h-8 text-xs text-muted-foreground gap-1"
@@ -332,6 +355,7 @@ function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: strin
           </>
         )}
       </DialogContent>
+      <Client360Modal open={!!client360Id} onClose={() => setClient360Id(null)} clientId={client360Id} />
     </Dialog>
   );
 }
@@ -1524,6 +1548,7 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "name", dir: "asc" });
   const [statusFilter, setStatusFilter] = useState("all");
   const [financialReportOpen, setFinancialReportOpen] = useState(false);
+  const [client360Id, setClient360Id] = useState<string | null>(null);
 
   const { data: allTripsData } = useListTrips({ limit: 100 });
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
@@ -1733,7 +1758,9 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
                 const isEditing = editingId === r.id;
                 return (
                   <tr key={r.id} className={`border-b ${isEditing ? "bg-primary/5" : "hover:bg-muted/30"}`}>
-                    <td className="p-2 font-medium">{r.client.name}</td>
+                    <td className="p-2 font-medium">
+                      <button className="hover:underline text-left" onClick={() => setClient360Id(r.client.id)}>{r.client.name}</button>
+                    </td>
                     <td className="p-2"><code className="text-xs bg-muted px-1.5 py-0.5 rounded">{r.voucherCode}</code></td>
                     <td className="p-2">{r.seats.join(", ") || "—"}</td>
                     <td className="p-2">
@@ -1918,6 +1945,7 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
           )}
         </DialogContent>
       </Dialog>
+      <Client360Modal open={!!client360Id} onClose={() => setClient360Id(null)} clientId={client360Id} />
     </div>
   );
 }

@@ -26,6 +26,7 @@ import {
 } from "@workspace/api-client-react";
 import type { Reservation, Passenger } from "@workspace/api-client-react";
 import { SeatMapPicker } from "@/components/SeatMapPicker";
+import { Client360Modal } from "@/components/client360-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -1596,6 +1597,7 @@ export default function Reservations() {
   const [voucherRes, setVoucherRes] = useState<Reservation | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [initialTripId, setInitialTripId] = useState<string | undefined>(undefined);
+  const [client360Id, setClient360Id] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1790,8 +1792,17 @@ export default function Reservations() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <p className="font-medium text-sm">{r.client?.name ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground">{r.client?.whatsapp}</p>
+                    {r.client?.id ? (
+                      <button className="text-left hover:underline" onClick={() => setClient360Id(r.client!.id)}>
+                        <p className="font-medium text-sm">{r.client?.name ?? "—"}</p>
+                        <p className="text-xs text-muted-foreground">{r.client?.whatsapp}</p>
+                      </button>
+                    ) : (
+                      <>
+                        <p className="font-medium text-sm">{r.client?.name ?? "—"}</p>
+                        <p className="text-xs text-muted-foreground">{r.client?.whatsapp}</p>
+                      </>
+                    )}
                   </TableCell>
                   <TableCell>
                     <p className="font-medium text-sm truncate max-w-[140px]">{r.trip?.name ?? "—"}</p>
@@ -1959,6 +1970,7 @@ export default function Reservations() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <Client360Modal open={!!client360Id} onClose={() => setClient360Id(null)} clientId={client360Id} />
     </div>
   );
 }
