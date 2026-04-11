@@ -83,13 +83,17 @@ export default function Indicacoes() {
     if (navigator.share) {
       try {
         await navigator.share({ title: "Meu link de indicação", url: referralLink });
-      } catch {
-        // user cancelled or error — do nothing
+        return;
+      } catch (err) {
+        const name = err instanceof Error ? err.name : "";
+        if (name === "AbortError") return;
       }
-    } else {
-      navigator.clipboard.writeText(referralLink).then(() => {
-        toast({ title: "Link copiado!", description: "Cole e envie para quem quiser indicar." });
-      });
+    }
+    try {
+      await navigator.clipboard.writeText(referralLink);
+      toast({ title: "Link copiado!", description: "Cole e envie para quem quiser indicar." });
+    } catch {
+      toast({ title: "Não foi possível compartilhar", variant: "destructive" });
     }
   }
 
