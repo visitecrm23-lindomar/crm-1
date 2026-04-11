@@ -129,7 +129,7 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onDelet
         </div>
         {(client?.totalSpent ?? 0) > 0 && (
           <p className="text-xs text-green-600 font-medium mt-1">
-            Pago: {formatCurrency(client!.totalSpent)}
+            Pago: {formatCurrency(client?.totalSpent ?? 0)}
           </p>
         )}
       </div>

@@ -538,11 +538,12 @@ router.post("/reservations", async (req, res): Promise<void> => {
       .where(and(eq(reservationsTable.id, id), eq(reservationsTable.tenantId, me.tenantId)))
       .limit(1);
     if (!reservation) { res.status(500).json({ error: "Failed to create reservation" }); return; }
-    if (reservation.clientId) {
-      await syncClientDeal(reservation.clientId, me.tenantId, reservation.tripId, Number(reservation.totalValue), me.id);
-    }
     const formatted = await formatReservation(reservation);
     res.status(201).json(formatted);
+    if (reservation.clientId) {
+      syncClientDeal(reservation.clientId, me.tenantId, reservation.tripId, Number(reservation.totalValue), me.id)
+        .catch((err) => req.log.error({ err }, "Error syncing deal after reservation creation"));
+    }
   } catch (err) {
     req.log.error({ err }, "Error creating reservation");
     res.status(500).json({ error: "Internal server error" });
@@ -641,7 +642,8 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
 
     if (!reservation) { res.status(404).json({ error: "Not found" }); return; }
     if (parsed.data.totalValue != null && existing.clientId) {
-      await syncClientDeal(existing.clientId, me.tenantId, existing.tripId, parsed.data.totalValue, me.id);
+      syncClientDeal(existing.clientId, me.tenantId, existing.tripId, parsed.data.totalValue, me.id)
+        .catch((err) => req.log.error({ err }, "Error syncing deal after reservation update"));
     }
     const formatted = await formatReservation(reservation);
     res.json(formatted);
