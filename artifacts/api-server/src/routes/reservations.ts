@@ -677,23 +677,29 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
         if (principalPassenger) {
           await tx.update(passengersTable).set({ seatNumber: newSeat })
             .where(eq(passengersTable.id, principalPassenger.id));
-        } else if (existing.clientId) {
-          const [clientData] = await tx.select().from(clientsTable)
-            .where(and(eq(clientsTable.id, existing.clientId), eq(clientsTable.tenantId, me.tenantId)))
+        } else {
+          const [anyPassenger] = await tx.select({ id: passengersTable.id })
+            .from(passengersTable)
+            .where(eq(passengersTable.reservationId, req.params.id))
             .limit(1);
-          if (clientData) {
-            await tx.insert(passengersTable).values({
-              id: generateId(),
-              reservationId: req.params.id,
-              name: clientData.name,
-              cpf: clientData.cpf ?? null,
-              rg: clientData.rg ?? null,
-              birthDate: clientData.birthDate ?? null,
-              ageCategory: deriveAgeCategory(clientData.birthDate ?? null),
-              seatNumber: newSeat,
-              isChildUnder7: getAgeYears(clientData.birthDate ?? null) < 7,
-              isPrimary: true,
-            }).onConflictDoNothing();
+          if (!anyPassenger && existing.clientId) {
+            const [clientData] = await tx.select().from(clientsTable)
+              .where(and(eq(clientsTable.id, existing.clientId), eq(clientsTable.tenantId, me.tenantId)))
+              .limit(1);
+            if (clientData) {
+              await tx.insert(passengersTable).values({
+                id: generateId(),
+                reservationId: req.params.id,
+                name: clientData.name,
+                cpf: clientData.cpf ?? null,
+                rg: clientData.rg ?? null,
+                birthDate: clientData.birthDate ?? null,
+                ageCategory: deriveAgeCategory(clientData.birthDate ?? null),
+                seatNumber: newSeat,
+                isChildUnder7: getAgeYears(clientData.birthDate ?? null) < 7,
+                isPrimary: true,
+              }).onConflictDoNothing();
+            }
           }
         }
       }

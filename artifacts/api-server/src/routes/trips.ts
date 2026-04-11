@@ -436,10 +436,7 @@ router.post("/trips/:id/sync-passengers", async (req, res): Promise<void> => {
     const reservationIds = reservations.map(r => r.id);
     const existingPassengers = await db.select({ reservationId: passengersTable.reservationId })
       .from(passengersTable)
-      .where(and(
-        inArray(passengersTable.reservationId, reservationIds),
-        eq(passengersTable.isPrimary, true),
-      ));
+      .where(inArray(passengersTable.reservationId, reservationIds));
     const reservationIdsWithPassengers = new Set(existingPassengers.map(p => p.reservationId));
 
     const reservationsNeedingPassenger = reservations.filter(r => !reservationIdsWithPassengers.has(r.id));
@@ -469,7 +466,7 @@ router.post("/trips/:id/sync-passengers", async (req, res): Promise<void> => {
         seatNumber: r.seats?.[0] ?? null,
         isChildUnder7: client.birthDate ? Math.floor((Date.now() - client.birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000)) < 7 : false,
         isPrimary: true,
-      });
+      }).onConflictDoNothing();
       created++;
     }
 
