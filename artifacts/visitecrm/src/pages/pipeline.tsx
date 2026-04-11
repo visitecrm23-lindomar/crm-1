@@ -719,7 +719,7 @@ export default function Pipeline() {
 
       {(loadingStages || loadingDeals) ? (
         <div className="flex gap-4 overflow-x-auto pb-4 flex-1">
-          {Array.from({ length: 7 }).map((_, i) => (
+          {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="w-64 shrink-0 space-y-3">
               <Skeleton className="h-10 w-full" /><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" />
             </div>

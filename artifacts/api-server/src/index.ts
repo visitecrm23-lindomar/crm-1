@@ -102,6 +102,76 @@ async function runMigrations() {
         END IF;
       END $$;
     `);
+    // Migrate pipeline stages from 7-column layout to 5-column layout (idempotent)
+    // Maps: Novos→Lead, Contato→(merge into Lead), Qualificados→Interessado,
+    //       Reservados→Cliente, Proposta→(merge into Cliente), Em Viagem→unchanged, Pós-Venda→Pós-venda
+    await client.query(`
+      DO $$
+      DECLARE
+        r_novos RECORD;
+        r_contato RECORD;
+        r_qualificados RECORD;
+        r_reservados RECORD;
+        r_proposta RECORD;
+        r_pos_venda RECORD;
+      BEGIN
+        -- Process each tenant that still has the old "Novos" stage
+        FOR r_novos IN
+          SELECT id, tenant_id, pipeline_id FROM pipeline_stages
+          WHERE name = 'Novos'
+        LOOP
+          -- Find sibling stages for this tenant
+          SELECT id INTO r_contato FROM pipeline_stages
+            WHERE tenant_id = r_novos.tenant_id AND name = 'Contato' LIMIT 1;
+          SELECT id INTO r_qualificados FROM pipeline_stages
+            WHERE tenant_id = r_novos.tenant_id AND name = 'Qualificados' LIMIT 1;
+          SELECT id INTO r_reservados FROM pipeline_stages
+            WHERE tenant_id = r_novos.tenant_id AND name = 'Reservados' LIMIT 1;
+          SELECT id INTO r_proposta FROM pipeline_stages
+            WHERE tenant_id = r_novos.tenant_id AND name = 'Proposta' LIMIT 1;
+          SELECT id INTO r_pos_venda FROM pipeline_stages
+            WHERE tenant_id = r_novos.tenant_id AND name = 'Pós-Venda' LIMIT 1;
+
+          -- Rename "Novos" → "Lead"
+          UPDATE pipeline_stages SET name = 'Lead', color = '#6366F1', "order" = 1
+            WHERE id = r_novos.id;
+
+          -- Move "Contato" deals to "Lead", then delete "Contato"
+          IF r_contato.id IS NOT NULL THEN
+            UPDATE deals SET stage_id = r_novos.id WHERE stage_id = r_contato.id;
+            DELETE FROM pipeline_stages WHERE id = r_contato.id;
+          END IF;
+
+          -- Rename "Qualificados" → "Interessado"
+          IF r_qualificados.id IS NOT NULL THEN
+            UPDATE pipeline_stages SET name = 'Interessado', color = '#F59E0B', "order" = 2
+              WHERE id = r_qualificados.id;
+          END IF;
+
+          -- Rename "Reservados" → "Cliente"
+          IF r_reservados.id IS NOT NULL THEN
+            UPDATE pipeline_stages SET name = 'Cliente', color = '#10B981', "order" = 3
+              WHERE id = r_reservados.id;
+          END IF;
+
+          -- Move "Proposta" deals to "Cliente", then delete "Proposta"
+          IF r_proposta.id IS NOT NULL AND r_reservados.id IS NOT NULL THEN
+            UPDATE deals SET stage_id = r_reservados.id WHERE stage_id = r_proposta.id;
+            DELETE FROM pipeline_stages WHERE id = r_proposta.id;
+          END IF;
+
+          -- Fix "Em Viagem" order
+          UPDATE pipeline_stages SET "order" = 4
+            WHERE tenant_id = r_novos.tenant_id AND name = 'Em Viagem';
+
+          -- Rename "Pós-Venda" → "Pós-venda" and fix order
+          IF r_pos_venda.id IS NOT NULL THEN
+            UPDATE pipeline_stages SET name = 'Pós-venda', "order" = 5
+              WHERE id = r_pos_venda.id;
+          END IF;
+        END LOOP;
+      END $$;
+    `);
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");

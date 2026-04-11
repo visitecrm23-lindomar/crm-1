@@ -35,13 +35,11 @@ const UpdateDealBody = z.object({
 const MoveDealBody = z.object({ stageId: z.string() });
 
 const DEFAULT_STAGES = [
-  { name: "Novos", order: 1, color: "#6366F1", isFinal: false },
-  { name: "Contato", order: 2, color: "#8B5CF6", isFinal: false },
-  { name: "Qualificados", order: 3, color: "#F59E0B", isFinal: false },
-  { name: "Reservados", order: 4, color: "#10B981", isFinal: false },
-  { name: "Proposta", order: 5, color: "#EF4444", isFinal: false },
-  { name: "Em Viagem", order: 6, color: "#06B6D4", isFinal: false },
-  { name: "Pós-Venda", order: 7, color: "#6B7280", isFinal: true },
+  { name: "Lead", order: 1, color: "#6366F1", isFinal: false },
+  { name: "Interessado", order: 2, color: "#F59E0B", isFinal: false },
+  { name: "Cliente", order: 3, color: "#10B981", isFinal: false },
+  { name: "Em Viagem", order: 4, color: "#06B6D4", isFinal: false },
+  { name: "Pós-venda", order: 5, color: "#6B7280", isFinal: true },
 ];
 
 async function ensureDefaultPipeline(tenantId: string): Promise<string> {
