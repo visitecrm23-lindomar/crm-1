@@ -674,10 +674,12 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
     if (parsed.data.seats != null) {
       const newSeat = parsed.data.seats[0] ?? null;
       const existingPassengers = await db.select().from(passengersTable)
-        .where(eq(passengersTable.reservationId, req.params.id)).limit(1);
+        .where(eq(passengersTable.reservationId, req.params.id))
+        .orderBy(asc(passengersTable.id))
+        .limit(1);
       if (existingPassengers.length > 0) {
         await db.update(passengersTable).set({ seatNumber: newSeat })
-          .where(eq(passengersTable.reservationId, req.params.id));
+          .where(eq(passengersTable.id, existingPassengers[0].id));
       } else if (existing.clientId) {
         const [clientData] = await db.select().from(clientsTable)
           .where(and(eq(clientsTable.id, existing.clientId), eq(clientsTable.tenantId, me.tenantId)))
