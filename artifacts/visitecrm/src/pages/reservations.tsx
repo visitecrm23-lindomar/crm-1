@@ -465,10 +465,16 @@ function VoucherModal({ reservation, open, onClose }: { reservation: Reservation
     styleEl.textContent = `@media print { body > *:not([data-voucher-print]) { display: none !important; } [data-voucher-print] { display: block !important; } }`;
     document.head.appendChild(styleEl);
 
+    const cleanup = () => {
+      if (document.body.contains(printEl)) document.body.removeChild(printEl);
+      if (document.head.contains(styleEl)) document.head.removeChild(styleEl);
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
+
     window.print();
 
-    document.body.removeChild(printEl);
-    document.head.removeChild(styleEl);
+    setTimeout(cleanup, 3000);
   }, []);
 
   if (!reservation) return null;
