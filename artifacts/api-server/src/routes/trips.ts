@@ -4,7 +4,7 @@ import { tripsTable, reservationsTable, passengersTable, clientsTable } from "@w
 import { eq, and, ilike, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
-import { deriveAgeCategory } from "../lib/passenger";
+import { deriveAgeCategory, getAgeYears } from "../lib/passenger";
 import { CreateTripBody, UpdateTripBody } from "@workspace/api-zod";
 
 const router = Router();
@@ -457,7 +457,7 @@ router.post("/trips/:id/sync-passengers", async (req, res): Promise<void> => {
         birthDate: client.birthDate ?? null,
         ageCategory: deriveAgeCategory(client.birthDate ?? null),
         seatNumber: r.seats?.[0] ?? null,
-        isChildUnder7: client.birthDate ? Math.floor((Date.now() - client.birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000)) < 7 : false,
+        isChildUnder7: getAgeYears(client.birthDate ?? null) < 7,
         isPrimary: true,
       }).onConflictDoNothing().returning({ id: passengersTable.id });
       if (inserted.length > 0) created++;
