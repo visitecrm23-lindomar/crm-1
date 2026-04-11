@@ -3,6 +3,7 @@ import { useLocation, useRoute } from "wouter";
 import {
   useListReservations,
   useGetReservation,
+  useGetReservationStats,
   useCreateReservation,
   useUpdateReservation,
   useCheckInReservation,
@@ -32,7 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   Plus, Search, MoreHorizontal, Eye, DollarSign, QrCode, CheckCircle, XCircle,
-  CalendarCheck, Clock, Users, Tag, Pencil, Trash2, UserPlus,
+  CalendarCheck, Clock, Users, Tag, Pencil, Trash2, UserPlus, TrendingDown,
 } from "lucide-react";
 
 const AGE_CATEGORY_LABELS: Record<string, string> = {
@@ -309,6 +310,78 @@ function ReservationPassengersTab({ reservationId }: { reservationId: string }) 
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+function VoucherModal({ reservation, open, onClose }: { reservation: Reservation | null; open: boolean; onClose: () => void }) {
+  if (!reservation) return null;
+  const trip = reservation.trip;
+  const client = reservation.client;
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Voucher de Reserva</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="flex flex-col items-center gap-2 p-6 bg-muted/30 rounded-xl border-2 border-dashed">
+            <p className="text-xs text-muted-foreground uppercase tracking-widest">Código do Voucher</p>
+            <p className="text-3xl font-mono font-bold tracking-wider">{reservation.voucherCode}</p>
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[reservation.status] ?? "bg-gray-100 text-gray-800"}`}>
+              {STATUS_LABELS[reservation.status] ?? reservation.status}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Cliente</p>
+              <p className="font-semibold text-sm">{client?.name ?? "—"}</p>
+              {client?.whatsapp && <p className="text-xs text-muted-foreground">{client.whatsapp}</p>}
+              {client?.cpf && <p className="text-xs text-muted-foreground">CPF: {client.cpf}</p>}
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Viagem</p>
+              <p className="font-semibold text-sm">{trip?.name ?? "—"}</p>
+              {trip?.destination && <p className="text-xs text-muted-foreground">{trip.destination}</p>}
+              {trip?.departureDate && (
+                <p className="text-xs text-muted-foreground">
+                  {new Date(trip.departureDate).toLocaleDateString("pt-BR")}
+                </p>
+              )}
+            </div>
+          </div>
+          <Separator />
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div>
+              <p className="text-xs text-muted-foreground">Valor Total</p>
+              <p className="font-bold text-sm">{fmt(reservation.totalValue)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Pago</p>
+              <p className="font-bold text-sm text-green-600">{fmt(reservation.paidValue)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Saldo</p>
+              <p className={`font-bold text-sm ${reservation.balance > 0 ? "text-destructive" : "text-green-600"}`}>
+                {fmt(reservation.balance)}
+              </p>
+            </div>
+          </div>
+          {reservation.seats?.length > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Assentos</p>
+              <div className="flex flex-wrap gap-1">
+                {reservation.seats.map(s => (
+                  <span key={s} className="font-mono text-xs bg-muted px-2 py-1 rounded">{s}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          <p className="text-xs text-center text-muted-foreground">
+            Emitido em {new Date(reservation.createdAt).toLocaleString("pt-BR")}
+          </p>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -743,7 +816,10 @@ export default function Reservations() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [paymentRes, setPaymentRes] = useState<Reservation | null>(null);
+  const [voucherRes, setVoucherRes] = useState<Reservation | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
+  const [confirmCheckinRes, setConfirmCheckinRes] = useState<Reservation | null>(null);
 
   const activeDetailId = detailId ?? idFromRoute;
 
@@ -751,12 +827,13 @@ export default function Reservations() {
     status: statusFilter || undefined,
     tripId: tripFilter || undefined,
     search: search || undefined,
+    createdById: sellerFilter || undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
     page,
     limit: 20,
   });
-  const { data: confirmedTotals } = useListReservations({ status: "confirmed", limit: 1 });
-  const { data: pendingTotals } = useListReservations({ status: "pending", limit: 1 });
-  const { data: cancelledTotals } = useListReservations({ status: "cancelled", limit: 1 });
+  const { data: stats, refetch: refetchStats } = useGetReservationStats();
   const { data: tripsData } = useListTrips({ limit: 100 });
   const { data: usersRaw } = useListUsers();
   const { data: boardingRaw } = useListBoardingLocations();
@@ -770,33 +847,19 @@ export default function Reservations() {
     return m;
   }, [boardingRaw]);
 
-  const reservationsRaw = data?.data ?? [];
-  const reservations = useMemo(() => {
-    let all = reservationsRaw;
-    if (dateFrom) all = all.filter(r => r.createdAt >= dateFrom);
-    if (dateTo) all = all.filter(r => r.createdAt <= dateTo + "T23:59:59.999Z");
-    if (sellerFilter) all = all.filter(r => (r as { sellerId?: string }).sellerId === sellerFilter);
-    return all;
-  }, [reservationsRaw, dateFrom, dateTo, sellerFilter]);
+  const reservations = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / 20);
-
-  const statCards = useMemo(() => {
-    return {
-      total: data?.total ?? 0,
-      confirmed: confirmedTotals?.total ?? 0,
-      pending: pendingTotals?.total ?? 0,
-      cancelled: cancelledTotals?.total ?? 0,
-    };
-  }, [data, confirmedTotals, pendingTotals, cancelledTotals]);
 
   const handleCheckin = async (r: Reservation) => {
     await checkInReservation.mutateAsync({ id: r.id });
     refetch();
+    refetchStats();
   };
   const handleCancel = async (id: string) => {
     await updateReservation.mutateAsync({ id, data: { status: "cancelled" } });
     refetch();
+    refetchStats();
   };
 
   return (
@@ -812,10 +875,10 @@ export default function Reservations() {
       </div>
 
       <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-        <StatCard icon={CalendarCheck} label="Total de Reservas" value={data?.total ?? "—"} color="text-blue-600" />
-        <StatCard icon={CheckCircle} label="Confirmadas" value={statCards.confirmed} color="text-green-600" />
-        <StatCard icon={Clock} label="Pendentes" value={statCards.pending} color="text-yellow-600" />
-        <StatCard icon={XCircle} label="Canceladas" value={statCards.cancelled} color="text-red-600" />
+        <StatCard icon={CalendarCheck} label="Total de Reservas" value={stats?.total ?? "—"} color="text-blue-600" />
+        <StatCard icon={CheckCircle} label="Confirmadas" value={stats?.confirmed ?? "—"} color="text-green-600" />
+        <StatCard icon={Clock} label="Pendentes" value={stats?.pending ?? "—"} color="text-yellow-600" />
+        <StatCard icon={TrendingDown} label="Valor a Receber" value={stats ? fmt(stats.totalOutstanding) : "—"} color="text-orange-600" sub="Saldo em aberto" />
       </div>
 
       <div className="flex flex-wrap items-center gap-3 bg-card p-4 rounded-lg border">
@@ -981,18 +1044,18 @@ export default function Reservations() {
                             <DollarSign className="w-4 h-4 mr-2" /> Registrar Pagamento
                           </DropdownMenuItem>
                         )}
-                        <DropdownMenuItem onClick={() => setDetailId(r.id)}>
+                        <DropdownMenuItem onClick={() => setVoucherRes(r)}>
                           <QrCode className="w-4 h-4 mr-2" /> Ver Voucher
                         </DropdownMenuItem>
                         {r.status !== "cancelled" && r.status !== "completed" && (
-                          <DropdownMenuItem onClick={() => handleCheckin(r)}>
+                          <DropdownMenuItem onClick={() => setConfirmCheckinRes(r)}>
                             <CheckCircle className="w-4 h-4 mr-2" /> Check-in
                           </DropdownMenuItem>
                         )}
                         {r.status !== "cancelled" && (
                           <DropdownMenuItem
                             className="text-destructive"
-                            onClick={() => handleCancel(r.id)}
+                            onClick={() => setConfirmCancelId(r.id)}
                           >
                             <XCircle className="w-4 h-4 mr-2" /> Cancelar Reserva
                           </DropdownMenuItem>
@@ -1034,21 +1097,65 @@ export default function Reservations() {
         reservation={paymentRes}
         open={!!paymentRes}
         onClose={() => setPaymentRes(null)}
-        onSuccess={refetch}
+        onSuccess={() => { refetch(); refetchStats(); }}
       />
       <NewReservationModal
         open={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
-        onSuccess={refetch}
+        onSuccess={() => { refetch(); refetchStats(); }}
       />
       {editId && (
         <EditReservationModal
           reservationId={editId}
           open={!!editId}
           onClose={() => setEditId(null)}
-          onSuccess={() => { refetch(); setEditId(null); }}
+          onSuccess={() => { refetch(); refetchStats(); setEditId(null); }}
         />
       )}
+      <VoucherModal
+        reservation={voucherRes}
+        open={!!voucherRes}
+        onClose={() => setVoucherRes(null)}
+      />
+
+      <AlertDialog open={!!confirmCancelId} onOpenChange={o => { if (!o) setConfirmCancelId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar Reserva</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja cancelar esta reserva? As vagas serão devolvidas para a viagem. Esta ação não pode ser desfeita facilmente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (confirmCancelId) handleCancel(confirmCancelId); setConfirmCancelId(null); }}
+            >
+              Confirmar Cancelamento
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!confirmCheckinRes} onOpenChange={o => { if (!o) setConfirmCheckinRes(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Check-in</AlertDialogTitle>
+            <AlertDialogDescription>
+              Confirmar check-in para <strong>{confirmCheckinRes?.client?.name}</strong>? Voucher: <span className="font-mono font-semibold">{confirmCheckinRes?.voucherCode}</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { if (confirmCheckinRes) { handleCheckin(confirmCheckinRes); setConfirmCheckinRes(null); } }}
+            >
+              Confirmar Check-in
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -1057,23 +1164,38 @@ function EditReservationModal({ reservationId, open, onClose, onSuccess }: { res
   const { data, isLoading } = useGetReservation(reservationId, {
     query: { queryKey: ["reservation-edit", reservationId], enabled: open && !!reservationId },
   });
+  const { data: boardingRaw } = useListBoardingLocations();
   const updateReservation = useUpdateReservation();
   const [paymentMethod, setPaymentMethod] = useState("");
   const [editStatus, setEditStatus] = useState<string>("");
+  const [boardingLocationId, setBoardingLocationId] = useState<string>("");
 
   useEffect(() => {
-    if (data?.status) setEditStatus(data.status);
-  }, [data?.status]);
+    if (data) {
+      setEditStatus(data.status ?? "");
+      setPaymentMethod(data.paymentMethod ?? "");
+      setBoardingLocationId((data as { boardingLocationId?: string | null }).boardingLocationId ?? "");
+    }
+  }, [data]);
+
+  const boardingLocations = boardingRaw ?? [];
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    const totalValueRaw = fd.get("totalValue") as string;
+    const installmentsRaw = fd.get("installments") as string;
+    const seatsRaw = (fd.get("seats") as string || "").trim();
     await updateReservation.mutateAsync({
       id: reservationId,
       data: {
         status: (editStatus as "pending" | "confirmed" | "completed" | "cancelled") || undefined,
         paymentMethod: paymentMethod || undefined,
         notes: (fd.get("notes") as string) || undefined,
+        totalValue: totalValueRaw ? parseFloat(totalValueRaw) : undefined,
+        installments: installmentsRaw ? parseInt(installmentsRaw) : undefined,
+        seats: seatsRaw ? seatsRaw.split(",").map(s => s.trim()).filter(Boolean) : undefined,
+        boardingLocationId: boardingLocationId || null,
       }
     });
     onSuccess();
@@ -1081,38 +1203,79 @@ function EditReservationModal({ reservationId, open, onClose, onSuccess }: { res
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Editar Reserva</DialogTitle></DialogHeader>
         {isLoading ? (
           <div className="space-y-3"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /></div>
         ) : data ? (
           <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Status</label>
-              <Select value={editStatus} onValueChange={setEditStatus}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending">Pendente</SelectItem>
-                  <SelectItem value="confirmed">Confirmada</SelectItem>
-                  <SelectItem value="completed">Concluída</SelectItem>
-                  <SelectItem value="cancelled">Cancelada</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="p-3 bg-muted/50 rounded-lg text-sm">
+              <span className="text-muted-foreground">Reserva: </span>
+              <span className="font-mono font-semibold">{data.voucherCode}</span>
+              <span className="text-muted-foreground ml-3">Cliente: </span>
+              <span className="font-medium">{data.client?.name}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Status</label>
+                <Select value={editStatus} onValueChange={setEditStatus}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pendente</SelectItem>
+                    <SelectItem value="confirmed">Confirmada</SelectItem>
+                    <SelectItem value="completed">Concluída</SelectItem>
+                    <SelectItem value="cancelled">Cancelada</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Forma de Pagamento</label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pix">PIX</SelectItem>
+                    <SelectItem value="credit_card">Cartão de Crédito</SelectItem>
+                    <SelectItem value="debit_card">Cartão de Débito</SelectItem>
+                    <SelectItem value="bank_transfer">Transferência</SelectItem>
+                    <SelectItem value="cash">Dinheiro</SelectItem>
+                    <SelectItem value="boleto">Boleto</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Valor Total (R$)</label>
+                <Input name="totalValue" type="number" step="0.01" min="0" defaultValue={data.totalValue.toFixed(2)} />
+                <p className="text-xs text-muted-foreground">Saldo atual: {fmt(data.balance)}</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Parcelas</label>
+                <Input name="installments" type="number" min="1" max="24" defaultValue={data.installments ?? 1} />
+              </div>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Forma de Pagamento</label>
-              <Select value={paymentMethod || data.paymentMethod || ""} onValueChange={setPaymentMethod}>
-                <SelectTrigger><SelectValue placeholder="Manter atual" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pix">PIX</SelectItem>
-                  <SelectItem value="credit_card">Cartão de Crédito</SelectItem>
-                  <SelectItem value="debit_card">Cartão de Débito</SelectItem>
-                  <SelectItem value="bank_transfer">Transferência</SelectItem>
-                  <SelectItem value="cash">Dinheiro</SelectItem>
-                  <SelectItem value="boleto">Boleto</SelectItem>
-                </SelectContent>
-              </Select>
+              <label className="text-sm font-medium">Assentos</label>
+              <Input
+                name="seats"
+                defaultValue={(data.seats ?? []).join(", ")}
+                placeholder="Ex: 1, 2, 3 (separados por vírgula)"
+              />
             </div>
+            {boardingLocations.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Local de Embarque</label>
+                <Select value={boardingLocationId || "none"} onValueChange={v => setBoardingLocationId(v === "none" ? "" : v)}>
+                  <SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhum</SelectItem>
+                    {boardingLocations.map(b => (
+                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-2">
               <label className="text-sm font-medium">Observações</label>
               <Input name="notes" defaultValue={data.notes ?? ""} placeholder="Observações sobre a reserva..." />

@@ -509,6 +509,20 @@ export interface UpdateReservationBody {
   notes?: string | null;
   /** @nullable */
   seats?: string[] | null;
+  /** @nullable */
+  totalValue?: number | null;
+  /** @nullable */
+  installments?: number | null;
+  /** @nullable */
+  boardingLocationId?: string | null;
+}
+
+export interface ReservationStats {
+  total: number;
+  confirmed: number;
+  pending: number;
+  cancelled: number;
+  totalOutstanding: number;
 }
 
 export interface Passenger {
@@ -2253,6 +2267,18 @@ export type ListReservationsParams = {
    * @nullable
    */
   status?: string | null;
+  /**
+   * @nullable
+   */
+  createdById?: string | null;
+  /**
+   * @nullable
+   */
+  dateFrom?: string | null;
+  /**
+   * @nullable
+   */
+  dateTo?: string | null;
   page?: number;
   limit?: number;
 };

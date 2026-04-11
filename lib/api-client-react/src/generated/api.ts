@@ -122,6 +122,7 @@ import type {
   Referral,
   Reservation,
   ReservationListResponse,
+  ReservationStats,
   SeatMap,
   SendMessageBody,
   SuccessResponse,
@@ -3784,6 +3785,81 @@ export function useGetTripSeatMap<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetTripSeatMapQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get reservation aggregate statistics
+ */
+export const getGetReservationStatsUrl = () => {
+  return `/api/reservations/stats`;
+};
+
+export const getReservationStats = async (
+  options?: RequestInit,
+): Promise<ReservationStats> => {
+  return customFetch<ReservationStats>(getGetReservationStatsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetReservationStatsQueryKey = () => {
+  return [`/api/reservations/stats`] as const;
+};
+
+export const getGetReservationStatsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getReservationStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getReservationStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetReservationStatsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getReservationStats>>
+  > = ({ signal }) => getReservationStats({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getReservationStats>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetReservationStatsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getReservationStats>>
+>;
+export type GetReservationStatsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get reservation aggregate statistics
+ */
+
+export function useGetReservationStats<
+  TData = Awaited<ReturnType<typeof getReservationStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getReservationStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetReservationStatsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

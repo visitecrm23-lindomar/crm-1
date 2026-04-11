@@ -1153,6 +1153,17 @@ export const GetTripSeatMapResponse = zod.object({
 });
 
 /**
+ * @summary Get reservation aggregate statistics
+ */
+export const GetReservationStatsResponse = zod.object({
+  total: zod.number(),
+  confirmed: zod.number(),
+  pending: zod.number(),
+  cancelled: zod.number(),
+  totalOutstanding: zod.number(),
+});
+
+/**
  * @summary List reservations
  */
 export const listReservationsQueryPageDefault = 1;
@@ -1163,6 +1174,9 @@ export const ListReservationsQueryParams = zod.object({
   tripId: zod.coerce.string().nullish(),
   clientId: zod.coerce.string().nullish(),
   status: zod.coerce.string().nullish(),
+  createdById: zod.coerce.string().nullish(),
+  dateFrom: zod.coerce.string().nullish(),
+  dateTo: zod.coerce.string().nullish(),
   page: zod.coerce.number().default(listReservationsQueryPageDefault),
   limit: zod.coerce.number().default(listReservationsQueryLimitDefault),
 });
@@ -1296,6 +1310,9 @@ export const UpdateReservationBody = zod.object({
   paymentMethod: zod.string().nullish(),
   notes: zod.string().nullish(),
   seats: zod.array(zod.string()).nullish(),
+  totalValue: zod.number().nullish(),
+  installments: zod.number().nullish(),
+  boardingLocationId: zod.string().nullish(),
 });
 
 export const UpdateReservationResponse = zod.object({

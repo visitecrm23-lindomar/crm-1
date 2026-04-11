@@ -965,6 +965,19 @@ paths:
                 $ref: "#/components/schemas/SeatMap"
 
   # ─── RESERVATIONS ─────────────────────────────────────────────────
+  /reservations/stats:
+    get:
+      operationId: getReservationStats
+      tags: [reservations]
+      summary: Get reservation aggregate statistics
+      responses:
+        "200":
+          description: Reservation stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationStats"
+
   /reservations:
     get:
       operationId: listReservations
@@ -984,6 +997,18 @@ paths:
           schema:
             type: ["string", "null"]
         - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: createdById
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: dateFrom
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: dateTo
           in: query
           schema:
             type: ["string", "null"]
@@ -4254,6 +4279,27 @@ components:
           type: ["array", "null"]
           items:
             type: string
+        totalValue:
+          type: ["number", "null"]
+        installments:
+          type: ["integer", "null"]
+        boardingLocationId:
+          type: ["string", "null"]
+
+    ReservationStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        confirmed:
+          type: integer
+        pending:
+          type: integer
+        cancelled:
+          type: integer
+        totalOutstanding:
+          type: number
+      required: [total, confirmed, pending, cancelled, totalOutstanding]
 
     # ─── PASSENGER ─────────────────────────────────────────────────
     Passenger:

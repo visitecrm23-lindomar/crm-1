@@ -15,4 +15,10 @@ export interface UpdateReservationBody {
   notes?: string | null;
   /** @nullable */
   seats?: string[] | null;
+  /** @nullable */
+  totalValue?: number | null;
+  /** @nullable */
+  installments?: number | null;
+  /** @nullable */
+  boardingLocationId?: string | null;
 }

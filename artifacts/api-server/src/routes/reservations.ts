@@ -63,12 +63,43 @@ function formatPassenger(p: typeof passengersTable.$inferSelect) {
   };
 }
 
+router.get("/reservations/stats", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    const tenantCond = eq(reservationsTable.tenantId, me.tenantId);
+
+    const [statsRow] = await db
+      .select({
+        total: sql<number>`count(*)`,
+        confirmed: sql<number>`count(*) filter (where status = 'confirmed')`,
+        pending: sql<number>`count(*) filter (where status = 'pending')`,
+        cancelled: sql<number>`count(*) filter (where status = 'cancelled')`,
+        totalOutstanding: sql<number>`coalesce(sum(balance) filter (where status not in ('cancelled', 'completed')), 0)`,
+      })
+      .from(reservationsTable)
+      .where(tenantCond);
+
+    res.json({
+      total: Number(statsRow?.total ?? 0),
+      confirmed: Number(statsRow?.confirmed ?? 0),
+      pending: Number(statsRow?.pending ?? 0),
+      cancelled: Number(statsRow?.cancelled ?? 0),
+      totalOutstanding: Number(statsRow?.totalOutstanding ?? 0),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error fetching reservation stats");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/reservations", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    const { tripId, clientId, status, search, page = "1", limit = "20" } = req.query as Record<string, string>;
+    const { tripId, clientId, status, search, createdById, dateFrom, dateTo, page = "1", limit = "20" } = req.query as Record<string, string>;
     const pageNum = parseInt(page) || 1;
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (pageNum - 1) * limitNum;
@@ -76,6 +107,9 @@ router.get("/reservations", async (req, res): Promise<void> => {
     const conditions: ReturnType<typeof eq>[] = [eq(reservationsTable.tenantId, me.tenantId)];
     if (tripId) conditions.push(eq(reservationsTable.tripId, tripId));
     if (status) conditions.push(eq(reservationsTable.status, status));
+    if (createdById) conditions.push(eq(reservationsTable.createdById, createdById));
+    if (dateFrom) conditions.push(sql`${reservationsTable.createdAt} >= ${dateFrom}::timestamptz` as ReturnType<typeof eq>);
+    if (dateTo) conditions.push(sql`${reservationsTable.createdAt} <= (${dateTo}::date + interval '1 day - 1 millisecond')` as ReturnType<typeof eq>);
     if (search) {
       const term = `%${search}%`;
       const matchingClients = await db
@@ -283,6 +317,15 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
     if (parsed.data.paymentMethod != null) updates.paymentMethod = parsed.data.paymentMethod;
     if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
     if (parsed.data.seats != null) updates.seats = parsed.data.seats;
+    if (parsed.data.installments != null) updates.installments = parsed.data.installments;
+    if (parsed.data.boardingLocationId !== undefined) updates.boardingLocationId = parsed.data.boardingLocationId ?? null;
+    if (parsed.data.totalValue != null) {
+      const newTotal = String(parsed.data.totalValue);
+      const paidValue = Number(existing.paidValue);
+      const newBalance = Math.max(0, parsed.data.totalValue - paidValue);
+      updates.totalValue = newTotal;
+      updates.balance = String(newBalance);
+    }
 
     const isBeingCancelled = parsed.data.status != null && CANCELLING_STATUSES.includes(parsed.data.status);
     const wasActive = ACTIVE_STATUSES.includes(existing.status);

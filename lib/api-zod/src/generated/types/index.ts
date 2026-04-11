@@ -134,6 +134,7 @@ export * from "./referral";
 export * from "./reservation";
 export * from "./reservationClient";
 export * from "./reservationListResponse";
+export * from "./reservationStats";
 export * from "./seat";
 export * from "./seatMap";
 export * from "./sendMessageBody";

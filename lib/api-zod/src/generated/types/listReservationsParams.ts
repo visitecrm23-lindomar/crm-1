@@ -23,6 +23,18 @@ export type ListReservationsParams = {
    * @nullable
    */
   status?: string | null;
+  /**
+   * @nullable
+   */
+  createdById?: string | null;
+  /**
+   * @nullable
+   */
+  dateFrom?: string | null;
+  /**
+   * @nullable
+   */
+  dateTo?: string | null;
   page?: number;
   limit?: number;
 };
