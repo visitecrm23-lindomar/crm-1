@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   useGetNpsSummary,
   useListNpsResponses,
+  useSendNpsSurvey,
 } from "@workspace/api-client-react";
 import { useListTrips } from "@workspace/api-client-react";
 import { useListClients } from "@workspace/api-client-react";
@@ -38,11 +39,13 @@ import {
   Send,
   Star,
   MessageSquare,
-  Users,
   ThumbsUp,
   ThumbsDown,
+  Copy,
+  Check,
+  User,
 } from "lucide-react";
-import type { NpsResponse } from "@workspace/api-client-react";
+import type { NpsResponse, NpsSendLink } from "@workspace/api-client-react";
 
 const classConfig: Record<
   string,
@@ -69,7 +72,6 @@ const classConfig: Record<
 };
 
 function NpsGauge({ score }: { score: number }) {
-  const pct = ((score + 100) / 200) * 100;
   const color =
     score >= 50
       ? "#22c55e"
@@ -107,6 +109,30 @@ function NpsGauge({ score }: { score: number }) {
   );
 }
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="p-1 rounded hover:bg-muted transition-colors shrink-0"
+      title="Copiar link"
+    >
+      {copied ? (
+        <Check className="w-3.5 h-3.5 text-green-500" />
+      ) : (
+        <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+      )}
+    </button>
+  );
+}
+
 function ResponseDetail({
   response,
   onClose,
@@ -127,6 +153,12 @@ function ResponseDetail({
         <DialogTitle>Detalhe da Resposta NPS</DialogTitle>
       </DialogHeader>
       <div className="space-y-4 mt-2">
+        {response.clientName && (
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
+            <User className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium">{response.clientName}</span>
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {cls.icon}
@@ -188,6 +220,7 @@ export default function Nps() {
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [sendMode, setSendMode] = useState<"all" | "select">("all");
   const [detailResponse, setDetailResponse] = useState<NpsResponse | null>(null);
+  const [generatedLinks, setGeneratedLinks] = useState<NpsSendLink[]>([]);
 
   const { data: summary, isLoading: loadingSummary } = useGetNpsSummary();
   const { data: responses, isLoading: loadingResponses } = useListNpsResponses({
@@ -197,7 +230,33 @@ export default function Nps() {
   const { data: trips } = useListTrips({ limit: 100 });
   const { data: clients } = useListClients({ limit: 300 });
 
+  const { mutate: sendNps, isPending: isSending } = useSendNpsSurvey({
+    mutation: {
+      onSuccess: (data) => {
+        setGeneratedLinks(data.links ?? []);
+      },
+    },
+  });
+
   const filteredResponses = responses ?? [];
+
+  const handleSend = () => {
+    if (!selectedTrip) return;
+    sendNps({
+      data: {
+        tripId: selectedTrip,
+        clientIds: sendMode === "select" ? selectedClientIds : undefined,
+      },
+    });
+  };
+
+  const handleCloseSend = () => {
+    setIsSendOpen(false);
+    setSelectedTrip("");
+    setSelectedClientIds([]);
+    setSendMode("all");
+    setGeneratedLinks([]);
+  };
 
   return (
     <div className="space-y-6">
@@ -208,7 +267,7 @@ export default function Nps() {
             Net Promoter Score — satisfação dos seus clientes.
           </p>
         </div>
-        <Dialog open={isSendOpen} onOpenChange={setIsSendOpen}>
+        <Dialog open={isSendOpen} onOpenChange={(open) => { if (!open) handleCloseSend(); else setIsSendOpen(true); }}>
           <DialogTrigger asChild>
             <Button>
               <Send className="w-4 h-4 mr-2" /> Enviar Pesquisa
@@ -218,122 +277,150 @@ export default function Nps() {
             <DialogHeader>
               <DialogTitle>Enviar Pesquisa NPS</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Viagem</label>
-                <Select value={selectedTrip} onValueChange={(v) => { setSelectedTrip(v); setSelectedClientIds([]); }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecionar viagem..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(trips?.data ?? []).map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.name} —{" "}
-                        {new Date(t.departureDate).toLocaleDateString("pt-BR")}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Destinatários</label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => { setSendMode("all"); setSelectedClientIds([]); }}
-                    className={`flex-1 py-1.5 rounded-md border text-sm font-medium transition-colors ${
-                      sendMode === "all"
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background border-border hover:bg-muted"
-                    }`}
-                  >
-                    Todos os passageiros
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSendMode("select")}
-                    className={`flex-1 py-1.5 rounded-md border text-sm font-medium transition-colors ${
-                      sendMode === "select"
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background border-border hover:bg-muted"
-                    }`}
-                  >
-                    Selecionar clientes
-                  </button>
-                </div>
-              </div>
-
-              {sendMode === "select" && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Clientes</label>
-                  <div className="max-h-44 overflow-y-auto border rounded-lg divide-y">
-                    {(clients?.data ?? []).map((c) => (
-                      <label
-                        key={c.id}
-                        className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/50 text-sm"
-                      >
-                        <input
-                          type="checkbox"
-                          className="rounded"
-                          checked={selectedClientIds.includes(c.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedClientIds((prev) => [...prev, c.id]);
-                            } else {
-                              setSelectedClientIds((prev) =>
-                                prev.filter((id) => id !== c.id)
-                              );
-                            }
-                          }}
-                        />
-                        <span>{c.name}</span>
-                        {c.phone && (
-                          <span className="text-muted-foreground ml-auto">
-                            {c.phone}
-                          </span>
-                        )}
-                      </label>
-                    ))}
-                  </div>
-                  {selectedClientIds.length > 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      {selectedClientIds.length} cliente(s) selecionado(s)
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {sendMode === "all" && (
-                <p className="text-sm text-muted-foreground p-3 rounded-lg bg-muted/50 border">
-                  A pesquisa será enviada via WhatsApp para todos os passageiros
-                  da viagem selecionada, solicitando uma avaliação de 0 a 10.
+            {generatedLinks.length > 0 ? (
+              <div className="space-y-4 mt-4">
+                <p className="text-sm text-muted-foreground">
+                  Links gerados para {generatedLinks.length} cliente(s). Copie e envie via WhatsApp:
                 </p>
-              )}
-
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => { setIsSendOpen(false); setSelectedClientIds([]); setSendMode("all"); }}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  disabled={
-                    !selectedTrip ||
-                    (sendMode === "select" && selectedClientIds.length === 0)
-                  }
-                  onClick={() => {
-                    setIsSendOpen(false);
-                    setSelectedTrip("");
-                    setSelectedClientIds([]);
-                    setSendMode("all");
-                  }}
-                >
-                  <Send className="w-4 h-4 mr-2" /> Enviar
-                </Button>
+                <div className="max-h-64 overflow-y-auto space-y-2">
+                  {generatedLinks.map((link) => (
+                    <div
+                      key={link.clientId}
+                      className="p-3 rounded-lg border bg-muted/30 space-y-1"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">{link.clientName}</span>
+                        <CopyButton text={link.surveyUrl} />
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">{link.surveyUrl}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-end">
+                  <Button onClick={handleCloseSend}>Fechar</Button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Viagem</label>
+                  <Select value={selectedTrip} onValueChange={(v) => { setSelectedTrip(v); setSelectedClientIds([]); }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecionar viagem..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(trips?.data ?? []).map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name} —{" "}
+                          {new Date(t.departureDate).toLocaleDateString("pt-BR")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Destinatários</label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setSendMode("all"); setSelectedClientIds([]); }}
+                      className={`flex-1 py-1.5 rounded-md border text-sm font-medium transition-colors ${
+                        sendMode === "all"
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-background border-border hover:bg-muted"
+                      }`}
+                    >
+                      Todos os passageiros
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSendMode("select")}
+                      className={`flex-1 py-1.5 rounded-md border text-sm font-medium transition-colors ${
+                        sendMode === "select"
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-background border-border hover:bg-muted"
+                      }`}
+                    >
+                      Selecionar clientes
+                    </button>
+                  </div>
+                </div>
+
+                {sendMode === "select" && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Clientes</label>
+                    <div className="max-h-44 overflow-y-auto border rounded-lg divide-y">
+                      {(clients?.data ?? []).map((c) => (
+                        <label
+                          key={c.id}
+                          className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/50 text-sm"
+                        >
+                          <input
+                            type="checkbox"
+                            className="rounded"
+                            checked={selectedClientIds.includes(c.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedClientIds((prev) => [...prev, c.id]);
+                              } else {
+                                setSelectedClientIds((prev) =>
+                                  prev.filter((id) => id !== c.id)
+                                );
+                              }
+                            }}
+                          />
+                          <span>{c.name}</span>
+                          {c.phone && (
+                            <span className="text-muted-foreground ml-auto">
+                              {c.phone}
+                            </span>
+                          )}
+                        </label>
+                      ))}
+                    </div>
+                    {selectedClientIds.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        {selectedClientIds.length} cliente(s) selecionado(s)
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {sendMode === "all" && (
+                  <p className="text-sm text-muted-foreground p-3 rounded-lg bg-muted/50 border">
+                    Serão gerados links individuais para todos os passageiros
+                    da viagem selecionada.
+                  </p>
+                )}
+
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={handleCloseSend}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    disabled={
+                      !selectedTrip ||
+                      (sendMode === "select" && selectedClientIds.length === 0) ||
+                      isSending
+                    }
+                    onClick={handleSend}
+                  >
+                    {isSending ? (
+                      <span className="flex items-center gap-2">
+                        <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                        Gerando...
+                      </span>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 mr-2" /> Gerar Links
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </div>
@@ -449,6 +536,7 @@ export default function Nps() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Cliente</TableHead>
                 <TableHead>Classificação</TableHead>
                 <TableHead>Nota</TableHead>
                 <TableHead>Comentário</TableHead>
@@ -460,7 +548,7 @@ export default function Nps() {
               {loadingResponses ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 5 }).map((_, j) => (
+                    {Array.from({ length: 6 }).map((_, j) => (
                       <TableCell key={j}>
                         <Skeleton className="h-5 w-full" />
                       </TableCell>
@@ -470,7 +558,7 @@ export default function Nps() {
               ) : filteredResponses.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={5}
+                    colSpan={6}
                     className="text-center py-12 text-muted-foreground"
                   >
                     <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-30" />
@@ -489,6 +577,13 @@ export default function Nps() {
                   };
                   return (
                     <TableRow key={r.id}>
+                      <TableCell>
+                        {r.clientName ? (
+                          <span className="text-sm font-medium">{r.clientName}</span>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">—</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <span className="flex items-center gap-1.5 text-sm">
                           {cls.icon}

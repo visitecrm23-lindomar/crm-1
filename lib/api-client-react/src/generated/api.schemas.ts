@@ -1376,7 +1376,15 @@ export interface NpsResponse {
   classification: string;
   /** @nullable */
   feedback?: string | null;
+  /** @nullable */
+  clientName?: string | null;
   createdAt: string;
+}
+
+export interface NpsSendLink {
+  clientId: string;
+  clientName: string;
+  surveyUrl: string;
 }
 
 export interface NpsSummary {
@@ -2487,4 +2495,13 @@ export type ListNpsResponsesParams = {
   classification?: string | null;
   page?: number;
   limit?: number;
+};
+
+export type SendNpsSurveyBody = {
+  tripId: string;
+  clientIds?: string[];
+};
+
+export type SendNpsSurvey200 = {
+  links: NpsSendLink[];
 };

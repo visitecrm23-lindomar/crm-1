@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { campaignsTable, npsResponsesTable, productsTable, ordersTable, orderItemsTable, clientsTable } from "@workspace/db";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { campaignsTable, npsResponsesTable, productsTable, ordersTable, orderItemsTable, clientsTable, reservationsTable } from "@workspace/db";
+import { eq, and, desc, inArray, avg, sql } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { z } from "zod";
@@ -32,6 +32,11 @@ const CreateNpsResponseBody = z.object({
   orderId: z.string().optional(),
   score: z.number().int().min(0).max(10),
   feedback: z.string().optional(),
+});
+
+const SendNpsBody = z.object({
+  tripId: z.string(),
+  clientIds: z.array(z.string()).optional(),
 });
 
 const CreateProductBody = z.object({
@@ -218,16 +223,96 @@ router.get("/nps", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const responses = await db.select().from(npsResponsesTable)
+    const rows = await db
+      .select({
+        id: npsResponsesTable.id,
+        tenantId: npsResponsesTable.tenantId,
+        userId: npsResponsesTable.userId,
+        orderId: npsResponsesTable.orderId,
+        score: npsResponsesTable.score,
+        classification: npsResponsesTable.classification,
+        feedback: npsResponsesTable.feedback,
+        createdAt: npsResponsesTable.createdAt,
+        clientName: clientsTable.name,
+      })
+      .from(npsResponsesTable)
+      .leftJoin(
+        clientsTable,
+        and(
+          eq(clientsTable.userId, npsResponsesTable.userId),
+          eq(clientsTable.tenantId, npsResponsesTable.tenantId),
+        ),
+      )
       .where(eq(npsResponsesTable.tenantId, me.tenantId))
       .orderBy(desc(npsResponsesTable.createdAt));
-    res.json(responses.map(r => ({
-      id: r.id, tenantId: r.tenantId, userId: r.userId, orderId: r.orderId,
-      score: r.score, classification: r.classification, feedback: r.feedback,
+    const classification = req.query.classification as string | undefined;
+    const filtered = classification && classification !== "all"
+      ? rows.filter(r => r.classification === classification)
+      : rows;
+    res.json(filtered.map(r => ({
+      id: r.id,
+      tenantId: r.tenantId,
+      userId: r.userId,
+      orderId: r.orderId,
+      score: r.score,
+      classification: r.classification,
+      feedback: r.feedback,
+      clientName: r.clientName ?? null,
       createdAt: r.createdAt.toISOString(),
     })));
   } catch (err) {
     req.log.error({ err }, "Error listing NPS responses");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/nps/send", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const parsed = SendNpsBody.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const { tripId, clientIds } = parsed.data;
+    const reservations = await db
+      .select({ clientId: reservationsTable.clientId })
+      .from(reservationsTable)
+      .where(
+        and(
+          eq(reservationsTable.tenantId, me.tenantId),
+          eq(reservationsTable.tripId, tripId),
+        ),
+      );
+
+    const allClientIds = [...new Set(reservations.map(r => r.clientId))];
+    const targetIds = clientIds && clientIds.length > 0
+      ? allClientIds.filter(id => clientIds.includes(id))
+      : allClientIds;
+
+    if (targetIds.length === 0) {
+      res.json({ links: [] });
+      return;
+    }
+
+    const clients = await db
+      .select({ id: clientsTable.id, name: clientsTable.name })
+      .from(clientsTable)
+      .where(
+        and(
+          eq(clientsTable.tenantId, me.tenantId),
+          inArray(clientsTable.id, targetIds),
+        ),
+      );
+
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const links = clients.map(c => {
+      const token = Buffer.from(`${c.id}:${me.tenantId}:${tripId}`).toString("base64url");
+      return { clientId: c.id, clientName: c.name, surveyUrl: `${baseUrl}/nps/survey?token=${token}` };
+    });
+
+    res.json({ links });
+  } catch (err) {
+    req.log.error({ err }, "Error sending NPS survey");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -250,6 +335,29 @@ router.post("/nps", async (req, res): Promise<void> => {
       classification,
       feedback: parsed.data.feedback ?? null,
     });
+
+    const allScores = await db
+      .select({ score: npsResponsesTable.score })
+      .from(npsResponsesTable)
+      .where(
+        and(
+          eq(npsResponsesTable.userId, parsed.data.userId),
+          eq(npsResponsesTable.tenantId, me.tenantId),
+        ),
+      );
+    const avgScore = allScores.length > 0
+      ? Math.round(allScores.reduce((sum, r) => sum + r.score, 0) / allScores.length)
+      : null;
+    await db
+      .update(clientsTable)
+      .set({ npsScore: avgScore })
+      .where(
+        and(
+          eq(clientsTable.userId, parsed.data.userId),
+          eq(clientsTable.tenantId, me.tenantId),
+        ),
+      );
+
     const [nps] = await db.select().from(npsResponsesTable)
       .where(and(eq(npsResponsesTable.id, id), eq(npsResponsesTable.tenantId, me.tenantId)))
       .limit(1);

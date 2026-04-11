@@ -2531,6 +2531,39 @@ paths:
                 items:
                   $ref: "#/components/schemas/NpsResponse"
 
+  /nps/send:
+    post:
+      operationId: sendNpsSurvey
+      tags: [nps]
+      summary: Generate NPS survey links for trip passengers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tripId:
+                  type: string
+                clientIds:
+                  type: array
+                  items:
+                    type: string
+              required: [tripId]
+      responses:
+        "200":
+          description: Survey links
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  links:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/NpsSendLink"
+                required: [links]
+
   /nps/summary:
     get:
       operationId: getNpsSummary
@@ -5693,9 +5726,22 @@ components:
           type: string
         feedback:
           type: ["string", "null"]
+        clientName:
+          type: ["string", "null"]
         createdAt:
           type: string
       required: [id, userId, score, classification, createdAt]
+
+    NpsSendLink:
+      type: object
+      properties:
+        clientId:
+          type: string
+        clientName:
+          type: string
+        surveyUrl:
+          type: string
+      required: [clientId, clientName, surveyUrl]
 
     NpsSummary:
       type: object

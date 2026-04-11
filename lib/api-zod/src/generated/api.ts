@@ -2869,9 +2869,28 @@ export const ListNpsResponsesResponseItem = zod.object({
   score: zod.number(),
   classification: zod.string(),
   feedback: zod.string().nullish(),
+  clientName: zod.string().nullish(),
   createdAt: zod.string(),
 });
 export const ListNpsResponsesResponse = zod.array(ListNpsResponsesResponseItem);
+
+/**
+ * @summary Generate NPS survey links for trip passengers
+ */
+export const SendNpsSurveyBody = zod.object({
+  tripId: zod.string(),
+  clientIds: zod.array(zod.string()).optional(),
+});
+
+export const SendNpsSurveyResponse = zod.object({
+  links: zod.array(
+    zod.object({
+      clientId: zod.string(),
+      clientName: zod.string(),
+      surveyUrl: zod.string(),
+    }),
+  ),
+});
 
 /**
  * @summary Get NPS summary and score

@@ -130,6 +130,8 @@ import type {
   ReservationStats,
   SeatMap,
   SendMessageBody,
+  SendNpsSurvey200,
+  SendNpsSurveyBody,
   SuccessResponse,
   Supplier,
   SyncTripPassengers200,
@@ -10110,6 +10112,92 @@ export function useListNpsResponses<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Generate NPS survey links for trip passengers
+ */
+export const getSendNpsSurveyUrl = () => {
+  return `/api/nps/send`;
+};
+
+export const sendNpsSurvey = async (
+  sendNpsSurveyBody: SendNpsSurveyBody,
+  options?: RequestInit,
+): Promise<SendNpsSurvey200> => {
+  return customFetch<SendNpsSurvey200>(getSendNpsSurveyUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(sendNpsSurveyBody),
+  });
+};
+
+export const getSendNpsSurveyMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendNpsSurvey>>,
+    TError,
+    { data: BodyType<SendNpsSurveyBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof sendNpsSurvey>>,
+  TError,
+  { data: BodyType<SendNpsSurveyBody> },
+  TContext
+> => {
+  const mutationKey = ["sendNpsSurvey"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof sendNpsSurvey>>,
+    { data: BodyType<SendNpsSurveyBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return sendNpsSurvey(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SendNpsSurveyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof sendNpsSurvey>>
+>;
+export type SendNpsSurveyMutationBody = BodyType<SendNpsSurveyBody>;
+export type SendNpsSurveyMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Generate NPS survey links for trip passengers
+ */
+export const useSendNpsSurvey = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendNpsSurvey>>,
+    TError,
+    { data: BodyType<SendNpsSurveyBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof sendNpsSurvey>>,
+  TError,
+  { data: BodyType<SendNpsSurveyBody> },
+  TContext
+> => {
+  return useMutation(getSendNpsSurveyMutationOptions(options));
+};
 
 /**
  * @summary Get NPS summary and score

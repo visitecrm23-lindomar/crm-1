@@ -13,5 +13,7 @@ export interface NpsResponse {
   classification: string;
   /** @nullable */
   feedback?: string | null;
+  /** @nullable */
+  clientName?: string | null;
   createdAt: string;
 }
