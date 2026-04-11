@@ -317,7 +317,7 @@ router.post("/payments", async (req, res): Promise<void> => {
     const id = generateId();
     const installments = parsed.data.installments ?? 1;
     const receiptUrl = typeof req.body.receiptUrl === "string" ? req.body.receiptUrl : null;
-    const canSetPaymentStatus = ["agencia", "superadmin"].includes(me.role);
+    const canSetPaymentStatus = ["agencia", "superadmin", "vendedor"].includes(me.role);
     const explicitStatus = canSetPaymentStatus ? (parsed.data.status ?? undefined) : undefined;
     const explicitPaidAt = canSetPaymentStatus && parsed.data.paidAt ? new Date(parsed.data.paidAt) : undefined;
 

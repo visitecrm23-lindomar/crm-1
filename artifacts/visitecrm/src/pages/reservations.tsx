@@ -814,10 +814,13 @@ function PaymentModal({ reservation, open, onClose, onSuccess }: { reservation: 
         paidAt: now,
       }
     });
-    await queryClient.invalidateQueries({ queryKey: ["reservations"] });
+    await queryClient.invalidateQueries({ queryKey: ["/api/reservations"] });
+    await queryClient.invalidateQueries({ queryKey: ["/api/reservations/stats"] });
     await queryClient.invalidateQueries({ queryKey: ["reservation", reservation.id] });
+    await queryClient.invalidateQueries({ queryKey: ["reservation-edit", reservation.id] });
     await queryClient.invalidateQueries({ queryKey: ["voucher", reservation.id] });
-    await queryClient.invalidateQueries({ queryKey: ["payments"] });
+    await queryClient.invalidateQueries({ queryKey: ["payments", reservation.id] });
+    await queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
     onSuccess();
     onClose();
   };
