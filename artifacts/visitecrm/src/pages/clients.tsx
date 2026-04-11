@@ -385,7 +385,7 @@ interface ClientModalProps {
   onSave: (createReservation?: boolean, savedClientId?: string) => void;
 }
 
-function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
+export function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
   const [tab, setTab] = useState("personal");
   const [form, setForm] = useState<ClientFormData>(EMPTY_CLIENT);
   const { toast } = useToast();

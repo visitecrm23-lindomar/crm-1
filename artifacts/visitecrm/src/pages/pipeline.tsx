@@ -1,25 +1,24 @@
-import { useState, useMemo, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useState, useMemo } from "react";
 import {
   DndContext, closestCenter, DragOverlay, useSensor, useSensors, PointerSensor,
   type DragStartEvent, type DragEndEvent
 } from "@dnd-kit/core";
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import {
-  useListPipelineStages, useListDeals, useCreateDeal, useMoveDeal,
-  useDeleteDeal, useListClients, useListTrips, useCreateClient, useUpdateClient, useUpdateDeal,
+  useListPipelineStages, useListDeals, useMoveDeal,
+  useDeleteDeal, useListClients, useListTrips,
 } from "@workspace/api-client-react";
 import type { Deal, PipelineStage, Client } from "@workspace/api-client-react";
+import { ClientModal } from "./clients";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Plus, Search, Trash2, Phone, Calendar, MapPin, X } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Plus, Search, Trash2, Phone, Calendar, MapPin, X, Pencil, UserPen } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -27,439 +26,20 @@ function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  active: { label: "Ativo", color: "bg-green-100 text-green-700" },
-  inactive: { label: "Inativo", color: "bg-gray-100 text-gray-600" },
-  lead: { label: "Lead", color: "bg-blue-100 text-blue-700" },
-  prospect: { label: "Prospecto", color: "bg-yellow-100 text-yellow-700" },
-  vip: { label: "VIP", color: "bg-purple-100 text-purple-700" },
-};
-
-const GENDER_OPTIONS = [
-  { value: "M", label: "Masculino" },
-  { value: "F", label: "Feminino" },
-  { value: "other", label: "Outro" },
-];
-
 const CLASSIFICATION_LABELS: Record<string, string> = {
   lead: "Lead", prospect: "Prospecto", client: "Cliente", vip: "VIP", inactive: "Inativo",
 };
-
-interface ClientFormData {
-  name: string; email: string; whatsapp: string; phone: string; cpf: string;
-  birthDate: string; gender: string; addressCity: string; addressState: string;
-  instagram: string; observations: string; tags: string; dreamDestinations: string;
-  pipelineStage: string; classification: string; npsScore: string; status: string;
-  stageId: string; tripInterestId: string;
-  dealValue: string; dealPaymentMethod: string; dealInstallments: string; dealCommission: string;
-}
-
-const EMPTY_CLIENT: ClientFormData = {
-  name: "", email: "", whatsapp: "", phone: "", cpf: "", birthDate: "", gender: "none",
-  addressCity: "", addressState: "", instagram: "", observations: "", tags: "",
-  dreamDestinations: "", pipelineStage: "", classification: "lead", npsScore: "", status: "active",
-  stageId: "", tripInterestId: "none",
-  dealValue: "", dealPaymentMethod: "none", dealInstallments: "1", dealCommission: "",
-};
-
-function clientToForm(c: Client, defaultStageId = "", deal?: Deal | null): ClientFormData {
-  return {
-    name: c.name, email: c.email, whatsapp: c.whatsapp, phone: c.phone ?? "",
-    cpf: c.cpf ?? "", birthDate: c.birthDate ? c.birthDate.split("T")[0] : "",
-    gender: c.gender ?? "none", addressCity: c.addressCity ?? "", addressState: c.addressState ?? "",
-    instagram: c.instagram ?? "", observations: c.observations ?? "",
-    tags: (c.tags ?? []).join(", "), dreamDestinations: (c.dreamDestinations ?? []).join(", "),
-    pipelineStage: c.pipelineStage ?? "", classification: c.classification ?? "lead",
-    npsScore: c.npsScore != null ? String(c.npsScore) : "", status: c.status ?? "active",
-    stageId: deal?.stageId ?? defaultStageId, tripInterestId: deal?.tripId ?? "none",
-    dealValue: deal?.value != null ? String(deal.value) : "", dealPaymentMethod: "none", dealInstallments: "1", dealCommission: "",
-  };
-}
-
-interface ClientPipelineModalProps {
-  open: boolean;
-  onClose: () => void;
-  editClient?: Client | null;
-  editDeal?: Deal | null;
-  defaultStageId?: string;
-  stages: PipelineStage[];
-  onSave: () => void;
-}
-
-function ClientPipelineModal({ open, onClose, editClient, editDeal, defaultStageId = "", stages, onSave }: ClientPipelineModalProps) {
-  const [tab, setTab] = useState("personal");
-  const [form, setForm] = useState<ClientFormData>(EMPTY_CLIENT);
-  const [, navigate] = useLocation();
-  const createClient = useCreateClient();
-  const updateClient = useUpdateClient();
-  const updateDeal = useUpdateDeal();
-  const createDeal = useCreateDeal();
-  const { data: tripsData } = useListTrips({ limit: 100 });
-
-  useEffect(() => {
-    if (open) {
-      setTab("personal");
-      if (editClient) {
-        const resolvedStageId = editDeal?.stageId ?? (editClient.pipelineStage
-          ? (stages.find(s => s.name === editClient.pipelineStage)?.id ?? defaultStageId)
-          : defaultStageId);
-        setForm(clientToForm(editClient, resolvedStageId, editDeal));
-      } else {
-        setForm({ ...EMPTY_CLIENT, stageId: defaultStageId });
-      }
-    }
-  }, [open, editClient, editDeal, defaultStageId, stages]);
-
-  const isEditing = !!editClient;
-  const isPending = createClient.isPending || updateClient.isPending;
-  const set = (key: keyof ClientFormData) => (val: string) => setForm(prev => ({ ...prev, [key]: val }));
-
-  const handleSubmit = async (withReservation = false) => {
-    const base = {
-      name: form.name, email: form.email, whatsapp: form.whatsapp,
-      phone: form.phone || undefined, cpf: form.cpf || undefined,
-      birthDate: form.birthDate ? new Date(form.birthDate).toISOString() : undefined,
-      gender: form.gender !== "none" ? form.gender : undefined,
-      addressCity: form.addressCity || undefined,
-      addressState: form.addressState || undefined,
-      instagram: form.instagram || undefined,
-      observations: form.observations || undefined,
-      tags: form.tags ? form.tags.split(",").map(t => t.trim()).filter(Boolean) : [],
-      dreamDestinations: form.dreamDestinations ? form.dreamDestinations.split(",").map(t => t.trim()).filter(Boolean) : [],
-    };
-
-    let savedClientId: string | undefined;
-    if (isEditing && editClient) {
-      await updateClient.mutateAsync({
-        id: editClient.id,
-        data: {
-          ...base,
-          pipelineStage: form.pipelineStage || undefined,
-          classification: form.classification || undefined,
-          npsScore: form.npsScore ? parseFloat(form.npsScore) : undefined,
-          status: form.status || undefined,
-        },
-      });
-      savedClientId = editClient.id;
-      if (editDeal) {
-        const dealUpdates: { stageId?: string; value?: number } = {};
-        if (form.stageId && form.stageId !== editDeal.stageId) dealUpdates.stageId = form.stageId;
-        if (form.dealValue !== "") dealUpdates.value = parseFloat(form.dealValue);
-        if (Object.keys(dealUpdates).length > 0) {
-          await updateDeal.mutateAsync({ id: editDeal.id, data: dealUpdates });
-        }
-      }
-    } else {
-      const result = await createClient.mutateAsync({ data: base });
-      savedClientId = result.id;
-      if (form.stageId && savedClientId) {
-        await createDeal.mutateAsync({
-          data: {
-            stageId: form.stageId,
-            title: `${form.name} — Lead`,
-            value: form.dealValue ? parseFloat(form.dealValue) : 0,
-            clientId: savedClientId,
-            leadName: form.name,
-            leadWhatsapp: form.whatsapp || undefined,
-            tripId: form.tripInterestId !== "none" ? form.tripInterestId : undefined,
-          },
-        });
-      }
-    }
-
-    if (withReservation && savedClientId) {
-      navigate(`/reservations?clientId=${savedClientId}&new=true`);
-      onClose();
-      return;
-    }
-    onSave();
-    onClose();
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{isEditing ? `Editar: ${editClient?.name}` : "Novo Cliente no Pipeline"}</DialogTitle>
-        </DialogHeader>
-
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="personal">Dados</TabsTrigger>
-            <TabsTrigger value="trip">Viagem</TabsTrigger>
-            <TabsTrigger value="financial">Financeiro</TabsTrigger>
-            <TabsTrigger value="observations">Obs.</TabsTrigger>
-            <TabsTrigger value="marketing">Follow-up</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="personal" className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <Label>Estágio no Pipeline</Label>
-              <Select value={form.stageId || "none"} onValueChange={v => set("stageId")(v === "none" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Selecionar estágio..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Selecionar estágio...</SelectItem>
-                  {stages.map(s => (
-                    <SelectItem key={s.id} value={s.id}>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
-                        {s.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 space-y-2">
-                <Label>Nome Completo *</Label>
-                <Input required placeholder="Maria Silva" value={form.name} onChange={e => set("name")(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>E-mail *</Label>
-                <Input type="email" required placeholder="maria@email.com" value={form.email} onChange={e => set("email")(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>WhatsApp *</Label>
-                <Input placeholder="+55 31 99999-9999" value={form.whatsapp} onChange={e => set("whatsapp")(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Telefone</Label>
-                <Input placeholder="+55 31 3333-3333" value={form.phone} onChange={e => set("phone")(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>CPF</Label>
-                <Input placeholder="000.000.000-00" value={form.cpf} onChange={e => set("cpf")(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Data de Nascimento</Label>
-                <Input type="date" value={form.birthDate} onChange={e => set("birthDate")(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Gênero</Label>
-                <Select value={form.gender} onValueChange={set("gender")}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Não informado</SelectItem>
-                    {GENDER_OPTIONS.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Cidade</Label>
-                <Input placeholder="Belo Horizonte" value={form.addressCity} onChange={e => set("addressCity")(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Estado</Label>
-                <Input placeholder="MG" maxLength={2} value={form.addressState} onChange={e => set("addressState")(e.target.value.toUpperCase())} />
-              </div>
-              <div className="col-span-2 space-y-2">
-                <Label>Instagram</Label>
-                <Input placeholder="@mariaSilva" value={form.instagram} onChange={e => set("instagram")(e.target.value)} />
-              </div>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="trip" className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <Label>Viagem de Interesse</Label>
-              <Select value={form.tripInterestId} onValueChange={set("tripInterestId")}>
-                <SelectTrigger><SelectValue placeholder="Selecionar viagem..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhuma</SelectItem>
-                  {tripsData?.data.map(t => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name} — {format(parseISO(t.departureDate), "dd/MM/yyyy")}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Destinos Sonhados</Label>
-              <Input placeholder="Arraial do Cabo, Morro de São Paulo" value={form.dreamDestinations} onChange={e => set("dreamDestinations")(e.target.value)} />
-              <p className="text-xs text-muted-foreground">Separe com vírgula</p>
-            </div>
-            <div className="space-y-2">
-              <Label>Tags de Interesse</Label>
-              <Input placeholder="praia, aventura, família" value={form.tags} onChange={e => set("tags")(e.target.value)} />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="financial" className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <Label>Valor do Negócio (R$)</Label>
-              <Input
-                type="number" min="0" step="0.01"
-                placeholder="5000.00"
-                value={form.dealValue}
-                onChange={e => set("dealValue")(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">Valor estimado desta oportunidade de venda</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Forma de Pagamento</Label>
-                <Select value={form.dealPaymentMethod} onValueChange={set("dealPaymentMethod")}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Não definido</SelectItem>
-                    <SelectItem value="pix">PIX</SelectItem>
-                    <SelectItem value="credit_card">Cartão de Crédito</SelectItem>
-                    <SelectItem value="debit_card">Cartão de Débito</SelectItem>
-                    <SelectItem value="cash">Dinheiro</SelectItem>
-                    <SelectItem value="bank_transfer">Transferência</SelectItem>
-                    <SelectItem value="boleto">Boleto</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Parcelas</Label>
-                <Select value={form.dealInstallments} onValueChange={set("dealInstallments")}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 12 }, (_, i) => (
-                      <SelectItem key={i + 1} value={String(i + 1)}>{i + 1}x</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Comissão do Vendedor (%)</Label>
-              <Input
-                type="number" min="0" max="100" step="0.5"
-                placeholder="5.0"
-                value={form.dealCommission}
-                onChange={e => set("dealCommission")(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                {form.dealValue && form.dealCommission
-                  ? `Comissão: ${formatCurrency((parseFloat(form.dealValue) * parseFloat(form.dealCommission)) / 100)}`
-                  : "Percentual de comissão sobre o valor do negócio"}
-              </p>
-            </div>
-            {isEditing && editClient && (
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Total Gasto pelo Cliente</p>
-                  <p className="text-lg font-bold">{formatCurrency(editClient.totalSpent)}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Saldo Devedor</p>
-                  <p className={`text-lg font-bold ${editClient.outstandingBalance > 0 ? "text-destructive" : "text-green-600"}`}>
-                    {formatCurrency(editClient.outstandingBalance)}
-                  </p>
-                </div>
-              </div>
-            )}
-            <div className="pt-3 border-t space-y-2">
-              <Label>Classificação do Cliente</Label>
-              <Select value={form.classification} onValueChange={set("classification")}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(CLASSIFICATION_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="observations" className="space-y-4 mt-4">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>NPS — Nota de 0 a 10</Label>
-                {form.npsScore !== "" && (
-                  <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${
-                    parseInt(form.npsScore) >= 9 ? "bg-green-100 text-green-700" :
-                    parseInt(form.npsScore) >= 7 ? "bg-yellow-100 text-yellow-700" :
-                    "bg-red-100 text-red-700"
-                  }`}>{form.npsScore}/10</span>
-                )}
-              </div>
-              <input
-                type="range" min="0" max="10" step="1"
-                value={form.npsScore !== "" ? parseInt(form.npsScore) : 0}
-                onChange={e => set("npsScore")(e.target.value)}
-                className="w-full accent-primary cursor-pointer"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>0 — Detrator</span><span>6 — Neutro</span><span>10 — Promotor</span>
-              </div>
-              {form.npsScore !== "" && (
-                <div className="flex gap-1">
-                  {Array.from({ length: 10 }).map((_, i) => (
-                    <button type="button" key={i} onClick={() => set("npsScore")(String(i + 1))}
-                      className={`flex-1 h-7 rounded text-xs font-bold ${
-                        i + 1 <= parseInt(form.npsScore)
-                          ? parseInt(form.npsScore) >= 9 ? "bg-green-500 text-white" : parseInt(form.npsScore) >= 7 ? "bg-yellow-400 text-white" : "bg-red-400 text-white"
-                          : "bg-muted text-muted-foreground hover:bg-muted-foreground/20"
-                      }`}
-                    >{i + 1}</button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label>Observações</Label>
-              <Textarea placeholder="Anotações sobre o cliente..." rows={5} value={form.observations} onChange={e => set("observations")(e.target.value)} />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="marketing" className="space-y-4 mt-4">
-            <p className="text-sm text-muted-foreground">Follow-up e preferências de contato</p>
-            <div className="space-y-2">
-              <Label>Próximo Follow-up</Label>
-              <Input type="date" />
-            </div>
-            <div className="space-y-2">
-              <Label>Canal Preferido</Label>
-              <Select defaultValue="whatsapp">
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                  <SelectItem value="email">E-mail</SelectItem>
-                  <SelectItem value="phone">Ligação</SelectItem>
-                  <SelectItem value="instagram">Instagram</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Tags de Interesse</Label>
-              <Input placeholder="praia, aventura, cultural, gastronomia" value={form.tags} onChange={e => set("tags")(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Destinos Sonhados</Label>
-              <Textarea placeholder="Destinos mencionados pelo cliente..." rows={3} value={form.dreamDestinations} onChange={e => set("dreamDestinations")(e.target.value)} />
-            </div>
-          </TabsContent>
-        </Tabs>
-
-        <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t mt-2">
-          <Button variant="outline" onClick={onClose} className="sm:order-1">Cancelar</Button>
-          {!isEditing && (
-            <Button variant="secondary" onClick={() => handleSubmit(true)} disabled={isPending || !form.name || !form.email || !form.whatsapp} className="sm:order-2">
-              {isPending ? "Salvando..." : "Salvar e Criar Reserva"}
-            </Button>
-          )}
-          <Button onClick={() => handleSubmit(false)} disabled={isPending || !form.name || !form.email || !form.whatsapp} className="sm:order-3">
-            {isPending ? "Salvando..." : isEditing ? "Salvar Alterações" : "Criar Cliente"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 interface ClientCardProps {
   deal: Deal;
   clientsById: Map<string, Client>;
   tripsById: Map<string, string>;
-  onEdit: (d: Deal, client?: Client) => void;
+  onEditClient: (client: Client) => void;
   onDelete: (id: string) => void;
   isDragging?: boolean;
 }
 
-function ClientCardContent({ deal, clientsById, tripsById, onEdit, onDelete, isDragging }: ClientCardProps) {
+function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onDelete, isDragging }: ClientCardProps) {
   const client = deal.clientId ? clientsById.get(deal.clientId) : undefined;
   const name = client?.name ?? deal.leadName ?? "Lead Desconhecido";
   const whatsapp = client?.whatsapp ?? deal.leadWhatsapp;
@@ -482,9 +62,26 @@ function ClientCardContent({ deal, clientsById, tripsById, onEdit, onDelete, isD
           <p className="text-xs text-muted-foreground truncate">{deal.title}</p>
         </div>
         <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-          <button onClick={() => onEdit(deal, client)} className="p-1 text-muted-foreground hover:text-foreground rounded">
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="p-1 text-muted-foreground hover:text-foreground rounded" title="Opções">
+                <Pencil className="w-3 h-3" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[160px]">
+              {client ? (
+                <DropdownMenuItem onClick={() => onEditClient(client)}>
+                  <UserPen className="w-3.5 h-3.5 mr-2" />
+                  Editar Cliente
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem disabled className="text-muted-foreground">
+                  <UserPen className="w-3.5 h-3.5 mr-2" />
+                  Sem cliente vinculado
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <button onClick={() => onDelete(deal.id)} className="p-1 text-muted-foreground hover:text-destructive rounded">
             <Trash2 className="w-3 h-3" />
           </button>
@@ -533,11 +130,11 @@ function ClientCardContent({ deal, clientsById, tripsById, onEdit, onDelete, isD
   );
 }
 
-function DraggableCard({ deal, clientsById, tripsById, onEdit, onDelete }: Omit<ClientCardProps, "isDragging">) {
+function DraggableCard({ deal, clientsById, tripsById, onEditClient, onDelete }: Omit<ClientCardProps, "isDragging">) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: deal.id });
   return (
     <div ref={setNodeRef} {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing">
-      <ClientCardContent deal={deal} clientsById={clientsById} tripsById={tripsById} onEdit={onEdit} onDelete={onDelete} isDragging={isDragging} />
+      <ClientCardContent deal={deal} clientsById={clientsById} tripsById={tripsById} onEditClient={onEditClient} onDelete={onDelete} isDragging={isDragging} />
     </div>
   );
 }
@@ -561,8 +158,6 @@ export default function Pipeline() {
   const [filterCity, setFilterCity] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
-  const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
-  const [defaultStageId, setDefaultStageId] = useState("");
   const [activeDragDeal, setActiveDragDeal] = useState<Deal | null>(null);
 
   const { data: stages, isLoading: loadingStages, refetch: refetchStages } = useListPipelineStages();
@@ -646,24 +241,24 @@ export default function Pipeline() {
     refetchStages();
   };
 
-  const handleEdit = (deal: Deal, client?: Client) => {
-    setEditingClient(client ?? null);
-    setEditingDeal(deal);
-    setDefaultStageId(deal.stageId);
+  const handleEditClient = (client: Client) => {
+    setEditingClient(client);
     setIsModalOpen(true);
   };
 
-  const openNew = (stageId = "") => {
+  const openNew = () => {
     setEditingClient(null);
-    setEditingDeal(null);
-    setDefaultStageId(stageId);
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingClient(null);
-    setEditingDeal(null);
+  };
+
+  const handleSave = () => {
+    refetchDeals();
+    refetchStages();
   };
 
   const totalValue = (deals ?? []).reduce((acc, d) => acc + d.value, 0);
@@ -678,7 +273,7 @@ export default function Pipeline() {
             {deals?.length ?? 0} leads · {formatCurrency(totalValue)} no funil
           </p>
         </div>
-        <Button onClick={() => openNew(stages?.[0]?.id ?? "")}>
+        <Button onClick={openNew}>
           <Plus className="w-4 h-4 mr-2" /> Novo Lead
         </Button>
       </div>
@@ -739,7 +334,7 @@ export default function Pipeline() {
                       <span className="text-sm font-semibold">{stage.name}</span>
                       <Badge variant="secondary" className="text-xs px-1.5 h-5">{stageDeals.length}</Badge>
                     </div>
-                    <button onClick={() => openNew(stage.id)} className="text-muted-foreground hover:text-primary p-1 rounded">
+                    <button onClick={openNew} className="text-muted-foreground hover:text-primary p-1 rounded">
                       <Plus className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -754,13 +349,13 @@ export default function Pipeline() {
                         deal={deal}
                         clientsById={clientsById}
                         tripsById={tripsById}
-                        onEdit={handleEdit}
+                        onEditClient={handleEditClient}
                         onDelete={handleDelete}
                       />
                     ))}
                     {stageDeals.length === 0 && (
                       <button
-                        onClick={() => openNew(stage.id)}
+                        onClick={openNew}
                         className="flex items-center justify-center h-16 rounded-lg border-2 border-dashed text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors w-full"
                       >
                         + Adicionar lead
@@ -779,7 +374,7 @@ export default function Pipeline() {
                   deal={activeDragDeal}
                   clientsById={clientsById}
                   tripsById={tripsById}
-                  onEdit={() => {}}
+                  onEditClient={() => {}}
                   onDelete={() => {}}
                 />
               </div>
@@ -788,14 +383,11 @@ export default function Pipeline() {
         </DndContext>
       )}
 
-      <ClientPipelineModal
+      <ClientModal
         open={isModalOpen}
         onClose={closeModal}
         editClient={editingClient}
-        editDeal={editingDeal}
-        defaultStageId={defaultStageId}
-        stages={stages ?? []}
-        onSave={() => { refetchDeals(); refetchStages(); }}
+        onSave={handleSave}
       />
     </div>
   );
