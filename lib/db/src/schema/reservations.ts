@@ -34,6 +34,13 @@ export const reservationsTable = pgTable("reservations", {
   cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
   createdById: text("created_by_id").notNull().references(() => usersTable.id),
   storeOrderId: text("store_order_id"),
+  discountCouponCode: text("discount_coupon_code"),
+  discountCouponAmount: numeric("discount_coupon_amount", { precision: 10, scale: 2 }),
+  discountLoyaltyPoints: integer("discount_loyalty_points"),
+  discountLoyaltyAmount: numeric("discount_loyalty_amount", { precision: 10, scale: 2 }),
+  discountReferralCode: text("discount_referral_code"),
+  discountReferralAmount: numeric("discount_referral_amount", { precision: 10, scale: 2 }),
+  discountTotal: numeric("discount_total", { precision: 10, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

@@ -1,10 +1,11 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { reservationsTable, passengersTable, tripsTable, clientsTable } from "@workspace/db";
+import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable } from "@workspace/db";
 import { eq, and, sql, desc, inArray, or, ilike } from "drizzle-orm";
 import { generateId, generateVoucherCode } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { CreateReservationBody, UpdateReservationBody, CreatePassengerBody, UpdatePassengerBody } from "@workspace/api-zod";
+import { z } from "zod/v4";
 
 const router = Router();
 
@@ -32,6 +33,13 @@ async function formatReservation(r: typeof reservationsTable.$inferSelect) {
     notes: r.notes,
     boardingLocationId: r.boardingLocationId ?? null,
     storeOrderId: r.storeOrderId ?? null,
+    discountCouponCode: r.discountCouponCode ?? null,
+    discountCouponAmount: r.discountCouponAmount != null ? Number(r.discountCouponAmount) : null,
+    discountLoyaltyPoints: r.discountLoyaltyPoints ?? null,
+    discountLoyaltyAmount: r.discountLoyaltyAmount != null ? Number(r.discountLoyaltyAmount) : null,
+    discountReferralCode: r.discountReferralCode ?? null,
+    discountReferralAmount: r.discountReferralAmount != null ? Number(r.discountReferralAmount) : null,
+    discountTotal: r.discountTotal != null ? Number(r.discountTotal) : null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
     trip: trip ? {
@@ -63,6 +71,77 @@ function formatPassenger(p: typeof passengersTable.$inferSelect) {
     checkedInAt: p.checkedInAt?.toISOString() ?? null,
   };
 }
+
+const ValidateCouponBodySchema = z.object({
+  code: z.string().min(1),
+  subtotal: z.number().positive(),
+});
+
+router.post("/reservations/validate-coupon", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const parsed = ValidateCouponBodySchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const { code, subtotal } = parsed.data;
+    const now = new Date();
+
+    const stores = await db.select({ id: storesTable.id })
+      .from(storesTable)
+      .where(eq(storesTable.tenantId, me.tenantId));
+
+    if (!stores.length) {
+      res.json({ valid: false, discountAmount: 0, couponCode: code, message: "Nenhuma loja encontrada para este tenant" });
+      return;
+    }
+
+    const storeIds = stores.map(s => s.id);
+    const [coupon] = await db.select().from(storeCouponsTable)
+      .where(and(
+        inArray(storeCouponsTable.storeId, storeIds),
+        eq(storeCouponsTable.code, code),
+        eq(storeCouponsTable.isActive, true),
+      )).limit(1);
+
+    if (!coupon) {
+      res.json({ valid: false, discountAmount: 0, couponCode: code, message: "Cupom inválido ou não encontrado" });
+      return;
+    }
+    if (coupon.startsAt > now) {
+      res.json({ valid: false, discountAmount: 0, couponCode: code, message: "Cupom ainda não está ativo" });
+      return;
+    }
+    if (coupon.expiresAt < now) {
+      res.json({ valid: false, discountAmount: 0, couponCode: code, message: "Cupom expirado" });
+      return;
+    }
+    if (coupon.usageLimit != null && coupon.usageCount >= coupon.usageLimit) {
+      res.json({ valid: false, discountAmount: 0, couponCode: code, message: "Limite de uso do cupom atingido" });
+      return;
+    }
+    if (coupon.minPurchaseAmount != null && subtotal < Number(coupon.minPurchaseAmount)) {
+      res.json({ valid: false, discountAmount: 0, couponCode: code, message: `Valor mínimo de compra: R$ ${Number(coupon.minPurchaseAmount).toFixed(2)}` });
+      return;
+    }
+
+    let discountAmount = 0;
+    if (coupon.type === "percentage") {
+      discountAmount = subtotal * (Number(coupon.value) / 100);
+    } else {
+      discountAmount = Number(coupon.value);
+    }
+    if (coupon.maxDiscountAmount != null) {
+      discountAmount = Math.min(discountAmount, Number(coupon.maxDiscountAmount));
+    }
+    discountAmount = Math.min(discountAmount, subtotal);
+
+    res.json({ valid: true, discountAmount: Math.round(discountAmount * 100) / 100, couponCode: code, message: null });
+  } catch (err) {
+    req.log.error({ err }, "Error validating coupon");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 router.get("/reservations/stats", async (req, res): Promise<void> => {
   try {
@@ -237,6 +316,13 @@ router.post("/reservations", async (req, res): Promise<void> => {
         qrCode: `QR-${voucherCode}`,
         notes: parsed.data.notes ?? null,
         createdById: me.id,
+        discountCouponCode: parsed.data.discountCouponCode ?? null,
+        discountCouponAmount: parsed.data.discountCouponAmount != null ? String(parsed.data.discountCouponAmount) : null,
+        discountLoyaltyPoints: parsed.data.discountLoyaltyPoints ?? null,
+        discountLoyaltyAmount: parsed.data.discountLoyaltyAmount != null ? String(parsed.data.discountLoyaltyAmount) : null,
+        discountReferralCode: parsed.data.discountReferralCode ?? null,
+        discountReferralAmount: parsed.data.discountReferralAmount != null ? String(parsed.data.discountReferralAmount) : null,
+        discountTotal: parsed.data.discountTotal != null ? String(parsed.data.discountTotal) : null,
       });
 
       await tx.update(tripsTable).set({

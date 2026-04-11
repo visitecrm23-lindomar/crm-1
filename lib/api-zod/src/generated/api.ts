@@ -791,6 +791,23 @@ export const DeleteClientResponse = zod.object({
 });
 
 /**
+ * @summary Get loyalty info for a client
+ */
+export const GetClientLoyaltyParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetClientLoyaltyResponse = zod.object({
+  memberId: zod.string(),
+  programId: zod.string(),
+  programName: zod.string(),
+  availablePoints: zod.number(),
+  realPerPoint: zod.number(),
+  minRedeemPoints: zod.number(),
+  maxRedeemableAmount: zod.number(),
+});
+
+/**
  * @summary Move client in pipeline
  */
 export const UpdateClientPipelineStageParams = zod.object({
@@ -1232,6 +1249,13 @@ export const ListReservationsResponse = zod.object({
       notes: zod.string().nullish(),
       boardingLocationId: zod.string().nullish(),
       storeOrderId: zod.string().nullish(),
+      discountCouponCode: zod.string().nullish(),
+      discountCouponAmount: zod.number().nullish(),
+      discountLoyaltyPoints: zod.number().nullish(),
+      discountLoyaltyAmount: zod.number().nullish(),
+      discountReferralCode: zod.string().nullish(),
+      discountReferralAmount: zod.number().nullish(),
+      discountTotal: zod.number().nullish(),
       createdAt: zod.string(),
       updatedAt: zod.string(),
       trip: zod.object({
@@ -1278,6 +1302,28 @@ export const CreateReservationBody = zod.object({
     .optional()
     .describe("Amount already paid at the time of booking"),
   notes: zod.string().nullish(),
+  discountCouponCode: zod.string().nullish(),
+  discountCouponAmount: zod.number().nullish(),
+  discountLoyaltyPoints: zod.number().nullish(),
+  discountLoyaltyAmount: zod.number().nullish(),
+  discountReferralCode: zod.string().nullish(),
+  discountReferralAmount: zod.number().nullish(),
+  discountTotal: zod.number().nullish(),
+});
+
+/**
+ * @summary Validate a coupon code for a reservation
+ */
+export const ValidateReservationCouponBody = zod.object({
+  code: zod.string(),
+  subtotal: zod.number(),
+});
+
+export const ValidateReservationCouponResponse = zod.object({
+  valid: zod.boolean(),
+  discountAmount: zod.number(),
+  couponCode: zod.string(),
+  message: zod.string().nullish(),
 });
 
 /**
@@ -1308,6 +1354,13 @@ export const GetReservationResponse = zod.object({
   notes: zod.string().nullish(),
   boardingLocationId: zod.string().nullish(),
   storeOrderId: zod.string().nullish(),
+  discountCouponCode: zod.string().nullish(),
+  discountCouponAmount: zod.number().nullish(),
+  discountLoyaltyPoints: zod.number().nullish(),
+  discountLoyaltyAmount: zod.number().nullish(),
+  discountReferralCode: zod.string().nullish(),
+  discountReferralAmount: zod.number().nullish(),
+  discountTotal: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
   trip: zod.object({
@@ -1368,6 +1421,13 @@ export const UpdateReservationResponse = zod.object({
   notes: zod.string().nullish(),
   boardingLocationId: zod.string().nullish(),
   storeOrderId: zod.string().nullish(),
+  discountCouponCode: zod.string().nullish(),
+  discountCouponAmount: zod.number().nullish(),
+  discountLoyaltyPoints: zod.number().nullish(),
+  discountLoyaltyAmount: zod.number().nullish(),
+  discountReferralCode: zod.string().nullish(),
+  discountReferralAmount: zod.number().nullish(),
+  discountTotal: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
   trip: zod.object({
@@ -1418,6 +1478,13 @@ export const CheckInReservationResponse = zod.object({
   notes: zod.string().nullish(),
   boardingLocationId: zod.string().nullish(),
   storeOrderId: zod.string().nullish(),
+  discountCouponCode: zod.string().nullish(),
+  discountCouponAmount: zod.number().nullish(),
+  discountLoyaltyPoints: zod.number().nullish(),
+  discountLoyaltyAmount: zod.number().nullish(),
+  discountReferralCode: zod.string().nullish(),
+  discountReferralAmount: zod.number().nullish(),
+  discountTotal: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
   trip: zod.object({
@@ -3246,6 +3313,20 @@ export const CreateReferralBody = zod.object({
   referredEmail: zod.string().email().optional(),
   code: zod.string(),
   bonusAmount: zod.string().optional(),
+});
+
+/**
+ * @summary Validate a referral code for discount
+ */
+export const ValidateReferralCodeParams = zod.object({
+  code: zod.coerce.string(),
+});
+
+export const ValidateReferralCodeResponse = zod.object({
+  valid: zod.boolean(),
+  referralId: zod.string().optional(),
+  bonusAmount: zod.number(),
+  message: zod.string().nullish(),
 });
 
 /**

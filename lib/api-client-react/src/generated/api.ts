@@ -35,9 +35,11 @@ import type {
   ChatbotMessage,
   Client,
   ClientListResponse,
+  ClientLoyaltyInfo,
   Commission,
   CommissionRule,
   Coupon,
+  CouponValidationResult,
   CreateAccommodationBody,
   CreateAutomationActionBody,
   CreateAutomationBody,
@@ -121,6 +123,7 @@ import type {
   ProductCategory,
   ProductImage,
   Referral,
+  ReferralValidationResult,
   Reservation,
   ReservationListResponse,
   ReservationStats,
@@ -165,6 +168,7 @@ import type {
   UpdateVehicleBody,
   UpsertSystemConfigBody,
   UserProfile,
+  ValidateCouponBody,
   Vehicle,
 } from "./api.schemas";
 
@@ -2929,6 +2933,93 @@ export const useDeleteClient = <
 };
 
 /**
+ * @summary Get loyalty info for a client
+ */
+export const getGetClientLoyaltyUrl = (id: string) => {
+  return `/api/clients/${id}/loyalty`;
+};
+
+export const getClientLoyalty = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ClientLoyaltyInfo> => {
+  return customFetch<ClientLoyaltyInfo>(getGetClientLoyaltyUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetClientLoyaltyQueryKey = (id: string) => {
+  return [`/api/clients/${id}/loyalty`] as const;
+};
+
+export const getGetClientLoyaltyQueryOptions = <
+  TData = Awaited<ReturnType<typeof getClientLoyalty>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getClientLoyalty>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetClientLoyaltyQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getClientLoyalty>>
+  > = ({ signal }) => getClientLoyalty(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getClientLoyalty>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetClientLoyaltyQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getClientLoyalty>>
+>;
+export type GetClientLoyaltyQueryError = ErrorType<void>;
+
+/**
+ * @summary Get loyalty info for a client
+ */
+
+export function useGetClientLoyalty<
+  TData = Awaited<ReturnType<typeof getClientLoyalty>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getClientLoyalty>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetClientLoyaltyQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Move client in pipeline
  */
 export const getUpdateClientPipelineStageUrl = (id: string) => {
@@ -4138,6 +4229,96 @@ export const useCreateReservation = <
   TContext
 > => {
   return useMutation(getCreateReservationMutationOptions(options));
+};
+
+/**
+ * @summary Validate a coupon code for a reservation
+ */
+export const getValidateReservationCouponUrl = () => {
+  return `/api/reservations/validate-coupon`;
+};
+
+export const validateReservationCoupon = async (
+  validateCouponBody: ValidateCouponBody,
+  options?: RequestInit,
+): Promise<CouponValidationResult> => {
+  return customFetch<CouponValidationResult>(
+    getValidateReservationCouponUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(validateCouponBody),
+    },
+  );
+};
+
+export const getValidateReservationCouponMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof validateReservationCoupon>>,
+    TError,
+    { data: BodyType<ValidateCouponBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof validateReservationCoupon>>,
+  TError,
+  { data: BodyType<ValidateCouponBody> },
+  TContext
+> => {
+  const mutationKey = ["validateReservationCoupon"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof validateReservationCoupon>>,
+    { data: BodyType<ValidateCouponBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return validateReservationCoupon(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ValidateReservationCouponMutationResult = NonNullable<
+  Awaited<ReturnType<typeof validateReservationCoupon>>
+>;
+export type ValidateReservationCouponMutationBody =
+  BodyType<ValidateCouponBody>;
+export type ValidateReservationCouponMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Validate a coupon code for a reservation
+ */
+export const useValidateReservationCoupon = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof validateReservationCoupon>>,
+    TError,
+    { data: BodyType<ValidateCouponBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof validateReservationCoupon>>,
+  TError,
+  { data: BodyType<ValidateCouponBody> },
+  TContext
+> => {
+  return useMutation(getValidateReservationCouponMutationOptions(options));
 };
 
 /**
@@ -11631,6 +11812,97 @@ export const useCreateReferral = <
 > => {
   return useMutation(getCreateReferralMutationOptions(options));
 };
+
+/**
+ * @summary Validate a referral code for discount
+ */
+export const getValidateReferralCodeUrl = (code: string) => {
+  return `/api/referrals/validate/${code}`;
+};
+
+export const validateReferralCode = async (
+  code: string,
+  options?: RequestInit,
+): Promise<ReferralValidationResult> => {
+  return customFetch<ReferralValidationResult>(
+    getValidateReferralCodeUrl(code),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getValidateReferralCodeQueryKey = (code: string) => {
+  return [`/api/referrals/validate/${code}`] as const;
+};
+
+export const getValidateReferralCodeQueryOptions = <
+  TData = Awaited<ReturnType<typeof validateReferralCode>>,
+  TError = ErrorType<unknown>,
+>(
+  code: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof validateReferralCode>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getValidateReferralCodeQueryKey(code);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof validateReferralCode>>
+  > = ({ signal }) => validateReferralCode(code, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!code,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof validateReferralCode>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ValidateReferralCodeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof validateReferralCode>>
+>;
+export type ValidateReferralCodeQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Validate a referral code for discount
+ */
+
+export function useValidateReferralCode<
+  TData = Awaited<ReturnType<typeof validateReferralCode>>,
+  TError = ErrorType<unknown>,
+>(
+  code: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof validateReferralCode>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getValidateReferralCodeQueryOptions(code, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Update referral status

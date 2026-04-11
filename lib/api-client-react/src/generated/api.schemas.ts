@@ -468,6 +468,20 @@ export interface Reservation {
   boardingLocationId?: string | null;
   /** @nullable */
   storeOrderId?: string | null;
+  /** @nullable */
+  discountCouponCode?: string | null;
+  /** @nullable */
+  discountCouponAmount?: number | null;
+  /** @nullable */
+  discountLoyaltyPoints?: number | null;
+  /** @nullable */
+  discountLoyaltyAmount?: number | null;
+  /** @nullable */
+  discountReferralCode?: string | null;
+  /** @nullable */
+  discountReferralAmount?: number | null;
+  /** @nullable */
+  discountTotal?: number | null;
   createdAt: string;
   updatedAt: string;
   trip: TripSummary;
@@ -500,6 +514,51 @@ export interface CreateReservationBody {
   paidValue?: number;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  discountCouponCode?: string | null;
+  /** @nullable */
+  discountCouponAmount?: number | null;
+  /** @nullable */
+  discountLoyaltyPoints?: number | null;
+  /** @nullable */
+  discountLoyaltyAmount?: number | null;
+  /** @nullable */
+  discountReferralCode?: string | null;
+  /** @nullable */
+  discountReferralAmount?: number | null;
+  /** @nullable */
+  discountTotal?: number | null;
+}
+
+export interface ValidateCouponBody {
+  code: string;
+  subtotal: number;
+}
+
+export interface CouponValidationResult {
+  valid: boolean;
+  discountAmount: number;
+  couponCode: string;
+  /** @nullable */
+  message?: string | null;
+}
+
+export interface ClientLoyaltyInfo {
+  memberId: string;
+  programId: string;
+  programName: string;
+  availablePoints: number;
+  realPerPoint: number;
+  minRedeemPoints: number;
+  maxRedeemableAmount: number;
+}
+
+export interface ReferralValidationResult {
+  valid: boolean;
+  referralId?: string;
+  bonusAmount: number;
+  /** @nullable */
+  message?: string | null;
 }
 
 export interface UpdateReservationBody {

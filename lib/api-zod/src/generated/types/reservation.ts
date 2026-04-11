@@ -37,6 +37,20 @@ export interface Reservation {
   boardingLocationId?: string | null;
   /** @nullable */
   storeOrderId?: string | null;
+  /** @nullable */
+  discountCouponCode?: string | null;
+  /** @nullable */
+  discountCouponAmount?: number | null;
+  /** @nullable */
+  discountLoyaltyPoints?: number | null;
+  /** @nullable */
+  discountLoyaltyAmount?: number | null;
+  /** @nullable */
+  discountReferralCode?: string | null;
+  /** @nullable */
+  discountReferralAmount?: number | null;
+  /** @nullable */
+  discountTotal?: number | null;
   createdAt: string;
   updatedAt: string;
   trip: TripSummary;

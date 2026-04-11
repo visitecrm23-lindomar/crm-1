@@ -16,6 +16,36 @@ const CreateReferralBody = z.object({
   bonusAmount: z.string().optional(),
 });
 
+router.get("/referrals/validate/:code", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const { code } = req.params;
+
+    const [referral] = await db.select().from(referralsTable)
+      .where(and(
+        eq(referralsTable.tenantId, me.tenantId),
+        eq(referralsTable.code, code),
+        eq(referralsTable.status, "pending"),
+      )).limit(1);
+
+    if (!referral) {
+      res.json({ valid: false, bonusAmount: 0, message: "Código de indicação inválido ou já utilizado" });
+      return;
+    }
+
+    res.json({
+      valid: true,
+      referralId: referral.id,
+      bonusAmount: referral.bonusAmount != null ? Number(referral.bonusAmount) : 0,
+      message: null,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error validating referral code");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/referrals", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);

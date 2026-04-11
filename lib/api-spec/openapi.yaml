@@ -736,6 +736,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
 
+  /clients/{id}/loyalty:
+    get:
+      operationId: getClientLoyalty
+      tags: [clients]
+      summary: Get loyalty info for a client
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Loyalty info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientLoyaltyInfo"
+        "404":
+          description: Not a loyalty member
+
   /clients/{id}/pipeline-stage:
     patch:
       operationId: updateClientPipelineStage
@@ -1065,6 +1086,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Reservation"
+
+  /reservations/validate-coupon:
+    post:
+      operationId: validateReservationCoupon
+      tags: [reservations]
+      summary: Validate a coupon code for a reservation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidateCouponBody"
+      responses:
+        "200":
+          description: Coupon validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CouponValidationResult"
 
   /reservations/{id}:
     get:
@@ -2861,6 +2901,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/Referral"
 
+  /referrals/validate/{code}:
+    get:
+      operationId: validateReferralCode
+      summary: Validate a referral code for discount
+      tags: [Referrals]
+      parameters:
+        - in: path
+          name: code
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Referral validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferralValidationResult"
+
   /referrals/{id}:
     patch:
       operationId: updateReferral
@@ -4247,6 +4306,20 @@ components:
           type: ["string", "null"]
         storeOrderId:
           type: ["string", "null"]
+        discountCouponCode:
+          type: ["string", "null"]
+        discountCouponAmount:
+          type: ["number", "null"]
+        discountLoyaltyPoints:
+          type: ["integer", "null"]
+        discountLoyaltyAmount:
+          type: ["number", "null"]
+        discountReferralCode:
+          type: ["string", "null"]
+        discountReferralAmount:
+          type: ["number", "null"]
+        discountTotal:
+          type: ["number", "null"]
         createdAt:
           type: string
         updatedAt:
@@ -4332,7 +4405,75 @@ components:
           description: Amount already paid at the time of booking
         notes:
           type: ["string", "null"]
+        discountCouponCode:
+          type: ["string", "null"]
+        discountCouponAmount:
+          type: ["number", "null"]
+        discountLoyaltyPoints:
+          type: ["integer", "null"]
+        discountLoyaltyAmount:
+          type: ["number", "null"]
+        discountReferralCode:
+          type: ["string", "null"]
+        discountReferralAmount:
+          type: ["number", "null"]
+        discountTotal:
+          type: ["number", "null"]
       required: [tripId, clientId, seats, totalValue]
+
+    ValidateCouponBody:
+      type: object
+      properties:
+        code:
+          type: string
+        subtotal:
+          type: number
+      required: [code, subtotal]
+
+    CouponValidationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        discountAmount:
+          type: number
+        couponCode:
+          type: string
+        message:
+          type: ["string", "null"]
+      required: [valid, discountAmount, couponCode]
+
+    ClientLoyaltyInfo:
+      type: object
+      properties:
+        memberId:
+          type: string
+        programId:
+          type: string
+        programName:
+          type: string
+        availablePoints:
+          type: integer
+        realPerPoint:
+          type: number
+        minRedeemPoints:
+          type: integer
+        maxRedeemableAmount:
+          type: number
+      required: [memberId, programId, programName, availablePoints, realPerPoint, minRedeemPoints, maxRedeemableAmount]
+
+    ReferralValidationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        referralId:
+          type: string
+        bonusAmount:
+          type: number
+        message:
+          type: ["string", "null"]
+      required: [valid, bonusAmount]
 
     UpdateReservationBody:
       type: object

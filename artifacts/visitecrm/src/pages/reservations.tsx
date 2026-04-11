@@ -14,6 +14,9 @@ import {
   useListClients,
   useListUsers,
   useListBoardingLocations,
+  useValidateReservationCoupon,
+  useGetClientLoyalty,
+  validateReferralCode,
   useListPassengers,
   useCreatePassenger,
   useUpdatePassenger,
@@ -904,10 +907,29 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
   const [hasInsurance, setHasInsurance] = useState(false);
   const [notes, setNotes] = useState("");
 
+  const [couponCode, setCouponCode] = useState("");
+  const [couponApplied, setCouponApplied] = useState<{ code: string; amount: number } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponLoading, setCouponLoading] = useState(false);
+
+  const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState<number>(0);
+  const [loyaltyAmountApplied, setLoyaltyAmountApplied] = useState<number>(0);
+
+  const [referralCode, setReferralCode] = useState("");
+  const [referralApplied, setReferralApplied] = useState<{ id: string; code: string; amount: number } | null>(null);
+  const [referralError, setReferralError] = useState<string | null>(null);
+  const [referralLoading, setReferralLoading] = useState(false);
+
   const [createError, setCreateError] = useState<string | null>(null);
+
+  const validateCoupon = useValidateReservationCoupon();
 
   const { data: selectedTripFull } = useGetTrip(selectedTripId, {
     query: { queryKey: ["wizard-trip", selectedTripId], enabled: !!selectedTripId },
+  });
+
+  const { data: loyaltyInfo } = useGetClientLoyalty(selectedClientId, {
+    query: { queryKey: ["wizard-loyalty", selectedClientId], enabled: !!selectedClientId, retry: false },
   });
 
   const filteredTrips = useMemo(() =>
@@ -939,17 +961,61 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
     }
   }, [selectedTripFull, effectiveSeats.length]);
 
+  const totalDiscount = (couponApplied?.amount ?? 0) + loyaltyAmountApplied + (referralApplied?.amount ?? 0);
+  const finalTotal = Math.max(0, totalValue - totalDiscount);
+
   const resetWizard = () => {
     setStep(1);
     setSelectedTripId(""); setSelectedClientId(""); setBoardingLocationId("");
     setSelectedSeats([]); setManualSeats(""); setTripSearch(""); setClientSearch("");
     setTotalValue(0); setPaidValue(0); setPaymentMethod("pix"); setInstallments(1);
     setHasInsurance(false); setNotes(""); setCreateError(null);
+    setCouponCode(""); setCouponApplied(null); setCouponError(null);
+    setLoyaltyPointsToRedeem(0); setLoyaltyAmountApplied(0);
+    setReferralCode(""); setReferralApplied(null); setReferralError(null);
   };
 
   const handleClose = () => { resetWizard(); onClose(); };
 
   const canGoNext1 = !!selectedTripId && !!selectedClientId && effectiveSeats.length > 0;
+
+  const handleCouponApply = async () => {
+    if (!couponCode.trim()) return;
+    setCouponLoading(true); setCouponError(null);
+    try {
+      const result = await validateCoupon.mutateAsync({ data: { code: couponCode.trim(), subtotal: totalValue } });
+      if (result.valid) {
+        setCouponApplied({ code: result.couponCode, amount: result.discountAmount });
+        setCouponError(null);
+      } else {
+        setCouponError(result.message ?? "Cupom inválido");
+        setCouponApplied(null);
+      }
+    } catch {
+      setCouponError("Erro ao validar cupom");
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const handleReferralApply = async () => {
+    if (!referralCode.trim()) return;
+    setReferralLoading(true); setReferralError(null);
+    try {
+      const result = await validateReferralCode(referralCode.trim());
+      if (result.valid) {
+        setReferralApplied({ id: result.referralId ?? "", code: referralCode.trim(), amount: result.bonusAmount });
+        setReferralError(null);
+      } else {
+        setReferralError(result.message ?? "Código inválido");
+        setReferralApplied(null);
+      }
+    } catch {
+      setReferralError("Erro ao validar código de indicação");
+    } finally {
+      setReferralLoading(false);
+    }
+  };
 
   const handleConfirm = async () => {
     setCreateError(null);
@@ -964,12 +1030,19 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
           tripId: selectedTripId,
           clientId: selectedClientId,
           seats,
-          totalValue,
+          totalValue: finalTotal,
           paidValue: paidValue || undefined,
           paymentMethod,
           installments,
           notes: notes || undefined,
           hasInsurance,
+          discountCouponCode: couponApplied?.code ?? null,
+          discountCouponAmount: couponApplied?.amount ?? null,
+          discountLoyaltyPoints: loyaltyPointsToRedeem > 0 ? loyaltyPointsToRedeem : null,
+          discountLoyaltyAmount: loyaltyAmountApplied > 0 ? loyaltyAmountApplied : null,
+          discountReferralCode: referralApplied?.code ?? null,
+          discountReferralAmount: referralApplied?.amount ?? null,
+          discountTotal: totalDiscount > 0 ? totalDiscount : null,
         },
       });
       const effectiveBoardingId = boardingLocationId && boardingLocationId !== "__none__" ? boardingLocationId : null;
@@ -992,7 +1065,7 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
     }
   };
 
-  const balance = Math.max(0, totalValue - paidValue);
+  const balance = Math.max(0, finalTotal - paidValue);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
@@ -1161,6 +1234,106 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
               <label htmlFor="hasInsuranceWizard" className="text-sm">Incluir seguro de viagem</label>
             </div>
 
+            <div className="border rounded-lg p-4 space-y-4 bg-muted/20">
+              <h4 className="text-sm font-semibold flex items-center gap-2">
+                <Tag className="w-4 h-4 text-primary" />
+                Descontos e Benefícios
+              </h4>
+
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Cupom de Desconto</label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Código do cupom"
+                    value={couponCode}
+                    onChange={e => { setCouponCode(e.target.value); setCouponApplied(null); setCouponError(null); }}
+                    disabled={!!couponApplied}
+                    className="flex-1"
+                  />
+                  {couponApplied ? (
+                    <Button variant="outline" size="sm" onClick={() => { setCouponApplied(null); setCouponCode(""); }}>Remover</Button>
+                  ) : (
+                    <Button size="sm" onClick={handleCouponApply} disabled={couponLoading || !couponCode.trim() || totalValue <= 0}>
+                      {couponLoading ? "..." : "Aplicar"}
+                    </Button>
+                  )}
+                </div>
+                {couponApplied && (
+                  <p className="text-xs text-green-600 font-medium">✓ Cupom aplicado: −R$ {couponApplied.amount.toFixed(2)}</p>
+                )}
+                {couponError && <p className="text-xs text-destructive">{couponError}</p>}
+              </div>
+
+              {loyaltyInfo ? (
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Pontos de Fidelidade
+                    <span className="ml-2 text-primary font-semibold">{loyaltyInfo.availablePoints} pts disponíveis</span>
+                  </label>
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      type="number"
+                      min="0"
+                      max={loyaltyInfo.availablePoints}
+                      step={loyaltyInfo.minRedeemPoints}
+                      placeholder={`Mín. ${loyaltyInfo.minRedeemPoints} pts`}
+                      value={loyaltyPointsToRedeem || ""}
+                      onChange={e => {
+                        const pts = parseInt(e.target.value) || 0;
+                        const capped = Math.min(pts, loyaltyInfo.availablePoints);
+                        setLoyaltyPointsToRedeem(capped);
+                        const amount = Math.round(capped * loyaltyInfo.realPerPoint * 100) / 100;
+                        setLoyaltyAmountApplied(Math.min(amount, totalValue));
+                      }}
+                      className="flex-1"
+                    />
+                    {loyaltyPointsToRedeem > 0 && (
+                      <Button variant="outline" size="sm" onClick={() => { setLoyaltyPointsToRedeem(0); setLoyaltyAmountApplied(0); }}>Remover</Button>
+                    )}
+                  </div>
+                  {loyaltyAmountApplied > 0 && (
+                    <p className="text-xs text-green-600 font-medium">✓ Desconto fidelidade: −R$ {loyaltyAmountApplied.toFixed(2)}</p>
+                  )}
+                  {loyaltyPointsToRedeem > 0 && loyaltyPointsToRedeem < loyaltyInfo.minRedeemPoints && (
+                    <p className="text-xs text-destructive">Mínimo de {loyaltyInfo.minRedeemPoints} pontos para resgate</p>
+                  )}
+                </div>
+              ) : selectedClientId ? (
+                <p className="text-xs text-muted-foreground italic">Este cliente não possui cadastro no programa de fidelidade.</p>
+              ) : null}
+
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Código de Indicação</label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Código de indicação"
+                    value={referralCode}
+                    onChange={e => { setReferralCode(e.target.value); setReferralApplied(null); setReferralError(null); }}
+                    disabled={!!referralApplied}
+                    className="flex-1"
+                  />
+                  {referralApplied ? (
+                    <Button variant="outline" size="sm" onClick={() => { setReferralApplied(null); setReferralCode(""); }}>Remover</Button>
+                  ) : (
+                    <Button size="sm" onClick={handleReferralApply} disabled={referralLoading || !referralCode.trim()}>
+                      {referralLoading ? "..." : "Validar"}
+                    </Button>
+                  )}
+                </div>
+                {referralApplied && (
+                  <p className="text-xs text-green-600 font-medium">✓ Indicação aplicada: −R$ {referralApplied.amount.toFixed(2)}</p>
+                )}
+                {referralError && <p className="text-xs text-destructive">{referralError}</p>}
+              </div>
+
+              {totalDiscount > 0 && (
+                <div className="pt-2 border-t flex justify-between text-sm font-semibold">
+                  <span>Total com desconto:</span>
+                  <span className="text-primary">R$ {finalTotal.toFixed(2)} <span className="text-muted-foreground line-through text-xs font-normal ml-1">R$ {totalValue.toFixed(2)}</span></span>
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-between gap-2 pt-2">
               <Button variant="outline" onClick={() => setStep(1)}>← Anterior</Button>
               <Button onClick={() => setStep(3)} disabled={totalValue <= 0}>Próximo →</Button>
@@ -1200,8 +1373,8 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
 
               <div className="grid grid-cols-3 gap-3 text-sm">
                 <div className="text-center">
-                  <p className="text-muted-foreground text-xs mb-0.5">Valor Total</p>
-                  <p className="font-bold text-base">R$ {totalValue.toFixed(2)}</p>
+                  <p className="text-muted-foreground text-xs mb-0.5">Valor Base</p>
+                  <p className={`font-bold text-base ${totalDiscount > 0 ? "line-through text-muted-foreground" : ""}`}>R$ {totalValue.toFixed(2)}</p>
                 </div>
                 <div className="text-center">
                   <p className="text-muted-foreground text-xs mb-0.5">Valor Pago</p>
@@ -1214,6 +1387,34 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
                   </p>
                 </div>
               </div>
+
+              {totalDiscount > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-1.5 text-sm">
+                  <p className="font-semibold text-green-800 text-xs uppercase tracking-wide">Descontos Aplicados</p>
+                  {couponApplied && (
+                    <div className="flex justify-between text-green-700">
+                      <span>Cupom ({couponApplied.code})</span>
+                      <span>−R$ {couponApplied.amount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {loyaltyAmountApplied > 0 && (
+                    <div className="flex justify-between text-green-700">
+                      <span>Fidelidade ({loyaltyPointsToRedeem} pts)</span>
+                      <span>−R$ {loyaltyAmountApplied.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {referralApplied && (
+                    <div className="flex justify-between text-green-700">
+                      <span>Indicação ({referralApplied.code})</span>
+                      <span>−R$ {referralApplied.amount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-green-800 pt-1 border-t border-green-200">
+                    <span>Total com Desconto</span>
+                    <span>R$ {finalTotal.toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>

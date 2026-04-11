@@ -25,4 +25,18 @@ export interface CreateReservationBody {
   paidValue?: number;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  discountCouponCode?: string | null;
+  /** @nullable */
+  discountCouponAmount?: number | null;
+  /** @nullable */
+  discountLoyaltyPoints?: number | null;
+  /** @nullable */
+  discountLoyaltyAmount?: number | null;
+  /** @nullable */
+  discountReferralCode?: string | null;
+  /** @nullable */
+  discountReferralAmount?: number | null;
+  /** @nullable */
+  discountTotal?: number | null;
 }

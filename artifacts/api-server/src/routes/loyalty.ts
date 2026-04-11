@@ -82,6 +82,51 @@ router.patch("/loyalty-programs/:id", async (req, res): Promise<void> => {
   }
 });
 
+router.get("/clients/:clientId/loyalty", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const { clientId } = req.params;
+
+    const [member] = await db.select().from(loyaltyMembersTable)
+      .where(and(
+        eq(loyaltyMembersTable.tenantId, me.tenantId),
+        eq(loyaltyMembersTable.clientId, clientId),
+      )).limit(1);
+
+    if (!member) {
+      res.status(404).json({ error: "Client is not a loyalty member" });
+      return;
+    }
+
+    const [program] = await db.select().from(loyaltyProgramsTable)
+      .where(eq(loyaltyProgramsTable.id, member.programId)).limit(1);
+
+    if (!program) {
+      res.status(404).json({ error: "Loyalty program not found" });
+      return;
+    }
+
+    const availablePoints = member.availablePoints ?? 0;
+    const realPerPoint = Number(program.realPerPoint ?? "0");
+    const minRedeemPoints = program.minRedeemPoints ?? 1;
+    const maxRedeemableAmount = Math.round(availablePoints * realPerPoint * 100) / 100;
+
+    res.json({
+      memberId: member.id,
+      programId: program.id,
+      programName: program.name,
+      availablePoints,
+      realPerPoint,
+      minRedeemPoints,
+      maxRedeemableAmount,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error fetching client loyalty info");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/loyalty-members", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
