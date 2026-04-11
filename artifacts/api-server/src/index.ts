@@ -120,17 +120,17 @@ async function runMigrations() {
           SELECT id, tenant_id, pipeline_id FROM pipeline_stages
           WHERE name = 'Novos'
         LOOP
-          -- Find sibling stages for this tenant
+          -- Find sibling stages scoped to same tenant AND pipeline
           SELECT id INTO r_contato FROM pipeline_stages
-            WHERE tenant_id = r_novos.tenant_id AND name = 'Contato' LIMIT 1;
+            WHERE tenant_id = r_novos.tenant_id AND pipeline_id = r_novos.pipeline_id AND name = 'Contato' LIMIT 1;
           SELECT id INTO r_qualificados FROM pipeline_stages
-            WHERE tenant_id = r_novos.tenant_id AND name = 'Qualificados' LIMIT 1;
+            WHERE tenant_id = r_novos.tenant_id AND pipeline_id = r_novos.pipeline_id AND name = 'Qualificados' LIMIT 1;
           SELECT id INTO r_reservados FROM pipeline_stages
-            WHERE tenant_id = r_novos.tenant_id AND name = 'Reservados' LIMIT 1;
+            WHERE tenant_id = r_novos.tenant_id AND pipeline_id = r_novos.pipeline_id AND name = 'Reservados' LIMIT 1;
           SELECT id INTO r_proposta FROM pipeline_stages
-            WHERE tenant_id = r_novos.tenant_id AND name = 'Proposta' LIMIT 1;
+            WHERE tenant_id = r_novos.tenant_id AND pipeline_id = r_novos.pipeline_id AND name = 'Proposta' LIMIT 1;
           SELECT id INTO r_pos_venda FROM pipeline_stages
-            WHERE tenant_id = r_novos.tenant_id AND name = 'Pós-Venda' LIMIT 1;
+            WHERE tenant_id = r_novos.tenant_id AND pipeline_id = r_novos.pipeline_id AND name = 'Pós-Venda' LIMIT 1;
 
           -- Rename "Novos" → "Lead"
           UPDATE pipeline_stages SET name = 'Lead', color = '#6366F1', "order" = 1
@@ -160,9 +160,9 @@ async function runMigrations() {
             DELETE FROM pipeline_stages WHERE id = r_proposta.id;
           END IF;
 
-          -- Fix "Em Viagem" order
+          -- Fix "Em Viagem" order (scoped to same pipeline)
           UPDATE pipeline_stages SET "order" = 4
-            WHERE tenant_id = r_novos.tenant_id AND name = 'Em Viagem';
+            WHERE tenant_id = r_novos.tenant_id AND pipeline_id = r_novos.pipeline_id AND name = 'Em Viagem';
 
           -- Rename "Pós-Venda" → "Pós-venda" and fix order
           IF r_pos_venda.id IS NOT NULL THEN
