@@ -774,6 +774,7 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
   const { data: boardingRaw } = useListBoardingLocations();
   const createReservation = useCreateReservation();
   const updateReservation = useUpdateReservation();
+  const { toast } = useToast();
 
   const [step, setStep] = useState(1);
 
@@ -862,10 +863,14 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
       });
       const effectiveBoardingId = boardingLocationId && boardingLocationId !== "__none__" ? boardingLocationId : null;
       if (effectiveBoardingId && created?.id) {
-        await updateReservation.mutateAsync({
-          id: created.id,
-          data: { boardingLocationId: effectiveBoardingId },
-        });
+        try {
+          await updateReservation.mutateAsync({
+            id: created.id,
+            data: { boardingLocationId: effectiveBoardingId },
+          });
+        } catch {
+          toast({ title: "Reserva criada", description: "Não foi possível salvar o ponto de embarque. Edite a reserva para ajustar.", variant: "default" });
+        }
       }
       resetWizard();
       onSuccess();
