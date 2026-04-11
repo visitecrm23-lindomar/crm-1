@@ -786,7 +786,6 @@ function ReservationDetailModal({ reservationId, open, onClose }: { reservationI
 
 function PaymentModal({ reservation, open, onClose, onSuccess }: { reservation: Reservation | null; open: boolean; onClose: () => void; onSuccess: () => void }) {
   const createPayment = useCreatePayment();
-  const updateReservation = useUpdateReservation();
   const [method, setMethod] = useState("pix");
 
   if (!reservation) return null;
@@ -810,9 +809,6 @@ function PaymentModal({ reservation, open, onClose, onSuccess }: { reservation: 
         installments: parseInt(fd.get("installments") as string || "1"),
       }
     });
-    if (amount >= remaining) {
-      await updateReservation.mutateAsync({ id: reservation.id, data: { status: "confirmed" } });
-    }
     onSuccess();
     onClose();
   };
@@ -855,7 +851,7 @@ function PaymentModal({ reservation, open, onClose, onSuccess }: { reservation: 
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-            <Button type="submit" disabled={createPayment.isPending || updateReservation.isPending}>
+            <Button type="submit" disabled={createPayment.isPending}>
               {createPayment.isPending ? "Registrando..." : "Confirmar Pagamento"}
             </Button>
           </div>

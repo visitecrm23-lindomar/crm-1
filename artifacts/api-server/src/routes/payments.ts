@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { paymentsTable, expensesTable, reservationsTable, clientsTable } from "@workspace/db";
+import { paymentsTable, expensesTable, reservationsTable, clientsTable, commissionRulesTable, commissionsTable } from "@workspace/db";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -22,6 +22,76 @@ async function recalculateClientFinancials(clientId: string, tenantId: string): 
     totalSpent: row.total_spent,
     outstandingBalance: row.outstanding_balance,
   }).where(and(eq(clientsTable.id, clientId), eq(clientsTable.tenantId, tenantId)));
+}
+
+async function syncReservationPaymentStatus(reservationId: string, tenantId: string): Promise<void> {
+  const [reservation] = await db.select().from(reservationsTable)
+    .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)))
+    .limit(1);
+  if (!reservation) return;
+
+  const result = await db.execute(sql`
+    SELECT COALESCE(SUM(amount::numeric), 0) AS total_paid
+    FROM payments
+    WHERE reservation_id = ${reservationId} AND tenant_id = ${tenantId} AND status != 'cancelled'
+  `);
+  const row = (result as unknown as { rows: Array<{ total_paid: string }> }).rows[0];
+  const paidValue = parseFloat(row?.total_paid ?? "0");
+  const totalValue = parseFloat(String(reservation.totalValue));
+  const balance = Math.max(totalValue - paidValue, 0);
+
+  const updates: Partial<typeof reservationsTable.$inferInsert> = {
+    paidValue: String(paidValue),
+    balance: String(balance),
+  };
+
+  if (paidValue >= totalValue && reservation.status === "pending") {
+    updates.status = "confirmed";
+    updates.confirmedAt = new Date();
+  }
+
+  await db.update(reservationsTable).set(updates)
+    .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)));
+}
+
+async function autoCreateCommission(reservationId: string, tenantId: string): Promise<void> {
+  const [reservation] = await db.select().from(reservationsTable)
+    .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)))
+    .limit(1);
+  if (!reservation) return;
+
+  const paidValue = parseFloat(String(reservation.paidValue));
+  const totalValue = parseFloat(String(reservation.totalValue));
+  if (paidValue < totalValue) return;
+
+  const [existing] = await db.select().from(commissionsTable)
+    .where(and(eq(commissionsTable.reservationId, reservationId), eq(commissionsTable.tenantId, tenantId)))
+    .limit(1);
+  if (existing) return;
+
+  const rules = await db.select().from(commissionRulesTable)
+    .where(and(eq(commissionRulesTable.tenantId, tenantId), eq(commissionRulesTable.isActive, true)));
+
+  const tripSpecificRule = rules.find(r => r.appliesTo === "trip" && r.tripId === reservation.tripId);
+  const allRule = rules.find(r => r.appliesTo === "all");
+  const rule = tripSpecificRule ?? allRule;
+  if (!rule) return;
+
+  const baseAmount = totalValue;
+  const commissionAmount = rule.type === "percentage"
+    ? (baseAmount * parseFloat(String(rule.value))) / 100
+    : parseFloat(String(rule.value));
+
+  await db.insert(commissionsTable).values({
+    id: generateId(),
+    tenantId,
+    ruleId: rule.id,
+    userId: reservation.createdById,
+    reservationId,
+    baseAmount: String(baseAmount),
+    commissionAmount: String(commissionAmount.toFixed(2)),
+    status: "pending",
+  });
 }
 
 router.get("/trips/:tripId/financial-report", async (req, res): Promise<void> => {
@@ -255,6 +325,10 @@ router.post("/payments", async (req, res): Promise<void> => {
     if (parsed.data.clientId) {
       await recalculateClientFinancials(parsed.data.clientId, me.tenantId);
     }
+    if (parsed.data.reservationId) {
+      await syncReservationPaymentStatus(parsed.data.reservationId, me.tenantId);
+      await autoCreateCommission(parsed.data.reservationId, me.tenantId);
+    }
     res.status(201).json(formatPayment(payment));
   } catch (err) {
     req.log.error({ err }, "Error creating payment");
@@ -321,6 +395,10 @@ router.patch("/payments/:id", async (req, res): Promise<void> => {
     if (!payment) { res.status(404).json({ error: "Not found" }); return; }
     if (payment.clientId) {
       await recalculateClientFinancials(payment.clientId, me.tenantId);
+    }
+    if (payment.reservationId) {
+      await syncReservationPaymentStatus(payment.reservationId, me.tenantId);
+      await autoCreateCommission(payment.reservationId, me.tenantId);
     }
     res.json(formatPayment(payment));
   } catch (err) {
