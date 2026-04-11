@@ -981,7 +981,7 @@ function Client360Modal({ open, onClose, client }: Client360ModalProps) {
                       <p className="font-semibold text-sm">{formatCurrency(r.totalValue)}</p>
                       <Badge
                         variant={
-                          r.status === "confirmed" ? "default"
+                          r.status === "confirmed" || r.status === "completed" ? "default"
                           : r.status === "cancelled" ? "destructive"
                           : "secondary"
                         }
