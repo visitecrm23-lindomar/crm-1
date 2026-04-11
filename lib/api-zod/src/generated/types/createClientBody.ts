@@ -34,4 +34,20 @@ export interface CreateClientBody {
   dreamDestinations?: string[];
   /** @nullable */
   origin?: string | null;
+  /** @nullable */
+  maritalStatus?: string | null;
+  /** @nullable */
+  professionalArea?: string | null;
+  /** @nullable */
+  favoriteDrink?: string | null;
+  /** @nullable */
+  companyFeedback?: string | null;
+  /** @nullable */
+  musicalPreferences?: string | null;
+  /** @nullable */
+  foodPreferences?: string | null;
+  /** @nullable */
+  internalRating?: number | null;
+  /** @nullable */
+  companyNps?: number | null;
 }

@@ -2,7 +2,8 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import {
   useListClients, useCreateClient, useUpdateClient,
-  useListPipelineStages, useListReservations, useListPayments, useListTrips, useListUsers
+  useListPipelineStages, useListReservations, useListPayments, useListTrips, useListUsers,
+  useCreateDeal,
 } from "@workspace/api-client-react";
 import type { Client } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
@@ -280,19 +282,42 @@ const GENDER_OPTIONS = [
   { value: "other", label: "Outro" },
 ];
 
+const ORIGIN_OPTIONS = ["Indicação", "Instagram", "WhatsApp", "Google", "Cliente Antigo", "Evento", "Outros"];
+const MARITAL_OPTIONS = ["Solteiro(a)", "Casado(a)", "Divorciado(a)", "Viúvo(a)"];
+const TRAVEL_TYPE_OPTIONS = ["Casal", "Bate-volta", "Excursão", "Trilha", "Corporativo"];
+const ROOM_TYPE_OPTIONS = ["Quarto Casal", "Quarto Triplo", "Quarto Quádruplo", "Quarto Compartilhado", "Não se aplica"];
+const TRAVEL_REASON_OPTIONS = ["Lazer", "Aniversário", "Família", "Romance", "Negócios"];
+const PAYMENT_METHOD_OPTIONS = ["Dinheiro", "PIX", "Cartão Débito", "Cartão Crédito", "Boleto", "Transferência"];
+const INTERNAL_RATING_LABELS: Record<number, string> = { 1: "Difícil", 2: "Neutro", 3: "Fácil", 4: "Ótimo", 5: "Excelente" };
+
 interface ClientFormData {
   name: string; email: string; whatsapp: string; phone: string; cpf: string; rg: string;
   birthDate: string; gender: string; addressCity: string; addressState: string;
-  instagram: string; observations: string; tags: string; dreamDestinations: string;
-  pipelineStage: string; classification: string; npsScore: string; status: string;
-  origin: string;
+  instagram: string; pipelineStage: string; classification: string; status: string;
+  origin: string; maritalStatus: string;
+  tripId: string; boardingPoint: string; seatNumber: string;
+  travelType: string; roomType: string; hasInsurance: boolean;
+  hasMinorChild: boolean; childInfo: string; travelReason: string;
+  ticketPrice: string; quantity: string; paymentMethod: string;
+  amountPaid: string; commission: string; consultantId: string;
+  internalRating: number; observations: string;
+  professionalArea: string; favoriteDrink: string;
+  musicalPreferences: string; foodPreferences: string;
+  dreamDestinations: string; tags: string;
+  npsScore: string; companyFeedback: string;
 }
 
 const EMPTY_CLIENT: ClientFormData = {
   name: "", email: "", whatsapp: "", phone: "", cpf: "", rg: "", birthDate: "", gender: "none",
-  addressCity: "", addressState: "", instagram: "", observations: "", tags: "",
-  dreamDestinations: "", pipelineStage: "none", classification: "lead", npsScore: "", status: "active",
-  origin: "",
+  addressCity: "", addressState: "", instagram: "", pipelineStage: "none",
+  classification: "lead", status: "active", origin: "none", maritalStatus: "none",
+  tripId: "none", boardingPoint: "none", seatNumber: "", travelType: "none",
+  roomType: "none", hasInsurance: false, hasMinorChild: false, childInfo: "", travelReason: "none",
+  ticketPrice: "", quantity: "1", paymentMethod: "none", amountPaid: "", commission: "", consultantId: "none",
+  internalRating: 0, observations: "",
+  professionalArea: "", favoriteDrink: "", musicalPreferences: "", foodPreferences: "",
+  dreamDestinations: "", tags: "",
+  npsScore: "", companyFeedback: "",
 };
 
 function clientToForm(c: Client): ClientFormData {
@@ -300,11 +325,18 @@ function clientToForm(c: Client): ClientFormData {
     name: c.name, email: c.email, whatsapp: c.whatsapp, phone: c.phone ?? "",
     cpf: c.cpf ?? "", rg: c.rg ?? "", birthDate: c.birthDate ? c.birthDate.split("T")[0] : "",
     gender: c.gender ?? "none", addressCity: c.addressCity ?? "", addressState: c.addressState ?? "",
-    instagram: c.instagram ?? "", observations: c.observations ?? "",
-    tags: (c.tags ?? []).join(", "), dreamDestinations: (c.dreamDestinations ?? []).join(", "),
-    pipelineStage: c.pipelineStage ?? "none", classification: c.classification ?? "lead",
-    npsScore: c.npsScore != null ? String(c.npsScore) : "", status: c.status ?? "active",
-    origin: c.origin ?? "",
+    instagram: c.instagram ?? "", pipelineStage: c.pipelineStage ?? "none",
+    classification: c.classification ?? "lead", status: c.status ?? "active",
+    origin: c.origin ?? "none", maritalStatus: c.maritalStatus ?? "none",
+    tripId: "none", boardingPoint: "none", seatNumber: "", travelType: "none",
+    roomType: "none", hasInsurance: false, hasMinorChild: false, childInfo: "", travelReason: "none",
+    ticketPrice: "", quantity: "1", paymentMethod: "none", amountPaid: "", commission: "", consultantId: "none",
+    internalRating: c.internalRating ?? 0, observations: c.observations ?? "",
+    professionalArea: c.professionalArea ?? "", favoriteDrink: c.favoriteDrink ?? "",
+    musicalPreferences: c.musicalPreferences ?? "", foodPreferences: c.foodPreferences ?? "",
+    dreamDestinations: (c.dreamDestinations ?? []).join(", "), tags: (c.tags ?? []).join(", "),
+    npsScore: c.npsScore != null ? String(c.npsScore) : "",
+    companyFeedback: c.companyFeedback ?? "",
   };
 }
 
@@ -358,8 +390,11 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
   const [form, setForm] = useState<ClientFormData>(EMPTY_CLIENT);
   const { toast } = useToast();
   const { data: stages } = useListPipelineStages();
+  const { data: tripsData } = useListTrips({ limit: 100 });
+  const { data: usersData } = useListUsers();
   const createClient = useCreateClient();
   const updateClient = useUpdateClient();
+  const createDeal = useCreateDeal();
 
   useEffect(() => {
     if (open) {
@@ -369,10 +404,25 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
   }, [open, editClient]);
 
   const isEditing = !!editClient;
-  const isPending = createClient.isPending || updateClient.isPending;
+  const isPending = createClient.isPending || updateClient.isPending || createDeal.isPending;
   const set = (key: keyof ClientFormData) => (val: string) => setForm(prev => ({ ...prev, [key]: val }));
 
-  const handleSubmit = async (withReservation = false) => {
+  const trips = tripsData?.data ?? [];
+  const users = usersData ?? [];
+  const selectedTrip = trips.find(t => t.id === form.tripId);
+  const boardingPoints = (selectedTrip?.boardingPoints ?? []) as Array<{ id: string; name: string }>;
+
+  const ticketPrice = parseFloat(form.ticketPrice) || 0;
+  const quantity = parseInt(form.quantity) || 1;
+  const amountPaid = parseFloat(form.amountPaid) || 0;
+  const valorTotal = ticketPrice * quantity;
+  const faltaPagar = valorTotal - amountPaid;
+
+  const handleSubmit = async () => {
+    if (!form.name || !form.whatsapp) {
+      toast({ title: "Nome e WhatsApp são obrigatórios", variant: "destructive" });
+      return;
+    }
     const base = {
       name: form.name, email: form.email, whatsapp: form.whatsapp,
       phone: form.phone || undefined, cpf: form.cpf || undefined,
@@ -380,11 +430,21 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
       birthDate: form.birthDate ? new Date(form.birthDate).toISOString() : undefined,
       gender: form.gender !== "none" ? form.gender : undefined,
       addressCity: form.addressCity || undefined,
-      addressState: form.addressState || undefined, instagram: form.instagram || undefined,
+      addressState: form.addressState || undefined,
+      instagram: form.instagram || undefined,
+      origin: form.origin !== "none" ? form.origin : undefined,
+      maritalStatus: form.maritalStatus !== "none" ? form.maritalStatus : undefined,
       observations: form.observations || undefined,
       tags: form.tags ? form.tags.split(",").map(t => t.trim()).filter(Boolean) : [],
       dreamDestinations: form.dreamDestinations ? form.dreamDestinations.split(",").map(t => t.trim()).filter(Boolean) : [],
-      origin: form.origin || undefined,
+      professionalArea: form.professionalArea || undefined,
+      favoriteDrink: form.favoriteDrink || undefined,
+      musicalPreferences: form.musicalPreferences || undefined,
+      foodPreferences: form.foodPreferences || undefined,
+      internalRating: form.internalRating > 0 ? form.internalRating : undefined,
+      npsScore: form.npsScore ? parseInt(form.npsScore) : undefined,
+      companyFeedback: form.companyFeedback || undefined,
+      companyNps: form.npsScore ? parseInt(form.npsScore) : undefined,
     };
 
     try {
@@ -396,7 +456,6 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
             ...base,
             pipelineStage: form.pipelineStage !== "none" ? form.pipelineStage : undefined,
             classification: form.classification || undefined,
-            npsScore: form.npsScore ? parseFloat(form.npsScore) : undefined,
             status: form.status || undefined,
           },
         });
@@ -404,8 +463,24 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
       } else {
         const result = await createClient.mutateAsync({ data: base });
         savedId = result.id;
+        if (form.tripId !== "none" && savedId) {
+          const leadStage = stages?.find(s => s.name === "Lead");
+          if (leadStage) {
+            const tripName = selectedTrip?.name ?? "Viagem";
+            await createDeal.mutateAsync({
+              data: {
+                stageId: leadStage.id,
+                tripId: form.tripId,
+                title: `${form.name} — ${tripName}`,
+                value: valorTotal ?? 0,
+                clientId: savedId,
+              },
+            });
+          }
+        }
       }
-      onSave(withReservation, savedId);
+      toast({ title: isEditing ? "Alterações salvas!" : "Cliente criado!" });
+      onSave(false, savedId);
       onClose();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
@@ -423,51 +498,49 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="personal">Dados</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-6 text-xs">
+            <TabsTrigger value="personal">Pessoal</TabsTrigger>
             <TabsTrigger value="trip">Viagem</TabsTrigger>
             <TabsTrigger value="financial">Financeiro</TabsTrigger>
             <TabsTrigger value="observations">Obs.</TabsTrigger>
-            <TabsTrigger value="marketing">Mkt</TabsTrigger>
+            <TabsTrigger value="followup">Follow-up</TabsTrigger>
+            <TabsTrigger value="agency">Agência</TabsTrigger>
           </TabsList>
 
+          {/* Aba 1 — Pessoal */}
           <TabsContent value="personal" className="space-y-4 mt-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2 space-y-2">
                 <Label>Nome Completo *</Label>
-                <Input required placeholder="Maria Silva" value={form.name} onChange={e => set("name")(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>E-mail *</Label>
-                <Input type="email" required placeholder="maria@email.com" value={form.email} onChange={e => set("email")(e.target.value)} />
+                <Input placeholder="Maria Silva" value={form.name} onChange={e => set("name")(e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>WhatsApp *</Label>
                 <Input placeholder="+55 31 99999-9999" value={form.whatsapp} onChange={e => set("whatsapp")(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label>Telefone</Label>
-                <Input placeholder="+55 31 3333-3333" value={form.phone} onChange={e => set("phone")(e.target.value)} />
-              </div>
-              <div className="space-y-2">
                 <Label>CPF</Label>
                 <Input placeholder="000.000.000-00" value={form.cpf} onChange={e => set("cpf")(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label>RG</Label>
-                <Input placeholder="MG-00.000.000" value={form.rg} onChange={e => set("rg")(e.target.value)} />
+                <Label>E-mail</Label>
+                <Input type="email" placeholder="maria@email.com" value={form.email} onChange={e => set("email")(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label>Data de Nascimento</Label>
+                <Label>Instagram</Label>
+                <Input placeholder="@mariaSilva" value={form.instagram} onChange={e => set("instagram")(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Data de Aniversário</Label>
                 <Input type="date" value={form.birthDate} onChange={e => set("birthDate")(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label>Gênero</Label>
-                <Select value={form.gender} onValueChange={set("gender")}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Label>Origem do Cliente</Label>
+                <Select value={form.origin} onValueChange={set("origin")}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Não informado</SelectItem>
-                    {GENDER_OPTIONS.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}
+                    {ORIGIN_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -476,80 +549,205 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
                 <Input placeholder="Belo Horizonte" value={form.addressCity} onChange={e => set("addressCity")(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label>Estado</Label>
-                <Input placeholder="MG" maxLength={2} value={form.addressState} onChange={e => set("addressState")(e.target.value.toUpperCase())} />
+                <Label>Estado Civil</Label>
+                <Select value={form.maritalStatus} onValueChange={set("maritalStatus")}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não informado</SelectItem>
+                    {MARITAL_OPTIONS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
-                <Label>Origem / Canal de Captação</Label>
-                <Input placeholder="Indicação, Instagram, Feira..." value={form.origin} onChange={e => set("origin")(e.target.value)} />
+                <Label>Gênero</Label>
+                <Select value={form.gender} onValueChange={set("gender")}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não informado</SelectItem>
+                    {GENDER_OPTIONS.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
-                <Label>Instagram</Label>
-                <Input placeholder="@mariaSilva" value={form.instagram} onChange={e => set("instagram")(e.target.value)} />
+                <Label>Status no Pipeline</Label>
+                <Select value={form.pipelineStage} onValueChange={set("pipelineStage")}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhum</SelectItem>
+                    {stages?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </TabsContent>
 
+          {/* Aba 2 — Viagem */}
           <TabsContent value="trip" className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <Label>Estágio no Pipeline</Label>
-              <Select value={form.pipelineStage} onValueChange={set("pipelineStage")}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhum</SelectItem>
-                  {stages?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Destinos Sonhados</Label>
-              <Input placeholder="Arraial do Cabo, Morro de São Paulo, Fernando de Noronha" value={form.dreamDestinations} onChange={e => set("dreamDestinations")(e.target.value)} />
-              <p className="text-xs text-muted-foreground">Separe os destinos com vírgula</p>
-            </div>
-            <div className="space-y-2">
-              <Label>Tags</Label>
-              <Input placeholder="vip, família, aventura" value={form.tags} onChange={e => set("tags")(e.target.value)} />
-              <p className="text-xs text-muted-foreground">Separe as tags com vírgula</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2 space-y-2">
+                <Label>Viagem</Label>
+                <Select value={form.tripId} onValueChange={v => setForm(prev => ({ ...prev, tripId: v, boardingPoint: "none" }))}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar viagem..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhuma</SelectItem>
+                    {trips.map(t => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name} — {format(parseISO(t.departureDate), "dd/MM/yyyy", { locale: ptBR })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {selectedTrip && (
+                <div className="col-span-2 rounded-lg border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+                  Data da Viagem: <span className="font-medium text-foreground">{format(parseISO(selectedTrip.departureDate), "dd/MM/yyyy", { locale: ptBR })}</span>
+                </div>
+              )}
+              {boardingPoints.length > 0 && (
+                <div className="col-span-2 space-y-2">
+                  <Label>Local de Embarque</Label>
+                  <Select value={form.boardingPoint} onValueChange={set("boardingPoint")}>
+                    <SelectTrigger><SelectValue placeholder="Selecionar ponto de embarque..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Não especificado</SelectItem>
+                      {boardingPoints.map(bp => <SelectItem key={bp.id} value={bp.name}>{bp.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label>Poltrona</Label>
+                <Input type="number" min="1" placeholder="Ex: 12" value={form.seatNumber} onChange={e => set("seatNumber")(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Tipo de Viagem</Label>
+                <Select value={form.travelType} onValueChange={set("travelType")}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não especificado</SelectItem>
+                    {TRAVEL_TYPE_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Pacote / Quarto</Label>
+                <Select value={form.roomType} onValueChange={set("roomType")}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não especificado</SelectItem>
+                    {ROOM_TYPE_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Motivo da Viagem</Label>
+                <Select value={form.travelReason} onValueChange={set("travelReason")}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não especificado</SelectItem>
+                    {TRAVEL_REASON_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2 flex flex-col gap-3 pt-1">
+                <div className="flex items-center gap-3">
+                  <Checkbox
+                    id="hasInsurance"
+                    checked={form.hasInsurance}
+                    onCheckedChange={v => setForm(prev => ({ ...prev, hasInsurance: !!v }))}
+                  />
+                  <Label htmlFor="hasInsurance" className="cursor-pointer">Possui Seguro de Viagem</Label>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Checkbox
+                    id="hasMinorChild"
+                    checked={form.hasMinorChild}
+                    onCheckedChange={v => setForm(prev => ({ ...prev, hasMinorChild: !!v }))}
+                  />
+                  <Label htmlFor="hasMinorChild" className="cursor-pointer">Criança menor de 7 anos</Label>
+                </div>
+                {form.hasMinorChild && (
+                  <div className="space-y-2 pl-7">
+                    <Label>Nome e CPF da Criança</Label>
+                    <Input placeholder="Nome da Criança — 000.000.000-00" value={form.childInfo} onChange={e => set("childInfo")(e.target.value)} />
+                  </div>
+                )}
+              </div>
             </div>
           </TabsContent>
 
+          {/* Aba 3 — Financeiro */}
           <TabsContent value="financial" className="space-y-4 mt-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Classificação</Label>
-                <Select value={form.classification} onValueChange={set("classification")}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Label>Preço da Passagem (R$)</Label>
+                <Input type="number" min="0" step="0.01" placeholder="0,00" value={form.ticketPrice} onChange={e => set("ticketPrice")(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Quantidade de Passageiros</Label>
+                <Input type="number" min="1" placeholder="1" value={form.quantity} onChange={e => set("quantity")(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Forma de Pagamento</Label>
+                <Select value={form.paymentMethod} onValueChange={set("paymentMethod")}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
                   <SelectContent>
-                    {Object.entries(CLASSIFICATION_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                    <SelectItem value="none">Não especificado</SelectItem>
+                    {PAYMENT_METHOD_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Status</Label>
-                <Select value={form.status} onValueChange={set("status")}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Label>Valor Já Pago (R$)</Label>
+                <Input type="number" min="0" step="0.01" placeholder="0,00" value={form.amountPaid} onChange={e => set("amountPaid")(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Comissão (R$)</Label>
+                <Input type="number" min="0" step="0.01" placeholder="0,00" value={form.commission} onChange={e => set("commission")(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Consultor / Vendedor</Label>
+                <Select value={form.consultantId} onValueChange={set("consultantId")}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
                   <SelectContent>
-                    {Object.entries(STATUS_LABELS).map(([v, { label }]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
+                    <SelectItem value="none">Não especificado</SelectItem>
+                    {users.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
             </div>
+            {(ticketPrice > 0 || amountPaid > 0) && (
+              <div className="grid grid-cols-3 gap-3 pt-3 border-t">
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Valor Total</p>
+                  <p className="text-base font-bold">{formatCurrency(valorTotal)}</p>
+                </div>
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Valor Pago</p>
+                  <p className="text-base font-bold text-green-600">{formatCurrency(amountPaid)}</p>
+                </div>
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Falta Pagar</p>
+                  <p className={`text-base font-bold ${faltaPagar > 0 ? "text-destructive" : "text-green-600"}`}>{formatCurrency(Math.max(0, faltaPagar))}</p>
+                </div>
+              </div>
+            )}
             {isEditing && editClient && (
               <>
-                <div className="grid grid-cols-3 gap-4 pt-4 border-t">
+                <div className="grid grid-cols-3 gap-3 pt-3 border-t">
                   <div className="rounded-lg border bg-muted/30 p-3">
                     <p className="text-xs text-muted-foreground mb-1">Total Gasto</p>
-                    <p className="text-lg font-bold">{formatCurrency(editClient.totalSpent)}</p>
+                    <p className="text-base font-bold">{formatCurrency(editClient.totalSpent)}</p>
                   </div>
                   <div className="rounded-lg border bg-muted/30 p-3">
                     <p className="text-xs text-muted-foreground mb-1">Saldo Devedor</p>
-                    <p className={`text-lg font-bold ${editClient.outstandingBalance > 0 ? "text-destructive" : "text-green-600"}`}>
+                    <p className={`text-base font-bold ${editClient.outstandingBalance > 0 ? "text-destructive" : "text-green-600"}`}>
                       {formatCurrency(editClient.outstandingBalance)}
                     </p>
                   </div>
                   <div className="rounded-lg border bg-muted/30 p-3">
                     <p className="text-xs text-muted-foreground mb-1">Pontos Fidelidade</p>
-                    <p className="text-lg font-bold">0 pts</p>
+                    <p className="text-base font-bold">0 pts</p>
                   </div>
                 </div>
                 <ClientPaymentsSection clientId={editClient.id} />
@@ -557,10 +755,77 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
             )}
           </TabsContent>
 
+          {/* Aba 4 — Observações */}
           <TabsContent value="observations" className="space-y-4 mt-4">
             <div className="space-y-3">
+              <Label>Avaliação Interna (0–5)</Label>
+              <p className="text-xs text-muted-foreground -mt-2">Como a equipe avalia esse cliente</p>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map(n => (
+                  <button
+                    type="button"
+                    key={n}
+                    onClick={() => setForm(prev => ({ ...prev, internalRating: prev.internalRating === n ? 0 : n }))}
+                    className={`flex-1 py-2 rounded-lg border text-xs font-semibold transition-all ${
+                      form.internalRating >= n
+                        ? form.internalRating >= 4 ? "bg-green-500 border-green-500 text-white" : form.internalRating >= 3 ? "bg-yellow-400 border-yellow-400 text-white" : "bg-red-400 border-red-400 text-white"
+                        : "bg-muted border-border text-muted-foreground hover:bg-muted-foreground/10"
+                    }`}
+                  >
+                    <div className="text-sm">{n}</div>
+                    <div className="text-[10px] leading-tight">{INTERNAL_RATING_LABELS[n]}</div>
+                  </button>
+                ))}
+              </div>
+              {form.internalRating > 0 && (
+                <p className="text-xs text-center text-muted-foreground">
+                  Avaliação: <span className="font-semibold">{form.internalRating}/5 — {INTERNAL_RATING_LABELS[form.internalRating]}</span>
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Observações</Label>
+              <Textarea placeholder="Anotações livres sobre o cliente..." rows={6} value={form.observations} onChange={e => set("observations")(e.target.value)} />
+            </div>
+          </TabsContent>
+
+          {/* Aba 5 — Follow-up */}
+          <TabsContent value="followup" className="space-y-4 mt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Área de Atuação Profissional</Label>
+                <Input placeholder="Ex: Saúde, Tecnologia..." value={form.professionalArea} onChange={e => set("professionalArea")(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Bebida Favorita</Label>
+                <Input placeholder="Ex: Vinho, Cerveja artesanal..." value={form.favoriteDrink} onChange={e => set("favoriteDrink")(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Preferências Musicais</Label>
+                <Input placeholder="Ex: Sertanejo, Rock, MPB..." value={form.musicalPreferences} onChange={e => set("musicalPreferences")(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Preferências Gastronômicas</Label>
+                <Input placeholder="Ex: Frutos do mar, Vegetariano..." value={form.foodPreferences} onChange={e => set("foodPreferences")(e.target.value)} />
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label>Destinos Sonhados</Label>
+                <Input placeholder="Arraial do Cabo, Morro de São Paulo, Fernando de Noronha" value={form.dreamDestinations} onChange={e => set("dreamDestinations")(e.target.value)} />
+                <p className="text-xs text-muted-foreground">Separe os destinos com vírgula</p>
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label>Tags</Label>
+                <Input placeholder="vip, família, aventura, praia" value={form.tags} onChange={e => set("tags")(e.target.value)} />
+                <p className="text-xs text-muted-foreground">Separe as tags com vírgula</p>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Aba 6 — Agência */}
+          <TabsContent value="agency" className="space-y-4 mt-4">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label>NPS — Nota de 0 a 10</Label>
+                <Label>NPS — Nota do cliente à agência (0–10)</Label>
                 {form.npsScore !== "" && (
                   <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${
                     parseInt(form.npsScore) >= 9 ? "bg-green-100 text-green-700" :
@@ -571,57 +836,48 @@ function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
               </div>
               <input
                 type="range" min="0" max="10" step="1"
-                value={form.npsScore !== "" ? parseInt(form.npsScore) : 0}
+                value={form.npsScore !== "" ? parseInt(form.npsScore) : 5}
                 onChange={e => set("npsScore")(e.target.value)}
                 className="w-full accent-primary cursor-pointer"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>0 — Detrator</span><span>6 — Neutro</span><span>10 — Promotor</span>
               </div>
-              {form.npsScore !== "" && (
-                <div className="flex gap-1 mt-1">
-                  {Array.from({ length: 10 }).map((_, i) => (
-                    <button
-                      type="button"
-                      key={i}
-                      onClick={() => set("npsScore")(String(i + 1))}
-                      className={`flex-1 h-7 rounded text-xs font-bold transition-all ${
-                        i + 1 <= parseInt(form.npsScore)
-                          ? parseInt(form.npsScore) >= 9 ? "bg-green-500 text-white" : parseInt(form.npsScore) >= 7 ? "bg-yellow-400 text-white" : "bg-red-400 text-white"
-                          : "bg-muted text-muted-foreground hover:bg-muted-foreground/20"
-                      }`}
-                    >{i + 1}</button>
-                  ))}
-                </div>
-              )}
+              <div className="flex gap-1">
+                {Array.from({ length: 11 }).map((_, i) => (
+                  <button
+                    type="button"
+                    key={i}
+                    onClick={() => set("npsScore")(String(i))}
+                    className={`flex-1 h-7 rounded text-xs font-bold transition-all ${
+                      form.npsScore !== "" && i <= parseInt(form.npsScore)
+                        ? parseInt(form.npsScore) >= 9 ? "bg-green-500 text-white" : parseInt(form.npsScore) >= 7 ? "bg-yellow-400 text-white" : "bg-red-400 text-white"
+                        : "bg-muted text-muted-foreground hover:bg-muted-foreground/20"
+                    }`}
+                  >{i}</button>
+                ))}
+              </div>
             </div>
             <div className="space-y-2">
-              <Label>Observações</Label>
-              <Textarea placeholder="Anotações sobre o cliente..." rows={6} value={form.observations} onChange={e => set("observations")(e.target.value)} />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="marketing" className="space-y-4 mt-4">
-            <p className="text-sm text-muted-foreground">Preferências de lifestyle e marketing</p>
-            <div className="space-y-2">
-              <Label>Destinos Sonhados</Label>
-              <Textarea placeholder="Destinos que o cliente mencionou querer visitar..." rows={3} value={form.dreamDestinations} onChange={e => set("dreamDestinations")(e.target.value)} />
+              <Label>Origem do Cliente</Label>
+              <Select value={form.origin} onValueChange={set("origin")}>
+                <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Não informado</SelectItem>
+                  {ORIGIN_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
-              <Label>Tags de Interesse</Label>
-              <Input placeholder="praia, aventura, cultural, gastronomia" value={form.tags} onChange={e => set("tags")(e.target.value)} />
+              <Label>Comentário sobre a Agência</Label>
+              <Textarea placeholder="O que o cliente disse sobre a experiência com a agência..." rows={5} value={form.companyFeedback} onChange={e => set("companyFeedback")(e.target.value)} />
             </div>
           </TabsContent>
         </Tabs>
 
-        <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t mt-2">
-          <Button variant="outline" onClick={onClose} className="sm:order-1">Cancelar</Button>
-          {!isEditing && (
-            <Button variant="secondary" onClick={() => handleSubmit(true)} disabled={isPending || !form.name || !form.email || !form.whatsapp} className="sm:order-2">
-              {isPending ? "Salvando..." : "Salvar e Criar Reserva"}
-            </Button>
-          )}
-          <Button onClick={() => handleSubmit(false)} disabled={isPending || !form.name || !form.email || !form.whatsapp} className="sm:order-3">
+        <div className="flex justify-end gap-2 pt-4 border-t mt-2">
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button onClick={handleSubmit} disabled={isPending || !form.name || !form.whatsapp}>
             {isPending ? "Salvando..." : isEditing ? "Salvar Alterações" : "Criar Cliente"}
           </Button>
         </div>

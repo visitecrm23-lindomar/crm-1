@@ -15,13 +15,4 @@ export interface UpdateVehicleBody {
   capacity?: number | null;
   /** @nullable */
   dailyRate?: number | null;
-  amenities?: string[];
-  /** @nullable */
-  driverName?: string | null;
-  /** @nullable */
-  driverPhone?: string | null;
-  /** @nullable */
-  seatLayout?: string | null;
-  /** @nullable */
-  notes?: string | null;
 }

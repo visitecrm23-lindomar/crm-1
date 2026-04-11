@@ -23,12 +23,4 @@ export interface CreateSupplierBody {
   addressState?: string | null;
   /** @nullable */
   pixKey?: string | null;
-  /** @nullable */
-  pixType?: string | null;
-  /** @nullable */
-  bankName?: string | null;
-  /** @nullable */
-  bankAgency?: string | null;
-  /** @nullable */
-  bankAccount?: string | null;
 }

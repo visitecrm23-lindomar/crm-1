@@ -3607,6 +3607,22 @@ components:
           type: ["string", "null"]
         lastTripName:
           type: ["string", "null"]
+        maritalStatus:
+          type: ["string", "null"]
+        professionalArea:
+          type: ["string", "null"]
+        favoriteDrink:
+          type: ["string", "null"]
+        companyFeedback:
+          type: ["string", "null"]
+        musicalPreferences:
+          type: ["string", "null"]
+        foodPreferences:
+          type: ["string", "null"]
+        internalRating:
+          type: ["integer", "null"]
+        companyNps:
+          type: ["integer", "null"]
       required:
         - id
         - name
@@ -3676,6 +3692,22 @@ components:
             type: string
         origin:
           type: ["string", "null"]
+        maritalStatus:
+          type: ["string", "null"]
+        professionalArea:
+          type: ["string", "null"]
+        favoriteDrink:
+          type: ["string", "null"]
+        companyFeedback:
+          type: ["string", "null"]
+        musicalPreferences:
+          type: ["string", "null"]
+        foodPreferences:
+          type: ["string", "null"]
+        internalRating:
+          type: ["integer", "null"]
+        companyNps:
+          type: ["integer", "null"]
       required: [name, email, whatsapp]
 
     UpdateClientBody:
@@ -3727,6 +3759,22 @@ components:
           type: ["string", "null"]
         origin:
           type: ["string", "null"]
+        maritalStatus:
+          type: ["string", "null"]
+        professionalArea:
+          type: ["string", "null"]
+        favoriteDrink:
+          type: ["string", "null"]
+        companyFeedback:
+          type: ["string", "null"]
+        musicalPreferences:
+          type: ["string", "null"]
+        foodPreferences:
+          type: ["string", "null"]
+        internalRating:
+          type: ["integer", "null"]
+        companyNps:
+          type: ["integer", "null"]
 
     # ─── NOTE ──────────────────────────────────────────────────────
     Note:

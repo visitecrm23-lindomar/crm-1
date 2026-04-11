@@ -172,6 +172,12 @@ async function runMigrations() {
         END LOOP;
       END $$;
     `);
+    await client.query(`
+      ALTER TABLE clients ADD COLUMN IF NOT EXISTS musical_preferences text;
+      ALTER TABLE clients ADD COLUMN IF NOT EXISTS food_preferences text;
+      ALTER TABLE clients ADD COLUMN IF NOT EXISTS internal_rating integer;
+      ALTER TABLE clients ADD COLUMN IF NOT EXISTS company_nps integer;
+    `);
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");

@@ -15,6 +15,4 @@ export interface UpdateAccommodationBody {
   pricePerNight?: number | null;
   /** @nullable */
   totalRooms?: number | null;
-  amenities?: string[];
-  galleryUrls?: string[];
 }

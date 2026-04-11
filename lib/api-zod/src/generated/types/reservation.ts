@@ -35,6 +35,8 @@ export interface Reservation {
   notes?: string | null;
   /** @nullable */
   boardingLocationId?: string | null;
+  /** @nullable */
+  storeOrderId?: string | null;
   createdAt: string;
   updatedAt: string;
   trip: TripSummary;

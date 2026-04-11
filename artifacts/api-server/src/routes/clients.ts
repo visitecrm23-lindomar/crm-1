@@ -41,6 +41,14 @@ function formatClient(c: typeof clientsTable.$inferSelect) {
     updatedAt: c.updatedAt.toISOString(),
     lastContactAt: c.lastContactAt?.toISOString() ?? null,
     origin: c.origin ?? null,
+    maritalStatus: c.maritalStatus ?? null,
+    professionalArea: c.professionalArea ?? null,
+    favoriteDrink: c.favoriteDrink ?? null,
+    companyFeedback: c.companyFeedback ?? null,
+    musicalPreferences: c.musicalPreferences ?? null,
+    foodPreferences: c.foodPreferences ?? null,
+    internalRating: c.internalRating ?? null,
+    companyNps: c.companyNps ?? null,
   };
 }
 
@@ -173,6 +181,14 @@ router.post("/clients", async (req, res): Promise<void> => {
       tags: parsed.data.tags ?? [],
       dreamDestinations: parsed.data.dreamDestinations ?? [],
       origin: parsed.data.origin ?? null,
+      maritalStatus: parsed.data.maritalStatus ?? null,
+      professionalArea: parsed.data.professionalArea ?? null,
+      favoriteDrink: parsed.data.favoriteDrink ?? null,
+      companyFeedback: parsed.data.companyFeedback ?? null,
+      musicalPreferences: parsed.data.musicalPreferences ?? null,
+      foodPreferences: parsed.data.foodPreferences ?? null,
+      internalRating: parsed.data.internalRating ?? null,
+      companyNps: parsed.data.companyNps ?? null,
       createdById: me.id,
     });
 
@@ -247,6 +263,14 @@ router.patch("/clients/:id", async (req, res): Promise<void> => {
     if (parsed.data.photoUrl !== undefined) updates.photoUrl = parsed.data.photoUrl ?? null;
     if (parsed.data.instagram !== undefined) updates.instagram = parsed.data.instagram ?? null;
     if (parsed.data.origin !== undefined) updates.origin = parsed.data.origin ?? null;
+    if (parsed.data.maritalStatus !== undefined) updates.maritalStatus = parsed.data.maritalStatus ?? null;
+    if (parsed.data.professionalArea !== undefined) updates.professionalArea = parsed.data.professionalArea ?? null;
+    if (parsed.data.favoriteDrink !== undefined) updates.favoriteDrink = parsed.data.favoriteDrink ?? null;
+    if (parsed.data.companyFeedback !== undefined) updates.companyFeedback = parsed.data.companyFeedback ?? null;
+    if (parsed.data.musicalPreferences !== undefined) updates.musicalPreferences = parsed.data.musicalPreferences ?? null;
+    if (parsed.data.foodPreferences !== undefined) updates.foodPreferences = parsed.data.foodPreferences ?? null;
+    if (parsed.data.internalRating !== undefined) updates.internalRating = parsed.data.internalRating ?? null;
+    if (parsed.data.companyNps !== undefined) updates.companyNps = parsed.data.companyNps ?? null;
 
     await db.update(clientsTable).set(updates)
       .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)));
