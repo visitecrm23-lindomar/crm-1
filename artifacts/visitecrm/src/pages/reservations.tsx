@@ -821,11 +821,9 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
   }, [selectedSeats, manualSeats]);
 
   useEffect(() => {
-    if (selectedTripFull && effectiveSeats.length > 0) {
+    if (selectedTripFull) {
       const price = selectedTripFull.priceAdult ?? 0;
       setTotalValue(price * effectiveSeats.length);
-    } else if (selectedTripFull && effectiveSeats.length === 0) {
-      setTotalValue(selectedTripFull.priceAdult ?? 0);
     }
   }, [selectedTripFull, effectiveSeats.length]);
 
@@ -839,11 +837,15 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
 
   const handleClose = () => { resetWizard(); onClose(); };
 
-  const canGoNext1 = !!selectedTripId && !!selectedClientId;
+  const canGoNext1 = !!selectedTripId && !!selectedClientId && effectiveSeats.length > 0;
 
   const handleConfirm = async () => {
     setCreateError(null);
-    const seats = effectiveSeats.length > 0 ? effectiveSeats : ["1"];
+    if (effectiveSeats.length === 0) {
+      setCreateError("Selecione pelo menos um assento antes de confirmar.");
+      return;
+    }
+    const seats = effectiveSeats;
     try {
       const created = await createReservation.mutateAsync({
         data: {
@@ -935,7 +937,7 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
             <Separator />
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Seleção de Assentos</label>
+              <label className="text-sm font-medium">Seleção de Assentos * <span className="font-normal text-muted-foreground">(obrigatório)</span></label>
               {selectedTripId ? (
                 <SeatMapPicker
                   tripId={selectedTripId}
