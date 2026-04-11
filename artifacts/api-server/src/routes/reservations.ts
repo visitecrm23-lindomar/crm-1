@@ -426,9 +426,20 @@ router.post("/reservations", async (req, res): Promise<void> => {
       }).where(and(eq(tripsTable.id, parsed.data.tripId), eq(tripsTable.tenantId, me.tenantId)));
 
       if (serverLoyaltyMemberId && serverLoyaltyPoints > 0) {
-        await tx.update(loyaltyMembersTable).set({
-          availablePoints: sql`available_points - ${serverLoyaltyPoints}`,
-        }).where(eq(loyaltyMembersTable.id, serverLoyaltyMemberId));
+        const memberLock = await tx.execute(
+          sql`SELECT id, available_points FROM loyalty_members WHERE id = ${serverLoyaltyMemberId} FOR UPDATE`
+        );
+        const memberRow = (memberLock as unknown as { rows: Array<{ id: string; available_points: number }> }).rows[0];
+        if (!memberRow || memberRow.available_points < serverLoyaltyPoints) {
+          return { error: "Pontos de fidelidade insuficientes (corrida detectada)", status: 400 };
+        }
+        const loyaltyResult = await tx.execute(
+          sql`UPDATE loyalty_members SET available_points = available_points - ${serverLoyaltyPoints} WHERE id = ${serverLoyaltyMemberId} AND available_points >= ${serverLoyaltyPoints}`
+        );
+        const loyaltyAffected = (loyaltyResult as unknown as { rowCount: number }).rowCount ?? 0;
+        if (loyaltyAffected === 0) {
+          return { error: "Pontos de fidelidade insuficientes", status: 400 };
+        }
         await tx.insert(loyaltyTransactionsTable).values({
           id: generateId(),
           tenantId: me.tenantId,
@@ -442,14 +453,20 @@ router.post("/reservations", async (req, res): Promise<void> => {
       }
 
       if (serverReferralCode) {
-        await tx.update(referralsTable).set({
-          status: "converted",
-          convertedAt: new Date(),
-        }).where(and(
-          eq(referralsTable.tenantId, me.tenantId),
-          eq(referralsTable.code, serverReferralCode),
-          eq(referralsTable.status, "pending"),
-        ));
+        const referralLock = await tx.execute(
+          sql`SELECT id, status FROM referrals WHERE tenant_id = ${me.tenantId} AND code = ${serverReferralCode} AND status = 'pending' FOR UPDATE`
+        );
+        const referralRow = (referralLock as unknown as { rows: Array<{ id: string; status: string }> }).rows[0];
+        if (!referralRow) {
+          return { error: "Código de indicação já foi utilizado por outro processo", status: 400 };
+        }
+        const referralResult = await tx.execute(
+          sql`UPDATE referrals SET status = 'converted', converted_at = NOW() WHERE tenant_id = ${me.tenantId} AND code = ${serverReferralCode} AND status = 'pending'`
+        );
+        const referralAffected = (referralResult as unknown as { rowCount: number }).rowCount ?? 0;
+        if (referralAffected === 0) {
+          return { error: "Código de indicação já foi utilizado", status: 400 };
+        }
       }
 
       return { ok: true };
