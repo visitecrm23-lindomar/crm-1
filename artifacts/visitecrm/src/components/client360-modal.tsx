@@ -284,23 +284,42 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                   <p className="text-sm text-muted-foreground text-center py-8">Nenhuma viagem encontrada.</p>
                 ) : (
                   <div className="space-y-2">
-                    {reservations.data.map(r => (
-                      <div key={r.id} className="flex items-center justify-between p-3 rounded-lg border">
-                        <div>
-                          <p className="font-medium text-sm">{r.trip.name}</p>
+                    {reservations.data.map(r => {
+                      const birthDate = r.client?.birthDate ? new Date(r.client.birthDate) : null;
+                      const ageYears = birthDate ? Math.floor((Date.now() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : null;
+                      const ageCategory = ageYears == null ? "adult" : ageYears < 12 ? "child" : ageYears >= 60 ? "senior" : "adult";
+                      const ageCategoryLabel: Record<string, { label: string; color: string }> = {
+                        child:  { label: "Criança", color: "bg-blue-100 text-blue-800" },
+                        senior: { label: "Sênior",  color: "bg-purple-100 text-purple-800" },
+                        adult:  { label: "Adulto",  color: "bg-gray-100 text-gray-700" },
+                      };
+                      const catInfo = ageCategoryLabel[ageCategory];
+                      const firstSeat = r.seats?.[0] ?? null;
+                      return (
+                        <div key={r.id} className="p-3 rounded-lg border space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <p className="font-medium text-sm">{r.trip.name}</p>
+                            <Badge
+                              variant={r.status === "confirmed" || r.status === "completed" ? "default" : r.status === "cancelled" ? "destructive" : "secondary"}
+                              className="text-xs"
+                            >
+                              {r.status === "confirmed" ? "Confirmada" : r.status === "pending" ? "Pendente" : r.status === "completed" ? "Concluída" : r.status === "cancelled" ? "Cancelada" : r.status}
+                            </Badge>
+                          </div>
                           <p className="text-xs text-muted-foreground">{format(parseISO(r.trip.departureDate), "dd/MM/yyyy", { locale: ptBR })} · {r.seats.length} lugar(es)</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {firstSeat && (
+                              <span className="font-mono text-xs bg-gray-100 border border-gray-300 px-2 py-0.5 rounded font-bold">Assento {firstSeat}</span>
+                            )}
+                            <span className={`text-xs px-2 py-0.5 rounded font-medium ${catInfo.color}`}>{catInfo.label}</span>
+                            {r.client?.cpf && (
+                              <span className="text-xs text-muted-foreground">CPF: {r.client.cpf}</span>
+                            )}
+                          </div>
+                          <p className="text-sm font-semibold">{formatCurrency(r.totalValue)}</p>
                         </div>
-                        <div className="text-right">
-                          <p className="font-semibold text-sm">{formatCurrency(r.totalValue)}</p>
-                          <Badge
-                            variant={r.status === "confirmed" || r.status === "completed" ? "default" : r.status === "cancelled" ? "destructive" : "secondary"}
-                            className="text-xs"
-                          >
-                            {r.status === "confirmed" ? "Confirmada" : r.status === "pending" ? "Pendente" : r.status === "completed" ? "Concluída" : r.status === "cancelled" ? "Cancelada" : r.status}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </TabsContent>

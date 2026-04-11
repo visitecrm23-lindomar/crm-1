@@ -148,6 +148,7 @@ export * from "./sendMessageBody";
 export * from "./subscription";
 export * from "./successResponse";
 export * from "./supplier";
+export * from "./syncTripPassengers200";
 export * from "./syncUserBody";
 export * from "./systemConfig";
 export * from "./systemConfigValue";

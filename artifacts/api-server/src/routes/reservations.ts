@@ -9,6 +9,20 @@ import { z } from "zod/v4";
 
 const router = Router();
 
+function deriveAgeCategory(birthDate: Date | null): "child" | "adult" | "senior" {
+  if (!birthDate) return "adult";
+  const ageMs = Date.now() - birthDate.getTime();
+  const age = Math.floor(ageMs / (365.25 * 24 * 60 * 60 * 1000));
+  if (age < 12) return "child";
+  if (age >= 60) return "senior";
+  return "adult";
+}
+
+function getAgeYears(birthDate: Date | null): number {
+  if (!birthDate) return 30;
+  return Math.floor((Date.now() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+}
+
 async function syncClientDeal(clientId: string, tenantId: string, tripId: string, totalValue: number, ownerId: string): Promise<void> {
   const [client] = await db.select({ name: clientsTable.name })
     .from(clientsTable).where(and(eq(clientsTable.id, clientId), eq(clientsTable.tenantId, tenantId))).limit(1);
@@ -477,6 +491,18 @@ router.post("/reservations", async (req, res): Promise<void> => {
         discountTotal: serverDiscountTotal > 0 ? String(serverDiscountTotal) : null,
       });
 
+      await tx.insert(passengersTable).values({
+        id: generateId(),
+        reservationId: id,
+        name: client.name,
+        cpf: client.cpf ?? null,
+        rg: client.rg ?? null,
+        birthDate: client.birthDate ?? null,
+        ageCategory: deriveAgeCategory(client.birthDate ?? null),
+        seatNumber: parsed.data.seats[0] ?? null,
+        isChildUnder7: getAgeYears(client.birthDate ?? null) < 7,
+      });
+
       await tx.update(tripsTable).set({
         reservedSeats: sql`reserved_seats + ${seatsCount}`,
         availableSeats: sql`available_seats - ${seatsCount}`,
@@ -644,6 +670,32 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
     if (parsed.data.totalValue != null && existing.clientId) {
       syncClientDeal(existing.clientId, me.tenantId, existing.tripId, parsed.data.totalValue, me.id)
         .catch((err) => req.log.error({ err }, "Error syncing deal after reservation update"));
+    }
+    if (parsed.data.seats != null) {
+      const newSeat = parsed.data.seats[0] ?? null;
+      const existingPassengers = await db.select().from(passengersTable)
+        .where(eq(passengersTable.reservationId, req.params.id)).limit(1);
+      if (existingPassengers.length > 0) {
+        await db.update(passengersTable).set({ seatNumber: newSeat })
+          .where(eq(passengersTable.reservationId, req.params.id));
+      } else if (existing.clientId) {
+        const [clientData] = await db.select().from(clientsTable)
+          .where(and(eq(clientsTable.id, existing.clientId), eq(clientsTable.tenantId, me.tenantId)))
+          .limit(1);
+        if (clientData) {
+          await db.insert(passengersTable).values({
+            id: generateId(),
+            reservationId: req.params.id,
+            name: clientData.name,
+            cpf: clientData.cpf ?? null,
+            rg: clientData.rg ?? null,
+            birthDate: clientData.birthDate ?? null,
+            ageCategory: deriveAgeCategory(clientData.birthDate ?? null),
+            seatNumber: newSeat,
+            isChildUnder7: getAgeYears(clientData.birthDate ?? null) < 7,
+          });
+        }
+      }
     }
     const formatted = await formatReservation(reservation);
     res.json(formatted);

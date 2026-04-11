@@ -132,6 +132,7 @@ import type {
   SendMessageBody,
   SuccessResponse,
   Supplier,
+  SyncTripPassengers200,
   SyncUserBody,
   SystemConfig,
   Tenant,
@@ -3973,6 +3974,90 @@ export function useGetTripBoardingPanel<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Sync passengers for all reservations in a trip (creates missing principal passenger records)
+ */
+export const getSyncTripPassengersUrl = (id: string) => {
+  return `/api/trips/${id}/sync-passengers`;
+};
+
+export const syncTripPassengers = async (
+  id: string,
+  options?: RequestInit,
+): Promise<SyncTripPassengers200> => {
+  return customFetch<SyncTripPassengers200>(getSyncTripPassengersUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getSyncTripPassengersMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof syncTripPassengers>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof syncTripPassengers>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["syncTripPassengers"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof syncTripPassengers>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return syncTripPassengers(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SyncTripPassengersMutationResult = NonNullable<
+  Awaited<ReturnType<typeof syncTripPassengers>>
+>;
+
+export type SyncTripPassengersMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Sync passengers for all reservations in a trip (creates missing principal passenger records)
+ */
+export const useSyncTripPassengers = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof syncTripPassengers>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof syncTripPassengers>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getSyncTripPassengersMutationOptions(options));
+};
 
 /**
  * @summary Get reservation aggregate statistics

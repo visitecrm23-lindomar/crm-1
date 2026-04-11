@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   useListTrips, useCreateTrip, useGetTrip, useUpdateTrip, useDeleteTrip,
   useGetTripSeatMap, getGetTripSeatMapQueryKey, useGetDashboardUpcomingTrips, useListReservations, useListClients, useCreateReservation, useUpdateReservation, useCreateClient,
-  useGetTripBoardingPanel, useCheckInPassenger, useUndoCheckInPassenger,
+  useGetTripBoardingPanel, useCheckInPassenger, useUndoCheckInPassenger, useSyncTripPassengers,
 } from "@workspace/api-client-react";
 import type { Trip, Seat, BoardingPassenger } from "@workspace/api-client-react";
 import { Client360Modal } from "@/components/client360-modal";
@@ -25,7 +25,7 @@ import { getSeatColor } from "@/components/SeatMapPicker";
 import {
   Plus, Search, MapPin, Calendar, Users, Bus, Edit, Trash2, Eye, ChevronsLeft, ChevronsRight,
   LayoutGrid, List, ChevronLeft, ChevronRight, ArrowLeft, Check, X, Download, Send, Copy,
-  AlertCircle, DollarSign, ClipboardList, LogIn, RotateCcw, CheckCircle, UserRound,
+  AlertCircle, DollarSign, ClipboardList, LogIn, RotateCcw, CheckCircle, UserRound, RefreshCw,
 } from "lucide-react";
 import {
   format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay,
@@ -199,6 +199,25 @@ function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: strin
 
   const checkIn = useCheckInPassenger();
   const undoCheckIn = useUndoCheckInPassenger();
+  const syncPassengers = useSyncTripPassengers();
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const result = await syncPassengers.mutateAsync({ id: tripId });
+      await refetch();
+      if (result.created > 0) {
+        toast({ title: `${result.created} passageiro(s) sincronizado(s)`, description: "O painel foi atualizado." });
+      } else {
+        toast({ title: "Tudo sincronizado", description: "Nenhum passageiro novo a adicionar." });
+      }
+    } catch {
+      toast({ title: "Erro ao sincronizar passageiros", variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const handleCheckIn = async (p: BoardingPassenger) => {
     try {
@@ -238,10 +257,20 @@ function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: strin
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <ClipboardList className="w-5 h-5 text-primary" />
-            Painel de Embarque — {tripName}
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2">
+              <ClipboardList className="w-5 h-5 text-primary" />
+              Painel de Embarque — {tripName}
+            </DialogTitle>
+            <Button
+              size="sm" variant="outline" className="h-8 text-xs gap-1.5 mr-2"
+              onClick={handleSync}
+              disabled={syncing}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncing ? "animate-spin" : ""}`} />
+              {syncing ? "Sincronizando..." : "Sincronizar"}
+            </Button>
+          </div>
         </DialogHeader>
 
         {isLoading ? (

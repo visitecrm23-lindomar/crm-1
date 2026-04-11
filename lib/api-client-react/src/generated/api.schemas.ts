@@ -2352,6 +2352,11 @@ export type ListTripsParams = {
   limit?: number;
 };
 
+export type SyncTripPassengers200 = {
+  /** Number of passenger records created */
+  created: number;
+};
+
 export type ListReservationsParams = {
   /**
    * @nullable

@@ -1198,6 +1198,17 @@ export const GetTripBoardingPanelResponse = zod.object({
 });
 
 /**
+ * @summary Sync passengers for all reservations in a trip (creates missing principal passenger records)
+ */
+export const SyncTripPassengersParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const SyncTripPassengersResponse = zod.object({
+  created: zod.number().describe("Number of passenger records created"),
+});
+
+/**
  * @summary Get reservation aggregate statistics
  */
 export const GetReservationStatsResponse = zod.object({

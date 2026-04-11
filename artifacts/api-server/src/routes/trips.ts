@@ -401,4 +401,79 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
   }
 });
 
+function deriveTripAgeCategory(birthDate: Date | null): "child" | "adult" | "senior" {
+  if (!birthDate) return "adult";
+  const age = Math.floor((Date.now() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+  if (age < 12) return "child";
+  if (age >= 60) return "senior";
+  return "adult";
+}
+
+router.post("/trips/:id/sync-passengers", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const [trip] = await db.select({ id: tripsTable.id })
+      .from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!trip) { res.status(404).json({ error: "Trip not found" }); return; }
+
+    const reservations = await db.select().from(reservationsTable)
+      .where(and(
+        eq(reservationsTable.tripId, trip.id),
+        eq(reservationsTable.tenantId, me.tenantId),
+        sql`${reservationsTable.status} NOT IN ('cancelled', 'refunded')`,
+      ));
+
+    if (reservations.length === 0) {
+      res.json({ created: 0 });
+      return;
+    }
+
+    const reservationIds = reservations.map(r => r.id);
+    const existingPassengers = await db.select({ reservationId: passengersTable.reservationId })
+      .from(passengersTable)
+      .where(inArray(passengersTable.reservationId, reservationIds));
+    const reservationIdsWithPassengers = new Set(existingPassengers.map(p => p.reservationId));
+
+    const reservationsNeedingPassenger = reservations.filter(r => !reservationIdsWithPassengers.has(r.id));
+
+    if (reservationsNeedingPassenger.length === 0) {
+      res.json({ created: 0 });
+      return;
+    }
+
+    const clientIds = [...new Set(reservationsNeedingPassenger.map(r => r.clientId))];
+    const clients = await db.select().from(clientsTable)
+      .where(inArray(clientsTable.id, clientIds));
+    const clientMap = new Map(clients.map(c => [c.id, c]));
+
+    let created = 0;
+    for (const r of reservationsNeedingPassenger) {
+      const client = clientMap.get(r.clientId);
+      if (!client) continue;
+      await db.insert(passengersTable).values({
+        id: generateId(),
+        reservationId: r.id,
+        name: client.name,
+        cpf: client.cpf ?? null,
+        rg: client.rg ?? null,
+        birthDate: client.birthDate ?? null,
+        ageCategory: deriveTripAgeCategory(client.birthDate ?? null),
+        seatNumber: r.seats?.[0] ?? null,
+        isChildUnder7: client.birthDate ? Math.floor((Date.now() - client.birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000)) < 7 : false,
+      });
+      created++;
+    }
+
+    res.json({ created });
+  } catch (err) {
+    req.log.error({ err }, "Error syncing passengers");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default router;
