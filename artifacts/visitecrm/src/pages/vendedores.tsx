@@ -160,10 +160,11 @@ export default function Vendedores() {
   const reservations = reservationsData?.data ?? [];
   const { data: allDeals = [] } = useListDeals();
   const { data: stages = [] } = useListPipelineStages();
-  const { data: configs = [] } = useListSystemConfigs();
+  const { data: configs } = useListSystemConfigs();
   const monthlyGoal = (() => {
-    const v = configs.find((c) => c.key === "salesMonthlyGoal")?.value;
-    return typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : 50000;
+    const v = (configs ?? []).find((c) => c.key === "salesMonthlyGoal")?.value;
+    const parsed = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : NaN;
+    return isNaN(parsed) || parsed <= 0 ? 50000 : parsed;
   })();
 
   const [selectedSeller, setSelectedSeller] = useState<SellerStats | null>(null);
