@@ -383,9 +383,10 @@ interface ClientModalProps {
   onClose: () => void;
   editClient?: Client | null;
   onSave: (createReservation?: boolean, savedClientId?: string) => void;
+  defaultStageId?: string;
 }
 
-export function ClientModal({ open, onClose, editClient, onSave }: ClientModalProps) {
+export function ClientModal({ open, onClose, editClient, onSave, defaultStageId }: ClientModalProps) {
   const [tab, setTab] = useState("personal");
   const [form, setForm] = useState<ClientFormData>(EMPTY_CLIENT);
   const { toast } = useToast();
@@ -460,16 +461,20 @@ export function ClientModal({ open, onClose, editClient, onSave }: ClientModalPr
       } else {
         const result = await createClient.mutateAsync({ data: base });
         savedId = result.id;
-        if (form.tripId !== "none" && savedId) {
+        if (savedId) {
+          const hasTrip = form.tripId !== "none";
           const leadStage = stages?.find(s => s.name === "Lead");
-          if (leadStage) {
+          const dealStageId = hasTrip
+            ? (leadStage?.id ?? defaultStageId)
+            : defaultStageId;
+          if (dealStageId) {
             const tripName = selectedTrip?.name ?? "Viagem";
             await createDeal.mutateAsync({
               data: {
-                stageId: leadStage.id,
-                tripId: form.tripId,
-                title: `${form.name} — ${tripName}`,
-                value: valorTotal ?? 0,
+                stageId: dealStageId,
+                ...(hasTrip ? { tripId: form.tripId } : {}),
+                title: hasTrip ? `${form.name} — ${tripName}` : `${form.name} — Lead`,
+                value: hasTrip ? (valorTotal ?? 0) : 0,
                 clientId: savedId,
               },
             });

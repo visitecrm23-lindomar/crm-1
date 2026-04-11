@@ -158,6 +158,7 @@ export default function Pipeline() {
   const [filterCity, setFilterCity] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [defaultStageId, setDefaultStageId] = useState<string | undefined>(undefined);
   const [activeDragDeal, setActiveDragDeal] = useState<Deal | null>(null);
 
   const { data: stages, isLoading: loadingStages, refetch: refetchStages } = useListPipelineStages();
@@ -246,14 +247,16 @@ export default function Pipeline() {
     setIsModalOpen(true);
   };
 
-  const openNew = () => {
+  const openNew = (stageId?: string) => {
     setEditingClient(null);
+    setDefaultStageId(stageId ?? stages?.[0]?.id);
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingClient(null);
+    setDefaultStageId(undefined);
   };
 
   const handleSave = () => {
@@ -273,7 +276,7 @@ export default function Pipeline() {
             {deals?.length ?? 0} leads · {formatCurrency(totalValue)} no funil
           </p>
         </div>
-        <Button onClick={openNew}>
+        <Button onClick={() => openNew()}>
           <Plus className="w-4 h-4 mr-2" /> Novo Lead
         </Button>
       </div>
@@ -334,7 +337,7 @@ export default function Pipeline() {
                       <span className="text-sm font-semibold">{stage.name}</span>
                       <Badge variant="secondary" className="text-xs px-1.5 h-5">{stageDeals.length}</Badge>
                     </div>
-                    <button onClick={openNew} className="text-muted-foreground hover:text-primary p-1 rounded">
+                    <button onClick={() => openNew(stage.id)} className="text-muted-foreground hover:text-primary p-1 rounded">
                       <Plus className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -355,7 +358,7 @@ export default function Pipeline() {
                     ))}
                     {stageDeals.length === 0 && (
                       <button
-                        onClick={openNew}
+                        onClick={() => openNew(stage.id)}
                         className="flex items-center justify-center h-16 rounded-lg border-2 border-dashed text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors w-full"
                       >
                         + Adicionar lead
@@ -388,6 +391,7 @@ export default function Pipeline() {
         onClose={closeModal}
         editClient={editingClient}
         onSave={handleSave}
+        defaultStageId={defaultStageId}
       />
     </div>
   );
