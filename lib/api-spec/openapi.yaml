@@ -4049,8 +4049,13 @@ components:
           type: string
         type:
           type: string
+          description: "Activity type: note, call, whatsapp, email, meeting (manual) or reservation_created, reservation_cancelled, checkin, payment (auto)"
         content:
           type: string
+        metadata:
+          type: ["object", "null"]
+          additionalProperties: true
+          description: "Optional structured metadata (e.g. voucherCode, amount, tripName)"
         isPrivate:
           type: boolean
         createdById:
@@ -4064,8 +4069,13 @@ components:
       properties:
         type:
           type: string
+          description: "Activity type: note, call, whatsapp, email, meeting"
         content:
           type: string
+        metadata:
+          type: ["object", "null"]
+          additionalProperties: true
+          description: "Optional structured metadata (e.g. callDuration, meetingLocation)"
       required: [type, content]
 
     Note:

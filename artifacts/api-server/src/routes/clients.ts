@@ -337,7 +337,9 @@ router.get("/clients/:clientId/activities", async (req, res): Promise<void> => {
       .orderBy(desc(notesTable.createdAt));
     res.json(activities.map(n => ({
       id: n.id, clientId: n.clientId, type: n.type,
-      content: n.content, isPrivate: n.isPrivate, createdById: n.createdById,
+      content: n.content,
+      metadata: n.metadata ? (() => { try { return JSON.parse(n.metadata!); } catch { return null; } })() : null,
+      isPrivate: n.isPrivate, createdById: n.createdById,
       createdAt: n.createdAt.toISOString(),
     })));
   } catch (err) {
@@ -352,7 +354,7 @@ router.post("/clients/:clientId/activities", async (req, res): Promise<void> => 
     if (!me) return;
     const client = await requireClientAccess(me, req.params.clientId, res);
     if (!client) return;
-    const { type, content } = req.body as { type?: string; content?: string };
+    const { type, content, metadata } = req.body as { type?: string; content?: string; metadata?: Record<string, unknown> | null };
     if (!type || !content) { res.status(400).json({ error: "type and content are required" }); return; }
     const id = generateId();
     await db.insert(notesTable).values({
@@ -360,6 +362,7 @@ router.post("/clients/:clientId/activities", async (req, res): Promise<void> => 
       clientId: req.params.clientId,
       type,
       content,
+      metadata: metadata ? JSON.stringify(metadata) : null,
       isPrivate: false,
       createdById: me.id,
     });
@@ -369,7 +372,9 @@ router.post("/clients/:clientId/activities", async (req, res): Promise<void> => 
     if (!activity) { res.status(500).json({ error: "Failed to create activity" }); return; }
     res.status(201).json({
       id: activity.id, clientId: activity.clientId, type: activity.type,
-      content: activity.content, isPrivate: activity.isPrivate, createdById: activity.createdById,
+      content: activity.content,
+      metadata: activity.metadata ? (() => { try { return JSON.parse(activity.metadata!); } catch { return null; } })() : null,
+      isPrivate: activity.isPrivate, createdById: activity.createdById,
       createdAt: activity.createdAt.toISOString(),
     });
   } catch (err) {

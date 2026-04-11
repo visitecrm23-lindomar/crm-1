@@ -5,8 +5,15 @@
  * VisiteCRM API - SaaS CRM for tourism agencies
  * OpenAPI spec version: 0.1.0
  */
+import type { CreateClientActivityBodyMetadata } from "./createClientActivityBodyMetadata";
 
 export interface CreateClientActivityBody {
+  /** Activity type: note, call, whatsapp, email, meeting */
   type: string;
   content: string;
+  /**
+   * Optional structured metadata (e.g. callDuration, meetingLocation)
+   * @nullable
+   */
+  metadata?: CreateClientActivityBodyMetadata;
 }

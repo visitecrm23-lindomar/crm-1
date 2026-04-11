@@ -6,12 +6,14 @@ export async function writeClientActivity(
   type: string,
   content: string,
   createdById: string,
+  metadata?: Record<string, unknown>,
 ): Promise<void> {
   await db.insert(notesTable).values({
     id: generateId(),
     clientId,
     type,
     content,
+    metadata: metadata ? JSON.stringify(metadata) : null,
     isPrivate: false,
     createdById,
   });

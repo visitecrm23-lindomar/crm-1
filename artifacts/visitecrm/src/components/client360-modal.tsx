@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Phone, Mail, MapPin, Calendar, FileText, Download, Upload, Trash2,
   Star, TrendingUp, Gift, Award, Zap, MessageSquare, Loader2, Plus,
+  CreditCard, CheckSquare, XCircle,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -56,18 +57,34 @@ const ACTIVITY_TYPE_OPTIONS = [
 
 function activityIcon(type: string) {
   switch (type) {
-    case "auto": return { Icon: Zap, bg: "bg-blue-100", color: "text-blue-600" };
+    case "reservation_created": return { Icon: Calendar, bg: "bg-blue-100", color: "text-blue-600" };
+    case "reservation_cancelled": return { Icon: XCircle, bg: "bg-red-100", color: "text-red-600" };
+    case "checkin": return { Icon: CheckSquare, bg: "bg-green-100", color: "text-green-600" };
+    case "payment": return { Icon: CreditCard, bg: "bg-emerald-100", color: "text-emerald-600" };
     case "call": return { Icon: Phone, bg: "bg-green-100", color: "text-green-600" };
     case "whatsapp": return { Icon: MessageSquare, bg: "bg-green-100", color: "text-green-600" };
     case "email": return { Icon: Mail, bg: "bg-sky-100", color: "text-sky-600" };
     case "meeting": return { Icon: Calendar, bg: "bg-purple-100", color: "text-purple-600" };
-    default: return { Icon: FileText, bg: "bg-gray-100", color: "text-gray-500" };
+    case "note": return { Icon: FileText, bg: "bg-gray-100", color: "text-gray-500" };
+    default: return { Icon: Zap, bg: "bg-blue-100", color: "text-blue-600" };
   }
 }
 
+const AUTO_TYPE_LABELS: Record<string, string> = {
+  reservation_created: "Reserva criada",
+  reservation_cancelled: "Reserva cancelada",
+  checkin: "Check-in realizado",
+  payment: "Pagamento recebido",
+};
+
 function activityTypeLabel(type: string) {
+  if (AUTO_TYPE_LABELS[type]) return AUTO_TYPE_LABELS[type];
   const found = ACTIVITY_TYPE_OPTIONS.find(o => o.value === type);
-  return found?.label ?? (type === "auto" ? "Automático" : type);
+  return found?.label ?? type;
+}
+
+function isAutoActivity(type: string) {
+  return type in AUTO_TYPE_LABELS;
 }
 
 function ClientHistoryTab({ clientId, isOpen }: { clientId: string; isOpen: boolean }) {
@@ -165,7 +182,7 @@ function ClientHistoryTab({ clientId, isOpen }: { clientId: string; isOpen: bool
                 <div className="pb-4 min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-medium">{activityTypeLabel(act.type)}</span>
-                    {act.type !== "auto" && (
+                    {!isAutoActivity(act.type) && (
                       <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Manual</span>
                     )}
                   </div>

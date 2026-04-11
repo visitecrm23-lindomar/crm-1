@@ -188,6 +188,7 @@ async function runMigrations() {
     `);
     await client.query(`
       ALTER TABLE notes ADD COLUMN IF NOT EXISTS type text NOT NULL DEFAULT 'note';
+      ALTER TABLE notes ADD COLUMN IF NOT EXISTS metadata text;
     `);
     logger.info("Startup migrations complete");
   } catch (err) {

@@ -559,7 +559,7 @@ router.post("/reservations", async (req, res): Promise<void> => {
       syncClientDeal(reservation.clientId, me.tenantId, reservation.tripId, Number(reservation.totalValue), me.id)
         .catch((err) => req.log.error({ err }, "Error syncing deal after reservation creation"));
       const totalFormatted = Number(reservation.totalValue).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-      writeClientActivity(reservation.clientId, "auto", `Reserva ${voucherCode} criada — ${totalFormatted}`, me.id)
+      writeClientActivity(reservation.clientId, "reservation_created", `Reserva ${voucherCode} criada — ${totalFormatted}`, me.id, { voucherCode, totalValue: Number(reservation.totalValue) })
         .catch((err) => req.log.error({ err }, "Error writing reservation creation activity"));
     }
   } catch (err) {
@@ -710,7 +710,7 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
     }
     if (isBeingCancelled && existing.clientId) {
       const code = existing.voucherCode ?? req.params.id.slice(-8).toUpperCase();
-      writeClientActivity(existing.clientId, "auto", `Reserva ${code} cancelada`, me.id)
+      writeClientActivity(existing.clientId, "reservation_cancelled", `Reserva ${code} cancelada`, me.id, { voucherCode: code })
         .catch((err) => req.log.error({ err }, "Error writing cancellation activity"));
     }
     const formatted = await formatReservation(reservation);
@@ -770,7 +770,7 @@ router.post("/reservations/:id/check-in", async (req, res): Promise<void> => {
       const [trip] = await db.select({ name: tripsTable.name }).from(tripsTable)
         .where(eq(tripsTable.id, existing.tripId)).limit(1);
       const tripName = trip?.name ?? "viagem";
-      writeClientActivity(existing.clientId, "auto", `Check-in realizado na viagem ${tripName}`, me.id)
+      writeClientActivity(existing.clientId, "checkin", `Check-in realizado na viagem ${tripName}`, me.id, { tripName })
         .catch((err) => req.log.error({ err }, "Error writing check-in activity"));
     }
   } catch (err) {

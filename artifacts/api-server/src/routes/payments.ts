@@ -357,9 +357,9 @@ router.post("/payments", async (req, res): Promise<void> => {
       await autoCreateCommission(parsed.data.reservationId, me.tenantId);
     }
     res.status(201).json(formatPayment(payment));
-    if (parsed.data.clientId && explicitStatus === "paid") {
+    if (parsed.data.clientId && parsed.data.reservationId && explicitStatus === "paid") {
       const amountFormatted = Number(parsed.data.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-      writeClientActivity(parsed.data.clientId, "auto", `Pagamento de ${amountFormatted} recebido`, me.id)
+      writeClientActivity(parsed.data.clientId, "payment", `Pagamento de ${amountFormatted} recebido`, me.id, { amount: parsed.data.amount, reservationId: parsed.data.reservationId })
         .catch(() => {});
     }
   } catch (err) {

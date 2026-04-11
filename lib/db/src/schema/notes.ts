@@ -7,6 +7,7 @@ export const notesTable = pgTable("notes", {
   clientId: text("client_id").notNull(),
   type: text("type").notNull().default("note"),
   content: text("content").notNull(),
+  metadata: text("metadata"),
   isPrivate: boolean("is_private").notNull().default(false),
   createdById: text("created_by_id").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

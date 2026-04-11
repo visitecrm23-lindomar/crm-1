@@ -234,19 +234,45 @@ export interface UpdateClientBody {
   companyNps?: number | null;
 }
 
+/**
+ * Optional structured metadata (e.g. voucherCode, amount, tripName)
+ * @nullable
+ */
+export type ClientActivityMetadata = { [key: string]: unknown } | null;
+
 export interface ClientActivity {
   id: string;
   clientId: string;
+  /** Activity type: note, call, whatsapp, email, meeting (manual) or reservation_created, reservation_cancelled, checkin, payment (auto) */
   type: string;
   content: string;
+  /**
+   * Optional structured metadata (e.g. voucherCode, amount, tripName)
+   * @nullable
+   */
+  metadata?: ClientActivityMetadata;
   isPrivate: boolean;
   createdById: string;
   createdAt: string;
 }
 
+/**
+ * Optional structured metadata (e.g. callDuration, meetingLocation)
+ * @nullable
+ */
+export type CreateClientActivityBodyMetadata = {
+  [key: string]: unknown;
+} | null;
+
 export interface CreateClientActivityBody {
+  /** Activity type: note, call, whatsapp, email, meeting */
   type: string;
   content: string;
+  /**
+   * Optional structured metadata (e.g. callDuration, meetingLocation)
+   * @nullable
+   */
+  metadata?: CreateClientActivityBodyMetadata;
 }
 
 export interface Note {

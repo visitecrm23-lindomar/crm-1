@@ -866,8 +866,18 @@ export const ListClientActivitiesParams = zod.object({
 export const ListClientActivitiesResponseItem = zod.object({
   id: zod.string(),
   clientId: zod.string(),
-  type: zod.string(),
+  type: zod
+    .string()
+    .describe(
+      "Activity type: note, call, whatsapp, email, meeting (manual) or reservation_created, reservation_cancelled, checkin, payment (auto)",
+    ),
   content: zod.string(),
+  metadata: zod
+    .record(zod.string(), zod.unknown())
+    .nullish()
+    .describe(
+      "Optional structured metadata (e.g. voucherCode, amount, tripName)",
+    ),
   isPrivate: zod.boolean(),
   createdById: zod.string(),
   createdAt: zod.string(),
@@ -884,8 +894,16 @@ export const CreateClientActivityParams = zod.object({
 });
 
 export const CreateClientActivityBody = zod.object({
-  type: zod.string(),
+  type: zod
+    .string()
+    .describe("Activity type: note, call, whatsapp, email, meeting"),
   content: zod.string(),
+  metadata: zod
+    .record(zod.string(), zod.unknown())
+    .nullish()
+    .describe(
+      "Optional structured metadata (e.g. callDuration, meetingLocation)",
+    ),
 });
 
 /**
