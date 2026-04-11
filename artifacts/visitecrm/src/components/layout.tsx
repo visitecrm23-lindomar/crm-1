@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useUser, useClerk } from "@clerk/react";
-import { useGetMe } from "@workspace/api-client-react";
+import { useGetMe, useGetNotifications } from "@workspace/api-client-react";
 import {
   LayoutDashboard,
   Users,
@@ -33,6 +33,9 @@ import {
   ShoppingCart,
   Tag,
   MessageCircle,
+  AlertTriangle,
+  Info,
+  XCircle,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -45,6 +48,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface NavItem {
   name: string;
@@ -155,6 +159,9 @@ export default function Layout({ children }: { children: ReactNode }) {
   const { signOut } = useClerk();
   const { data: me } = useGetMe();
 
+  const { data: notifData } = useGetNotifications({ query: { queryKey: ["notifications"], refetchInterval: 60_000 } });
+  const alertCount = notifData?.total ?? 0;
+
   const tenantName: string = me?.tenant?.name ?? "VisiteCRM";
   const tenantLogoUrl: string | undefined = me?.tenant?.logoUrl ?? undefined;
   const tenantPrimaryColor: string = me?.tenant?.primaryColor ?? "#3B82F6";
@@ -262,9 +269,50 @@ export default function Layout({ children }: { children: ReactNode }) {
 
           {/* Right side: notifications + user dropdown */}
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8" title="Notificações">
-              <Bell className="w-4 h-4" />
-            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 relative" title="Notificações">
+                  <Bell className="w-4 h-4" />
+                  {alertCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 w-4 h-4 text-[10px] font-bold bg-destructive text-destructive-foreground rounded-full flex items-center justify-center leading-none">
+                      {alertCount > 9 ? "9+" : alertCount}
+                    </span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80 p-0">
+                <div className="px-4 py-3 border-b flex items-center justify-between">
+                  <h4 className="text-sm font-semibold">Notificações</h4>
+                  {alertCount > 0 && (
+                    <Badge variant="destructive" className="text-[10px] h-4 px-1.5">{alertCount}</Badge>
+                  )}
+                </div>
+                <div className="max-h-80 overflow-y-auto divide-y">
+                  {!notifData || notifData.alerts.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground gap-2">
+                      <Bell className="w-8 h-8 opacity-30" />
+                      <p className="text-sm">Nenhuma notificação ativa.</p>
+                    </div>
+                  ) : (
+                    notifData.alerts.map((alert, i) => {
+                      const Icon = alert.severity === "error" ? XCircle : alert.severity === "warning" ? AlertTriangle : Info;
+                      const iconClass = alert.severity === "error" ? "text-destructive" : alert.severity === "warning" ? "text-amber-500" : "text-blue-500";
+                      return (
+                        <Link key={i} href={alert.link}>
+                          <div className="flex items-start gap-3 px-4 py-3 hover:bg-muted/50 cursor-pointer transition-colors">
+                            <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${iconClass}`} />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium leading-snug">{alert.title}</p>
+                              <p className="text-xs text-muted-foreground leading-snug mt-0.5">{alert.message}</p>
+                            </div>
+                          </div>
+                        </Link>
+                      );
+                    })
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

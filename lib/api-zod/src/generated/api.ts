@@ -3925,3 +3925,20 @@ export const UpsertSystemConfigResponse = zod.object({
   updatedById: zod.string().nullish(),
   updatedAt: zod.string(),
 });
+
+/**
+ * @summary Get computed alert notifications
+ */
+export const GetNotificationsResponse = zod.object({
+  alerts: zod.array(
+    zod.object({
+      type: zod.string(),
+      severity: zod.string(),
+      title: zod.string(),
+      message: zod.string(),
+      link: zod.string(),
+      entityId: zod.string().nullish(),
+    }),
+  ),
+  total: zod.number(),
+});

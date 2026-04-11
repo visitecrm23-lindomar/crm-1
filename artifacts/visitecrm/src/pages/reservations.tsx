@@ -484,7 +484,7 @@ function VoucherContent({ r, qrDataUrl }: { r: Reservation | null | undefined; q
   );
 }
 
-function VoucherModal({ reservation, open, onClose }: { reservation: Reservation | null; open: boolean; onClose: () => void }) {
+export function VoucherModal({ reservation, open, onClose }: { reservation: Reservation | null; open: boolean; onClose: () => void }) {
   const reservationId = reservation?.id ?? "";
   const { data: fullData, isLoading } = useGetReservation(reservationId, {
     query: { queryKey: ["voucher", reservationId], enabled: open && !!reservationId },

@@ -3,6 +3,8 @@ import {
   useGetDashboardSummary, useGetDashboardRevenueChart, useGetDashboardUpcomingTrips,
   useListPayments, useListClients, useGetMe, useListPipelineStages, useListDeals, useListReservations,
 } from "@workspace/api-client-react";
+import type { Reservation } from "@workspace/api-client-react";
+import { VoucherModal } from "./reservations";
 import { Users, Map, DollarSign, Star, Briefcase, CalendarCheck, AlertTriangle, ArrowUpRight, Plus, Clock, Check, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -601,9 +603,17 @@ function ClientDashboard() {
   const { data: upcomingTrips, isLoading: loadingTrips } = useGetDashboardUpcomingTrips();
   const { data: pendingPayments, isLoading: loadingPayments } = useListPayments({ status: "pending", limit: 5 });
   const { data: me } = useGetMe();
+  const [voucherOpen, setVoucherOpen] = useState(false);
+  const [voucherReservation, setVoucherReservation] = useState<Reservation | null>(null);
 
   const nextTrip = upcomingTrips?.[0];
   const daysToTrip = nextTrip ? differenceInDays(parseISO(nextTrip.departureDate), new Date()) : null;
+
+  const { data: nextTripReservations } = useListReservations(
+    { tripId: nextTrip?.id ?? "", limit: 1 },
+    { query: { queryKey: ["dashboard-reservation", nextTrip?.id], enabled: !!nextTrip?.id } }
+  );
+  const myReservation = (nextTripReservations?.data?.[0] ?? null) as Reservation | null;
 
   const referralLink = `https://visitecrm.com.br/ref/${me?.referralCode ?? "—"}`;
 
@@ -637,13 +647,29 @@ function ClientDashboard() {
                 </p>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm">Ver Voucher</Button>
-                <Button variant="outline" size="sm">Baixar PDF</Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!myReservation}
+                  onClick={() => { setVoucherReservation(myReservation); setVoucherOpen(true); }}
+                >
+                  Ver Voucher
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!myReservation}
+                  onClick={() => { setVoucherReservation(myReservation); setVoucherOpen(true); }}
+                >
+                  Baixar PDF
+                </Button>
               </div>
             </div>
           </CardContent>
         </Card>
       )}
+
+      <VoucherModal reservation={voucherReservation} open={voucherOpen} onClose={() => setVoucherOpen(false)} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

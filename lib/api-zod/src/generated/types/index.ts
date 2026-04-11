@@ -120,6 +120,8 @@ export * from "./messageTemplate";
 export * from "./metricPoint";
 export * from "./moveDealBody";
 export * from "./note";
+export * from "./notificationAlert";
+export * from "./notificationsResponse";
 export * from "./npsResponse";
 export * from "./npsSummary";
 export * from "./order";

@@ -48,9 +48,65 @@ import {
   Mail,
   Loader2,
   Trash2,
+  Target,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+/* ──────────────────── Sales Goal Section ──────────────────── */
+function SalesGoalSection() {
+  const { toast } = useToast();
+  const { data: configs = [], refetch } = useListSystemConfigs();
+  const upsert = useUpsertSystemConfig();
+  const currentGoal = (() => {
+    const v = configs.find((c) => c.key === "salesMonthlyGoal")?.value;
+    return typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : 50000;
+  })();
+  const [goalInput, setGoalInput] = useState("");
+
+  useEffect(() => {
+    setGoalInput(String(currentGoal));
+  }, [currentGoal]);
+
+  async function handleSaveGoal() {
+    const parsed = parseFloat(goalInput.replace(/\./g, "").replace(",", "."));
+    if (isNaN(parsed) || parsed <= 0) {
+      toast({ title: "Valor inválido para a meta", variant: "destructive" });
+      return;
+    }
+    try {
+      await upsert.mutateAsync({ data: { key: "salesMonthlyGoal", value: parsed } });
+      toast({ title: "Meta de vendas atualizada" });
+      refetch();
+    } catch {
+      toast({ title: "Erro ao salvar meta", variant: "destructive" });
+    }
+  }
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3 mt-4">
+      <div className="flex items-center gap-2">
+        <Target className="w-4 h-4 text-muted-foreground" />
+        <h3 className="text-sm font-semibold">Meta de Vendas Mensal</h3>
+      </div>
+      <p className="text-xs text-muted-foreground">Defina a meta de faturamento mensal por vendedor. Usada no painel de vendedores.</p>
+      <div className="flex items-center gap-2 max-w-xs">
+        <span className="text-sm text-muted-foreground">R$</span>
+        <Input
+          value={goalInput}
+          onChange={(e) => setGoalInput(e.target.value)}
+          placeholder="50000"
+          type="number"
+          min="0"
+          step="1000"
+        />
+        <Button size="sm" onClick={handleSaveGoal} disabled={upsert.isPending}>
+          Salvar
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 /* ──────────────────── Agency Profile Tab ──────────────────── */
 function AgencyProfileTab() {
@@ -181,6 +237,8 @@ function AgencyProfileTab() {
       <Button onClick={handleSave} disabled={updateTenant.isPending}>
         Salvar Perfil
       </Button>
+
+      <SalesGoalSection />
     </div>
   );
 }

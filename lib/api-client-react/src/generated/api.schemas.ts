@@ -1852,6 +1852,21 @@ export interface UpsertSystemConfigBody {
   value?: unknown;
 }
 
+export interface NotificationAlert {
+  type: string;
+  severity: string;
+  title: string;
+  message: string;
+  link: string;
+  /** @nullable */
+  entityId?: string | null;
+}
+
+export interface NotificationsResponse {
+  alerts: NotificationAlert[];
+  total: number;
+}
+
 export interface ProductCategory {
   id: string;
   tenantId: string;

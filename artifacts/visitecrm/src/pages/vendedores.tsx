@@ -5,6 +5,7 @@ import {
   useListReservations,
   useListDeals,
   useListPipelineStages,
+  useListSystemConfigs,
 } from "@workspace/api-client-react";
 import type { UserProfile, Commission, Deal } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,9 +45,7 @@ interface SellerStats {
   dealValue: number;
 }
 
-const MONTHLY_GOAL = 50000;
-
-function GoalsChart({ stats }: { stats: SellerStats[] }) {
+function GoalsChart({ stats, monthlyGoal }: { stats: SellerStats[]; monthlyGoal: number }) {
   const top = [...stats].sort((a, b) => b.revenue - a.revenue).slice(0, 6);
 
   return (
@@ -54,7 +53,7 @@ function GoalsChart({ stats }: { stats: SellerStats[] }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Target className="w-4 h-4" />
-          Metas vs Realizado — Meta mensal por vendedor: {fmtCurrency(MONTHLY_GOAL)}
+          Metas vs Realizado — Meta mensal por vendedor: {fmtCurrency(monthlyGoal)}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -65,13 +64,13 @@ function GoalsChart({ stats }: { stats: SellerStats[] }) {
         ) : (
           <div className="space-y-4">
             {top.map((s) => {
-              const pct = Math.min(100, (s.revenue / MONTHLY_GOAL) * 100);
+              const pct = Math.min(100, (s.revenue / monthlyGoal) * 100);
               return (
                 <div key={s.user.id} className="space-y-1">
                   <div className="flex justify-between items-center text-sm">
                     <span className="font-medium">{s.user.name}</span>
                     <span className="text-muted-foreground">
-                      {fmtCurrency(s.revenue)} / {fmtCurrency(MONTHLY_GOAL)}
+                      {fmtCurrency(s.revenue)} / {fmtCurrency(monthlyGoal)}
                     </span>
                   </div>
                   <div className="relative h-4 rounded-full bg-muted overflow-hidden">
@@ -161,6 +160,11 @@ export default function Vendedores() {
   const reservations = reservationsData?.data ?? [];
   const { data: allDeals = [] } = useListDeals();
   const { data: stages = [] } = useListPipelineStages();
+  const { data: configs = [] } = useListSystemConfigs();
+  const monthlyGoal = (() => {
+    const v = configs.find((c) => c.key === "salesMonthlyGoal")?.value;
+    return typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : 50000;
+  })();
 
   const [selectedSeller, setSelectedSeller] = useState<SellerStats | null>(null);
 
@@ -283,7 +287,7 @@ export default function Vendedores() {
       </div>
 
       {/* Goals vs actual chart */}
-      <GoalsChart stats={stats} />
+      <GoalsChart stats={stats} monthlyGoal={monthlyGoal} />
 
       {/* Ranking table */}
       <Card>
@@ -409,15 +413,15 @@ export default function Vendedores() {
                 <div className="flex justify-between text-sm mb-2">
                   <span className="font-medium">Meta mensal</span>
                   <span className="text-muted-foreground">
-                    {fmtCurrency(selectedSeller.revenue)} / {fmtCurrency(MONTHLY_GOAL)}
+                    {fmtCurrency(selectedSeller.revenue)} / {fmtCurrency(monthlyGoal)}
                   </span>
                 </div>
                 <Progress
-                  value={Math.min(100, (selectedSeller.revenue / MONTHLY_GOAL) * 100)}
+                  value={Math.min(100, (selectedSeller.revenue / monthlyGoal) * 100)}
                   className="h-3"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  {Math.min(100, Math.round((selectedSeller.revenue / MONTHLY_GOAL) * 100))}% da meta atingida
+                  {Math.min(100, Math.round((selectedSeller.revenue / monthlyGoal) * 100))}% da meta atingida
                 </p>
               </div>
 

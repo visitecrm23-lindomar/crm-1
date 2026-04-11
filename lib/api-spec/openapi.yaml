@@ -3583,6 +3583,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/SystemConfig"
 
+  /notifications:
+    get:
+      operationId: getNotifications
+      summary: Get computed alert notifications
+      tags: [dashboard]
+      responses:
+        "200":
+          description: Notification alerts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationsResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -6393,6 +6406,34 @@ components:
           type: string
         value: {}
       required: [key]
+
+    NotificationAlert:
+      type: object
+      properties:
+        type:
+          type: string
+        severity:
+          type: string
+        title:
+          type: string
+        message:
+          type: string
+        link:
+          type: string
+        entityId:
+          type: ["string", "null"]
+      required: [type, severity, title, message, link]
+
+    NotificationsResponse:
+      type: object
+      properties:
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificationAlert"
+        total:
+          type: integer
+      required: [alerts, total]
 
     # ─── CATALOG ───────────────────────────────────────────────────
     ProductCategory:
