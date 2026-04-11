@@ -8,6 +8,22 @@ import { CreatePaymentBody, UpdatePaymentBody, CreateExpenseBody, UpdateExpenseB
 
 const router = Router();
 
+async function recalculateClientFinancials(clientId: string, tenantId: string): Promise<void> {
+  const result = await db.execute(sql`
+    SELECT
+      COALESCE(SUM(CASE WHEN status = 'paid' THEN amount::numeric ELSE 0 END), 0) AS total_spent,
+      COALESCE(SUM(CASE WHEN status IN ('pending', 'overdue') THEN amount::numeric ELSE 0 END), 0) AS outstanding_balance
+    FROM payments
+    WHERE client_id = ${clientId} AND tenant_id = ${tenantId}
+  `);
+  const row = (result as unknown as { rows: Array<{ total_spent: string; outstanding_balance: string }> }).rows[0];
+  if (!row) return;
+  await db.update(clientsTable).set({
+    totalSpent: row.total_spent,
+    outstandingBalance: row.outstanding_balance,
+  }).where(and(eq(clientsTable.id, clientId), eq(clientsTable.tenantId, tenantId)));
+}
+
 router.get("/trips/:tripId/financial-report", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
@@ -236,6 +252,9 @@ router.post("/payments", async (req, res): Promise<void> => {
       .where(and(eq(paymentsTable.id, id), eq(paymentsTable.tenantId, me.tenantId)))
       .limit(1);
     if (!payment) { res.status(500).json({ error: "Failed to create payment" }); return; }
+    if (parsed.data.clientId) {
+      await recalculateClientFinancials(parsed.data.clientId, me.tenantId);
+    }
     res.status(201).json(formatPayment(payment));
   } catch (err) {
     req.log.error({ err }, "Error creating payment");
@@ -300,6 +319,9 @@ router.patch("/payments/:id", async (req, res): Promise<void> => {
       .where(and(eq(paymentsTable.id, req.params.id), eq(paymentsTable.tenantId, me.tenantId)))
       .limit(1);
     if (!payment) { res.status(404).json({ error: "Not found" }); return; }
+    if (payment.clientId) {
+      await recalculateClientFinancials(payment.clientId, me.tenantId);
+    }
     res.json(formatPayment(payment));
   } catch (err) {
     req.log.error({ err }, "Error updating payment");

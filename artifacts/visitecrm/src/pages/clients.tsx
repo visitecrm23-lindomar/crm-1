@@ -979,8 +979,19 @@ function Client360Modal({ open, onClose, client }: Client360ModalProps) {
                     </div>
                     <div className="text-right">
                       <p className="font-semibold text-sm">{formatCurrency(r.totalValue)}</p>
-                      <Badge variant={r.status === "confirmed" ? "default" : "secondary"} className="text-xs">
-                        {r.status === "confirmed" ? "Confirmada" : r.status}
+                      <Badge
+                        variant={
+                          r.status === "confirmed" ? "default"
+                          : r.status === "cancelled" ? "destructive"
+                          : "secondary"
+                        }
+                        className="text-xs"
+                      >
+                        {r.status === "confirmed" ? "Confirmada"
+                          : r.status === "pending" ? "Pendente"
+                          : r.status === "completed" ? "Concluída"
+                          : r.status === "cancelled" ? "Cancelada"
+                          : r.status}
                       </Badge>
                     </div>
                   </div>
