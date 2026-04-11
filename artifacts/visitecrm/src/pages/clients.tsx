@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import {
   useListClients, useCreateClient, useUpdateClient,
   useListPipelineStages, useListTrips, useListUsers,
-  useCreateDeal,
+  useCreateDeal, useListPayments,
 } from "@workspace/api-client-react";
 import type { Client } from "@workspace/api-client-react";
 import { Client360Modal } from "@/components/client360-modal";
@@ -260,6 +260,41 @@ function clientToForm(c: Client): ClientFormData {
   };
 }
 
+
+function ClientPaymentsSection({ clientId }: { clientId: string }) {
+  const { data: payments, isLoading } = useListPayments({ clientId, limit: 10 });
+  if (isLoading) return <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>;
+  const items = payments?.data ?? [];
+  return (
+    <div className="space-y-2 pt-2 border-t">
+      <p className="text-sm font-medium text-muted-foreground">Pagamentos / Comissões</p>
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Nenhum pagamento registrado.</p>
+      ) : (
+        <div className="space-y-1 max-h-[220px] overflow-y-auto">
+          {items.map(p => (
+            <div key={p.id} className="flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-2">
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{p.description ?? p.category}</p>
+                <p className="text-xs text-muted-foreground">
+                  Vence {p.dueDate ? format(parseISO(p.dueDate), "dd/MM/yyyy", { locale: ptBR }) : "—"}
+                  {p.installmentNumber ? ` · Parcela ${p.installmentNumber}` : ""}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                  p.status === "paid" ? "bg-green-100 text-green-700" :
+                  p.status === "overdue" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"
+                }`}>{p.status === "paid" ? "Pago" : p.status === "overdue" ? "Vencido" : "Pendente"}</span>
+                <span className="text-sm font-semibold">{formatCurrency(p.amount)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface ClientModalProps {
   open: boolean;
@@ -637,6 +672,7 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
                     <p className="text-base font-bold">0 pts</p>
                   </div>
                 </div>
+                <ClientPaymentsSection clientId={editClient.id} />
               </>
             )}
           </TabsContent>
