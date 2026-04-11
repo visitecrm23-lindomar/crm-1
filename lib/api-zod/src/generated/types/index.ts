@@ -26,6 +26,8 @@ export * from "./automationLogResult";
 export * from "./automationLogTriggerData";
 export * from "./automationTriggerConfig";
 export * from "./boardingLocation";
+export * from "./boardingPanel";
+export * from "./boardingPassenger";
 export * from "./campaign";
 export * from "./cartItem";
 export * from "./chartDataPoint";

@@ -964,6 +964,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/SeatMap"
 
+  /trips/{id}/boarding-panel:
+    get:
+      operationId: getTripBoardingPanel
+      tags: [trips]
+      summary: Get boarding panel for a trip (all passengers across all reservations)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Boarding panel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardingPanel"
+
   # ─── RESERVATIONS ─────────────────────────────────────────────────
   /reservations/stats:
     get:
@@ -1206,6 +1225,52 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
+
+  /reservations/{reservationId}/passengers/{id}/check-in:
+    post:
+      operationId: checkInPassenger
+      tags: [passengers]
+      summary: Check in a single passenger
+      parameters:
+        - name: reservationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Checked in passenger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Passenger"
+    delete:
+      operationId: undoCheckInPassenger
+      tags: [passengers]
+      summary: Undo check-in for a passenger
+      parameters:
+        - name: reservationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Check-in undone
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Passenger"
 
   # ─── PAYMENTS ─────────────────────────────────────────────────────
   /payments:
@@ -4326,7 +4391,51 @@ components:
           type: ["string", "null"]
         isChildUnder7:
           type: boolean
+        checkedInAt:
+          type: ["string", "null"]
       required: [id, reservationId, name, ageCategory, isChildUnder7]
+
+    BoardingPassenger:
+      type: object
+      properties:
+        id:
+          type: string
+        reservationId:
+          type: string
+        voucherCode:
+          type: string
+        clientName:
+          type: string
+        name:
+          type: string
+        cpf:
+          type: ["string", "null"]
+        seatNumber:
+          type: ["string", "null"]
+        ageCategory:
+          type: string
+        checkedInAt:
+          type: ["string", "null"]
+      required: [id, reservationId, voucherCode, clientName, name, ageCategory]
+
+    BoardingPanel:
+      type: object
+      properties:
+        tripId:
+          type: string
+        tripName:
+          type: string
+        departureDate:
+          type: string
+        totalPassengers:
+          type: integer
+        checkedIn:
+          type: integer
+        passengers:
+          type: array
+          items:
+            $ref: "#/components/schemas/BoardingPassenger"
+      required: [tripId, tripName, departureDate, totalPassengers, checkedIn, passengers]
 
     CreatePassengerBody:
       type: object

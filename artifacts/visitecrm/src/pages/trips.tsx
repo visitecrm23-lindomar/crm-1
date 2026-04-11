@@ -5,8 +5,9 @@ import { useQuery } from "@tanstack/react-query";
 import {
   useListTrips, useCreateTrip, useGetTrip, useUpdateTrip, useDeleteTrip,
   useGetTripSeatMap, getGetTripSeatMapQueryKey, useGetDashboardUpcomingTrips, useListReservations, useListClients, useCreateReservation, useUpdateReservation, useCreateClient,
+  useGetTripBoardingPanel, useCheckInPassenger, useUndoCheckInPassenger,
 } from "@workspace/api-client-react";
-import type { Trip, Seat } from "@workspace/api-client-react";
+import type { Trip, Seat, BoardingPassenger } from "@workspace/api-client-react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,7 @@ import { getSeatColor } from "@/components/SeatMapPicker";
 import {
   Plus, Search, MapPin, Calendar, Users, Bus, Edit, Trash2, Eye, ChevronsLeft, ChevronsRight,
   LayoutGrid, List, ChevronLeft, ChevronRight, ArrowLeft, Check, X, Download, Send, Copy,
-  AlertCircle, DollarSign,
+  AlertCircle, DollarSign, ClipboardList, LogIn, RotateCcw, CheckCircle,
 } from "lucide-react";
 import {
   format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay,
@@ -174,6 +175,167 @@ function OccupancyBar({ reserved, confirmed, total }: { reserved: number; confir
   );
 }
 
+function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: string; tripName: string; open: boolean; onClose: () => void }) {
+  const [search, setSearch] = useState("");
+  const { toast } = useToast();
+
+  const { data: panel, isLoading, refetch } = useGetTripBoardingPanel(tripId, {
+    query: { queryKey: ["boarding-panel", tripId], enabled: open && !!tripId },
+  });
+
+  const checkIn = useCheckInPassenger();
+  const undoCheckIn = useUndoCheckInPassenger();
+
+  const handleCheckIn = async (p: BoardingPassenger) => {
+    try {
+      await checkIn.mutateAsync({ reservationId: p.reservationId, id: p.id });
+      await refetch();
+      toast({ title: `${p.name} embarcou`, description: "Check-in individual registrado." });
+    } catch {
+      toast({ title: "Erro ao fazer check-in", variant: "destructive" });
+    }
+  };
+
+  const handleUndoCheckIn = async (p: BoardingPassenger) => {
+    try {
+      await undoCheckIn.mutateAsync({ reservationId: p.reservationId, id: p.id });
+      await refetch();
+      toast({ title: "Check-in desfeito" });
+    } catch {
+      toast({ title: "Erro ao desfazer check-in", variant: "destructive" });
+    }
+  };
+
+  const passengers = panel?.passengers ?? [];
+  const filtered = search
+    ? passengers.filter(p =>
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        p.seatNumber?.toLowerCase().includes(search.toLowerCase()) ||
+        p.voucherCode.toLowerCase().includes(search.toLowerCase()) ||
+        p.clientName.toLowerCase().includes(search.toLowerCase())
+      )
+    : passengers;
+
+  const pct = panel && panel.totalPassengers > 0
+    ? Math.round((panel.checkedIn / panel.totalPassengers) * 100)
+    : 0;
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ClipboardList className="w-5 h-5 text-primary" />
+            Painel de Embarque — {tripName}
+          </DialogTitle>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="space-y-3 py-4">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : (
+          <>
+            <div className="bg-muted/50 border rounded-lg p-4 space-y-3">
+              <div className="flex justify-between items-center text-sm">
+                <div className="flex gap-4">
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-green-700">{panel?.checkedIn ?? 0}</p>
+                    <p className="text-xs text-muted-foreground">Embarcados</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold">{(panel?.totalPassengers ?? 0) - (panel?.checkedIn ?? 0)}</p>
+                    <p className="text-xs text-muted-foreground">Pendentes</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold">{panel?.totalPassengers ?? 0}</p>
+                    <p className="text-xs text-muted-foreground">Total</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold">{pct}%</p>
+                  <p className="text-xs text-muted-foreground">embarque</p>
+                </div>
+              </div>
+              <div className="w-full h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${pct >= 90 ? "bg-green-500" : pct >= 50 ? "bg-blue-500" : "bg-amber-500"}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nome, assento ou voucher..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+
+            <div className="overflow-y-auto flex-1 space-y-1.5 pr-1">
+              {filtered.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground">
+                  <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">{passengers.length === 0 ? "Nenhum passageiro cadastrado nesta viagem" : "Nenhum resultado encontrado"}</p>
+                </div>
+              ) : filtered.map(p => {
+                const isCheckedIn = !!p.checkedInAt;
+                return (
+                  <div key={p.id} className={`flex items-center justify-between p-3 rounded-lg border ${isCheckedIn ? "bg-green-50 border-green-200" : "bg-muted/30"}`}>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {p.seatNumber && (
+                          <span className="font-mono text-xs bg-gray-100 border border-gray-300 px-2 py-0.5 rounded font-bold">{p.seatNumber}</span>
+                        )}
+                        <span className="font-medium text-sm">{p.name}</span>
+                        {isCheckedIn && (
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold border border-green-200">
+                            <CheckCircle className="w-3 h-3" />
+                            {new Date(p.checkedInAt!).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex gap-3 mt-0.5 flex-wrap text-xs text-muted-foreground">
+                        <span>{p.clientName}</span>
+                        {p.cpf && <span>CPF: {p.cpf}</span>}
+                        <span className="font-mono opacity-70">{p.voucherCode}</span>
+                      </div>
+                    </div>
+                    <div className="shrink-0 ml-2">
+                      {isCheckedIn ? (
+                        <Button
+                          size="sm" variant="outline" className="h-8 text-xs text-muted-foreground gap-1"
+                          onClick={() => handleUndoCheckIn(p)}
+                          disabled={undoCheckIn.isPending}
+                        >
+                          <RotateCcw className="w-3 h-3" /> Desfazer
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white gap-1"
+                          onClick={() => handleCheckIn(p)}
+                          disabled={checkIn.isPending}
+                        >
+                          <LogIn className="w-3 h-3" /> Embarcar
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function TripList() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -182,6 +344,7 @@ export function TripList() {
   const [page, setPage] = useState(1);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [boardingTrip, setBoardingTrip] = useState<{ id: string; name: string } | null>(null);
   const [, navigate] = useLocation();
 
   const { data: tripsData, isLoading, refetch } = useListTrips({
@@ -354,7 +517,7 @@ export function TripList() {
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {trips.map(trip => (
-            <TripCard key={trip.id} trip={trip} onDelete={() => setDeletingId(trip.id)} onDuplicate={() => handleDuplicate(trip)} navigate={navigate} />
+            <TripCard key={trip.id} trip={trip} onDelete={() => setDeletingId(trip.id)} onDuplicate={() => handleDuplicate(trip)} onBoarding={() => setBoardingTrip({ id: trip.id, name: trip.name })} navigate={navigate} />
           ))}
         </div>
       ) : (
@@ -380,6 +543,7 @@ export function TripList() {
               <div className="flex gap-1">
                 <Link href={`/trips/${trip.id}/passengers-overview`}><Button size="icon" variant="ghost" className="h-8 w-8" title="Visão Geral"><Eye className="w-4 h-4" /></Button></Link>
                 <Link href={`/trips/${trip.id}/passengers`}><Button size="icon" variant="ghost" className="h-8 w-8" title="Passageiros"><Users className="w-4 h-4" /></Button></Link>
+                <Button size="icon" variant="ghost" className="h-8 w-8 text-green-700" onClick={() => setBoardingTrip({ id: trip.id, name: trip.name })} title="Painel de Embarque"><ClipboardList className="w-4 h-4" /></Button>
                 <Link href={`/trips/${trip.id}/seat-map`}><Button size="icon" variant="ghost" className="h-8 w-8" title="Mapa de Assentos"><Bus className="w-4 h-4" /></Button></Link>
                 <Link href={`/trips/${trip.id}/edit`}><Button size="icon" variant="ghost" className="h-8 w-8" title="Editar"><Edit className="w-4 h-4" /></Button></Link>
                 <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleDuplicate(trip)} title="Duplicar"><Copy className="w-4 h-4" /></Button>
@@ -412,11 +576,20 @@ export function TripList() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {boardingTrip && (
+        <BoardingPanelModal
+          tripId={boardingTrip.id}
+          tripName={boardingTrip.name}
+          open={!!boardingTrip}
+          onClose={() => setBoardingTrip(null)}
+        />
+      )}
     </div>
   );
 }
 
-function TripCard({ trip, onDelete, onDuplicate, navigate }: { trip: Trip; onDelete: () => void; onDuplicate: () => void; navigate: (to: string) => void }) {
+function TripCard({ trip, onDelete, onDuplicate, onBoarding, navigate }: { trip: Trip; onDelete: () => void; onDuplicate: () => void; onBoarding: () => void; navigate: (to: string) => void }) {
   const pct = trip.totalCapacity > 0 ? Math.round((trip.reservedSeats + trip.confirmedSeats) / trip.totalCapacity * 100) : 0;
   const statusInfo = STATUS_MAP[trip.status] ?? { label: trip.status, color: "bg-gray-100 text-gray-600" };
   return (
@@ -447,6 +620,9 @@ function TripCard({ trip, onDelete, onDuplicate, navigate }: { trip: Trip; onDel
           <Link href={`/trips/${trip.id}/passengers`}>
             <Button variant="outline" size="sm" className="text-xs"><Users className="w-3 h-3 mr-1" />Passageiros</Button>
           </Link>
+          <Button variant="outline" size="sm" className="text-xs text-green-700 border-green-200 hover:bg-green-50" onClick={onBoarding} title="Painel de Embarque">
+            <ClipboardList className="w-3 h-3 mr-1" />Embarque
+          </Button>
           <Link href={`/trips/${trip.id}/seat-map`}>
             <Button variant="outline" size="sm" className="text-xs"><Bus className="w-3 h-3 mr-1" />Mapa</Button>
           </Link>

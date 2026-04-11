@@ -60,6 +60,7 @@ export const passengersTable = pgTable("passengers", {
   ageCategory: text("age_category").notNull().default("adult"),
   seatNumber: text("seat_number"),
   isChildUnder7: boolean("is_child_under_7").notNull().default(false),
+  checkedInAt: timestamp("checked_in_at", { withTimezone: true }),
 });
 
 export const insertPassengerSchema = createInsertSchema(passengersTable);

@@ -1153,6 +1153,34 @@ export const GetTripSeatMapResponse = zod.object({
 });
 
 /**
+ * @summary Get boarding panel for a trip (all passengers across all reservations)
+ */
+export const GetTripBoardingPanelParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetTripBoardingPanelResponse = zod.object({
+  tripId: zod.string(),
+  tripName: zod.string(),
+  departureDate: zod.string(),
+  totalPassengers: zod.number(),
+  checkedIn: zod.number(),
+  passengers: zod.array(
+    zod.object({
+      id: zod.string(),
+      reservationId: zod.string(),
+      voucherCode: zod.string(),
+      clientName: zod.string(),
+      name: zod.string(),
+      cpf: zod.string().nullish(),
+      seatNumber: zod.string().nullish(),
+      ageCategory: zod.string(),
+      checkedInAt: zod.string().nullish(),
+    }),
+  ),
+});
+
+/**
  * @summary Get reservation aggregate statistics
  */
 export const GetReservationStatsResponse = zod.object({
@@ -1429,6 +1457,7 @@ export const ListPassengersResponseItem = zod.object({
   ageCategory: zod.string(),
   seatNumber: zod.string().nullish(),
   isChildUnder7: zod.boolean(),
+  checkedInAt: zod.string().nullish(),
 });
 export const ListPassengersResponse = zod.array(ListPassengersResponseItem);
 
@@ -1474,6 +1503,7 @@ export const UpdatePassengerResponse = zod.object({
   ageCategory: zod.string(),
   seatNumber: zod.string().nullish(),
   isChildUnder7: zod.boolean(),
+  checkedInAt: zod.string().nullish(),
 });
 
 /**
@@ -1486,6 +1516,48 @@ export const DeletePassengerParams = zod.object({
 
 export const DeletePassengerResponse = zod.object({
   success: zod.boolean(),
+});
+
+/**
+ * @summary Check in a single passenger
+ */
+export const CheckInPassengerParams = zod.object({
+  reservationId: zod.coerce.string(),
+  id: zod.coerce.string(),
+});
+
+export const CheckInPassengerResponse = zod.object({
+  id: zod.string(),
+  reservationId: zod.string(),
+  name: zod.string(),
+  cpf: zod.string().nullish(),
+  rg: zod.string().nullish(),
+  birthDate: zod.string().nullish(),
+  ageCategory: zod.string(),
+  seatNumber: zod.string().nullish(),
+  isChildUnder7: zod.boolean(),
+  checkedInAt: zod.string().nullish(),
+});
+
+/**
+ * @summary Undo check-in for a passenger
+ */
+export const UndoCheckInPassengerParams = zod.object({
+  reservationId: zod.coerce.string(),
+  id: zod.coerce.string(),
+});
+
+export const UndoCheckInPassengerResponse = zod.object({
+  id: zod.string(),
+  reservationId: zod.string(),
+  name: zod.string(),
+  cpf: zod.string().nullish(),
+  rg: zod.string().nullish(),
+  birthDate: zod.string().nullish(),
+  ageCategory: zod.string(),
+  seatNumber: zod.string().nullish(),
+  isChildUnder7: zod.boolean(),
+  checkedInAt: zod.string().nullish(),
 });
 
 /**

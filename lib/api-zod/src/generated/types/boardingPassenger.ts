@@ -6,20 +6,17 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface Passenger {
+export interface BoardingPassenger {
   id: string;
   reservationId: string;
+  voucherCode: string;
+  clientName: string;
   name: string;
   /** @nullable */
   cpf?: string | null;
   /** @nullable */
-  rg?: string | null;
-  /** @nullable */
-  birthDate?: string | null;
-  ageCategory: string;
-  /** @nullable */
   seatNumber?: string | null;
-  isChildUnder7: boolean;
+  ageCategory: string;
   /** @nullable */
   checkedInAt?: string | null;
 }

@@ -18,6 +18,8 @@ import {
   useCreatePassenger,
   useUpdatePassenger,
   useDeletePassenger,
+  useCheckInPassenger,
+  useUndoCheckInPassenger,
 } from "@workspace/api-client-react";
 import type { Reservation, Passenger } from "@workspace/api-client-react";
 import { SeatMapPicker } from "@/components/SeatMapPicker";
@@ -37,7 +39,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Search, MoreHorizontal, Eye, DollarSign, QrCode, CheckCircle, XCircle,
   CalendarCheck, Clock, Users, Tag, Pencil, Trash2, UserPlus, TrendingDown,
-  Download, Printer,
+  Download, Printer, LogIn, RotateCcw,
 } from "lucide-react";
 import QRCodeLib from "qrcode";
 
@@ -157,6 +159,7 @@ function ReservationPassengersTab({ reservationId }: { reservationId: string }) 
   const [addOpen, setAddOpen] = useState(false);
   const [editingPassenger, setEditingPassenger] = useState<Passenger | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const { data: passengers, refetch } = useListPassengers(reservationId, {
     query: { queryKey: ["passengers", reservationId] },
@@ -164,6 +167,8 @@ function ReservationPassengersTab({ reservationId }: { reservationId: string }) 
   const createPassenger = useCreatePassenger();
   const updatePassenger = useUpdatePassenger();
   const deletePassenger = useDeletePassenger();
+  const checkInPassenger = useCheckInPassenger();
+  const undoCheckInPassenger = useUndoCheckInPassenger();
 
   const handleAdd = async (fd: FormData, ageCategory: string) => {
     await createPassenger.mutateAsync({
@@ -203,12 +208,42 @@ function ReservationPassengersTab({ reservationId }: { reservationId: string }) 
     setDeleteId(null);
   };
 
+  const handleCheckIn = async (passengerId: string) => {
+    try {
+      await checkInPassenger.mutateAsync({ reservationId, id: passengerId });
+      await refetch();
+      toast({ title: "Passageiro embarcado", description: "Check-in registrado com sucesso." });
+    } catch {
+      toast({ title: "Erro ao fazer check-in", variant: "destructive" });
+    }
+  };
+
+  const handleUndoCheckIn = async (passengerId: string) => {
+    try {
+      await undoCheckInPassenger.mutateAsync({ reservationId, id: passengerId });
+      await refetch();
+      toast({ title: "Check-in desfeito" });
+    } catch {
+      toast({ title: "Erro ao desfazer check-in", variant: "destructive" });
+    }
+  };
+
   const list = (passengers ?? []) as Passenger[];
+  const checkedInCount = list.filter(p => p.checkedInAt).length;
 
   return (
     <div className="space-y-4 py-2">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{list.length} passageiro(s) cadastrado(s)</p>
+        <div>
+          <p className="text-sm text-muted-foreground">{list.length} passageiro(s) cadastrado(s)</p>
+          {list.length > 0 && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              <span className="text-green-600 font-medium">{checkedInCount} embarcado(s)</span>
+              {" · "}
+              <span>{list.length - checkedInCount} pendente(s)</span>
+            </p>
+          )}
+        </div>
         <Button size="sm" variant="outline" onClick={() => setAddOpen(true)}>
           <UserPlus className="w-4 h-4 mr-1.5" /> Adicionar Passageiro
         </Button>
@@ -222,40 +257,70 @@ function ReservationPassengersTab({ reservationId }: { reservationId: string }) 
         </div>
       ) : (
         <div className="space-y-2">
-          {list.map(p => (
-            <div key={p.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border">
-              <div>
-                <p className="font-medium text-sm">{p.name}</p>
-                <div className="flex gap-3 mt-0.5 flex-wrap">
-                  {p.cpf && <span className="text-xs text-muted-foreground">CPF: {p.cpf}</span>}
-                  {p.seatNumber && <span className="text-xs text-muted-foreground">Assento: {p.seatNumber}</span>}
-                  {p.birthDate && <span className="text-xs text-muted-foreground">{new Date(p.birthDate as string).toLocaleDateString("pt-BR")}</span>}
-                  <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-                    p.ageCategory === "adult" ? "bg-blue-100 text-blue-700" :
-                    p.ageCategory === "child" ? "bg-amber-100 text-amber-700" :
-                    p.ageCategory === "senior" ? "bg-purple-100 text-purple-700" :
-                    "bg-pink-100 text-pink-700"
-                  }`}>
-                    {AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory}
-                  </span>
+          {list.map(p => {
+            const isCheckedIn = !!p.checkedInAt;
+            return (
+              <div key={p.id} className={`flex items-center justify-between p-3 rounded-lg border ${isCheckedIn ? "bg-green-50 border-green-200" : "bg-muted/50"}`}>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-medium text-sm">{p.name}</p>
+                    {isCheckedIn && (
+                      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold border border-green-200">
+                        <CheckCircle className="w-3 h-3" />
+                        Embarcado {new Date(p.checkedInAt as string).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-3 mt-0.5 flex-wrap">
+                    {p.cpf && <span className="text-xs text-muted-foreground">CPF: {p.cpf}</span>}
+                    {p.seatNumber && <span className="text-xs text-muted-foreground">Assento: {p.seatNumber}</span>}
+                    {p.birthDate && <span className="text-xs text-muted-foreground">{new Date(p.birthDate as string).toLocaleDateString("pt-BR")}</span>}
+                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                      p.ageCategory === "adult" ? "bg-blue-100 text-blue-700" :
+                      p.ageCategory === "child" ? "bg-amber-100 text-amber-700" :
+                      p.ageCategory === "senior" ? "bg-purple-100 text-purple-700" :
+                      "bg-pink-100 text-pink-700"
+                    }`}>
+                      {AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-1 shrink-0 ml-2">
+                  {isCheckedIn ? (
+                    <Button
+                      size="sm" variant="outline" className="h-7 text-xs text-muted-foreground gap-1"
+                      onClick={() => handleUndoCheckIn(p.id)}
+                      disabled={undoCheckInPassenger.isPending}
+                      title="Desfazer check-in"
+                    >
+                      <RotateCcw className="w-3 h-3" /> Desfazer
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm" variant="outline" className="h-7 text-xs text-green-700 border-green-200 hover:bg-green-50 gap-1"
+                      onClick={() => handleCheckIn(p.id)}
+                      disabled={checkInPassenger.isPending}
+                      title="Fazer check-in"
+                    >
+                      <LogIn className="w-3 h-3" /> Embarcar
+                    </Button>
+                  )}
+                  <Button
+                    size="icon" variant="ghost" className="h-7 w-7"
+                    onClick={() => setEditingPassenger(p)}
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => setDeleteId(p.id)}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
                 </div>
               </div>
-              <div className="flex gap-1 shrink-0">
-                <Button
-                  size="icon" variant="ghost" className="h-7 w-7"
-                  onClick={() => setEditingPassenger(p)}
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </Button>
-                <Button
-                  size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={() => setDeleteId(p.id)}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

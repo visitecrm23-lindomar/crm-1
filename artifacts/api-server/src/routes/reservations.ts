@@ -60,6 +60,7 @@ function formatPassenger(p: typeof passengersTable.$inferSelect) {
     id: p.id, reservationId: p.reservationId, name: p.name, cpf: p.cpf, rg: p.rg,
     birthDate: p.birthDate?.toISOString() ?? null, ageCategory: p.ageCategory,
     seatNumber: p.seatNumber, isChildUnder7: p.isChildUnder7,
+    checkedInAt: p.checkedInAt?.toISOString() ?? null,
   };
 }
 
@@ -499,6 +500,48 @@ router.delete("/reservations/:reservationId/passengers/:id", async (req, res): P
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Error deleting passenger");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/reservations/:reservationId/passengers/:id/check-in", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    const reservation = await requireReservationAccess(me, req.params.reservationId, res);
+    if (!reservation) return;
+    await db.update(passengersTable)
+      .set({ checkedInAt: new Date() })
+      .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)));
+    const [passenger] = await db.select().from(passengersTable)
+      .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)))
+      .limit(1);
+    if (!passenger) { res.status(404).json({ error: "Not found" }); return; }
+    res.json(formatPassenger(passenger));
+  } catch (err) {
+    req.log.error({ err }, "Error checking in passenger");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/reservations/:reservationId/passengers/:id/check-in", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    const reservation = await requireReservationAccess(me, req.params.reservationId, res);
+    if (!reservation) return;
+    await db.update(passengersTable)
+      .set({ checkedInAt: null })
+      .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)));
+    const [passenger] = await db.select().from(passengersTable)
+      .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)))
+      .limit(1);
+    if (!passenger) { res.status(404).json({ error: "Not found" }); return; }
+    res.json(formatPassenger(passenger));
+  } catch (err) {
+    req.log.error({ err }, "Error undoing passenger check-in");
     res.status(500).json({ error: "Internal server error" });
   }
 });

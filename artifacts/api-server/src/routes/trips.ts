@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { tripsTable, reservationsTable } from "@workspace/db";
+import { tripsTable, reservationsTable, passengersTable, clientsTable } from "@workspace/db";
 import { eq, and, ilike, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -324,6 +324,79 @@ router.get("/trips/:id/seat-map", async (req, res): Promise<void> => {
     });
   } catch (err) {
     req.log.error({ err }, "Error fetching seat map");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const [trip] = await db.select().from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!trip) { res.status(404).json({ error: "Trip not found" }); return; }
+
+    const reservations = await db.select().from(reservationsTable)
+      .where(and(
+        eq(reservationsTable.tripId, trip.id),
+        eq(reservationsTable.tenantId, me.tenantId),
+        sql`${reservationsTable.status} NOT IN ('cancelled', 'refunded')`,
+      ));
+
+    if (reservations.length === 0) {
+      res.json({
+        tripId: trip.id,
+        tripName: trip.name,
+        departureDate: trip.departureDate.toISOString(),
+        totalPassengers: 0,
+        checkedIn: 0,
+        passengers: [],
+      });
+      return;
+    }
+
+    const reservationIds = reservations.map(r => r.id);
+    const clientIds = [...new Set(reservations.map(r => r.clientId))];
+
+    const [passengers, clients] = await Promise.all([
+      db.select().from(passengersTable).where(inArray(passengersTable.reservationId, reservationIds)),
+      db.select({ id: clientsTable.id, name: clientsTable.name }).from(clientsTable).where(inArray(clientsTable.id, clientIds)),
+    ]);
+
+    const reservationMap = new Map(reservations.map(r => [r.id, r]));
+    const clientMap = new Map(clients.map(c => [c.id, c]));
+
+    const boardingPassengers = passengers.map(p => {
+      const reservation = reservationMap.get(p.reservationId);
+      const client = reservation ? clientMap.get(reservation.clientId) : undefined;
+      return {
+        id: p.id,
+        reservationId: p.reservationId,
+        voucherCode: reservation?.voucherCode ?? "",
+        clientName: client?.name ?? "—",
+        name: p.name,
+        cpf: p.cpf ?? null,
+        seatNumber: p.seatNumber ?? null,
+        ageCategory: p.ageCategory,
+        checkedInAt: p.checkedInAt?.toISOString() ?? null,
+      };
+    });
+
+    const checkedIn = boardingPassengers.filter(p => p.checkedInAt !== null).length;
+
+    res.json({
+      tripId: trip.id,
+      tripName: trip.name,
+      departureDate: trip.departureDate.toISOString(),
+      totalPassengers: boardingPassengers.length,
+      checkedIn,
+      passengers: boardingPassengers,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error fetching boarding panel");
     res.status(500).json({ error: "Internal server error" });
   }
 });

@@ -27,6 +27,7 @@ import type {
   AutomationAction,
   AutomationLog,
   BoardingLocation,
+  BoardingPanel,
   Campaign,
   CartItem,
   ChartDataPoint,
@@ -3794,6 +3795,94 @@ export function useGetTripSeatMap<
 }
 
 /**
+ * @summary Get boarding panel for a trip (all passengers across all reservations)
+ */
+export const getGetTripBoardingPanelUrl = (id: string) => {
+  return `/api/trips/${id}/boarding-panel`;
+};
+
+export const getTripBoardingPanel = async (
+  id: string,
+  options?: RequestInit,
+): Promise<BoardingPanel> => {
+  return customFetch<BoardingPanel>(getGetTripBoardingPanelUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetTripBoardingPanelQueryKey = (id: string) => {
+  return [`/api/trips/${id}/boarding-panel`] as const;
+};
+
+export const getGetTripBoardingPanelQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTripBoardingPanel>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTripBoardingPanel>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetTripBoardingPanelQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTripBoardingPanel>>
+  > = ({ signal }) => getTripBoardingPanel(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTripBoardingPanel>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTripBoardingPanelQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTripBoardingPanel>>
+>;
+export type GetTripBoardingPanelQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get boarding panel for a trip (all passengers across all reservations)
+ */
+
+export function useGetTripBoardingPanel<
+  TData = Awaited<ReturnType<typeof getTripBoardingPanel>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTripBoardingPanel>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTripBoardingPanelQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Get reservation aggregate statistics
  */
 export const getGetReservationStatsUrl = () => {
@@ -4658,6 +4747,179 @@ export const useDeletePassenger = <
   TContext
 > => {
   return useMutation(getDeletePassengerMutationOptions(options));
+};
+
+/**
+ * @summary Check in a single passenger
+ */
+export const getCheckInPassengerUrl = (reservationId: string, id: string) => {
+  return `/api/reservations/${reservationId}/passengers/${id}/check-in`;
+};
+
+export const checkInPassenger = async (
+  reservationId: string,
+  id: string,
+  options?: RequestInit,
+): Promise<Passenger> => {
+  return customFetch<Passenger>(getCheckInPassengerUrl(reservationId, id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getCheckInPassengerMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkInPassenger>>,
+    TError,
+    { reservationId: string; id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof checkInPassenger>>,
+  TError,
+  { reservationId: string; id: string },
+  TContext
+> => {
+  const mutationKey = ["checkInPassenger"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof checkInPassenger>>,
+    { reservationId: string; id: string }
+  > = (props) => {
+    const { reservationId, id } = props ?? {};
+
+    return checkInPassenger(reservationId, id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CheckInPassengerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof checkInPassenger>>
+>;
+
+export type CheckInPassengerMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Check in a single passenger
+ */
+export const useCheckInPassenger = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkInPassenger>>,
+    TError,
+    { reservationId: string; id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof checkInPassenger>>,
+  TError,
+  { reservationId: string; id: string },
+  TContext
+> => {
+  return useMutation(getCheckInPassengerMutationOptions(options));
+};
+
+/**
+ * @summary Undo check-in for a passenger
+ */
+export const getUndoCheckInPassengerUrl = (
+  reservationId: string,
+  id: string,
+) => {
+  return `/api/reservations/${reservationId}/passengers/${id}/check-in`;
+};
+
+export const undoCheckInPassenger = async (
+  reservationId: string,
+  id: string,
+  options?: RequestInit,
+): Promise<Passenger> => {
+  return customFetch<Passenger>(getUndoCheckInPassengerUrl(reservationId, id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getUndoCheckInPassengerMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof undoCheckInPassenger>>,
+    TError,
+    { reservationId: string; id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof undoCheckInPassenger>>,
+  TError,
+  { reservationId: string; id: string },
+  TContext
+> => {
+  const mutationKey = ["undoCheckInPassenger"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof undoCheckInPassenger>>,
+    { reservationId: string; id: string }
+  > = (props) => {
+    const { reservationId, id } = props ?? {};
+
+    return undoCheckInPassenger(reservationId, id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UndoCheckInPassengerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof undoCheckInPassenger>>
+>;
+
+export type UndoCheckInPassengerMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Undo check-in for a passenger
+ */
+export const useUndoCheckInPassenger = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof undoCheckInPassenger>>,
+    TError,
+    { reservationId: string; id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof undoCheckInPassenger>>,
+  TError,
+  { reservationId: string; id: string },
+  TContext
+> => {
+  return useMutation(getUndoCheckInPassengerMutationOptions(options));
 };
 
 /**

@@ -541,6 +541,32 @@ export interface Passenger {
   /** @nullable */
   seatNumber?: string | null;
   isChildUnder7: boolean;
+  /** @nullable */
+  checkedInAt?: string | null;
+}
+
+export interface BoardingPassenger {
+  id: string;
+  reservationId: string;
+  voucherCode: string;
+  clientName: string;
+  name: string;
+  /** @nullable */
+  cpf?: string | null;
+  /** @nullable */
+  seatNumber?: string | null;
+  ageCategory: string;
+  /** @nullable */
+  checkedInAt?: string | null;
+}
+
+export interface BoardingPanel {
+  tripId: string;
+  tripName: string;
+  departureDate: string;
+  totalPassengers: number;
+  checkedIn: number;
+  passengers: BoardingPassenger[];
 }
 
 export interface CreatePassengerBody {
