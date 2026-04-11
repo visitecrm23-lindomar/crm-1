@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, loyaltyMembersTable, loyaltyTransactionsTable, referralsTable } from "@workspace/db";
+import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable } from "@workspace/db";
 import { eq, and, sql, desc, inArray, or, ilike } from "drizzle-orm";
 import { generateId, generateVoucherCode } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -277,6 +277,88 @@ router.post("/reservations", async (req, res): Promise<void> => {
       .limit(1);
     if (!client) { res.status(400).json({ error: "Client not found or not in tenant" }); return; }
 
+    const baseValue = parsed.data.totalValue;
+    const now = new Date();
+
+    let serverCouponId: string | null = null;
+    let serverCouponCode: string | null = null;
+    let serverCouponAmount = 0;
+
+    if (parsed.data.discountCouponCode) {
+      const stores = await db.select({ id: storesTable.id })
+        .from(storesTable).where(eq(storesTable.tenantId, me.tenantId));
+      const storeIds = stores.map(s => s.id);
+      const [coupon] = storeIds.length
+        ? await db.select().from(storeCouponsTable).where(and(
+            inArray(storeCouponsTable.storeId, storeIds),
+            eq(storeCouponsTable.code, parsed.data.discountCouponCode),
+            eq(storeCouponsTable.isActive, true),
+          )).limit(1)
+        : [];
+      if (!coupon || coupon.startsAt > now || coupon.expiresAt < now ||
+          (coupon.usageLimit != null && coupon.usageCount >= coupon.usageLimit) ||
+          (coupon.minPurchaseAmount != null && baseValue < Number(coupon.minPurchaseAmount))) {
+        res.status(400).json({ error: "Cupom inválido ou expirado" }); return;
+      }
+      serverCouponId = coupon.id;
+      serverCouponCode = coupon.code;
+      if (coupon.type === "percentage") {
+        serverCouponAmount = baseValue * (Number(coupon.value) / 100);
+      } else {
+        serverCouponAmount = Number(coupon.value);
+      }
+      if (coupon.maxDiscountAmount != null) serverCouponAmount = Math.min(serverCouponAmount, Number(coupon.maxDiscountAmount));
+      serverCouponAmount = Math.round(Math.min(serverCouponAmount, baseValue) * 100) / 100;
+    }
+
+    let serverLoyaltyMemberId: string | null = null;
+    let serverLoyaltyPoints = 0;
+    let serverLoyaltyAmount = 0;
+
+    if (parsed.data.discountLoyaltyPoints && parsed.data.discountLoyaltyPoints > 0) {
+      const [member] = await db.select().from(loyaltyMembersTable)
+        .where(and(eq(loyaltyMembersTable.tenantId, me.tenantId), eq(loyaltyMembersTable.clientId, parsed.data.clientId)))
+        .limit(1);
+      if (!member) {
+        res.status(400).json({ error: "Cliente não é membro do programa de fidelidade" }); return;
+      }
+      const [program] = await db.select().from(loyaltyProgramsTable).where(eq(loyaltyProgramsTable.id, member.programId)).limit(1);
+      if (!program) {
+        res.status(400).json({ error: "Programa de fidelidade não encontrado" }); return;
+      }
+      const requestedPoints = parsed.data.discountLoyaltyPoints;
+      const minRedeemPoints = program.minRedeemPoints ?? 1;
+      if (requestedPoints < minRedeemPoints) {
+        res.status(400).json({ error: `Mínimo de ${minRedeemPoints} pontos para resgate` }); return;
+      }
+      if ((member.availablePoints ?? 0) < requestedPoints) {
+        res.status(400).json({ error: "Pontos de fidelidade insuficientes" }); return;
+      }
+      serverLoyaltyMemberId = member.id;
+      serverLoyaltyPoints = requestedPoints;
+      serverLoyaltyAmount = Math.round(Math.min(requestedPoints * Number(program.realPerPoint ?? "0"), baseValue) * 100) / 100;
+    }
+
+    let serverReferralCode: string | null = null;
+    let serverReferralAmount = 0;
+
+    if (parsed.data.discountReferralCode) {
+      const [referral] = await db.select().from(referralsTable)
+        .where(and(
+          eq(referralsTable.tenantId, me.tenantId),
+          eq(referralsTable.code, parsed.data.discountReferralCode),
+          eq(referralsTable.status, "pending"),
+        )).limit(1);
+      if (!referral) {
+        res.status(400).json({ error: "Código de indicação inválido ou já utilizado" }); return;
+      }
+      serverReferralCode = referral.code;
+      serverReferralAmount = Math.round(Math.min(Number(referral.bonusAmount ?? "0"), baseValue) * 100) / 100;
+    }
+
+    const serverDiscountTotal = Math.round((serverCouponAmount + serverLoyaltyAmount + serverReferralAmount) * 100) / 100;
+    const serverFinalTotal = Math.round(Math.max(0, baseValue - serverDiscountTotal) * 100) / 100;
+
     const id = generateId();
     const voucherCode = generateVoucherCode();
     const seatsCount = parsed.data.seats.length;
@@ -296,6 +378,19 @@ router.post("/reservations", async (req, res): Promise<void> => {
         return { error: "Não há vagas suficientes nesta viagem", status: 400 };
       }
 
+      if (serverCouponId) {
+        const couponLock = await tx.execute(
+          sql`SELECT id, usage_count, usage_limit FROM store_coupons WHERE id = ${serverCouponId} FOR UPDATE`
+        );
+        const couponRow = (couponLock as unknown as { rows: Array<{ id: string; usage_count: number; usage_limit: number | null }> }).rows[0];
+        if (!couponRow) return { error: "Cupom não encontrado", status: 400 };
+        if (couponRow.usage_limit != null && couponRow.usage_count >= couponRow.usage_limit) {
+          return { error: "Limite de uso do cupom atingido", status: 400 };
+        }
+        await tx.update(storeCouponsTable).set({ usageCount: sql`usage_count + 1` })
+          .where(eq(storeCouponsTable.id, serverCouponId));
+      }
+
       await tx.insert(reservationsTable).values({
         id,
         tenantId: me.tenantId,
@@ -305,9 +400,9 @@ router.post("/reservations", async (req, res): Promise<void> => {
         tripType: parsed.data.tripType ?? null,
         packageType: parsed.data.packageType ?? null,
         hasInsurance: parsed.data.hasInsurance ?? false,
-        totalValue: String(parsed.data.totalValue),
+        totalValue: String(serverFinalTotal),
         paidValue: String(parsed.data.paidValue ?? 0),
-        balance: String(Math.max(0, parsed.data.totalValue - (parsed.data.paidValue ?? 0))),
+        balance: String(Math.max(0, serverFinalTotal - (parsed.data.paidValue ?? 0))),
         paymentMethod: parsed.data.paymentMethod ?? null,
         installments: parsed.data.installments ?? 1,
         commissionPercentage: parsed.data.commissionPercentage ? String(parsed.data.commissionPercentage) : null,
@@ -316,13 +411,13 @@ router.post("/reservations", async (req, res): Promise<void> => {
         qrCode: `QR-${voucherCode}`,
         notes: parsed.data.notes ?? null,
         createdById: me.id,
-        discountCouponCode: parsed.data.discountCouponCode ?? null,
-        discountCouponAmount: parsed.data.discountCouponAmount != null ? String(parsed.data.discountCouponAmount) : null,
-        discountLoyaltyPoints: parsed.data.discountLoyaltyPoints ?? null,
-        discountLoyaltyAmount: parsed.data.discountLoyaltyAmount != null ? String(parsed.data.discountLoyaltyAmount) : null,
-        discountReferralCode: parsed.data.discountReferralCode ?? null,
-        discountReferralAmount: parsed.data.discountReferralAmount != null ? String(parsed.data.discountReferralAmount) : null,
-        discountTotal: parsed.data.discountTotal != null ? String(parsed.data.discountTotal) : null,
+        discountCouponCode: serverCouponCode,
+        discountCouponAmount: serverCouponAmount > 0 ? String(serverCouponAmount) : null,
+        discountLoyaltyPoints: serverLoyaltyPoints > 0 ? serverLoyaltyPoints : null,
+        discountLoyaltyAmount: serverLoyaltyAmount > 0 ? String(serverLoyaltyAmount) : null,
+        discountReferralCode: serverReferralCode,
+        discountReferralAmount: serverReferralAmount > 0 ? String(serverReferralAmount) : null,
+        discountTotal: serverDiscountTotal > 0 ? String(serverDiscountTotal) : null,
       });
 
       await tx.update(tripsTable).set({
@@ -330,40 +425,29 @@ router.post("/reservations", async (req, res): Promise<void> => {
         availableSeats: sql`available_seats - ${seatsCount}`,
       }).where(and(eq(tripsTable.id, parsed.data.tripId), eq(tripsTable.tenantId, me.tenantId)));
 
-      if (parsed.data.discountLoyaltyPoints && parsed.data.discountLoyaltyPoints > 0) {
-        const [member] = await tx.select().from(loyaltyMembersTable)
-          .where(and(
-            eq(loyaltyMembersTable.tenantId, me.tenantId),
-            eq(loyaltyMembersTable.clientId, parsed.data.clientId),
-          )).limit(1);
-        if (member) {
-          const pointsToDeduct = parsed.data.discountLoyaltyPoints;
-          if ((member.availablePoints ?? 0) < pointsToDeduct) {
-            return { error: "Pontos de fidelidade insuficientes", status: 400 };
-          }
-          await tx.update(loyaltyMembersTable).set({
-            availablePoints: sql`available_points - ${pointsToDeduct}`,
-          }).where(eq(loyaltyMembersTable.id, member.id));
-          await tx.insert(loyaltyTransactionsTable).values({
-            id: generateId(),
-            tenantId: me.tenantId,
-            memberId: member.id,
-            type: "redeem",
-            points: -pointsToDeduct,
-            description: `Resgate de pontos na reserva ${voucherCode}`,
-            referenceId: id,
-            referenceType: "reservation",
-          });
-        }
+      if (serverLoyaltyMemberId && serverLoyaltyPoints > 0) {
+        await tx.update(loyaltyMembersTable).set({
+          availablePoints: sql`available_points - ${serverLoyaltyPoints}`,
+        }).where(eq(loyaltyMembersTable.id, serverLoyaltyMemberId));
+        await tx.insert(loyaltyTransactionsTable).values({
+          id: generateId(),
+          tenantId: me.tenantId,
+          memberId: serverLoyaltyMemberId,
+          type: "redeem",
+          points: -serverLoyaltyPoints,
+          description: `Resgate de pontos na reserva ${voucherCode}`,
+          referenceId: id,
+          referenceType: "reservation",
+        });
       }
 
-      if (parsed.data.discountReferralCode) {
+      if (serverReferralCode) {
         await tx.update(referralsTable).set({
           status: "converted",
           convertedAt: new Date(),
         }).where(and(
           eq(referralsTable.tenantId, me.tenantId),
-          eq(referralsTable.code, parsed.data.discountReferralCode),
+          eq(referralsTable.code, serverReferralCode),
           eq(referralsTable.status, "pending"),
         ));
       }
