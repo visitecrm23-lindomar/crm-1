@@ -32,6 +32,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,7 +44,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Search, MoreHorizontal, Eye, DollarSign, QrCode, CheckCircle, XCircle,
   CalendarCheck, Clock, Users, Tag, Pencil, Trash2, UserPlus, TrendingDown,
-  Download, Printer, LogIn, RotateCcw,
+  Download, Printer, LogIn, RotateCcw, Check, ChevronsUpDown,
 } from "lucide-react";
 import QRCodeLib from "qrcode";
 
@@ -882,7 +884,7 @@ function WizardStepIndicator({ step }: { step: number }) {
   );
 }
 
-function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onClose: () => void; onSuccess: () => void }) {
+function NewReservationWizard({ open, onClose, onSuccess, initialTripId }: { open: boolean; onClose: () => void; onSuccess: () => void; initialTripId?: string }) {
   const { data: tripsData } = useListTrips({ limit: 200, status: "published" });
   const { data: clientsData } = useListClients({ limit: 300 });
   const { data: boardingRaw } = useListBoardingLocations();
@@ -892,13 +894,13 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
 
   const [step, setStep] = useState(1);
 
-  const [selectedTripId, setSelectedTripId] = useState("");
+  const [selectedTripId, setSelectedTripId] = useState(initialTripId ?? "");
   const [selectedClientId, setSelectedClientId] = useState("");
   const [boardingLocationId, setBoardingLocationId] = useState("");
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [manualSeats, setManualSeats] = useState("");
-  const [tripSearch, setTripSearch] = useState("");
-  const [clientSearch, setClientSearch] = useState("");
+  const [tripComboOpen, setTripComboOpen] = useState(false);
+  const [clientComboOpen, setClientComboOpen] = useState(false);
 
   const [totalValue, setTotalValue] = useState<number>(0);
   const [paidValue, setPaidValue] = useState<number>(0);
@@ -935,17 +937,8 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
     query: { queryKey: ["wizard-loyalty", selectedClientId], enabled: !!selectedClientId, retry: false },
   });
 
-  const filteredTrips = useMemo(() =>
-    (tripsData?.data ?? []).filter(t => t.name.toLowerCase().includes(tripSearch.toLowerCase())),
-    [tripsData, tripSearch]
-  );
-  const filteredClients = useMemo(() =>
-    (clientsData?.data ?? []).filter(c =>
-      c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
-      c.whatsapp.includes(clientSearch)
-    ),
-    [clientsData, clientSearch]
-  );
+  const allTrips = tripsData?.data ?? [];
+  const allClients = clientsData?.data ?? [];
 
   const selectedTrip = tripsData?.data.find(t => t.id === selectedTripId);
   const selectedClient = clientsData?.data.find(c => c.id === selectedClientId);
@@ -977,7 +970,7 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
   const resetWizard = () => {
     setStep(1);
     setSelectedTripId(""); setSelectedClientId(""); setBoardingLocationId("");
-    setSelectedSeats([]); setManualSeats(""); setTripSearch(""); setClientSearch("");
+    setSelectedSeats([]); setManualSeats(""); setTripComboOpen(false); setClientComboOpen(false);
     setTotalValue(0); setPaidValue(0); setPaymentMethod("pix"); setInstallments(1);
     setHasInsurance(false); setNotes(""); setCreateError(null);
     setCouponCode(""); setCouponApplied(null); setCouponError(null);
@@ -1092,30 +1085,98 @@ function NewReservationWizard({ open, onClose, onSuccess }: { open: boolean; onC
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Viagem *</label>
-                <Input placeholder="Buscar viagem..." value={tripSearch} onChange={e => setTripSearch(e.target.value)} />
-                <Select onValueChange={v => { setSelectedTripId(v); setSelectedSeats([]); setManualSeats(""); }} value={selectedTripId}>
-                  <SelectTrigger><SelectValue placeholder="Selecionar viagem..." /></SelectTrigger>
-                  <SelectContent className="max-h-56">
-                    {filteredTrips.map(t => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.name}{t.availableSeats != null ? ` — ${t.availableSeats} vagas` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={tripComboOpen} onOpenChange={setTripComboOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={tripComboOpen}
+                      className="w-full justify-between font-normal"
+                    >
+                      <span className="truncate">
+                        {selectedTripId
+                          ? (allTrips.find(t => t.id === selectedTripId)?.name ?? "Viagem não encontrada")
+                          : "Selecionar viagem..."}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Buscar viagem..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhuma viagem encontrada.</CommandEmpty>
+                        <CommandGroup>
+                          {allTrips.map(t => (
+                            <CommandItem
+                              key={t.id}
+                              value={`${t.name} ${t.availableSeats ?? ""}`}
+                              onSelect={() => {
+                                setSelectedTripId(t.id);
+                                setSelectedSeats([]);
+                                setManualSeats("");
+                                setTripComboOpen(false);
+                              }}
+                            >
+                              <Check className={`mr-2 h-4 w-4 ${selectedTripId === t.id ? "opacity-100" : "opacity-0"}`} />
+                              <span className="flex-1">{t.name}</span>
+                              {t.availableSeats != null && (
+                                <span className="text-xs text-muted-foreground ml-2">{t.availableSeats} vagas</span>
+                              )}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">Cliente *</label>
-                <Input placeholder="Buscar cliente..." value={clientSearch} onChange={e => setClientSearch(e.target.value)} />
-                <Select onValueChange={setSelectedClientId} value={selectedClientId}>
-                  <SelectTrigger><SelectValue placeholder="Selecionar cliente..." /></SelectTrigger>
-                  <SelectContent className="max-h-56">
-                    {filteredClients.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.name} — {c.whatsapp}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={clientComboOpen} onOpenChange={setClientComboOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={clientComboOpen}
+                      className="w-full justify-between font-normal"
+                    >
+                      <span className="truncate">
+                        {selectedClientId
+                          ? (allClients.find(c => c.id === selectedClientId)
+                              ? `${allClients.find(c => c.id === selectedClientId)!.name}`
+                              : "Cliente não encontrado")
+                          : "Selecionar cliente..."}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Buscar por nome ou whatsapp..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                        <CommandGroup>
+                          {allClients.map(c => (
+                            <CommandItem
+                              key={c.id}
+                              value={`${c.name} ${c.whatsapp}`}
+                              onSelect={() => {
+                                setSelectedClientId(c.id);
+                                setClientComboOpen(false);
+                              }}
+                            >
+                              <Check className={`mr-2 h-4 w-4 ${selectedClientId === c.id ? "opacity-100" : "opacity-0"}`} />
+                              <span className="flex-1">{c.name}</span>
+                              <span className="text-xs text-muted-foreground ml-2">{c.whatsapp}</span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
 
@@ -1516,6 +1577,19 @@ export default function Reservations() {
   const [paymentRes, setPaymentRes] = useState<Reservation | null>(null);
   const [voucherRes, setVoucherRes] = useState<Reservation | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [initialTripId, setInitialTripId] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tripId = params.get("tripId") ?? undefined;
+    const openNew = params.get("new") === "true";
+    if (openNew || tripId) {
+      setInitialTripId(tripId);
+      setIsCreateOpen(true);
+      history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
+
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
   const [confirmCheckinRes, setConfirmCheckinRes] = useState<Reservation | null>(null);
 
@@ -1808,8 +1882,9 @@ export default function Reservations() {
       />
       <NewReservationWizard
         open={isCreateOpen}
-        onClose={() => setIsCreateOpen(false)}
-        onSuccess={() => { refetch(); refetchStats(); }}
+        onClose={() => { setIsCreateOpen(false); setInitialTripId(undefined); }}
+        onSuccess={() => { refetch(); refetchStats(); setInitialTripId(undefined); }}
+        initialTripId={initialTripId}
       />
       {editId && (
         <EditReservationModal
