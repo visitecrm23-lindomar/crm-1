@@ -115,15 +115,22 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onDelet
         </div>
       )}
 
-      <div className="flex items-center justify-between pt-2 border-t mt-1">
-        <div>
-          <p className="text-xs text-muted-foreground">Valor do negócio</p>
-          <p className="text-sm font-bold text-primary">{formatCurrency(dealValue)}</p>
+      <div className="pt-2 border-t mt-1">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs text-muted-foreground">Valor do negócio</p>
+            <p className="text-sm font-bold text-primary">{formatCurrency(dealValue)}</p>
+          </div>
+          {hasOutstanding && (
+            <Badge variant="destructive" className="text-xs">
+              Deve {formatCurrency(outstanding)}
+            </Badge>
+          )}
         </div>
-        {hasOutstanding && (
-          <Badge variant="destructive" className="text-xs">
-            Deve {formatCurrency(outstanding)}
-          </Badge>
+        {(client?.totalSpent ?? 0) > 0 && (
+          <p className="text-xs text-green-600 font-medium mt-1">
+            Pago: {formatCurrency(client!.totalSpent)}
+          </p>
         )}
       </div>
     </div>

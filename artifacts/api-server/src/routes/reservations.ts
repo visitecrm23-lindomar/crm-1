@@ -1,13 +1,53 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable } from "@workspace/db";
-import { eq, and, sql, desc, inArray, or, ilike } from "drizzle-orm";
+import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, dealsTable, pipelineStagesTable } from "@workspace/db";
+import { eq, and, sql, desc, asc, inArray, or, ilike } from "drizzle-orm";
 import { generateId, generateVoucherCode } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { CreateReservationBody, UpdateReservationBody, CreatePassengerBody, UpdatePassengerBody } from "@workspace/api-zod";
 import { z } from "zod/v4";
 
 const router = Router();
+
+async function syncClientDeal(clientId: string, tenantId: string, tripId: string, totalValue: number, ownerId: string): Promise<void> {
+  const [client] = await db.select({ name: clientsTable.name })
+    .from(clientsTable).where(and(eq(clientsTable.id, clientId), eq(clientsTable.tenantId, tenantId))).limit(1);
+  const [trip] = await db.select({ name: tripsTable.name })
+    .from(tripsTable).where(and(eq(tripsTable.id, tripId), eq(tripsTable.tenantId, tenantId))).limit(1);
+
+  const clientName = client?.name ?? "Cliente";
+  const tripName = trip?.name ?? "Viagem";
+  const title = `${clientName} — ${tripName}`;
+
+  const [existingDeal] = await db.select({ id: dealsTable.id })
+    .from(dealsTable)
+    .where(and(eq(dealsTable.clientId, clientId), eq(dealsTable.tenantId, tenantId), eq(dealsTable.status, "open")))
+    .orderBy(desc(dealsTable.createdAt))
+    .limit(1);
+
+  if (existingDeal) {
+    await db.update(dealsTable).set({ value: String(totalValue), tripId, title })
+      .where(and(eq(dealsTable.id, existingDeal.id), eq(dealsTable.tenantId, tenantId)));
+  } else {
+    const [firstStage] = await db.select({ id: pipelineStagesTable.id })
+      .from(pipelineStagesTable)
+      .where(eq(pipelineStagesTable.tenantId, tenantId))
+      .orderBy(asc(pipelineStagesTable.order))
+      .limit(1);
+    if (!firstStage) return;
+    await db.insert(dealsTable).values({
+      id: generateId(),
+      tenantId,
+      clientId,
+      stageId: firstStage.id,
+      tripId,
+      title,
+      value: String(totalValue),
+      status: "open",
+      ownerId,
+    });
+  }
+}
 
 async function formatReservation(r: typeof reservationsTable.$inferSelect) {
   const [trip] = await db.select().from(tripsTable).where(eq(tripsTable.id, r.tripId)).limit(1);
@@ -498,6 +538,9 @@ router.post("/reservations", async (req, res): Promise<void> => {
       .where(and(eq(reservationsTable.id, id), eq(reservationsTable.tenantId, me.tenantId)))
       .limit(1);
     if (!reservation) { res.status(500).json({ error: "Failed to create reservation" }); return; }
+    if (reservation.clientId) {
+      await syncClientDeal(reservation.clientId, me.tenantId, reservation.tripId, Number(reservation.totalValue), me.id);
+    }
     const formatted = await formatReservation(reservation);
     res.status(201).json(formatted);
   } catch (err) {
@@ -597,6 +640,9 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
     });
 
     if (!reservation) { res.status(404).json({ error: "Not found" }); return; }
+    if (parsed.data.totalValue != null && existing.clientId) {
+      await syncClientDeal(existing.clientId, me.tenantId, existing.tripId, parsed.data.totalValue, me.id);
+    }
     const formatted = await formatReservation(reservation);
     res.json(formatted);
   } catch (err) {
