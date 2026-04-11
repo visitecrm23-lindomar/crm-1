@@ -957,6 +957,12 @@ function NewReservationWizard({ open, onClose, onSuccess, initialTripId }: { ope
     }
   }, [selectedTripFull, effectiveSeats.length]);
 
+  useEffect(() => {
+    if (open) {
+      setSelectedTripId(initialTripId ?? "");
+    }
+  }, [open, initialTripId]);
+
   // Mirror backend sequential cap: coupon → loyalty → referral, each capped to remaining
   const uiRemaining0 = totalValue;
   const uiCouponApplied = Math.round(Math.min(couponApplied?.amount ?? 0, uiRemaining0) * 100) / 100;
@@ -1144,9 +1150,10 @@ function NewReservationWizard({ open, onClose, onSuccess, initialTripId }: { ope
                     >
                       <span className="truncate">
                         {selectedClientId
-                          ? (allClients.find(c => c.id === selectedClientId)
-                              ? `${allClients.find(c => c.id === selectedClientId)!.name}`
-                              : "Cliente não encontrado")
+                          ? (() => {
+                              const cl = allClients.find(c => c.id === selectedClientId);
+                              return cl ? `${cl.name} — ${cl.whatsapp}` : "Cliente não encontrado";
+                            })()
                           : "Selecionar cliente..."}
                       </span>
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
