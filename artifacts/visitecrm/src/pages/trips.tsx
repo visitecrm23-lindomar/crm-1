@@ -1987,7 +1987,7 @@ const AGE_CATEGORY_LABELS: Record<string, string> = {
   adult: "Adulto",
   child: "Criança",
   senior: "Sênior",
-  baby: "Bebê",
+  baby: "Isento",
 };
 
 function escapeHtml(str: string): string {
@@ -1999,6 +1999,13 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#39;");
 }
 
+function formatCpf(cpf: string | null | undefined): string {
+  if (!cpf) return "—";
+  const digits = cpf.replace(/\D/g, "");
+  if (digits.length !== 11) return cpf;
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+}
+
 export function PassengersList({ tripId }: { tripId: string }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -2007,6 +2014,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const [boardingStatusFilter, setBoardingStatusFilter] = useState("all");
   const [isSyncing, setIsSyncing] = useState(false);
 
+  const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
   const { data: panel, isLoading, refetch } = useGetTripBoardingPanel(tripId, {
     query: { queryKey: ["boarding-panel-antt", tripId] },
   });
@@ -2071,7 +2079,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
     const rows = filtered.map((p, i) => [
       String(i + 1),
       p.name,
-      p.cpf ?? "",
+      formatCpf(p.cpf),
       p.birthDate ? new Date(p.birthDate).toLocaleDateString("pt-BR") : "",
       AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory,
       p.seatNumber ?? "",
@@ -2090,12 +2098,18 @@ export function PassengersList({ tripId }: { tripId: string }) {
 
   const handlePdfPrint = () => {
     const tripName = escapeHtml(panel?.tripName ?? "");
-    const depDate = panel?.departureDate ? escapeHtml(formatDate(panel.departureDate)) : "";
+    const destination = trip ? escapeHtml(`${trip.destinationCity}, ${trip.destinationState}`) : "";
+    const depDate = panel?.departureDate
+      ? escapeHtml(format(parseISO(panel.departureDate), "dd/MM/yyyy", { locale: ptBR }))
+      : "";
+    const depTimeRaw = panel?.departureDate ? format(parseISO(panel.departureDate), "HH:mm") : "";
+    const depTime = depTimeRaw && depTimeRaw !== "00:00" ? escapeHtml(depTimeRaw) : "";
+    const depFull = depDate + (depTime ? ` às ${depTime}` : "");
     const emitidoEm = escapeHtml(new Date().toLocaleString("pt-BR"));
     const total = filtered.length;
     const rows = filtered.map((p, i) => {
       const nome = escapeHtml(p.name);
-      const cpf = escapeHtml(p.cpf ?? "—");
+      const cpf = escapeHtml(formatCpf(p.cpf));
       const nasc = p.birthDate ? escapeHtml(new Date(p.birthDate).toLocaleDateString("pt-BR")) : "—";
       const cat = escapeHtml(AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory);
       const poltrona = escapeHtml(p.seatNumber ?? "—");
@@ -2135,7 +2149,8 @@ export function PassengersList({ tripId }: { tripId: string }) {
 <p class="sub">Documento obrigatório conforme Resolução ANTT n° 4.777/2015 — Transporte rodoviário interestadual e internacional de passageiros</p>
 <div class="meta">
   <div class="meta-item"><label>Viagem: </label>${tripName}</div>
-  <div class="meta-item"><label>Data de Saída: </label>${depDate}</div>
+  ${destination ? `<div class="meta-item"><label>Destino: </label>${destination}</div>` : ""}
+  <div class="meta-item"><label>Data/Hora de Saída: </label>${depFull || depDate}</div>
   <div class="meta-item"><label>Total de Passageiros: </label>${total}</div>
   <div class="meta-item"><label>Emitido em: </label>${emitidoEm}</div>
 </div>
@@ -2181,7 +2196,11 @@ export function PassengersList({ tripId }: { tripId: string }) {
         <div className="flex-1">
           <h1 className="text-2xl font-bold tracking-tight">Lista de Passageiros — ANTT</h1>
           <p className="text-muted-foreground text-sm">
-            {panel?.tripName ?? "Carregando..."} · {panel?.departureDate ? formatDate(panel.departureDate) : ""}
+            {panel?.tripName ?? "Carregando..."}
+            {trip && <span> · <MapPin className="inline w-3 h-3 mr-0.5" />{trip.destinationCity}, {trip.destinationState}</span>}
+            {panel?.departureDate && (
+              <span> · <Calendar className="inline w-3 h-3 mr-0.5" />{format(parseISO(panel.departureDate), "dd/MM/yyyy", { locale: ptBR })}</span>
+            )}
             {panel && (
               <span className="ml-3 font-medium text-foreground">{checkedInCount}/{panel.totalPassengers} embarcados</span>
             )}
@@ -2240,7 +2259,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
                     <tr key={p.id} className={`border-b hover:bg-muted/30 ${embarcou ? "bg-green-50/40" : ""}`}>
                       <td className="p-3 text-muted-foreground text-xs">{i + 1}</td>
                       <td className="p-3 font-medium whitespace-nowrap">{p.name}</td>
-                      <td className="p-3 text-muted-foreground text-xs">{p.cpf ?? "—"}</td>
+                      <td className="p-3 text-muted-foreground text-xs">{formatCpf(p.cpf)}</td>
                       <td className="p-3 text-muted-foreground text-xs whitespace-nowrap">
                         {p.birthDate ? new Date(p.birthDate).toLocaleDateString("pt-BR") : "—"}
                       </td>
