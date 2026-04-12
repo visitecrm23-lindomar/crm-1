@@ -6,6 +6,7 @@ import {
   useListTrips, useCreateTrip, useGetTrip, useUpdateTrip, useDeleteTrip,
   useGetTripSeatMap, getGetTripSeatMapQueryKey, useGetDashboardUpcomingTrips, useListReservations, useListClients, useCreateReservation, useUpdateReservation, useCreateClient,
   useGetTripBoardingPanel, useCheckInPassenger, useUndoCheckInPassenger, useSyncTripPassengers,
+  listReservations,
 } from "@workspace/api-client-react";
 import type { Trip, Seat, BoardingPassenger } from "@workspace/api-client-react";
 import { Client360Modal } from "@/components/client360-modal";
@@ -1985,6 +1986,7 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
 
 export function PassengersList({ tripId }: { tripId: string }) {
   const [, navigate] = useLocation();
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [paymentFilter, setPaymentFilter] = useState("all");
@@ -1992,6 +1994,8 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const [boardingFilter, setBoardingFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isExporting, setIsExporting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
   const { data: reservations, isLoading } = useListReservations({
@@ -2070,9 +2074,151 @@ export function PassengersList({ tripId }: { tripId: string }) {
     return next;
   });
 
+  const syncMutation = useSyncTripPassengers();
+
   const STATUS_LABELS: Record<string, string> = { all: "Todos", confirmed: "Confirmado", pending: "Pendente", cancelled: "Cancelado", completed: "Concluído" };
   const PAYMENT_STATUS_LABELS: Record<string, string> = { all: "Todos os status de pag.", paid: "Pago", pending: "Pagamento Parcial", unpaid: "Não pago", overdue: "Em aberto" };
   const TYPE_LABELS: Record<string, string> = { all: "Todos os tipos", adult: "Adulto", child: "Criança (< 12)", senior: "Sênior (60+)" };
+
+  const handleSync = async () => {
+    setIsSyncing(true);
+    try {
+      const result = await syncMutation.mutateAsync({ id: tripId });
+      toast({ title: "Sincronização concluída", description: `${(result as any)?.synced ?? 0} passageiro(s) sincronizado(s).` });
+    } catch {
+      toast({ title: "Erro ao sincronizar", variant: "destructive" });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleCsvExport = async () => {
+    setIsExporting(true);
+    try {
+      const all = await listReservations({ tripId, limit: 10000, page: 1 });
+      const rows = (all.data ?? []).map((r, i) => {
+        const bdate = r.client.birthDate;
+        const age = bdate ? new Date().getFullYear() - new Date(bdate).getFullYear() : null;
+        const tipo = age === null ? "Adulto" : age < 12 ? "Criança" : age >= 60 ? "Sênior" : "Adulto";
+        const isPaid = r.balance <= 0 && r.paidValue > 0;
+        const isPending = r.balance > 0 && r.paidValue > 0;
+        const pgto = isPaid ? "Pago" : isPending ? "Parcial" : r.paidValue === 0 ? "Não pago" : "Pendente";
+        return [
+          String(i + 1),
+          r.client.name,
+          r.client.cpf ?? "",
+          bdate ? new Date(bdate).toLocaleDateString("pt-BR") : "",
+          tipo,
+          r.seats.join("; "),
+          r.voucherCode,
+          STATUS_LABELS[r.status] ?? r.status,
+          pgto,
+          String(r.totalValue),
+          String(r.balance),
+          r.checkedInAt ? "Sim" : "Não",
+        ];
+      });
+      const header = ["Nº", "Nome", "CPF", "Dt. Nascimento", "Tipo", "Assento(s)", "Voucher", "Status", "Pgto.", "Valor", "Saldo", "Check-in"];
+      const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `passageiros-antt-${trip?.name ?? tripId}-${format(new Date(), "yyyy-MM-dd")}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast({ title: "Erro ao exportar CSV", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handlePdfPrint = async () => {
+    setIsExporting(true);
+    try {
+      const all = await listReservations({ tripId, limit: 10000, page: 1 });
+      const rows = (all.data ?? []).map((r, i) => {
+        const bdate = r.client.birthDate;
+        const age = bdate ? new Date().getFullYear() - new Date(bdate).getFullYear() : null;
+        const tipo = age === null ? "Adulto" : age < 12 ? "Criança" : age >= 60 ? "Sênior" : "Adulto";
+        const nascimento = bdate ? new Date(bdate).toLocaleDateString("pt-BR") : "—";
+        return `<tr>
+          <td>${i + 1}</td>
+          <td>${r.client.name}</td>
+          <td>${r.client.cpf ?? "—"}</td>
+          <td>${nascimento}</td>
+          <td>${tipo}</td>
+          <td>${r.seats.join(", ") || "—"}</td>
+          <td>${r.voucherCode}</td>
+          <td>${r.checkedInAt ? "✓" : ""}</td>
+        </tr>`;
+      }).join("");
+      const tripName = trip?.name ?? "";
+      const depDate = trip ? formatDate(trip.departureDate) : "";
+      const totalPassengers = all.total ?? 0;
+      const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<title>Lista de Passageiros ANTT — ${tripName}</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11px; margin: 20px; color: #000; }
+  h1 { font-size: 16px; margin: 0 0 2px; }
+  .subtitle { font-size: 12px; margin: 0 0 12px; color: #444; }
+  .meta { display: flex; gap: 40px; margin-bottom: 12px; font-size: 11px; }
+  .meta span { font-weight: bold; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #333; color: #fff; text-align: left; padding: 5px 6px; font-size: 10px; }
+  td { padding: 4px 6px; border-bottom: 1px solid #ddd; }
+  tr:nth-child(even) td { background: #f5f5f5; }
+  .footer { margin-top: 20px; font-size: 10px; color: #666; border-top: 1px solid #ccc; padding-top: 8px; display: flex; justify-content: space-between; }
+  @media print { body { margin: 10mm; } }
+</style>
+</head>
+<body>
+<h1>MANIFESTO DE PASSAGEIROS — ANTT</h1>
+<p class="subtitle">Documento obrigatório para transporte rodoviário de passageiros (ANTT)</p>
+<div class="meta">
+  <div>Viagem: <span>${tripName}</span></div>
+  <div>Data de Saída: <span>${depDate}</span></div>
+  <div>Total de Passageiros: <span>${totalPassengers}</span></div>
+  <div>Emitido em: <span>${new Date().toLocaleString("pt-BR")}</span></div>
+</div>
+<table>
+  <thead>
+    <tr>
+      <th>Nº</th>
+      <th>Nome Completo</th>
+      <th>CPF</th>
+      <th>Dt. Nascimento</th>
+      <th>Tipo</th>
+      <th>Assento(s)</th>
+      <th>Voucher</th>
+      <th>Check-in</th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>
+<div class="footer">
+  <span>VisiteCRM — Sistema de Gestão para Agências de Turismo</span>
+  <span>Página 1</span>
+</div>
+</body>
+</html>`;
+      const win = window.open("", "_blank");
+      if (win) {
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => win.print(), 500);
+      }
+    } catch {
+      toast({ title: "Erro ao gerar PDF", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -2083,10 +2229,9 @@ export function PassengersList({ tripId }: { tripId: string }) {
           <p className="text-muted-foreground text-sm">{trip?.name} · {trip ? formatDate(trip.departureDate) : ""}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" size="sm"><Download className="w-4 h-4 mr-2" />CSV</Button>
-          <Button variant="outline" size="sm"><Download className="w-4 h-4 mr-2" />PDF</Button>
-          <Button variant="outline" size="sm"><Download className="w-4 h-4 mr-2" />Excel</Button>
-          <Button variant="outline" size="sm"><Send className="w-4 h-4 mr-2" />WhatsApp em Massa</Button>
+          <Button variant="outline" size="sm" onClick={handleCsvExport} disabled={isExporting}><Download className="w-4 h-4 mr-2" />CSV</Button>
+          <Button variant="outline" size="sm" onClick={handlePdfPrint} disabled={isExporting}><Download className="w-4 h-4 mr-2" />PDF / Imprimir</Button>
+          <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing}><RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? "animate-spin" : ""}`} />{isSyncing ? "Sincronizando..." : "Sincronizar"}</Button>
         </div>
       </div>
 

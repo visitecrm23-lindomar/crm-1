@@ -4709,6 +4709,8 @@ components:
           type: string
         checkedInAt:
           type: ["string", "null"]
+        birthDate:
+          type: ["string", "null"]
       required: [id, reservationId, voucherCode, clientName, name, ageCategory]
 
     BoardingPanel:

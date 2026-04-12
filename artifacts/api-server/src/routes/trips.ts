@@ -383,6 +383,7 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
         seatNumber: p.seatNumber ?? null,
         ageCategory: p.ageCategory,
         checkedInAt: p.checkedInAt?.toISOString() ?? null,
+        birthDate: p.birthDate?.toISOString() ?? null,
       };
     });
 

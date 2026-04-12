@@ -1243,6 +1243,7 @@ export const GetTripBoardingPanelResponse = zod.object({
       seatNumber: zod.string().nullish(),
       ageCategory: zod.string(),
       checkedInAt: zod.string().nullish(),
+      birthDate: zod.string().nullish(),
     }),
   ),
 });

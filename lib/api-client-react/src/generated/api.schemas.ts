@@ -658,6 +658,8 @@ export interface BoardingPassenger {
   ageCategory: string;
   /** @nullable */
   checkedInAt?: string | null;
+  /** @nullable */
+  birthDate?: string | null;
 }
 
 export interface BoardingPanel {
