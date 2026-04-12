@@ -476,12 +476,10 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                               <span className="text-xs text-muted-foreground">CPF: {r.client.cpf}</span>
                             )}
                           </div>
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-semibold">Valor do negócio: {formatCurrency(r.totalValue)}</p>
-                            {paidForReservation > 0 && (
-                              <p className="text-sm text-green-600 font-medium">Pago: {formatCurrency(paidForReservation)}</p>
-                            )}
-                          </div>
+                          <p className="text-sm font-semibold">Valor do negócio: {formatCurrency(r.totalValue)}</p>
+                          {paidForReservation > 0 && (
+                            <p className="text-sm text-green-600 font-medium">Pago: {formatCurrency(paidForReservation)}</p>
+                          )}
                         </div>
                       );
                     })}
