@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { clientsTable, notesTable, reservationsTable, tripsTable } from "@workspace/db";
+import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable } from "@workspace/db";
 import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -273,10 +273,30 @@ router.patch("/clients/:id", async (req, res): Promise<void> => {
     if (parsed.data.musicalPreferences !== undefined) updates.musicalPreferences = parsed.data.musicalPreferences ?? null;
     if (parsed.data.foodPreferences !== undefined) updates.foodPreferences = parsed.data.foodPreferences ?? null;
     if (parsed.data.internalRating !== undefined) updates.internalRating = parsed.data.internalRating ?? null;
-    if (parsed.data.companyNps !== undefined) updates.companyNps = parsed.data.companyNps ?? null;
+    if (parsed.data.companyNps !== undefined) {
+      updates.companyNps = parsed.data.companyNps ?? null;
+      if (parsed.data.companyNps != null) {
+        updates.npsScore = parsed.data.companyNps;
+      }
+    }
 
     await db.update(clientsTable).set(updates)
       .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)));
+
+    if (parsed.data.companyNps != null && parsed.data.companyNps !== existing.companyNps) {
+      const score = parsed.data.companyNps;
+      const classification = score >= 9 ? "promoter" : score >= 7 ? "passive" : "detractor";
+      const npsUserId = existing.userId ?? existing.id;
+      await db.insert(npsResponsesTable).values({
+        id: generateId(),
+        tenantId: me.tenantId,
+        userId: npsUserId,
+        score,
+        classification,
+        feedback: null,
+        orderId: null,
+      });
+    }
 
     const [client] = await db.select().from(clientsTable)
       .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)))

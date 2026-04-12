@@ -386,7 +386,7 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
               </Card>
               <Card className="p-3">
                 <p className="text-xs text-muted-foreground">NPS</p>
-                <p className="text-lg font-bold">{client.npsScore != null ? `${client.npsScore}/10` : "—"}</p>
+                <p className="text-lg font-bold">{(client.companyNps ?? client.npsScore) != null ? `${client.companyNps ?? client.npsScore}/10` : "—"}</p>
               </Card>
             </div>
 

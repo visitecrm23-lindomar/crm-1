@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { campaignsTable, npsResponsesTable, productsTable, ordersTable, orderItemsTable, clientsTable, reservationsTable } from "@workspace/db";
-import { eq, and, desc, inArray, avg, sql } from "drizzle-orm";
+import { eq, and, desc, inArray, avg, sql, or } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { z } from "zod";
@@ -239,8 +239,11 @@ router.get("/nps", async (req, res): Promise<void> => {
       .leftJoin(
         clientsTable,
         and(
-          eq(clientsTable.userId, npsResponsesTable.userId),
           eq(clientsTable.tenantId, npsResponsesTable.tenantId),
+          or(
+            eq(clientsTable.userId, npsResponsesTable.userId),
+            eq(clientsTable.id, npsResponsesTable.userId),
+          ),
         ),
       )
       .where(eq(npsResponsesTable.tenantId, me.tenantId))
