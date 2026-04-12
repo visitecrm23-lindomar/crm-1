@@ -2081,11 +2081,11 @@ export function PassengersList({ tripId }: { tripId: string }) {
       p.name,
       formatCpf(p.cpf),
       p.birthDate ? new Date(p.birthDate).toLocaleDateString("pt-BR") : "",
-      AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory,
       p.seatNumber ?? "",
+      AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory,
       p.checkedInAt ? "Sim" : "Não",
     ]);
-    const header = ["Nº", "Passageiro", "CPF", "Dt. Nascimento", "Categoria", "Poltrona", "Embarcou"];
+    const header = ["Nº", "Passageiro", "CPF", "Dt. Nascimento", "Poltrona", "Categoria", "Embarcou"];
     const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -2198,9 +2198,13 @@ export function PassengersList({ tripId }: { tripId: string }) {
           <p className="text-muted-foreground text-sm">
             {panel?.tripName ?? "Carregando..."}
             {trip && <span> · <MapPin className="inline w-3 h-3 mr-0.5" />{trip.destinationCity}, {trip.destinationState}</span>}
-            {panel?.departureDate && (
-              <span> · <Calendar className="inline w-3 h-3 mr-0.5" />{format(parseISO(panel.departureDate), "dd/MM/yyyy", { locale: ptBR })}</span>
-            )}
+            {panel?.departureDate && (() => {
+              const d = parseISO(panel.departureDate);
+              const timeStr = format(d, "HH:mm");
+              return (
+                <span> · <Calendar className="inline w-3 h-3 mr-0.5" />{format(d, "dd/MM/yyyy", { locale: ptBR })}{timeStr !== "00:00" ? ` às ${timeStr}` : ""}</span>
+              );
+            })()}
             {panel && (
               <span className="ml-3 font-medium text-foreground">{checkedInCount}/{panel.totalPassengers} embarcados</span>
             )}
