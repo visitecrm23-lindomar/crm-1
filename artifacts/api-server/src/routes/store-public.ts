@@ -11,6 +11,9 @@ import {
   tripsTable,
   clientsTable,
   usersTable,
+  dealsTable,
+  pipelineStagesTable,
+  referralsTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -154,6 +157,8 @@ router.get("/public/store/:slug/products", async (req, res): Promise<void> => {
       slug: storeProductsTable.slug,
       shortDescription: storeProductsTable.shortDescription,
       categoryId: storeProductsTable.categoryId,
+      tripId: storeProductsTable.tripId,
+      includes: storeProductsTable.includes,
       price: storeProductsTable.price,
       comparePrice: storeProductsTable.comparePrice,
       onSale: storeProductsTable.onSale,
@@ -173,6 +178,8 @@ router.get("/public/store/:slug/products", async (req, res): Promise<void> => {
       trackInventory: storeProductsTable.trackInventory,
       stockQuantity: storeProductsTable.stockQuantity,
       publishedAt: storeProductsTable.publishedAt,
+      tripAvailableSeats: tripsTable.availableSeats,
+      tripTotalCapacity: tripsTable.totalCapacity,
     };
     const whereClause = and(...conditions);
     const limit = limitStr ? Math.min(Number(limitStr) || 20, 200) : undefined;
@@ -181,8 +188,12 @@ router.get("/public/store/:slug/products", async (req, res): Promise<void> => {
     const [countResult, products] = await Promise.all([
       db.select({ count: sql<number>`COUNT(*)` }).from(storeProductsTable).where(whereClause),
       limit
-        ? db.select(selectFields).from(storeProductsTable).where(whereClause).orderBy(orderBy).limit(limit).offset(offset)
-        : db.select(selectFields).from(storeProductsTable).where(whereClause).orderBy(orderBy),
+        ? db.select(selectFields).from(storeProductsTable)
+            .leftJoin(tripsTable, eq(storeProductsTable.tripId, tripsTable.id))
+            .where(whereClause).orderBy(orderBy).limit(limit).offset(offset)
+        : db.select(selectFields).from(storeProductsTable)
+            .leftJoin(tripsTable, eq(storeProductsTable.tripId, tripsTable.id))
+            .where(whereClause).orderBy(orderBy),
     ]);
     res.json({ data: products, total: Number(countResult[0]?.count ?? 0), page, limit: limit ?? products.length });
   } catch (err) {
@@ -229,6 +240,7 @@ const CreateOrderBody = z.object({
     metadata: z.record(z.string(), z.unknown()).optional(),
   })).min(1),
   couponCode: z.string().optional(),
+  referralCode: z.string().optional(),
   paymentMethod: z.string().optional(),
   paymentProvider: z.string().optional(),
   notes: z.string().optional(),
@@ -361,9 +373,10 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
       }
     }
 
-    // Phase 2: Coupon handling (outside transaction)
+    // Phase 2: Coupon/referral handling (outside transaction)
     let discountAmount = 0;
     let couponId: string | undefined;
+    let appliedReferralCode: string | undefined;
     if (data.couponCode) {
       const [coupon] = await db.select().from(storeCouponsTable)
         .where(and(
@@ -386,6 +399,20 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
             couponId = coupon.id;
           }
         }
+      }
+    }
+    // Referral code gives 5% discount (only if no coupon discount already applied)
+    if (data.referralCode && !couponId) {
+      const [referral] = await db.select({ id: referralsTable.id, code: referralsTable.code })
+        .from(referralsTable)
+        .where(and(
+          eq(referralsTable.tenantId, store.tenantId),
+          eq(referralsTable.code, data.referralCode),
+          eq(referralsTable.status, "pending"),
+        )).limit(1);
+      if (referral) {
+        discountAmount = subtotal * 0.05;
+        appliedReferralCode = referral.code;
       }
     }
 
@@ -565,6 +592,17 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
             .where(eq(storeCouponsTable.id, couponId));
         }
 
+        // Mark referral as converted atomically
+        if (appliedReferralCode) {
+          await tx.update(referralsTable)
+            .set({ status: "converted", convertedAt: new Date() })
+            .where(and(
+              eq(referralsTable.tenantId, store.tenantId),
+              eq(referralsTable.code, appliedReferralCode),
+              eq(referralsTable.status, "pending"),
+            ));
+        }
+
         // Update store order count atomically
         await tx.update(storesTable)
           .set({ totalOrders: sql`total_orders + 1` })
@@ -599,6 +637,33 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
       .where(eq(storeOrdersTable.id, orderId)).limit(1);
     const items = await db.select().from(storeOrderItemsTable)
       .where(eq(storeOrderItemsTable.orderId, orderId));
+
+    // Auto-create CRM deal for store order (fire-and-forget, do not fail the response)
+    if (reservationClientId && reservationCreatedById) {
+      try {
+        const [firstStage] = await db.select({ id: pipelineStagesTable.id })
+          .from(pipelineStagesTable)
+          .where(eq(pipelineStagesTable.tenantId, store.tenantId))
+          .orderBy(asc(pipelineStagesTable.position))
+          .limit(1);
+        if (firstStage) {
+          const dealId = generateId();
+          await db.insert(dealsTable).values({
+            id: dealId,
+            tenantId: store.tenantId,
+            title: `Pedido Loja ${orderNumber}`,
+            clientId: reservationClientId,
+            ownerId: reservationCreatedById,
+            stageId: firstStage.id,
+            value: totalAmount.toFixed(2),
+            status: "open",
+          });
+        }
+      } catch (dealErr) {
+        req.log.warn({ dealErr }, "Could not auto-create CRM deal for store order");
+      }
+    }
+
     res.status(201).json({ ...order, items });
   } catch (err) {
     req.log.error({ err }, "Error creating store order");
@@ -670,6 +735,39 @@ router.get("/public/store/:slug/orders/:orderNumber", async (req, res): Promise<
     res.json({ ...order, items });
   } catch (err) {
     req.log.error({ err }, "Error getting public store order");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/public/store/:slug/referral/validate", async (req, res): Promise<void> => {
+  try {
+    const store = await getActiveStore(req.params.slug);
+    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    const parsed = z.object({ code: z.string().min(1) }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    const [referral] = await db.select({
+      id: referralsTable.id,
+      code: referralsTable.code,
+      bonusAmount: referralsTable.bonusAmount,
+      status: referralsTable.status,
+    }).from(referralsTable)
+      .where(and(
+        eq(referralsTable.tenantId, store.tenantId),
+        eq(referralsTable.code, parsed.data.code),
+        eq(referralsTable.status, "pending"),
+      )).limit(1);
+    if (!referral) {
+      res.status(400).json({ valid: false, error: "Código de indicação inválido ou já utilizado" });
+      return;
+    }
+    res.json({
+      valid: true,
+      code: referral.code,
+      discountPercent: 5,
+      description: "Desconto de 5% por indicação",
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error validating referral code");
     res.status(500).json({ error: "Internal server error" });
   }
 });

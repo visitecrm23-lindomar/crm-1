@@ -163,6 +163,8 @@ export const publicStoreApi = {
       `/public/store/${slug}/reviews`,
       data
     ),
+  validateReferral: (slug: string, code: string) =>
+    publicReq<ReferralValidation>("POST", `/public/store/${slug}/referral/validate`, { code }),
 };
 
 export interface StoreSettings {
@@ -287,9 +289,11 @@ export interface StoreCategory {
 
 export interface StoreProduct {
   id: string;
-  storeId: string;
+  storeId?: string;
   categoryId?: string | null;
   tripId?: string | null;
+  tripAvailableSeats?: number | null;
+  tripTotalCapacity?: number | null;
   type: string;
   name: string;
   slug: string;
@@ -496,8 +500,17 @@ export interface CreateOrderInput {
     variantLabel?: string;
   }>;
   couponCode?: string;
+  referralCode?: string;
   paymentMethod?: string;
   notes?: string;
+}
+
+export interface ReferralValidation {
+  valid: boolean;
+  code?: string;
+  discountPercent?: number;
+  description?: string;
+  error?: string;
 }
 
 export interface CouponValidation {

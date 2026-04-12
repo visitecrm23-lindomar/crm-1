@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { publicStoreApi, PublicStore, CouponValidation } from "@/lib/storeApi";
+import { publicStoreApi, PublicStore, CouponValidation, ReferralValidation } from "@/lib/storeApi";
 import { useCart } from "@/contexts/CartContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -265,6 +265,7 @@ export default function VitrineCheckout({
     notes: "",
     paymentMethod: store.paymentMethods[0] ?? "pix",
     couponCode: "",
+    referralCode: "",
     cardNumber: "",
     cardName: "",
     cardExpiry: "",
@@ -274,12 +275,16 @@ export default function VitrineCheckout({
 
   const [couponResult, setCouponResult] = useState<CouponValidation | null>(null);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
+  const [referralResult, setReferralResult] = useState<ReferralValidation | null>(null);
+  const [validatingReferral, setValidatingReferral] = useState(false);
 
   function set(field: string, value: string) {
     setFormState((p) => ({ ...p, [field]: value }));
   }
 
-  const discount = couponResult?.valid ? Number(couponResult.discountAmount ?? 0) : 0;
+  const couponDiscount = couponResult?.valid ? Number(couponResult.discountAmount ?? 0) : 0;
+  const referralDiscount = referralResult?.valid && !couponResult?.valid ? total * 0.05 : 0;
+  const discount = couponDiscount + referralDiscount;
   const finalTotal = Math.max(0, total - discount);
 
   async function validateCoupon() {
@@ -298,6 +303,24 @@ export default function VitrineCheckout({
   function removeCoupon() {
     setCouponResult(null);
     setFormState((p) => ({ ...p, couponCode: "" }));
+  }
+
+  async function validateReferral() {
+    if (!form.referralCode) return;
+    setValidatingReferral(true);
+    try {
+      const res = await publicStoreApi.validateReferral(slug, form.referralCode);
+      setReferralResult(res);
+    } catch {
+      setReferralResult({ valid: false, error: "Código de indicação inválido" });
+    } finally {
+      setValidatingReferral(false);
+    }
+  }
+
+  function removeReferral() {
+    setReferralResult(null);
+    setFormState((p) => ({ ...p, referralCode: "" }));
   }
 
   function canGoNextFromDados() {
@@ -320,6 +343,7 @@ export default function VitrineCheckout({
           variantLabel: i.variantLabel,
         })),
         couponCode: couponResult?.valid ? form.couponCode : undefined,
+        referralCode: referralResult?.valid && !couponResult?.valid ? form.referralCode : undefined,
         paymentMethod: form.paymentMethod,
         notes: form.notes || undefined,
       });
@@ -411,10 +435,16 @@ export default function VitrineCheckout({
             <span>Subtotal</span>
             <span>R$ {total.toFixed(2)}</span>
           </div>
-          {discount > 0 && (
+          {couponDiscount > 0 && (
             <div className="flex justify-between text-sm text-green-600">
-              <span>Desconto ({couponResult?.code})</span>
-              <span>- R$ {discount.toFixed(2)}</span>
+              <span>Cupom ({couponResult?.code})</span>
+              <span>- R$ {couponDiscount.toFixed(2)}</span>
+            </div>
+          )}
+          {referralDiscount > 0 && (
+            <div className="flex justify-between text-sm text-green-600">
+              <span>Indicação ({referralResult?.code}) −5%</span>
+              <span>- R$ {referralDiscount.toFixed(2)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-lg border-t pt-2 mt-1">
@@ -596,6 +626,58 @@ export default function VitrineCheckout({
                       {couponResult && !couponResult.valid && (
                         <p className="text-xs text-red-500">{couponResult.error}</p>
                       )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <User className="w-4 h-4" /> Código de Indicação
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {referralResult?.valid ? (
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 border border-green-200">
+                      <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
+                      <div className="flex-1">
+                        <p className="font-mono font-bold text-green-700">{referralResult.code}</p>
+                        <p className="text-xs text-green-600">
+                          {couponResult?.valid
+                            ? "Desconto de indicação não aplicável junto com cupom"
+                            : "Desconto de 5% por indicação aplicado!"}
+                        </p>
+                      </div>
+                      <button onClick={removeReferral} className="text-green-600 hover:text-green-800">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <Input
+                          value={form.referralCode}
+                          onChange={(e) => set("referralCode", e.target.value.toUpperCase())}
+                          placeholder="Código de quem te indicou"
+                          className="font-mono uppercase"
+                        />
+                        <Button
+                          variant="outline"
+                          onClick={validateReferral}
+                          disabled={!form.referralCode || validatingReferral}
+                        >
+                          {validatingReferral ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            "Aplicar"
+                          )}
+                        </Button>
+                      </div>
+                      {referralResult && !referralResult.valid && (
+                        <p className="text-xs text-red-500">{referralResult.error}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">Se alguém te indicou, insira o código deles para ganhar 5% de desconto.</p>
                     </div>
                   )}
                 </CardContent>

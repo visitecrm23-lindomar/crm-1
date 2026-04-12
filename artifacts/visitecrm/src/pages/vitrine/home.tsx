@@ -12,6 +12,8 @@ import {
   Star,
   ChevronRight,
   ArrowRight,
+  MessageCircle,
+  Check,
 } from "lucide-react";
 
 function ProductCard({
@@ -19,11 +21,13 @@ function ProductCard({
   slug,
   primaryColor,
   accentColor,
+  whatsapp,
 }: {
   product: StoreProduct;
   slug: string;
   primaryColor: string;
   accentColor: string;
+  whatsapp?: string | null;
 }) {
   const [, navigate] = useLocation();
   const { addItem, openCart } = useCart();
@@ -31,14 +35,32 @@ function ProductCard({
   const displayPrice = product.salePrice ?? product.price;
   const hasDiscount = !!product.salePrice;
 
+  const availableSeats = product.tripAvailableSeats ?? null;
+  const totalCapacity = product.tripTotalCapacity ?? null;
+  const isLastSeats = availableSeats !== null && availableSeats > 0 && availableSeats <= 10;
+  const isSoldOut = availableSeats !== null && availableSeats <= 0;
+  const occupancyPct = totalCapacity && totalCapacity > 0 && availableSeats !== null
+    ? Math.round(((totalCapacity - availableSeats) / totalCapacity) * 100)
+    : null;
+
+  const inclusions = (product.includes ?? []).slice(0, 3);
+
   function handleAddToCart() {
+    if (isSoldOut) return;
     addItem({
       productId: product.id,
       productName: product.name,
       unitPrice: parseFloat(displayPrice),
-      image: product.images[0],
+      image: product.images?.[0],
     });
     openCart();
+  }
+
+  function handleWhatsApp() {
+    const wa = whatsapp?.replace(/\D/g, "");
+    if (!wa) return;
+    const text = encodeURIComponent(`Olá! Tenho interesse no pacote: ${product.name}`);
+    window.open(`https://wa.me/${wa}?text=${text}`, "_blank");
   }
 
   return (
@@ -47,7 +69,7 @@ function ProductCard({
         className="relative h-48 bg-gradient-to-br from-blue-400 to-blue-600 cursor-pointer overflow-hidden"
         onClick={() => navigate(`/loja/${slug}/produtos/${product.slug}`)}
       >
-        {product.images[0] ? (
+        {product.images?.[0] ? (
           <img
             src={product.images[0]}
             alt={product.name}
@@ -58,7 +80,17 @@ function ProductCard({
             <MapPin className="w-16 h-16 text-white" />
           </div>
         )}
-        {hasDiscount && (
+        {isSoldOut && (
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+            <span className="text-white font-bold text-sm bg-black/60 px-3 py-1 rounded-full">Esgotado</span>
+          </div>
+        )}
+        {isLastSeats && !isSoldOut && (
+          <div className="absolute top-2 left-2 px-2 py-1 rounded-full text-xs font-bold text-white bg-red-500 animate-pulse">
+            Últimas vagas!
+          </div>
+        )}
+        {hasDiscount && !isLastSeats && !isSoldOut && (
           <div
             className="absolute top-2 left-2 px-2 py-1 rounded-full text-xs font-bold text-white"
             style={{ backgroundColor: accentColor }}
@@ -83,12 +115,12 @@ function ProductCard({
           {product.name}
         </h3>
         {product.destination && (
-          <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
             <MapPin className="w-3 h-3" />
             {product.destination}
           </div>
         )}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
           {product.durationDays && (
             <span className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
@@ -105,7 +137,30 @@ function ProductCard({
             </span>
           )}
         </div>
-        <div className="flex items-center justify-between">
+        {inclusions.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {inclusions.map((inc, i) => (
+              <span key={i} className="inline-flex items-center gap-0.5 text-[10px] bg-green-50 text-green-700 border border-green-200 px-1.5 py-0.5 rounded-full">
+                <Check className="w-2.5 h-2.5" />{inc}
+              </span>
+            ))}
+          </div>
+        )}
+        {occupancyPct !== null && totalCapacity !== null && (
+          <div className="mb-2">
+            <div className="flex justify-between text-[10px] text-muted-foreground mb-0.5">
+              <span>{availableSeats} vaga{availableSeats !== 1 ? "s" : ""} disponível{availableSeats !== 1 ? "ais" : ""}</span>
+              <span>{occupancyPct}% ocupado</span>
+            </div>
+            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${occupancyPct >= 90 ? "bg-red-500" : occupancyPct >= 70 ? "bg-amber-500" : "bg-green-500"}`}
+                style={{ width: `${occupancyPct}%` }}
+              />
+            </div>
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-2">
           <div>
             {hasDiscount && (
               <div className="text-xs text-muted-foreground line-through">
@@ -116,14 +171,28 @@ function ProductCard({
               R$ {parseFloat(displayPrice).toFixed(2)}
             </div>
           </div>
-          <Button
-            size="sm"
-            onClick={handleAddToCart}
-            style={{ backgroundColor: primaryColor }}
-            className="text-white"
-          >
-            <ShoppingCart className="w-4 h-4" />
-          </Button>
+          <div className="flex gap-1">
+            {whatsapp && (
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-8 w-8 text-green-600 border-green-300 hover:bg-green-50"
+                onClick={handleWhatsApp}
+                title="Perguntar via WhatsApp"
+              >
+                <MessageCircle className="w-4 h-4" />
+              </Button>
+            )}
+            <Button
+              size="sm"
+              onClick={handleAddToCart}
+              disabled={isSoldOut}
+              style={!isSoldOut ? { backgroundColor: primaryColor } : undefined}
+              className={`text-white h-8 ${isSoldOut ? "bg-gray-300 cursor-not-allowed" : ""}`}
+            >
+              <ShoppingCart className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </div>
     </div>
@@ -264,6 +333,7 @@ export default function VitrineHome({
                     slug={slug}
                     primaryColor={store.primaryColor}
                     accentColor={store.accentColor}
+                    whatsapp={store.contactWhatsapp}
                   />
                 ))}
               </div>

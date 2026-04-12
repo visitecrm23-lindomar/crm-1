@@ -8,6 +8,7 @@ import {
   useGetTripBoardingPanel, useCheckInPassenger, useUndoCheckInPassenger, useSyncTripPassengers,
 } from "@workspace/api-client-react";
 import type { Trip, Seat, BoardingPassenger } from "@workspace/api-client-react";
+import { storeApi } from "@/lib/storeApi";
 import { Client360Modal } from "@/components/client360-modal";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -26,6 +27,7 @@ import {
   Plus, Search, MapPin, Calendar, Users, Bus, Edit, Trash2, Eye, ChevronsLeft, ChevronsRight,
   LayoutGrid, List, ChevronLeft, ChevronRight, ArrowLeft, Check, X, Download, Send, Copy,
   AlertCircle, DollarSign, ClipboardList, LogIn, RotateCcw, CheckCircle, UserRound, RefreshCw,
+  ShoppingBag,
 } from "lucide-react";
 import {
   format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay,
@@ -397,6 +399,7 @@ export function TripList() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [boardingTrip, setBoardingTrip] = useState<{ id: string; name: string } | null>(null);
+  const [publishingTrip, setPublishingTrip] = useState<Trip | null>(null);
   const [, navigate] = useLocation();
 
   const { data: tripsData, isLoading, refetch } = useListTrips({
@@ -600,6 +603,7 @@ export function TripList() {
                 <Link href={`/trips/${trip.id}/edit`}><Button size="icon" variant="ghost" className="h-8 w-8" title="Editar"><Edit className="w-4 h-4" /></Button></Link>
                 <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleDuplicate(trip)} title="Duplicar"><Copy className="w-4 h-4" /></Button>
                 <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => setDeletingId(trip.id)} title="Excluir"><Trash2 className="w-4 h-4" /></Button>
+                <Button size="icon" variant="ghost" className="h-8 w-8 text-primary" onClick={() => setPublishingTrip(trip)} title="Publicar na Loja"><ShoppingBag className="w-4 h-4" /></Button>
               </div>
             </div>
           ))}
@@ -637,13 +641,123 @@ export function TripList() {
           onClose={() => setBoardingTrip(null)}
         />
       )}
+      {publishingTrip && (
+        <PublishToStoreDialog
+          trip={publishingTrip}
+          open={!!publishingTrip}
+          onClose={() => setPublishingTrip(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boolean; onClose: () => void }) {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({
+    name: trip.name,
+    description: trip.description ?? "",
+    price: String(trip.priceAdult),
+    imageUrl: trip.coverImage ?? "",
+    category: trip.category ?? "",
+    destination: `${trip.destinationCity}, ${trip.destinationState}`,
+    type: trip.type,
+    includes: "",
+    whatsappContact: "",
+  });
+
+  function set(field: string, value: string) {
+    setForm((p) => ({ ...p, [field]: value }));
+  }
+
+  async function publish() {
+    setLoading(true);
+    try {
+      await storeApi.createProduct({
+        name: form.name,
+        description: form.description,
+        price: form.price,
+        thumbnail: form.imageUrl || undefined,
+        destination: form.destination || undefined,
+        type: form.type || undefined,
+        includes: form.includes ? form.includes.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
+        tripId: trip.id,
+        status: "active",
+      });
+      toast({ title: "Publicado na loja!", description: `${form.name} já está disponível na vitrine.` });
+      onClose();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao publicar";
+      toast({ title: "Erro", description: msg, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ShoppingBag className="w-5 h-5" /> Publicar na Loja
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 mt-2">
+          <div>
+            <Label>Nome do produto</Label>
+            <Input value={form.name} onChange={(e) => set("name", e.target.value)} />
+          </div>
+          <div>
+            <Label>Descrição</Label>
+            <Textarea value={form.description} onChange={(e) => set("description", e.target.value)} rows={3} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Preço (R$)</Label>
+              <Input type="number" min="0" step="0.01" value={form.price} onChange={(e) => set("price", e.target.value)} />
+            </div>
+            <div>
+              <Label>Categoria</Label>
+              <Input value={form.category} onChange={(e) => set("category", e.target.value)} placeholder="Praia, Serra..." />
+            </div>
+          </div>
+          <div>
+            <Label>Destino</Label>
+            <Input value={form.destination} onChange={(e) => set("destination", e.target.value)} />
+          </div>
+          <div>
+            <Label>Tipo</Label>
+            <Input value={form.type} onChange={(e) => set("type", e.target.value)} />
+          </div>
+          <div>
+            <Label>O que inclui (separado por vírgula)</Label>
+            <Input value={form.includes} onChange={(e) => set("includes", e.target.value)} placeholder="Ônibus, Hotel, Guia..." />
+          </div>
+          <div>
+            <Label>WhatsApp de contato</Label>
+            <Input value={form.whatsappContact} onChange={(e) => set("whatsappContact", e.target.value)} placeholder="5511999999999" />
+          </div>
+          <div>
+            <Label>URL da imagem</Label>
+            <Input value={form.imageUrl} onChange={(e) => set("imageUrl", e.target.value)} placeholder="https://..." />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
+            <Button onClick={publish} disabled={loading || !form.name || !form.price}>
+              {loading ? "Publicando..." : "Publicar na Loja"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 function TripCard({ trip, onDelete, onDuplicate, onBoarding, navigate }: { trip: Trip; onDelete: () => void; onDuplicate: () => void; onBoarding: () => void; navigate: (to: string) => void }) {
   const pct = trip.totalCapacity > 0 ? Math.round((trip.reservedSeats + trip.confirmedSeats) / trip.totalCapacity * 100) : 0;
   const statusInfo = STATUS_MAP[trip.status] ?? { label: trip.status, color: "bg-gray-100 text-gray-600" };
+  const [publishOpen, setPublishOpen] = useState(false);
   return (
     <div className="bg-card border rounded-xl overflow-hidden hover:shadow-md transition-shadow">
       <div className="relative h-36 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
@@ -685,8 +799,10 @@ function TripCard({ trip, onDelete, onDuplicate, onBoarding, navigate }: { trip:
             <Copy className="w-4 h-4" />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={onDelete} title="Excluir"><Trash2 className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => setPublishOpen(true)} title="Publicar na Loja"><ShoppingBag className="w-4 h-4" /></Button>
         </div>
       </div>
+      <PublishToStoreDialog trip={trip} open={publishOpen} onClose={() => setPublishOpen(false)} />
     </div>
   );
 }
