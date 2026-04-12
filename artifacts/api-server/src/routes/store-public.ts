@@ -178,10 +178,10 @@ router.get("/public/store/:slug/products", async (req, res): Promise<void> => {
       trackInventory: storeProductsTable.trackInventory,
       stockQuantity: storeProductsTable.stockQuantity,
       publishedAt: storeProductsTable.publishedAt,
-      tripAvailableSeats: tripsTable.availableSeats,
-      tripTotalCapacity: tripsTable.totalCapacity,
-      tripDepartureDate: tripsTable.departureDate,
-      tripInclusions: tripsTable.inclusions,
+      availableSeats: tripsTable.availableSeats,
+      totalCapacity: tripsTable.totalCapacity,
+      departureDate: tripsTable.departureDate,
+      inclusions: tripsTable.inclusions,
     };
     const whereClause = and(...conditions);
     const limit = limitStr ? Math.min(Number(limitStr) || 20, 200) : undefined;
@@ -257,10 +257,10 @@ router.get("/public/store/:slug/products/:productSlug", async (req, res): Promis
       order: storeProductsTable.order,
       createdAt: storeProductsTable.createdAt,
       updatedAt: storeProductsTable.updatedAt,
-      tripAvailableSeats: tripsTable.availableSeats,
-      tripTotalCapacity: tripsTable.totalCapacity,
-      tripDepartureDate: tripsTable.departureDate,
-      tripInclusions: tripsTable.inclusions,
+      availableSeats: tripsTable.availableSeats,
+      totalCapacity: tripsTable.totalCapacity,
+      departureDate: tripsTable.departureDate,
+      inclusions: tripsTable.inclusions,
     })
       .from(storeProductsTable)
       .leftJoin(tripsTable, eq(storeProductsTable.tripId, tripsTable.id))
@@ -704,9 +704,8 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
     const items = await db.select().from(storeOrderItemsTable)
       .where(eq(storeOrderItemsTable.orderId, orderId));
 
-    // Auto-create CRM deal for store order (fire-and-forget, do not fail the response).
-    // For immediate payment methods (credit_card, debit_card), set status = "won".
-    // For deferred methods (pix, boleto, transfer), set status = "open" — payment not yet confirmed.
+    // Auto-create CRM deal for store order as "won" (fire-and-forget, do not fail the response).
+    // A store order represents a completed customer action; deal is created as won immediately.
     if (reservationClientId && reservationCreatedById) {
       try {
         const [firstStage] = await db.select({ id: pipelineStagesTable.id })
@@ -715,7 +714,6 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
           .orderBy(asc(pipelineStagesTable.order))
           .limit(1);
         if (firstStage) {
-          const isImmediatePay = ["credit_card", "debit_card"].includes(data.paymentMethod ?? "");
           const dealId = generateId();
           await db.insert(dealsTable).values({
             id: dealId,
@@ -725,7 +723,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
             ownerId: reservationCreatedById,
             stageId: firstStage.id,
             value: totalAmount.toFixed(2),
-            status: isImmediatePay ? "won" : "open",
+            status: "won",
             ...(firstTripId && { tripId: firstTripId }),
             ...(firstReservationId && { reservationId: firstReservationId }),
           });

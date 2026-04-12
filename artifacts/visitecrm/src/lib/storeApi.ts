@@ -292,10 +292,10 @@ export interface StoreProduct {
   storeId?: string;
   categoryId?: string | null;
   tripId?: string | null;
-  tripAvailableSeats?: number | null;
-  tripTotalCapacity?: number | null;
-  tripDepartureDate?: string | null;
-  tripInclusions?: string[] | null;
+  availableSeats?: number | null;
+  totalCapacity?: number | null;
+  departureDate?: string | null;
+  inclusions?: string[] | null;
   type: string;
   name: string;
   slug: string;

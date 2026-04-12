@@ -33,17 +33,17 @@ function ProductCard({
   const hasDiscount = !!product.salePrice;
 
   const isStockOut = product.trackInventory && (product.stockQuantity ?? 0) <= 0;
-  const availableSeats = product.tripAvailableSeats ?? null;
-  const totalCapacity = product.tripTotalCapacity ?? null;
+  const availableSeats = product.availableSeats ?? null;
+  const totalCapacity = product.totalCapacity ?? null;
   const isTripSoldOut = availableSeats !== null && availableSeats <= 0;
   const isLastSeats = availableSeats !== null && availableSeats > 0 && availableSeats <= 10;
   const isOutOfStock = isStockOut || isTripSoldOut;
   const occupancyPct = totalCapacity && totalCapacity > 0 && availableSeats !== null
     ? Math.round(((totalCapacity - availableSeats) / totalCapacity) * 100)
     : null;
-  const displayDate = product.tripId ? (product.tripDepartureDate ?? product.startDate) : product.startDate;
-  const allInclusions = product.tripId && (product.tripInclusions ?? []).length > 0
-    ? (product.tripInclusions ?? [])
+  const displayDate = product.tripId ? (product.departureDate ?? product.startDate) : product.startDate;
+  const allInclusions = product.tripId && (product.inclusions ?? []).length > 0
+    ? (product.inclusions ?? [])
     : (product.includes ?? []);
   const inclusions = allInclusions.slice(0, 3);
   const inclusionsOverflow = allInclusions.length > 3 ? allInclusions.length - 3 : 0;
