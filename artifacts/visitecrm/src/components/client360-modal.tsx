@@ -375,8 +375,8 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
 
             <div className="grid grid-cols-3 gap-3 py-2">
               <Card className="p-3">
-                <p className="text-xs text-muted-foreground">Total Gasto</p>
-                <p className="text-lg font-bold">{formatCurrency(client.totalSpent)}</p>
+                <p className="text-xs text-muted-foreground">Valor Pago</p>
+                <p className="text-lg font-bold text-green-600">{formatCurrency(client.totalSpent)}</p>
               </Card>
               <Card className="p-3">
                 <p className="text-xs text-muted-foreground">Saldo Devedor</p>
@@ -452,6 +452,9 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                       };
                       const catInfo = ageCategoryLabel[ageCategory];
                       const firstSeat = r.seats?.[0] ?? null;
+                      const paidForReservation = (payments?.data ?? [])
+                        .filter(p => p.reservationId === r.id && p.status === "paid")
+                        .reduce((sum, p) => sum + Number(p.amount), 0);
                       return (
                         <div key={r.id} className="p-3 rounded-lg border space-y-1.5">
                           <div className="flex items-center justify-between">
@@ -473,7 +476,12 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                               <span className="text-xs text-muted-foreground">CPF: {r.client.cpf}</span>
                             )}
                           </div>
-                          <p className="text-sm font-semibold">{formatCurrency(r.totalValue)}</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-semibold">Valor do negócio: {formatCurrency(r.totalValue)}</p>
+                            {paidForReservation > 0 && (
+                              <p className="text-sm text-green-600 font-medium">Pago: {formatCurrency(paidForReservation)}</p>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -583,6 +591,19 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                 <ClientDocumentsTab clientId={id} />
               </TabsContent>
             </Tabs>
+
+            <div className="border-t pt-3 mt-2 flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Valor Pago:</span>
+                <span className="text-sm font-bold text-green-600">{formatCurrency(client.totalSpent)}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">A Pagar:</span>
+                <span className={`text-sm font-bold ${client.outstandingBalance > 0 ? "text-destructive" : "text-muted-foreground"}`}>
+                  {formatCurrency(client.outstandingBalance)}
+                </span>
+              </div>
+            </div>
           </>
         )}
       </DialogContent>
