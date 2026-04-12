@@ -337,7 +337,7 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
     } else if (!form.tripId || form.tripId === "none") {
       setForm(prev => ({ ...prev, ticketPrice: "" }));
     }
-  }, [form.tripId]);
+  }, [form.tripId, selectedTrip]);
 
   const ticketPrice = parseFloat(form.ticketPrice) || 0;
   const quantity = parseInt(form.quantity) || 1;
