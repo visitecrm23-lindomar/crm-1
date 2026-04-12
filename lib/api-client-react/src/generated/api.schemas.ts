@@ -834,6 +834,8 @@ export interface Deal {
   leadWhatsapp?: string | null;
   /** @nullable */
   tripId?: string | null;
+  /** @nullable */
+  reservationId?: string | null;
   ownerId: string;
   /** @nullable */
   expectedCloseDate?: string | null;
@@ -887,6 +889,8 @@ export interface UpdateDealBody {
   description?: string | null;
   /** @nullable */
   expectedCloseDate?: string | null;
+  /** @nullable */
+  reservationId?: string | null;
 }
 
 export interface Pipeline {

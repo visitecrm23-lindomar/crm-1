@@ -23,6 +23,8 @@ export interface Deal {
   leadWhatsapp?: string | null;
   /** @nullable */
   tripId?: string | null;
+  /** @nullable */
+  reservationId?: string | null;
   ownerId: string;
   /** @nullable */
   expectedCloseDate?: string | null;

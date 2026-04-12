@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useLocation } from "wouter";
 import {
   DndContext, closestCenter, DragOverlay, useSensor, useSensors, PointerSensor,
   type DragStartEvent, type DragEndEvent
@@ -19,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Search, Trash2, Phone, Calendar, MapPin, X, Pencil, UserPen, Eye } from "lucide-react";
+import { Plus, Search, Trash2, Phone, Calendar, MapPin, X, Pencil, UserPen, Eye, BookOpen, ExternalLink } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -38,10 +39,13 @@ interface ClientCardProps {
   onEditClient: (client: Client) => void;
   onView360: (clientId: string) => void;
   onDelete: (id: string) => void;
+  onCreateReservation: (deal: Deal) => void;
+  onViewReservation: (reservationId: string) => void;
+  isFinalStage: boolean;
   isDragging?: boolean;
 }
 
-function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView360, onDelete, isDragging }: ClientCardProps) {
+function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView360, onDelete, onCreateReservation, onViewReservation, isFinalStage, isDragging }: ClientCardProps) {
   const client = deal.clientId ? clientsById.get(deal.clientId) : undefined;
   const name = client?.name ?? deal.leadName ?? "Lead Desconhecido";
   const whatsapp = client?.whatsapp ?? deal.leadWhatsapp;
@@ -52,6 +56,7 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
   const hasOutstanding = outstanding > 0;
   const tripName = deal.tripId ? tripsById.get(deal.tripId) : undefined;
   const initials = name.charAt(0).toUpperCase();
+  const hasReservation = !!(deal as { reservationId?: string | null }).reservationId;
 
   return (
     <div className={`bg-card rounded-lg border p-3 shadow-sm group relative select-none ${isDragging ? "opacity-50 shadow-xl" : "hover:shadow-md"} transition-all`}>
@@ -70,7 +75,7 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
                 <Pencil className="w-3 h-3" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-[160px]">
+            <DropdownMenuContent align="end" className="min-w-[180px]">
               {client ? (
                 <>
                   <DropdownMenuItem onClick={() => onView360(client.id)}>
@@ -86,6 +91,12 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
                 <DropdownMenuItem disabled className="text-muted-foreground">
                   <UserPen className="w-3.5 h-3.5 mr-2" />
                   Sem cliente vinculado
+                </DropdownMenuItem>
+              )}
+              {hasReservation && (
+                <DropdownMenuItem onClick={() => onViewReservation((deal as { reservationId: string }).reservationId)}>
+                  <ExternalLink className="w-3.5 h-3.5 mr-2" />
+                  Ver Reserva
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>
@@ -140,16 +151,36 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
             Pago: {formatCurrency(client?.totalSpent ?? 0)}
           </p>
         )}
+        {isFinalStage && !hasReservation && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full mt-2 h-7 text-xs gap-1 border-green-300 text-green-700 hover:bg-green-50"
+            onClick={e => { e.stopPropagation(); onCreateReservation(deal); }}
+          >
+            <BookOpen className="w-3 h-3" />
+            Criar Reserva
+          </Button>
+        )}
+        {hasReservation && (
+          <button
+            className="w-full mt-2 text-xs text-blue-600 hover:underline flex items-center justify-center gap-1"
+            onClick={e => { e.stopPropagation(); onViewReservation((deal as { reservationId: string }).reservationId); }}
+          >
+            <ExternalLink className="w-3 h-3" />
+            Ver Reserva vinculada
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-function DraggableCard({ deal, clientsById, tripsById, onEditClient, onView360, onDelete }: Omit<ClientCardProps, "isDragging">) {
+function DraggableCard({ deal, clientsById, tripsById, onEditClient, onView360, onDelete, onCreateReservation, onViewReservation, isFinalStage }: Omit<ClientCardProps, "isDragging">) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: deal.id });
   return (
     <div ref={setNodeRef} {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing">
-      <ClientCardContent deal={deal} clientsById={clientsById} tripsById={tripsById} onEditClient={onEditClient} onView360={onView360} onDelete={onDelete} isDragging={isDragging} />
+      <ClientCardContent deal={deal} clientsById={clientsById} tripsById={tripsById} onEditClient={onEditClient} onView360={onView360} onDelete={onDelete} onCreateReservation={onCreateReservation} onViewReservation={onViewReservation} isFinalStage={isFinalStage} isDragging={isDragging} />
     </div>
   );
 }
@@ -167,6 +198,7 @@ function DroppableColumn({ stage, children }: { stage: PipelineStage; children: 
 }
 
 export default function Pipeline() {
+  const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [filterStageId, setFilterStageId] = useState("all");
   const [filterClassification, setFilterClassification] = useState("all");
@@ -183,6 +215,20 @@ export default function Pipeline() {
   const { data: tripsData } = useListTrips({ limit: 200 });
   const moveDeal = useMoveDeal();
   const deleteDeal = useDeleteDeal();
+
+  const handleCreateReservation = (deal: Deal) => {
+    const params = new URLSearchParams();
+    params.set("new", "true");
+    if (deal.clientId) params.set("clientId", deal.clientId);
+    if (deal.tripId) params.set("tripId", deal.tripId);
+    if (deal.value) params.set("amount", String(deal.value));
+    params.set("dealId", deal.id);
+    navigate(`/reservations?${params.toString()}`);
+  };
+
+  const handleViewReservation = (reservationId: string) => {
+    navigate(`/reservations?reservationId=${reservationId}`);
+  };
 
   const clientsById = useMemo(() => {
     const map = new Map<string, Client>();
@@ -372,6 +418,9 @@ export default function Pipeline() {
                         onEditClient={handleEditClient}
                         onView360={setClient360Id}
                         onDelete={handleDelete}
+                        onCreateReservation={handleCreateReservation}
+                        onViewReservation={handleViewReservation}
+                        isFinalStage={stage.isFinal}
                       />
                     ))}
                     {stageDeals.length === 0 && (
@@ -398,6 +447,9 @@ export default function Pipeline() {
                   onEditClient={() => {}}
                   onView360={() => {}}
                   onDelete={() => {}}
+                  onCreateReservation={() => {}}
+                  onViewReservation={() => {}}
+                  isFinalStage={false}
                 />
               </div>
             ) : null}

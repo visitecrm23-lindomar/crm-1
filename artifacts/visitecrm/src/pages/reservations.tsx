@@ -24,6 +24,7 @@ import {
   useDeletePassenger,
   useCheckInPassenger,
   useUndoCheckInPassenger,
+  useUpdateDeal,
 } from "@workspace/api-client-react";
 import type { Reservation, Passenger } from "@workspace/api-client-react";
 import { SeatMapPicker } from "@/components/SeatMapPicker";
@@ -912,25 +913,26 @@ function WizardStepIndicator({ step }: { step: number }) {
   );
 }
 
-function NewReservationWizard({ open, onClose, onSuccess, initialTripId }: { open: boolean; onClose: () => void; onSuccess: () => void; initialTripId?: string }) {
+function NewReservationWizard({ open, onClose, onSuccess, initialTripId, initialClientId, initialAmount, dealId }: { open: boolean; onClose: () => void; onSuccess: () => void; initialTripId?: string; initialClientId?: string; initialAmount?: number; dealId?: string }) {
   const { data: tripsData } = useListTrips({ limit: 200 });
   const { data: clientsData } = useListClients({ limit: 300 });
   const { data: boardingRaw } = useListBoardingLocations();
   const createReservation = useCreateReservation();
   const updateReservation = useUpdateReservation();
+  const updateDeal = useUpdateDeal();
   const { toast } = useToast();
 
   const [step, setStep] = useState(1);
 
   const [selectedTripId, setSelectedTripId] = useState(initialTripId ?? "");
-  const [selectedClientId, setSelectedClientId] = useState("");
+  const [selectedClientId, setSelectedClientId] = useState(initialClientId ?? "");
   const [boardingLocationId, setBoardingLocationId] = useState("");
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [manualSeats, setManualSeats] = useState("");
   const [tripComboOpen, setTripComboOpen] = useState(false);
   const [clientComboOpen, setClientComboOpen] = useState(false);
 
-  const [totalValue, setTotalValue] = useState<number>(0);
+  const [totalValue, setTotalValue] = useState<number>(initialAmount ?? 0);
   const [paidValue, setPaidValue] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState("pix");
   const [installments, setInstallments] = useState(1);
@@ -988,8 +990,10 @@ function NewReservationWizard({ open, onClose, onSuccess, initialTripId }: { ope
   useEffect(() => {
     if (open) {
       setSelectedTripId(initialTripId ?? "");
+      setSelectedClientId(initialClientId ?? "");
+      setTotalValue(initialAmount ?? 0);
     }
-  }, [open, initialTripId]);
+  }, [open, initialTripId, initialClientId, initialAmount]);
 
   // Mirror backend sequential cap: coupon → loyalty → referral, each capped to remaining
   const uiRemaining0 = totalValue;
@@ -1092,6 +1096,13 @@ function NewReservationWizard({ open, onClose, onSuccess, initialTripId }: { ope
           });
         } catch {
           toast({ title: "Reserva criada", description: "Não foi possível salvar o ponto de embarque. Edite a reserva para ajustar.", variant: "default" });
+        }
+      }
+      if (dealId && created?.id) {
+        try {
+          await updateDeal.mutateAsync({ id: dealId, data: { reservationId: created.id } });
+        } catch {
+          toast({ title: "Reserva criada", description: "Não foi possível vincular ao deal. Ligue manualmente se necessário.", variant: "default" });
         }
       }
       resetWizard();
@@ -1613,17 +1624,36 @@ export default function Reservations() {
   const [voucherRes, setVoucherRes] = useState<Reservation | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [initialTripId, setInitialTripId] = useState<string | undefined>(undefined);
+  const [initialClientId, setInitialClientId] = useState<string | undefined>(undefined);
+  const [initialAmount, setInitialAmount] = useState<number | undefined>(undefined);
+  const [initialDealId, setInitialDealId] = useState<string | undefined>(undefined);
   const [client360Id, setClient360Id] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tripId = params.get("tripId") ?? undefined;
+    const clientId = params.get("clientId") ?? undefined;
+    const amount = params.get("amount") ? parseFloat(params.get("amount")!) : undefined;
+    const dealId = params.get("dealId") ?? undefined;
+    const reservationIdParam = params.get("reservationId") ?? undefined;
     const openNew = params.get("new") === "true";
-    if (openNew || tripId) {
+    if (openNew || tripId || clientId) {
       setInitialTripId(tripId);
+      setInitialClientId(clientId);
+      setInitialAmount(amount);
+      setInitialDealId(dealId);
       setIsCreateOpen(true);
       params.delete("tripId");
+      params.delete("clientId");
+      params.delete("amount");
+      params.delete("dealId");
       params.delete("new");
+      const remaining = params.toString();
+      history.replaceState(null, "", window.location.pathname + (remaining ? `?${remaining}` : ""));
+    }
+    if (reservationIdParam) {
+      setDetailId(reservationIdParam);
+      params.delete("reservationId");
       const remaining = params.toString();
       history.replaceState(null, "", window.location.pathname + (remaining ? `?${remaining}` : ""));
     }
@@ -1930,9 +1960,12 @@ export default function Reservations() {
       />
       <NewReservationWizard
         open={isCreateOpen}
-        onClose={() => { setIsCreateOpen(false); setInitialTripId(undefined); }}
-        onSuccess={() => { refetch(); refetchStats(); setInitialTripId(undefined); }}
+        onClose={() => { setIsCreateOpen(false); setInitialTripId(undefined); setInitialClientId(undefined); setInitialAmount(undefined); setInitialDealId(undefined); }}
+        onSuccess={() => { refetch(); refetchStats(); setInitialTripId(undefined); setInitialClientId(undefined); setInitialAmount(undefined); setInitialDealId(undefined); }}
         initialTripId={initialTripId}
+        initialClientId={initialClientId}
+        initialAmount={initialAmount}
+        dealId={initialDealId}
       />
       {editId && (
         <EditReservationModal

@@ -1926,6 +1926,7 @@ export const ListDealsResponseItem = zod.object({
   leadEmail: zod.string().nullish(),
   leadWhatsapp: zod.string().nullish(),
   tripId: zod.string().nullish(),
+  reservationId: zod.string().nullish(),
   ownerId: zod.string(),
   expectedCloseDate: zod.string().nullish(),
   status: zod.string(),
@@ -1973,6 +1974,7 @@ export const GetDealResponse = zod.object({
   leadEmail: zod.string().nullish(),
   leadWhatsapp: zod.string().nullish(),
   tripId: zod.string().nullish(),
+  reservationId: zod.string().nullish(),
   ownerId: zod.string(),
   expectedCloseDate: zod.string().nullish(),
   status: zod.string(),
@@ -2000,6 +2002,7 @@ export const UpdateDealBody = zod.object({
   lostReason: zod.string().nullish(),
   description: zod.string().nullish(),
   expectedCloseDate: zod.string().nullish(),
+  reservationId: zod.string().nullish(),
 });
 
 export const UpdateDealResponse = zod.object({
@@ -2013,6 +2016,7 @@ export const UpdateDealResponse = zod.object({
   leadEmail: zod.string().nullish(),
   leadWhatsapp: zod.string().nullish(),
   tripId: zod.string().nullish(),
+  reservationId: zod.string().nullish(),
   ownerId: zod.string(),
   expectedCloseDate: zod.string().nullish(),
   status: zod.string(),
@@ -2058,6 +2062,7 @@ export const MoveDealResponse = zod.object({
   leadEmail: zod.string().nullish(),
   leadWhatsapp: zod.string().nullish(),
   tripId: zod.string().nullish(),
+  reservationId: zod.string().nullish(),
   ownerId: zod.string(),
   expectedCloseDate: zod.string().nullish(),
   status: zod.string(),

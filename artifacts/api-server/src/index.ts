@@ -190,6 +190,9 @@ async function runMigrations() {
       ALTER TABLE notes ADD COLUMN IF NOT EXISTS type text NOT NULL DEFAULT 'note';
       ALTER TABLE notes ADD COLUMN IF NOT EXISTS metadata text;
     `);
+    await client.query(`
+      ALTER TABLE deals ADD COLUMN IF NOT EXISTS reservation_id text;
+    `);
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");

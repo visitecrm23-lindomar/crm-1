@@ -54,6 +54,7 @@ export const dealsTable = pgTable("deals", {
   closedAt: timestamp("closed_at", { withTimezone: true }),
   status: text("status").notNull().default("open"),
   lostReason: text("lost_reason"),
+  reservationId: text("reservation_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

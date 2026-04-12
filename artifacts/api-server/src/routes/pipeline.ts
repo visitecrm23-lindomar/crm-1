@@ -30,6 +30,7 @@ const UpdateDealBody = z.object({
   expectedCloseDate: z.string().optional().nullable(),
   stageId: z.string().optional(),
   lostReason: z.string().optional(),
+  reservationId: z.string().optional().nullable(),
 });
 
 const MoveDealBody = z.object({ stageId: z.string() });
@@ -83,6 +84,7 @@ function formatDeal(d: typeof dealsTable.$inferSelect) {
     status: d.status, ownerId: d.ownerId,
     leadName: d.leadName, leadEmail: d.leadEmail, leadWhatsapp: d.leadWhatsapp,
     tripId: d.tripId, lostReason: d.lostReason,
+    reservationId: d.reservationId ?? null,
     expectedCloseDate: d.expectedCloseDate?.toISOString() ?? null,
     closedAt: d.closedAt?.toISOString() ?? null,
     createdAt: d.createdAt.toISOString(), updatedAt: d.updatedAt.toISOString(),
@@ -226,6 +228,9 @@ router.patch("/deals/:id", async (req, res): Promise<void> => {
         .limit(1);
       if (!stage) { res.status(400).json({ error: "Stage not found or not in tenant" }); return; }
       updates.stageId = parsed.data.stageId;
+    }
+    if (parsed.data.reservationId !== undefined) {
+      updates.reservationId = parsed.data.reservationId ?? null;
     }
 
     await db.update(dealsTable).set(updates)

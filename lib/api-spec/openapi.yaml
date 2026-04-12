@@ -4989,6 +4989,8 @@ components:
           type: ["string", "null"]
         tripId:
           type: ["string", "null"]
+        reservationId:
+          type: ["string", "null"]
         ownerId:
           type: string
         expectedCloseDate:
@@ -5060,6 +5062,8 @@ components:
         description:
           type: ["string", "null"]
         expectedCloseDate:
+          type: ["string", "null"]
+        reservationId:
           type: ["string", "null"]
 
     Pipeline:

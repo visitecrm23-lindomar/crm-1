@@ -21,4 +21,6 @@ export interface UpdateDealBody {
   description?: string | null;
   /** @nullable */
   expectedCloseDate?: string | null;
+  /** @nullable */
+  reservationId?: string | null;
 }
