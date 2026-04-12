@@ -331,6 +331,14 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
   const selectedTrip = trips.find(t => t.id === form.tripId);
   const boardingPoints = (selectedTrip?.boardingPoints ?? []) as Array<{ id: string; name: string }>;
 
+  useEffect(() => {
+    if (form.tripId && form.tripId !== "none" && selectedTrip) {
+      setForm(prev => ({ ...prev, ticketPrice: String(selectedTrip.priceAdult) }));
+    } else if (!form.tripId || form.tripId === "none") {
+      setForm(prev => ({ ...prev, ticketPrice: "" }));
+    }
+  }, [form.tripId]);
+
   const ticketPrice = parseFloat(form.ticketPrice) || 0;
   const quantity = parseInt(form.quantity) || 1;
   const amountPaid = parseFloat(form.amountPaid) || 0;
@@ -521,8 +529,28 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
                 </Select>
               </div>
               {selectedTrip && (
-                <div className="col-span-2 rounded-lg border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-                  Data da Viagem: <span className="font-medium text-foreground">{format(parseISO(selectedTrip.departureDate), "dd/MM/yyyy", { locale: ptBR })}</span>
+                <div className="col-span-2 rounded-lg border bg-blue-50/60 dark:bg-blue-950/20 p-3 text-sm space-y-2">
+                  <p className="font-semibold text-foreground">{selectedTrip.name}</p>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Destino</p>
+                      <p className="font-medium text-foreground">{selectedTrip.destination}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Data de Partida</p>
+                      <p className="font-medium text-foreground">{format(parseISO(selectedTrip.departureDate), "dd/MM/yyyy", { locale: ptBR })}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Preço / Pessoa</p>
+                      <p className="font-medium text-foreground">{formatCurrency(selectedTrip.priceAdult)}</p>
+                    </div>
+                  </div>
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">Vagas disponíveis: </span>
+                    <span className={`font-semibold ${selectedTrip.availableSeats <= 5 ? "text-destructive" : "text-green-600"}`}>
+                      {selectedTrip.availableSeats}
+                    </span>
+                  </div>
                 </div>
               )}
               {boardingPoints.length > 0 && (
@@ -604,6 +632,11 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
               <div className="space-y-2">
                 <Label>Preço da Passagem (R$)</Label>
                 <Input type="number" min="0" step="0.01" placeholder="0,00" value={form.ticketPrice} onChange={e => set("ticketPrice")(e.target.value)} />
+                {selectedTrip && (
+                  <p className="text-xs text-muted-foreground">
+                    Preço base: {formatCurrency(selectedTrip.priceAdult)}/pessoa × {quantity} passageiro(s) = <span className="font-semibold text-foreground">{formatCurrency(selectedTrip.priceAdult * quantity)}</span>
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Quantidade de Passageiros</Label>
