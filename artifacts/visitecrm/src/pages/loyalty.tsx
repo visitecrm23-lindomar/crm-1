@@ -341,17 +341,10 @@ export default function Loyalty() {
   const handleSync = async () => {
     try {
       const result = await syncPoints.mutateAsync();
-      if (result.transactionsCreated > 0) {
-        toast({
-          title: "Pontos sincronizados",
-          description: `${result.membersUpdated} membro(s) atualizado(s), ${result.transactionsCreated} transação(ões) criada(s).`,
-        });
-      } else {
-        toast({
-          title: "Tudo sincronizado",
-          description: "Nenhum ponto novo a creditar.",
-        });
-      }
+      toast({
+        title: result.transactionsCreated > 0 ? "Pontos sincronizados" : "Tudo sincronizado",
+        description: `${result.membersUpdated} membro(s) atualizado(s), ${result.transactionsCreated} transação(ões) criada(s).`,
+      });
       refetchMembers();
       refetchTx();
     } catch {
