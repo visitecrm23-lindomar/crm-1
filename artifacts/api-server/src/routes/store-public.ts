@@ -658,10 +658,15 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
             .where(eq(storeCouponsTable.id, couponId));
         }
 
-        // Mark referral as converted atomically
+        // Mark referral as converted and record the referred client attribution
         if (appliedReferralCode) {
           await tx.update(referralsTable)
-            .set({ status: "converted", convertedAt: new Date() })
+            .set({
+              status: "converted",
+              convertedAt: new Date(),
+              referredId: reservationClientId,
+              referredEmail: data.customerEmail,
+            })
             .where(and(
               eq(referralsTable.tenantId, store.tenantId),
               eq(referralsTable.code, appliedReferralCode),
@@ -703,35 +708,6 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
       .where(eq(storeOrdersTable.id, orderId)).limit(1);
     const items = await db.select().from(storeOrderItemsTable)
       .where(eq(storeOrderItemsTable.orderId, orderId));
-
-    // Auto-create CRM deal for store order as "won" (fire-and-forget, do not fail the response).
-    // A store order represents a completed customer action; deal is created as won immediately.
-    if (reservationClientId && reservationCreatedById) {
-      try {
-        const [firstStage] = await db.select({ id: pipelineStagesTable.id })
-          .from(pipelineStagesTable)
-          .where(eq(pipelineStagesTable.tenantId, store.tenantId))
-          .orderBy(asc(pipelineStagesTable.order))
-          .limit(1);
-        if (firstStage) {
-          const dealId = generateId();
-          await db.insert(dealsTable).values({
-            id: dealId,
-            tenantId: store.tenantId,
-            title: `Pedido Loja ${orderNumber}`,
-            clientId: reservationClientId,
-            ownerId: reservationCreatedById,
-            stageId: firstStage.id,
-            value: totalAmount.toFixed(2),
-            status: "won",
-            ...(firstTripId && { tripId: firstTripId }),
-            ...(firstReservationId && { reservationId: firstReservationId }),
-          });
-        }
-      } catch (dealErr) {
-        req.log.warn({ dealErr }, "Could not auto-create CRM deal for store order");
-      }
-    }
 
     res.status(201).json({ ...order, items });
   } catch (err) {
