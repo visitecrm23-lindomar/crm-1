@@ -562,7 +562,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
           }
         }
 
-        // Insert order
+        // Insert order (persist clientId for CRM deal linkage on paid/completed transition)
         await tx.insert(storeOrdersTable).values({
           id: orderId,
           storeId: store.id,
@@ -571,6 +571,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
           customerName: data.customerName,
           customerEmail: data.customerEmail,
           customerPhone: data.customerPhone ?? "",
+          ...(reservationClientId && { clientId: reservationClientId }),
           ...(data.customerCpf && { customerCpf: data.customerCpf }),
           ...(data.customerAddress && { customerAddress: data.customerAddress }),
           subtotal: subtotal.toFixed(2),

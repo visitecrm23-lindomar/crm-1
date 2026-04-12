@@ -541,12 +541,13 @@ router.put("/store/orders/:id/status", async (req, res): Promise<void> => {
             ))
             .limit(1);
           if (!existingDeal) {
+            // storeOrderId is stored as orderNumber (human-readable) in reservations
             const [linkedReservation] = await db.select({
               id: reservationsTable.id,
               tripId: reservationsTable.tripId,
             })
               .from(reservationsTable)
-              .where(eq(reservationsTable.storeOrderId, order.id))
+              .where(eq(reservationsTable.storeOrderId, order.orderNumber))
               .limit(1);
             const [firstStage] = await db.select({ id: pipelineStagesTable.id })
               .from(pipelineStagesTable)
