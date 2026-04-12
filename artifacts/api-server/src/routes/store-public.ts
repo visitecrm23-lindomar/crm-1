@@ -7,6 +7,7 @@ import {
   storeOrdersTable,
   storeOrderItemsTable,
   storeCouponsTable,
+  storeReviewsTable,
   reservationsTable,
   tripsTable,
   clientsTable,
@@ -147,7 +148,9 @@ router.get("/public/store/:slug/products", async (req, res): Promise<void> => {
     if (sort === "price_asc") orderBy = asc(storeProductsTable.price);
     else if (sort === "price_desc") orderBy = desc(storeProductsTable.price);
     else if (sort === "popular") orderBy = desc(storeProductsTable.salesCount);
-    else orderBy = desc(storeProductsTable.publishedAt);
+    else if (sort === "rating") orderBy = desc(storeProductsTable.ratingAverage);
+    else if (sort === "newest") orderBy = desc(storeProductsTable.publishedAt);
+    else orderBy = desc(storeProductsTable.order);
     const selectFields = {
       id: storeProductsTable.id,
       type: storeProductsTable.type,
@@ -869,6 +872,29 @@ router.post("/public/store/:slug/coupons/validate", async (req, res): Promise<vo
     });
   } catch (err) {
     req.log.error({ err }, "Error validating coupon");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/:slug/reviews", async (req, res): Promise<void> => {
+  try {
+    const { slug } = req.params;
+    const { limit: limitStr, featured } = req.query;
+    const store = await db.query.storesTable.findFirst({ where: eq(storesTable.slug, slug as string) });
+    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    const limit = limitStr ? Math.min(Number(limitStr), 50) : 20;
+    const conditions = [
+      eq(storeReviewsTable.storeId, store.id),
+      eq(storeReviewsTable.status, "approved"),
+    ];
+    if (featured === "true") conditions.push(eq(storeReviewsTable.isFeatured, true));
+    const reviews = await db.select().from(storeReviewsTable)
+      .where(and(...conditions))
+      .orderBy(desc(storeReviewsTable.createdAt))
+      .limit(limit);
+    res.json(reviews);
+  } catch (err) {
+    req.log.error({ err }, "Error listing public reviews");
     res.status(500).json({ error: "Internal server error" });
   }
 });

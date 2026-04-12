@@ -17,6 +17,9 @@ import {
   ChevronLeft as PrevIcon,
   ChevronRight as NextIcon,
   MessageCircle,
+  Share2,
+  Copy,
+  Check,
 } from "lucide-react";
 
 function StarRating({ rating }: { rating: number }) {
@@ -52,12 +55,18 @@ export default function VitrineProduct({
   const [selectedVariant, setSelectedVariant] = useState<{ variantName: string; label: string; price: number } | null>(null);
   const [qty, setQty] = useState(1);
   const [activeTab, setActiveTab] = useState<"descricao" | "inclui" | "nao_inclui" | "requisitos" | "destaques">("descricao");
+  const [related, setRelated] = useState<StoreProduct[]>([]);
 
   useEffect(() => {
     setLoading(true);
     publicStoreApi
       .getProduct(slug, productSlug)
-      .then((p) => setProduct(p))
+      .then((p) => {
+        setProduct(p);
+        publicStoreApi.getProducts(slug, { limit: 4 }).then((r) => {
+          setRelated(r.data.filter((x) => x.id !== p.id).slice(0, 3));
+        }).catch(() => {});
+      })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [slug, productSlug]);
@@ -111,6 +120,20 @@ export default function VitrineProduct({
       ? product.reviews.reduce((a, r) => a + r.rating, 0) / product.reviews.length
       : 0;
 
+  const [copied, setCopied] = useState(false);
+
+  function handleShare() {
+    const url = window.location.href;
+    if (navigator.share) {
+      navigator.share({ title: product.name, url }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(url).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    }
+  }
+
   const tabs = [
     { key: "descricao" as const, label: "Descrição", show: !!product.description },
     { key: "inclui" as const, label: "O que inclui", show: product.includes.length > 0 },
@@ -124,13 +147,32 @@ export default function VitrineProduct({
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
-      <button
-        onClick={() => navigate(`/loja/${slug}/produtos`)}
-        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6"
-      >
-        <ChevronLeft className="w-4 h-4" />
-        Voltar ao Catálogo
-      </button>
+      <div className="flex items-center justify-between mb-6">
+        <button
+          onClick={() => navigate(`/loja/${slug}/produtos`)}
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          Voltar ao Catálogo
+        </button>
+        <button
+          onClick={handleShare}
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          title="Compartilhar"
+        >
+          {copied ? (
+            <>
+              <Check className="w-4 h-4 text-green-500" />
+              <span className="text-green-500">Link copiado!</span>
+            </>
+          ) : (
+            <>
+              <Share2 className="w-4 h-4" />
+              Compartilhar
+            </>
+          )}
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         <div>
@@ -448,6 +490,56 @@ export default function VitrineProduct({
                 )}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {related.length > 0 && (
+        <div className="mt-12">
+          <h2 className="text-xl font-bold mb-5">Você também pode gostar</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {related.map((r) => {
+              const rPrice = r.salePrice ?? r.price;
+              const rDate = r.tripId ? (r.departureDate ?? r.startDate) : r.startDate;
+              return (
+                <a
+                  key={r.id}
+                  href={`/loja/${slug}/produtos/${r.slug}`}
+                  className="group rounded-xl border overflow-hidden hover:shadow-md transition-shadow flex flex-col"
+                >
+                  <div className="aspect-video bg-muted overflow-hidden">
+                    {r.images[0] ? (
+                      <img
+                        src={r.images[0]}
+                        alt={r.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <MapPin className="w-10 h-10 text-muted-foreground/20" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-4 flex flex-col gap-1 flex-1">
+                    <p className="font-semibold text-sm line-clamp-2">{r.name}</p>
+                    {r.destination && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />{r.destination}
+                      </p>
+                    )}
+                    {rDate && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        {new Date(rDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+                      </p>
+                    )}
+                    <p className="text-sm font-bold mt-auto" style={{ color: store.primaryColor }}>
+                      R$ {parseFloat(rPrice).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                </a>
+              );
+            })}
           </div>
         </div>
       )}

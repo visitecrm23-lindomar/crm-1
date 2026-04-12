@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { publicStoreApi, PublicStore, StoreProduct, StoreCategory } from "@/lib/storeApi";
+import { publicStoreApi, PublicStore, StoreProduct, StoreCategory, StoreReview } from "@/lib/storeApi";
 import { useCart } from "@/contexts/CartContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import {
   ArrowRight,
   MessageCircle,
   Check,
+  Quote,
 } from "lucide-react";
 
 function ProductCard({
@@ -219,15 +220,18 @@ export default function VitrineHome({
   const [, navigate] = useLocation();
   const [featured, setFeatured] = useState<StoreProduct[]>([]);
   const [categories, setCategories] = useState<StoreCategory[]>([]);
+  const [reviews, setReviews] = useState<StoreReview[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       publicStoreApi.getProducts(slug, { featured: true, limit: 6 }),
       publicStoreApi.getCategories(slug),
-    ]).then(([p, c]) => {
+      publicStoreApi.getReviews(slug, { limit: 6 }),
+    ]).then(([p, c, r]) => {
       setFeatured(p.data);
       setCategories(c);
+      setReviews(r);
     }).finally(() => setLoading(false));
   }, [slug]);
 
@@ -348,6 +352,56 @@ export default function VitrineHome({
                 ))}
               </div>
             )}
+          </section>
+        )}
+
+        {reviews.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-bold">O que dizem nossos clientes</h2>
+                <p className="text-muted-foreground text-sm mt-1">Avaliações reais de viajantes satisfeitos</p>
+              </div>
+              <div className="flex items-center gap-1 text-yellow-500">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Star key={i} className="w-5 h-5 fill-current" />
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {reviews.map((review) => (
+                <div key={review.id} className="bg-card rounded-xl border p-5 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-start gap-2">
+                    <Quote className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
+                    <p className="text-sm text-muted-foreground leading-relaxed line-clamp-4">
+                      {review.comment ?? "Excelente experiência!"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-0.5 mt-auto">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Star
+                        key={i}
+                        className={`w-3.5 h-3.5 ${i < review.rating ? "fill-yellow-400 text-yellow-400" : "text-gray-200 fill-gray-200"}`}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                      style={{ backgroundColor: store.primaryColor }}
+                    >
+                      {(review.customerName ?? "?")[0].toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{review.customerName ?? "Cliente"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(review.createdAt).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </section>
         )}
 

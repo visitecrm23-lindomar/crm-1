@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useCart } from "@/contexts/CartContext";
 import { publicStoreApi, PublicStore, CouponValidation } from "@/lib/storeApi";
@@ -26,6 +26,7 @@ import {
   CheckCircle,
   Loader2,
   Menu,
+  Search,
 } from "lucide-react";
 
 function CartDrawer({ slug, store }: { slug: string; store: PublicStore }) {
@@ -217,6 +218,21 @@ export default function VitrineLayout({
   const { itemCount, openCart } = useCart();
   const [, navigate] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (searchOpen) searchRef.current?.focus();
+  }, [searchOpen]);
+
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+    setSearchOpen(false);
+    navigate(`/loja/${slug}/produtos?search=${encodeURIComponent(searchQuery.trim())}`);
+    setSearchQuery("");
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -278,6 +294,14 @@ export default function VitrineLayout({
 
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setSearchOpen((v) => !v)}
+              className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+              aria-label="Buscar"
+            >
+              <Search className="w-4 h-4" />
+            </button>
+
+            <button
               onClick={openCart}
               className="relative flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg transition-colors"
             >
@@ -301,6 +325,37 @@ export default function VitrineLayout({
             </button>
           </div>
         </div>
+
+        {searchOpen && (
+          <div className="border-t border-white/10 px-4 py-3">
+            <form onSubmit={handleSearch} className="max-w-lg mx-auto flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" />
+                <input
+                  ref={searchRef}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar destinos, pacotes..."
+                  className="w-full pl-9 pr-4 py-2 rounded-lg bg-white/10 border border-white/20 text-white placeholder:text-white/50 text-sm focus:outline-none focus:bg-white/20"
+                  onKeyDown={(e) => e.key === "Escape" && setSearchOpen(false)}
+                />
+              </div>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white text-sm font-medium transition-colors"
+              >
+                Buscar
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearchOpen(false)}
+                className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/10 hover:bg-white/20 text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </form>
+          </div>
+        )}
 
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-white/10 px-4 py-3 space-y-2">

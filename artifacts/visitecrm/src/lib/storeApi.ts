@@ -131,6 +131,10 @@ export const publicStoreApi = {
       "GET",
       `/public/store/${slug}/products/${productSlug}`
     ),
+  getReviews: (slug: string, params?: { limit?: number; featured?: boolean }) => {
+    const qs = params ? "?" + new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString() : "";
+    return publicReq<StoreReview[]>("GET", `/public/store/${slug}/reviews${qs}`);
+  },
   createOrder: (slug: string, data: CreateOrderInput) =>
     publicReq<StoreOrder>("POST", `/public/store/${slug}/orders`, data),
   getOrder: (slug: string, orderNumber: string) =>

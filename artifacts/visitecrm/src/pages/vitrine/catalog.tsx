@@ -6,13 +6,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Loader2, Search, MapPin, Calendar, Clock, ShoppingCart, Star, SlidersHorizontal, X, MessageCircle, Check } from "lucide-react";
+import { Loader2, Search, MapPin, Calendar, Clock, ShoppingCart, Star, SlidersHorizontal, X, MessageCircle, Check, ArrowUpDown } from "lucide-react";
 
 function ProductCard({
   product,
@@ -212,6 +219,7 @@ interface Filters {
   type: string;
   minPrice: string;
   maxPrice: string;
+  sort: string;
 }
 
 function FilterPanel({
@@ -241,7 +249,7 @@ function FilterPanel({
   }
 
   function reset() {
-    const empty: Filters = { search: "", category: "all", destination: "all", type: "all", minPrice: "", maxPrice: "" };
+    const empty: Filters = { search: "", category: "all", destination: "all", type: "all", minPrice: "", maxPrice: "", sort: "default" };
     setLocal(empty);
     setFilters(empty);
     onClose?.();
@@ -398,6 +406,7 @@ export default function VitrineCatalog({
   const searchStr = useSearch();
   const params = new URLSearchParams(searchStr);
   const initialCategory = params.get("categoryId") ?? "all";
+  const initialSearch = params.get("search") ?? "";
 
   const [products, setProducts] = useState<StoreProduct[]>([]);
   const [categories, setCategories] = useState<StoreCategory[]>([]);
@@ -408,12 +417,13 @@ export default function VitrineCatalog({
   const LIMIT = 12;
 
   const [filters, setFilters] = useState<Filters>({
-    search: "",
+    search: initialSearch,
     category: initialCategory,
     destination: "all",
     type: "all",
     minPrice: "",
     maxPrice: "",
+    sort: "default",
   });
 
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -431,6 +441,7 @@ export default function VitrineCatalog({
       if (filters.type !== "all") queryParams.type = filters.type;
       if (filters.minPrice) queryParams.minPrice = filters.minPrice;
       if (filters.maxPrice) queryParams.maxPrice = filters.maxPrice;
+      if (filters.sort && filters.sort !== "default") queryParams.sort = filters.sort;
       const res = await publicStoreApi.getProducts(slug, queryParams);
       setProducts(res.data);
       setTotal(res.total);
@@ -451,7 +462,7 @@ export default function VitrineCatalog({
 
   useEffect(() => {
     setPage(1);
-  }, [filters.search, filters.category, filters.destination, filters.type, filters.minPrice, filters.maxPrice]);
+  }, [filters.search, filters.category, filters.destination, filters.type, filters.minPrice, filters.maxPrice, filters.sort]);
 
   useEffect(() => {
     load();
@@ -485,6 +496,24 @@ export default function VitrineCatalog({
             onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
           />
         </div>
+
+        <Select
+          value={filters.sort}
+          onValueChange={(v) => setFilters((f) => ({ ...f, sort: v }))}
+        >
+          <SelectTrigger className="w-48 shrink-0">
+            <ArrowUpDown className="w-4 h-4 mr-2 text-muted-foreground" />
+            <SelectValue placeholder="Ordenar por" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="default">Relevância</SelectItem>
+            <SelectItem value="price_asc">Menor Preço</SelectItem>
+            <SelectItem value="price_desc">Maior Preço</SelectItem>
+            <SelectItem value="newest">Mais Recente</SelectItem>
+            <SelectItem value="popular">Mais Popular</SelectItem>
+            <SelectItem value="rating">Melhor Avaliado</SelectItem>
+          </SelectContent>
+        </Select>
 
         <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
           <SheetTrigger asChild>
