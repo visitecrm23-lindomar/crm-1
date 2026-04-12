@@ -2006,6 +2006,23 @@ function formatCpf(cpf: string | null | undefined): string {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
+type ColKey = "nome" | "cpf" | "birthDate" | "seatNumber" | "ageCategory" | "whatsapp" | "checkedInAt";
+
+const PASSENGER_COLS: { key: ColKey; label: string }[] = [
+  { key: "nome", label: "Nome" },
+  { key: "cpf", label: "CPF" },
+  { key: "birthDate", label: "Dt. Nascimento" },
+  { key: "seatNumber", label: "Poltrona" },
+  { key: "ageCategory", label: "Categoria" },
+  { key: "whatsapp", label: "WhatsApp/Telefone" },
+  { key: "checkedInAt", label: "Embarque" },
+];
+
+const ALL_COLS_ON: Record<ColKey, boolean> = {
+  nome: true, cpf: true, birthDate: true, seatNumber: true,
+  ageCategory: true, whatsapp: true, checkedInAt: true,
+};
+
 export function PassengersList({ tripId }: { tripId: string }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -2013,6 +2030,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [boardingStatusFilter, setBoardingStatusFilter] = useState("all");
   const [isSyncing, setIsSyncing] = useState(false);
+  const [visibleCols, setVisibleCols] = useState<Record<ColKey, boolean>>(ALL_COLS_ON);
 
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
   const { data: panel, isLoading, refetch } = useGetTripBoardingPanel(tripId, {
@@ -2024,6 +2042,9 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const syncMutation = useSyncTripPassengers();
 
   const allPassengers = panel?.passengers ?? [];
+
+  const toggleCol = (key: ColKey) =>
+    setVisibleCols(prev => ({ ...prev, [key]: !prev[key] }));
 
   const filtered = useMemo(() => {
     return allPassengers.filter(p => {
@@ -2075,23 +2096,34 @@ export function PassengersList({ tripId }: { tripId: string }) {
     }
   };
 
+  const getPassengerContact = (p: BoardingPassenger) =>
+    p.whatsapp ?? p.phone ?? "—";
+
   const handleCsvExport = () => {
-    const rows = allPassengers.map((p, i) => [
-      String(i + 1),
-      p.name,
-      formatCpf(p.cpf),
-      p.birthDate ? new Date(p.birthDate).toLocaleDateString("pt-BR") : "",
-      p.seatNumber ?? "",
-      AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory,
-      p.checkedInAt ? "Sim" : "Não",
-    ]);
-    const header = ["Nº", "Passageiro", "CPF", "Dt. Nascimento", "Poltrona", "Categoria", "Embarcou"];
+    const activeCols = PASSENGER_COLS.filter(c => visibleCols[c.key]);
+    const header = ["Nº", ...activeCols.map(c => c.label)];
+    const rows = allPassengers.map((p, i) => {
+      const values: string[] = [String(i + 1)];
+      for (const col of activeCols) {
+        switch (col.key) {
+          case "nome": values.push(p.name); break;
+          case "cpf": values.push(formatCpf(p.cpf)); break;
+          case "birthDate": values.push(p.birthDate ? new Date(p.birthDate).toLocaleDateString("pt-BR") : ""); break;
+          case "seatNumber": values.push(p.seatNumber ?? ""); break;
+          case "ageCategory": values.push(AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory); break;
+          case "whatsapp": values.push(getPassengerContact(p)); break;
+          case "checkedInAt": values.push(p.checkedInAt ? "Sim" : "Não"); break;
+        }
+      }
+      return values;
+    });
     const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `manifesto-antt-${panel?.tripName ?? tripId}-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    const safeName = (panel?.tripName ?? tripId).replace(/[^a-zA-Z0-9\-_]/g, "_");
+    a.download = `relacao-passageiros-${safeName}-${format(new Date(), "yyyy-MM-dd")}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -2106,6 +2138,8 @@ export function PassengersList({ tripId }: { tripId: string }) {
     const depTime = depTimeRaw && depTimeRaw !== "00:00" ? escapeHtml(depTimeRaw) : "";
     const depFull = depDate + (depTime ? ` às ${depTime}` : "");
     const emitidoEm = escapeHtml(new Date().toLocaleString("pt-BR"));
+    const organizador = escapeHtml(panel?.tenantName ?? "");
+    const cnpj = escapeHtml(panel?.tenantCnpj ?? "");
     const total = allPassengers.length;
     const rows = allPassengers.map((p, i) => {
       const nome = escapeHtml(p.name);
@@ -2113,29 +2147,29 @@ export function PassengersList({ tripId }: { tripId: string }) {
       const nasc = p.birthDate ? escapeHtml(new Date(p.birthDate).toLocaleDateString("pt-BR")) : "—";
       const cat = escapeHtml(AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory);
       const poltrona = escapeHtml(p.seatNumber ?? "—");
-      const embarcou = p.checkedInAt ? "&#10003;" : "";
+      const contato = escapeHtml(getPassengerContact(p));
       return `<tr>
-        <td>${i + 1}</td>
+        <td>${String(i + 1).padStart(2, "0")}</td>
         <td>${nome}</td>
         <td>${cpf}</td>
         <td>${nasc}</td>
         <td>${cat}</td>
         <td>${poltrona}</td>
-        <td style="text-align:center">${embarcou}</td>
-        <td style="border-bottom:1px solid #999; min-width:120px">&nbsp;</td>
+        <td>${contato}</td>
       </tr>`;
     }).join("");
     const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8" />
-<title>Manifesto ANTT — ${tripName}</title>
+<title>Relação de Passageiros ANTT — ${tripName}</title>
 <style>
   body { font-family: Arial, sans-serif; font-size: 11px; margin: 20px; color: #000; }
-  h1 { font-size: 15px; margin: 0 0 2px; text-transform: uppercase; }
+  h1 { font-size: 15px; margin: 0 0 2px; text-transform: uppercase; letter-spacing: 0.5px; }
   .sub { font-size: 10px; color: #555; margin: 0 0 10px; }
-  .meta { display: flex; flex-wrap: wrap; gap: 24px; margin-bottom: 10px; font-size: 11px; border: 1px solid #ccc; padding: 6px 10px; background: #f9f9f9; }
-  .meta-item label { font-weight: bold; }
+  .meta { border: 1px solid #ccc; padding: 6px 10px; background: #f9f9f9; margin-bottom: 6px; font-size: 11px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 24px; margin-bottom: 2px; }
+  .meta-row label { font-weight: bold; }
   table { width: 100%; border-collapse: collapse; margin-top: 4px; }
   th { background: #1a1a1a; color: #fff; text-align: left; padding: 5px 6px; font-size: 10px; }
   td { padding: 4px 6px; border-bottom: 1px solid #e0e0e0; font-size: 11px; }
@@ -2145,14 +2179,19 @@ export function PassengersList({ tripId }: { tripId: string }) {
 </style>
 </head>
 <body>
-<h1>Manifesto de Passageiros — ANTT</h1>
+<h1>Relação de Passageiros — ANTT</h1>
 <p class="sub">Documento obrigatório conforme Resolução ANTT n° 4.777/2015 — Transporte rodoviário interestadual e internacional de passageiros</p>
 <div class="meta">
-  <div class="meta-item"><label>Viagem: </label>${tripName}</div>
-  ${destination ? `<div class="meta-item"><label>Destino: </label>${destination}</div>` : ""}
-  <div class="meta-item"><label>Data/Hora de Saída: </label>${depFull || depDate}</div>
-  <div class="meta-item"><label>Total de Passageiros: </label>${total}</div>
-  <div class="meta-item"><label>Emitido em: </label>${emitidoEm}</div>
+  <div class="meta-row">
+    <span><label>ORIGEM: </label>${tripName}</span>
+    ${destination ? `<span><label>Destino: </label>${destination}</span>` : ""}
+    <span><label>Data/Hora de Saída: </label>${depFull || depDate}</span>
+  </div>
+  ${organizador ? `<div class="meta-row"><span><label>ORGANIZADOR: </label>${organizador}</span>${cnpj ? `<span><label>CPF/CNPJ: </label>${cnpj}</span>` : ""}</div>` : ""}
+  <div class="meta-row">
+    <span><label>Total de Passageiros: </label>${total}</span>
+    <span><label>Emitido em: </label>${emitidoEm}</span>
+  </div>
 </div>
 <table>
   <thead>
@@ -2163,8 +2202,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
       <th>Dt. Nascimento</th>
       <th>Categoria</th>
       <th>Poltrona</th>
-      <th>Embarcou</th>
-      <th>Assinatura</th>
+      <th>WhatsApp/Telefone</th>
     </tr>
   </thead>
   <tbody>${rows}</tbody>
@@ -2188,6 +2226,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const BOARDING_LABELS: Record<string, string> = { all: "Todos", embarcado: "Embarcado", pendente: "Pendente" };
 
   const checkedInCount = allPassengers.filter(p => p.checkedInAt).length;
+  const visibleColCount = PASSENGER_COLS.filter(c => visibleCols[c.key]).length + 2;
 
   return (
     <div className="space-y-6">
@@ -2232,18 +2271,36 @@ export function PassengersList({ tripId }: { tripId: string }) {
         </Select>
       </div>
 
+      <div className="bg-card border rounded-xl p-3">
+        <p className="text-xs font-medium text-muted-foreground mb-2">Colunas visíveis (CSV exporta conforme seleção):</p>
+        <div className="flex flex-wrap gap-x-5 gap-y-2">
+          {PASSENGER_COLS.map(col => (
+            <label key={col.key} className="flex items-center gap-1.5 cursor-pointer select-none text-sm">
+              <input
+                type="checkbox"
+                checked={visibleCols[col.key]}
+                onChange={() => toggleCol(col.key)}
+                className="w-4 h-4 accent-primary"
+              />
+              {col.label}
+            </label>
+          ))}
+        </div>
+      </div>
+
       <div className="bg-card border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50">
               <tr>
                 <th className="text-left p-3 font-medium w-10">Nº</th>
-                <th className="text-left p-3 font-medium whitespace-nowrap">Passageiro</th>
-                <th className="text-left p-3 font-medium whitespace-nowrap">CPF</th>
-                <th className="text-left p-3 font-medium whitespace-nowrap">Dt. Nascimento</th>
-                <th className="text-left p-3 font-medium whitespace-nowrap">Poltrona</th>
-                <th className="text-left p-3 font-medium whitespace-nowrap">Categoria</th>
-                <th className="text-center p-3 font-medium whitespace-nowrap">Embarque</th>
+                {visibleCols.nome && <th className="text-left p-3 font-medium whitespace-nowrap">Passageiro</th>}
+                {visibleCols.cpf && <th className="text-left p-3 font-medium whitespace-nowrap">CPF</th>}
+                {visibleCols.birthDate && <th className="text-left p-3 font-medium whitespace-nowrap">Dt. Nascimento</th>}
+                {visibleCols.seatNumber && <th className="text-left p-3 font-medium whitespace-nowrap">Poltrona</th>}
+                {visibleCols.ageCategory && <th className="text-left p-3 font-medium whitespace-nowrap">Categoria</th>}
+                {visibleCols.whatsapp && <th className="text-left p-3 font-medium whitespace-nowrap">WhatsApp/Telefone</th>}
+                {visibleCols.checkedInAt && <th className="text-center p-3 font-medium whitespace-nowrap">Embarque</th>}
                 <th className="text-center p-3 font-medium whitespace-nowrap">Ação</th>
               </tr>
             </thead>
@@ -2251,42 +2308,51 @@ export function PassengersList({ tripId }: { tripId: string }) {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b">
-                    {Array.from({ length: 8 }).map((_, j) => <td key={j} className="p-3"><Skeleton className="h-4 w-full" /></td>)}
+                    {Array.from({ length: visibleColCount }).map((_, j) => <td key={j} className="p-3"><Skeleton className="h-4 w-full" /></td>)}
                   </tr>
                 ))
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={8} className="text-center py-10 text-muted-foreground">Nenhum passageiro encontrado</td></tr>
+                <tr><td colSpan={visibleColCount} className="text-center py-10 text-muted-foreground">Nenhum passageiro encontrado</td></tr>
               ) : (
                 filtered.map((p, i) => {
                   const embarcou = !!p.checkedInAt;
                   return (
                     <tr key={p.id} className={`border-b hover:bg-muted/30 ${embarcou ? "bg-green-50/40" : ""}`}>
                       <td className="p-3 text-muted-foreground text-xs">{i + 1}</td>
-                      <td className="p-3 font-medium whitespace-nowrap">{p.name}</td>
-                      <td className="p-3 text-muted-foreground text-xs">{formatCpf(p.cpf)}</td>
-                      <td className="p-3 text-muted-foreground text-xs whitespace-nowrap">
-                        {p.birthDate ? new Date(p.birthDate).toLocaleDateString("pt-BR") : "—"}
-                      </td>
-                      <td className="p-3 whitespace-nowrap">{p.seatNumber ?? "—"}</td>
-                      <td className="p-3">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          p.ageCategory === "adult" ? "bg-blue-100 text-blue-700" :
-                          p.ageCategory === "child" ? "bg-amber-100 text-amber-700" :
-                          p.ageCategory === "senior" ? "bg-purple-100 text-purple-700" :
-                          "bg-gray-100 text-gray-700"
-                        }`}>
-                          {AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory}
-                        </span>
-                      </td>
-                      <td className="p-3 text-center">
-                        {embarcou ? (
-                          <span className="inline-flex items-center gap-1 text-green-700 text-xs font-medium">
-                            <CheckCircle className="w-4 h-4" /> Embarcado
+                      {visibleCols.nome && <td className="p-3 font-medium whitespace-nowrap">{p.name}</td>}
+                      {visibleCols.cpf && <td className="p-3 text-muted-foreground text-xs">{formatCpf(p.cpf)}</td>}
+                      {visibleCols.birthDate && (
+                        <td className="p-3 text-muted-foreground text-xs whitespace-nowrap">
+                          {p.birthDate ? new Date(p.birthDate).toLocaleDateString("pt-BR") : "—"}
+                        </td>
+                      )}
+                      {visibleCols.seatNumber && <td className="p-3 whitespace-nowrap">{p.seatNumber ?? "—"}</td>}
+                      {visibleCols.ageCategory && (
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            p.ageCategory === "adult" ? "bg-blue-100 text-blue-700" :
+                            p.ageCategory === "child" ? "bg-amber-100 text-amber-700" :
+                            p.ageCategory === "senior" ? "bg-purple-100 text-purple-700" :
+                            "bg-gray-100 text-gray-700"
+                          }`}>
+                            {AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory}
                           </span>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">Pendente</span>
-                        )}
-                      </td>
+                        </td>
+                      )}
+                      {visibleCols.whatsapp && (
+                        <td className="p-3 text-sm whitespace-nowrap">{getPassengerContact(p)}</td>
+                      )}
+                      {visibleCols.checkedInAt && (
+                        <td className="p-3 text-center">
+                          {embarcou ? (
+                            <span className="inline-flex items-center gap-1 text-green-700 text-xs font-medium">
+                              <CheckCircle className="w-4 h-4" /> Embarcado
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">Pendente</span>
+                          )}
+                        </td>
+                      )}
                       <td className="p-3 text-center">
                         {embarcou ? (
                           <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600 hover:text-red-700" onClick={() => handleUndoCheckIn(p)}>
