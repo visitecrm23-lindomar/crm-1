@@ -43,7 +43,10 @@ function ProductCard({
     ? Math.round(((totalCapacity - availableSeats) / totalCapacity) * 100)
     : null;
 
-  const inclusions = (product.includes ?? []).slice(0, 3);
+  const displayDate = product.tripId ? (product.tripDepartureDate ?? product.startDate) : product.startDate;
+  const inclusions = product.tripId && (product.tripInclusions ?? []).length > 0
+    ? (product.tripInclusions ?? []).slice(0, 3)
+    : (product.includes ?? []).slice(0, 3);
 
   function handleAddToCart() {
     if (isSoldOut) return;
@@ -100,8 +103,8 @@ function ProductCard({
         )}
         {product.isFeatured && (
           <div
-            className="absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-bold text-white flex items-center gap-1"
-            style={{ backgroundColor: accentColor }}
+            className="absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1"
+            style={{ backgroundColor: "#FBBF24", color: "#78350f" }}
           >
             <Star className="w-3 h-3" /> Destaque
           </div>
@@ -127,10 +130,10 @@ function ProductCard({
               {product.durationDays} dia(s)
             </span>
           )}
-          {product.startDate && (
+          {displayDate && (
             <span className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />
-              {new Date(product.startDate.length <= 10 ? product.startDate + "T12:00:00" : product.startDate).toLocaleDateString("pt-BR", {
+              {new Date(displayDate.length <= 10 ? displayDate + "T12:00:00" : displayDate).toLocaleDateString("pt-BR", {
                 day: "2-digit",
                 month: "short",
               })}

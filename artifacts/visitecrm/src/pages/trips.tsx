@@ -27,7 +27,7 @@ import {
   Plus, Search, MapPin, Calendar, Users, Bus, Edit, Trash2, Eye, ChevronsLeft, ChevronsRight,
   LayoutGrid, List, ChevronLeft, ChevronRight, ArrowLeft, Check, X, Download, Send, Copy,
   AlertCircle, DollarSign, ClipboardList, LogIn, RotateCcw, CheckCircle, UserRound, RefreshCw,
-  ShoppingBag,
+  ShoppingBag, Loader2,
 } from "lucide-react";
 import {
   format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay,
@@ -652,40 +652,57 @@ export function TripList() {
   );
 }
 
+function generateProductSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 80)
+    + "-" + Math.random().toString(36).slice(2, 7);
+}
+
 function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boolean; onClose: () => void }) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({
-    name: trip.name,
-    description: trip.description ?? "",
-    price: String(trip.priceAdult),
-    imageUrl: trip.coverImage ?? "",
-    category: trip.category ?? "",
-    destination: `${trip.destinationCity}, ${trip.destinationState}`,
-    type: trip.type,
-    includes: "",
-    whatsappContact: "",
-  });
+  const [checking, setChecking] = useState(true);
+  const [existingProductSlug, setExistingProductSlug] = useState<string | null>(null);
+  const [, navigate] = useLocation();
 
-  function set(field: string, value: string) {
-    setForm((p) => ({ ...p, [field]: value }));
-  }
+  useEffect(() => {
+    if (!open) return;
+    setChecking(true);
+    storeApi.getProducts()
+      .then((products) => {
+        const linked = products.find((p) => (p as { tripId?: string }).tripId === trip.id);
+        setExistingProductSlug(linked ? linked.slug : null);
+      })
+      .catch(() => setExistingProductSlug(null))
+      .finally(() => setChecking(false));
+  }, [open, trip.id]);
 
   async function publish() {
     setLoading(true);
     try {
+      const slug = generateProductSlug(trip.name);
       await storeApi.createProduct({
-        name: form.name,
-        description: form.description,
-        price: form.price,
-        thumbnail: form.imageUrl || undefined,
-        destination: form.destination || undefined,
-        type: form.type || undefined,
-        includes: form.includes ? form.includes.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
+        name: trip.name,
+        slug,
+        description: trip.description ?? "",
+        price: String(trip.priceAdult),
+        thumbnail: trip.coverImage || undefined,
+        destination: `${trip.destinationCity}, ${trip.destinationState}`,
+        type: trip.type,
         tripId: trip.id,
         status: "active",
+        hasDates: true,
+        startDate: trip.departureDate,
+        endDate: trip.returnDate ?? undefined,
       });
-      toast({ title: "Publicado na loja!", description: `${form.name} já está disponível na vitrine.` });
+      toast({ title: "Publicado na loja!", description: `${trip.name} já está disponível na vitrine.` });
       onClose();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erro ao publicar";
@@ -695,60 +712,58 @@ function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boole
     }
   }
 
+  function goToProduct() {
+    navigate("/store");
+    onClose();
+  }
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShoppingBag className="w-5 h-5" /> Publicar na Loja
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 mt-2">
-          <div>
-            <Label>Nome do produto</Label>
-            <Input value={form.name} onChange={(e) => set("name", e.target.value)} />
+        {checking ? (
+          <div className="flex items-center justify-center py-10">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
-          <div>
-            <Label>Descrição</Label>
-            <Textarea value={form.description} onChange={(e) => set("description", e.target.value)} rows={3} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Preço (R$)</Label>
-              <Input type="number" min="0" step="0.01" value={form.price} onChange={(e) => set("price", e.target.value)} />
+        ) : existingProductSlug ? (
+          <div className="space-y-4 py-2">
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+              <ShoppingBag className="w-5 h-5 text-amber-600 shrink-0" />
+              <p className="text-sm text-amber-800">
+                Esta viagem já está publicada na loja. Deseja ir para o produto na loja?
+              </p>
             </div>
-            <div>
-              <Label>Categoria</Label>
-              <Input value={form.category} onChange={(e) => set("category", e.target.value)} placeholder="Praia, Serra..." />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={onClose}>Fechar</Button>
+              <Button onClick={goToProduct}>Ver na Loja</Button>
             </div>
           </div>
-          <div>
-            <Label>Destino</Label>
-            <Input value={form.destination} onChange={(e) => set("destination", e.target.value)} />
+        ) : (
+          <div className="space-y-4 py-2">
+            <div className="p-3 rounded-lg bg-muted">
+              <p className="text-sm font-medium">{trip.name}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {trip.destinationCity}, {trip.destinationState} · R$ {Number(trip.priceAdult).toFixed(2)}/pessoa
+              </p>
+              {trip.coverImage && (
+                <img src={trip.coverImage} alt={trip.name} className="w-full h-28 object-cover rounded mt-2" />
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              A viagem será publicada na vitrine pública com os dados atuais. Você pode ajustá-la depois em Loja → Produtos.
+            </p>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
+              <Button onClick={publish} disabled={loading}>
+                {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Publicando...</> : "Publicar na Loja"}
+              </Button>
+            </div>
           </div>
-          <div>
-            <Label>Tipo</Label>
-            <Input value={form.type} onChange={(e) => set("type", e.target.value)} />
-          </div>
-          <div>
-            <Label>O que inclui (separado por vírgula)</Label>
-            <Input value={form.includes} onChange={(e) => set("includes", e.target.value)} placeholder="Ônibus, Hotel, Guia..." />
-          </div>
-          <div>
-            <Label>WhatsApp de contato</Label>
-            <Input value={form.whatsappContact} onChange={(e) => set("whatsappContact", e.target.value)} placeholder="5511999999999" />
-          </div>
-          <div>
-            <Label>URL da imagem</Label>
-            <Input value={form.imageUrl} onChange={(e) => set("imageUrl", e.target.value)} placeholder="https://..." />
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
-            <Button onClick={publish} disabled={loading || !form.name || !form.price}>
-              {loading ? "Publicando..." : "Publicar na Loja"}
-            </Button>
-          </div>
-        </div>
+        )}
       </DialogContent>
     </Dialog>
   );

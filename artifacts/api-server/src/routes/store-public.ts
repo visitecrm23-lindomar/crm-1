@@ -180,6 +180,8 @@ router.get("/public/store/:slug/products", async (req, res): Promise<void> => {
       publishedAt: storeProductsTable.publishedAt,
       tripAvailableSeats: tripsTable.availableSeats,
       tripTotalCapacity: tripsTable.totalCapacity,
+      tripDepartureDate: tripsTable.departureDate,
+      tripInclusions: tripsTable.inclusions,
     };
     const whereClause = and(...conditions);
     const limit = limitStr ? Math.min(Number(limitStr) || 20, 200) : undefined;
@@ -206,18 +208,72 @@ router.get("/public/store/:slug/products/:productSlug", async (req, res): Promis
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
-    const [product] = await db.select().from(storeProductsTable)
+    const [row] = await db.select({
+      id: storeProductsTable.id,
+      type: storeProductsTable.type,
+      name: storeProductsTable.name,
+      slug: storeProductsTable.slug,
+      shortDescription: storeProductsTable.shortDescription,
+      description: storeProductsTable.description,
+      categoryId: storeProductsTable.categoryId,
+      tripId: storeProductsTable.tripId,
+      includes: storeProductsTable.includes,
+      price: storeProductsTable.price,
+      comparePrice: storeProductsTable.comparePrice,
+      onSale: storeProductsTable.onSale,
+      salePrice: storeProductsTable.salePrice,
+      saleStartsAt: storeProductsTable.saleStartsAt,
+      saleEndsAt: storeProductsTable.saleEndsAt,
+      images: storeProductsTable.images,
+      thumbnail: storeProductsTable.thumbnail,
+      gallery: storeProductsTable.gallery,
+      features: storeProductsTable.features,
+      excludes: storeProductsTable.excludes,
+      requirements: storeProductsTable.requirements,
+      variants: storeProductsTable.variants,
+      hasDates: storeProductsTable.hasDates,
+      startDate: storeProductsTable.startDate,
+      endDate: storeProductsTable.endDate,
+      destination: storeProductsTable.destination,
+      durationDays: storeProductsTable.durationDays,
+      durationNights: storeProductsTable.durationNights,
+      productCity: storeProductsTable.productCity,
+      productState: storeProductsTable.productState,
+      country: storeProductsTable.country,
+      isFeatured: storeProductsTable.isFeatured,
+      hasVariants: storeProductsTable.hasVariants,
+      ratingAverage: storeProductsTable.ratingAverage,
+      ratingCount: storeProductsTable.ratingCount,
+      trackInventory: storeProductsTable.trackInventory,
+      stockQuantity: storeProductsTable.stockQuantity,
+      allowBackorder: storeProductsTable.allowBackorder,
+      salesCount: storeProductsTable.salesCount,
+      viewsCount: storeProductsTable.viewsCount,
+      publishedAt: storeProductsTable.publishedAt,
+      metaTitle: storeProductsTable.metaTitle,
+      metaDescription: storeProductsTable.metaDescription,
+      metaKeywords: storeProductsTable.metaKeywords,
+      status: storeProductsTable.status,
+      order: storeProductsTable.order,
+      createdAt: storeProductsTable.createdAt,
+      updatedAt: storeProductsTable.updatedAt,
+      tripAvailableSeats: tripsTable.availableSeats,
+      tripTotalCapacity: tripsTable.totalCapacity,
+      tripDepartureDate: tripsTable.departureDate,
+      tripInclusions: tripsTable.inclusions,
+    })
+      .from(storeProductsTable)
+      .leftJoin(tripsTable, eq(storeProductsTable.tripId, tripsTable.id))
       .where(and(
         eq(storeProductsTable.storeId, store.id),
         eq(storeProductsTable.slug, req.params.productSlug),
         eq(storeProductsTable.status, "active"),
       )).limit(1);
-    if (!product) { res.status(404).json({ error: "Product not found" }); return; }
-    const { costPrice, ...publicProduct } = product;
+    if (!row) { res.status(404).json({ error: "Product not found" }); return; }
     await db.update(storeProductsTable)
-      .set({ viewsCount: product.viewsCount + 1 })
-      .where(eq(storeProductsTable.id, product.id));
-    res.json(publicProduct);
+      .set({ viewsCount: row.viewsCount + 1 })
+      .where(eq(storeProductsTable.id, row.id));
+    res.json(row);
   } catch (err) {
     req.log.error({ err }, "Error getting public store product");
     res.status(500).json({ error: "Internal server error" });
@@ -457,6 +513,9 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
     }
 
     // Phase 3: Atomic transaction — lock trips, lock products, validate, write everything
+    // We collect first reservation+trip created inside the transaction for deal linking
+    let firstReservationId: string | null = null;
+    let firstTripId: string | null = null;
     try {
       await db.transaction(async (tx) => {
         // Lock trips FIRST (sorted by tripId) to prevent deadlocks with concurrent checkouts
@@ -556,9 +615,16 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
 
         // Create reservations for trip-linked products + decrement available_seats
         if (tripLinkedProducts.size > 0 && reservationClientId && reservationCreatedById) {
+          let isFirstReservation = true;
           for (const [tripId, { totalQty, totalValue }] of tripLinkedProducts) {
             const voucherCode = generateVoucherCode();
             const reservationId = generateId();
+            // Capture first reservation+trip for deal linking (outside transaction scope)
+            if (isFirstReservation) {
+              firstReservationId = reservationId;
+              firstTripId = tripId;
+              isFirstReservation = false;
+            }
             // Use sequential placeholder seat IDs so cancellation logic can return the correct
             // number of seats to the trip (reservation cancel uses seats.length for the decrement).
             const placeholderSeats = Array.from({ length: totalQty }, (_, i) => String(i + 1));
@@ -638,13 +704,13 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
     const items = await db.select().from(storeOrderItemsTable)
       .where(eq(storeOrderItemsTable.orderId, orderId));
 
-    // Auto-create CRM deal for store order (fire-and-forget, do not fail the response)
+    // Auto-create CRM deal for store order as "won" deal (fire-and-forget, do not fail the response)
     if (reservationClientId && reservationCreatedById) {
       try {
         const [firstStage] = await db.select({ id: pipelineStagesTable.id })
           .from(pipelineStagesTable)
           .where(eq(pipelineStagesTable.tenantId, store.tenantId))
-          .orderBy(asc(pipelineStagesTable.position))
+          .orderBy(asc(pipelineStagesTable.order))
           .limit(1);
         if (firstStage) {
           const dealId = generateId();
@@ -656,7 +722,9 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
             ownerId: reservationCreatedById,
             stageId: firstStage.id,
             value: totalAmount.toFixed(2),
-            status: "open",
+            status: "won",
+            ...(firstTripId && { tripId: firstTripId }),
+            ...(firstReservationId && { reservationId: firstReservationId }),
           });
         }
       } catch (dealErr) {

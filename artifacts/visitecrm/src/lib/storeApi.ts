@@ -294,6 +294,8 @@ export interface StoreProduct {
   tripId?: string | null;
   tripAvailableSeats?: number | null;
   tripTotalCapacity?: number | null;
+  tripDepartureDate?: string | null;
+  tripInclusions?: string[] | null;
   type: string;
   name: string;
   slug: string;
