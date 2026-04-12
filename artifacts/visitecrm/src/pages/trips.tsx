@@ -2076,7 +2076,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
   };
 
   const handleCsvExport = () => {
-    const rows = filtered.map((p, i) => [
+    const rows = allPassengers.map((p, i) => [
       String(i + 1),
       p.name,
       formatCpf(p.cpf),
@@ -2106,8 +2106,8 @@ export function PassengersList({ tripId }: { tripId: string }) {
     const depTime = depTimeRaw && depTimeRaw !== "00:00" ? escapeHtml(depTimeRaw) : "";
     const depFull = depDate + (depTime ? ` às ${depTime}` : "");
     const emitidoEm = escapeHtml(new Date().toLocaleString("pt-BR"));
-    const total = filtered.length;
-    const rows = filtered.map((p, i) => {
+    const total = allPassengers.length;
+    const rows = allPassengers.map((p, i) => {
       const nome = escapeHtml(p.name);
       const cpf = escapeHtml(formatCpf(p.cpf));
       const nasc = p.birthDate ? escapeHtml(new Date(p.birthDate).toLocaleDateString("pt-BR")) : "—";
