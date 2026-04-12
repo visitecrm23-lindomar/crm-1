@@ -12,6 +12,8 @@ import {
   clientsTable,
   usersTable,
   referralsTable,
+  dealsTable,
+  pipelineStagesTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -707,6 +709,36 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
       .where(eq(storeOrdersTable.id, orderId)).limit(1);
     const items = await db.select().from(storeOrderItemsTable)
       .where(eq(storeOrderItemsTable.orderId, orderId));
+
+    // Auto-create CRM won deal immediately after successful order creation (fire-and-forget).
+    // Links clientId, tripId, and reservationId captured during transaction.
+    if (reservationClientId && reservationCreatedById) {
+      (async () => {
+        try {
+          const [firstStage] = await db.select({ id: pipelineStagesTable.id })
+            .from(pipelineStagesTable)
+            .where(eq(pipelineStagesTable.tenantId, store.tenantId))
+            .orderBy(asc(pipelineStagesTable.order))
+            .limit(1);
+          if (firstStage) {
+            await db.insert(dealsTable).values({
+              id: generateId(),
+              tenantId: store.tenantId,
+              title: `Pedido Loja ${orderNumber}`,
+              clientId: reservationClientId,
+              ownerId: reservationCreatedById,
+              stageId: firstStage.id,
+              value: totalAmount.toFixed(2),
+              status: "won",
+              ...(firstTripId && { tripId: firstTripId }),
+              ...(firstReservationId && { reservationId: firstReservationId }),
+            });
+          }
+        } catch (dealErr) {
+          console.warn("Could not auto-create CRM deal for store order:", dealErr);
+        }
+      })();
+    }
 
     res.status(201).json({ ...order, items });
   } catch (err) {
