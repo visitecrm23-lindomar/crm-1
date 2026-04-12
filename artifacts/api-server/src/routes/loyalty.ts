@@ -4,7 +4,7 @@ import { eq, and, desc, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
-import { loyaltyAwardPoints } from "../lib/loyalty-helpers";
+import { loyaltyAwardPoints, calculateTier } from "../lib/loyalty-helpers";
 
 const router = Router();
 const ADMIN_ROLES = ["agencia", "superadmin"];
@@ -241,7 +241,7 @@ router.post("/loyalty/sync", async (req, res): Promise<void> => {
       );
 
     let transactionsCreated = 0;
-    const updatedMemberIds = new Set<string>();
+    const creditedMemberIds = new Set<string>();
 
     for (const payment of paidPayments) {
       if (!payment.clientId) continue;
@@ -254,7 +254,25 @@ router.post("/loyalty/sync", async (req, res): Promise<void> => {
       if (result.credited) {
         transactionsCreated++;
         const member = members.find((m) => m.clientId === payment.clientId);
-        if (member) updatedMemberIds.add(member.id);
+        if (member) creditedMemberIds.add(member.id);
+      }
+    }
+
+    const updatedMemberIds = new Set<string>(creditedMemberIds);
+
+    const freshMembers = await db
+      .select()
+      .from(loyaltyMembersTable)
+      .where(eq(loyaltyMembersTable.tenantId, me.tenantId));
+
+    for (const member of freshMembers) {
+      const correctTier = calculateTier(member.totalPoints);
+      if (member.tier !== correctTier) {
+        await db
+          .update(loyaltyMembersTable)
+          .set({ tier: correctTier })
+          .where(eq(loyaltyMembersTable.id, member.id));
+        updatedMemberIds.add(member.id);
       }
     }
 

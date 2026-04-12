@@ -2,7 +2,7 @@ import { db, loyaltyProgramsTable, loyaltyMembersTable, loyaltyTransactionsTable
 import { eq, and } from "drizzle-orm";
 import { generateId } from "./id";
 
-function calculateTier(totalPoints: number): string {
+export function calculateTier(totalPoints: number): string {
   if (totalPoints >= 5000) return "diamond";
   if (totalPoints >= 1500) return "gold";
   if (totalPoints >= 500) return "silver";
