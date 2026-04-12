@@ -941,7 +941,7 @@ function NewReservationWizard({ open, onClose, onSuccess, initialTripId, initial
   const [hasInsurance, setHasInsurance] = useState(false);
   const [notes, setNotes] = useState("");
   const [commissionAmount, setCommissionAmount] = useState<number>(0);
-  const [sellerId, setSellerId] = useState<string>("");
+  const [sellerId, setSellerId] = useState<string>("none");
 
   const [couponCode, setCouponCode] = useState("");
   const [couponApplied, setCouponApplied] = useState<{ code: string; amount: number } | null>(null);
@@ -1015,7 +1015,7 @@ function NewReservationWizard({ open, onClose, onSuccess, initialTripId, initial
     setSelectedSeats([]); setManualSeats(""); setTripComboOpen(false); setClientComboOpen(false);
     setTotalValue(0); setPaidValue(0); setPaymentMethod("pix"); setInstallments(1);
     setHasInsurance(false); setNotes(""); setCreateError(null);
-    setCommissionAmount(0); setSellerId("");
+    setCommissionAmount(0); setSellerId("none");
     setCouponCode(""); setCouponApplied(null); setCouponError(null);
     setRedeemLoyalty(false); setLoyaltyPointsToRedeem(0); setLoyaltyAmountApplied(0);
     setReferralCode(""); setReferralApplied(null); setReferralError(null);
@@ -1084,7 +1084,7 @@ function NewReservationWizard({ open, onClose, onSuccess, initialTripId, initial
           notes: notes || undefined,
           hasInsurance,
           commissionAmount: commissionAmount > 0 ? commissionAmount : null,
-          sellerId: sellerId || null,
+          sellerId: sellerId !== "none" ? sellerId : null,
           discountCouponCode: couponApplied?.code ?? null,
           discountCouponAmount: null,
           discountLoyaltyPoints: loyaltyPointsToRedeem > 0 ? loyaltyPointsToRedeem : null,
@@ -1366,7 +1366,7 @@ function NewReservationWizard({ open, onClose, onSuccess, initialTripId, initial
                 <Select value={sellerId} onValueChange={setSellerId}>
                   <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Não especificado</SelectItem>
+                    <SelectItem value="none">Não especificado</SelectItem>
                     {(usersForWizard ?? []).map(u => (
                       <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                     ))}

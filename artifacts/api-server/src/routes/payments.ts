@@ -66,27 +66,48 @@ export async function syncReservationCommission(reservationId: string, tenantId:
   if (!reservation) return;
   if (reservation.status === "cancelled" || reservation.status === "refunded") return;
 
-  // Determine the seller: explicit sellerId on reservation, or creator (any role)
-  let sellerId: string | null = reservation.sellerId ?? null;
-  if (!sellerId) {
-    const [creator] = await db.select({ id: usersTable.id })
+  const baseAmount = parseFloat(String(reservation.totalValue));
+  const directAmount = reservation.commissionAmount;
+  const hasDirectCommission = !!directAmount && parseFloat(directAmount) > 0;
+
+  // Determine commission amount and seller based on whether direct commission is set
+  let commissionAmount: number | null = null;
+  let ruleId: string | null = null;
+  let sellerId: string | null = null;
+
+  if (hasDirectCommission) {
+    // Direct commission path: explicit amount set, validate sellerId or fall back to creator (any role)
+    commissionAmount = parseFloat(directAmount!);
+    const explicitSellerId = reservation.sellerId ?? null;
+    if (explicitSellerId) {
+      // Validate sellerId belongs to the same tenant
+      const [seller] = await db.select({ id: usersTable.id })
+        .from(usersTable)
+        .where(and(eq(usersTable.id, explicitSellerId), eq(usersTable.tenantId, tenantId)))
+        .limit(1);
+      if (!seller) return; // Invalid seller — skip silently
+      sellerId = seller.id;
+    } else {
+      // Fall back to creator (any role) for direct commission
+      const [creator] = await db.select({ id: usersTable.id })
+        .from(usersTable)
+        .where(and(eq(usersTable.id, reservation.createdById), eq(usersTable.tenantId, tenantId)))
+        .limit(1);
+      if (creator) sellerId = creator.id;
+    }
+  } else {
+    // Rule-based commission path: requires fully paid reservation and creator must be "vendedor"
+    const paidValue = parseFloat(String(reservation.paidValue));
+    const totalValue = parseFloat(String(reservation.totalValue));
+    if (paidValue < totalValue) return;
+
+    const [creator] = await db.select({ id: usersTable.id, role: usersTable.role })
       .from(usersTable)
       .where(and(eq(usersTable.id, reservation.createdById), eq(usersTable.tenantId, tenantId)))
       .limit(1);
-    if (creator) sellerId = creator.id;
-  }
-  if (!sellerId) return;
+    if (!creator || creator.role !== "vendedor") return;
+    sellerId = creator.id;
 
-  const baseAmount = parseFloat(String(reservation.totalValue));
-
-  // Determine commission amount: use explicit amount from reservation, or fall back to rule-based
-  let commissionAmount: number | null = null;
-  let ruleId: string | null = null;
-
-  const directAmount = reservation.commissionAmount;
-  if (directAmount && parseFloat(directAmount) > 0) {
-    commissionAmount = parseFloat(directAmount);
-  } else {
     const rules = await db.select().from(commissionRulesTable)
       .where(and(eq(commissionRulesTable.tenantId, tenantId), eq(commissionRulesTable.isActive, true)));
     const tripSpecificRule = rules.find(r => r.appliesTo === "trip" && r.tripId === reservation.tripId);
@@ -100,7 +121,7 @@ export async function syncReservationCommission(reservationId: string, tenantId:
     }
   }
 
-  if (commissionAmount === null || commissionAmount <= 0) return;
+  if (!sellerId || commissionAmount === null || commissionAmount <= 0) return;
 
   const [existing] = await db.select({ id: commissionsTable.id, status: commissionsTable.status })
     .from(commissionsTable)
