@@ -10,6 +10,7 @@ import {
   storeReviewsTable,
   pipelineStagesTable,
   dealsTable,
+  reservationsTable,
 } from "@workspace/db";
 import { eq, and, desc, asc } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -527,38 +528,50 @@ router.put("/store/orders/:id/status", async (req, res): Promise<void> => {
       .where(and(eq(storeOrdersTable.id, req.params.id), eq(storeOrdersTable.storeId, store.id))).limit(1);
     if (!order) { res.status(404).json({ error: "Order not found" }); return; }
 
-    // Auto-create CRM deal when order transitions to paid or completed (fire-and-forget)
+    // Auto-create CRM deal as "won" when order transitions to paid or completed (fire-and-forget).
+    // Looks up linked reservation by storeOrderId to get tripId + reservationId for full linkage.
     if ((isTransitioningToPaid || isTransitioningToCompleted) && order.clientId) {
-      try {
-        const [existingDeal] = await db.select({ id: dealsTable.id })
-          .from(dealsTable)
-          .where(and(
-            eq(dealsTable.tenantId, me.tenantId),
-            eq(dealsTable.title, `Pedido Loja ${order.orderNumber}`),
-          ))
-          .limit(1);
-        if (!existingDeal) {
-          const [firstStage] = await db.select({ id: pipelineStagesTable.id })
-            .from(pipelineStagesTable)
-            .where(eq(pipelineStagesTable.tenantId, me.tenantId))
-            .orderBy(asc(pipelineStagesTable.order))
+      (async () => {
+        try {
+          const [existingDeal] = await db.select({ id: dealsTable.id })
+            .from(dealsTable)
+            .where(and(
+              eq(dealsTable.tenantId, me.tenantId),
+              eq(dealsTable.title, `Pedido Loja ${order.orderNumber}`),
+            ))
             .limit(1);
-          if (firstStage) {
-            await db.insert(dealsTable).values({
-              id: generateId(),
-              tenantId: me.tenantId,
-              title: `Pedido Loja ${order.orderNumber}`,
-              clientId: order.clientId,
-              ownerId: me.id,
-              stageId: firstStage.id,
-              value: order.totalAmount,
-              status: "won",
-            });
+          if (!existingDeal) {
+            const [linkedReservation] = await db.select({
+              id: reservationsTable.id,
+              tripId: reservationsTable.tripId,
+            })
+              .from(reservationsTable)
+              .where(eq(reservationsTable.storeOrderId, order.id))
+              .limit(1);
+            const [firstStage] = await db.select({ id: pipelineStagesTable.id })
+              .from(pipelineStagesTable)
+              .where(eq(pipelineStagesTable.tenantId, me.tenantId))
+              .orderBy(asc(pipelineStagesTable.order))
+              .limit(1);
+            if (firstStage) {
+              await db.insert(dealsTable).values({
+                id: generateId(),
+                tenantId: me.tenantId,
+                title: `Pedido Loja ${order.orderNumber}`,
+                clientId: order.clientId,
+                ownerId: me.id,
+                stageId: firstStage.id,
+                value: order.totalAmount,
+                status: "won",
+                ...(linkedReservation?.tripId && { tripId: linkedReservation.tripId }),
+                ...(linkedReservation?.id && { reservationId: linkedReservation.id }),
+              });
+            }
           }
+        } catch (dealErr) {
+          req.log.warn({ dealErr }, "Could not auto-create CRM deal on order status update");
         }
-      } catch (dealErr) {
-        req.log.warn({ dealErr }, "Could not auto-create CRM deal on order status update");
-      }
+      })();
     }
 
     res.json(order);
