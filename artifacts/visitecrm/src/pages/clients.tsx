@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import {
   useListClients, useCreateClient, useUpdateClient,
   useListPipelineStages, useListTrips, useListUsers,
-  useCreateDeal, useListPayments,
+  useCreateDeal, useListPayments, useCreateReservation,
 } from "@workspace/api-client-react";
 import type { Client } from "@workspace/api-client-react";
 import { Client360Modal } from "@/components/client360-modal";
@@ -314,6 +314,7 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
   const createClient = useCreateClient();
   const updateClient = useUpdateClient();
   const createDeal = useCreateDeal();
+  const createReservation = useCreateReservation();
 
   useEffect(() => {
     if (open) {
@@ -323,7 +324,7 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
   }, [open, editClient]);
 
   const isEditing = !!editClient;
-  const isPending = createClient.isPending || updateClient.isPending || createDeal.isPending;
+  const isPending = createClient.isPending || updateClient.isPending || createDeal.isPending || createReservation.isPending;
   const set = (key: keyof ClientFormData) => (val: string) => setForm(prev => ({ ...prev, [key]: val }));
 
   const trips = tripsData?.data ?? [];
@@ -389,6 +390,32 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
         savedId = result.id;
         if (savedId) {
           const hasTrip = form.tripId !== "none";
+          const commission = parseFloat(form.commission) || 0;
+          const consultantId = form.consultantId !== "none" ? form.consultantId : null;
+
+          // If trip selected with commission/seller info, create a reservation directly
+          if (hasTrip && (commission > 0 || consultantId)) {
+            const seatNum = form.seatNumber ? [form.seatNumber] : ["1"];
+            try {
+              await createReservation.mutateAsync({
+                data: {
+                  tripId: form.tripId,
+                  clientId: savedId,
+                  seats: seatNum,
+                  totalValue: valorTotal || ticketPrice,
+                  paidValue: amountPaid || undefined,
+                  paymentMethod: form.paymentMethod !== "none" ? form.paymentMethod.toLowerCase().replace(/ /g, "_") : undefined,
+                  installments: 1,
+                  commissionAmount: commission > 0 ? commission : null,
+                  sellerId: consultantId,
+                  notes: form.observations || undefined,
+                },
+              });
+            } catch {
+              // Reservation creation failure should not block client creation
+            }
+          }
+
           const leadStage = stages?.find(s => s.name === "Lead");
           const dealStageId = hasTrip
             ? (leadStage?.id ?? defaultStageId)

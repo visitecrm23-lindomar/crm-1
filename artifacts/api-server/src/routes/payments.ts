@@ -69,46 +69,63 @@ async function autoCreateCommission(reservationId: string, tenantId: string): Pr
   const totalValue = parseFloat(String(reservation.totalValue));
   if (paidValue < totalValue) return;
 
-  const [creator] = await db.select({ id: usersTable.id, role: usersTable.role })
-    .from(usersTable)
-    .where(and(eq(usersTable.id, reservation.createdById), eq(usersTable.tenantId, tenantId)))
-    .limit(1);
-  if (!creator || creator.role !== "vendedor") return;
-
-  const rules = await db.select().from(commissionRulesTable)
-    .where(and(eq(commissionRulesTable.tenantId, tenantId), eq(commissionRulesTable.isActive, true)));
-
-  const tripSpecificRule = rules.find(r => r.appliesTo === "trip" && r.tripId === reservation.tripId);
-  const allRule = rules.find(r => r.appliesTo === "all");
-  const rule = tripSpecificRule ?? allRule;
-  if (!rule) return;
+  // Determine the seller: explicit sellerId on reservation, or creator if they are a "vendedor"
+  let sellerId: string | null = reservation.sellerId ?? null;
+  if (!sellerId) {
+    const [creator] = await db.select({ id: usersTable.id, role: usersTable.role })
+      .from(usersTable)
+      .where(and(eq(usersTable.id, reservation.createdById), eq(usersTable.tenantId, tenantId)))
+      .limit(1);
+    if (creator && creator.role === "vendedor") sellerId = creator.id;
+  }
+  if (!sellerId) return;
 
   const baseAmount = totalValue;
-  const commissionAmount = rule.type === "percentage"
-    ? (baseAmount * parseFloat(String(rule.value))) / 100
-    : parseFloat(String(rule.value));
+
+  // Determine commission amount: use explicit amount from reservation, or fall back to rule-based
+  let commissionAmount: number | null = null;
+  let ruleId: string | null = null;
+
+  const directAmount = reservation.commissionAmount;
+  if (directAmount && parseFloat(directAmount) > 0) {
+    commissionAmount = parseFloat(directAmount);
+  } else {
+    const rules = await db.select().from(commissionRulesTable)
+      .where(and(eq(commissionRulesTable.tenantId, tenantId), eq(commissionRulesTable.isActive, true)));
+    const tripSpecificRule = rules.find(r => r.appliesTo === "trip" && r.tripId === reservation.tripId);
+    const allRule = rules.find(r => r.appliesTo === "all");
+    const rule = tripSpecificRule ?? allRule;
+    if (rule) {
+      ruleId = rule.id;
+      commissionAmount = rule.type === "percentage"
+        ? (baseAmount * parseFloat(String(rule.value))) / 100
+        : parseFloat(String(rule.value));
+    }
+  }
+
+  if (commissionAmount === null || commissionAmount <= 0) return;
 
   const [existing] = await db.select({ id: commissionsTable.id, status: commissionsTable.status })
     .from(commissionsTable)
     .where(and(
       eq(commissionsTable.reservationId, reservationId),
       eq(commissionsTable.tenantId, tenantId),
-      eq(commissionsTable.userId, creator.id),
+      eq(commissionsTable.userId, sellerId),
     ))
     .limit(1);
 
   if (existing) {
     if (existing.status === "pending") {
       await db.update(commissionsTable)
-        .set({ ruleId: rule.id, baseAmount: String(baseAmount), commissionAmount: String(commissionAmount.toFixed(2)) })
+        .set({ ruleId: ruleId ?? undefined, baseAmount: String(baseAmount), commissionAmount: String(commissionAmount.toFixed(2)) })
         .where(eq(commissionsTable.id, existing.id));
     }
   } else {
     await db.insert(commissionsTable).values({
       id: generateId(),
       tenantId,
-      ruleId: rule.id,
-      userId: creator.id,
+      ruleId: ruleId ?? undefined,
+      userId: sellerId,
       reservationId,
       baseAmount: String(baseAmount),
       commissionAmount: String(commissionAmount.toFixed(2)),

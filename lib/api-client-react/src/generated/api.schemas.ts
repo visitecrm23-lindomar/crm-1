@@ -551,6 +551,16 @@ export interface CreateReservationBody {
   installments?: number;
   /** @nullable */
   commissionPercentage?: number | null;
+  /**
+   * Direct commission amount in BRL (overrides rule-based calculation)
+   * @nullable
+   */
+  commissionAmount?: number | null;
+  /**
+   * ID of the seller/consultant responsible for this reservation
+   * @nullable
+   */
+  sellerId?: string | null;
   /** Amount already paid at the time of booking */
   paidValue?: number;
   /** @nullable */

@@ -193,6 +193,9 @@ async function runMigrations() {
     await client.query(`
       ALTER TABLE deals ADD COLUMN IF NOT EXISTS reservation_id text;
     `);
+    await client.query(`
+      ALTER TABLE reservations ADD COLUMN IF NOT EXISTS seller_id text;
+    `);
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");

@@ -917,6 +917,7 @@ function NewReservationWizard({ open, onClose, onSuccess, initialTripId, initial
   const { data: tripsData } = useListTrips({ limit: 200 });
   const { data: clientsData } = useListClients({ limit: 300 });
   const { data: boardingRaw } = useListBoardingLocations();
+  const { data: usersForWizard } = useListUsers();
   const createReservation = useCreateReservation();
   const updateReservation = useUpdateReservation();
   const updateDeal = useUpdateDeal();
@@ -939,6 +940,8 @@ function NewReservationWizard({ open, onClose, onSuccess, initialTripId, initial
   const [installments, setInstallments] = useState(1);
   const [hasInsurance, setHasInsurance] = useState(false);
   const [notes, setNotes] = useState("");
+  const [commissionAmount, setCommissionAmount] = useState<number>(0);
+  const [sellerId, setSellerId] = useState<string>("");
 
   const [couponCode, setCouponCode] = useState("");
   const [couponApplied, setCouponApplied] = useState<{ code: string; amount: number } | null>(null);
@@ -1012,6 +1015,7 @@ function NewReservationWizard({ open, onClose, onSuccess, initialTripId, initial
     setSelectedSeats([]); setManualSeats(""); setTripComboOpen(false); setClientComboOpen(false);
     setTotalValue(0); setPaidValue(0); setPaymentMethod("pix"); setInstallments(1);
     setHasInsurance(false); setNotes(""); setCreateError(null);
+    setCommissionAmount(0); setSellerId("");
     setCouponCode(""); setCouponApplied(null); setCouponError(null);
     setRedeemLoyalty(false); setLoyaltyPointsToRedeem(0); setLoyaltyAmountApplied(0);
     setReferralCode(""); setReferralApplied(null); setReferralError(null);
@@ -1079,6 +1083,8 @@ function NewReservationWizard({ open, onClose, onSuccess, initialTripId, initial
           installments,
           notes: notes || undefined,
           hasInsurance,
+          commissionAmount: commissionAmount > 0 ? commissionAmount : null,
+          sellerId: sellerId || null,
           discountCouponCode: couponApplied?.code ?? null,
           discountCouponAmount: null,
           discountLoyaltyPoints: loyaltyPointsToRedeem > 0 ? loyaltyPointsToRedeem : null,
@@ -1341,6 +1347,32 @@ function NewReservationWizard({ open, onClose, onSuccess, initialTripId, initial
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Comissão (R$)</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0,00"
+                  value={commissionAmount || ""}
+                  onChange={e => setCommissionAmount(parseFloat(e.target.value) || 0)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Consultor / Vendedor</label>
+                <Select value={sellerId} onValueChange={setSellerId}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Não especificado</SelectItem>
+                    {(usersForWizard ?? []).map(u => (
+                      <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="flex items-center gap-2">

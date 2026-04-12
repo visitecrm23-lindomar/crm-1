@@ -24,6 +24,7 @@ export const reservationsTable = pgTable("reservations", {
   installments: integer("installments").notNull().default(1),
   commissionPercentage: numeric("commission_percentage", { precision: 5, scale: 2 }),
   commissionAmount: numeric("commission_amount", { precision: 10, scale: 2 }),
+  sellerId: text("seller_id"),
   status: text("status").notNull().default("pending"),
   voucherCode: text("voucher_code").notNull().unique(),
   qrCode: text("qr_code").notNull(),

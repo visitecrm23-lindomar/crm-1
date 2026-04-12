@@ -4565,6 +4565,12 @@ components:
           type: integer
         commissionPercentage:
           type: ["number", "null"]
+        commissionAmount:
+          type: ["number", "null"]
+          description: Direct commission amount in BRL (overrides rule-based calculation)
+        sellerId:
+          type: ["string", "null"]
+          description: ID of the seller/consultant responsible for this reservation
         paidValue:
           type: number
           description: Amount already paid at the time of booking

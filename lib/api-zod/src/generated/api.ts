@@ -1363,6 +1363,16 @@ export const CreateReservationBody = zod.object({
   paymentMethod: zod.string().nullish(),
   installments: zod.number().optional(),
   commissionPercentage: zod.number().nullish(),
+  commissionAmount: zod
+    .number()
+    .nullish()
+    .describe(
+      "Direct commission amount in BRL (overrides rule-based calculation)",
+    ),
+  sellerId: zod
+    .string()
+    .nullish()
+    .describe("ID of the seller\/consultant responsible for this reservation"),
   paidValue: zod
     .number()
     .optional()
