@@ -669,18 +669,28 @@ function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boole
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
-  const [existingProductSlug, setExistingProductSlug] = useState<string | null>(null);
+  const [storeError, setStoreError] = useState<string | null>(null);
+  const [existingProductId, setExistingProductId] = useState<string | null>(null);
   const [, navigate] = useLocation();
 
   useEffect(() => {
     if (!open) return;
     setChecking(true);
-    storeApi.getProducts()
+    setStoreError(null);
+    storeApi.getSettings()
+      .then(() => storeApi.getProducts())
       .then((products) => {
-        const linked = products.find((p) => (p as { tripId?: string }).tripId === trip.id);
-        setExistingProductSlug(linked ? linked.slug : null);
+        const linked = products.find((p) => p.tripId === trip.id);
+        setExistingProductId(linked ? linked.id : null);
       })
-      .catch(() => setExistingProductSlug(null))
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : "";
+        if (msg.toLowerCase().includes("not found") || msg.toLowerCase().includes("not initialized") || msg.toLowerCase().includes("404")) {
+          setStoreError("Loja não configurada. Vá em Loja → Configurações para criar sua vitrine antes de publicar.");
+        } else {
+          setExistingProductId(null);
+        }
+      })
       .finally(() => setChecking(false));
   }, [open, trip.id]);
 
@@ -688,12 +698,17 @@ function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boole
     setLoading(true);
     try {
       const slug = generateProductSlug(trip.name);
+      const images = [
+        ...(trip.coverImage ? [trip.coverImage] : []),
+        ...(Array.isArray((trip as Record<string, unknown>).gallery) ? ((trip as Record<string, unknown>).gallery as string[]) : []),
+      ];
       await storeApi.createProduct({
         name: trip.name,
         slug,
         description: trip.description ?? "",
         price: String(trip.priceAdult),
         thumbnail: trip.coverImage || undefined,
+        images: images.length > 0 ? images : undefined,
         destination: `${trip.destinationCity}, ${trip.destinationState}`,
         type: trip.type,
         tripId: trip.id,
@@ -701,9 +716,13 @@ function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boole
         hasDates: true,
         startDate: trip.departureDate,
         endDate: trip.returnDate ?? undefined,
+        includes: Array.isArray((trip as Record<string, unknown>).inclusions) && ((trip as Record<string, unknown>).inclusions as string[]).length > 0
+          ? (trip as Record<string, unknown>).inclusions as string[]
+          : undefined,
       });
       toast({ title: "Publicado na loja!", description: `${trip.name} já está disponível na vitrine.` });
       onClose();
+      navigate("/loja/produtos");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erro ao publicar";
       toast({ title: "Erro", description: msg, variant: "destructive" });
@@ -713,7 +732,7 @@ function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boole
   }
 
   function goToProduct() {
-    navigate("/store");
+    navigate("/loja/produtos");
     onClose();
   }
 
@@ -729,12 +748,23 @@ function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boole
           <div className="flex items-center justify-center py-10">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
-        ) : existingProductSlug ? (
+        ) : storeError ? (
+          <div className="space-y-4 py-2">
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-red-50 border border-red-200">
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+              <p className="text-sm text-red-800">{storeError}</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={onClose}>Fechar</Button>
+              <Button onClick={() => { navigate("/loja/configuracoes"); onClose(); }}>Ir para Configurações</Button>
+            </div>
+          </div>
+        ) : existingProductId ? (
           <div className="space-y-4 py-2">
             <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
               <ShoppingBag className="w-5 h-5 text-amber-600 shrink-0" />
               <p className="text-sm text-amber-800">
-                Esta viagem já está publicada na loja. Deseja ir para o produto na loja?
+                Esta viagem já está publicada na loja. Você pode editar o produto na seção Loja → Produtos.
               </p>
             </div>
             <div className="flex justify-end gap-2">
@@ -754,7 +784,7 @@ function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boole
               )}
             </div>
             <p className="text-sm text-muted-foreground">
-              A viagem será publicada na vitrine pública com os dados atuais. Você pode ajustá-la depois em Loja → Produtos.
+              A viagem será publicada na vitrine pública com os dados atuais (nome, preço, destino, fotos e inclusões). Você pode ajustá-la depois em Loja → Produtos.
             </p>
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>

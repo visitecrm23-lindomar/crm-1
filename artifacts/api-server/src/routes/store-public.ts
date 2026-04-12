@@ -704,7 +704,9 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
     const items = await db.select().from(storeOrderItemsTable)
       .where(eq(storeOrderItemsTable.orderId, orderId));
 
-    // Auto-create CRM deal for store order as "won" deal (fire-and-forget, do not fail the response)
+    // Auto-create CRM deal for store order (fire-and-forget, do not fail the response).
+    // For immediate payment methods (credit_card, debit_card), set status = "won".
+    // For deferred methods (pix, boleto, transfer), set status = "open" — payment not yet confirmed.
     if (reservationClientId && reservationCreatedById) {
       try {
         const [firstStage] = await db.select({ id: pipelineStagesTable.id })
@@ -713,6 +715,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
           .orderBy(asc(pipelineStagesTable.order))
           .limit(1);
         if (firstStage) {
+          const isImmediatePay = ["credit_card", "debit_card"].includes(data.paymentMethod ?? "");
           const dealId = generateId();
           await db.insert(dealsTable).values({
             id: dealId,
@@ -722,7 +725,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
             ownerId: reservationCreatedById,
             stageId: firstStage.id,
             value: totalAmount.toFixed(2),
-            status: "won",
+            status: isImmediatePay ? "won" : "open",
             ...(firstTripId && { tripId: firstTripId }),
             ...(firstReservationId && { reservationId: firstReservationId }),
           });

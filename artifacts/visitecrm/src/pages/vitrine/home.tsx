@@ -44,9 +44,11 @@ function ProductCard({
     : null;
 
   const displayDate = product.tripId ? (product.tripDepartureDate ?? product.startDate) : product.startDate;
-  const inclusions = product.tripId && (product.tripInclusions ?? []).length > 0
-    ? (product.tripInclusions ?? []).slice(0, 3)
-    : (product.includes ?? []).slice(0, 3);
+  const allInclusions = product.tripId && (product.tripInclusions ?? []).length > 0
+    ? (product.tripInclusions ?? [])
+    : (product.includes ?? []);
+  const inclusions = allInclusions.slice(0, 3);
+  const inclusionsOverflow = allInclusions.length > 3 ? allInclusions.length - 3 : 0;
 
   function handleAddToCart() {
     if (isSoldOut) return;
@@ -147,6 +149,11 @@ function ProductCard({
                 <Check className="w-2.5 h-2.5" />{inc}
               </span>
             ))}
+            {inclusionsOverflow > 0 && (
+              <span className="inline-flex items-center text-[10px] bg-gray-100 text-gray-500 border border-gray-200 px-1.5 py-0.5 rounded-full">
+                +{inclusionsOverflow}
+              </span>
+            )}
           </div>
         )}
         {occupancyPct !== null && totalCapacity !== null && (
