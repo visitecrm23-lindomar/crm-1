@@ -123,20 +123,27 @@ export async function syncReservationCommission(reservationId: string, tenantId:
 
   if (!sellerId || commissionAmount === null || commissionAmount <= 0) return;
 
-  const [existing] = await db.select({ id: commissionsTable.id, status: commissionsTable.status })
+  // Find any existing commission for this reservation (regardless of userId) to handle seller reassignments
+  const existingCommissions = await db.select({ id: commissionsTable.id, status: commissionsTable.status, userId: commissionsTable.userId })
     .from(commissionsTable)
     .where(and(
       eq(commissionsTable.reservationId, reservationId),
       eq(commissionsTable.tenantId, tenantId),
-      eq(commissionsTable.userId, sellerId),
-    ))
-    .limit(1);
+    ));
 
-  if (existing) {
-    if (existing.status === "pending") {
+  const existingForSeller = existingCommissions.find(c => c.userId === sellerId);
+  const staleCommissions = existingCommissions.filter(c => c.userId !== sellerId && c.status === "pending");
+
+  // Remove stale pending commissions for old sellers
+  for (const stale of staleCommissions) {
+    await db.delete(commissionsTable).where(eq(commissionsTable.id, stale.id));
+  }
+
+  if (existingForSeller) {
+    if (existingForSeller.status === "pending") {
       await db.update(commissionsTable)
         .set({ ruleId: ruleId ?? undefined, baseAmount: String(baseAmount), commissionAmount: String(commissionAmount.toFixed(2)) })
-        .where(eq(commissionsTable.id, existing.id));
+        .where(eq(commissionsTable.id, existingForSeller.id));
     }
   } else {
     await db.insert(commissionsTable).values({
