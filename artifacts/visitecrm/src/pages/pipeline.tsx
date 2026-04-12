@@ -56,7 +56,7 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
   const hasOutstanding = outstanding > 0;
   const tripName = deal.tripId ? tripsById.get(deal.tripId) : undefined;
   const initials = name.charAt(0).toUpperCase();
-  const hasReservation = !!(deal as { reservationId?: string | null }).reservationId;
+  const hasReservation = !!deal.reservationId;
 
   return (
     <div className={`bg-card rounded-lg border p-3 shadow-sm group relative select-none ${isDragging ? "opacity-50 shadow-xl" : "hover:shadow-md"} transition-all`}>
@@ -94,7 +94,7 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
                 </DropdownMenuItem>
               )}
               {hasReservation && (
-                <DropdownMenuItem onClick={() => onViewReservation((deal as { reservationId: string }).reservationId)}>
+                <DropdownMenuItem onClick={() => onViewReservation(deal.reservationId!)}>
                   <ExternalLink className="w-3.5 h-3.5 mr-2" />
                   Ver Reserva
                 </DropdownMenuItem>
@@ -165,7 +165,7 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
         {hasReservation && (
           <button
             className="w-full mt-2 text-xs text-blue-600 hover:underline flex items-center justify-center gap-1"
-            onClick={e => { e.stopPropagation(); onViewReservation((deal as { reservationId: string }).reservationId); }}
+            onClick={e => { e.stopPropagation(); onViewReservation(deal.reservationId!); }}
           >
             <ExternalLink className="w-3 h-3" />
             Ver Reserva vinculada
@@ -221,7 +221,7 @@ export default function Pipeline() {
     params.set("new", "true");
     if (deal.clientId) params.set("clientId", deal.clientId);
     if (deal.tripId) params.set("tripId", deal.tripId);
-    if (deal.value) params.set("amount", String(deal.value));
+    if (deal.value != null) params.set("amount", String(deal.value));
     params.set("dealId", deal.id);
     navigate(`/reservations?${params.toString()}`);
   };
