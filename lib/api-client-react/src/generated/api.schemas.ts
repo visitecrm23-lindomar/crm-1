@@ -660,6 +660,10 @@ export interface BoardingPassenger {
   checkedInAt?: string | null;
   /** @nullable */
   birthDate?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  whatsapp?: string | null;
 }
 
 export interface BoardingPanel {
@@ -669,6 +673,9 @@ export interface BoardingPanel {
   totalPassengers: number;
   checkedIn: number;
   passengers: BoardingPassenger[];
+  tenantName: string;
+  /** @nullable */
+  tenantCnpj?: string | null;
 }
 
 export interface CreatePassengerBody {

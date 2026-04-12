@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { tripsTable, reservationsTable, passengersTable, clientsTable } from "@workspace/db";
+import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable } from "@workspace/db";
 import { eq, and, ilike, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -348,6 +348,7 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
       ));
 
     if (reservations.length === 0) {
+      const [tenantEarly] = await db.select({ name: tenantsTable.name, cnpj: tenantsTable.cnpj }).from(tenantsTable).where(eq(tenantsTable.id, me.tenantId)).limit(1);
       res.json({
         tripId: trip.id,
         tripName: trip.name,
@@ -355,6 +356,8 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
         totalPassengers: 0,
         checkedIn: 0,
         passengers: [],
+        tenantName: tenantEarly?.name ?? "",
+        tenantCnpj: tenantEarly?.cnpj ?? null,
       });
       return;
     }
@@ -362,9 +365,10 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
     const reservationIds = reservations.map(r => r.id);
     const clientIds = [...new Set(reservations.map(r => r.clientId))];
 
-    const [passengers, clients] = await Promise.all([
+    const [passengers, clients, [tenant]] = await Promise.all([
       db.select().from(passengersTable).where(inArray(passengersTable.reservationId, reservationIds)),
-      db.select({ id: clientsTable.id, name: clientsTable.name }).from(clientsTable).where(inArray(clientsTable.id, clientIds)),
+      db.select({ id: clientsTable.id, name: clientsTable.name, phone: clientsTable.phone, whatsapp: clientsTable.whatsapp }).from(clientsTable).where(inArray(clientsTable.id, clientIds)),
+      db.select({ name: tenantsTable.name, cnpj: tenantsTable.cnpj }).from(tenantsTable).where(eq(tenantsTable.id, me.tenantId)).limit(1),
     ]);
 
     const reservationMap = new Map(reservations.map(r => [r.id, r]));
@@ -384,6 +388,8 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
         ageCategory: p.ageCategory,
         checkedInAt: p.checkedInAt?.toISOString() ?? null,
         birthDate: p.birthDate?.toISOString() ?? null,
+        phone: client?.phone ?? null,
+        whatsapp: client?.whatsapp ?? null,
       };
     });
 
@@ -396,6 +402,8 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
       totalPassengers: boardingPassengers.length,
       checkedIn,
       passengers: boardingPassengers,
+      tenantName: tenant?.name ?? "",
+      tenantCnpj: tenant?.cnpj ?? null,
     });
   } catch (err) {
     req.log.error({ err }, "Error fetching boarding panel");

@@ -21,4 +21,8 @@ export interface BoardingPassenger {
   checkedInAt?: string | null;
   /** @nullable */
   birthDate?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  whatsapp?: string | null;
 }

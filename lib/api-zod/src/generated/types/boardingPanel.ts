@@ -14,4 +14,7 @@ export interface BoardingPanel {
   totalPassengers: number;
   checkedIn: number;
   passengers: BoardingPassenger[];
+  tenantName: string;
+  /** @nullable */
+  tenantCnpj?: string | null;
 }

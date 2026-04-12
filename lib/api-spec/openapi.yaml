@@ -4711,6 +4711,10 @@ components:
           type: ["string", "null"]
         birthDate:
           type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        whatsapp:
+          type: ["string", "null"]
       required: [id, reservationId, voucherCode, clientName, name, ageCategory]
 
     BoardingPanel:
@@ -4730,7 +4734,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BoardingPassenger"
-      required: [tripId, tripName, departureDate, totalPassengers, checkedIn, passengers]
+        tenantName:
+          type: string
+        tenantCnpj:
+          type: ["string", "null"]
+      required: [tripId, tripName, departureDate, totalPassengers, checkedIn, passengers, tenantName]
 
     CreatePassengerBody:
       type: object

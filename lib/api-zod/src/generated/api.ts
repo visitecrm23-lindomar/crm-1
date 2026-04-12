@@ -1244,8 +1244,12 @@ export const GetTripBoardingPanelResponse = zod.object({
       ageCategory: zod.string(),
       checkedInAt: zod.string().nullish(),
       birthDate: zod.string().nullish(),
+      phone: zod.string().nullish(),
+      whatsapp: zod.string().nullish(),
     }),
   ),
+  tenantName: zod.string(),
+  tenantCnpj: zod.string().nullish(),
 });
 
 /**
