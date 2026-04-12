@@ -3287,6 +3287,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/LoyaltyTransaction"
 
+  /loyalty/sync:
+    post:
+      operationId: syncLoyaltyPoints
+      summary: Sync loyalty points from paid payments
+      tags: [Loyalty]
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoyaltySyncResult"
+
   # ─── CHATBOT ────────────────────────────────────────────────────
   /chatbot-conversations:
     get:
@@ -6436,6 +6449,15 @@ components:
         referenceType:
           type: string
       required: [memberId, programId, type, points]
+
+    LoyaltySyncResult:
+      type: object
+      properties:
+        membersUpdated:
+          type: integer
+        transactionsCreated:
+          type: integer
+      required: [membersUpdated, transactionsCreated]
 
     # ─── CHATBOT CONVERSATION ──────────────────────────────────────
     ChatbotConversation:

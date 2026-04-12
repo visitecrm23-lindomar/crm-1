@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { db, loyaltyProgramsTable, loyaltyMembersTable, loyaltyTransactionsTable, clientsTable } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { db, loyaltyProgramsTable, loyaltyMembersTable, loyaltyTransactionsTable, clientsTable, paymentsTable } from "@workspace/db";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { loyaltyAwardPoints } from "../lib/loyalty-helpers";
 
 const router = Router();
 const ADMIN_ROLES = ["agencia", "superadmin"];
@@ -205,6 +206,61 @@ router.post("/loyalty-transactions", async (req, res): Promise<void> => {
     res.status(201).json(tx);
   } catch (err) {
     req.log.error({ err }, "Error creating loyalty transaction");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/loyalty/sync", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const members = await db
+      .select()
+      .from(loyaltyMembersTable)
+      .where(eq(loyaltyMembersTable.tenantId, me.tenantId));
+
+    if (members.length === 0) {
+      res.json({ membersUpdated: 0, transactionsCreated: 0 });
+      return;
+    }
+
+    const clientIds = members.map((m) => m.clientId);
+
+    const paidPayments = await db
+      .select()
+      .from(paymentsTable)
+      .where(
+        and(
+          eq(paymentsTable.tenantId, me.tenantId),
+          eq(paymentsTable.status, "paid"),
+          eq(paymentsTable.type, "receivable"),
+          inArray(paymentsTable.clientId, clientIds)
+        )
+      );
+
+    let transactionsCreated = 0;
+    const updatedMemberIds = new Set<string>();
+
+    for (const payment of paidPayments) {
+      if (!payment.clientId) continue;
+      const result = await loyaltyAwardPoints({
+        clientId: payment.clientId,
+        paymentId: payment.id,
+        amount: payment.amount,
+        tenantId: me.tenantId,
+      });
+      if (result.credited) {
+        transactionsCreated++;
+        const member = members.find((m) => m.clientId === payment.clientId);
+        if (member) updatedMemberIds.add(member.id);
+      }
+    }
+
+    res.json({ membersUpdated: updatedMemberIds.size, transactionsCreated });
+  } catch (err) {
+    req.log.error({ err }, "Error syncing loyalty points");
     res.status(500).json({ error: "Internal server error" });
   }
 });

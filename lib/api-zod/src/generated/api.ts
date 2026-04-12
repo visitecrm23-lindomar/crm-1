@@ -3675,6 +3675,14 @@ export const CreateLoyaltyTransactionBody = zod.object({
 });
 
 /**
+ * @summary Sync loyalty points from paid payments
+ */
+export const SyncLoyaltyPointsResponse = zod.object({
+  membersUpdated: zod.number(),
+  transactionsCreated: zod.number(),
+});
+
+/**
  * @summary List chatbot conversations
  */
 export const ListChatbotConversationsResponseItem = zod.object({

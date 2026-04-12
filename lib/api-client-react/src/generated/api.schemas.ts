@@ -1815,6 +1815,11 @@ export interface CreateLoyaltyTransactionBody {
   referenceType?: string;
 }
 
+export interface LoyaltySyncResult {
+  membersUpdated: number;
+  transactionsCreated: number;
+}
+
 export interface ChatbotConversation {
   id: string;
   tenantId: string;

@@ -7,9 +7,11 @@ import {
   useCreateLoyaltyMember,
   useListLoyaltyTransactions,
   useCreateLoyaltyTransaction,
+  useSyncLoyaltyPoints,
 } from "@workspace/api-client-react";
 import { useListClients } from "@workspace/api-client-react";
 import type { CreateLoyaltyTransactionBodyType } from "@workspace/api-client-react";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -50,6 +52,7 @@ import {
   Settings2,
   Award,
   Coins,
+  RefreshCw,
 } from "lucide-react";
 import type { LoyaltyProgram, LoyaltyMember } from "@workspace/api-client-react";
 
@@ -267,9 +270,12 @@ export default function Loyalty() {
   const { data: transactions, refetch: refetchTx } = useListLoyaltyTransactions();
   const { data: clients } = useListClients({ limit: 200 });
 
+  const { toast } = useToast();
+
   const createProgram = useCreateLoyaltyProgram();
   const createMember = useCreateLoyaltyMember();
   const createTransaction = useCreateLoyaltyTransaction();
+  const syncPoints = useSyncLoyaltyPoints();
 
   const handleCreateProgram = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -330,6 +336,30 @@ export default function Loyalty() {
     setTxMemberId(member.id);
     setTxProgramId(member.programId);
     setIsTxOpen(true);
+  };
+
+  const handleSync = async () => {
+    try {
+      const result = await syncPoints.mutateAsync();
+      if (result.transactionsCreated > 0) {
+        toast({
+          title: "Pontos sincronizados",
+          description: `${result.membersUpdated} membro(s) atualizado(s), ${result.transactionsCreated} transação(ões) criada(s).`,
+        });
+      } else {
+        toast({
+          title: "Tudo sincronizado",
+          description: "Nenhum ponto novo a creditar.",
+        });
+      }
+      refetchMembers();
+      refetchTx();
+    } catch {
+      toast({
+        title: "Erro ao sincronizar pontos",
+        variant: "destructive",
+      });
+    }
   };
 
   const totalPoints = (members ?? []).reduce((s, m) => s + m.totalPoints, 0);
@@ -409,6 +439,14 @@ export default function Loyalty() {
               </DialogContent>
             </Dialog>
           )}
+          <Button
+            variant="outline"
+            onClick={handleSync}
+            disabled={syncPoints.isPending}
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncPoints.isPending ? "animate-spin" : ""}`} />
+            {syncPoints.isPending ? "Sincronizando..." : "Sincronizar Pontos"}
+          </Button>
           <Dialog open={isMemberOpen} onOpenChange={setIsMemberOpen}>
             <DialogTrigger asChild>
               <Button>

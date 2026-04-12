@@ -6,6 +6,7 @@ import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { CreatePaymentBody, UpdatePaymentBody, CreateExpenseBody, UpdateExpenseBody } from "@workspace/api-zod";
 import { writeClientActivity } from "../lib/activities";
+import { loyaltyAwardPoints } from "../lib/loyalty-helpers";
 
 const router = Router();
 
@@ -434,6 +435,14 @@ router.patch("/payments/:id", async (req, res): Promise<void> => {
     if (payment.reservationId) {
       await syncReservationPaymentStatus(payment.reservationId, me.tenantId);
       await autoCreateCommission(payment.reservationId, me.tenantId);
+    }
+    if (payment.status === "paid" && payment.type === "receivable" && payment.clientId) {
+      await loyaltyAwardPoints({
+        clientId: payment.clientId,
+        paymentId: payment.id,
+        amount: payment.amount,
+        tenantId: me.tenantId,
+      });
     }
     res.json(formatPayment(payment));
   } catch (err) {

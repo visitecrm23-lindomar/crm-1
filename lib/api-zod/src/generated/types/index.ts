@@ -118,6 +118,7 @@ export * from "./listReservationsParams";
 export * from "./listTripsParams";
 export * from "./loyaltyMember";
 export * from "./loyaltyProgram";
+export * from "./loyaltySyncResult";
 export * from "./loyaltyTransaction";
 export * from "./message";
 export * from "./messageTemplate";
