@@ -2102,7 +2102,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const handleCsvExport = () => {
     const activeCols = PASSENGER_COLS.filter(c => visibleCols[c.key]);
     const header = ["Nº", ...activeCols.map(c => c.label)];
-    const rows = allPassengers.map((p, i) => {
+    const rows = filtered.map((p, i) => {
       const values: string[] = [String(i + 1)];
       for (const col of activeCols) {
         switch (col.key) {
