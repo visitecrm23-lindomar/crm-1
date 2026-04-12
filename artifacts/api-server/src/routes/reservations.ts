@@ -8,6 +8,7 @@ import { deriveAgeCategory, getAgeYears } from "../lib/passenger";
 import { CreateReservationBody, UpdateReservationBody, CreatePassengerBody, UpdatePassengerBody } from "@workspace/api-zod";
 import { z } from "zod/v4";
 import { writeClientActivity } from "../lib/activities";
+import { syncReservationCommission } from "./payments";
 
 const router = Router();
 
@@ -559,6 +560,8 @@ router.post("/reservations", async (req, res): Promise<void> => {
     if (!reservation) { res.status(500).json({ error: "Failed to create reservation" }); return; }
     const formatted = await formatReservation(reservation);
     res.status(201).json(formatted);
+    syncReservationCommission(id, me.tenantId)
+      .catch((err) => req.log.error({ err }, "Error syncing commission after reservation creation"));
     if (reservation.clientId) {
       syncClientDeal(reservation.clientId, me.tenantId, reservation.tripId, Number(reservation.totalValue), me.id)
         .catch((err) => req.log.error({ err }, "Error syncing deal after reservation creation"));
@@ -639,6 +642,8 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
       updates.totalValue = newTotal;
       updates.balance = String(newBalance);
     }
+    if (parsed.data.commissionAmount !== undefined) updates.commissionAmount = parsed.data.commissionAmount != null ? String(parsed.data.commissionAmount) : null;
+    if (parsed.data.sellerId !== undefined) updates.sellerId = parsed.data.sellerId ?? null;
 
     const isBeingCancelled = parsed.data.status != null && CANCELLING_STATUSES.includes(parsed.data.status);
     const wasActive = ACTIVE_STATUSES.includes(existing.status);
@@ -716,6 +721,10 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
       const code = existing.voucherCode ?? req.params.id.slice(-8).toUpperCase();
       writeClientActivity(existing.clientId, "reservation_cancelled", `Reserva ${code} cancelada`, me.id, { voucherCode: code })
         .catch((err) => req.log.error({ err }, "Error writing cancellation activity"));
+    }
+    if (!isBeingCancelled) {
+      syncReservationCommission(req.params.id, me.tenantId)
+        .catch((err) => req.log.error({ err }, "Error syncing commission after reservation update"));
     }
     const formatted = await formatReservation(reservation);
     res.json(formatted);

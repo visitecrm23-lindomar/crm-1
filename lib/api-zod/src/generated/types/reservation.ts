@@ -26,6 +26,10 @@ export interface Reservation {
   installments: number;
   /** @nullable */
   commissionPercentage?: number | null;
+  /** @nullable */
+  commissionAmount?: number | null;
+  /** @nullable */
+  sellerId?: string | null;
   status: string;
   voucherCode: string;
   qrCode: string;

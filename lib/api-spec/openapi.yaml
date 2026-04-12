@@ -4457,6 +4457,10 @@ components:
           type: integer
         commissionPercentage:
           type: ["number", "null"]
+        commissionAmount:
+          type: ["number", "null"]
+        sellerId:
+          type: ["string", "null"]
         status:
           type: string
         voucherCode:
@@ -4665,6 +4669,12 @@ components:
           type: ["integer", "null"]
         boardingLocationId:
           type: ["string", "null"]
+        commissionAmount:
+          type: ["number", "null"]
+          description: Direct commission amount in BRL
+        sellerId:
+          type: ["string", "null"]
+          description: ID of the seller/consultant responsible for this reservation
 
     ReservationStats:
       type: object
@@ -5070,6 +5080,8 @@ components:
         leadWhatsapp:
           type: ["string", "null"]
         tripId:
+          type: ["string", "null"]
+        reservationId:
           type: ["string", "null"]
         expectedCloseDate:
           type: ["string", "null"]

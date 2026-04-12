@@ -1308,6 +1308,8 @@ export const ListReservationsResponse = zod.object({
       paymentMethod: zod.string().nullish(),
       installments: zod.number(),
       commissionPercentage: zod.number().nullish(),
+      commissionAmount: zod.number().nullish(),
+      sellerId: zod.string().nullish(),
       status: zod.string(),
       voucherCode: zod.string(),
       qrCode: zod.string(),
@@ -1423,6 +1425,8 @@ export const GetReservationResponse = zod.object({
   paymentMethod: zod.string().nullish(),
   installments: zod.number(),
   commissionPercentage: zod.number().nullish(),
+  commissionAmount: zod.number().nullish(),
+  sellerId: zod.string().nullish(),
   status: zod.string(),
   voucherCode: zod.string(),
   qrCode: zod.string(),
@@ -1474,6 +1478,14 @@ export const UpdateReservationBody = zod.object({
   totalValue: zod.number().nullish(),
   installments: zod.number().nullish(),
   boardingLocationId: zod.string().nullish(),
+  commissionAmount: zod
+    .number()
+    .nullish()
+    .describe("Direct commission amount in BRL"),
+  sellerId: zod
+    .string()
+    .nullish()
+    .describe("ID of the seller\/consultant responsible for this reservation"),
 });
 
 export const UpdateReservationResponse = zod.object({
@@ -1490,6 +1502,8 @@ export const UpdateReservationResponse = zod.object({
   paymentMethod: zod.string().nullish(),
   installments: zod.number(),
   commissionPercentage: zod.number().nullish(),
+  commissionAmount: zod.number().nullish(),
+  sellerId: zod.string().nullish(),
   status: zod.string(),
   voucherCode: zod.string(),
   qrCode: zod.string(),
@@ -1547,6 +1561,8 @@ export const CheckInReservationResponse = zod.object({
   paymentMethod: zod.string().nullish(),
   installments: zod.number(),
   commissionPercentage: zod.number().nullish(),
+  commissionAmount: zod.number().nullish(),
+  sellerId: zod.string().nullish(),
   status: zod.string(),
   voucherCode: zod.string(),
   qrCode: zod.string(),
@@ -1968,6 +1984,7 @@ export const CreateDealBody = zod.object({
   leadEmail: zod.string().nullish(),
   leadWhatsapp: zod.string().nullish(),
   tripId: zod.string().nullish(),
+  reservationId: zod.string().nullish(),
   expectedCloseDate: zod.string().nullish(),
 });
 

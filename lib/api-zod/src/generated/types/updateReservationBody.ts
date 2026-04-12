@@ -21,4 +21,14 @@ export interface UpdateReservationBody {
   installments?: number | null;
   /** @nullable */
   boardingLocationId?: string | null;
+  /**
+   * Direct commission amount in BRL
+   * @nullable
+   */
+  commissionAmount?: number | null;
+  /**
+   * ID of the seller/consultant responsible for this reservation
+   * @nullable
+   */
+  sellerId?: string | null;
 }

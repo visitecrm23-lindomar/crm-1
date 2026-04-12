@@ -393,15 +393,15 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
           const commission = parseFloat(form.commission) || 0;
           const consultantId = form.consultantId !== "none" ? form.consultantId : null;
 
-          // If trip selected with commission/seller info, create a reservation directly
-          if (hasTrip && (commission > 0 || consultantId)) {
-            const seatNum = form.seatNumber ? [form.seatNumber] : ["1"];
+          // Create reservation when trip selected and ticket price > 0
+          let createdReservationId: string | undefined;
+          if (hasTrip && ticketPrice > 0) {
             try {
-              await createReservation.mutateAsync({
+              const resResult = await createReservation.mutateAsync({
                 data: {
                   tripId: form.tripId,
                   clientId: savedId,
-                  seats: seatNum,
+                  seats: [],
                   totalValue: valorTotal || ticketPrice,
                   paidValue: amountPaid || undefined,
                   paymentMethod: form.paymentMethod !== "none" ? form.paymentMethod.toLowerCase().replace(/ /g, "_") : undefined,
@@ -411,6 +411,7 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
                   notes: form.observations || undefined,
                 },
               });
+              createdReservationId = resResult.id;
             } catch {
               // Reservation creation failure should not block client creation
             }
@@ -431,6 +432,7 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
                 clientId: savedId,
                 leadName: form.name,
                 leadWhatsapp: form.whatsapp,
+                ...(createdReservationId ? { reservationId: createdReservationId } : {}),
               },
             });
           }

@@ -498,6 +498,10 @@ export interface Reservation {
   installments: number;
   /** @nullable */
   commissionPercentage?: number | null;
+  /** @nullable */
+  commissionAmount?: number | null;
+  /** @nullable */
+  sellerId?: string | null;
   status: string;
   voucherCode: string;
   qrCode: string;
@@ -627,6 +631,16 @@ export interface UpdateReservationBody {
   installments?: number | null;
   /** @nullable */
   boardingLocationId?: string | null;
+  /**
+   * Direct commission amount in BRL
+   * @nullable
+   */
+  commissionAmount?: number | null;
+  /**
+   * ID of the seller/consultant responsible for this reservation
+   * @nullable
+   */
+  sellerId?: string | null;
 }
 
 export interface ReservationStats {
@@ -889,6 +903,8 @@ export interface CreateDealBody {
   leadWhatsapp?: string | null;
   /** @nullable */
   tripId?: string | null;
+  /** @nullable */
+  reservationId?: string | null;
   /** @nullable */
   expectedCloseDate?: string | null;
 }

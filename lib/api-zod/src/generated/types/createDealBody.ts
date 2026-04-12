@@ -23,5 +23,7 @@ export interface CreateDealBody {
   /** @nullable */
   tripId?: string | null;
   /** @nullable */
+  reservationId?: string | null;
+  /** @nullable */
   expectedCloseDate?: string | null;
 }

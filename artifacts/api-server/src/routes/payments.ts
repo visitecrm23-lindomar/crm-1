@@ -59,28 +59,25 @@ async function syncReservationPaymentStatus(reservationId: string, tenantId: str
     .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)));
 }
 
-async function autoCreateCommission(reservationId: string, tenantId: string): Promise<void> {
+export async function syncReservationCommission(reservationId: string, tenantId: string): Promise<void> {
   const [reservation] = await db.select().from(reservationsTable)
     .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)))
     .limit(1);
   if (!reservation) return;
+  if (reservation.status === "cancelled" || reservation.status === "refunded") return;
 
-  const paidValue = parseFloat(String(reservation.paidValue));
-  const totalValue = parseFloat(String(reservation.totalValue));
-  if (paidValue < totalValue) return;
-
-  // Determine the seller: explicit sellerId on reservation, or creator if they are a "vendedor"
+  // Determine the seller: explicit sellerId on reservation, or creator (any role)
   let sellerId: string | null = reservation.sellerId ?? null;
   if (!sellerId) {
-    const [creator] = await db.select({ id: usersTable.id, role: usersTable.role })
+    const [creator] = await db.select({ id: usersTable.id })
       .from(usersTable)
       .where(and(eq(usersTable.id, reservation.createdById), eq(usersTable.tenantId, tenantId)))
       .limit(1);
-    if (creator && creator.role === "vendedor") sellerId = creator.id;
+    if (creator) sellerId = creator.id;
   }
   if (!sellerId) return;
 
-  const baseAmount = totalValue;
+  const baseAmount = parseFloat(String(reservation.totalValue));
 
   // Determine commission amount: use explicit amount from reservation, or fall back to rule-based
   let commissionAmount: number | null = null;
@@ -374,7 +371,7 @@ router.post("/payments", async (req, res): Promise<void> => {
     }
     if (parsed.data.reservationId) {
       await syncReservationPaymentStatus(parsed.data.reservationId, me.tenantId);
-      await autoCreateCommission(parsed.data.reservationId, me.tenantId);
+      await syncReservationCommission(parsed.data.reservationId, me.tenantId);
     }
     res.status(201).json(formatPayment(payment));
     const effectiveClientId = parsed.data.clientId ?? reservationClientId;
@@ -451,7 +448,7 @@ router.patch("/payments/:id", async (req, res): Promise<void> => {
     }
     if (payment.reservationId) {
       await syncReservationPaymentStatus(payment.reservationId, me.tenantId);
-      await autoCreateCommission(payment.reservationId, me.tenantId);
+      await syncReservationCommission(payment.reservationId, me.tenantId);
     }
     if (payment.status === "paid" && payment.type === "receivable" && payment.clientId) {
       await loyaltyAwardPoints({

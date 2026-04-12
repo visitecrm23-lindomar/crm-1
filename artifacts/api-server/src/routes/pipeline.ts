@@ -165,6 +165,7 @@ router.post("/deals", async (req, res): Promise<void> => {
       leadEmail: parsed.data.leadEmail ?? null,
       leadWhatsapp: parsed.data.leadWhatsapp ?? null,
       tripId: parsed.data.tripId ?? null,
+      reservationId: parsed.data.reservationId ?? null,
       expectedCloseDate: parsed.data.expectedCloseDate ? new Date(parsed.data.expectedCloseDate) : null,
     });
 
