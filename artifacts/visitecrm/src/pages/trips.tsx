@@ -6,7 +6,6 @@ import {
   useListTrips, useCreateTrip, useGetTrip, useUpdateTrip, useDeleteTrip,
   useGetTripSeatMap, getGetTripSeatMapQueryKey, useGetDashboardUpcomingTrips, useListReservations, useListClients, useCreateReservation, useUpdateReservation, useCreateClient,
   useGetTripBoardingPanel, useCheckInPassenger, useUndoCheckInPassenger, useSyncTripPassengers,
-  listReservations,
 } from "@workspace/api-client-react";
 import type { Trip, Seat, BoardingPassenger } from "@workspace/api-client-react";
 import { Client360Modal } from "@/components/client360-modal";
@@ -1984,107 +1983,63 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
   );
 }
 
+const AGE_CATEGORY_LABELS: Record<string, string> = {
+  adult: "Adulto",
+  child: "Criança",
+  senior: "Sênior",
+  baby: "Bebê",
+};
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function PassengersList({ tripId }: { tripId: string }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [paymentFilter, setPaymentFilter] = useState("all");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [boardingFilter, setBoardingFilter] = useState("all");
-  const [page, setPage] = useState(1);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [isExporting, setIsExporting] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [boardingStatusFilter, setBoardingStatusFilter] = useState("all");
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
-  const { data: reservations, isLoading } = useListReservations({
-    tripId,
-    status: statusFilter !== "all" ? statusFilter : undefined,
-    search: search || undefined,
-    page, limit: 20,
+  const { data: panel, isLoading, refetch } = useGetTripBoardingPanel(tripId, {
+    query: { queryKey: ["boarding-panel-antt", tripId] },
   });
 
-  const passengers = useMemo(() => {
-    return (reservations?.data ?? []).filter(r => {
-      if (paymentFilter !== "all") {
-        const isPaid = r.balance <= 0 && r.paidValue > 0;
-        const isPending = r.balance > 0 && r.paidValue > 0;
-        const isUnpaid = r.paidValue === 0;
-        const isOverdue = isUnpaid || isPending;
-        if (paymentFilter === "paid" && !isPaid) return false;
-        if (paymentFilter === "pending" && !isPending) return false;
-        if (paymentFilter === "unpaid" && !isUnpaid) return false;
-        if (paymentFilter === "overdue" && !isOverdue) return false;
-      }
-      if (typeFilter !== "all") {
-        const bdate = r.client.birthDate;
-        const age = bdate ? new Date().getFullYear() - new Date(bdate).getFullYear() : null;
-        const isChild = age !== null && age < 12;
-        const isSenior = age !== null && age >= 60;
-        if (typeFilter === "adult" && (isChild || isSenior)) return false;
-        if (typeFilter === "child" && !isChild) return false;
-        if (typeFilter === "senior" && !isSenior) return false;
-      }
-      if (boardingFilter !== "all") {
-        if (r.boardingLocationId !== boardingFilter) return false;
-      }
-      return true;
-    }).map(r => {
-      const bdate = r.client.birthDate;
-      const age = bdate ? new Date().getFullYear() - new Date(bdate).getFullYear() : null;
-      const passengerType = age === null ? "Adulto" : age < 12 ? "Criança" : age >= 60 ? "Sênior" : "Adulto";
-      const isPaid = r.balance <= 0 && r.paidValue > 0;
-      const isPending = r.balance > 0 && r.paidValue > 0;
-      const paymentStatus = isPaid ? "Pago" : isPending ? "Parcial" : r.paidValue === 0 ? "Não pago" : "Pendente";
-      const paymentStatusColor = isPaid ? "bg-green-100 text-green-700" : isPending ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700";
-      return {
-        reservationId: r.id,
-        name: r.client.name,
-        cpf: r.client.cpf ?? undefined,
-        birthDate: bdate ?? undefined,
-        whatsapp: r.client.whatsapp,
-        email: r.client.email,
-        passengerType,
-        voucherCode: r.voucherCode,
-        seats: r.seats.join(", "),
-        status: r.status,
-        paymentMethod: r.paymentMethod ?? "-",
-        paymentStatus,
-        paymentStatusColor,
-        totalValue: r.totalValue,
-        paidValue: r.paidValue,
-        balance: r.balance,
-        checkedIn: !!r.checkedInAt,
-        hasInsurance: r.hasInsurance,
-      };
-    });
-  }, [reservations, paymentFilter, typeFilter, boardingFilter]);
-
-  const totalPages = Math.ceil((reservations?.total ?? 0) / 20);
-  const allSelected = passengers.length > 0 && passengers.every(p => selectedIds.has(p.reservationId));
-
-  const toggleAll = () => {
-    if (allSelected) setSelectedIds(new Set());
-    else setSelectedIds(new Set(passengers.map(p => p.reservationId)));
-  };
-  const toggleOne = (id: string) => setSelectedIds(prev => {
-    const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
-
+  const checkIn = useCheckInPassenger();
+  const undoCheckIn = useUndoCheckInPassenger();
   const syncMutation = useSyncTripPassengers();
 
-  const STATUS_LABELS: Record<string, string> = { all: "Todos", confirmed: "Confirmado", pending: "Pendente", cancelled: "Cancelado", completed: "Concluído" };
-  const PAYMENT_STATUS_LABELS: Record<string, string> = { all: "Todos os status de pag.", paid: "Pago", pending: "Pagamento Parcial", unpaid: "Não pago", overdue: "Em aberto" };
-  const TYPE_LABELS: Record<string, string> = { all: "Todos os tipos", adult: "Adulto", child: "Criança (< 12)", senior: "Sênior (60+)" };
+  const allPassengers = panel?.passengers ?? [];
+
+  const filtered = useMemo(() => {
+    return allPassengers.filter(p => {
+      if (search) {
+        const q = search.toLowerCase();
+        if (!p.name.toLowerCase().includes(q) && !(p.cpf ?? "").toLowerCase().includes(q)) return false;
+      }
+      if (categoryFilter !== "all" && p.ageCategory !== categoryFilter) return false;
+      if (boardingStatusFilter === "embarcado" && !p.checkedInAt) return false;
+      if (boardingStatusFilter === "pendente" && p.checkedInAt) return false;
+      return true;
+    });
+  }, [allPassengers, search, categoryFilter, boardingStatusFilter]);
 
   const handleSync = async () => {
     setIsSyncing(true);
     try {
       const result = await syncMutation.mutateAsync({ id: tripId });
-      toast({ title: "Sincronização concluída", description: `${(result as any)?.synced ?? 0} passageiro(s) sincronizado(s).` });
+      await refetch();
+      if (result.created > 0) {
+        toast({ title: `${result.created} passageiro(s) adicionado(s)`, description: "O manifesto foi atualizado." });
+      } else {
+        toast({ title: "Tudo sincronizado", description: "Nenhum passageiro novo a adicionar." });
+      }
     } catch {
       toast({ title: "Erro ao sincronizar", variant: "destructive" });
     } finally {
@@ -2092,145 +2047,149 @@ export function PassengersList({ tripId }: { tripId: string }) {
     }
   };
 
-  const handleCsvExport = async () => {
-    setIsExporting(true);
+  const handleCheckIn = async (p: BoardingPassenger) => {
     try {
-      const all = await listReservations({ tripId, limit: 10000, page: 1 });
-      const rows = (all.data ?? []).map((r, i) => {
-        const bdate = r.client.birthDate;
-        const age = bdate ? new Date().getFullYear() - new Date(bdate).getFullYear() : null;
-        const tipo = age === null ? "Adulto" : age < 12 ? "Criança" : age >= 60 ? "Sênior" : "Adulto";
-        const isPaid = r.balance <= 0 && r.paidValue > 0;
-        const isPending = r.balance > 0 && r.paidValue > 0;
-        const pgto = isPaid ? "Pago" : isPending ? "Parcial" : r.paidValue === 0 ? "Não pago" : "Pendente";
-        return [
-          String(i + 1),
-          r.client.name,
-          r.client.cpf ?? "",
-          bdate ? new Date(bdate).toLocaleDateString("pt-BR") : "",
-          tipo,
-          r.seats.join("; "),
-          r.voucherCode,
-          STATUS_LABELS[r.status] ?? r.status,
-          pgto,
-          String(r.totalValue),
-          String(r.balance),
-          r.checkedInAt ? "Sim" : "Não",
-        ];
-      });
-      const header = ["Nº", "Nome", "CPF", "Dt. Nascimento", "Tipo", "Assento(s)", "Voucher", "Status", "Pgto.", "Valor", "Saldo", "Check-in"];
-      const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `passageiros-antt-${trip?.name ?? tripId}-${format(new Date(), "yyyy-MM-dd")}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await checkIn.mutateAsync({ reservationId: p.reservationId, id: p.id });
+      await refetch();
+      toast({ title: `${p.name} embarcou`, description: "Check-in registrado." });
     } catch {
-      toast({ title: "Erro ao exportar CSV", variant: "destructive" });
-    } finally {
-      setIsExporting(false);
+      toast({ title: "Erro ao fazer check-in", variant: "destructive" });
     }
   };
 
-  const handlePdfPrint = async () => {
-    setIsExporting(true);
+  const handleUndoCheckIn = async (p: BoardingPassenger) => {
     try {
-      const all = await listReservations({ tripId, limit: 10000, page: 1 });
-      const rows = (all.data ?? []).map((r, i) => {
-        const bdate = r.client.birthDate;
-        const age = bdate ? new Date().getFullYear() - new Date(bdate).getFullYear() : null;
-        const tipo = age === null ? "Adulto" : age < 12 ? "Criança" : age >= 60 ? "Sênior" : "Adulto";
-        const nascimento = bdate ? new Date(bdate).toLocaleDateString("pt-BR") : "—";
-        return `<tr>
-          <td>${i + 1}</td>
-          <td>${r.client.name}</td>
-          <td>${r.client.cpf ?? "—"}</td>
-          <td>${nascimento}</td>
-          <td>${tipo}</td>
-          <td>${r.seats.join(", ") || "—"}</td>
-          <td>${r.voucherCode}</td>
-          <td>${r.checkedInAt ? "✓" : ""}</td>
-        </tr>`;
-      }).join("");
-      const tripName = trip?.name ?? "";
-      const depDate = trip ? formatDate(trip.departureDate) : "";
-      const totalPassengers = all.total ?? 0;
-      const html = `<!DOCTYPE html>
+      await undoCheckIn.mutateAsync({ reservationId: p.reservationId, id: p.id });
+      await refetch();
+      toast({ title: "Check-in desfeito" });
+    } catch {
+      toast({ title: "Erro ao desfazer check-in", variant: "destructive" });
+    }
+  };
+
+  const handleCsvExport = () => {
+    const rows = filtered.map((p, i) => [
+      String(i + 1),
+      p.name,
+      p.cpf ?? "",
+      p.birthDate ? new Date(p.birthDate).toLocaleDateString("pt-BR") : "",
+      AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory,
+      p.seatNumber ?? "",
+      p.checkedInAt ? "Sim" : "Não",
+    ]);
+    const header = ["Nº", "Passageiro", "CPF", "Dt. Nascimento", "Categoria", "Poltrona", "Embarcou"];
+    const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `manifesto-antt-${panel?.tripName ?? tripId}-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePdfPrint = () => {
+    const tripName = escapeHtml(panel?.tripName ?? "");
+    const depDate = panel?.departureDate ? escapeHtml(formatDate(panel.departureDate)) : "";
+    const emitidoEm = escapeHtml(new Date().toLocaleString("pt-BR"));
+    const total = filtered.length;
+    const rows = filtered.map((p, i) => {
+      const nome = escapeHtml(p.name);
+      const cpf = escapeHtml(p.cpf ?? "—");
+      const nasc = p.birthDate ? escapeHtml(new Date(p.birthDate).toLocaleDateString("pt-BR")) : "—";
+      const cat = escapeHtml(AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory);
+      const poltrona = escapeHtml(p.seatNumber ?? "—");
+      const embarcou = p.checkedInAt ? "&#10003;" : "";
+      return `<tr>
+        <td>${i + 1}</td>
+        <td>${nome}</td>
+        <td>${cpf}</td>
+        <td>${nasc}</td>
+        <td>${cat}</td>
+        <td>${poltrona}</td>
+        <td style="text-align:center">${embarcou}</td>
+        <td style="border-bottom:1px solid #999; min-width:120px">&nbsp;</td>
+      </tr>`;
+    }).join("");
+    const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8" />
-<title>Lista de Passageiros ANTT — ${tripName}</title>
+<title>Manifesto ANTT — ${tripName}</title>
 <style>
   body { font-family: Arial, sans-serif; font-size: 11px; margin: 20px; color: #000; }
-  h1 { font-size: 16px; margin: 0 0 2px; }
-  .subtitle { font-size: 12px; margin: 0 0 12px; color: #444; }
-  .meta { display: flex; gap: 40px; margin-bottom: 12px; font-size: 11px; }
-  .meta span { font-weight: bold; }
-  table { width: 100%; border-collapse: collapse; }
-  th { background: #333; color: #fff; text-align: left; padding: 5px 6px; font-size: 10px; }
-  td { padding: 4px 6px; border-bottom: 1px solid #ddd; }
-  tr:nth-child(even) td { background: #f5f5f5; }
-  .footer { margin-top: 20px; font-size: 10px; color: #666; border-top: 1px solid #ccc; padding-top: 8px; display: flex; justify-content: space-between; }
-  @media print { body { margin: 10mm; } }
+  h1 { font-size: 15px; margin: 0 0 2px; text-transform: uppercase; }
+  .sub { font-size: 10px; color: #555; margin: 0 0 10px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 24px; margin-bottom: 10px; font-size: 11px; border: 1px solid #ccc; padding: 6px 10px; background: #f9f9f9; }
+  .meta-item label { font-weight: bold; }
+  table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  th { background: #1a1a1a; color: #fff; text-align: left; padding: 5px 6px; font-size: 10px; }
+  td { padding: 4px 6px; border-bottom: 1px solid #e0e0e0; font-size: 11px; }
+  tr:nth-child(even) td { background: #f7f7f7; }
+  .footer { margin-top: 24px; display: flex; justify-content: space-between; font-size: 10px; color: #555; border-top: 1px solid #ccc; padding-top: 8px; }
+  @media print { body { margin: 10mm; } button { display: none; } }
 </style>
 </head>
 <body>
-<h1>MANIFESTO DE PASSAGEIROS — ANTT</h1>
-<p class="subtitle">Documento obrigatório para transporte rodoviário de passageiros (ANTT)</p>
+<h1>Manifesto de Passageiros — ANTT</h1>
+<p class="sub">Documento obrigatório conforme Resolução ANTT n° 4.777/2015 — Transporte rodoviário interestadual e internacional de passageiros</p>
 <div class="meta">
-  <div>Viagem: <span>${tripName}</span></div>
-  <div>Data de Saída: <span>${depDate}</span></div>
-  <div>Total de Passageiros: <span>${totalPassengers}</span></div>
-  <div>Emitido em: <span>${new Date().toLocaleString("pt-BR")}</span></div>
+  <div class="meta-item"><label>Viagem: </label>${tripName}</div>
+  <div class="meta-item"><label>Data de Saída: </label>${depDate}</div>
+  <div class="meta-item"><label>Total de Passageiros: </label>${total}</div>
+  <div class="meta-item"><label>Emitido em: </label>${emitidoEm}</div>
 </div>
 <table>
   <thead>
     <tr>
       <th>Nº</th>
-      <th>Nome Completo</th>
+      <th>Passageiro</th>
       <th>CPF</th>
       <th>Dt. Nascimento</th>
-      <th>Tipo</th>
-      <th>Assento(s)</th>
-      <th>Voucher</th>
-      <th>Check-in</th>
+      <th>Categoria</th>
+      <th>Poltrona</th>
+      <th>Embarcou</th>
+      <th>Assinatura</th>
     </tr>
   </thead>
   <tbody>${rows}</tbody>
 </table>
 <div class="footer">
   <span>VisiteCRM — Sistema de Gestão para Agências de Turismo</span>
-  <span>Página 1</span>
+  <span>Impresso em ${emitidoEm}</span>
 </div>
 </body>
 </html>`;
-      const win = window.open("", "_blank");
-      if (win) {
-        win.document.write(html);
-        win.document.close();
-        win.focus();
-        setTimeout(() => win.print(), 500);
-      }
-    } catch {
-      toast({ title: "Erro ao gerar PDF", variant: "destructive" });
-    } finally {
-      setIsExporting(false);
+    const win = window.open("", "_blank");
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+      setTimeout(() => win.print(), 500);
     }
   };
 
+  const CATEGORY_LABELS: Record<string, string> = { all: "Todas as categorias", ...AGE_CATEGORY_LABELS };
+  const BOARDING_LABELS: Record<string, string> = { all: "Todos", embarcado: "Embarcado", pendente: "Pendente" };
+
+  const checkedInCount = allPassengers.filter(p => p.checkedInAt).length;
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <Button variant="ghost" size="icon" onClick={() => navigate("/trips")}><ArrowLeft className="w-4 h-4" /></Button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold tracking-tight">Lista de Passageiros — ANTT</h1>
-          <p className="text-muted-foreground text-sm">{trip?.name} · {trip ? formatDate(trip.departureDate) : ""}</p>
+          <p className="text-muted-foreground text-sm">
+            {panel?.tripName ?? "Carregando..."} · {panel?.departureDate ? formatDate(panel.departureDate) : ""}
+            {panel && (
+              <span className="ml-3 font-medium text-foreground">{checkedInCount}/{panel.totalPassengers} embarcados</span>
+            )}
+          </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={handleCsvExport} disabled={isExporting}><Download className="w-4 h-4 mr-2" />CSV</Button>
-          <Button variant="outline" size="sm" onClick={handlePdfPrint} disabled={isExporting}><Download className="w-4 h-4 mr-2" />PDF / Imprimir</Button>
+          <Button variant="outline" size="sm" onClick={handleCsvExport} disabled={isLoading || allPassengers.length === 0}><Download className="w-4 h-4 mr-2" />CSV</Button>
+          <Button variant="outline" size="sm" onClick={handlePdfPrint} disabled={isLoading || allPassengers.length === 0}><Download className="w-4 h-4 mr-2" />Imprimir / PDF</Button>
           <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing}><RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? "animate-spin" : ""}`} />{isSyncing ? "Sincronizando..." : "Sincronizar"}</Button>
         </div>
       </div>
@@ -2238,111 +2197,97 @@ export function PassengersList({ tripId }: { tripId: string }) {
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar passageiro..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="pl-9" />
+          <Input placeholder="Buscar por nome ou CPF..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
+        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+          <SelectContent>{Object.entries(CATEGORY_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+        </Select>
+        <Select value={boardingStatusFilter} onValueChange={setBoardingStatusFilter}>
           <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-          <SelectContent>{Object.entries(STATUS_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+          <SelectContent>{Object.entries(BOARDING_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
         </Select>
-        <Select value={paymentFilter} onValueChange={v => { setPaymentFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
-          <SelectContent>{Object.entries(PAYMENT_STATUS_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
-        </Select>
-        <Select value={typeFilter} onValueChange={v => { setTypeFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
-          <SelectContent>{Object.entries(TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
-        </Select>
-        <Select value={boardingFilter} onValueChange={v => { setBoardingFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-44"><SelectValue placeholder="Ponto de embarque" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os embarques</SelectItem>
-            {trip?.boardingPoints?.map?.((bp) => (
-              <SelectItem key={bp.id} value={bp.id}>{bp.name}</SelectItem>
-            )) ?? null}
-          </SelectContent>
-        </Select>
-        <Link href={`/reservations?tripId=${tripId}&new=true`}><Button><Plus className="w-4 h-4 mr-2" />Adicionar</Button></Link>
       </div>
-
-      {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 bg-primary/10 rounded-lg p-3 text-sm">
-          <span className="font-medium">{selectedIds.size} selecionado(s)</span>
-          <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())} className="h-7">Desmarcar</Button>
-          <Button size="sm" variant="outline" className="h-7"><Check className="w-3 h-3 mr-1" />Check-in</Button>
-          <Button size="sm" variant="outline" className="h-7"><Download className="w-3 h-3 mr-1" />Vouchers</Button>
-          <Button size="sm" variant="outline" className="h-7"><Send className="w-3 h-3 mr-1" />WhatsApp</Button>
-        </div>
-      )}
 
       <div className="bg-card border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50">
               <tr>
-                <th className="p-3 w-8">
-                  <Checkbox checked={allSelected} onCheckedChange={toggleAll} />
-                </th>
+                <th className="text-left p-3 font-medium w-10">Nº</th>
                 <th className="text-left p-3 font-medium whitespace-nowrap">Passageiro</th>
                 <th className="text-left p-3 font-medium whitespace-nowrap">CPF</th>
-                <th className="text-left p-3 font-medium whitespace-nowrap">Nascimento</th>
-                <th className="text-left p-3 font-medium whitespace-nowrap">Tipo</th>
-                <th className="text-left p-3 font-medium whitespace-nowrap">Contato</th>
-                <th className="text-left p-3 font-medium whitespace-nowrap">Assento(s)</th>
-                <th className="text-left p-3 font-medium whitespace-nowrap">Voucher</th>
-                <th className="text-left p-3 font-medium whitespace-nowrap">Reserva</th>
-                <th className="text-left p-3 font-medium whitespace-nowrap">Sit. Pgto.</th>
-                <th className="text-right p-3 font-medium whitespace-nowrap">Valor</th>
-                <th className="text-right p-3 font-medium whitespace-nowrap">Saldo</th>
-                <th className="text-center p-3 font-medium whitespace-nowrap">Check-in</th>
-                <th className="text-center p-3 font-medium whitespace-nowrap">Seguro</th>
+                <th className="text-left p-3 font-medium whitespace-nowrap">Dt. Nascimento</th>
+                <th className="text-left p-3 font-medium whitespace-nowrap">Poltrona</th>
+                <th className="text-left p-3 font-medium whitespace-nowrap">Categoria</th>
+                <th className="text-center p-3 font-medium whitespace-nowrap">Embarque</th>
+                <th className="text-center p-3 font-medium whitespace-nowrap">Ação</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b">
-                    {Array.from({ length: 14 }).map((_, j) => <td key={j} className="p-3"><Skeleton className="h-4 w-full" /></td>)}
+                    {Array.from({ length: 8 }).map((_, j) => <td key={j} className="p-3"><Skeleton className="h-4 w-full" /></td>)}
                   </tr>
                 ))
-              ) : passengers.length === 0 ? (
-                <tr><td colSpan={14} className="text-center py-10 text-muted-foreground">Nenhum passageiro encontrado</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan={8} className="text-center py-10 text-muted-foreground">Nenhum passageiro encontrado</td></tr>
               ) : (
-                passengers.map(p => (
-                  <tr key={p.reservationId} className="border-b hover:bg-muted/30">
-                    <td className="p-3"><Checkbox checked={selectedIds.has(p.reservationId)} onCheckedChange={() => toggleOne(p.reservationId)} /></td>
-                    <td className="p-3 font-medium whitespace-nowrap">{p.name}</td>
-                    <td className="p-3 text-muted-foreground text-xs">{p.cpf ?? "—"}</td>
-                    <td className="p-3 text-muted-foreground text-xs whitespace-nowrap">{p.birthDate ? new Date(p.birthDate).toLocaleDateString("pt-BR") : "—"}</td>
-                    <td className="p-3 text-xs"><span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{p.passengerType}</span></td>
-                    <td className="p-3 text-muted-foreground text-xs whitespace-nowrap">{p.whatsapp}</td>
-                    <td className="p-3 whitespace-nowrap">{p.seats || "—"}</td>
-                    <td className="p-3"><code className="text-xs bg-muted px-1.5 py-0.5 rounded">{p.voucherCode}</code></td>
-                    <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${p.status === "confirmed" ? "bg-green-100 text-green-700" : p.status === "pending" ? "bg-amber-100 text-amber-700" : p.status === "cancelled" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-700"}`}>
-                        {STATUS_LABELS[p.status] ?? p.status}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${p.paymentStatusColor}`}>{p.paymentStatus}</span>
-                    </td>
-                    <td className="p-3 text-right font-medium whitespace-nowrap">{formatCurrency(p.totalValue)}</td>
-                    <td className={`p-3 text-right font-medium whitespace-nowrap ${p.balance > 0 ? "text-red-600" : "text-green-600"}`}>{formatCurrency(p.balance)}</td>
-                    <td className="p-3 text-center">{p.checkedIn ? <Check className="w-4 h-4 text-green-600 mx-auto" /> : <span className="text-muted-foreground">—</span>}</td>
-                    <td className="p-3 text-center">{p.hasInsurance ? <Check className="w-4 h-4 text-blue-600 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}</td>
-                  </tr>
-                ))
+                filtered.map((p, i) => {
+                  const embarcou = !!p.checkedInAt;
+                  return (
+                    <tr key={p.id} className={`border-b hover:bg-muted/30 ${embarcou ? "bg-green-50/40" : ""}`}>
+                      <td className="p-3 text-muted-foreground text-xs">{i + 1}</td>
+                      <td className="p-3 font-medium whitespace-nowrap">{p.name}</td>
+                      <td className="p-3 text-muted-foreground text-xs">{p.cpf ?? "—"}</td>
+                      <td className="p-3 text-muted-foreground text-xs whitespace-nowrap">
+                        {p.birthDate ? new Date(p.birthDate).toLocaleDateString("pt-BR") : "—"}
+                      </td>
+                      <td className="p-3 whitespace-nowrap">{p.seatNumber ?? "—"}</td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                          p.ageCategory === "adult" ? "bg-blue-100 text-blue-700" :
+                          p.ageCategory === "child" ? "bg-amber-100 text-amber-700" :
+                          p.ageCategory === "senior" ? "bg-purple-100 text-purple-700" :
+                          "bg-gray-100 text-gray-700"
+                        }`}>
+                          {AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory}
+                        </span>
+                      </td>
+                      <td className="p-3 text-center">
+                        {embarcou ? (
+                          <span className="inline-flex items-center gap-1 text-green-700 text-xs font-medium">
+                            <CheckCircle className="w-4 h-4" /> Embarcado
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">Pendente</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-center">
+                        {embarcou ? (
+                          <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600 hover:text-red-700" onClick={() => handleUndoCheckIn(p)}>
+                            <RotateCcw className="w-3 h-3 mr-1" />Desfazer
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="ghost" className="h-7 text-xs text-green-700 hover:text-green-800" onClick={() => handleCheckIn(p)}>
+                            <LogIn className="w-3 h-3 mr-1" />Check-in
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <Button variant="outline" size="icon" disabled={page <= 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></Button>
-          <span className="text-sm text-muted-foreground">Página {page} de {totalPages}</span>
-          <Button variant="outline" size="icon" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></Button>
-        </div>
+      {!isLoading && filtered.length > 0 && (
+        <p className="text-xs text-muted-foreground text-center">
+          Exibindo {filtered.length} de {allPassengers.length} passageiro(s)
+        </p>
       )}
     </div>
   );
