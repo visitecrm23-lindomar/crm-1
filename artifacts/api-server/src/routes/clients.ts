@@ -275,28 +275,28 @@ router.patch("/clients/:id", async (req, res): Promise<void> => {
     if (parsed.data.internalRating !== undefined) updates.internalRating = parsed.data.internalRating ?? null;
     if (parsed.data.companyNps !== undefined) {
       updates.companyNps = parsed.data.companyNps ?? null;
+      updates.npsScore = parsed.data.companyNps ?? null;
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.update(clientsTable).set(updates)
+        .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)));
+
       if (parsed.data.companyNps != null) {
-        updates.npsScore = parsed.data.companyNps;
+        const score = parsed.data.companyNps;
+        const classification = score >= 9 ? "promoter" : score >= 7 ? "passive" : "detractor";
+        const npsUserId = existing.userId ?? existing.id;
+        await tx.insert(npsResponsesTable).values({
+          id: generateId(),
+          tenantId: me.tenantId,
+          userId: npsUserId,
+          score,
+          classification,
+          feedback: null,
+          orderId: null,
+        });
       }
-    }
-
-    await db.update(clientsTable).set(updates)
-      .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)));
-
-    if (parsed.data.companyNps != null && parsed.data.companyNps !== existing.companyNps) {
-      const score = parsed.data.companyNps;
-      const classification = score >= 9 ? "promoter" : score >= 7 ? "passive" : "detractor";
-      const npsUserId = existing.userId ?? existing.id;
-      await db.insert(npsResponsesTable).values({
-        id: generateId(),
-        tenantId: me.tenantId,
-        userId: npsUserId,
-        score,
-        classification,
-        feedback: null,
-        orderId: null,
-      });
-    }
+    });
 
     const [client] = await db.select().from(clientsTable)
       .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)))
