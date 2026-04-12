@@ -274,7 +274,13 @@ router.get("/public/store/:slug/products/:productSlug", async (req, res): Promis
     await db.update(storeProductsTable)
       .set({ viewsCount: row.viewsCount + 1 })
       .where(eq(storeProductsTable.id, row.id));
-    res.json(row);
+    const reviews = await db.select().from(storeReviewsTable)
+      .where(and(
+        eq(storeReviewsTable.productId, row.id),
+        eq(storeReviewsTable.status, "approved"),
+      ))
+      .orderBy(desc(storeReviewsTable.createdAt));
+    res.json({ ...row, reviews });
   } catch (err) {
     req.log.error({ err }, "Error getting public store product");
     res.status(500).json({ error: "Internal server error" });
@@ -876,7 +882,7 @@ router.post("/public/store/:slug/coupons/validate", async (req, res): Promise<vo
   }
 });
 
-router.get("/:slug/reviews", async (req, res): Promise<void> => {
+router.get("/public/store/:slug/reviews", async (req, res): Promise<void> => {
   try {
     const { slug } = req.params;
     const { limit: limitStr, featured } = req.query;

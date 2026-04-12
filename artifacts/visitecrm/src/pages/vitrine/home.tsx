@@ -224,14 +224,14 @@ export default function VitrineHome({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
+    Promise.allSettled([
       publicStoreApi.getProducts(slug, { featured: true, limit: 6 }),
       publicStoreApi.getCategories(slug),
       publicStoreApi.getReviews(slug, { limit: 6 }),
     ]).then(([p, c, r]) => {
-      setFeatured(p.data);
-      setCategories(c);
-      setReviews(r);
+      if (p.status === "fulfilled") setFeatured(p.value.data);
+      if (c.status === "fulfilled") setCategories(c.value);
+      if (r.status === "fulfilled") setReviews(r.value);
     }).finally(() => setLoading(false));
   }, [slug]);
 
