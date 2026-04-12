@@ -5065,6 +5065,8 @@ components:
           type: ["string", "null"]
         reservationId:
           type: ["string", "null"]
+        tripId:
+          type: ["string", "null"]
 
     Pipeline:
       type: object

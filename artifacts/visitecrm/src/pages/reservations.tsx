@@ -920,6 +920,7 @@ function NewReservationWizard({ open, onClose, onSuccess, initialTripId, initial
   const createReservation = useCreateReservation();
   const updateReservation = useUpdateReservation();
   const updateDeal = useUpdateDeal();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const [step, setStep] = useState(1);
@@ -1100,7 +1101,8 @@ function NewReservationWizard({ open, onClose, onSuccess, initialTripId, initial
       }
       if (dealId && created?.id) {
         try {
-          await updateDeal.mutateAsync({ id: dealId, data: { reservationId: created.id } });
+          await updateDeal.mutateAsync({ id: dealId, data: { reservationId: created.id, status: "won" } });
+          await queryClient.invalidateQueries({ queryKey: ["/api/deals"] });
         } catch {
           toast({ title: "Reserva criada", description: "Não foi possível vincular ao deal. Ligue manualmente se necessário.", variant: "default" });
         }

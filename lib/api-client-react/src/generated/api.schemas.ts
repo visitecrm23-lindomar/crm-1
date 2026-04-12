@@ -891,6 +891,8 @@ export interface UpdateDealBody {
   expectedCloseDate?: string | null;
   /** @nullable */
   reservationId?: string | null;
+  /** @nullable */
+  tripId?: string | null;
 }
 
 export interface Pipeline {

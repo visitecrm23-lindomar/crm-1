@@ -2003,6 +2003,7 @@ export const UpdateDealBody = zod.object({
   description: zod.string().nullish(),
   expectedCloseDate: zod.string().nullish(),
   reservationId: zod.string().nullish(),
+  tripId: zod.string().nullish(),
 });
 
 export const UpdateDealResponse = zod.object({

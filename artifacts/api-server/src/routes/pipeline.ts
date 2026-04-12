@@ -31,6 +31,7 @@ const UpdateDealBody = z.object({
   stageId: z.string().optional(),
   lostReason: z.string().optional(),
   reservationId: z.string().optional().nullable(),
+  tripId: z.string().optional().nullable(),
 });
 
 const MoveDealBody = z.object({ stageId: z.string() });
@@ -231,6 +232,9 @@ router.patch("/deals/:id", async (req, res): Promise<void> => {
     }
     if (parsed.data.reservationId !== undefined) {
       updates.reservationId = parsed.data.reservationId ?? null;
+    }
+    if (parsed.data.tripId !== undefined) {
+      updates.tripId = parsed.data.tripId ?? null;
     }
 
     await db.update(dealsTable).set(updates)
