@@ -35,6 +35,7 @@ export interface ReservationConfirmationEmailProps {
   agencyName: string
   agencyLogo: string
   agencyPhone: string
+  agencyPhoneVoice?: string
   agencyEmail: string
   agencyWebsite: string
   voucherUrl: string
@@ -62,6 +63,7 @@ export function ReservationConfirmationEmail({
   agencyName,
   agencyLogo,
   agencyPhone,
+  agencyPhoneVoice,
   agencyEmail,
   agencyWebsite,
   voucherUrl,
@@ -293,6 +295,15 @@ export function ReservationConfirmationEmail({
                     <td>
                       <Text style={contactLabel}>WhatsApp</Text>
                       <Link href={whatsappUrl} style={contactValue}>{agencyPhone}</Link>
+                    </td>
+                  </tr>
+                )}
+                {agencyPhoneVoice && agencyPhoneVoice !== agencyPhone && (
+                  <tr>
+                    <td style={contactIcon}>📞</td>
+                    <td>
+                      <Text style={contactLabel}>Telefone</Text>
+                      <Link href={`tel:${agencyPhoneVoice.replace(/\D/g, '')}`} style={contactValue}>{agencyPhoneVoice}</Link>
                     </td>
                   </tr>
                 )}

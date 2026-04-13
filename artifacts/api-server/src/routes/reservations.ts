@@ -672,6 +672,7 @@ router.post("/reservations", async (req, res): Promise<void> => {
           agencyName: tenant.name,
           agencyLogo: tenant.logoUrl ?? "",
           agencyPhone,
+          agencyPhoneVoice: tenant.phone ?? "",
           agencyEmail: tenant.email,
           agencyWebsite,
           voucherUrl,
