@@ -3,8 +3,6 @@ import { eq, and, sql, inArray } from "drizzle-orm";
 import { generateId } from "./id";
 import { sendBirthdayEmail } from "@workspace/email";
 
-const ADMIN_EMAIL = "reservas@visitecrm.com.br";
-
 interface EvolutionConfig {
   apiUrl: string;
   apiKey: string;
@@ -215,7 +213,7 @@ export async function processBirthdayForClient(
       if (evolutionConfig?.apiUrl && evolutionConfig?.apiKey && evolutionConfig?.instanceName) {
         const defaultMsg = settings.whatsappMessage
           ? interpolateTemplate(settings.whatsappMessage)
-          : `🎂 Feliz Aniversário, ${firstName}!\n\nA ${agencyName} tem um presente especial para você: *${settings.discountPercent}% de desconto* na sua próxima viagem!\n\nUse o cupom: *${couponCode}*\nVálido até ${validUntilStr}\n\nAproveitie para planejar a viagem dos seus sonhos! 🌍`;
+          : `🎂 Feliz Aniversário, ${firstName}!\n\nA ${agencyName} tem um presente especial para você: *${settings.discountPercent}% de desconto* na sua próxima viagem!\n\nUse o cupom: *${couponCode}*\nVálido até ${validUntilStr}\n\nAproveite para planejar a viagem dos seus sonhos! 🌍`;
 
         await sendWhatsAppMessage(evolutionConfig, client.whatsapp, defaultMsg);
         sentWhatsapp = true;
