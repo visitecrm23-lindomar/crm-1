@@ -8,4 +8,6 @@
 
 export type ValidatePublicReferralCodeBody = {
   code: string;
+  /** Optional customer email for self-referral prevention check */
+  customerEmail?: string;
 };

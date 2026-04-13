@@ -2700,6 +2700,8 @@ export type GetPublicReferralInfo200 = {
 
 export type ValidatePublicReferralCodeBody = {
   code: string;
+  /** Optional customer email for self-referral prevention check */
+  customerEmail?: string;
 };
 
 export type ValidatePublicReferralCode200 = {

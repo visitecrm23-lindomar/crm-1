@@ -3101,6 +3101,9 @@ paths:
               properties:
                 code:
                   type: string
+                customerEmail:
+                  type: string
+                  description: Optional customer email for self-referral prevention check
               required: [code]
       responses:
         "200":

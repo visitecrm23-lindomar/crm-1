@@ -3546,6 +3546,10 @@ export const ValidatePublicReferralCodeParams = zod.object({
 
 export const ValidatePublicReferralCodeBody = zod.object({
   code: zod.string(),
+  customerEmail: zod
+    .string()
+    .optional()
+    .describe("Optional customer email for self-referral prevention check"),
 });
 
 export const ValidatePublicReferralCodeResponse = zod.object({

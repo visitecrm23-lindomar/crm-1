@@ -496,6 +496,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
     // Referral code gives discount (only if no coupon discount already applied)
     let appliedReferralReferrerId: string | undefined;
     let appliedReferralDiscountValue = 5;
+    let appliedReferralDiscountType = "percentage";
     if (data.referralCode && !couponId) {
       const upperCode = data.referralCode.toUpperCase();
       // Look up referrer by permanent client referral code
@@ -555,14 +556,14 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
           if (referralEligible) {
             // Apply discount — respect discountType (percentage or fixed)
             const discValue = Number(refSettings?.discountValue ?? "5");
-            if (refSettings?.discountType === "fixed") {
+            appliedReferralDiscountType = refSettings?.discountType ?? "percentage";
+            if (appliedReferralDiscountType === "fixed") {
               discountAmount = Math.min(discValue, subtotal);
-              appliedReferralDiscountValue = discValue;
             } else {
               // Default: percentage
               discountAmount = subtotal * (discValue / 100);
-              appliedReferralDiscountValue = discValue;
             }
+            appliedReferralDiscountValue = discValue;
             appliedReferralCode = upperCode;
             appliedReferralReferrerId = referrer.id;
           }
@@ -769,7 +770,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
             referredName: data.customerName,
             discountApplied: true,
             discountValue: (appliedReferralDiscountValue).toFixed(2),
-            discountType: "percentage",
+            discountType: appliedReferralDiscountType,
             discountAmount: discountAmountForReferral.toFixed(2),
             bonusAmount: bonusValue.toFixed(2),
             convertedAt: new Date(),
