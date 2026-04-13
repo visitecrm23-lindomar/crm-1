@@ -34,6 +34,8 @@ export interface Deal {
   source: string;
   autoCreated: boolean;
   seats: string[];
+  /** @nullable */
+  reservationNumber?: string | null;
   createdAt: string;
   updatedAt: string;
   /** @nullable */

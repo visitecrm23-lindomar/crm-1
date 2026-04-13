@@ -4720,6 +4720,8 @@ components:
           type: string
         voucherCode:
           type: string
+        reservationNumber:
+          type: ["string", "null"]
         qrCode:
           type: string
         checkedInAt:
@@ -5301,6 +5303,8 @@ components:
           type: array
           items:
             type: string
+        reservationNumber:
+          type: ["string", "null"]
         createdAt:
           type: string
         updatedAt:
@@ -6346,6 +6350,8 @@ components:
           type: ["integer", "null"]
         maxTripsOverride:
           type: ["integer", "null"]
+        reservationPrefix:
+          type: ["string", "null"]
 
     # ─── BOARDING LOCATION ─────────────────────────────────────────
     BoardingLocation:

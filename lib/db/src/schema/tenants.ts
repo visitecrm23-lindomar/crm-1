@@ -24,6 +24,7 @@ export const tenantsTable = pgTable("tenants", {
   trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
   limits: json("limits").$type<Record<string, number>>().notNull().default({}),
   settings: json("settings").$type<Record<string, unknown>>(),
+  reservationPrefix: text("reservation_prefix"),
   maxUsersOverride: integer("max_users_override"),
   maxClientsOverride: integer("max_clients_override"),
   maxTripsOverride: integer("max_trips_override"),

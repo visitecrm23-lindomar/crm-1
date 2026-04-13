@@ -81,7 +81,7 @@ function formatStage(s: typeof pipelineStagesTable.$inferSelect) {
   };
 }
 
-function formatDeal(d: typeof dealsTable.$inferSelect, seats: string[] = []) {
+function formatDeal(d: typeof dealsTable.$inferSelect, seats: string[] = [], reservationNumber: string | null = null) {
   return {
     id: d.id, tenantId: d.tenantId, clientId: d.clientId, stageId: d.stageId,
     title: d.title, description: d.description, value: Number(d.value),
@@ -89,6 +89,7 @@ function formatDeal(d: typeof dealsTable.$inferSelect, seats: string[] = []) {
     leadName: d.leadName, leadEmail: d.leadEmail, leadWhatsapp: d.leadWhatsapp,
     tripId: d.tripId, lostReason: d.lostReason,
     reservationId: d.reservationId ?? null,
+    reservationNumber,
     source: d.source ?? "manual",
     autoCreated: d.autoCreated ?? false,
     seats,
@@ -98,15 +99,17 @@ function formatDeal(d: typeof dealsTable.$inferSelect, seats: string[] = []) {
   };
 }
 
-async function getSeatsForDeals(deals: typeof dealsTable.$inferSelect[], tenantId: string): Promise<Map<string, string[]>> {
+interface ReservationInfo { seats: string[]; reservationNumber: string | null }
+
+async function getReservationInfoForDeals(deals: typeof dealsTable.$inferSelect[], tenantId: string): Promise<Map<string, ReservationInfo>> {
   const resIds = deals.map(d => d.reservationId).filter(Boolean) as string[];
-  const seatsMap = new Map<string, string[]>();
-  if (resIds.length === 0) return seatsMap;
-  const rows = await db.select({ id: reservationsTable.id, seats: reservationsTable.seats })
+  const infoMap = new Map<string, ReservationInfo>();
+  if (resIds.length === 0) return infoMap;
+  const rows = await db.select({ id: reservationsTable.id, seats: reservationsTable.seats, reservationNumber: reservationsTable.reservationNumber })
     .from(reservationsTable)
     .where(and(inArray(reservationsTable.id, resIds), eq(reservationsTable.tenantId, tenantId)));
-  for (const r of rows) seatsMap.set(r.id, r.seats ?? []);
-  return seatsMap;
+  for (const r of rows) infoMap.set(r.id, { seats: r.seats ?? [], reservationNumber: r.reservationNumber ?? null });
+  return infoMap;
 }
 
 router.get("/pipeline/stages", async (req, res): Promise<void> => {
@@ -141,8 +144,11 @@ router.get("/deals", async (req, res): Promise<void> => {
     if (me.role === "vendedor") conditions.push(eq(dealsTable.ownerId, me.id));
     const deals = await db.select().from(dealsTable)
       .where(and(...conditions)).orderBy(desc(dealsTable.createdAt));
-    const seatsMap = await getSeatsForDeals(deals, me.tenantId);
-    res.json(deals.map(d => formatDeal(d, d.reservationId ? (seatsMap.get(d.reservationId) ?? []) : [])));
+    const resInfoMap = await getReservationInfoForDeals(deals, me.tenantId);
+    res.json(deals.map(d => {
+      const info = d.reservationId ? resInfoMap.get(d.reservationId) : undefined;
+      return formatDeal(d, info?.seats ?? [], info?.reservationNumber ?? null);
+    }));
   } catch (err) {
     req.log.error({ err }, "Error listing deals");
     res.status(500).json({ error: "Internal server error" });

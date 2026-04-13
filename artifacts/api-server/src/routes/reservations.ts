@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, referralSettingsTable, dealsTable, pipelineStagesTable } from "@workspace/db";
 import { eq, and, sql, desc, asc, inArray, or, ilike } from "drizzle-orm";
 import { generateId, generateVoucherCode } from "../lib/id";
+import { getTenantReservationPrefix, tripTypeToCode, getYearMonth, nextReservationSequence, buildReservationNumber } from "../lib/reservation-number";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { deriveAgeCategory, getAgeYears } from "../lib/passenger";
 import { CreateReservationBody, UpdateReservationBody, CreatePassengerBody, UpdatePassengerBody } from "@workspace/api-zod";
@@ -73,6 +74,7 @@ async function formatReservation(r: typeof reservationsTable.$inferSelect) {
     sellerId: r.sellerId ?? null,
     status: r.status,
     voucherCode: r.voucherCode,
+    reservationNumber: r.reservationNumber ?? null,
     qrCode: r.qrCode,
     checkedInAt: r.checkedInAt?.toISOString() ?? null,
     notes: r.notes,
@@ -254,7 +256,10 @@ router.get("/reservations", async (req, res): Promise<void> => {
           ),
         ));
       const matchingClientIds = matchingClients.map(c => c.id);
-      const voucherCondition = ilike(reservationsTable.voucherCode, term) as ReturnType<typeof eq>;
+      const voucherCondition = or(
+        ilike(reservationsTable.voucherCode, term),
+        ilike(reservationsTable.reservationNumber, term),
+      ) as ReturnType<typeof eq>;
       if (matchingClientIds.length > 0) {
         conditions.push(or(voucherCondition, inArray(reservationsTable.clientId, matchingClientIds)) as ReturnType<typeof eq>);
       } else {
@@ -446,14 +451,17 @@ router.post("/reservations", async (req, res): Promise<void> => {
     const voucherCode = generateVoucherCode();
     const seatsCount = parsed.data.seats.length;
 
+    const tenantPrefix = await getTenantReservationPrefix(me.tenantId);
+    const yearMonth = getYearMonth();
+
     type TxResult = { error: string; status: number } | { ok: true };
 
     const txResult: TxResult = await db.transaction(async (tx) => {
       const lockResult = await tx.execute(
-        sql`SELECT id, available_seats FROM trips WHERE id = ${parsed.data.tripId} AND tenant_id = ${me.tenantId} FOR UPDATE`
+        sql`SELECT id, available_seats, type FROM trips WHERE id = ${parsed.data.tripId} AND tenant_id = ${me.tenantId} FOR UPDATE`
       );
       // Drizzle's tx.execute() returns the raw node-postgres QueryResult; cast to access .rows
-      const tripRow = (lockResult as unknown as { rows: Array<{ id: string; available_seats: number }> }).rows[0];
+      const tripRow = (lockResult as unknown as { rows: Array<{ id: string; available_seats: number; type: string }> }).rows[0];
       if (!tripRow) return { error: "Trip not found or not in tenant", status: 400 };
 
       const availableSeats = Number(tripRow.available_seats);
@@ -474,6 +482,10 @@ router.post("/reservations", async (req, res): Promise<void> => {
           .where(eq(storeCouponsTable.id, serverCouponId));
       }
 
+      const typeCode = tripTypeToCode(parsed.data.tripType ?? tripRow.type);
+      const seq = await nextReservationSequence(me.tenantId, yearMonth, typeCode, tx);
+      const reservationNumber = buildReservationNumber(tenantPrefix, typeCode, yearMonth, seq);
+
       await tx.insert(reservationsTable).values({
         id,
         tenantId: me.tenantId,
@@ -493,6 +505,7 @@ router.post("/reservations", async (req, res): Promise<void> => {
         sellerId: parsed.data.sellerId ?? null,
         status: "pending",
         voucherCode,
+        reservationNumber,
         qrCode: `QR-${voucherCode}`,
         notes: parsed.data.notes ?? null,
         createdById: me.id,

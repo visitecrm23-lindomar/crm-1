@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, numeric, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, numeric, integer, primaryKey } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -42,6 +42,7 @@ export const reservationsTable = pgTable("reservations", {
   discountReferralCode: text("discount_referral_code"),
   discountReferralAmount: numeric("discount_referral_amount", { precision: 10, scale: 2 }),
   discountTotal: numeric("discount_total", { precision: 10, scale: 2 }),
+  reservationNumber: text("reservation_number"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -79,3 +80,12 @@ export type Passenger = typeof passengersTable.$inferSelect;
 export const passengersRelations = relations(passengersTable, ({ one }) => ({
   reservation: one(reservationsTable, { fields: [passengersTable.reservationId], references: [reservationsTable.id] }),
 }));
+
+export const reservationSequencesTable = pgTable("reservation_sequences", {
+  tenantId: text("tenant_id").notNull(),
+  yearMonth: text("year_month").notNull(),
+  typeCode: text("type_code").notNull(),
+  lastNum: integer("last_num").notNull().default(0),
+}, (t) => [
+  primaryKey({ columns: [t.tenantId, t.yearMonth, t.typeCode] }),
+]);

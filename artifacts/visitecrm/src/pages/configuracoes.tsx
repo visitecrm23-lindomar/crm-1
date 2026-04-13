@@ -132,6 +132,7 @@ function AgencyProfileTab() {
         secondaryColor: fullTenant.secondaryColor ?? "#8B5CF6",
         whatsapp: fullTenant.whatsapp ?? "",
         phone: fullTenant.phone ?? "",
+        reservationPrefix: fullTenant.reservationPrefix ?? "",
       });
     } else if (me?.tenant) {
       setForm((f) => ({
@@ -232,6 +233,21 @@ function AgencyProfileTab() {
               className="font-mono"
             />
           </div>
+        </div>
+      </div>
+      <div className="space-y-1">
+        <Label>Prefixo de Reservas</Label>
+        <div className="flex items-center gap-2">
+          <Input
+            value={form.reservationPrefix ?? ""}
+            onChange={(e) => setForm((f) => ({ ...f, reservationPrefix: e.target.value.toUpperCase().slice(0, 5) }))}
+            placeholder="Ex: CHQ, AGT..."
+            className="font-mono w-36"
+            maxLength={5}
+          />
+          <span className="text-xs text-muted-foreground">
+            Aparece nos números de reserva: <span className="font-mono font-semibold">{form.reservationPrefix || "CHQ"}-EXC-202604-00001</span>
+          </span>
         </div>
       </div>
       <Button onClick={handleSave} disabled={updateTenant.isPending}>

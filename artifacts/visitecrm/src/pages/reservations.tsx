@@ -413,8 +413,18 @@ function VoucherContent({ r, qrDataUrl }: { r: Reservation | null | undefined; q
       </div>
 
       <div className="flex flex-col items-center gap-1.5 py-4 mb-4 bg-gray-50 rounded-lg border border-gray-200">
-        <p className="text-xs text-gray-500 uppercase tracking-widest font-medium">Código do Voucher</p>
-        <p className="text-3xl font-mono font-black tracking-wider text-gray-900">{r?.voucherCode}</p>
+        {r?.reservationNumber ? (
+          <>
+            <p className="text-xs text-gray-500 uppercase tracking-widest font-medium">Número da Reserva</p>
+            <p className="text-2xl font-mono font-black tracking-wider text-gray-900">{r.reservationNumber}</p>
+            <p className="text-xs text-gray-400 font-mono">Código: {r?.voucherCode}</p>
+          </>
+        ) : (
+          <>
+            <p className="text-xs text-gray-500 uppercase tracking-widest font-medium">Código do Voucher</p>
+            <p className="text-3xl font-mono font-black tracking-wider text-gray-900">{r?.voucherCode}</p>
+          </>
+        )}
         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${STATUS_COLORS[r?.status ?? ""] ?? "bg-gray-100 text-gray-800"}`}>
           {STATUS_LABELS[r?.status ?? ""] ?? r?.status}
         </span>
@@ -1862,7 +1872,9 @@ export default function Reservations() {
                     <div className="flex flex-col gap-0.5">
                       <div className="flex items-center gap-1.5">
                         <Tag className="w-3.5 h-3.5 text-muted-foreground" />
-                        <span className="font-mono text-xs font-semibold">{r.voucherCode}</span>
+                        <span className="font-mono text-xs font-semibold">
+                          {r.reservationNumber ?? r.voucherCode}
+                        </span>
                       </div>
                       {(r as { storeOrderId?: string | null }).storeOrderId && (
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 w-fit">

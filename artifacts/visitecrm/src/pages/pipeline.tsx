@@ -75,7 +75,10 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
             )}
           </div>
           <p className="text-xs text-muted-foreground truncate">{deal.title}</p>
-          {deal.source === "website" && deal.seats && deal.seats.length > 0 && (
+          {deal.source === "website" && deal.reservationNumber && (
+            <p className="text-xs text-blue-700 font-mono font-semibold mt-0.5">{deal.reservationNumber}</p>
+          )}
+          {deal.source === "website" && !deal.reservationNumber && deal.seats && deal.seats.length > 0 && (
             <p className="text-xs text-blue-600 font-medium mt-0.5">
               {deal.seats.length === 1 ? `Assento ${deal.seats[0]}` : `Assentos ${deal.seats.join(", ")}`}
             </p>

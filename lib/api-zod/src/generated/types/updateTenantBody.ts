@@ -26,4 +26,6 @@ export interface UpdateTenantBody {
   maxClientsOverride?: number | null;
   /** @nullable */
   maxTripsOverride?: number | null;
+  /** @nullable */
+  reservationPrefix?: string | null;
 }

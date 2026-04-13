@@ -191,6 +191,17 @@ Optional:
 
 If neither `FRONTEND_URL` nor `REPLIT_DEV_DOMAIN` is set at startup, the API server logs a CORS warning — browser cross-origin calls will be blocked (same-origin requests still work).
 
+## Reservation Numbering System
+
+Reservations are assigned a human-readable number on creation: `{PREFIX}-{TYPE}-{YYYYMM}-{NNNNN}`
+
+- **PREFIX**: Agency-specific prefix from `tenants.reservation_prefix` (default: first 3 letters of slug, uppercased). Configurable per-agency in Settings.
+- **TYPE**: Derived from trip type — `EXC` (excursion), `PCT` (package), `BTV` (day_trip), `TRF` (transfer), `RES` (custom/default)
+- **YYYYMM**: Year+month of reservation creation
+- **NNNNN**: 5-digit zero-padded sequential counter, per tenant+type+month (atomic upsert on `reservation_sequences` table)
+- Old reservations without a number fall back to displaying `voucherCode` in the UI (QR codes still use `voucherCode`)
+- Search by reservation number supported in the reservations list (server-side)
+
 ## Important Notes
 
 - API build uses esbuild (not tsc) — `tsc --noEmit` errors can be ignored

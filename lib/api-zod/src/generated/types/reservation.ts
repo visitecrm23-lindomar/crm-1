@@ -32,6 +32,8 @@ export interface Reservation {
   sellerId?: string | null;
   status: string;
   voucherCode: string;
+  /** @nullable */
+  reservationNumber?: string | null;
   qrCode: string;
   /** @nullable */
   checkedInAt?: string | null;

@@ -331,6 +331,21 @@ async function runMigrations() {
       END $$;
     `);
 
+    // Reservation numbering system
+    await client.query(`
+      ALTER TABLE tenants ADD COLUMN IF NOT EXISTS reservation_prefix text;
+      ALTER TABLE reservations ADD COLUMN IF NOT EXISTS reservation_number text;
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS reservation_sequences (
+        tenant_id text NOT NULL,
+        year_month text NOT NULL,
+        type_code text NOT NULL,
+        last_num integer NOT NULL DEFAULT 0,
+        PRIMARY KEY (tenant_id, year_month, type_code)
+      );
+    `);
+
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");

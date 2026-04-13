@@ -21,6 +21,7 @@ import {
 import { eq, and, desc, asc, ilike, or, sql, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId, generateVoucherCode } from "../lib/id";
+import { getTenantReservationPrefix, tripTypeToCode, getYearMonth, nextReservationSequence, buildReservationNumber } from "../lib/reservation-number";
 import { randomBytes } from "crypto";
 
 function generateCookieId(): string {
@@ -629,6 +630,14 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
       }
     }
 
+    // Fetch tenant reservation prefix before transaction (used for reservation numbering)
+    const tenantResPrefix = tripLinkedProducts.size > 0
+      ? await getTenantReservationPrefix(store.tenantId)
+      : "";
+    const resYearMonth = getYearMonth();
+    // Map to store locked trip types (populated during trip lock loop, used during reservation creation)
+    const lockedTripTypes = new Map<string, string>();
+
     // Phase 3: Atomic transaction — lock trips, lock products, validate, write everything
     try {
       await db.transaction(async (tx) => {
@@ -638,9 +647,9 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
         for (const tripId of sortedTripIds) {
           const { product, totalQty } = tripLinkedProducts.get(tripId)!;
           const lockResult = await tx.execute(
-            sql`SELECT id, available_seats FROM trips WHERE id = ${tripId} AND tenant_id = ${store.tenantId} FOR UPDATE`
+            sql`SELECT id, available_seats, type FROM trips WHERE id = ${tripId} AND tenant_id = ${store.tenantId} FOR UPDATE`
           );
-          const row = (lockResult as unknown as { rows: Array<{ id: string; available_seats: number }> }).rows[0];
+          const row = (lockResult as unknown as { rows: Array<{ id: string; available_seats: number; type: string }> }).rows[0];
           if (!row) {
             const tripErr = new Error("trip_not_found");
             (tripErr as Error & Record<string, unknown>).productName = product.name;
@@ -653,6 +662,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
             (seatErr as Error & Record<string, unknown>).available = currentSeats;
             throw seatErr;
           }
+          lockedTripTypes.set(tripId, row.type ?? "");
         }
 
         // Then lock products (sorted by productId for deadlock prevention)
@@ -738,6 +748,11 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
             const realSeats = (data.seats && data.seats.length >= totalQty)
               ? data.seats.slice(0, totalQty)
               : Array.from({ length: totalQty }, (_, i) => String(i + 1));
+            // Generate professional reservation number atomically inside the transaction
+            const tripTypeRaw = lockedTripTypes.get(tripId) ?? "";
+            const resTypeCode = tripTypeToCode(tripTypeRaw);
+            const resSeq = await nextReservationSequence(store.tenantId, resYearMonth, resTypeCode, tx);
+            const reservationNumber = buildReservationNumber(tenantResPrefix, resTypeCode, resYearMonth, resSeq);
             await tx.insert(reservationsTable).values({
               id: reservationId,
               tenantId: store.tenantId,
@@ -749,6 +764,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
               balance: totalValue.toFixed(2),
               status: "pending",
               voucherCode,
+              reservationNumber,
               qrCode: `QR-${voucherCode}`,
               storeOrderId: orderNumber,
               createdById: reservationCreatedById,

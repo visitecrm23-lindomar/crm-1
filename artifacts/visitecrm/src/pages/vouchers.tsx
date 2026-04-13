@@ -160,10 +160,20 @@ function VoucherCard({ reservation, onDownload }: { reservation: Reservation; on
           </div>
         </div>
 
-        {/* Voucher code + barcode */}
+        {/* Reservation number + barcode */}
         <div className="rounded-lg border bg-muted/20 p-3 text-center">
-          <p className="text-xs text-muted-foreground mb-1">Código do Voucher</p>
-          <p className="font-mono text-lg font-bold tracking-widest">{reservation.voucherCode}</p>
+          {reservation.reservationNumber ? (
+            <>
+              <p className="text-xs text-muted-foreground mb-1">Número da Reserva</p>
+              <p className="font-mono text-base font-black tracking-widest text-primary">{reservation.reservationNumber}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Código: {reservation.voucherCode}</p>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground mb-1">Código do Voucher</p>
+              <p className="font-mono text-lg font-bold tracking-widest">{reservation.voucherCode}</p>
+            </>
+          )}
           <div className="mt-2 h-8 bg-gradient-to-r from-transparent via-foreground/10 to-transparent rounded flex items-center justify-center">
             <span className="font-mono text-xs text-muted-foreground">|||||||||||||||||||||||||||</span>
           </div>
@@ -293,7 +303,11 @@ function BulkCheckIn() {
                       <p className="font-medium text-sm">{r.client.name}</p>
                       <p className="text-xs text-muted-foreground">{r.client.cpf ?? ""}</p>
                     </TableCell>
-                    <TableCell className="font-mono text-xs">{r.voucherCode}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {r.reservationNumber ? (
+                        <span className="text-primary font-bold">{r.reservationNumber}</span>
+                      ) : r.voucherCode}
+                    </TableCell>
                     <TableCell className="text-sm">{r.seats.join(", ") || "—"}</TableCell>
                     <TableCell>
                       <Badge

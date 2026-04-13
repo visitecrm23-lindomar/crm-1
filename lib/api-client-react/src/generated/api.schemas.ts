@@ -504,6 +504,8 @@ export interface Reservation {
   sellerId?: string | null;
   status: string;
   voucherCode: string;
+  /** @nullable */
+  reservationNumber?: string | null;
   qrCode: string;
   /** @nullable */
   checkedInAt?: string | null;
@@ -878,6 +880,8 @@ export interface Deal {
   source: string;
   autoCreated: boolean;
   seats: string[];
+  /** @nullable */
+  reservationNumber?: string | null;
   createdAt: string;
   updatedAt: string;
   /** @nullable */
@@ -1599,6 +1603,8 @@ export interface UpdateTenantBody {
   maxClientsOverride?: number | null;
   /** @nullable */
   maxTripsOverride?: number | null;
+  /** @nullable */
+  reservationPrefix?: string | null;
 }
 
 export interface BoardingLocation {
