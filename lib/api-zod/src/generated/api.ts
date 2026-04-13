@@ -948,6 +948,119 @@ export const DeleteClientNoteResponse = zod.object({
 });
 
 /**
+ * @summary Get referral info and history for a client
+ */
+export const GetClientReferralParams = zod.object({
+  clientId: zod.coerce.string(),
+});
+
+export const GetClientReferralResponse = zod.object({
+  referralCode: zod.string().nullable(),
+  totalReferrals: zod.number(),
+  successfulReferrals: zod.number(),
+  referralEarnings: zod.number(),
+  referrals: zod.array(
+    zod.object({
+      id: zod.string(),
+      tenantId: zod.string(),
+      referrerId: zod.string(),
+      referredId: zod.string().nullish(),
+      referredEmail: zod.string().nullish(),
+      referredName: zod.string().nullish(),
+      referredPhone: zod.string().nullish(),
+      referrerName: zod.string().nullish(),
+      referrerEmail: zod.string().nullish(),
+      referrerPhone: zod.string().nullish(),
+      code: zod.string(),
+      status: zod.string(),
+      bonusAmount: zod.string(),
+      bonusPaid: zod.boolean(),
+      bonusPaidAt: zod.string().nullish(),
+      discountType: zod.string(),
+      discountValue: zod.string(),
+      discountApplied: zod.boolean(),
+      discountAmount: zod.string().nullish(),
+      cookieId: zod.string().nullish(),
+      ipAddress: zod.string().nullish(),
+      utmSource: zod.string().nullish(),
+      utmMedium: zod.string().nullish(),
+      utmCampaign: zod.string().nullish(),
+      visitsCount: zod.number(),
+      firstVisit: zod.string().nullish(),
+      lastVisit: zod.string().nullish(),
+      expiresAt: zod.string().nullish(),
+      isActive: zod.boolean(),
+      reservationId: zod.string().nullish(),
+      notes: zod.string().nullish(),
+      convertedAt: zod.string().nullish(),
+      createdAt: zod.string(),
+      updatedAt: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Generate or return existing referral code for a client
+ */
+export const GenerateClientReferralCodeParams = zod.object({
+  clientId: zod.coerce.string(),
+});
+
+export const GenerateClientReferralCodeResponse = zod.object({
+  code: zod.string(),
+});
+
+/**
+ * @summary Get referral program settings for the tenant
+ */
+export const GetReferralSettingsResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  isEnabled: zod.boolean(),
+  discountType: zod.string(),
+  discountValue: zod.string(),
+  bonusType: zod.string(),
+  bonusValue: zod.string(),
+  expirationDays: zod.number(),
+  allowSelfReferral: zod.boolean(),
+  requireFirstPurchase: zod.boolean(),
+  shareMessage: zod.string().nullish(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Update referral program settings
+ */
+export const UpdateReferralSettingsBody = zod.object({
+  isEnabled: zod.boolean().optional(),
+  discountType: zod.string().optional(),
+  discountValue: zod.number().optional(),
+  bonusType: zod.string().optional(),
+  bonusValue: zod.number().optional(),
+  expirationDays: zod.number().optional(),
+  allowSelfReferral: zod.boolean().optional(),
+  requireFirstPurchase: zod.boolean().optional(),
+  shareMessage: zod.string().optional(),
+});
+
+export const UpdateReferralSettingsResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  isEnabled: zod.boolean(),
+  discountType: zod.string(),
+  discountValue: zod.string(),
+  bonusType: zod.string(),
+  bonusValue: zod.string(),
+  expirationDays: zod.number(),
+  allowSelfReferral: zod.boolean(),
+  requireFirstPurchase: zod.boolean(),
+  shareMessage: zod.string().nullish(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
  * @summary List trips
  */
 export const listTripsQueryPageDefault = 1;
@@ -3415,12 +3528,35 @@ export const ListReferralsResponseItem = zod.object({
   referrerId: zod.string(),
   referredId: zod.string().nullish(),
   referredEmail: zod.string().nullish(),
+  referredName: zod.string().nullish(),
+  referredPhone: zod.string().nullish(),
+  referrerName: zod.string().nullish(),
+  referrerEmail: zod.string().nullish(),
+  referrerPhone: zod.string().nullish(),
   code: zod.string(),
   status: zod.string(),
   bonusAmount: zod.string(),
   bonusPaid: zod.boolean(),
+  bonusPaidAt: zod.string().nullish(),
+  discountType: zod.string(),
+  discountValue: zod.string(),
+  discountApplied: zod.boolean(),
+  discountAmount: zod.string().nullish(),
+  cookieId: zod.string().nullish(),
+  ipAddress: zod.string().nullish(),
+  utmSource: zod.string().nullish(),
+  utmMedium: zod.string().nullish(),
+  utmCampaign: zod.string().nullish(),
+  visitsCount: zod.number(),
+  firstVisit: zod.string().nullish(),
+  lastVisit: zod.string().nullish(),
+  expiresAt: zod.string().nullish(),
+  isActive: zod.boolean(),
+  reservationId: zod.string().nullish(),
+  notes: zod.string().nullish(),
   convertedAt: zod.string().nullish(),
   createdAt: zod.string(),
+  updatedAt: zod.string(),
 });
 export const ListReferralsResponse = zod.array(ListReferralsResponseItem);
 
@@ -3433,6 +3569,19 @@ export const CreateReferralBody = zod.object({
   referredEmail: zod.string().email().optional(),
   code: zod.string(),
   bonusAmount: zod.string().optional(),
+});
+
+/**
+ * @summary Get referral statistics for the tenant
+ */
+export const GetReferralStatsResponse = zod.object({
+  total: zod.number(),
+  pending: zod.number(),
+  completed: zod.number(),
+  expired: zod.number(),
+  conversionRate: zod.number(),
+  totalBonusPaid: zod.number(),
+  totalDiscountGiven: zod.number(),
 });
 
 /**
@@ -3460,6 +3609,8 @@ export const UpdateReferralBody = zod.object({
   status: zod.string().optional(),
   bonusPaid: zod.boolean().optional(),
   convertedAt: zod.string().optional(),
+  isActive: zod.boolean().optional(),
+  notes: zod.string().optional(),
 });
 
 export const UpdateReferralResponse = zod.object({
@@ -3468,12 +3619,35 @@ export const UpdateReferralResponse = zod.object({
   referrerId: zod.string(),
   referredId: zod.string().nullish(),
   referredEmail: zod.string().nullish(),
+  referredName: zod.string().nullish(),
+  referredPhone: zod.string().nullish(),
+  referrerName: zod.string().nullish(),
+  referrerEmail: zod.string().nullish(),
+  referrerPhone: zod.string().nullish(),
   code: zod.string(),
   status: zod.string(),
   bonusAmount: zod.string(),
   bonusPaid: zod.boolean(),
+  bonusPaidAt: zod.string().nullish(),
+  discountType: zod.string(),
+  discountValue: zod.string(),
+  discountApplied: zod.boolean(),
+  discountAmount: zod.string().nullish(),
+  cookieId: zod.string().nullish(),
+  ipAddress: zod.string().nullish(),
+  utmSource: zod.string().nullish(),
+  utmMedium: zod.string().nullish(),
+  utmCampaign: zod.string().nullish(),
+  visitsCount: zod.number(),
+  firstVisit: zod.string().nullish(),
+  lastVisit: zod.string().nullish(),
+  expiresAt: zod.string().nullish(),
+  isActive: zod.boolean(),
+  reservationId: zod.string().nullish(),
+  notes: zod.string().nullish(),
   convertedAt: zod.string().nullish(),
   createdAt: zod.string(),
+  updatedAt: zod.string(),
 });
 
 /**

@@ -14,11 +14,51 @@ export interface Referral {
   referredId?: string | null;
   /** @nullable */
   referredEmail?: string | null;
+  /** @nullable */
+  referredName?: string | null;
+  /** @nullable */
+  referredPhone?: string | null;
+  /** @nullable */
+  referrerName?: string | null;
+  /** @nullable */
+  referrerEmail?: string | null;
+  /** @nullable */
+  referrerPhone?: string | null;
   code: string;
   status: string;
   bonusAmount: string;
   bonusPaid: boolean;
   /** @nullable */
+  bonusPaidAt?: string | null;
+  discountType: string;
+  discountValue: string;
+  discountApplied: boolean;
+  /** @nullable */
+  discountAmount?: string | null;
+  /** @nullable */
+  cookieId?: string | null;
+  /** @nullable */
+  ipAddress?: string | null;
+  /** @nullable */
+  utmSource?: string | null;
+  /** @nullable */
+  utmMedium?: string | null;
+  /** @nullable */
+  utmCampaign?: string | null;
+  visitsCount: number;
+  /** @nullable */
+  firstVisit?: string | null;
+  /** @nullable */
+  lastVisit?: string | null;
+  /** @nullable */
+  expiresAt?: string | null;
+  isActive: boolean;
+  /** @nullable */
+  reservationId?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
   convertedAt?: string | null;
   createdAt: string;
+  updatedAt: string;
 }

@@ -1679,13 +1679,53 @@ export interface Referral {
   referredId?: string | null;
   /** @nullable */
   referredEmail?: string | null;
+  /** @nullable */
+  referredName?: string | null;
+  /** @nullable */
+  referredPhone?: string | null;
+  /** @nullable */
+  referrerName?: string | null;
+  /** @nullable */
+  referrerEmail?: string | null;
+  /** @nullable */
+  referrerPhone?: string | null;
   code: string;
   status: string;
   bonusAmount: string;
   bonusPaid: boolean;
   /** @nullable */
+  bonusPaidAt?: string | null;
+  discountType: string;
+  discountValue: string;
+  discountApplied: boolean;
+  /** @nullable */
+  discountAmount?: string | null;
+  /** @nullable */
+  cookieId?: string | null;
+  /** @nullable */
+  ipAddress?: string | null;
+  /** @nullable */
+  utmSource?: string | null;
+  /** @nullable */
+  utmMedium?: string | null;
+  /** @nullable */
+  utmCampaign?: string | null;
+  visitsCount: number;
+  /** @nullable */
+  firstVisit?: string | null;
+  /** @nullable */
+  lastVisit?: string | null;
+  /** @nullable */
+  expiresAt?: string | null;
+  isActive: boolean;
+  /** @nullable */
+  reservationId?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
   convertedAt?: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreateReferralBody {
@@ -1700,6 +1740,56 @@ export interface UpdateReferralBody {
   status?: string;
   bonusPaid?: boolean;
   convertedAt?: string;
+  isActive?: boolean;
+  notes?: string;
+}
+
+export interface ReferralStats {
+  total: number;
+  pending: number;
+  completed: number;
+  expired: number;
+  conversionRate: number;
+  totalBonusPaid: number;
+  totalDiscountGiven: number;
+}
+
+export interface ReferralSettings {
+  id: string;
+  tenantId: string;
+  isEnabled: boolean;
+  discountType: string;
+  discountValue: string;
+  bonusType: string;
+  bonusValue: string;
+  expirationDays: number;
+  allowSelfReferral: boolean;
+  requireFirstPurchase: boolean;
+  /** @nullable */
+  shareMessage?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateReferralSettingsBody {
+  isEnabled?: boolean;
+  discountType?: string;
+  discountValue?: number;
+  bonusType?: string;
+  bonusValue?: number;
+  expirationDays?: number;
+  allowSelfReferral?: boolean;
+  requireFirstPurchase?: boolean;
+  shareMessage?: string;
+}
+
+export interface ClientReferralInfo {
+  /** @nullable */
+  referralCode: string | null;
+  totalReferrals: number;
+  successfulReferrals: number;
+  referralEarnings: number;
+  referrals: Referral[];
 }
 
 export interface Coupon {
@@ -2436,6 +2526,10 @@ export type ListClientsParams = {
 
 export type UpdateClientPipelineStageBody = {
   stage: string;
+};
+
+export type GenerateClientReferralCode200 = {
+  code: string;
 };
 
 export type ListTripsParams = {

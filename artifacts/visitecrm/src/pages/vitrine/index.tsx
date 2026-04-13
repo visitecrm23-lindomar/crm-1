@@ -9,6 +9,7 @@ import VitrineProduct from "./product";
 import VitrineCheckout from "./checkout";
 import VitrineOrderTracking from "./order-tracking";
 import ReservationWizard from "./reservation-wizard";
+import ReferralLanding from "./referral-landing";
 import { Loader2 } from "lucide-react";
 
 function StoreRouter({ slug }: { slug: string }) {
@@ -104,6 +105,9 @@ function StoreRouter({ slug }: { slug: string }) {
         </Route>
         <Route path={`/loja/${slug}/consultar-pedido`}>
           <VitrineOrderTracking slug={slug} store={store} />
+        </Route>
+        <Route path={`/loja/${slug}/indicacao`}>
+          <ReferralLanding slug={slug} store={store} />
         </Route>
         <Route>
           <Redirect to={`/loja/${slug}`} />

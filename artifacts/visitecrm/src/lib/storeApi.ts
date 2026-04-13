@@ -200,6 +200,17 @@ export const publicStoreApi = {
     ),
   validateReferral: (slug: string, code: string) =>
     publicReq<ReferralValidation>("POST", `/public/store/${slug}/referral/validate`, { code }),
+  getReferralInfo: (slug: string, code: string) =>
+    publicReq<ReferralValidation>("GET", `/public/store/${slug}/referral/info?code=${encodeURIComponent(code)}`),
+  trackReferral: (slug: string, data: {
+    code: string;
+    cookieId?: string;
+    landingPage?: string;
+    utmSource?: string;
+    utmMedium?: string;
+    utmCampaign?: string;
+  }) =>
+    publicReq<{ cookieId: string; tracked: boolean }>("POST", `/public/store/${slug}/referral/track`, data),
 };
 
 export interface StoreSettings {
@@ -569,7 +580,9 @@ export interface CreateOrderInput {
 export interface ReferralValidation {
   valid: boolean;
   code?: string;
+  referrerName?: string;
   discountPercent?: number;
+  discountType?: string;
   description?: string;
   error?: string;
 }

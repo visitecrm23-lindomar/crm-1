@@ -899,6 +899,79 @@ paths:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
 
+  /clients/{clientId}/referral:
+    get:
+      operationId: getClientReferral
+      summary: Get referral info and history for a client
+      tags: [Clients]
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Client referral info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientReferralInfo"
+
+  /clients/{clientId}/referral/generate:
+    post:
+      operationId: generateClientReferralCode
+      summary: Generate or return existing referral code for a client
+      tags: [Clients]
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Generated referral code
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                required: [code]
+
+  # ─── REFERRAL SETTINGS ─────────────────────────────────────────────
+  /referral-settings:
+    get:
+      operationId: getReferralSettings
+      summary: Get referral program settings for the tenant
+      tags: [Referrals]
+      responses:
+        "200":
+          description: Referral settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferralSettings"
+    patch:
+      operationId: updateReferralSettings
+      summary: Update referral program settings
+      tags: [Referrals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateReferralSettingsBody"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferralSettings"
+
   # ─── TRIPS ───────────────────────────────────────────────────────
   /trips:
     get:
@@ -3001,6 +3074,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Referral"
+
+  /referrals/stats:
+    get:
+      operationId: getReferralStats
+      summary: Get referral statistics for the tenant
+      tags: [Referrals]
+      responses:
+        "200":
+          description: Referral stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferralStats"
 
   /referrals/validate/{code}:
     get:
@@ -6210,6 +6296,16 @@ components:
           type: ["string", "null"]
         referredEmail:
           type: ["string", "null"]
+        referredName:
+          type: ["string", "null"]
+        referredPhone:
+          type: ["string", "null"]
+        referrerName:
+          type: ["string", "null"]
+        referrerEmail:
+          type: ["string", "null"]
+        referrerPhone:
+          type: ["string", "null"]
         code:
           type: string
         status:
@@ -6218,11 +6314,47 @@ components:
           type: string
         bonusPaid:
           type: boolean
+        bonusPaidAt:
+          type: ["string", "null"]
+        discountType:
+          type: string
+        discountValue:
+          type: string
+        discountApplied:
+          type: boolean
+        discountAmount:
+          type: ["string", "null"]
+        cookieId:
+          type: ["string", "null"]
+        ipAddress:
+          type: ["string", "null"]
+        utmSource:
+          type: ["string", "null"]
+        utmMedium:
+          type: ["string", "null"]
+        utmCampaign:
+          type: ["string", "null"]
+        visitsCount:
+          type: integer
+        firstVisit:
+          type: ["string", "null"]
+        lastVisit:
+          type: ["string", "null"]
+        expiresAt:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        reservationId:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
         convertedAt:
           type: ["string", "null"]
         createdAt:
           type: string
-      required: [id, tenantId, referrerId, code, status, bonusAmount, bonusPaid, createdAt]
+        updatedAt:
+          type: string
+      required: [id, tenantId, referrerId, code, status, bonusAmount, bonusPaid, discountType, discountValue, discountApplied, isActive, visitsCount, createdAt, updatedAt]
 
     CreateReferralBody:
       type: object
@@ -6249,6 +6381,99 @@ components:
           type: boolean
         convertedAt:
           type: string
+        isActive:
+          type: boolean
+        notes:
+          type: string
+
+    ReferralStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        pending:
+          type: integer
+        completed:
+          type: integer
+        expired:
+          type: integer
+        conversionRate:
+          type: integer
+        totalBonusPaid:
+          type: number
+        totalDiscountGiven:
+          type: number
+      required: [total, pending, completed, expired, conversionRate, totalBonusPaid, totalDiscountGiven]
+
+    ReferralSettings:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        isEnabled:
+          type: boolean
+        discountType:
+          type: string
+        discountValue:
+          type: string
+        bonusType:
+          type: string
+        bonusValue:
+          type: string
+        expirationDays:
+          type: integer
+        allowSelfReferral:
+          type: boolean
+        requireFirstPurchase:
+          type: boolean
+        shareMessage:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, tenantId, isEnabled, discountType, discountValue, bonusType, bonusValue, expirationDays, allowSelfReferral, requireFirstPurchase, createdAt, updatedAt]
+
+    UpdateReferralSettingsBody:
+      type: object
+      properties:
+        isEnabled:
+          type: boolean
+        discountType:
+          type: string
+        discountValue:
+          type: number
+        bonusType:
+          type: string
+        bonusValue:
+          type: number
+        expirationDays:
+          type: integer
+        allowSelfReferral:
+          type: boolean
+        requireFirstPurchase:
+          type: boolean
+        shareMessage:
+          type: string
+
+    ClientReferralInfo:
+      type: object
+      properties:
+        referralCode:
+          type: ["string", "null"]
+        totalReferrals:
+          type: integer
+        successfulReferrals:
+          type: integer
+        referralEarnings:
+          type: number
+        referrals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Referral"
+      required: [referralCode, totalReferrals, successfulReferrals, referralEarnings, referrals]
 
     # ─── COUPON ────────────────────────────────────────────────────
     Coupon:

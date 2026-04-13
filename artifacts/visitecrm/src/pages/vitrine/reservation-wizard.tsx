@@ -535,8 +535,9 @@ export default function ReservationWizard({
   const [validatingCoupon, setValidatingCoupon] = useState(false);
   const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
 
-  const [referralCode, setReferralCode] = useState("");
+  const [referralCode, setReferralCode] = useState(() => localStorage.getItem("referral_code") ?? "");
   const [referralApplied, setReferralApplied] = useState(false);
+  const [referralDiscountPct, setReferralDiscountPct] = useState(5);
 
   useEffect(() => {
     setLoadingProduct(true);
@@ -547,6 +548,21 @@ export default function ReservationWizard({
       .finally(() => setLoadingProduct(false));
   }, [slug, productSlug]);
 
+  // Auto-apply referral code from localStorage
+  useEffect(() => {
+    const savedCode = localStorage.getItem("referral_code");
+    if (savedCode) {
+      publicStoreApi.validateReferral(slug, savedCode).then((res) => {
+        if (res.valid) {
+          setReferralCode(savedCode);
+          setReferralApplied(true);
+          setReferralDiscountPct(res.discountPercent ?? 5);
+        }
+      }).catch(() => {/* Silently ignore */});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function set(field: string, value: string) {
     setFormState((p) => ({ ...p, [field]: value }));
   }
@@ -555,7 +571,7 @@ export default function ReservationWizard({
   const unitPrice = selectedVariant ? selectedVariant.price : basePrice;
   const subtotal = unitPrice * qty;
   const couponDiscount = couponResult?.valid ? Number(couponResult.discountAmount ?? 0) : 0;
-  const referralDiscount = referralApplied ? subtotal * 0.05 : 0;
+  const referralDiscount = referralApplied ? subtotal * (referralDiscountPct / 100) : 0;
   const finalTotal = Math.max(0, subtotal - couponDiscount - referralDiscount);
 
   const showSeatGrid =
@@ -598,9 +614,20 @@ export default function ReservationWizard({
     set("couponCode", "");
   }
 
-  function applyReferral() {
+  async function applyReferral() {
     if (!referralCode.trim()) return;
-    setReferralApplied(true);
+    try {
+      const res = await publicStoreApi.validateReferral(slug, referralCode.trim().toUpperCase());
+      if (res.valid) {
+        setReferralApplied(true);
+        setReferralDiscountPct(res.discountPercent ?? 5);
+        localStorage.setItem("referral_code", referralCode.trim().toUpperCase());
+      } else {
+        alert(res.error ?? "Código inválido");
+      }
+    } catch {
+      alert("Erro ao validar código de indicação");
+    }
   }
 
   function removeReferral() {

@@ -196,6 +196,86 @@ async function runMigrations() {
     await client.query(`
       ALTER TABLE reservations ADD COLUMN IF NOT EXISTS seller_id text;
     `);
+
+    // Referral system enhancements
+    await client.query(`
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS referrer_name text;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS referrer_email text;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS referrer_phone text;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS referred_name text;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS referred_phone text;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS discount_type text NOT NULL DEFAULT 'percentage';
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS discount_value numeric(5,2) NOT NULL DEFAULT 5;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS discount_applied boolean NOT NULL DEFAULT false;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS discount_amount numeric(10,2);
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS bonus_paid_at TIMESTAMPTZ;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS cookie_id text;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS ip_address text;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS user_agent text;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS landing_page text;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS utm_source text;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS utm_medium text;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS utm_campaign text;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS visits_count integer NOT NULL DEFAULT 0;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS first_visit TIMESTAMPTZ;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS last_visit TIMESTAMPTZ;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS reservation_id text;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS notes text;
+      ALTER TABLE referrals ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+    `);
+    await client.query(`
+      ALTER TABLE clients ADD COLUMN IF NOT EXISTS referral_code text;
+      ALTER TABLE clients ADD COLUMN IF NOT EXISTS referred_by_id text;
+      ALTER TABLE clients ADD COLUMN IF NOT EXISTS total_referrals integer NOT NULL DEFAULT 0;
+      ALTER TABLE clients ADD COLUMN IF NOT EXISTS successful_referrals integer NOT NULL DEFAULT 0;
+      ALTER TABLE clients ADD COLUMN IF NOT EXISTS referral_earnings numeric(10,2) NOT NULL DEFAULT 0;
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS referral_tracking (
+        id text PRIMARY KEY,
+        tenant_id text NOT NULL,
+        cookie_id text NOT NULL UNIQUE,
+        referral_code text NOT NULL,
+        ip_address text,
+        user_agent text,
+        device_type text,
+        browser text,
+        os text,
+        first_visit TIMESTAMPTZ NOT NULL DEFAULT now(),
+        last_visit TIMESTAMPTZ NOT NULL DEFAULT now(),
+        visits_count integer NOT NULL DEFAULT 1,
+        pages_visited json,
+        converted boolean NOT NULL DEFAULT false,
+        converted_at TIMESTAMPTZ,
+        reservation_id text,
+        utm_source text,
+        utm_medium text,
+        utm_campaign text,
+        utm_content text,
+        utm_term text,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS referral_settings (
+        id text PRIMARY KEY,
+        tenant_id text NOT NULL UNIQUE,
+        is_enabled boolean NOT NULL DEFAULT true,
+        discount_type text NOT NULL DEFAULT 'percentage',
+        discount_value numeric(5,2) NOT NULL DEFAULT 5,
+        bonus_type text NOT NULL DEFAULT 'credit',
+        bonus_value numeric(10,2) NOT NULL DEFAULT 10,
+        expiration_days integer NOT NULL DEFAULT 30,
+        allow_self_referral boolean NOT NULL DEFAULT false,
+        require_first_purchase boolean NOT NULL DEFAULT true,
+        share_message text,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    `);
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");

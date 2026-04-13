@@ -8,6 +8,8 @@ import {
   useListLoyaltyTransactions,
   useListClientActivities,
   useCreateClientActivity,
+  useGetClientReferral,
+  useGenerateClientReferralCode,
 } from "@workspace/api-client-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -292,6 +294,109 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
   );
 }
 
+function ClientReferralTab({ clientId }: { clientId: string }) {
+  const { data, refetch } = useGetClientReferral(clientId, { query: { enabled: !!clientId } });
+  const generate = useGenerateClientReferralCode();
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
+
+  async function handleGenerate() {
+    try {
+      await generate.mutateAsync({ clientId });
+      toast({ title: "Código de indicação gerado!" });
+      refetch();
+    } catch {
+      toast({ title: "Erro ao gerar código", variant: "destructive" });
+    }
+  }
+
+  function copyCode() {
+    if (!data?.referralCode) return;
+    navigator.clipboard.writeText(data.referralCode).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  const STATUS_COLORS: Record<string, string> = {
+    pending: "text-yellow-600",
+    completed: "text-green-600",
+    expired: "text-red-500",
+    converted: "text-green-600",
+  };
+
+  return (
+    <div className="space-y-4 mt-2">
+      {/* Referral code card */}
+      <Card className="p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-muted-foreground mb-1">Código de indicação</p>
+            {data?.referralCode ? (
+              <div className="flex items-center gap-2">
+                <span className="text-2xl font-mono font-bold text-primary">{data.referralCode}</span>
+                <Button size="sm" variant="outline" onClick={copyCode}>
+                  {copied ? <CheckSquare className="w-4 h-4 text-green-500" /> : <FileText className="w-4 h-4" />}
+                </Button>
+              </div>
+            ) : (
+              <Button size="sm" onClick={handleGenerate} disabled={generate.isPending}>
+                <Gift className="w-4 h-4 mr-2" />
+                {generate.isPending ? "Gerando..." : "Gerar código"}
+              </Button>
+            )}
+          </div>
+          <div className="text-right space-y-1">
+            <p className="text-xs text-muted-foreground">Indicações bem-sucedidas</p>
+            <p className="text-2xl font-bold text-green-600">{data?.successfulReferrals ?? 0}</p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-3">
+        <Card className="p-3 text-center">
+          <p className="text-xs text-muted-foreground">Total</p>
+          <p className="text-xl font-bold">{data?.totalReferrals ?? 0}</p>
+        </Card>
+        <Card className="p-3 text-center">
+          <p className="text-xs text-muted-foreground">Convertidas</p>
+          <p className="text-xl font-bold text-green-600">{data?.successfulReferrals ?? 0}</p>
+        </Card>
+        <Card className="p-3 text-center">
+          <p className="text-xs text-muted-foreground">Bônus ganho</p>
+          <p className="text-xl font-bold">{formatCurrency(data?.referralEarnings ?? 0)}</p>
+        </Card>
+      </div>
+
+      {/* Referrals list */}
+      {(data?.referrals ?? []).length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-4">Nenhuma indicação registrada</p>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-muted-foreground">Histórico de indicações</p>
+          {(data?.referrals ?? []).map((r) => (
+            <div key={r.id} className="flex items-center justify-between py-2 border-b last:border-0">
+              <div>
+                <p className="text-sm font-medium">{r.referredName ?? r.referredEmail ?? "—"}</p>
+                <p className="text-xs text-muted-foreground">{r.createdAt ? new Date(r.createdAt).toLocaleDateString("pt-BR") : ""}</p>
+              </div>
+              <div className="text-right">
+                <p className={`text-sm font-medium ${STATUS_COLORS[r.status] ?? ""}`}>
+                  {r.status === "pending" ? "Pendente" : r.status === "completed" || r.status === "converted" ? "Convertida" : "Expirada"}
+                </p>
+                {r.discountApplied && (
+                  <p className="text-xs text-muted-foreground">Desconto: {formatCurrency(Number(r.discountAmount ?? 0))}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface Client360ModalProps {
   open: boolean;
   onClose: () => void;
@@ -391,11 +496,12 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
             </div>
 
             <Tabs defaultValue="data">
-              <TabsList className="grid w-full grid-cols-6">
+              <TabsList className="grid w-full grid-cols-7">
                 <TabsTrigger value="data">Dados</TabsTrigger>
                 <TabsTrigger value="trips">Viagens</TabsTrigger>
                 <TabsTrigger value="financial">Financeiro</TabsTrigger>
                 <TabsTrigger value="loyalty">Fidelidade</TabsTrigger>
+                <TabsTrigger value="referral">Indicações</TabsTrigger>
                 <TabsTrigger value="history">Histórico</TabsTrigger>
                 <TabsTrigger value="documents">Docs</TabsTrigger>
               </TabsList>
@@ -579,6 +685,10 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                     </div>
                   </>
                 )}
+              </TabsContent>
+
+              <TabsContent value="referral" className="mt-4">
+                <ClientReferralTab clientId={id} />
               </TabsContent>
 
               <TabsContent value="history" className="mt-4">

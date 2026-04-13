@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, numeric, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, numeric, boolean, integer, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -8,14 +8,89 @@ export const referralsTable = pgTable("referrals", {
   referrerId: text("referrer_id").notNull(),
   referredId: text("referred_id"),
   referredEmail: text("referred_email"),
+  referredName: text("referred_name"),
+  referredPhone: text("referred_phone"),
+  referrerName: text("referrer_name"),
+  referrerEmail: text("referrer_email"),
+  referrerPhone: text("referrer_phone"),
   code: text("code").notNull(),
   status: text("status").notNull().default("pending"),
   bonusAmount: numeric("bonus_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   bonusPaid: boolean("bonus_paid").notNull().default(false),
+  bonusPaidAt: timestamp("bonus_paid_at", { withTimezone: true }),
   convertedAt: timestamp("converted_at", { withTimezone: true }),
+  discountType: text("discount_type").notNull().default("percentage"),
+  discountValue: numeric("discount_value", { precision: 5, scale: 2 }).notNull().default("5"),
+  discountApplied: boolean("discount_applied").notNull().default(false),
+  discountAmount: numeric("discount_amount", { precision: 10, scale: 2 }),
+  cookieId: text("cookie_id"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  landingPage: text("landing_page"),
+  utmSource: text("utm_source"),
+  utmMedium: text("utm_medium"),
+  utmCampaign: text("utm_campaign"),
+  visitsCount: integer("visits_count").notNull().default(0),
+  firstVisit: timestamp("first_visit", { withTimezone: true }),
+  lastVisit: timestamp("last_visit", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  isActive: boolean("is_active").notNull().default(true),
+  reservationId: text("reservation_id"),
+  notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const insertReferralSchema = createInsertSchema(referralsTable).omit({ createdAt: true });
+export const insertReferralSchema = createInsertSchema(referralsTable).omit({ createdAt: true, updatedAt: true });
 export type InsertReferral = z.infer<typeof insertReferralSchema>;
 export type Referral = typeof referralsTable.$inferSelect;
+
+export const referralTrackingTable = pgTable("referral_tracking", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  cookieId: text("cookie_id").notNull().unique(),
+  referralCode: text("referral_code").notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  deviceType: text("device_type"),
+  browser: text("browser"),
+  os: text("os"),
+  firstVisit: timestamp("first_visit", { withTimezone: true }).notNull().defaultNow(),
+  lastVisit: timestamp("last_visit", { withTimezone: true }).notNull().defaultNow(),
+  visitsCount: integer("visits_count").notNull().default(1),
+  pagesVisited: json("pages_visited").$type<string[]>(),
+  converted: boolean("converted").notNull().default(false),
+  convertedAt: timestamp("converted_at", { withTimezone: true }),
+  reservationId: text("reservation_id"),
+  utmSource: text("utm_source"),
+  utmMedium: text("utm_medium"),
+  utmCampaign: text("utm_campaign"),
+  utmContent: text("utm_content"),
+  utmTerm: text("utm_term"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertReferralTrackingSchema = createInsertSchema(referralTrackingTable).omit({ createdAt: true, updatedAt: true });
+export type InsertReferralTracking = z.infer<typeof insertReferralTrackingSchema>;
+export type ReferralTracking = typeof referralTrackingTable.$inferSelect;
+
+export const referralSettingsTable = pgTable("referral_settings", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull().unique(),
+  isEnabled: boolean("is_enabled").notNull().default(true),
+  discountType: text("discount_type").notNull().default("percentage"),
+  discountValue: numeric("discount_value", { precision: 5, scale: 2 }).notNull().default("5"),
+  bonusType: text("bonus_type").notNull().default("credit"),
+  bonusValue: numeric("bonus_value", { precision: 10, scale: 2 }).notNull().default("10"),
+  expirationDays: integer("expiration_days").notNull().default(30),
+  allowSelfReferral: boolean("allow_self_referral").notNull().default(false),
+  requireFirstPurchase: boolean("require_first_purchase").notNull().default(true),
+  shareMessage: text("share_message"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertReferralSettingsSchema = createInsertSchema(referralSettingsTable).omit({ createdAt: true, updatedAt: true });
+export type InsertReferralSettings = z.infer<typeof insertReferralSettingsSchema>;
+export type ReferralSettings = typeof referralSettingsTable.$inferSelect;

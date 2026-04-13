@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { publicStoreApi, PublicStore, CouponValidation, ReferralValidation } from "@/lib/storeApi";
 import { useCart } from "@/contexts/CartContext";
@@ -257,20 +257,23 @@ export default function VitrineCheckout({
   const [loading, setLoading] = useState(false);
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
 
-  const [form, setFormState] = useState({
-    customerName: "",
-    customerEmail: "",
-    customerPhone: "",
-    customerCpf: "",
-    notes: "",
-    paymentMethod: store.paymentMethods[0] ?? "pix",
-    couponCode: "",
-    referralCode: "",
-    cardNumber: "",
-    cardName: "",
-    cardExpiry: "",
-    cardCvv: "",
-    installments: "1",
+  const [form, setFormState] = useState(() => {
+    const savedCode = localStorage.getItem("referral_code") ?? "";
+    return {
+      customerName: "",
+      customerEmail: "",
+      customerPhone: "",
+      customerCpf: "",
+      notes: "",
+      paymentMethod: store.paymentMethods[0] ?? "pix",
+      couponCode: "",
+      referralCode: savedCode,
+      cardNumber: "",
+      cardName: "",
+      cardExpiry: "",
+      cardCvv: "",
+      installments: "1",
+    };
   });
 
   const [couponResult, setCouponResult] = useState<CouponValidation | null>(null);
@@ -278,12 +281,26 @@ export default function VitrineCheckout({
   const [referralResult, setReferralResult] = useState<ReferralValidation | null>(null);
   const [validatingReferral, setValidatingReferral] = useState(false);
 
+  // Auto-validate referral code from localStorage on mount
+  useEffect(() => {
+    const savedCode = localStorage.getItem("referral_code");
+    if (savedCode && !referralResult) {
+      publicStoreApi.validateReferral(slug, savedCode).then((res) => {
+        if (res.valid) setReferralResult(res);
+      }).catch(() => {
+        // Silently fail — user can still enter it manually
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function set(field: string, value: string) {
     setFormState((p) => ({ ...p, [field]: value }));
   }
 
+  const referralDiscountPct = referralResult?.discountPercent ?? 5;
   const couponDiscount = couponResult?.valid ? Number(couponResult.discountAmount ?? 0) : 0;
-  const referralDiscount = referralResult?.valid && !couponResult?.valid ? total * 0.05 : 0;
+  const referralDiscount = referralResult?.valid && !couponResult?.valid ? total * (referralDiscountPct / 100) : 0;
   const discount = couponDiscount + referralDiscount;
   const finalTotal = Math.max(0, total - discount);
 
@@ -443,7 +460,7 @@ export default function VitrineCheckout({
           )}
           {referralDiscount > 0 && (
             <div className="flex justify-between text-sm text-green-600">
-              <span>Indicação ({referralResult?.code}) −5%</span>
+              <span>Indicação ({referralResult?.code}) −{referralDiscountPct}%</span>
               <span>- R$ {referralDiscount.toFixed(2)}</span>
             </div>
           )}

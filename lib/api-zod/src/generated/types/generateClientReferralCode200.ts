@@ -6,10 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface UpdateReferralBody {
-  status?: string;
-  bonusPaid?: boolean;
-  convertedAt?: string;
-  isActive?: boolean;
-  notes?: string;
-}
+export type GenerateClientReferralCode200 = {
+  code: string;
+};

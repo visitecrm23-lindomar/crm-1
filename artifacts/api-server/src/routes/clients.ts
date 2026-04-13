@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable } from "@workspace/db";
+import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable } from "@workspace/db";
 import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -470,6 +470,73 @@ router.delete("/clients/:clientId/notes/:noteId", async (req, res): Promise<void
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Error deleting note");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/clients/:clientId/referral", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const client = await requireClientAccess(me, req.params.clientId, res);
+    if (!client) return;
+    const referrals = await db.select().from(referralsTable)
+      .where(and(
+        eq(referralsTable.tenantId, me.tenantId),
+        eq(referralsTable.referrerId, req.params.clientId),
+      ))
+      .orderBy(desc(referralsTable.createdAt));
+    res.json({
+      referralCode: client.referralCode ?? null,
+      totalReferrals: client.totalReferrals ?? 0,
+      successfulReferrals: client.successfulReferrals ?? 0,
+      referralEarnings: Number(client.referralEarnings ?? 0),
+      referrals,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error fetching client referral info");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/clients/:clientId/referral/generate", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const client = await requireClientAccess(me, req.params.clientId, res);
+    if (!client) return;
+
+    // If client already has a code return it
+    if (client.referralCode) {
+      res.json({ code: client.referralCode });
+      return;
+    }
+
+    // Generate unique referral code from first letters of name + random
+    const namePart = (client.name ?? "REF").replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 4);
+    const randPart = Math.random().toString(36).toUpperCase().slice(2, 6);
+    const code = `${namePart}${randPart}`;
+
+    await db.update(clientsTable)
+      .set({ referralCode: code })
+      .where(eq(clientsTable.id, client.id));
+
+    // Create a pending referral record for this code
+    const referralId = generateId();
+    await db.insert(referralsTable).values({
+      id: referralId,
+      tenantId: me.tenantId,
+      referrerId: client.id,
+      referrerName: client.name ?? undefined,
+      referrerEmail: client.email ?? undefined,
+      referrerPhone: client.whatsapp ?? undefined,
+      code,
+      status: "pending",
+    });
+
+    res.json({ code });
+  } catch (err) {
+    req.log.error({ err }, "Error generating referral code for client");
     res.status(500).json({ error: "Internal server error" });
   }
 });

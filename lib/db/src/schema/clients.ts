@@ -4,6 +4,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { tenantsTable } from "./tenants";
 
+
 export const clientsTable = pgTable("clients", {
   id: text("id").primaryKey(),
   tenantId: text("tenant_id").notNull().references(() => tenantsTable.id, { onDelete: "cascade" }),
@@ -47,6 +48,11 @@ export const clientsTable = pgTable("clients", {
   pipelineStage: text("pipeline_stage").notNull().default("novo"),
   createdById: text("created_by_id").notNull(),
   userId: text("user_id"),
+  referralCode: text("referral_code"),
+  referredById: text("referred_by_id"),
+  totalReferrals: integer("total_referrals").notNull().default(0),
+  successfulReferrals: integer("successful_referrals").notNull().default(0),
+  referralEarnings: numeric("referral_earnings", { precision: 10, scale: 2 }).notNull().default("0"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
   lastContactAt: timestamp("last_contact_at", { withTimezone: true }),
