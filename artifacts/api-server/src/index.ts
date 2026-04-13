@@ -337,8 +337,9 @@ async function runMigrations() {
       ALTER TABLE reservations ADD COLUMN IF NOT EXISTS reservation_number text;
     `);
     await client.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS reservations_reservation_number_unique
-        ON reservations (reservation_number)
+      DROP INDEX IF EXISTS reservations_reservation_number_unique;
+      CREATE UNIQUE INDEX IF NOT EXISTS reservations_tenant_reservation_number_unique
+        ON reservations (tenant_id, reservation_number)
         WHERE reservation_number IS NOT NULL;
     `);
     await client.query(`
