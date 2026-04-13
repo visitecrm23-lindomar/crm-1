@@ -120,6 +120,8 @@ export interface Client {
   companyNps?: number | null;
   /** @nullable */
   isNew?: boolean | null;
+  /** @nullable */
+  message?: string | null;
 }
 
 export interface ClientListResponse {

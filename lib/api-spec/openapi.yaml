@@ -4308,6 +4308,8 @@ components:
           type: ["integer", "null"]
         isNew:
           type: ["boolean", "null"]
+        message:
+          type: ["string", "null"]
       required:
         - id
         - name

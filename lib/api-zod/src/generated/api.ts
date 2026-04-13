@@ -626,6 +626,7 @@ export const ListClientsResponse = zod.object({
       internalRating: zod.number().nullish(),
       companyNps: zod.number().nullish(),
       isNew: zod.boolean().nullish(),
+      message: zod.string().nullish(),
     }),
   ),
   total: zod.number(),
@@ -707,6 +708,7 @@ export const GetClientResponse = zod.object({
   internalRating: zod.number().nullish(),
   companyNps: zod.number().nullish(),
   isNew: zod.boolean().nullish(),
+  message: zod.string().nullish(),
 });
 
 /**
@@ -785,6 +787,7 @@ export const UpdateClientResponse = zod.object({
   internalRating: zod.number().nullish(),
   companyNps: zod.number().nullish(),
   isNew: zod.boolean().nullish(),
+  message: zod.string().nullish(),
 });
 
 /**
@@ -863,6 +866,7 @@ export const UpdateClientPipelineStageResponse = zod.object({
   internalRating: zod.number().nullish(),
   companyNps: zod.number().nullish(),
   isNew: zod.boolean().nullish(),
+  message: zod.string().nullish(),
 });
 
 /**

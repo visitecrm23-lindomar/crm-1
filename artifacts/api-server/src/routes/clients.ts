@@ -14,7 +14,7 @@ import {
 
 const router = Router();
 
-function formatClient(c: typeof clientsTable.$inferSelect, extra?: { isNew?: boolean }) {
+function formatClient(c: typeof clientsTable.$inferSelect, extra?: { isNew?: boolean; message?: string }) {
   return {
     id: c.id,
     name: c.name,
@@ -51,6 +51,7 @@ function formatClient(c: typeof clientsTable.$inferSelect, extra?: { isNew?: boo
     internalRating: c.internalRating ?? null,
     companyNps: c.companyNps ?? null,
     isNew: extra?.isNew ?? null,
+    message: extra?.message ?? null,
   };
 }
 
@@ -202,32 +203,27 @@ router.post("/clients", async (req, res): Promise<void> => {
       companyNps: parsed.data.companyNps ?? null,
     };
 
-    const [existing] = await db.select().from(clientsTable)
-      .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.cpf, cleanedCpf)))
-      .limit(1);
-
-    if (existing) {
-      const [updated] = await db.update(clientsTable)
-        .set({ ...sharedFields, updatedAt: new Date() })
-        .where(eq(clientsTable.id, existing.id))
-        .returning();
-      return void res.status(200).json(formatClient(updated, { isNew: false }));
-    }
-
     const id = generateId();
-    await db.insert(clientsTable).values({
-      id,
-      tenantId: me.tenantId,
-      cpf: cleanedCpf,
-      ...sharedFields,
-      createdById: me.id,
-    });
+    const [upserted] = await db.insert(clientsTable)
+      .values({
+        id,
+        tenantId: me.tenantId,
+        cpf: cleanedCpf,
+        ...sharedFields,
+        createdById: me.id,
+      })
+      .onConflictDoUpdate({
+        target: [clientsTable.tenantId, clientsTable.cpf],
+        set: { ...sharedFields, updatedAt: new Date() },
+      })
+      .returning();
 
-    const [client] = await db.select().from(clientsTable)
-      .where(and(eq(clientsTable.id, id), eq(clientsTable.tenantId, me.tenantId)))
-      .limit(1);
-    if (!client) { res.status(500).json({ error: "Failed to create client" }); return; }
-    res.status(201).json(formatClient(client, { isNew: true }));
+    if (!upserted) { res.status(500).json({ error: "Failed to create client" }); return; }
+
+    const isNew = upserted.id === id;
+    const message = isNew ? "Cliente cadastrado com sucesso." : "Cliente já cadastrado — dados atualizados com sucesso.";
+    const statusCode = isNew ? 201 : 200;
+    res.status(statusCode).json(formatClient(upserted, { isNew, message }));
   } catch (err) {
     req.log.error({ err }, "Error creating client");
     res.status(500).json({ error: "Internal server error" });
@@ -276,7 +272,9 @@ router.patch("/clients/:id", async (req, res): Promise<void> => {
     if (parsed.data.email != null) updates.email = parsed.data.email;
     if (parsed.data.whatsapp != null) updates.whatsapp = parsed.data.whatsapp;
     if (parsed.data.phone !== undefined) updates.phone = parsed.data.phone ?? null;
-    if (parsed.data.cpf !== undefined) updates.cpf = parsed.data.cpf ?? null;
+    if (parsed.data.cpf != null) {
+      try { updates.cpf = validateCPF(parsed.data.cpf); } catch { res.status(400).json({ error: "CPF inválido" }); return; }
+    }
     if (parsed.data.rg !== undefined) updates.rg = parsed.data.rg ?? null;
     if (parsed.data.birthDate !== undefined) updates.birthDate = parsed.data.birthDate ? new Date(parsed.data.birthDate) : null;
     if (parsed.data.gender !== undefined) updates.gender = parsed.data.gender ?? null;
