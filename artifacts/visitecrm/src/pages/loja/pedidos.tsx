@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { storeApi, StoreOrder } from "@/lib/storeApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -26,7 +27,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ShoppingCart, Loader2, Search, Eye, Package } from "lucide-react";
+import {
+  ShoppingCart,
+  Loader2,
+  Search,
+  Eye,
+  Package,
+  Download,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  CheckCircle,
+  ExternalLink,
+} from "lucide-react";
 
 const ORDER_STATUSES = [
   { value: "pending", label: "Pendente", color: "bg-yellow-100 text-yellow-800" },
@@ -43,6 +56,20 @@ const PAYMENT_STATUSES = [
   { value: "failed", label: "Falhou" },
 ];
 
+const FULFILLMENT_STATUSES = [
+  { value: "unfulfilled", label: "Não Enviado" },
+  { value: "partial", label: "Parcial" },
+  { value: "fulfilled", label: "Enviado" },
+];
+
+const PAYMENT_METHODS: Record<string, string> = {
+  pix: "PIX",
+  boleto: "Boleto",
+  credit_card: "Cartão de Crédito",
+  debit_card: "Cartão de Débito",
+  transfer: "Transferência",
+};
+
 function statusLabel(s: string) {
   return ORDER_STATUSES.find((x) => x.value === s)?.label ?? s;
 }
@@ -55,18 +82,65 @@ function statusColor(s: string) {
   return ORDER_STATUSES.find((x) => x.value === s)?.color ?? "bg-gray-100 text-gray-800";
 }
 
-function OrderDetail({ order, onClose, onUpdated }: { order: StoreOrder; onClose: () => void; onUpdated: (o: StoreOrder) => void }) {
+function paymentColor(s: string) {
+  if (s === "paid") return "bg-green-100 text-green-800";
+  if (s === "refunded") return "bg-purple-100 text-purple-800";
+  if (s === "failed") return "bg-red-100 text-red-800";
+  return "bg-yellow-100 text-yellow-800";
+}
+
+function formatDate(d?: string | null) {
+  if (!d) return "—";
+  return new Date(d).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard.writeText(value).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+  return (
+    <button onClick={copy} className="ml-1 text-muted-foreground hover:text-foreground" title="Copiar">
+      {copied ? <CheckCircle className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+    </button>
+  );
+}
+
+function OrderDetail({ orderId, onClose, onUpdated }: { orderId: string; onClose: () => void; onUpdated: (o: StoreOrder) => void }) {
   const { toast } = useToast();
-  const [status, setStatus] = useState(order.status);
-  const [paymentStatus, setPaymentStatus] = useState(order.paymentStatus);
+  const [order, setOrder] = useState<StoreOrder | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState("");
+  const [fulfillmentStatus, setFulfillmentStatus] = useState("");
+  const [internalNotes, setInternalNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    setLoading(true);
+    storeApi.getOrder(orderId).then((o) => {
+      setOrder(o);
+      setStatus(o.status);
+      setPaymentStatus(o.paymentStatus);
+      setFulfillmentStatus(o.fulfillmentStatus ?? "unfulfilled");
+      setInternalNotes(o.internalNotes ?? "");
+    }).catch(() => {
+      toast({ title: "Erro ao carregar pedido", variant: "destructive" });
+    }).finally(() => setLoading(false));
+  }, [orderId]);
+
   async function save() {
+    if (!order) return;
     setSaving(true);
     try {
-      const updated = await storeApi.updateOrderStatus(order.id, status, paymentStatus);
+      await storeApi.updateOrderStatus(order.id, status, paymentStatus, fulfillmentStatus, internalNotes);
       toast({ title: "Pedido atualizado!" });
-      onUpdated(updated);
+      const patch = { ...order, status, paymentStatus, fulfillmentStatus, internalNotes };
+      setOrder(patch);
+      onUpdated(patch);
     } catch (err: unknown) {
       toast({
         title: "Erro",
@@ -78,14 +152,24 @@ function OrderDetail({ order, onClose, onUpdated }: { order: StoreOrder; onClose
     }
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!order) return null;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 max-h-[75vh] overflow-y-auto pr-1">
       <div className="grid grid-cols-2 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Cliente</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-0.5">
             <p className="font-semibold">{order.customerName}</p>
             <p className="text-sm text-muted-foreground">{order.customerEmail}</p>
             {order.customerPhone && (
@@ -94,11 +178,21 @@ function OrderDetail({ order, onClose, onUpdated }: { order: StoreOrder; onClose
             {order.customerCpf && (
               <p className="text-sm text-muted-foreground">CPF: {order.customerCpf}</p>
             )}
+            {order.customerAddress && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {[
+                  (order.customerAddress as Record<string, string>).street,
+                  (order.customerAddress as Record<string, string>).city,
+                  (order.customerAddress as Record<string, string>).state,
+                ].filter(Boolean).join(", ")}
+              </p>
+            )}
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Resumo</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Financeiro</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">
             <div className="flex justify-between text-sm">
@@ -111,12 +205,21 @@ function OrderDetail({ order, onClose, onUpdated }: { order: StoreOrder; onClose
                 <span>- R$ {parseFloat(order.discountAmount).toFixed(2)}</span>
               </div>
             )}
+            {order.taxAmount && parseFloat(order.taxAmount) > 0 && (
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>Taxas</span>
+                <span>R$ {parseFloat(order.taxAmount).toFixed(2)}</span>
+              </div>
+            )}
             <div className="flex justify-between font-bold border-t pt-1 mt-1">
               <span>Total</span>
               <span>R$ {parseFloat(order.totalAmount).toFixed(2)}</span>
             </div>
-            <div className="text-sm text-muted-foreground mt-2">
-              Pagamento: {order.paymentMethod ?? "Não informado"}
+            <div className="text-xs text-muted-foreground mt-2 space-y-0.5">
+              <p>Pagamento: {PAYMENT_METHODS[order.paymentMethod ?? ""] ?? order.paymentMethod ?? "Não informado"}</p>
+              {order.installments && order.installments > 1 && (
+                <p>{order.installments}x de R$ {order.installmentAmount ? parseFloat(order.installmentAmount).toFixed(2) : "—"}</p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -127,22 +230,110 @@ function OrderDetail({ order, onClose, onUpdated }: { order: StoreOrder; onClose
           <CardTitle className="text-sm font-medium text-muted-foreground">Itens do Pedido</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
-            {order.items.map((item, i) => (
-              <div key={i} className="flex justify-between items-center py-2 border-b last:border-0">
-                <div>
-                  <span className="font-medium text-sm">{item.productName}</span>
-                  {item.variantLabel && (
-                    <span className="text-xs text-muted-foreground ml-2">({item.variantLabel})</span>
-                  )}
-                  <span className="text-xs text-muted-foreground ml-2">x{item.quantity}</span>
+          {order.items.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum item encontrado.</p>
+          ) : (
+            <div className="space-y-2">
+              {order.items.map((item, i) => (
+                <div key={i} className="flex justify-between items-center py-2 border-b last:border-0">
+                  <div className="flex items-center gap-2">
+                    {item.productImage && (
+                      <img src={item.productImage} alt={item.productName} className="w-8 h-8 rounded object-cover" />
+                    )}
+                    <div>
+                      <span className="font-medium text-sm">{item.productName}</span>
+                      {item.variantLabel && (
+                        <span className="text-xs text-muted-foreground ml-2">({item.variantLabel})</span>
+                      )}
+                      <span className="text-xs text-muted-foreground ml-2">x{item.quantity}</span>
+                    </div>
+                  </div>
+                  <span className="text-sm font-medium">
+                    R$ {(item.unitPrice * item.quantity).toFixed(2)}
+                  </span>
                 </div>
-                <span className="text-sm font-medium">
-                  R$ {(item.unitPrice * item.quantity).toFixed(2)}
-                </span>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {(order.paymentMethod === "pix" || order.pixCopyPaste) && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Dados do PIX</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {order.pixCopyPaste && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Copia e Cola</p>
+                <div className="flex items-center gap-2 p-2 bg-muted rounded text-xs font-mono break-all">
+                  <span className="flex-1">{order.pixCopyPaste}</span>
+                  <CopyButton value={order.pixCopyPaste} />
+                </div>
               </div>
-            ))}
-          </div>
+            )}
+            {order.pixQrCodeUrl && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">QR Code</p>
+                <img src={order.pixQrCodeUrl} alt="QR Code PIX" className="w-32 h-32" />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {(order.paymentMethod === "boleto" || order.boletoUrl) && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Dados do Boleto</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {order.boletoBarcode && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Código de Barras</p>
+                <div className="flex items-center gap-2 p-2 bg-muted rounded text-xs font-mono break-all">
+                  <span className="flex-1">{order.boletoBarcode}</span>
+                  <CopyButton value={order.boletoBarcode} />
+                </div>
+              </div>
+            )}
+            {order.boletoUrl && (
+              <a
+                href={order.boletoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> Ver Boleto
+              </a>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {order.customerNotes && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Observações do Cliente</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">{order.customerNotes}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">Linha do Tempo</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 gap-2 text-xs">
+          <div><span className="text-muted-foreground">Criado:</span> {formatDate(order.createdAt)}</div>
+          <div><span className="text-muted-foreground">Confirmado:</span> {formatDate(order.confirmedAt)}</div>
+          <div><span className="text-muted-foreground">Pago:</span> {formatDate(order.paidAt)}</div>
+          <div><span className="text-muted-foreground">Concluído:</span> {formatDate(order.completedAt)}</div>
+          <div><span className="text-muted-foreground">Cancelado:</span> {formatDate(order.cancelledAt)}</div>
+          <div><span className="text-muted-foreground">Reembolsado:</span> {formatDate(order.refundedAt)}</div>
         </CardContent>
       </Card>
 
@@ -150,8 +341,8 @@ function OrderDetail({ order, onClose, onUpdated }: { order: StoreOrder; onClose
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">Atualizar Status</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Status do Pedido</label>
               <Select value={status} onValueChange={setStatus}>
@@ -160,33 +351,50 @@ function OrderDetail({ order, onClose, onUpdated }: { order: StoreOrder; onClose
                 </SelectTrigger>
                 <SelectContent>
                   {ORDER_STATUSES.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
-                      {s.label}
-                    </SelectItem>
+                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Status do Pagamento</label>
+              <label className="text-xs text-muted-foreground">Pagamento</label>
               <Select value={paymentStatus} onValueChange={setPaymentStatus}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {PAYMENT_STATUSES.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
-                      {s.label}
-                    </SelectItem>
+                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Envio</label>
+              <Select value={fulfillmentStatus} onValueChange={setFulfillmentStatus}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FULFILLMENT_STATUSES.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Notas Internas</label>
+            <Textarea
+              value={internalNotes}
+              onChange={(e) => setInternalNotes(e.target.value)}
+              placeholder="Anotações visíveis apenas para a agência..."
+              rows={3}
+              className="text-sm"
+            />
+          </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onClose}>
-              Fechar
-            </Button>
+            <Button variant="outline" onClick={onClose}>Fechar</Button>
             <Button onClick={save} disabled={saving}>
               {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Salvar
@@ -198,20 +406,37 @@ function OrderDetail({ order, onClose, onUpdated }: { order: StoreOrder; onClose
   );
 }
 
+const LIMIT = 50;
+
 export default function LojaPedidos() {
   const { toast } = useToast();
   const [orders, setOrders] = useState<StoreOrder[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [paymentFilter, setPaymentFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [selected, setSelected] = useState<StoreOrder | null>(null);
 
-  async function load() {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      setOrders(await storeApi.getOrders());
+      const res = await storeApi.getOrders({
+        status: statusFilter,
+        paymentStatus: paymentFilter,
+        search: search || undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+        page,
+        limit: LIMIT,
+      });
+      setOrders(res.data);
+      setTotal(res.total);
     } catch (err: unknown) {
       toast({
         title: "Erro ao carregar pedidos",
@@ -221,65 +446,52 @@ export default function LojaPedidos() {
     } finally {
       setLoading(false);
     }
+  }, [page, search, statusFilter, paymentFilter, dateFrom, dateTo]);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => { setPage(1); }, [search, statusFilter, paymentFilter, dateFrom, dateTo]);
+
+  function exportCSV() {
+    const headers = ["Pedido", "Cliente", "E-mail", "Telefone", "CPF", "Itens", "Subtotal", "Desconto", "Total", "Método", "Status Pagamento", "Status Pedido", "Data"];
+    const rows = orders.map((o) => [
+      o.orderNumber,
+      o.customerName,
+      o.customerEmail,
+      o.customerPhone ?? "",
+      o.customerCpf ?? "",
+      o.itemCount ?? 0,
+      parseFloat(o.subtotal).toFixed(2),
+      parseFloat(o.discountAmount).toFixed(2),
+      parseFloat(o.totalAmount).toFixed(2),
+      PAYMENT_METHODS[o.paymentMethod ?? ""] ?? o.paymentMethod ?? "",
+      paymentLabel(o.paymentStatus),
+      statusLabel(o.status),
+      new Date(o.createdAt).toLocaleDateString("pt-BR"),
+    ]);
+    const csv = [headers, ...rows].map((r) => r.map(String).map((v) => `"${v.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pedidos_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
-  useEffect(() => { load(); }, []);
-
-  const filtered = orders.filter((o) => {
-    const matchSearch =
-      o.orderNumber.toLowerCase().includes(search.toLowerCase()) ||
-      o.customerName.toLowerCase().includes(search.toLowerCase()) ||
-      o.customerEmail.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === "all" || o.status === statusFilter;
-    const orderDate = new Date(o.createdAt);
-    const matchFrom = !dateFrom || orderDate >= new Date(dateFrom);
-    const matchTo = !dateTo || orderDate <= new Date(dateTo + "T23:59:59");
-    return matchSearch && matchStatus && matchFrom && matchTo;
-  });
-
-  const stats = {
-    total: orders.length,
-    revenue: orders
-      .filter((o) => o.status !== "cancelled")
-      .reduce((acc, o) => acc + parseFloat(o.totalAmount), 0),
-    pending: orders.filter((o) => o.status === "pending").length,
-    completed: orders.filter((o) => o.status === "completed").length,
-  };
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Pedidos</h1>
-        <p className="text-muted-foreground text-sm mt-1">{orders.length} pedido(s) no total</p>
-      </div>
-
-      <div className="grid grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-4">
-            <div className="text-2xl font-bold">{stats.total}</div>
-            <div className="text-sm text-muted-foreground">Total de Pedidos</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
-            <div className="text-sm text-muted-foreground">Pendentes</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-green-600">{stats.completed}</div>
-            <div className="text-sm text-muted-foreground">Concluídos</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="text-2xl font-bold">
-              R$ {stats.revenue.toFixed(2)}
-            </div>
-            <div className="text-sm text-muted-foreground">Receita Total</div>
-          </CardContent>
-        </Card>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Pedidos</h1>
+          <p className="text-muted-foreground text-sm mt-1">{total} pedido(s) encontrado(s)</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={exportCSV} disabled={orders.length === 0}>
+          <Download className="w-4 h-4 mr-2" />
+          Exportar CSV
+        </Button>
       </div>
 
       <div className="flex gap-3 flex-wrap">
@@ -287,40 +499,49 @@ export default function LojaPedidos() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             className="pl-9"
-            placeholder="Buscar por número, cliente ou e-mail..."
+            placeholder="Número, cliente ou e-mail..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Todos os status" />
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todos</SelectItem>
+            <SelectItem value="all">Todos os status</SelectItem>
             {ORDER_STATUSES.map((s) => (
-              <SelectItem key={s.value} value={s.value}>
-                {s.label}
-              </SelectItem>
+              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <div className="flex items-center gap-2">
+        <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="Pagamento" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            {PAYMENT_STATUSES.map((s) => (
+              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="flex items-center gap-1.5">
           <label className="text-sm text-muted-foreground whitespace-nowrap">De:</label>
           <Input
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            className="w-40"
+            className="w-36"
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <label className="text-sm text-muted-foreground whitespace-nowrap">Até:</label>
           <Input
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            className="w-40"
+            className="w-36"
           />
         </div>
         {(dateFrom || dateTo) && (
@@ -339,7 +560,7 @@ export default function LojaPedidos() {
         <div className="flex items-center justify-center h-48">
           <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
         </div>
-      ) : filtered.length === 0 ? (
+      ) : orders.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             <ShoppingCart className="w-12 h-12 mx-auto mb-3 opacity-30" />
@@ -347,86 +568,106 @@ export default function LojaPedidos() {
           </CardContent>
         </Card>
       ) : (
-        <div className="rounded-lg border overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Pedido</TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Itens</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Pagamento</TableHead>
-                <TableHead>Data</TableHead>
-                <TableHead className="w-16">Ação</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((order) => (
-                <TableRow key={order.id}>
-                  <TableCell className="font-mono text-sm font-medium">
-                    {order.orderNumber}
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm font-medium">{order.customerName}</div>
-                    <div className="text-xs text-muted-foreground">{order.customerEmail}</div>
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    <div className="flex items-center gap-1">
-                      <Package className="w-3 h-3 text-muted-foreground" />
-                      {order.items.length} item(s)
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-medium text-sm">
-                    R$ {parseFloat(order.totalAmount).toFixed(2)}
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs font-medium ${statusColor(order.status)}`}
-                    >
-                      {statusLabel(order.status)}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={order.paymentStatus === "paid" ? "default" : "secondary"}
-                      className="text-xs"
-                    >
-                      {paymentLabel(order.paymentStatus)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {new Date(order.createdAt).toLocaleDateString("pt-BR")}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => setSelected(order)}
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Button>
-                  </TableCell>
+        <>
+          <div className="rounded-lg border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Pedido</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Itens</TableHead>
+                  <TableHead>Total</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Pagamento</TableHead>
+                  <TableHead>Data</TableHead>
+                  <TableHead className="w-16"></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {orders.map((order) => (
+                  <TableRow key={order.id} className="cursor-pointer hover:bg-muted/40" onClick={() => setSelectedId(order.id)}>
+                    <TableCell className="font-mono text-sm font-medium">
+                      {order.orderNumber}
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm font-medium">{order.customerName}</div>
+                      <div className="text-xs text-muted-foreground">{order.customerEmail}</div>
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      <div className="flex items-center gap-1 text-muted-foreground">
+                        <Package className="w-3 h-3" />
+                        {order.itemCount ?? 0}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-medium text-sm">
+                      R$ {parseFloat(order.totalAmount).toFixed(2)}
+                    </TableCell>
+                    <TableCell>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor(order.status)}`}>
+                        {statusLabel(order.status)}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${paymentColor(order.paymentStatus)}`}>
+                        {paymentLabel(order.paymentStatus)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {new Date(order.createdAt).toLocaleDateString("pt-BR")}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(e) => { e.stopPropagation(); setSelectedId(order.id); }}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>Página {page} de {totalPages} ({total} pedidos)</span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
-      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+      <Dialog open={!!selectedId} onOpenChange={(o) => !o && setSelectedId(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Pedido {selected?.orderNumber}</DialogTitle>
+            <DialogTitle>Detalhes do Pedido</DialogTitle>
           </DialogHeader>
-          {selected && (
+          {selectedId && (
             <OrderDetail
-              order={selected}
-              onClose={() => setSelected(null)}
+              orderId={selectedId}
+              onClose={() => setSelectedId(null)}
               onUpdated={(updated) => {
-                setOrders((o) => o.map((x) => (x.id === updated.id ? updated : x)));
-                setSelected(updated);
+                setOrders((o) => o.map((x) => (x.id === updated.id ? { ...x, ...updated } : x)));
               }}
             />
           )}

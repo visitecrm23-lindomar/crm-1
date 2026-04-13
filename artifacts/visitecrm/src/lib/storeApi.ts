@@ -61,16 +61,35 @@ export const storeApi = {
   deleteProduct: (id: string) =>
     req<void>("DELETE", `/store/products/${id}`),
 
-  getOrders: () => req<StoreOrder[]>("GET", "/store/orders"),
+  getOrders: (params?: {
+    status?: string;
+    paymentStatus?: string;
+    search?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const qs = params ? "?" + new URLSearchParams(
+      Object.entries(params)
+        .filter(([, v]) => v !== undefined && v !== "" && v !== "all")
+        .map(([k, v]) => [k, String(v)])
+    ).toString() : "";
+    return req<{ data: StoreOrder[]; total: number; page: number; limit: number }>("GET", `/store/orders${qs}`);
+  },
   getOrder: (id: string) => req<StoreOrder>("GET", `/store/orders/${id}`),
   updateOrderStatus: (
     id: string,
     status: string,
-    paymentStatus?: string
+    paymentStatus?: string,
+    fulfillmentStatus?: string,
+    internalNotes?: string,
   ) =>
     req<StoreOrder>("PUT", `/store/orders/${id}/status`, {
       status,
       paymentStatus,
+      fulfillmentStatus,
+      internalNotes,
     }),
 
   getCoupons: () => req<StoreCoupon[]>("GET", "/store/coupons"),
@@ -348,34 +367,58 @@ export interface StoreProduct {
   updatedAt: string;
 }
 
+export interface StoreOrderItem {
+  id?: string;
+  productId: string;
+  productName: string;
+  productType?: string;
+  productImage?: string | null;
+  quantity: number;
+  unitPrice: number;
+  variantLabel?: string | null;
+}
+
 export interface StoreOrder {
   id: string;
   storeId: string;
   tenantId: string;
   orderNumber: string;
-  status: string;
+  clientId?: string | null;
   customerName: string;
   customerEmail: string;
   customerPhone?: string | null;
   customerCpf?: string | null;
-  items: Array<{
-    productId: string;
-    productName: string;
-    quantity: number;
-    unitPrice: number;
-    variantLabel?: string;
-  }>;
+  customerAddress?: Record<string, unknown> | null;
   subtotal: string;
   discountAmount: string;
-  couponCode?: string | null;
+  taxAmount?: string | null;
+  shippingAmount?: string | null;
   totalAmount: string;
+  couponId?: string | null;
+  couponCode?: string | null;
   paymentMethod?: string | null;
+  paymentProvider?: string | null;
   paymentStatus: string;
-  paymentData?: Record<string, unknown> | null;
-  notes?: string | null;
+  installments?: number | null;
+  installmentAmount?: string | null;
+  pixQrCode?: string | null;
+  pixQrCodeUrl?: string | null;
+  pixCopyPaste?: string | null;
+  boletoUrl?: string | null;
+  boletoBarcode?: string | null;
+  status: string;
+  fulfillmentStatus?: string | null;
   customerNotes?: string | null;
+  internalNotes?: string | null;
+  paidAt?: string | null;
+  confirmedAt?: string | null;
+  completedAt?: string | null;
+  cancelledAt?: string | null;
+  refundedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  itemCount?: number;
+  items: StoreOrderItem[];
 }
 
 export interface StoreCoupon {

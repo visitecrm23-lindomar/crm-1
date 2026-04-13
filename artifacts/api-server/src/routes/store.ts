@@ -12,7 +12,7 @@ import {
   dealsTable,
   reservationsTable,
 } from "@workspace/db";
-import { eq, and, desc, asc } from "drizzle-orm";
+import { eq, and, desc, asc, count, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
@@ -469,10 +469,85 @@ router.get("/store/orders", async (req, res): Promise<void> => {
     if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
     const store = await getStoreForTenant(me.tenantId);
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
-    const orders = await db.select().from(storeOrdersTable)
-      .where(eq(storeOrdersTable.storeId, store.id))
-      .orderBy(desc(storeOrdersTable.createdAt));
-    res.json(orders);
+
+    const { status, paymentStatus, search, dateFrom, dateTo, page: pageStr, limit: limitStr } = req.query;
+    const page = pageStr ? Math.max(1, parseInt(pageStr as string)) : 1;
+    const limit = limitStr ? Math.min(100, parseInt(limitStr as string)) : 50;
+    const offset = (page - 1) * limit;
+
+    const conditions = [eq(storeOrdersTable.storeId, store.id)];
+    if (status && status !== "all") conditions.push(eq(storeOrdersTable.status, status as string));
+    if (paymentStatus && paymentStatus !== "all") conditions.push(eq(storeOrdersTable.paymentStatus, paymentStatus as string));
+    if (search) {
+      conditions.push(or(
+        ilike(storeOrdersTable.orderNumber, `%${search}%`),
+        ilike(storeOrdersTable.customerName, `%${search}%`),
+        ilike(storeOrdersTable.customerEmail, `%${search}%`),
+      )!);
+    }
+    if (dateFrom) conditions.push(sql`${storeOrdersTable.createdAt} >= ${dateFrom}`);
+    if (dateTo) conditions.push(sql`${storeOrdersTable.createdAt} <= ${dateTo}::date + interval '1 day'`);
+
+    const whereClause = and(...conditions);
+
+    const [{ total }] = await db.select({ total: count() }).from(storeOrdersTable).where(whereClause);
+
+    const itemCountSq = db.select({
+      orderId: storeOrderItemsTable.orderId,
+      cnt: count().as("cnt"),
+    }).from(storeOrderItemsTable).groupBy(storeOrderItemsTable.orderId).as("item_counts");
+
+    const orders = await db
+      .select({
+        id: storeOrdersTable.id,
+        storeId: storeOrdersTable.storeId,
+        tenantId: storeOrdersTable.tenantId,
+        orderNumber: storeOrdersTable.orderNumber,
+        clientId: storeOrdersTable.clientId,
+        customerName: storeOrdersTable.customerName,
+        customerEmail: storeOrdersTable.customerEmail,
+        customerPhone: storeOrdersTable.customerPhone,
+        customerCpf: storeOrdersTable.customerCpf,
+        customerAddress: storeOrdersTable.customerAddress,
+        subtotal: storeOrdersTable.subtotal,
+        discountAmount: storeOrdersTable.discountAmount,
+        taxAmount: storeOrdersTable.taxAmount,
+        shippingAmount: storeOrdersTable.shippingAmount,
+        totalAmount: storeOrdersTable.totalAmount,
+        couponId: storeOrdersTable.couponId,
+        couponCode: storeOrdersTable.couponCode,
+        paymentMethod: storeOrdersTable.paymentMethod,
+        paymentProvider: storeOrdersTable.paymentProvider,
+        paymentStatus: storeOrdersTable.paymentStatus,
+        installments: storeOrdersTable.installments,
+        installmentAmount: storeOrdersTable.installmentAmount,
+        pixQrCode: storeOrdersTable.pixQrCode,
+        pixQrCodeUrl: storeOrdersTable.pixQrCodeUrl,
+        pixCopyPaste: storeOrdersTable.pixCopyPaste,
+        boletoUrl: storeOrdersTable.boletoUrl,
+        boletoBarcode: storeOrdersTable.boletoBarcode,
+        status: storeOrdersTable.status,
+        fulfillmentStatus: storeOrdersTable.fulfillmentStatus,
+        customerNotes: storeOrdersTable.customerNotes,
+        internalNotes: storeOrdersTable.internalNotes,
+        paidAt: storeOrdersTable.paidAt,
+        confirmedAt: storeOrdersTable.confirmedAt,
+        completedAt: storeOrdersTable.completedAt,
+        cancelledAt: storeOrdersTable.cancelledAt,
+        refundedAt: storeOrdersTable.refundedAt,
+        createdAt: storeOrdersTable.createdAt,
+        updatedAt: storeOrdersTable.updatedAt,
+        itemCount: sql<number>`coalesce(${itemCountSq.cnt}, 0)`,
+        items: sql<unknown[]>`'[]'::json`,
+      })
+      .from(storeOrdersTable)
+      .leftJoin(itemCountSq, eq(storeOrdersTable.id, itemCountSq.orderId))
+      .where(whereClause)
+      .orderBy(desc(storeOrdersTable.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    res.json({ data: orders, total, page, limit });
   } catch (err) {
     req.log.error({ err }, "Error listing store orders");
     res.status(500).json({ error: "Internal server error" });
@@ -489,8 +564,26 @@ router.get("/store/orders/:id", async (req, res): Promise<void> => {
     const [order] = await db.select().from(storeOrdersTable)
       .where(and(eq(storeOrdersTable.id, req.params.id), eq(storeOrdersTable.storeId, store.id))).limit(1);
     if (!order) { res.status(404).json({ error: "Order not found" }); return; }
-    const items = await db.select().from(storeOrderItemsTable)
+    const rawItems = await db.select().from(storeOrderItemsTable)
       .where(eq(storeOrderItemsTable.orderId, order.id));
+    const items = rawItems.map((item) => {
+      const variantObj = item.variant as Record<string, unknown> | null;
+      const variantLabel = variantObj
+        ? Object.values(variantObj).join(" / ")
+        : null;
+      return {
+        id: item.id,
+        productId: item.productId,
+        productName: item.productName,
+        productType: item.productType,
+        productImage: item.productImage,
+        unitPrice: parseFloat(item.price ?? "0"),
+        quantity: item.quantity,
+        variantLabel,
+        subtotal: item.subtotal,
+        total: item.total,
+      };
+    });
     res.json({ ...order, items });
   } catch (err) {
     req.log.error({ err }, "Error getting store order");
