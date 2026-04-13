@@ -13,6 +13,7 @@ import type { Reservation } from "@workspace/api-client-react";
 
 interface ReservationCardVisualProps {
   reservation: Reservation;
+  clientName: string;
   agencyName: string;
   agencyLogo?: string | null;
   departureDate: string;
@@ -72,6 +73,7 @@ function formatYearMonth(ym: string) {
 
 export function ReservationCardVisual({
   reservation,
+  clientName,
   agencyName,
   agencyLogo,
   departureDate,
@@ -87,7 +89,6 @@ export function ReservationCardVisual({
     ? `1234  ${yearMonth}-${sequenceStr}  3456`
     : `1234  ${reservation.voucherCode.slice(0, 8)}  3456`;
 
-  const clientName = reservation.client.name;
   const clientCpf = reservation.client.cpf;
   const destination = reservation.trip.destination;
   const firstSeat = reservation.seats?.[0] ?? "—";

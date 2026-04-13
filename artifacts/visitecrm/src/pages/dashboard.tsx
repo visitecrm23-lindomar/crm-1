@@ -634,7 +634,7 @@ function ClientDashboard() {
       </div>
 
       {nextTrip && (
-        myReservation ? (
+        myReservation && myReservation.reservationNumber ? (
           <Card className="overflow-hidden">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2">
@@ -649,6 +649,7 @@ function ClientDashboard() {
             <CardContent>
               <ReservationCardVisual
                 reservation={myReservation}
+                clientName={me?.name ?? myReservation.client.name}
                 agencyName={me?.tenant?.name ?? "Agência"}
                 agencyLogo={me?.tenant?.logoUrl}
                 departureDate={format(parseISO(nextTrip.departureDate), "dd/MM/yyyy")}
@@ -672,6 +673,16 @@ function ClientDashboard() {
                     {daysToTrip != null && daysToTrip > 0 && <Badge className="ml-2" variant="outline">Faltam {daysToTrip} dias</Badge>}
                   </p>
                 </div>
+                {myReservation && (
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => { setVoucherReservation(myReservation); setVoucherAutoDownload(false); setVoucherOpen(true); }}>
+                      Ver Voucher
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => { setVoucherReservation(myReservation); setVoucherAutoDownload(true); setVoucherOpen(true); }}>
+                      Baixar PDF
+                    </Button>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
