@@ -501,6 +501,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
       const [referrer] = await db.select({
         id: clientsTable.id,
         name: clientsTable.name,
+        email: clientsTable.email,
       }).from(clientsTable)
         .where(and(
           eq(clientsTable.tenantId, store.tenantId),
@@ -508,20 +509,27 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
         )).limit(1);
 
       if (referrer) {
-        // Get discount % from referral settings
-        const [refSettings] = await db.select({
-          discountValue: referralSettingsTable.discountValue,
-          discountType: referralSettingsTable.discountType,
-          isActive: referralSettingsTable.isActive,
-        }).from(referralSettingsTable)
-          .where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
+        // Prevent self-referral
+        const isSelfReferral = referrer.email
+          && data.customerEmail
+          && referrer.email.toLowerCase() === data.customerEmail.toLowerCase();
 
-        if (!refSettings || refSettings.isActive !== false) {
-          const discPct = refSettings?.discountType === "percentage" ? Number(refSettings.discountValue) : 5;
-          discountAmount = subtotal * (discPct / 100);
-          appliedReferralCode = upperCode;
-          appliedReferralReferrerId = referrer.id;
-          appliedReferralDiscountValue = discPct;
+        if (!isSelfReferral) {
+          // Get discount % from referral settings
+          const [refSettings] = await db.select({
+            discountValue: referralSettingsTable.discountValue,
+            discountType: referralSettingsTable.discountType,
+            isActive: referralSettingsTable.isEnabled,
+          }).from(referralSettingsTable)
+            .where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
+
+          if (!refSettings || refSettings.isActive !== false) {
+            const discPct = refSettings?.discountType === "percentage" ? Number(refSettings.discountValue) : 5;
+            discountAmount = subtotal * (discPct / 100);
+            appliedReferralCode = upperCode;
+            appliedReferralReferrerId = referrer.id;
+            appliedReferralDiscountValue = discPct;
+          }
         }
       }
     }
@@ -739,10 +747,13 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
             })
             .where(eq(clientsTable.id, appliedReferralReferrerId));
 
-          // Mark referral_tracking as converted if we have a cookie
+          // Mark referral_tracking as converted — scoped to tenant + code
           await tx.update(referralTrackingTable)
             .set({ converted: true, convertedAt: new Date(), updatedAt: new Date() })
-            .where(eq(referralTrackingTable.referralCode, appliedReferralCode));
+            .where(and(
+              eq(referralTrackingTable.tenantId, store.tenantId),
+              eq(referralTrackingTable.referralCode, appliedReferralCode),
+            ));
         }
 
         // Update store order count atomically
@@ -883,8 +894,8 @@ router.post("/public/store/:slug/referral/validate", async (req, res): Promise<v
     const [settings] = await db.select({
       discountValue: referralSettingsTable.discountValue,
       discountType: referralSettingsTable.discountType,
-      isActive: referralSettingsTable.isActive,
-      expiryDays: referralSettingsTable.expiryDays,
+      isActive: referralSettingsTable.isEnabled,
+      expiryDays: referralSettingsTable.expirationDays,
     }).from(referralSettingsTable)
       .where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
 
@@ -938,7 +949,7 @@ router.get("/public/store/:slug/referral/info", async (req, res): Promise<void> 
     const [settings] = await db.select({
       discountValue: referralSettingsTable.discountValue,
       discountType: referralSettingsTable.discountType,
-      isActive: referralSettingsTable.isActive,
+      isActive: referralSettingsTable.isEnabled,
     }).from(referralSettingsTable)
       .where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
 
@@ -986,9 +997,13 @@ router.post("/public/store/:slug/referral/track", async (req, res): Promise<void
     // Generate or use provided cookie ID
     const cookieId = parsed.data.cookieId || generateCookieId();
 
-    // Try to update existing tracking record
+    // Try to update existing tracking record (scoped to tenant + cookieId)
     const [existing] = await db.select({ id: referralTrackingTable.id, pagesVisited: referralTrackingTable.pagesVisited })
-      .from(referralTrackingTable).where(eq(referralTrackingTable.cookieId, cookieId)).limit(1);
+      .from(referralTrackingTable)
+      .where(and(
+        eq(referralTrackingTable.tenantId, store.tenantId),
+        eq(referralTrackingTable.cookieId, cookieId),
+      )).limit(1);
 
     if (existing) {
       const pages = Array.isArray(existing.pagesVisited) ? existing.pagesVisited : [];
@@ -998,7 +1013,10 @@ router.post("/public/store/:slug/referral/track", async (req, res): Promise<void
         visitsCount: sql`visits_count + 1`,
         pagesVisited: pages as string[],
         updatedAt: new Date(),
-      }).where(eq(referralTrackingTable.cookieId, cookieId));
+      }).where(and(
+        eq(referralTrackingTable.tenantId, store.tenantId),
+        eq(referralTrackingTable.cookieId, cookieId),
+      ));
     } else {
       await db.insert(referralTrackingTable).values({
         id: generateId(),
@@ -1019,13 +1037,8 @@ router.post("/public/store/:slug/referral/track", async (req, res): Promise<void
       });
     }
 
-    // Increment visit count on the referrer client
-    await db.update(clientsTable)
-      .set({ totalReferrals: sql`COALESCE(total_referrals, 0) + 1` })
-      .where(and(
-        eq(clientsTable.tenantId, store.tenantId),
-        eq(clientsTable.referralCode, code),
-      ));
+    // Set server-generated cookie ID in response header for client persistence
+    res.setHeader("X-Referral-Cookie-Id", cookieId);
 
     res.json({ cookieId, tracked: true });
   } catch (err) {

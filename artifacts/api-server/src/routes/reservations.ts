@@ -405,7 +405,7 @@ router.post("/reservations", async (req, res): Promise<void> => {
       // Get discount/bonus from referral settings
       const [refSettings] = await db.select({
         bonusValue: referralSettingsTable.bonusValue,
-        isActive: referralSettingsTable.isActive,
+        isActive: referralSettingsTable.isEnabled,
       }).from(referralSettingsTable)
         .where(eq(referralSettingsTable.tenantId, me.tenantId)).limit(1);
       if (refSettings && refSettings.isActive === false) {
