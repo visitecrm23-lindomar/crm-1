@@ -494,126 +494,6 @@ function ConfettiAnimation() {
   );
 }
 
-function PixPayment({ store }: { store: PublicStore }) {
-  const [copied, setCopied] = useState(false);
-  const pixKey =
-    store.contactWhatsapp?.replace(/\D/g, "") ?? store.contactEmail ?? "contato@agencia.com.br";
-  function copy() {
-    navigator.clipboard.writeText(pixKey).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Use o aplicativo do seu banco para realizar o pagamento via PIX.
-      </p>
-      <div className="bg-muted rounded-xl p-6 text-center space-y-3">
-        <div className="w-32 h-32 mx-auto bg-white rounded-lg border-4 border-primary/20 flex items-center justify-center">
-          <div className="text-xs text-muted-foreground leading-tight text-center">
-            QR Code PIX
-            <br />
-            <span className="text-primary font-bold">{store.name}</span>
-          </div>
-        </div>
-        <p className="text-xs text-muted-foreground">ou copie a chave PIX abaixo:</p>
-        <div className="flex items-center gap-2 bg-white rounded-lg border px-3 py-2">
-          <code className="flex-1 text-sm font-mono truncate">{pixKey}</code>
-          <button onClick={copy} className="text-primary hover:text-primary/80 shrink-0">
-            {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-          </button>
-        </div>
-      </div>
-      <p className="text-xs text-muted-foreground text-center">
-        Após o pagamento, nossa equipe confirmará sua reserva em até 24h.
-      </p>
-    </div>
-  );
-}
-
-function CardPayment({
-  form,
-  set,
-  total,
-}: {
-  form: { cardNumber: string; cardName: string; cardExpiry: string; cardCvv: string; installments: string };
-  set: (field: string, value: string) => void;
-  total: number;
-}) {
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Preencha os dados do seu cartão. Seus dados são protegidos com criptografia.
-      </p>
-      <div className="space-y-3">
-        <div className="space-y-1">
-          <Label>Número do Cartão</Label>
-          <Input
-            value={form.cardNumber}
-            onChange={(e) =>
-              set("cardNumber", e.target.value.replace(/\D/g, "").replace(/(\d{4})/g, "$1 ").trim().slice(0, 19))
-            }
-            placeholder="0000 0000 0000 0000"
-            className="font-mono"
-            maxLength={19}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label>Nome no Cartão</Label>
-          <Input
-            value={form.cardName}
-            onChange={(e) => set("cardName", e.target.value.toUpperCase())}
-            placeholder="NOME COMO NO CARTÃO"
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label>Validade</Label>
-            <Input
-              value={form.cardExpiry}
-              onChange={(e) =>
-                set("cardExpiry", e.target.value.replace(/\D/g, "").replace(/(\d{2})(\d)/, "$1/$2").slice(0, 5))
-              }
-              placeholder="MM/AA"
-              maxLength={5}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label>CVV</Label>
-            <Input
-              value={form.cardCvv}
-              onChange={(e) => set("cardCvv", e.target.value.replace(/\D/g, "").slice(0, 4))}
-              placeholder="000"
-              maxLength={4}
-            />
-          </div>
-        </div>
-      </div>
-      <div>
-        <Label className="mb-2 block">Parcelamento</Label>
-        <div className="grid grid-cols-3 gap-2">
-          {[1, 2, 3, 4, 6, 12].map((n) => (
-            <button
-              key={n}
-              onClick={() => set("installments", String(n))}
-              className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
-                form.installments === String(n)
-                  ? "border-blue-500 bg-blue-50 text-blue-700"
-                  : "border-border hover:bg-muted"
-              }`}
-            >
-              <span className="block font-bold">{n}x</span>
-              <span className="text-muted-foreground">R$ {(total / n).toFixed(2)}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-      <p className="text-xs text-muted-foreground text-center">
-        🔒 Dados protegidos com SSL. Não armazenamos informações do cartão.
-      </p>
-    </div>
-  );
-}
 
 export default function ReservationWizard({
   slug,
@@ -656,7 +536,6 @@ export default function ReservationWizard({
   const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
 
   const [referralCode, setReferralCode] = useState("");
-  const [referralDiscount, setReferralDiscount] = useState(0);
   const [referralApplied, setReferralApplied] = useState(false);
 
   useEffect(() => {
@@ -676,6 +555,7 @@ export default function ReservationWizard({
   const unitPrice = selectedVariant ? selectedVariant.price : basePrice;
   const subtotal = unitPrice * qty;
   const couponDiscount = couponResult?.valid ? Number(couponResult.discountAmount ?? 0) : 0;
+  const referralDiscount = referralApplied ? subtotal * 0.05 : 0;
   const finalTotal = Math.max(0, subtotal - couponDiscount - referralDiscount);
 
   const showSeatGrid =
@@ -720,13 +600,10 @@ export default function ReservationWizard({
 
   function applyReferral() {
     if (!referralCode.trim()) return;
-    const discount = subtotal * 0.05;
-    setReferralDiscount(discount);
     setReferralApplied(true);
   }
 
   function removeReferral() {
-    setReferralDiscount(0);
     setReferralApplied(false);
     setReferralCode("");
   }
