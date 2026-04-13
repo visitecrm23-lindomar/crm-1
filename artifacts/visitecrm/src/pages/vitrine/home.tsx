@@ -15,7 +15,60 @@ import {
   MessageCircle,
   Check,
   Quote,
+  Gift,
+  X,
 } from "lucide-react";
+
+function ReferralWelcomeBanner({ slug, primaryColor }: { slug: string; primaryColor: string }) {
+  const [visible, setVisible] = useState(false);
+  const [referrerName, setReferrerName] = useState<string | null>(null);
+  const [discountPct, setDiscountPct] = useState<number>(5);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const isWelcome = params.get("welcome") === "true";
+    const refCode = params.get("ref");
+    if (!isWelcome || !refCode) return;
+
+    setVisible(true);
+
+    const storedName = localStorage.getItem("referral_referrer_name");
+    if (storedName) setReferrerName(storedName);
+
+    publicStoreApi.getReferralInfo(slug, refCode).then((info) => {
+      if (info?.referrerName) setReferrerName(info.referrerName);
+      if (info?.discountPercent) setDiscountPct(info.discountPercent);
+    }).catch(() => {});
+  }, [slug]);
+
+  if (!visible) return null;
+
+  return (
+    <div
+      className="relative text-white px-4 py-4 flex items-center gap-3 shadow-lg"
+      style={{ background: `linear-gradient(135deg, ${primaryColor} 0%, ${primaryColor}cc 100%)` }}
+    >
+      <Gift className="w-6 h-6 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold text-sm md:text-base">
+          {referrerName
+            ? `Você foi indicado por ${referrerName}! 🎉`
+            : "Você chegou por indicação! 🎉"}
+        </p>
+        <p className="text-white/85 text-xs md:text-sm">
+          Ganhe <strong>{discountPct}% de desconto</strong> na sua reserva. O código já está salvo para você!
+        </p>
+      </div>
+      <button
+        onClick={() => setVisible(false)}
+        className="shrink-0 p-1 rounded-full hover:bg-white/20 transition-colors"
+        aria-label="Fechar"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
 
 function ProductCard({
   product,
@@ -237,6 +290,7 @@ export default function VitrineHome({
 
   return (
     <div>
+      <ReferralWelcomeBanner slug={slug} primaryColor={store.primaryColor ?? "#6366f1"} />
       {store.bannerUrl ? (
         <div className="relative h-80 md:h-[420px] overflow-hidden">
           <img

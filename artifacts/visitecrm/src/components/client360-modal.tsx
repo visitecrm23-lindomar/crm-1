@@ -10,6 +10,7 @@ import {
   useCreateClientActivity,
   useGetClientReferral,
   useGenerateClientReferralCode,
+  useGetMe,
 } from "@workspace/api-client-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -297,8 +298,15 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
 function ClientReferralTab({ clientId }: { clientId: string }) {
   const { data, refetch } = useGetClientReferral(clientId, { query: { enabled: !!clientId } });
   const generate = useGenerateClientReferralCode();
+  const { data: me } = useGetMe();
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const storeSlug = (me as { tenant?: { slug?: string } } | undefined)?.tenant?.slug ?? "";
+  const shareLink = data?.referralCode && storeSlug
+    ? `${window.location.origin}/loja/${storeSlug}/ref/${data.referralCode}`
+    : null;
 
   async function handleGenerate() {
     try {
@@ -318,6 +326,15 @@ function ClientReferralTab({ clientId }: { clientId: string }) {
     });
   }
 
+  function copyLink() {
+    if (!shareLink) return;
+    navigator.clipboard.writeText(shareLink).then(() => {
+      setCopiedLink(true);
+      toast({ title: "Link copiado!" });
+      setTimeout(() => setCopiedLink(false), 2000);
+    });
+  }
+
   const STATUS_COLORS: Record<string, string> = {
     pending: "text-yellow-600",
     completed: "text-green-600",
@@ -328,14 +345,14 @@ function ClientReferralTab({ clientId }: { clientId: string }) {
   return (
     <div className="space-y-4 mt-2">
       {/* Referral code card */}
-      <Card className="p-4">
+      <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-muted-foreground mb-1">Código de indicação</p>
             {data?.referralCode ? (
               <div className="flex items-center gap-2">
                 <span className="text-2xl font-mono font-bold text-primary">{data.referralCode}</span>
-                <Button size="sm" variant="outline" onClick={copyCode}>
+                <Button size="sm" variant="outline" onClick={copyCode} title="Copiar código">
                   {copied ? <CheckSquare className="w-4 h-4 text-green-500" /> : <FileText className="w-4 h-4" />}
                 </Button>
               </div>
@@ -351,6 +368,21 @@ function ClientReferralTab({ clientId }: { clientId: string }) {
             <p className="text-2xl font-bold text-green-600">{data?.successfulReferrals ?? 0}</p>
           </div>
         </div>
+        {shareLink && (
+          <div className="border-t pt-3">
+            <p className="text-xs text-muted-foreground mb-1">Link de compartilhamento</p>
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={shareLink}
+                className="flex-1 text-xs bg-muted rounded px-2 py-1.5 font-mono truncate"
+              />
+              <Button size="sm" variant="outline" onClick={copyLink} title="Copiar link">
+                {copiedLink ? <CheckSquare className="w-4 h-4 text-green-500" /> : <FileText className="w-4 h-4" />}
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Stats */}

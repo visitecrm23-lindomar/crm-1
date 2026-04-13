@@ -43,6 +43,8 @@ import {
   Clock,
   Ban,
   Eye,
+  Trophy,
+  Medal,
 } from "lucide-react";
 
 function fmtCurrency(v: string | number | null | undefined) {
@@ -283,6 +285,80 @@ export default function Indicacoes() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Top Referrers Ranking */}
+      {(() => {
+        const rankMap = new Map<string, { name: string; code: string; total: number; conversions: number; earnings: number }>();
+        for (const r of referrals) {
+          const key = r.referrerId;
+          const existing = rankMap.get(key);
+          const bonus = parseFloat(String(r.bonusAmount ?? "0")) || 0;
+          if (existing) {
+            existing.total += 1;
+            if (r.status === "completed") { existing.conversions += 1; existing.earnings += bonus; }
+          } else {
+            rankMap.set(key, {
+              name: r.referrerName ?? r.referrerId.slice(0, 8),
+              code: r.code,
+              total: 1,
+              conversions: r.status === "completed" ? 1 : 0,
+              earnings: r.status === "completed" ? bonus : 0,
+            });
+          }
+        }
+        const ranked = Array.from(rankMap.values())
+          .sort((a, b) => b.conversions - a.conversions || b.total - a.total)
+          .slice(0, 10);
+
+        if (ranked.length === 0) return null;
+
+        const rankIcon = (i: number) => {
+          if (i === 0) return <Trophy className="w-4 h-4 text-yellow-500" />;
+          if (i === 1) return <Medal className="w-4 h-4 text-gray-400" />;
+          if (i === 2) return <Medal className="w-4 h-4 text-orange-400" />;
+          return <span className="text-xs font-bold text-muted-foreground w-4 text-center">{i + 1}</span>;
+        };
+
+        return (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-yellow-500" />
+                Ranking de Top Indicadores
+              </CardTitle>
+              <CardDescription>Clientes que mais geraram conversões</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8">#</TableHead>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Código</TableHead>
+                    <TableHead className="text-center">Indicações</TableHead>
+                    <TableHead className="text-center">Convertidas</TableHead>
+                    <TableHead className="text-right">Bônus ganho</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ranked.map((r, i) => (
+                    <TableRow key={r.code + i}>
+                      <TableCell className="py-2">{rankIcon(i)}</TableCell>
+                      <TableCell className="font-medium py-2">{r.name}</TableCell>
+                      <TableCell className="font-mono text-primary py-2">{r.code}</TableCell>
+                      <TableCell className="text-center py-2">{r.total}</TableCell>
+                      <TableCell className="text-center py-2">
+                        <Badge variant={r.conversions > 0 ? "default" : "secondary"}>{r.conversions}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right py-2 text-green-600 font-medium">{fmtCurrency(r.earnings)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Referrals Table */}
       <Tabs defaultValue="all">

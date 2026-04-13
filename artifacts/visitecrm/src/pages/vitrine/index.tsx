@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, Switch, Route, Redirect } from "wouter";
+import { useParams, Switch, Route, Redirect, useLocation } from "wouter";
 import { publicStoreApi, PublicStore } from "@/lib/storeApi";
 import { CartProvider } from "@/contexts/CartContext";
 import VitrineLayout from "./layout";
@@ -11,6 +11,86 @@ import VitrineOrderTracking from "./order-tracking";
 import ReservationWizard from "./reservation-wizard";
 import ReferralLanding from "./referral-landing";
 import { Loader2 } from "lucide-react";
+
+const REFERRAL_CODE_KEY = "referral_code";
+const REFERRAL_CODE_EXPIRY_KEY = "referral_code_expiry";
+const REFERRAL_REFERRER_NAME_KEY = "referral_referrer_name";
+const SERVER_COOKIE_KEY = "referral_server_cookie_id";
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+function saveReferralToStorage(code: string, referrerName?: string) {
+  const expiry = Date.now() + THIRTY_DAYS_MS;
+  localStorage.setItem(REFERRAL_CODE_KEY, code);
+  localStorage.setItem(REFERRAL_CODE_EXPIRY_KEY, String(expiry));
+  if (referrerName) localStorage.setItem(REFERRAL_REFERRER_NAME_KEY, referrerName);
+}
+
+function getReferralFromStorage(): { code: string; referrerName?: string } | null {
+  const code = localStorage.getItem(REFERRAL_CODE_KEY);
+  const expiry = localStorage.getItem(REFERRAL_CODE_EXPIRY_KEY);
+  if (!code) return null;
+  if (expiry && Date.now() > parseInt(expiry)) {
+    localStorage.removeItem(REFERRAL_CODE_KEY);
+    localStorage.removeItem(REFERRAL_CODE_EXPIRY_KEY);
+    localStorage.removeItem(REFERRAL_REFERRER_NAME_KEY);
+    return null;
+  }
+  const referrerName = localStorage.getItem(REFERRAL_REFERRER_NAME_KEY) ?? undefined;
+  return { code, referrerName };
+}
+
+export { getReferralFromStorage };
+
+function ReferralCapture({ slug, code }: { slug: string; code: string }) {
+  const [, navigate] = useLocation();
+
+  useEffect(() => {
+    const upperCode = code.toUpperCase();
+    const params = new URLSearchParams(window.location.search);
+    const utmSource = params.get("utm_source") ?? undefined;
+    const utmMedium = params.get("utm_medium") ?? undefined;
+    const utmCampaign = params.get("utm_campaign") ?? undefined;
+    const existingCookieId = localStorage.getItem(SERVER_COOKIE_KEY) ?? undefined;
+
+    async function captureAndRedirect() {
+      try {
+        const [trackResult, infoResult] = await Promise.allSettled([
+          publicStoreApi.trackReferral(slug, {
+            code: upperCode,
+            serverCookieId: existingCookieId,
+            landingPage: window.location.href,
+            utmSource,
+            utmMedium,
+            utmCampaign,
+          }),
+          publicStoreApi.getReferralInfo(slug, upperCode),
+        ]);
+
+        if (trackResult.status === "fulfilled" && trackResult.value?.cookieId) {
+          localStorage.setItem(SERVER_COOKIE_KEY, trackResult.value.cookieId);
+        }
+
+        const referrerName = infoResult.status === "fulfilled"
+          ? infoResult.value?.referrerName
+          : undefined;
+
+        saveReferralToStorage(upperCode, referrerName);
+      } catch {
+        saveReferralToStorage(upperCode);
+      }
+
+      navigate(`/loja/${slug}?ref=${encodeURIComponent(upperCode)}&welcome=true`, { replace: true });
+    }
+
+    captureAndRedirect();
+  }, [slug, code, navigate]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+    </div>
+  );
+}
 
 function StoreRouter({ slug }: { slug: string }) {
   const [store, setStore] = useState<PublicStore | null>(null);
@@ -108,6 +188,11 @@ function StoreRouter({ slug }: { slug: string }) {
         </Route>
         <Route path={`/loja/${slug}/indicacao`}>
           <ReferralLanding slug={slug} store={store} />
+        </Route>
+        <Route path={`/loja/${slug}/ref/:code`}>
+          {(params: Record<string, string>) => (
+            <ReferralCapture slug={slug} code={params.code ?? ""} />
+          )}
         </Route>
         <Route>
           <Redirect to={`/loja/${slug}`} />
