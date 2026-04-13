@@ -196,7 +196,7 @@ If neither `FRONTEND_URL` nor `REPLIT_DEV_DOMAIN` is set at startup, the API ser
 Reservations are assigned a human-readable number on creation: `{PREFIX}-{TYPE}-{YYYYMM}-{NNNNN}`
 
 - **PREFIX**: Agency-specific prefix from `tenants.reservation_prefix` (default: first 3 letters of slug, uppercased). Configurable per-agency in Settings.
-- **TYPE**: Derived from trip type — `EXC` (excursion), `PCT` (package), `BTV` (day_trip), `TRF` (transfer), `RES` (custom/default)
+- **TYPE**: Derived from trip type — `EXC` (excursion), `PCT` (package), `BTV` (day_trip), `RES` (all others/default)
 - **YYYYMM**: Year+month of reservation creation
 - **NNNNN**: 5-digit zero-padded sequential counter, per tenant+type+month (atomic upsert on `reservation_sequences` table)
 - Old reservations without a number fall back to displaying `voucherCode` in the UI (QR codes still use `voucherCode`)
