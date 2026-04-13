@@ -56,7 +56,7 @@ export default function VitrineProduct({
   const [imgIndex, setImgIndex] = useState(0);
   const [selectedVariant, setSelectedVariant] = useState<{ variantName: string; label: string; price: number } | null>(null);
   const [qty, setQty] = useState(1);
-  const [activeTab, setActiveTab] = useState<"descricao" | "inclui" | "nao_inclui" | "requisitos" | "destaques">("descricao");
+  const [activeTab, setActiveTab] = useState<"descricao" | "requisitos" | "destaques">("descricao");
   const [related, setRelated] = useState<StoreProduct[]>([]);
 
   useEffect(() => {
@@ -151,8 +151,6 @@ export default function VitrineProduct({
 
   const tabs = [
     { key: "descricao" as const, label: "Descrição", show: !!product.description },
-    { key: "inclui" as const, label: "O que inclui", show: product.includes.length > 0 },
-    { key: "nao_inclui" as const, label: "Não inclui", show: product.excludes.length > 0 },
     { key: "requisitos" as const, label: "Requisitos", show: product.requirements.length > 0 },
     { key: "destaques" as const, label: "Destaques", show: product.features.length > 0 },
   ].filter((t) => t.show);
@@ -161,7 +159,7 @@ export default function VitrineProduct({
   const currentTab = tabs.find((t) => t.key === activeTab) ? activeTab : defaultTab;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-4 py-8 pb-24">
       <div className="flex items-center justify-between mb-6">
         <button
           onClick={() => navigate(`/loja/${slug}/produtos`)}
@@ -386,21 +384,6 @@ export default function VitrineProduct({
             </Button>
           </div>
 
-          <Button
-            className="w-full h-11 font-bold text-white mb-3"
-            style={{ backgroundColor: store.accentColor || store.primaryColor }}
-            onClick={handleReserveNow}
-            disabled={
-              (product.trackInventory && product.stockQuantity != null && product.stockQuantity <= 0) ||
-              (product.hasVariants && !selectedVariant)
-            }
-          >
-            <Zap className="w-5 h-5 mr-2" />
-            {product.hasVariants && !selectedVariant
-              ? "Selecione uma opção"
-              : "Reservar Agora → Ir para Checkout"}
-          </Button>
-
           {store.contactWhatsapp && (
             <Button
               variant="outline"
@@ -464,10 +447,10 @@ export default function VitrineProduct({
         </div>
       )}
 
-      {tabs.filter(t => t.key !== "inclui" && t.key !== "nao_inclui").length > 0 && (
+      {tabs.length > 0 && (
         <div className="mt-10">
           <div className="border-b flex gap-0 overflow-x-auto">
-            {tabs.filter(t => t.key !== "inclui" && t.key !== "nao_inclui").map((tab) => (
+            {tabs.map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
@@ -591,6 +574,50 @@ export default function VitrineProduct({
           </div>
         </div>
       )}
+
+      <div
+        className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t shadow-lg"
+        style={{ backdropFilter: "blur(8px)" }}
+      >
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs text-muted-foreground">Preço por pessoa</p>
+            <div className="flex items-baseline gap-2">
+              {product.salePrice && (
+                <span className="text-sm text-muted-foreground line-through">
+                  R$ {parseFloat(product.price).toFixed(2)}
+                </span>
+              )}
+              <span className="text-2xl font-bold" style={{ color: store.primaryColor }}>
+                R$ {effectivePrice.toFixed(2)}
+              </span>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              className="h-11 px-4 text-white font-semibold"
+              style={{ backgroundColor: store.primaryColor }}
+              onClick={handleAddToCart}
+              disabled={product.trackInventory && product.stockQuantity != null && product.stockQuantity <= 0}
+            >
+              <ShoppingCart className="w-5 h-5" />
+              <span className="hidden sm:inline ml-2">Carrinho</span>
+            </Button>
+            <Button
+              className="h-11 px-6 font-bold text-white"
+              style={{ backgroundColor: store.accentColor || store.primaryColor }}
+              onClick={handleReserveNow}
+              disabled={
+                (product.trackInventory && product.stockQuantity != null && product.stockQuantity <= 0) ||
+                (product.hasVariants && !selectedVariant)
+              }
+            >
+              <Zap className="w-5 h-5 mr-2" />
+              {product.hasVariants && !selectedVariant ? "Selecione uma opção" : "Reservar Agora"}
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
