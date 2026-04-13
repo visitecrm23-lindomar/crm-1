@@ -6298,6 +6298,8 @@ components:
           type: ["string", "null"]
         secondaryColor:
           type: ["string", "null"]
+        reservationPrefix:
+          type: ["string", "null"]
         createdAt:
           type: string
       required: [id, name, slug, email, planId, status, createdAt]

@@ -462,6 +462,7 @@ export const SuspendTenantResponse = zod.object({
   logoUrl: zod.string().nullish(),
   primaryColor: zod.string().nullish(),
   secondaryColor: zod.string().nullish(),
+  reservationPrefix: zod.string().nullish(),
   createdAt: zod.string(),
 });
 
@@ -484,6 +485,7 @@ export const ActivateTenantResponse = zod.object({
   logoUrl: zod.string().nullish(),
   primaryColor: zod.string().nullish(),
   secondaryColor: zod.string().nullish(),
+  reservationPrefix: zod.string().nullish(),
   createdAt: zod.string(),
 });
 
@@ -3286,6 +3288,7 @@ export const ListTenantsResponseItem = zod
     logoUrl: zod.string().nullish(),
     primaryColor: zod.string().nullish(),
     secondaryColor: zod.string().nullish(),
+    reservationPrefix: zod.string().nullish(),
     createdAt: zod.string(),
   })
   .and(
@@ -3325,6 +3328,7 @@ export const GetTenantResponse = zod.object({
   logoUrl: zod.string().nullish(),
   primaryColor: zod.string().nullish(),
   secondaryColor: zod.string().nullish(),
+  reservationPrefix: zod.string().nullish(),
   createdAt: zod.string(),
 });
 
@@ -3367,6 +3371,7 @@ export const UpdateTenantResponse = zod.object({
   logoUrl: zod.string().nullish(),
   primaryColor: zod.string().nullish(),
   secondaryColor: zod.string().nullish(),
+  reservationPrefix: zod.string().nullish(),
   createdAt: zod.string(),
 });
 

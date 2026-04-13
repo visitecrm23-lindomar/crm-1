@@ -147,7 +147,11 @@ router.patch("/tenants/:id", async (req, res): Promise<void> => {
     }
     const parsed = UpdateTenantBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    await db.update(tenantsTable).set(parsed.data).where(eq(tenantsTable.id, req.params.id));
+    const updateData = { ...parsed.data };
+    if (updateData.reservationPrefix != null) {
+      updateData.reservationPrefix = updateData.reservationPrefix.trim().toUpperCase().slice(0, 5) || null;
+    }
+    await db.update(tenantsTable).set(updateData).where(eq(tenantsTable.id, req.params.id));
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
     if (!tenant) { res.status(404).json({ error: "Not found" }); return; }
     res.json(tenant);

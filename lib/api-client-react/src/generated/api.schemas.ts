@@ -1570,6 +1570,8 @@ export interface Tenant {
   primaryColor?: string | null;
   /** @nullable */
   secondaryColor?: string | null;
+  /** @nullable */
+  reservationPrefix?: string | null;
   createdAt: string;
 }
 
