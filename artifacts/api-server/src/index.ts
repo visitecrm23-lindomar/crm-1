@@ -234,6 +234,11 @@ async function runMigrations() {
       ALTER TABLE clients ADD COLUMN IF NOT EXISTS referral_code_generated_at TIMESTAMPTZ;
     `);
     await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS clients_tenant_referral_code_unique
+        ON clients (tenant_id, referral_code)
+        WHERE referral_code IS NOT NULL;
+    `);
+    await client.query(`
       CREATE TABLE IF NOT EXISTS referral_tracking (
         id text PRIMARY KEY,
         tenant_id text NOT NULL,

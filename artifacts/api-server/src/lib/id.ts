@@ -9,12 +9,14 @@ export function generateVoucherCode(): string {
 }
 
 /**
- * Generates a referral code in NOME2026 format (up to 4 letters from name + current year).
+ * Generates the base referral code in NOME2026 format (up to 4 letters from name + current year).
+ * Uniqueness per tenant must be verified by the caller using a DB check loop.
  * @param clientName - The client's full name
- * @returns A deterministic base code like "JOAO2026"
+ * @param _tenantId - Tenant ID (used for uniqueness enforcement in calling code)
+ * @returns A base code like "JOAO2026"
  */
-export function generateReferralCode(clientName: string): string {
+export function generateReferralCode(clientName: string, _tenantId?: string): string {
   const year = new Date().getFullYear();
-  const namePart = (clientName ?? "REF").replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 4);
+  const namePart = (clientName ?? "REF").replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 4) || "REF";
   return `${namePart}${year}`;
 }

@@ -512,14 +512,16 @@ router.post("/clients/:clientId/referral/generate", async (req, res): Promise<vo
       return;
     }
 
-    // Generate unique referral code using utility: NOME2026 format
-    let code = generateReferralCode(client.name ?? "REF");
-    const namePart = code.replace(/\d+$/, "");
+    // Generate unique referral code using utility: NOME2026 format (tenant-scoped uniqueness)
+    const baseCode = generateReferralCode(client.name ?? "REF", me.tenantId);
+    const namePart = baseCode.replace(/\d+$/, "");
+    const year = new Date().getFullYear();
+    let code = baseCode;
 
-    // Ensure uniqueness per tenant - add numeric suffix if collision
+    // Unlimited loop until a unique code is found within this tenant
     let attempt = 0;
-    while (attempt < 10) {
-      const candidate = attempt === 0 ? code : `${namePart}${new Date().getFullYear()}${attempt}`;
+    while (true) {
+      const candidate = attempt === 0 ? code : `${namePart}${year}${attempt}`;
       const [existing] = await db.select({ id: clientsTable.id })
         .from(clientsTable)
         .where(and(

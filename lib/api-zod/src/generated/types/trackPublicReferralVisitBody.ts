@@ -8,7 +8,8 @@
 
 export type TrackPublicReferralVisitBody = {
   code: string;
-  cookieId?: string;
+  /** Previously server-issued tracking cookie ID for return visit recognition */
+  serverCookieId?: string;
   landingPage?: string;
   utmSource?: string;
   utmMedium?: string;

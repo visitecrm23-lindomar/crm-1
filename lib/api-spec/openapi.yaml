@@ -3147,8 +3147,9 @@ paths:
               properties:
                 code:
                   type: string
-                cookieId:
+                serverCookieId:
                   type: string
+                  description: Previously server-issued tracking cookie ID for return visit recognition
                 landingPage:
                   type: string
                 utmSource:

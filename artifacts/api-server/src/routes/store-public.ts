@@ -927,6 +927,7 @@ router.post("/public/store/:slug/referral/validate", async (req, res): Promise<v
       isEnabled: referralSettingsTable.isEnabled,
       expirationDays: referralSettingsTable.expirationDays,
       allowSelfReferral: referralSettingsTable.allowSelfReferral,
+      requireFirstPurchase: referralSettingsTable.requireFirstPurchase,
     }).from(referralSettingsTable)
       .where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
 
@@ -950,6 +951,21 @@ router.post("/public/store/:slug/referral/validate", async (req, res): Promise<v
     if (!settings?.allowSelfReferral && parsed.data.customerEmail && referrer.email) {
       if (referrer.email.toLowerCase() === parsed.data.customerEmail.toLowerCase()) {
         res.status(400).json({ valid: false, error: "Você não pode usar seu próprio código de indicação" });
+        return;
+      }
+    }
+
+    // Enforce requireFirstPurchase: customer must not have prior completed orders in this tenant
+    if (settings?.requireFirstPurchase && parsed.data.customerEmail) {
+      const [priorOrder] = await db.select({ id: storeOrdersTable.id })
+        .from(storeOrdersTable)
+        .where(and(
+          eq(storeOrdersTable.tenantId, store.tenantId),
+          eq(storeOrdersTable.customerEmail, parsed.data.customerEmail.toLowerCase()),
+          eq(storeOrdersTable.status, "completed"),
+        )).limit(1);
+      if (priorOrder) {
+        res.status(400).json({ valid: false, error: "Código de indicação válido apenas para novos clientes" });
         return;
       }
     }

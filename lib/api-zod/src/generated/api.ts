@@ -3566,7 +3566,12 @@ export const TrackPublicReferralVisitParams = zod.object({
 
 export const TrackPublicReferralVisitBody = zod.object({
   code: zod.string(),
-  cookieId: zod.string().optional(),
+  serverCookieId: zod
+    .string()
+    .optional()
+    .describe(
+      "Previously server-issued tracking cookie ID for return visit recognition",
+    ),
   landingPage: zod.string().optional(),
   utmSource: zod.string().optional(),
   utmMedium: zod.string().optional(),
