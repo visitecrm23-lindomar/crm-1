@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/contexts/CartContext";
@@ -56,6 +56,11 @@ export function ProductQuickView({
 }) {
   const [imgIndex, setImgIndex] = useState(0);
   const [, navigate] = useLocation();
+
+  useEffect(() => {
+    setImgIndex(0);
+  }, [product.id, open]);
+
   const { addItem } = useCart();
 
   const displayPrice = parseFloat(product.salePrice ?? product.price);

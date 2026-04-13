@@ -203,13 +203,13 @@ export default function VitrineProduct({
         {product.images.length > 1 && (
           <>
             <button
-              onClick={() => setImgIndex((i) => Math.max(0, i - 1))}
+              onClick={() => setImgIndex((i) => (i - 1 + product.images.length) % product.images.length)}
               className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors"
             >
               <PrevIcon className="w-5 h-5" />
             </button>
             <button
-              onClick={() => setImgIndex((i) => Math.min(product.images.length - 1, i + 1))}
+              onClick={() => setImgIndex((i) => (i + 1) % product.images.length)}
               className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors"
             >
               <NextIcon className="w-5 h-5" />
