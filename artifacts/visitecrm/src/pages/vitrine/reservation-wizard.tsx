@@ -380,8 +380,8 @@ function SeatGrid({
       </div>
 
       <p className="text-xs text-muted-foreground text-center mt-3">
-        {selected.length} de {qty} assento{qty !== 1 ? "s" : ""} selecionado{qty !== 1 ? "s" : ""}
-        {selected.length < qty && ` · selecione mais ${qty - selected.length}`}
+        Selecione exatamente {qty} assento{qty !== 1 ? "s" : ""} para continuar
+        {" "}({selected.length}/{qty} selecionado{qty !== 1 ? "s" : ""})
       </p>
     </div>
   );
@@ -995,11 +995,9 @@ export default function ReservationWizard({
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <Armchair className="w-5 h-5 text-primary" />
               Seleção de Assentos{" "}
-              {showSeatGrid && (
-                <span className="text-sm font-normal text-muted-foreground">
-                  * (obrigatório)
-                </span>
-              )}
+              <span className="text-sm font-normal text-muted-foreground">
+                * (obrigatório)
+              </span>
             </h2>
           </div>
 
