@@ -576,6 +576,7 @@ export interface CreateOrderInput {
   referralCookieId?: string;
   paymentMethod?: string;
   notes?: string;
+  seats?: string[];
 }
 
 export interface ReferralValidation {

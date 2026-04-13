@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { pipelinesTable, pipelineStagesTable, dealsTable, clientsTable } from "@workspace/db";
-import { eq, and, asc, desc } from "drizzle-orm";
+import { pipelinesTable, pipelineStagesTable, dealsTable, clientsTable, reservationsTable } from "@workspace/db";
+import { eq, and, asc, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { z } from "zod";
@@ -81,7 +81,7 @@ function formatStage(s: typeof pipelineStagesTable.$inferSelect) {
   };
 }
 
-function formatDeal(d: typeof dealsTable.$inferSelect) {
+function formatDeal(d: typeof dealsTable.$inferSelect, seats: string[] = []) {
   return {
     id: d.id, tenantId: d.tenantId, clientId: d.clientId, stageId: d.stageId,
     title: d.title, description: d.description, value: Number(d.value),
@@ -91,10 +91,22 @@ function formatDeal(d: typeof dealsTable.$inferSelect) {
     reservationId: d.reservationId ?? null,
     source: d.source ?? "manual",
     autoCreated: d.autoCreated ?? false,
+    seats,
     expectedCloseDate: d.expectedCloseDate?.toISOString() ?? null,
     closedAt: d.closedAt?.toISOString() ?? null,
     createdAt: d.createdAt.toISOString(), updatedAt: d.updatedAt.toISOString(),
   };
+}
+
+async function getSeatsForDeals(deals: typeof dealsTable.$inferSelect[]): Promise<Map<string, string[]>> {
+  const resIds = deals.map(d => d.reservationId).filter(Boolean) as string[];
+  const seatsMap = new Map<string, string[]>();
+  if (resIds.length === 0) return seatsMap;
+  const rows = await db.select({ id: reservationsTable.id, seats: reservationsTable.seats })
+    .from(reservationsTable)
+    .where(inArray(reservationsTable.id, resIds));
+  for (const r of rows) seatsMap.set(r.id, r.seats ?? []);
+  return seatsMap;
 }
 
 router.get("/pipeline/stages", async (req, res): Promise<void> => {
@@ -129,7 +141,8 @@ router.get("/deals", async (req, res): Promise<void> => {
     if (me.role === "vendedor") conditions.push(eq(dealsTable.ownerId, me.id));
     const deals = await db.select().from(dealsTable)
       .where(and(...conditions)).orderBy(desc(dealsTable.createdAt));
-    res.json(deals.map(formatDeal));
+    const seatsMap = await getSeatsForDeals(deals);
+    res.json(deals.map(d => formatDeal(d, d.reservationId ? (seatsMap.get(d.reservationId) ?? []) : [])));
   } catch (err) {
     req.log.error({ err }, "Error listing deals");
     res.status(500).json({ error: "Internal server error" });

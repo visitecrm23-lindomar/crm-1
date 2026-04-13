@@ -5297,6 +5297,10 @@ components:
           type: string
         autoCreated:
           type: boolean
+        seats:
+          type: array
+          items:
+            type: string
         createdAt:
           type: string
         updatedAt:
@@ -5318,6 +5322,7 @@ components:
         - status
         - source
         - autoCreated
+        - seats
         - createdAt
         - updatedAt
 

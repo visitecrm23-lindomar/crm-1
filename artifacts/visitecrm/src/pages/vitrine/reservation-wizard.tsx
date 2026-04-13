@@ -707,6 +707,7 @@ export default function ReservationWizard({
         referralCookieId: referralApplied ? (localStorage.getItem("referral_server_cookie_id") ?? undefined) : undefined,
         paymentMethod: form.paymentMethod,
         notes: extraNotes || undefined,
+        seats: selectedSeats.length > 0 ? selectedSeats.map(String) : undefined,
       });
       setCompletedOrder({
         orderNumber: order.orderNumber,

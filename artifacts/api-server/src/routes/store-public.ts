@@ -341,6 +341,7 @@ const CreateOrderBody = z.object({
   customerNotes: z.string().optional(),
   ipAddress: z.string().optional(),
   userAgent: z.string().optional(),
+  seats: z.array(z.string()).optional(),
 });
 
 router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
@@ -732,15 +733,17 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
           for (const [tripId, { product, totalQty, totalValue }] of tripLinkedProducts) {
             const voucherCode = generateVoucherCode();
             const reservationId = generateId();
-            // Use sequential placeholder seat IDs so cancellation logic can return the correct
-            // number of seats to the trip (reservation cancel uses seats.length for the decrement).
-            const placeholderSeats = Array.from({ length: totalQty }, (_, i) => String(i + 1));
+            // Use real seats from the request if provided; fall back to sequential placeholders.
+            // Cancellation logic uses seats.length for the decrement, so length must always equal totalQty.
+            const realSeats = (data.seats && data.seats.length >= totalQty)
+              ? data.seats.slice(0, totalQty)
+              : Array.from({ length: totalQty }, (_, i) => String(i + 1));
             await tx.insert(reservationsTable).values({
               id: reservationId,
               tenantId: store.tenantId,
               tripId,
               clientId: reservationClientId,
-              seats: placeholderSeats,
+              seats: realSeats,
               totalValue: totalValue.toFixed(2),
               paidValue: "0",
               balance: totalValue.toFixed(2),

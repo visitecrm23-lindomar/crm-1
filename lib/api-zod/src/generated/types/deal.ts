@@ -33,6 +33,7 @@ export interface Deal {
   lostReason?: string | null;
   source: string;
   autoCreated: boolean;
+  seats: string[];
   createdAt: string;
   updatedAt: string;
   /** @nullable */
