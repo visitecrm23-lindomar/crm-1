@@ -388,6 +388,7 @@ router.post("/reservations", async (req, res): Promise<void> => {
 
     let serverReferralCode: string | null = null;
     let serverReferralAmount = 0;
+    let serverReferralBonusValue = 0;
     let serverReferralReferrerId: string | null = null;
 
     if (parsed.data.discountReferralCode) {
@@ -404,6 +405,8 @@ router.post("/reservations", async (req, res): Promise<void> => {
       }
       // Get discount/bonus from referral settings
       const [refSettings] = await db.select({
+        discountValue: referralSettingsTable.discountValue,
+        discountType: referralSettingsTable.discountType,
         bonusValue: referralSettingsTable.bonusValue,
         isActive: referralSettingsTable.isEnabled,
       }).from(referralSettingsTable)
@@ -413,7 +416,11 @@ router.post("/reservations", async (req, res): Promise<void> => {
       }
       serverReferralCode = upperCode;
       serverReferralReferrerId = referrer.id;
-      serverReferralAmount = Number(refSettings?.bonusValue ?? "10");
+      // Discount for the referred customer (percentage of base value)
+      const discPct = Number(refSettings?.discountValue ?? "5");
+      serverReferralAmount = Math.round((baseValue * (discPct / 100)) * 100) / 100;
+      // Bonus earned by the referrer
+      serverReferralBonusValue = Number(refSettings?.bonusValue ?? "10");
     }
 
     // Apply discounts in priority order against running remaining balance
@@ -552,19 +559,27 @@ router.post("/reservations", async (req, res): Promise<void> => {
           status: "completed",
           referredId: parsed.data.clientId,
           discountApplied: true,
-          discountType: "fixed",
+          discountType: "percentage",
           discountValue: appliedReferralAmount.toFixed(2),
           discountAmount: appliedReferralAmount.toFixed(2),
-          bonusAmount: appliedReferralAmount.toFixed(2),
+          bonusAmount: serverReferralBonusValue.toFixed(2),
           convertedAt: new Date(),
         });
-        // Update referrer client stats
+        // Update referrer client stats (earnings += referrer bonus)
         await tx.update(clientsTable)
           .set({
+            totalReferrals: sql`COALESCE(total_referrals, 0) + 1`,
             successfulReferrals: sql`COALESCE(successful_referrals, 0) + 1`,
-            referralEarnings: sql`COALESCE(referral_earnings, 0) + ${appliedReferralAmount.toFixed(2)}`,
+            referralEarnings: sql`COALESCE(referral_earnings, 0) + ${serverReferralBonusValue.toFixed(2)}`,
           })
           .where(eq(clientsTable.id, serverReferralReferrerId));
+        // Update referred client: set referredById if not already set
+        await tx.update(clientsTable)
+          .set({ referredById: serverReferralReferrerId })
+          .where(and(
+            eq(clientsTable.id, parsed.data.clientId),
+            sql`referred_by_id IS NULL`,
+          ));
       }
 
       return { ok: true };

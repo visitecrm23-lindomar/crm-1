@@ -742,10 +742,21 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
           // Update referrer client stats
           await tx.update(clientsTable)
             .set({
+              totalReferrals: sql`COALESCE(total_referrals, 0) + 1`,
               successfulReferrals: sql`COALESCE(successful_referrals, 0) + 1`,
               referralEarnings: sql`COALESCE(referral_earnings, 0) + ${bonusValue.toFixed(2)}`,
             })
             .where(eq(clientsTable.id, appliedReferralReferrerId));
+
+          // Update referred client: set referredById if not already set
+          if (reservationClientId) {
+            await tx.update(clientsTable)
+              .set({ referredById: appliedReferralReferrerId })
+              .where(and(
+                eq(clientsTable.id, reservationClientId),
+                sql`referred_by_id IS NULL`,
+              ));
+          }
 
           // Mark referral_tracking as converted — scoped to tenant + code
           await tx.update(referralTrackingTable)
