@@ -18,7 +18,7 @@ import {
   pipelineStagesTable,
   dealsTable,
 } from "@workspace/db";
-import { eq, and, desc, asc, ilike, or, sql } from "drizzle-orm";
+import { eq, and, desc, asc, ilike, or, sql, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId, generateVoucherCode } from "../lib/id";
 import { randomBytes } from "crypto";
@@ -581,6 +581,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
     let reservationClientId: string | null = null;
     let reservationCreatedById: string | null = null;
     let vitrineStageId: string | null = null;
+    const tripNameMap = new Map<string, string>();
     if (tripLinkedProducts.size > 0) {
       // Find the first active user in the tenant (needed for reservation.createdById)
       const [adminUser] = await db.select({ id: usersTable.id })
@@ -614,6 +615,13 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
           .where(eq(pipelineStagesTable.tenantId, store.tenantId));
         const vitrine = stages.find(s => s.isDefaultWeb) ?? stages.find(s => s.name === "Vitrine");
         vitrineStageId = vitrine?.id ?? null;
+
+        // Fetch trip names for deal titles
+        const tripIds = [...tripLinkedProducts.keys()];
+        const tripRows = await db.select({ id: tripsTable.id, name: tripsTable.name })
+          .from(tripsTable)
+          .where(and(inArray(tripsTable.id, tripIds), eq(tripsTable.tenantId, store.tenantId)));
+        for (const t of tripRows) tripNameMap.set(t.id, t.name);
       } else {
         res.status(500).json({ error: "Não foi possível criar a reserva: nenhum usuário ativo encontrado para esta agência" });
         return;
@@ -753,11 +761,12 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
             // Auto-create deal in "Vitrine" pipeline stage for this reservation
             if (vitrineStageId && reservationCreatedById) {
               const dealId = generateId();
+              const tripName = tripNameMap.get(tripId) ?? product.name;
               await tx.insert(dealsTable).values({
                 id: dealId,
                 tenantId: store.tenantId,
                 stageId: vitrineStageId,
-                title: `${data.customerName} — ${product.name}`,
+                title: `${data.customerName} — ${tripName}`,
                 value: totalValue.toFixed(2),
                 clientId: reservationClientId,
                 tripId,
