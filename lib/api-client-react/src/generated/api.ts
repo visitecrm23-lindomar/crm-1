@@ -26,6 +26,11 @@ import type {
   Automation,
   AutomationAction,
   AutomationLog,
+  BirthdayClient,
+  BirthdayHistoryItem,
+  BirthdaySendResult,
+  BirthdaySettings,
+  BirthdayStats,
   BoardingLocation,
   BoardingPanel,
   Campaign,
@@ -88,6 +93,8 @@ import type {
   FeatureFlag,
   FinancialSummary,
   GenerateClientReferralCode200,
+  GetBirthdayHistoryParams,
+  GetBirthdayUpcomingParams,
   GetDashboardRevenueChartParams,
   GetPublicReferralInfo200,
   GetPublicReferralInfoParams,
@@ -113,6 +120,8 @@ import type {
   LoyaltyProgram,
   LoyaltySyncResult,
   LoyaltyTransaction,
+  MarkBirthdayConverted200,
+  MarkBirthdayConvertedBody,
   Message,
   MessageTemplate,
   MetricPoint,
@@ -13420,6 +13429,685 @@ export const useDeleteCoupon = <
   TContext
 > => {
   return useMutation(getDeleteCouponMutationOptions(options));
+};
+
+/**
+ * @summary Get today's birthday clients
+ */
+export const getGetBirthdayTodayUrl = () => {
+  return `/api/birthday/today`;
+};
+
+export const getBirthdayToday = async (
+  options?: RequestInit,
+): Promise<BirthdayClient[]> => {
+  return customFetch<BirthdayClient[]>(getGetBirthdayTodayUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetBirthdayTodayQueryKey = () => {
+  return [`/api/birthday/today`] as const;
+};
+
+export const getGetBirthdayTodayQueryOptions = <
+  TData = Awaited<ReturnType<typeof getBirthdayToday>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getBirthdayToday>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetBirthdayTodayQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getBirthdayToday>>
+  > = ({ signal }) => getBirthdayToday({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getBirthdayToday>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetBirthdayTodayQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getBirthdayToday>>
+>;
+export type GetBirthdayTodayQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get today's birthday clients
+ */
+
+export function useGetBirthdayToday<
+  TData = Awaited<ReturnType<typeof getBirthdayToday>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getBirthdayToday>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetBirthdayTodayQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get upcoming birthday clients
+ */
+export const getGetBirthdayUpcomingUrl = (
+  params?: GetBirthdayUpcomingParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/birthday/upcoming?${stringifiedParams}`
+    : `/api/birthday/upcoming`;
+};
+
+export const getBirthdayUpcoming = async (
+  params?: GetBirthdayUpcomingParams,
+  options?: RequestInit,
+): Promise<BirthdayClient[]> => {
+  return customFetch<BirthdayClient[]>(getGetBirthdayUpcomingUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetBirthdayUpcomingQueryKey = (
+  params?: GetBirthdayUpcomingParams,
+) => {
+  return [`/api/birthday/upcoming`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetBirthdayUpcomingQueryOptions = <
+  TData = Awaited<ReturnType<typeof getBirthdayUpcoming>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetBirthdayUpcomingParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getBirthdayUpcoming>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetBirthdayUpcomingQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getBirthdayUpcoming>>
+  > = ({ signal }) =>
+    getBirthdayUpcoming(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getBirthdayUpcoming>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetBirthdayUpcomingQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getBirthdayUpcoming>>
+>;
+export type GetBirthdayUpcomingQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get upcoming birthday clients
+ */
+
+export function useGetBirthdayUpcoming<
+  TData = Awaited<ReturnType<typeof getBirthdayUpcoming>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetBirthdayUpcomingParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getBirthdayUpcoming>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetBirthdayUpcomingQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get birthday message history
+ */
+export const getGetBirthdayHistoryUrl = (params?: GetBirthdayHistoryParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/birthday/history?${stringifiedParams}`
+    : `/api/birthday/history`;
+};
+
+export const getBirthdayHistory = async (
+  params?: GetBirthdayHistoryParams,
+  options?: RequestInit,
+): Promise<BirthdayHistoryItem[]> => {
+  return customFetch<BirthdayHistoryItem[]>(getGetBirthdayHistoryUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetBirthdayHistoryQueryKey = (
+  params?: GetBirthdayHistoryParams,
+) => {
+  return [`/api/birthday/history`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetBirthdayHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getBirthdayHistory>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetBirthdayHistoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getBirthdayHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetBirthdayHistoryQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getBirthdayHistory>>
+  > = ({ signal }) => getBirthdayHistory(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getBirthdayHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetBirthdayHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getBirthdayHistory>>
+>;
+export type GetBirthdayHistoryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get birthday message history
+ */
+
+export function useGetBirthdayHistory<
+  TData = Awaited<ReturnType<typeof getBirthdayHistory>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetBirthdayHistoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getBirthdayHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetBirthdayHistoryQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get birthday message statistics
+ */
+export const getGetBirthdayStatsUrl = () => {
+  return `/api/birthday/stats`;
+};
+
+export const getBirthdayStats = async (
+  options?: RequestInit,
+): Promise<BirthdayStats> => {
+  return customFetch<BirthdayStats>(getGetBirthdayStatsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetBirthdayStatsQueryKey = () => {
+  return [`/api/birthday/stats`] as const;
+};
+
+export const getGetBirthdayStatsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getBirthdayStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getBirthdayStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetBirthdayStatsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getBirthdayStats>>
+  > = ({ signal }) => getBirthdayStats({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getBirthdayStats>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetBirthdayStatsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getBirthdayStats>>
+>;
+export type GetBirthdayStatsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get birthday message statistics
+ */
+
+export function useGetBirthdayStats<
+  TData = Awaited<ReturnType<typeof getBirthdayStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getBirthdayStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetBirthdayStatsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Manually send birthday message to a client
+ */
+export const getSendBirthdayMessageUrl = (clientId: string) => {
+  return `/api/birthday/${clientId}/send`;
+};
+
+export const sendBirthdayMessage = async (
+  clientId: string,
+  options?: RequestInit,
+): Promise<BirthdaySendResult> => {
+  return customFetch<BirthdaySendResult>(getSendBirthdayMessageUrl(clientId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getSendBirthdayMessageMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendBirthdayMessage>>,
+    TError,
+    { clientId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof sendBirthdayMessage>>,
+  TError,
+  { clientId: string },
+  TContext
+> => {
+  const mutationKey = ["sendBirthdayMessage"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof sendBirthdayMessage>>,
+    { clientId: string }
+  > = (props) => {
+    const { clientId } = props ?? {};
+
+    return sendBirthdayMessage(clientId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SendBirthdayMessageMutationResult = NonNullable<
+  Awaited<ReturnType<typeof sendBirthdayMessage>>
+>;
+
+export type SendBirthdayMessageMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Manually send birthday message to a client
+ */
+export const useSendBirthdayMessage = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendBirthdayMessage>>,
+    TError,
+    { clientId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof sendBirthdayMessage>>,
+  TError,
+  { clientId: string },
+  TContext
+> => {
+  return useMutation(getSendBirthdayMessageMutationOptions(options));
+};
+
+/**
+ * @summary Mark a birthday coupon as converted (redeemed)
+ */
+export const getMarkBirthdayConvertedUrl = () => {
+  return `/api/birthday/mark-converted`;
+};
+
+export const markBirthdayConverted = async (
+  markBirthdayConvertedBody: MarkBirthdayConvertedBody,
+  options?: RequestInit,
+): Promise<MarkBirthdayConverted200> => {
+  return customFetch<MarkBirthdayConverted200>(getMarkBirthdayConvertedUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(markBirthdayConvertedBody),
+  });
+};
+
+export const getMarkBirthdayConvertedMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markBirthdayConverted>>,
+    TError,
+    { data: BodyType<MarkBirthdayConvertedBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof markBirthdayConverted>>,
+  TError,
+  { data: BodyType<MarkBirthdayConvertedBody> },
+  TContext
+> => {
+  const mutationKey = ["markBirthdayConverted"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof markBirthdayConverted>>,
+    { data: BodyType<MarkBirthdayConvertedBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return markBirthdayConverted(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MarkBirthdayConvertedMutationResult = NonNullable<
+  Awaited<ReturnType<typeof markBirthdayConverted>>
+>;
+export type MarkBirthdayConvertedMutationBody =
+  BodyType<MarkBirthdayConvertedBody>;
+export type MarkBirthdayConvertedMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Mark a birthday coupon as converted (redeemed)
+ */
+export const useMarkBirthdayConverted = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markBirthdayConverted>>,
+    TError,
+    { data: BodyType<MarkBirthdayConvertedBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof markBirthdayConverted>>,
+  TError,
+  { data: BodyType<MarkBirthdayConvertedBody> },
+  TContext
+> => {
+  return useMutation(getMarkBirthdayConvertedMutationOptions(options));
+};
+
+/**
+ * @summary Get birthday message settings
+ */
+export const getGetBirthdaySettingsUrl = () => {
+  return `/api/birthday/settings`;
+};
+
+export const getBirthdaySettings = async (
+  options?: RequestInit,
+): Promise<BirthdaySettings> => {
+  return customFetch<BirthdaySettings>(getGetBirthdaySettingsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetBirthdaySettingsQueryKey = () => {
+  return [`/api/birthday/settings`] as const;
+};
+
+export const getGetBirthdaySettingsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getBirthdaySettings>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getBirthdaySettings>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetBirthdaySettingsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getBirthdaySettings>>
+  > = ({ signal }) => getBirthdaySettings({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getBirthdaySettings>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetBirthdaySettingsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getBirthdaySettings>>
+>;
+export type GetBirthdaySettingsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get birthday message settings
+ */
+
+export function useGetBirthdaySettings<
+  TData = Awaited<ReturnType<typeof getBirthdaySettings>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getBirthdaySettings>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetBirthdaySettingsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update birthday message settings
+ */
+export const getUpdateBirthdaySettingsUrl = () => {
+  return `/api/birthday/settings`;
+};
+
+export const updateBirthdaySettings = async (
+  birthdaySettings: BirthdaySettings,
+  options?: RequestInit,
+): Promise<BirthdaySettings> => {
+  return customFetch<BirthdaySettings>(getUpdateBirthdaySettingsUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(birthdaySettings),
+  });
+};
+
+export const getUpdateBirthdaySettingsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateBirthdaySettings>>,
+    TError,
+    { data: BodyType<BirthdaySettings> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateBirthdaySettings>>,
+  TError,
+  { data: BodyType<BirthdaySettings> },
+  TContext
+> => {
+  const mutationKey = ["updateBirthdaySettings"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateBirthdaySettings>>,
+    { data: BodyType<BirthdaySettings> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateBirthdaySettings(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateBirthdaySettingsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateBirthdaySettings>>
+>;
+export type UpdateBirthdaySettingsMutationBody = BodyType<BirthdaySettings>;
+export type UpdateBirthdaySettingsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update birthday message settings
+ */
+export const useUpdateBirthdaySettings = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateBirthdaySettings>>,
+    TError,
+    { data: BodyType<BirthdaySettings> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateBirthdaySettings>>,
+  TError,
+  { data: BodyType<BirthdaySettings> },
+  TContext
+> => {
+  return useMutation(getUpdateBirthdaySettingsMutationOptions(options));
 };
 
 /**

@@ -49,6 +49,8 @@ tags:
     description: Marketplace orders
   - name: campaigns
     description: Marketing campaigns
+  - name: Birthday
+    description: Birthday message automation
   - name: loyalty
     description: Loyalty programs
   - name: nps
@@ -3371,6 +3373,156 @@ paths:
       responses:
         "204":
           description: Deleted
+
+  # ─── BIRTHDAY ───────────────────────────────────────────────────
+  /birthday/today:
+    get:
+      operationId: getBirthdayToday
+      summary: Get today's birthday clients
+      tags: [Birthday]
+      responses:
+        "200":
+          description: List of birthday clients for today
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BirthdayClient"
+
+  /birthday/upcoming:
+    get:
+      operationId: getBirthdayUpcoming
+      summary: Get upcoming birthday clients
+      tags: [Birthday]
+      parameters:
+        - in: query
+          name: days
+          schema:
+            type: integer
+          description: Number of days to look ahead (default 7, max 60)
+      responses:
+        "200":
+          description: List of upcoming birthday clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BirthdayClient"
+
+  /birthday/history:
+    get:
+      operationId: getBirthdayHistory
+      summary: Get birthday message history
+      tags: [Birthday]
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: year
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Birthday message history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BirthdayHistoryItem"
+
+  /birthday/stats:
+    get:
+      operationId: getBirthdayStats
+      summary: Get birthday message statistics
+      tags: [Birthday]
+      responses:
+        "200":
+          description: Birthday statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BirthdayStats"
+
+  /birthday/{clientId}/send:
+    post:
+      operationId: sendBirthdayMessage
+      summary: Manually send birthday message to a client
+      tags: [Birthday]
+      parameters:
+        - in: path
+          name: clientId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Send result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BirthdaySendResult"
+
+  /birthday/mark-converted:
+    post:
+      operationId: markBirthdayConverted
+      summary: Mark a birthday coupon as converted (redeemed)
+      tags: [Birthday]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                couponCode:
+                  type: string
+              required: [couponCode]
+      responses:
+        "200":
+          description: Conversion marked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required: [success]
+
+  /birthday/settings:
+    get:
+      operationId: getBirthdaySettings
+      summary: Get birthday message settings
+      tags: [Birthday]
+      responses:
+        "200":
+          description: Birthday settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BirthdaySettings"
+    put:
+      operationId: updateBirthdaySettings
+      summary: Update birthday message settings
+      tags: [Birthday]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BirthdaySettings"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BirthdaySettings"
 
   # ─── DOCUMENTS ──────────────────────────────────────────────────
   /documents:
@@ -7683,6 +7835,130 @@ components:
         updatedAt:
           type: string
       required: [id, tenantId, planId, status, billingCycle, currentPeriodStart, currentPeriodEnd, cancelAtPeriodEnd, createdAt, updatedAt]
+
+    # ─── BIRTHDAY ───────────────────────────────────────────────────
+    BirthdayMessage:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        clientId:
+          type: string
+        birthdayYear:
+          type: integer
+        sentWhatsapp:
+          type: boolean
+        sentEmail:
+          type: boolean
+        whatsappSentAt:
+          type: ["string", "null"]
+        emailSentAt:
+          type: ["string", "null"]
+        whatsappError:
+          type: ["string", "null"]
+        emailError:
+          type: ["string", "null"]
+        couponId:
+          type: ["string", "null"]
+        couponCode:
+          type: ["string", "null"]
+        converted:
+          type: boolean
+        isManual:
+          type: boolean
+        sentById:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, tenantId, clientId, birthdayYear, sentWhatsapp, sentEmail, converted, isManual, createdAt]
+
+    BirthdayClient:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        whatsapp:
+          type: string
+        birthDate:
+          type: ["string", "null"]
+        whatsappOptIn:
+          type: boolean
+        emailOptIn:
+          type: boolean
+        daysUntil:
+          type: ["integer", "null"]
+        birthdayMessage:
+          oneOf:
+            - $ref: "#/components/schemas/BirthdayMessage"
+            - type: "null"
+      required: [id, tenantId, name, email, whatsapp]
+
+    BirthdayHistoryItem:
+      allOf:
+        - $ref: "#/components/schemas/BirthdayMessage"
+        - type: object
+          properties:
+            client:
+              oneOf:
+                - $ref: "#/components/schemas/BirthdayClient"
+                - type: "null"
+
+    BirthdayStats:
+      type: object
+      properties:
+        totalSentYear:
+          type: integer
+        sentThisMonth:
+          type: integer
+        whatsappSent:
+          type: integer
+        emailSent:
+          type: integer
+        converted:
+          type: integer
+        conversionRate:
+          type: integer
+        todayCount:
+          type: integer
+        upcomingWeek:
+          type: integer
+      required: [totalSentYear, sentThisMonth, whatsappSent, emailSent, converted, conversionRate, todayCount, upcomingWeek]
+
+    BirthdaySendResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        couponCode:
+          type: ["string", "null"]
+        error:
+          type: ["string", "null"]
+      required: [success]
+
+    BirthdaySettings:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        discountPercent:
+          type: integer
+        validDays:
+          type: integer
+        sendWhatsapp:
+          type: boolean
+        sendEmail:
+          type: boolean
+        whatsappMessage:
+          type: ["string", "null"]
+      required: [enabled, discountPercent, validDays, sendWhatsapp, sendEmail]
 
     # ─── PLATFORM SETTING ───────────────────────────────────────────
     PlatformSetting:

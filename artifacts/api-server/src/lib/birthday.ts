@@ -309,15 +309,25 @@ export async function runBirthdayCronForTenant(tenantId: string): Promise<void> 
 export async function runBirthdayCron(): Promise<void> {
   console.log("[birthday] Running daily birthday cron...");
   try {
-    const tenants = await db.select({ id: tenantsTable.id }).from(tenantsTable);
-    for (const tenant of tenants) {
+    const tenants = await db
+      .select({ id: tenantsTable.id, status: tenantsTable.status, settings: tenantsTable.settings })
+      .from(tenantsTable);
+
+    const activeTenants = tenants.filter((t) => {
+      if (t.status === "suspended") return false;
+      const settings = t.settings as Record<string, unknown> | null;
+      if (settings && settings.birthdayMessagesEnabled === false) return false;
+      return true;
+    });
+
+    for (const tenant of activeTenants) {
       try {
         await runBirthdayCronForTenant(tenant.id);
       } catch (err) {
         console.error(`[birthday] Error for tenant ${tenant.id}:`, err);
       }
     }
-    console.log("[birthday] Daily cron complete.");
+    console.log(`[birthday] Daily cron complete. Processed ${activeTenants.length} tenants.`);
   } catch (err) {
     console.error("[birthday] Cron failed:", err);
   }

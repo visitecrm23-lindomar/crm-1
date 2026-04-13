@@ -2444,6 +2444,80 @@ export interface Subscription {
   updatedAt: string;
 }
 
+export interface BirthdayMessage {
+  id: string;
+  tenantId: string;
+  clientId: string;
+  birthdayYear: number;
+  sentWhatsapp: boolean;
+  sentEmail: boolean;
+  /** @nullable */
+  whatsappSentAt?: string | null;
+  /** @nullable */
+  emailSentAt?: string | null;
+  /** @nullable */
+  whatsappError?: string | null;
+  /** @nullable */
+  emailError?: string | null;
+  /** @nullable */
+  couponId?: string | null;
+  /** @nullable */
+  couponCode?: string | null;
+  converted: boolean;
+  isManual: boolean;
+  /** @nullable */
+  sentById?: string | null;
+  createdAt: string;
+}
+
+export interface BirthdayClient {
+  id: string;
+  tenantId: string;
+  name: string;
+  email: string;
+  whatsapp: string;
+  /** @nullable */
+  birthDate?: string | null;
+  whatsappOptIn?: boolean;
+  emailOptIn?: boolean;
+  /** @nullable */
+  daysUntil?: number | null;
+  birthdayMessage?: BirthdayMessage | null;
+}
+
+export type BirthdayHistoryItem = BirthdayMessage & {
+  client?: BirthdayClient | null;
+};
+
+export interface BirthdayStats {
+  totalSentYear: number;
+  sentThisMonth: number;
+  whatsappSent: number;
+  emailSent: number;
+  converted: number;
+  conversionRate: number;
+  todayCount: number;
+  upcomingWeek: number;
+}
+
+export interface BirthdaySendResult {
+  success: boolean;
+  /** @nullable */
+  couponCode?: string | null;
+  /** @nullable */
+  error?: string | null;
+}
+
+export interface BirthdaySettings {
+  enabled: boolean;
+  discountPercent: number;
+  validDays: number;
+  sendWhatsapp: boolean;
+  sendEmail: boolean;
+  /** @nullable */
+  whatsappMessage?: string | null;
+}
+
 export interface PlatformSetting {
   id: string;
   key: string;
@@ -2765,4 +2839,24 @@ export type ListReferrals200Pagination = {
 export type ListReferrals200 = {
   data: Referral[];
   pagination: ListReferrals200Pagination;
+};
+
+export type GetBirthdayUpcomingParams = {
+  /**
+   * Number of days to look ahead (default 7, max 60)
+   */
+  days?: number;
+};
+
+export type GetBirthdayHistoryParams = {
+  limit?: number;
+  year?: number;
+};
+
+export type MarkBirthdayConvertedBody = {
+  couponCode: string;
+};
+
+export type MarkBirthdayConverted200 = {
+  success: boolean;
 };

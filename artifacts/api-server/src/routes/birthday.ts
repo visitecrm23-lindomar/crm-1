@@ -243,6 +243,38 @@ router.post("/birthday/:clientId/send", async (req, res): Promise<void> => {
   }
 });
 
+router.post("/birthday/mark-converted", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const { couponCode } = req.body as { couponCode?: string };
+    if (!couponCode) { res.status(400).json({ error: "couponCode required" }); return; }
+
+    const [message] = await db
+      .select()
+      .from(birthdayMessagesTable)
+      .where(
+        and(
+          eq(birthdayMessagesTable.tenantId, me.tenantId),
+          eq(birthdayMessagesTable.couponCode, couponCode)
+        )
+      )
+      .limit(1);
+
+    if (!message) { res.status(404).json({ error: "Birthday message not found" }); return; }
+
+    await db
+      .update(birthdayMessagesTable)
+      .set({ converted: true })
+      .where(eq(birthdayMessagesTable.id, message.id));
+
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Error marking birthday conversion");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/birthday/settings", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);

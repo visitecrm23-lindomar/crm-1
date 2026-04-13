@@ -1,12 +1,19 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useListCoupons,
   useCreateCoupon,
   useUpdateCoupon,
   useDeleteCoupon,
+  useGetBirthdayToday,
+  useGetBirthdayUpcoming,
+  useGetBirthdayHistory,
+  useGetBirthdayStats,
+  useGetBirthdaySettings,
+  sendBirthdayMessage,
+  updateBirthdaySettings,
 } from "@workspace/api-client-react";
-import type { CreateCouponBodyType } from "@workspace/api-client-react";
+import type { CreateCouponBodyType, BirthdaySettings } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -59,7 +66,6 @@ import {
   Loader2,
 } from "lucide-react";
 import type { Coupon } from "@workspace/api-client-react";
-import { birthdayApi, type BirthdaySettings } from "@/lib/birthdayApi";
 import { toast } from "@/hooks/use-toast";
 
 
@@ -80,42 +86,32 @@ export default function Marketing() {
   const updateCoupon = useUpdateCoupon();
   const deleteCoupon = useDeleteCoupon();
 
-  const { data: bdToday, isLoading: loadingToday, refetch: refetchToday } = useQuery({
-    queryKey: ["birthday", "today"],
-    queryFn: () => birthdayApi.getToday(),
-    enabled: tab === "birthdays",
+  const { data: bdToday, isLoading: loadingToday, refetch: refetchToday } = useGetBirthdayToday({
+    query: { enabled: tab === "birthdays" },
   });
-  const { data: bdUpcoming7, isLoading: loadingUpcoming7 } = useQuery({
-    queryKey: ["birthday", "upcoming7"],
-    queryFn: () => birthdayApi.getUpcoming(7),
-    enabled: tab === "birthdays" && birthdaySubTab === "upcoming7",
+  const { data: bdUpcoming7, isLoading: loadingUpcoming7 } = useGetBirthdayUpcoming(
+    { days: 7 },
+    { query: { enabled: tab === "birthdays" && birthdaySubTab === "upcoming7" } }
+  );
+  const { data: bdUpcoming30, isLoading: loadingUpcoming30 } = useGetBirthdayUpcoming(
+    { days: 30 },
+    { query: { enabled: tab === "birthdays" && birthdaySubTab === "upcoming30" } }
+  );
+  const { data: bdHistory, isLoading: loadingHistory } = useGetBirthdayHistory(
+    { year: new Date().getFullYear() },
+    { query: { enabled: tab === "birthdays" && birthdaySubTab === "history" } }
+  );
+  const { data: bdStats } = useGetBirthdayStats({
+    query: { enabled: tab === "birthdays" },
   });
-  const { data: bdUpcoming30, isLoading: loadingUpcoming30 } = useQuery({
-    queryKey: ["birthday", "upcoming30"],
-    queryFn: () => birthdayApi.getUpcoming(30),
-    enabled: tab === "birthdays" && birthdaySubTab === "upcoming30",
-  });
-  const { data: bdHistory, isLoading: loadingHistory } = useQuery({
-    queryKey: ["birthday", "history"],
-    queryFn: () => birthdayApi.getHistory(new Date().getFullYear()),
-    enabled: tab === "birthdays" && birthdaySubTab === "history",
-  });
-  const { data: bdStats } = useQuery({
-    queryKey: ["birthday", "stats"],
-    queryFn: () => birthdayApi.getStats(),
-    enabled: tab === "birthdays",
-  });
-  const { data: bdSettings, isLoading: loadingSettings } = useQuery({
-    queryKey: ["birthday", "settings"],
-    queryFn: () => birthdayApi.getSettings(),
-    enabled: tab === "birthdays" && birthdaySubTab === "settings",
-    refetchOnWindowFocus: false,
+  const { data: bdSettings, isLoading: loadingSettings } = useGetBirthdaySettings({
+    query: { enabled: tab === "birthdays" && birthdaySubTab === "settings", refetchOnWindowFocus: false },
   });
 
   const saveSettings = useMutation({
-    mutationFn: (data: Partial<BirthdaySettings>) => birthdayApi.updateSettings(data),
+    mutationFn: (data: BirthdaySettings) => updateBirthdaySettings(data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["birthday", "settings"] });
+      qc.invalidateQueries({ queryKey: ["/api/birthday/settings"] });
       setSettingsDirty(false);
       toast({ title: "Configurações salvas com sucesso" });
     },
@@ -193,13 +189,13 @@ export default function Marketing() {
   const handleSendBirthday = async (clientId: string) => {
     setSendingClientId(clientId);
     try {
-      const result = await birthdayApi.sendMessage(clientId);
+      const result = await sendBirthdayMessage(clientId);
       if (result.success) {
         toast({ title: `Mensagem enviada! Cupom: ${result.couponCode ?? ""}` });
       } else {
         toast({ title: result.error ?? "Falha ao enviar", variant: "destructive" });
       }
-      qc.invalidateQueries({ queryKey: ["birthday"] });
+      qc.invalidateQueries({ queryKey: ["/api/birthday/today"] });
       refetchToday();
     } catch (err) {
       toast({ title: err instanceof Error ? err.message : "Erro ao enviar", variant: "destructive" });
@@ -883,7 +879,7 @@ export default function Marketing() {
                       </div>
 
                       <Button
-                        onClick={() => saveSettings.mutate(settingsForm)}
+                        onClick={() => saveSettings.mutate(mergedSettings)}
                         disabled={!settingsDirty || saveSettings.isPending}
                       >
                         {saveSettings.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}

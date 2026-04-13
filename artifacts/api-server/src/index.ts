@@ -400,7 +400,7 @@ async function runMigrations() {
 }
 
 runMigrations().then(() => {
-  cron.schedule("0 9 * * *", () => {
+  cron.schedule("0 0 * * *", () => {
     logger.info("[birthday] Daily cron triggered");
     runBirthdayCron().catch((err) => logger.error({ err }, "[birthday] Cron failed"));
   }, { timezone: "America/Sao_Paulo" });

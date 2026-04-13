@@ -3850,6 +3850,238 @@ export const DeleteCouponParams = zod.object({
 });
 
 /**
+ * @summary Get today's birthday clients
+ */
+export const GetBirthdayTodayResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  email: zod.string(),
+  whatsapp: zod.string(),
+  birthDate: zod.string().nullish(),
+  whatsappOptIn: zod.boolean().optional(),
+  emailOptIn: zod.boolean().optional(),
+  daysUntil: zod.number().nullish(),
+  birthdayMessage: zod
+    .union([
+      zod.object({
+        id: zod.string(),
+        tenantId: zod.string(),
+        clientId: zod.string(),
+        birthdayYear: zod.number(),
+        sentWhatsapp: zod.boolean(),
+        sentEmail: zod.boolean(),
+        whatsappSentAt: zod.string().nullish(),
+        emailSentAt: zod.string().nullish(),
+        whatsappError: zod.string().nullish(),
+        emailError: zod.string().nullish(),
+        couponId: zod.string().nullish(),
+        couponCode: zod.string().nullish(),
+        converted: zod.boolean(),
+        isManual: zod.boolean(),
+        sentById: zod.string().nullish(),
+        createdAt: zod.string(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+});
+export const GetBirthdayTodayResponse = zod.array(GetBirthdayTodayResponseItem);
+
+/**
+ * @summary Get upcoming birthday clients
+ */
+export const GetBirthdayUpcomingQueryParams = zod.object({
+  days: zod.coerce
+    .number()
+    .optional()
+    .describe("Number of days to look ahead (default 7, max 60)"),
+});
+
+export const GetBirthdayUpcomingResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  email: zod.string(),
+  whatsapp: zod.string(),
+  birthDate: zod.string().nullish(),
+  whatsappOptIn: zod.boolean().optional(),
+  emailOptIn: zod.boolean().optional(),
+  daysUntil: zod.number().nullish(),
+  birthdayMessage: zod
+    .union([
+      zod.object({
+        id: zod.string(),
+        tenantId: zod.string(),
+        clientId: zod.string(),
+        birthdayYear: zod.number(),
+        sentWhatsapp: zod.boolean(),
+        sentEmail: zod.boolean(),
+        whatsappSentAt: zod.string().nullish(),
+        emailSentAt: zod.string().nullish(),
+        whatsappError: zod.string().nullish(),
+        emailError: zod.string().nullish(),
+        couponId: zod.string().nullish(),
+        couponCode: zod.string().nullish(),
+        converted: zod.boolean(),
+        isManual: zod.boolean(),
+        sentById: zod.string().nullish(),
+        createdAt: zod.string(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+});
+export const GetBirthdayUpcomingResponse = zod.array(
+  GetBirthdayUpcomingResponseItem,
+);
+
+/**
+ * @summary Get birthday message history
+ */
+export const GetBirthdayHistoryQueryParams = zod.object({
+  limit: zod.coerce.number().optional(),
+  year: zod.coerce.number().optional(),
+});
+
+export const GetBirthdayHistoryResponseItem = zod
+  .object({
+    id: zod.string(),
+    tenantId: zod.string(),
+    clientId: zod.string(),
+    birthdayYear: zod.number(),
+    sentWhatsapp: zod.boolean(),
+    sentEmail: zod.boolean(),
+    whatsappSentAt: zod.string().nullish(),
+    emailSentAt: zod.string().nullish(),
+    whatsappError: zod.string().nullish(),
+    emailError: zod.string().nullish(),
+    couponId: zod.string().nullish(),
+    couponCode: zod.string().nullish(),
+    converted: zod.boolean(),
+    isManual: zod.boolean(),
+    sentById: zod.string().nullish(),
+    createdAt: zod.string(),
+  })
+  .and(
+    zod.object({
+      client: zod
+        .union([
+          zod.object({
+            id: zod.string(),
+            tenantId: zod.string(),
+            name: zod.string(),
+            email: zod.string(),
+            whatsapp: zod.string(),
+            birthDate: zod.string().nullish(),
+            whatsappOptIn: zod.boolean().optional(),
+            emailOptIn: zod.boolean().optional(),
+            daysUntil: zod.number().nullish(),
+            birthdayMessage: zod
+              .union([
+                zod.object({
+                  id: zod.string(),
+                  tenantId: zod.string(),
+                  clientId: zod.string(),
+                  birthdayYear: zod.number(),
+                  sentWhatsapp: zod.boolean(),
+                  sentEmail: zod.boolean(),
+                  whatsappSentAt: zod.string().nullish(),
+                  emailSentAt: zod.string().nullish(),
+                  whatsappError: zod.string().nullish(),
+                  emailError: zod.string().nullish(),
+                  couponId: zod.string().nullish(),
+                  couponCode: zod.string().nullish(),
+                  converted: zod.boolean(),
+                  isManual: zod.boolean(),
+                  sentById: zod.string().nullish(),
+                  createdAt: zod.string(),
+                }),
+                zod.null(),
+              ])
+              .optional(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+    }),
+  );
+export const GetBirthdayHistoryResponse = zod.array(
+  GetBirthdayHistoryResponseItem,
+);
+
+/**
+ * @summary Get birthday message statistics
+ */
+export const GetBirthdayStatsResponse = zod.object({
+  totalSentYear: zod.number(),
+  sentThisMonth: zod.number(),
+  whatsappSent: zod.number(),
+  emailSent: zod.number(),
+  converted: zod.number(),
+  conversionRate: zod.number(),
+  todayCount: zod.number(),
+  upcomingWeek: zod.number(),
+});
+
+/**
+ * @summary Manually send birthday message to a client
+ */
+export const SendBirthdayMessageParams = zod.object({
+  clientId: zod.coerce.string(),
+});
+
+export const SendBirthdayMessageResponse = zod.object({
+  success: zod.boolean(),
+  couponCode: zod.string().nullish(),
+  error: zod.string().nullish(),
+});
+
+/**
+ * @summary Mark a birthday coupon as converted (redeemed)
+ */
+export const MarkBirthdayConvertedBody = zod.object({
+  couponCode: zod.string(),
+});
+
+export const MarkBirthdayConvertedResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary Get birthday message settings
+ */
+export const GetBirthdaySettingsResponse = zod.object({
+  enabled: zod.boolean(),
+  discountPercent: zod.number(),
+  validDays: zod.number(),
+  sendWhatsapp: zod.boolean(),
+  sendEmail: zod.boolean(),
+  whatsappMessage: zod.string().nullish(),
+});
+
+/**
+ * @summary Update birthday message settings
+ */
+export const UpdateBirthdaySettingsBody = zod.object({
+  enabled: zod.boolean(),
+  discountPercent: zod.number(),
+  validDays: zod.number(),
+  sendWhatsapp: zod.boolean(),
+  sendEmail: zod.boolean(),
+  whatsappMessage: zod.string().nullish(),
+});
+
+export const UpdateBirthdaySettingsResponse = zod.object({
+  enabled: zod.boolean(),
+  discountPercent: zod.number(),
+  validDays: zod.number(),
+  sendWhatsapp: zod.boolean(),
+  sendEmail: zod.boolean(),
+  whatsappMessage: zod.string().nullish(),
+});
+
+/**
  * @summary List documents
  */
 export const ListDocumentsResponseItem = zod.object({
