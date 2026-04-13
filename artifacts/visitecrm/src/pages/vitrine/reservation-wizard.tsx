@@ -283,69 +283,105 @@ function SeatGrid({
   qty,
   selected,
   onToggle,
+  accentColor,
 }: {
   totalCapacity: number;
   occupiedSeats: number[];
   qty: number;
   selected: number[];
   onToggle: (n: number) => void;
+  accentColor?: string;
 }) {
-  const cols = totalCapacity <= 20 ? 4 : 5;
-  const rows = Math.ceil(totalCapacity / cols);
+  const accent = accentColor || "#f97316";
+  const availableCount = totalCapacity - occupiedSeats.length;
+  const rowCount = Math.ceil(totalCapacity / 4);
+
+  function SeatBtn({ seatNum }: { seatNum: number }) {
+    const isOccupied = occupiedSeats.includes(seatNum);
+    const isSelected = selected.includes(seatNum);
+    const canSelect = !isOccupied && (isSelected || selected.length < qty);
+    let style: React.CSSProperties = {};
+    let cls =
+      "w-9 h-9 sm:w-10 sm:h-10 rounded-lg border-2 flex items-center justify-center text-xs font-bold transition-all select-none ";
+    if (isOccupied) {
+      cls += "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed";
+    } else if (isSelected) {
+      cls += "border-transparent text-white cursor-pointer";
+      style = { backgroundColor: accent, borderColor: accent };
+    } else if (canSelect) {
+      cls += "border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50 cursor-pointer";
+    } else {
+      cls += "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed";
+    }
+    return (
+      <button
+        onClick={() => canSelect && onToggle(seatNum)}
+        disabled={isOccupied}
+        title={isOccupied ? `Assento ${seatNum} — Ocupado` : `Assento ${seatNum}`}
+        className={cls}
+        style={style}
+      >
+        {seatNum}
+      </button>
+    );
+  }
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-          <span className="flex items-center gap-1">
-            <span className="w-4 h-4 rounded border border-primary bg-primary/10 inline-block" />
-            Disponível
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-4 h-4 rounded border-2 border-gray-300 bg-gray-100 inline-block" />
-            Ocupado
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-4 h-4 rounded border border-green-500 bg-green-100 inline-block" />
-            Selecionado
-          </span>
-        </div>
-        <span className="text-xs font-medium">
-          {selected.length}/{qty} selecionado(s)
+      <div className="flex items-center justify-between mb-2 text-xs text-muted-foreground">
+        <span className="font-medium text-foreground/70">Layout: 2×2 Padrão</span>
+        <span>
+          <strong className="text-foreground">{availableCount}</strong> disponíveis &middot; {totalCapacity} total
         </span>
       </div>
-      <div
-        className="grid gap-2"
-        style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
-      >
-        {Array.from({ length: rows * cols }, (_, i) => {
-          const seatNum = i + 1;
-          if (seatNum > totalCapacity) return <div key={i} />;
-          const isOccupied = occupiedSeats.includes(seatNum);
-          const isSelected = selected.includes(seatNum);
-          const canSelect = !isOccupied && (isSelected || selected.length < qty);
-          return (
-            <button
-              key={seatNum}
-              onClick={() => canSelect && onToggle(seatNum)}
-              disabled={isOccupied}
-              title={isOccupied ? `Assento ${seatNum} — Ocupado` : `Assento ${seatNum}`}
-              className={`aspect-square rounded-lg border-2 flex items-center justify-center text-xs font-bold transition-all ${
-                isOccupied
-                  ? "border-gray-300 bg-gray-100 text-gray-400 cursor-not-allowed"
-                  : isSelected
-                  ? "border-green-500 bg-green-100 text-green-700"
-                  : canSelect
-                  ? "border-primary/40 bg-primary/5 text-primary hover:bg-primary/15 hover:border-primary cursor-pointer"
-                  : "border-muted bg-muted text-muted-foreground cursor-not-allowed opacity-50"
-              }`}
-            >
-              {seatNum}
-            </button>
-          );
-        })}
+
+      <div className="flex items-center gap-4 text-xs text-muted-foreground mb-3 flex-wrap">
+        <span className="flex items-center gap-1.5">
+          <span className="w-4 h-4 rounded border-2 border-gray-300 bg-white inline-block" />
+          Disponível
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-4 h-4 rounded border-2 border-gray-200 bg-gray-100 inline-block" />
+          Ocupado
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-4 h-4 rounded inline-block" style={{ backgroundColor: accent }} />
+          Selecionado
+        </span>
       </div>
+
+      <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+        <div className="bg-gray-800 text-white text-xs font-bold py-2.5 text-center tracking-[0.15em]">
+          FRENTE DO ÔNIBUS
+        </div>
+        <div className="bg-gray-50 p-3 space-y-2">
+          {Array.from({ length: rowCount }, (_, rowIdx) => {
+            const s1 = rowIdx * 4 + 1;
+            const s2 = rowIdx * 4 + 2;
+            const s3 = rowIdx * 4 + 3;
+            const s4 = rowIdx * 4 + 4;
+            return (
+              <div key={rowIdx} className="flex items-center justify-center gap-1">
+                <div className="flex gap-1">
+                  {s1 <= totalCapacity && <SeatBtn seatNum={s1} />}
+                  {s2 <= totalCapacity && <SeatBtn seatNum={s2} />}
+                </div>
+                <div className="w-6 flex items-center justify-center text-gray-300 text-sm font-light select-none">
+                  |
+                </div>
+                <div className="flex gap-1">
+                  {s3 <= totalCapacity && <SeatBtn seatNum={s3} />}
+                  {s4 <= totalCapacity && <SeatBtn seatNum={s4} />}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       <p className="text-xs text-muted-foreground text-center mt-3">
-        Selecione exatamente {qty} assento(s) para continuar
+        {selected.length} de {qty} assento{qty !== 1 ? "s" : ""} selecionado{qty !== 1 ? "s" : ""}
+        {selected.length < qty && ` · selecione mais ${qty - selected.length}`}
       </p>
     </div>
   );
@@ -955,10 +991,17 @@ export default function ReservationWizard({
 
       {step === "assento" && (
         <div className="space-y-5">
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Armchair className="w-5 h-5 text-primary" />
-            Selecionar Assento
-          </h2>
+          <div>
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Armchair className="w-5 h-5 text-primary" />
+              Seleção de Assentos{" "}
+              {showSeatGrid && (
+                <span className="text-sm font-normal text-muted-foreground">
+                  * (obrigatório)
+                </span>
+              )}
+            </h2>
+          </div>
 
           {showSeatGrid && product.totalCapacity ? (
             <SeatGrid
@@ -967,6 +1010,7 @@ export default function ReservationWizard({
               qty={qty}
               selected={selectedSeats}
               onToggle={toggleSeat}
+              accentColor={store?.accentColor || store?.primaryColor}
             />
           ) : (
             <div className="space-y-4">
