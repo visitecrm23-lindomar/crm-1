@@ -240,6 +240,7 @@ export async function processBirthdayForClient(
       }, {
         emailSubject: settings.emailSubject ?? null,
         senderName: settings.senderName ?? null,
+        emailMessage: settings.emailMessage ? interpolateTemplate(settings.emailMessage) : null,
       });
       if (result.success) {
         sentEmail = true;

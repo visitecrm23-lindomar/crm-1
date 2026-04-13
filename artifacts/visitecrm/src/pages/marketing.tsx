@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useListCoupons,
   useCreateCoupon,
   useUpdateCoupon,
   useDeleteCoupon,
+  useListClients,
   useGetBirthdayToday,
   useGetBirthdayUpcoming,
   useGetBirthdayHistory,
@@ -78,6 +79,8 @@ export default function Marketing() {
   const [sendingClientId, setSendingClientId] = useState<string | null>(null);
   const [settingsForm, setSettingsForm] = useState<Partial<BirthdaySettings>>({});
   const [settingsDirty, setSettingsDirty] = useState(false);
+  const [manualSendOpen, setManualSendOpen] = useState(false);
+  const [clientSearch, setClientSearch] = useState("");
   const qc = useQueryClient();
 
   const { data: coupons, isLoading: loadingCoupons, refetch } = useListCoupons();
@@ -107,6 +110,18 @@ export default function Marketing() {
   const { data: bdSettings, isLoading: loadingSettings } = useGetBirthdaySettings({
     query: { enabled: tab === "birthdays" && birthdaySubTab === "settings", refetchOnWindowFocus: false },
   });
+
+  const { data: allClients } = useListClients(undefined, {
+    query: { enabled: manualSendOpen },
+  });
+
+  const filteredClients = useMemo(() => {
+    if (!allClients || !clientSearch.trim()) return (allClients ?? []).slice(0, 20);
+    const q = clientSearch.toLowerCase();
+    return (allClients as Array<{ id: string; name: string; email?: string; whatsapp?: string }>)
+      .filter((c) => c.name.toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q) || (c.whatsapp ?? "").includes(q))
+      .slice(0, 20);
+  }, [allClients, clientSearch]);
 
   const saveSettings = useMutation({
     mutationFn: (data: BirthdaySettings) => updateBirthdaySettings(data),
@@ -579,6 +594,55 @@ export default function Marketing() {
                 </p>
               </CardContent>
             </Card>
+          </div>
+
+          <div className="flex justify-end">
+            <Dialog open={manualSendOpen} onOpenChange={(v) => { setManualSendOpen(v); if (!v) setClientSearch(""); }}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline">
+                  <Send className="w-3.5 h-3.5 mr-1.5" /> Enviar para qualquer cliente
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Enviar mensagem de aniversário</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3 mt-2">
+                  <Input
+                    placeholder="Buscar por nome, email ou WhatsApp..."
+                    value={clientSearch}
+                    onChange={(e) => setClientSearch(e.target.value)}
+                  />
+                  <div className="max-h-72 overflow-y-auto divide-y border rounded-md">
+                    {filteredClients.length === 0 ? (
+                      <p className="text-center text-sm text-muted-foreground py-8">
+                        {clientSearch ? "Nenhum cliente encontrado" : "Carregando clientes..."}
+                      </p>
+                    ) : filteredClients.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between px-3 py-2 hover:bg-muted/50">
+                        <div>
+                          <p className="text-sm font-medium">{c.name}</p>
+                          <p className="text-xs text-muted-foreground">{c.email ?? c.whatsapp ?? "—"}</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs shrink-0"
+                          disabled={sendingClientId === c.id}
+                          onClick={async () => {
+                            await handleSendBirthday(c.id);
+                            setManualSendOpen(false);
+                            setClientSearch("");
+                          }}
+                        >
+                          {sendingClientId === c.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Send className="w-3 h-3 mr-1" />Enviar</>}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
 
           <Tabs value={birthdaySubTab} onValueChange={setBirthdaySubTab}>

@@ -20,6 +20,7 @@ export interface BirthdayEmailProps {
   couponCode: string
   discountPercent: number
   validUntil: string
+  customMessage?: string | null
 }
 
 export function BirthdayEmail({
@@ -30,6 +31,7 @@ export function BirthdayEmail({
   couponCode,
   discountPercent,
   validUntil,
+  customMessage,
 }: BirthdayEmailProps) {
   const firstName = clientName.split(' ')[0]
 
@@ -48,7 +50,9 @@ export function BirthdayEmail({
 
           <Section style={content}>
             <Text style={paragraph}>
-              Em comemoração ao seu aniversário, preparamos um presente especial para você:
+              {customMessage
+                ? customMessage
+                : `Em comemoração ao seu aniversário, preparamos um presente especial para você:`}
             </Text>
 
             <Section style={couponBox}>
