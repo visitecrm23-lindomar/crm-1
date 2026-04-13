@@ -666,6 +666,7 @@ function generateProductSlug(name: string): string {
 }
 
 function buildTripProductPayload(trip: Trip) {
+  const t = trip as Record<string, unknown>;
   const images = [
     ...(trip.coverImage ? [trip.coverImage] : []),
     ...(Array.isArray(trip.gallery) ? trip.gallery : []),
@@ -684,8 +685,25 @@ function buildTripProductPayload(trip: Trip) {
     }
   }
 
+  const shortDescription = (typeof t.shortDescription === "string" && t.shortDescription)
+    ? t.shortDescription
+    : (trip.description ? trip.description.slice(0, 200) : undefined);
+
+  const metaTitle = (typeof t.metaTitle === "string" && t.metaTitle)
+    ? t.metaTitle
+    : trip.name;
+
+  const metaDescription = (typeof t.metaDescription === "string" && t.metaDescription)
+    ? t.metaDescription
+    : (trip.description ? trip.description.slice(0, 160) : undefined);
+
+  const country = (typeof t.destinationCountry === "string" && t.destinationCountry)
+    ? t.destinationCountry
+    : "Brasil";
+
   return {
     name: trip.name,
+    shortDescription,
     description: trip.description ?? "",
     type: trip.type,
     price: String(trip.priceAdult),
@@ -695,7 +713,7 @@ function buildTripProductPayload(trip: Trip) {
     destination: `${trip.destinationCity}, ${trip.destinationState}`,
     productCity: trip.destinationCity,
     productState: trip.destinationState,
-    country: "Brasil",
+    country,
     hasDates: true,
     startDate: trip.departureDate,
     endDate: trip.returnDate ?? undefined,
@@ -704,8 +722,10 @@ function buildTripProductPayload(trip: Trip) {
     includes: trip.inclusions?.length > 0 ? trip.inclusions : undefined,
     excludes: trip.exclusions?.length > 0 ? trip.exclusions : undefined,
     trackInventory: true,
-    stockQuantity: trip.availableSeats > 0 ? trip.availableSeats : undefined,
+    stockQuantity: trip.availableSeats,
     isFeatured: trip.isFeatured,
+    metaTitle,
+    metaDescription,
     status: "active" as const,
   };
 }
@@ -760,7 +780,7 @@ function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boole
     setLoading(true);
     try {
       await storeApi.updateProduct(existingProductId, buildTripProductPayload(trip));
-      toast({ title: "Dados sincronizados!", description: `${trip.name} foi atualizado na vitrine com os dados mais recentes.` });
+      toast({ title: "Dados sincronizados com sucesso!", description: `${trip.name} foi atualizado na vitrine com os dados mais recentes.` });
       onClose();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erro ao sincronizar";
