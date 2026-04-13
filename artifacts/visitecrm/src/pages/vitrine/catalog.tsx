@@ -20,6 +20,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Loader2, Search, MapPin, Calendar, Clock, ShoppingCart, Star, SlidersHorizontal, X, MessageCircle, Check, ArrowUpDown } from "lucide-react";
+import { ProductQuickView } from "@/components/vitrine/ProductQuickView";
 
 function ProductCard({
   product,
@@ -27,12 +28,14 @@ function ProductCard({
   primaryColor,
   accentColor,
   whatsapp,
+  onQuickView,
 }: {
   product: StoreProduct;
   slug: string;
   primaryColor: string;
   accentColor: string;
   whatsapp?: string | null;
+  onQuickView?: (p: StoreProduct) => void;
 }) {
   const [, navigate] = useLocation();
   const { addItem, openCart } = useCart();
@@ -77,7 +80,7 @@ function ProductCard({
     <div className="bg-white rounded-xl border shadow-sm overflow-hidden hover:shadow-md transition-shadow group">
       <div
         className="relative h-44 cursor-pointer overflow-hidden bg-gradient-to-br from-blue-200 to-blue-400"
-        onClick={() => navigate(`/loja/${slug}/produtos/${product.slug}`)}
+        onClick={() => onQuickView ? onQuickView(product) : navigate(`/loja/${slug}/produtos/${product.slug}`)}
       >
         {product.images?.[0] ? (
           <img
@@ -120,7 +123,7 @@ function ProductCard({
       <div className="p-3">
         <h3
           className="font-semibold text-sm mb-1 line-clamp-2 cursor-pointer hover:underline"
-          onClick={() => navigate(`/loja/${slug}/produtos/${product.slug}`)}
+          onClick={() => onQuickView ? onQuickView(product) : navigate(`/loja/${slug}/produtos/${product.slug}`)}
         >
           {product.name}
         </h3>
@@ -414,6 +417,7 @@ export default function VitrineCatalog({
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [quickViewProduct, setQuickViewProduct] = useState<StoreProduct | null>(null);
   const LIMIT = 12;
 
   const [filters, setFilters] = useState<Filters>({
@@ -595,7 +599,7 @@ export default function VitrineCatalog({
             <button
               className="mt-2 text-primary underline text-sm"
               onClick={() =>
-                setFilters({ search: "", category: "all", destination: "all", type: "all", minPrice: "", maxPrice: "" })
+                setFilters({ search: "", category: "all", destination: "all", type: "all", minPrice: "", maxPrice: "", sort: "default" })
               }
             >
               Limpar filtros
@@ -613,6 +617,7 @@ export default function VitrineCatalog({
                 primaryColor={store.primaryColor}
                 accentColor={store.accentColor}
                 whatsapp={store.contactWhatsapp}
+                onQuickView={setQuickViewProduct}
               />
             ))}
           </div>
@@ -639,6 +644,16 @@ export default function VitrineCatalog({
             </div>
           )}
         </>
+      )}
+
+      {quickViewProduct && (
+        <ProductQuickView
+          product={quickViewProduct}
+          store={store}
+          storeSlug={slug}
+          open={!!quickViewProduct}
+          onClose={() => setQuickViewProduct(null)}
+        />
       )}
     </div>
   );

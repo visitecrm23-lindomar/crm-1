@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   Star,
   CheckCircle,
+  CheckCircle2,
   XCircle,
   Loader2,
   ChevronLeft as PrevIcon,
@@ -20,6 +21,7 @@ import {
   Share2,
   Copy,
   Check,
+  Zap,
 } from "lucide-react";
 
 function StarRating({ rating }: { rating: number }) {
@@ -105,6 +107,18 @@ export default function VitrineProduct({
     openCart();
   }
 
+  function handleReserveNow() {
+    addItem({
+      productId: product!.id,
+      productName: product!.name,
+      unitPrice: effectivePrice,
+      quantity: qty,
+      image: product!.images[0],
+      variantLabel: selectedVariant?.label,
+    });
+    navigate(`/loja/${slug}/checkout`);
+  }
+
   function handleWhatsApp() {
     const phone = store.contactWhatsapp?.replace(/\D/g, "");
     if (!phone) return;
@@ -123,6 +137,7 @@ export default function VitrineProduct({
   const [copied, setCopied] = useState(false);
 
   function handleShare() {
+    if (!product) return;
     const url = window.location.href;
     if (navigator.share) {
       navigator.share({ title: product.name, url }).catch(() => {});
@@ -344,7 +359,7 @@ export default function VitrineProduct({
             </span>
           </div>
 
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-3">
             <div className="flex items-center border rounded-lg">
               <button
                 onClick={() => setQty((q) => Math.max(1, q - 1))}
@@ -371,6 +386,21 @@ export default function VitrineProduct({
             </Button>
           </div>
 
+          <Button
+            className="w-full h-11 font-bold text-white mb-3"
+            style={{ backgroundColor: store.accentColor || store.primaryColor }}
+            onClick={handleReserveNow}
+            disabled={
+              (product.trackInventory && product.stockQuantity != null && product.stockQuantity <= 0) ||
+              (product.hasVariants && !selectedVariant)
+            }
+          >
+            <Zap className="w-5 h-5 mr-2" />
+            {product.hasVariants && !selectedVariant
+              ? "Selecione uma opção"
+              : "Reservar Agora → Ir para Checkout"}
+          </Button>
+
           {store.contactWhatsapp && (
             <Button
               variant="outline"
@@ -394,10 +424,50 @@ export default function VitrineProduct({
         </div>
       </div>
 
-      {tabs.length > 0 && (
+      {(product.includes.length > 0 || product.excludes.length > 0) && (
+        <div className="mt-10">
+          <h2 className="text-xl font-bold mb-5">O que está incluso</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {product.includes.length > 0 && (
+              <div className="rounded-xl border p-5 bg-green-50/40">
+                <h3 className="font-semibold text-green-700 mb-4 flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5" />
+                  Incluído
+                </h3>
+                <ul className="space-y-2.5">
+                  {product.includes.map((item, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm">
+                      <CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {product.excludes.length > 0 && (
+              <div className="rounded-xl border p-5 bg-red-50/30">
+                <h3 className="font-semibold text-red-700 mb-4 flex items-center gap-2">
+                  <XCircle className="w-5 h-5" />
+                  Não incluído
+                </h3>
+                <ul className="space-y-2.5">
+                  {product.excludes.map((item, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm">
+                      <XCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tabs.filter(t => t.key !== "inclui" && t.key !== "nao_inclui").length > 0 && (
         <div className="mt-10">
           <div className="border-b flex gap-0 overflow-x-auto">
-            {tabs.map((tab) => (
+            {tabs.filter(t => t.key !== "inclui" && t.key !== "nao_inclui").map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
@@ -417,28 +487,6 @@ export default function VitrineProduct({
               <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed whitespace-pre-wrap">
                 {product.description}
               </div>
-            )}
-
-            {currentTab === "inclui" && product.includes.length > 0 && (
-              <ul className="space-y-2">
-                {product.includes.map((item, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm">
-                    <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {currentTab === "nao_inclui" && product.excludes.length > 0 && (
-              <ul className="space-y-2">
-                {product.excludes.map((item, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm">
-                    <XCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
             )}
 
             {currentTab === "requisitos" && product.requirements.length > 0 && (
