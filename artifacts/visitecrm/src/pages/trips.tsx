@@ -675,13 +675,10 @@ function buildTripProductPayload(trip: Trip) {
   let durationDays: number | undefined;
   let durationNights: number | undefined;
   if (trip.departureDate && trip.returnDate) {
-    const dep = new Date(trip.departureDate);
-    const ret = new Date(trip.returnDate);
-    const diffMs = ret.getTime() - dep.getTime();
-    const days = Math.round(diffMs / (1000 * 60 * 60 * 24));
-    if (days > 0) {
-      durationDays = days + 1;
-      durationNights = days;
+    const nights = differenceInCalendarDays(parseISO(trip.returnDate), parseISO(trip.departureDate));
+    if (nights > 0) {
+      durationDays = nights + 1;
+      durationNights = nights;
     }
   }
 
