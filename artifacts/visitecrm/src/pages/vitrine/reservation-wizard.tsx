@@ -278,11 +278,13 @@ function CardPayment({
 
 function SeatGrid({
   totalCapacity,
+  occupiedSeats,
   qty,
   selected,
   onToggle,
 }: {
   totalCapacity: number;
+  occupiedSeats: number[];
   qty: number;
   selected: number[];
   onToggle: (n: number) => void;
@@ -291,14 +293,14 @@ function SeatGrid({
   const rows = Math.ceil(totalCapacity / cols);
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
           <span className="flex items-center gap-1">
             <span className="w-4 h-4 rounded border border-primary bg-primary/10 inline-block" />
             Disponível
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-4 h-4 rounded border border-muted bg-muted inline-block" />
+            <span className="w-4 h-4 rounded border-2 border-gray-300 bg-gray-100 inline-block" />
             Ocupado
           </span>
           <span className="flex items-center gap-1">
@@ -317,18 +319,22 @@ function SeatGrid({
         {Array.from({ length: rows * cols }, (_, i) => {
           const seatNum = i + 1;
           if (seatNum > totalCapacity) return <div key={i} />;
+          const isOccupied = occupiedSeats.includes(seatNum);
           const isSelected = selected.includes(seatNum);
-          const canSelect = isSelected || selected.length < qty;
+          const canSelect = !isOccupied && (isSelected || selected.length < qty);
           return (
             <button
               key={seatNum}
               onClick={() => canSelect && onToggle(seatNum)}
-              title={`Assento ${seatNum}`}
+              disabled={isOccupied}
+              title={isOccupied ? `Assento ${seatNum} — Ocupado` : `Assento ${seatNum}`}
               className={`aspect-square rounded-lg border-2 flex items-center justify-center text-xs font-bold transition-all ${
-                isSelected
+                isOccupied
+                  ? "border-gray-300 bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : isSelected
                   ? "border-green-500 bg-green-100 text-green-700"
                   : canSelect
-                  ? "border-primary/40 bg-primary/5 text-primary hover:bg-primary/15 hover:border-primary"
+                  ? "border-primary/40 bg-primary/5 text-primary hover:bg-primary/15 hover:border-primary cursor-pointer"
                   : "border-muted bg-muted text-muted-foreground cursor-not-allowed opacity-50"
               }`}
             >
@@ -498,6 +504,7 @@ export default function ReservationWizard({
     installments: "1",
   });
   const [qty, setQty] = useState(1);
+  const [selectedVariant, setSelectedVariant] = useState<{ variantName: string; label: string; price: number } | null>(null);
   const [couponResult, setCouponResult] = useState<CouponValidation | null>(null);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
   const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
@@ -515,7 +522,8 @@ export default function ReservationWizard({
     setFormState((p) => ({ ...p, [field]: value }));
   }
 
-  const unitPrice = product ? parseFloat(product.salePrice ?? product.price) : 0;
+  const basePrice = product ? parseFloat(product.salePrice ?? product.price) : 0;
+  const unitPrice = selectedVariant ? selectedVariant.price : basePrice;
   const subtotal = unitPrice * qty;
   const couponDiscount = couponResult?.valid ? Number(couponResult.discountAmount ?? 0) : 0;
   const finalTotal = Math.max(0, subtotal - couponDiscount);
@@ -524,6 +532,12 @@ export default function ReservationWizard({
     product?.availableSeats != null ? Math.max(1, product.availableSeats) : 99;
   const showSeatGrid =
     product?.totalCapacity != null && product.totalCapacity > 0 && product.totalCapacity <= 60;
+
+  const occupiedSeats: number[] = (() => {
+    if (!product?.totalCapacity) return [];
+    const taken = product.totalCapacity - (product.availableSeats ?? product.totalCapacity);
+    return Array.from({ length: Math.max(0, taken) }, (_, i) => i + 1);
+  })();
 
   async function validateCoupon() {
     if (!form.couponCode || !product) return;
@@ -556,6 +570,7 @@ export default function ReservationWizard({
   }
 
   function canProceedFromRevisao() {
+    if (product?.hasVariants && !selectedVariant) return false;
     return qty >= 1;
   }
 
@@ -594,6 +609,7 @@ export default function ReservationWizard({
             productName: product.name,
             quantity: qty,
             unitPrice,
+            variantLabel: selectedVariant?.label,
           },
         ],
         couponCode: couponResult?.valid ? form.couponCode : undefined,
@@ -806,6 +822,39 @@ export default function ReservationWizard({
 
           <ProductCard product={product} store={store} />
 
+          {product.hasVariants && (product.variants ?? []).length > 0 && (
+            <div className="space-y-3">
+              {(product.variants ?? []).map((v) => (
+                <div key={v.name}>
+                  <Label className="text-sm font-medium mb-2 block">{v.name} <span className="text-red-500">*</span></Label>
+                  <div className="flex flex-wrap gap-2">
+                    {v.options.map((opt) => (
+                      <button
+                        key={opt.label}
+                        onClick={() => setSelectedVariant({ variantName: v.name, label: opt.label, price: opt.price })}
+                        className={`px-3 py-1.5 rounded-lg border-2 text-sm font-medium transition-colors ${
+                          selectedVariant?.label === opt.label
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border hover:bg-muted"
+                        }`}
+                      >
+                        {opt.label}
+                        {opt.price !== basePrice && (
+                          <span className="ml-1 text-xs opacity-70">(R$ {opt.price.toFixed(2)})</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {!selectedVariant && (
+                <p className="text-xs text-amber-600 flex items-center gap-1">
+                  Selecione uma opção para continuar
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="flex items-center justify-between p-4 border rounded-xl">
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-muted-foreground" />
@@ -898,6 +947,7 @@ export default function ReservationWizard({
           {showSeatGrid && product.totalCapacity ? (
             <SeatGrid
               totalCapacity={product.totalCapacity}
+              occupiedSeats={occupiedSeats}
               qty={qty}
               selected={selectedSeats}
               onToggle={toggleSeat}

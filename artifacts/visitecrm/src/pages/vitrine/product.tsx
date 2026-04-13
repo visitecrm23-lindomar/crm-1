@@ -602,7 +602,7 @@ export default function VitrineProduct({
             </Button>
             <Button
               variant="outline"
-              className="h-11 px-4 font-medium hidden sm:flex items-center gap-2"
+              className="h-11 px-4 font-medium flex items-center gap-2"
               onClick={() => navigate(`/loja/${slug}/consultar-pedido`)}
             >
               <Search className="w-4 h-4" />
