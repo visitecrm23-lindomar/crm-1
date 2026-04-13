@@ -111,17 +111,18 @@ export default function Marketing() {
     query: { enabled: tab === "birthdays" && birthdaySubTab === "settings", refetchOnWindowFocus: false },
   });
 
-  const { data: allClients } = useListClients(undefined, {
+  const { data: allClientsData } = useListClients({ limit: 1000, page: 1 }, {
     query: { enabled: manualSendOpen },
   });
 
   const filteredClients = useMemo(() => {
-    if (!allClients || !clientSearch.trim()) return (allClients ?? []).slice(0, 20);
+    const clients = allClientsData?.data ?? [];
+    if (!clientSearch.trim()) return clients.slice(0, 20);
     const q = clientSearch.toLowerCase();
-    return (allClients as Array<{ id: string; name: string; email?: string; whatsapp?: string }>)
+    return clients
       .filter((c) => c.name.toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q) || (c.whatsapp ?? "").includes(q))
       .slice(0, 20);
-  }, [allClients, clientSearch]);
+  }, [allClientsData, clientSearch]);
 
   const saveSettings = useMutation({
     mutationFn: (data: BirthdaySettings) => updateBirthdaySettings(data),
@@ -622,7 +623,7 @@ export default function Marketing() {
                       <div key={c.id} className="flex items-center justify-between px-3 py-2 hover:bg-muted/50">
                         <div>
                           <p className="text-sm font-medium">{c.name}</p>
-                          <p className="text-xs text-muted-foreground">{c.email ?? c.whatsapp ?? "—"}</p>
+                          <p className="text-xs text-muted-foreground">{c.email ?? c.whatsapp ?? "Sem contato"}</p>
                         </div>
                         <Button
                           size="sm"
