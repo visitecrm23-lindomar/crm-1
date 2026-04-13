@@ -713,6 +713,10 @@ export default function ReservationWizard({
         totalAmount: order.totalAmount,
         createdAt: order.createdAt,
       });
+      localStorage.removeItem("referral_code");
+      localStorage.removeItem("referral_code_expiry");
+      localStorage.removeItem("referral_referrer_name");
+      localStorage.removeItem("referral_server_cookie_id");
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 5000);
       setStep("confirmado");
@@ -1353,7 +1357,7 @@ export default function ReservationWizard({
                 </div>
                 {referralDiscount > 0 && (
                   <div className="flex justify-between text-green-600">
-                    <span>Desconto Indicação (5%)</span>
+                    <span>Desconto Indicação ({referralDiscountPct}%)</span>
                     <span>− R$ {referralDiscount.toFixed(2)}</span>
                   </div>
                 )}
