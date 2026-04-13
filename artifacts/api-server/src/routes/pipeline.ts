@@ -98,13 +98,13 @@ function formatDeal(d: typeof dealsTable.$inferSelect, seats: string[] = []) {
   };
 }
 
-async function getSeatsForDeals(deals: typeof dealsTable.$inferSelect[]): Promise<Map<string, string[]>> {
+async function getSeatsForDeals(deals: typeof dealsTable.$inferSelect[], tenantId: string): Promise<Map<string, string[]>> {
   const resIds = deals.map(d => d.reservationId).filter(Boolean) as string[];
   const seatsMap = new Map<string, string[]>();
   if (resIds.length === 0) return seatsMap;
   const rows = await db.select({ id: reservationsTable.id, seats: reservationsTable.seats })
     .from(reservationsTable)
-    .where(inArray(reservationsTable.id, resIds));
+    .where(and(inArray(reservationsTable.id, resIds), eq(reservationsTable.tenantId, tenantId)));
   for (const r of rows) seatsMap.set(r.id, r.seats ?? []);
   return seatsMap;
 }
@@ -141,7 +141,7 @@ router.get("/deals", async (req, res): Promise<void> => {
     if (me.role === "vendedor") conditions.push(eq(dealsTable.ownerId, me.id));
     const deals = await db.select().from(dealsTable)
       .where(and(...conditions)).orderBy(desc(dealsTable.createdAt));
-    const seatsMap = await getSeatsForDeals(deals);
+    const seatsMap = await getSeatsForDeals(deals, me.tenantId);
     res.json(deals.map(d => formatDeal(d, d.reservationId ? (seatsMap.get(d.reservationId) ?? []) : [])));
   } catch (err) {
     req.log.error({ err }, "Error listing deals");
