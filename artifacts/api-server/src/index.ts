@@ -1,6 +1,8 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
+import cron from "node-cron";
+import { runBirthdayCron } from "./lib/birthday";
 
 const rawPort = process.env["PORT"];
 
@@ -352,6 +354,43 @@ async function runMigrations() {
       );
     `);
 
+    await client.query(`
+      ALTER TABLE clients ADD COLUMN IF NOT EXISTS whatsapp_opt_in boolean NOT NULL DEFAULT true;
+      ALTER TABLE clients ADD COLUMN IF NOT EXISTS email_opt_in boolean NOT NULL DEFAULT true;
+    `);
+
+    await client.query(`
+      ALTER TABLE coupons ADD COLUMN IF NOT EXISTS client_id text;
+      ALTER TABLE coupons ADD COLUMN IF NOT EXISTS is_birthday boolean NOT NULL DEFAULT false;
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS birthday_messages (
+        id text PRIMARY KEY,
+        tenant_id text NOT NULL,
+        client_id text NOT NULL,
+        birthday_year integer NOT NULL,
+        sent_whatsapp boolean NOT NULL DEFAULT false,
+        sent_email boolean NOT NULL DEFAULT false,
+        whatsapp_sent_at TIMESTAMPTZ,
+        email_sent_at TIMESTAMPTZ,
+        whatsapp_error text,
+        email_error text,
+        coupon_id text,
+        coupon_code text,
+        converted boolean NOT NULL DEFAULT false,
+        is_manual boolean NOT NULL DEFAULT false,
+        sent_by_id text,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    `);
+
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS birthday_messages_tenant_client_year_unique
+        ON birthday_messages (tenant_id, client_id, birthday_year)
+        WHERE is_manual = false;
+    `);
+
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");
@@ -361,6 +400,11 @@ async function runMigrations() {
 }
 
 runMigrations().then(() => {
+  cron.schedule("0 9 * * *", () => {
+    logger.info("[birthday] Daily cron triggered");
+    runBirthdayCron().catch((err) => logger.error({ err }, "[birthday] Cron failed"));
+  }, { timezone: "America/Sao_Paulo" });
+
   app.listen(port, (err) => {
     if (err) {
       logger.error({ err }, "Error listening on port");

@@ -1,14 +1,15 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useListCoupons,
   useCreateCoupon,
   useUpdateCoupon,
   useDeleteCoupon,
 } from "@workspace/api-client-react";
-import { useListClients } from "@workspace/api-client-react";
 import type { CreateCouponBodyType } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -36,6 +37,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Plus,
   Tag,
@@ -45,47 +47,80 @@ import {
   Ticket,
   CheckCircle2,
   XCircle,
+  Send,
+  MessageCircle,
+  Mail,
+  Settings,
+  History,
+  TrendingUp,
+  Users,
+  Gift,
+  CalendarDays,
+  Loader2,
 } from "lucide-react";
 import type { Coupon } from "@workspace/api-client-react";
+import { birthdayApi, type BirthdaySettings } from "@/lib/birthdayApi";
+import { toast } from "@/hooks/use-toast";
 
-const MONTHS_PT = [
-  "Janeiro",
-  "Fevereiro",
-  "Março",
-  "Abril",
-  "Maio",
-  "Junho",
-  "Julho",
-  "Agosto",
-  "Setembro",
-  "Outubro",
-  "Novembro",
-  "Dezembro",
-];
-
-function birthdayMonth(dateStr: string): number {
-  const parts = dateStr.split("-");
-  return parts.length >= 2 ? parseInt(parts[1], 10) : 0;
-}
-
-function birthdayDay(dateStr: string): number {
-  const parts = dateStr.split("-");
-  return parts.length >= 3 ? parseInt(parts[2], 10) : 0;
-}
 
 export default function Marketing() {
   const [tab, setTab] = useState("coupons");
+  const [birthdaySubTab, setBirthdaySubTab] = useState("today");
   const [isOpen, setIsOpen] = useState(false);
   const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
   const [couponType, setCouponType] = useState<CreateCouponBodyType>("percentage");
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [sendingClientId, setSendingClientId] = useState<string | null>(null);
+  const [settingsForm, setSettingsForm] = useState<Partial<BirthdaySettings>>({});
+  const [settingsDirty, setSettingsDirty] = useState(false);
+  const qc = useQueryClient();
 
   const { data: coupons, isLoading: loadingCoupons, refetch } = useListCoupons();
-  const { data: clients } = useListClients({ limit: 500 });
 
   const createCoupon = useCreateCoupon();
   const updateCoupon = useUpdateCoupon();
   const deleteCoupon = useDeleteCoupon();
+
+  const { data: bdToday, isLoading: loadingToday, refetch: refetchToday } = useQuery({
+    queryKey: ["birthday", "today"],
+    queryFn: () => birthdayApi.getToday(),
+    enabled: tab === "birthdays",
+  });
+  const { data: bdUpcoming7, isLoading: loadingUpcoming7 } = useQuery({
+    queryKey: ["birthday", "upcoming7"],
+    queryFn: () => birthdayApi.getUpcoming(7),
+    enabled: tab === "birthdays" && birthdaySubTab === "upcoming7",
+  });
+  const { data: bdUpcoming30, isLoading: loadingUpcoming30 } = useQuery({
+    queryKey: ["birthday", "upcoming30"],
+    queryFn: () => birthdayApi.getUpcoming(30),
+    enabled: tab === "birthdays" && birthdaySubTab === "upcoming30",
+  });
+  const { data: bdHistory, isLoading: loadingHistory } = useQuery({
+    queryKey: ["birthday", "history"],
+    queryFn: () => birthdayApi.getHistory(new Date().getFullYear()),
+    enabled: tab === "birthdays" && birthdaySubTab === "history",
+  });
+  const { data: bdStats } = useQuery({
+    queryKey: ["birthday", "stats"],
+    queryFn: () => birthdayApi.getStats(),
+    enabled: tab === "birthdays",
+  });
+  const { data: bdSettings, isLoading: loadingSettings } = useQuery({
+    queryKey: ["birthday", "settings"],
+    queryFn: () => birthdayApi.getSettings(),
+    enabled: tab === "birthdays" && birthdaySubTab === "settings",
+    refetchOnWindowFocus: false,
+  });
+
+  const saveSettings = useMutation({
+    mutationFn: (data: Partial<BirthdaySettings>) => birthdayApi.updateSettings(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["birthday", "settings"] });
+      setSettingsDirty(false);
+      toast({ title: "Configurações salvas com sucesso" });
+    },
+    onError: () => toast({ title: "Erro ao salvar configurações", variant: "destructive" }),
+  });
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -155,13 +190,38 @@ export default function Marketing() {
     setIsOpen(true);
   };
 
-  const birthdayClients = (clients?.data ?? [])
-    .filter((c) => c.birthDate && birthdayMonth(c.birthDate) === selectedMonth)
-    .sort((a, b) => birthdayDay(a.birthDate!) - birthdayDay(b.birthDate!));
+  const handleSendBirthday = async (clientId: string) => {
+    setSendingClientId(clientId);
+    try {
+      const result = await birthdayApi.sendMessage(clientId);
+      if (result.success) {
+        toast({ title: `Mensagem enviada! Cupom: ${result.couponCode ?? ""}` });
+      } else {
+        toast({ title: result.error ?? "Falha ao enviar", variant: "destructive" });
+      }
+      qc.invalidateQueries({ queryKey: ["birthday"] });
+      refetchToday();
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Erro ao enviar", variant: "destructive" });
+    } finally {
+      setSendingClientId(null);
+    }
+  };
 
-  const today = new Date();
-  const todayMonth = today.getMonth() + 1;
-  const todayDay = today.getDate();
+  const handleSettingsChange = (key: keyof BirthdaySettings, value: unknown) => {
+    setSettingsForm((prev) => ({ ...prev, [key]: value }));
+    setSettingsDirty(true);
+  };
+
+  const mergedSettings: BirthdaySettings = {
+    enabled: true,
+    discountPercent: 10,
+    validDays: 30,
+    sendWhatsapp: true,
+    sendEmail: true,
+    ...(bdSettings ?? {}),
+    ...settingsForm,
+  };
 
   return (
     <div className="space-y-6">
@@ -466,77 +526,375 @@ export default function Marketing() {
         </TabsContent>
 
         <TabsContent value="birthdays" className="mt-4 space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Cake className="w-4 h-4 text-pink-500" />
-                Aniversariantes do Mês
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2 mb-4">
-                {MONTHS_PT.map((m, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setSelectedMonth(i + 1)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                      selectedMonth === i + 1
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background border-border hover:bg-muted"
-                    }`}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-
-              {birthdayClients.length === 0 ? (
-                <div className="text-center py-10 text-muted-foreground">
-                  <Cake className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">
-                    Nenhum aniversariante em {MONTHS_PT[selectedMonth - 1]}.
-                  </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <Card>
+              <CardContent className="pt-4 pb-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Cake className="w-4 h-4 text-pink-500" />
+                  <span className="text-xs text-muted-foreground">Hoje</span>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {birthdayClients.map((c) => {
-                    const day = birthdayDay(c.birthDate!);
-                    const isToday =
-                      selectedMonth === todayMonth && day === todayDay;
-                    return (
-                      <div
-                        key={c.id}
-                        className={`flex items-center gap-4 p-3 rounded-lg border ${
-                          isToday ? "border-pink-300 bg-pink-50" : "bg-card"
-                        }`}
-                      >
-                        <div
-                          className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
-                            isToday
-                              ? "bg-pink-500 text-white"
-                              : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          {day}
+                <p className="text-2xl font-bold">{bdStats?.todayCount ?? 0}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4 pb-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <CalendarDays className="w-4 h-4 text-blue-500" />
+                  <span className="text-xs text-muted-foreground">Próx. 7 dias</span>
+                </div>
+                <p className="text-2xl font-bold">{bdStats?.upcomingWeek ?? 0}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4 pb-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Send className="w-4 h-4 text-green-500" />
+                  <span className="text-xs text-muted-foreground">Enviados (mês)</span>
+                </div>
+                <p className="text-2xl font-bold">{bdStats?.sentThisMonth ?? 0}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4 pb-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <TrendingUp className="w-4 h-4 text-purple-500" />
+                  <span className="text-xs text-muted-foreground">Taxa conversão</span>
+                </div>
+                <p className="text-2xl font-bold">{bdStats?.conversionRate ?? 0}%</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Tabs value={birthdaySubTab} onValueChange={setBirthdaySubTab}>
+            <TabsList className="flex-wrap h-auto gap-1">
+              <TabsTrigger value="today" className="text-xs">
+                <Cake className="w-3 h-3 mr-1" /> Hoje
+              </TabsTrigger>
+              <TabsTrigger value="upcoming7" className="text-xs">
+                <CalendarDays className="w-3 h-3 mr-1" /> Próximos 7 dias
+              </TabsTrigger>
+              <TabsTrigger value="upcoming30" className="text-xs">
+                <Users className="w-3 h-3 mr-1" /> Próximos 30 dias
+              </TabsTrigger>
+              <TabsTrigger value="history" className="text-xs">
+                <History className="w-3 h-3 mr-1" /> Histórico
+              </TabsTrigger>
+              <TabsTrigger value="settings" className="text-xs">
+                <Settings className="w-3 h-3 mr-1" /> Configurações
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="today" className="mt-3">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Aniversariantes de hoje — {new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long" })}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {loadingToday ? (
+                    <div className="space-y-2">{[0,1,2].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div>
+                  ) : !bdToday?.length ? (
+                    <div className="text-center py-10 text-muted-foreground">
+                      <Cake className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm">Nenhum aniversariante hoje.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {bdToday.map((c) => (
+                        <div key={c.id} className="flex items-center gap-3 p-3 rounded-lg border border-pink-200 bg-pink-50">
+                          <div className="w-10 h-10 rounded-full bg-pink-500 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                            {c.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{c.name}</p>
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              <span className="text-xs text-muted-foreground">{c.whatsapp}</span>
+                              {c.birthdayMessage ? (
+                                <div className="flex items-center gap-1">
+                                  {c.birthdayMessage.sentWhatsapp && (
+                                    <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-green-400 text-green-700">
+                                      <MessageCircle className="w-2.5 h-2.5 mr-0.5" /> WhatsApp
+                                    </Badge>
+                                  )}
+                                  {c.birthdayMessage.sentEmail && (
+                                    <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-blue-400 text-blue-700">
+                                      <Mail className="w-2.5 h-2.5 mr-0.5" /> Email
+                                    </Badge>
+                                  )}
+                                  {c.birthdayMessage.couponCode && (
+                                    <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-purple-400 text-purple-700">
+                                      <Gift className="w-2.5 h-2.5 mr-0.5" /> {c.birthdayMessage.couponCode}
+                                    </Badge>
+                                  )}
+                                </div>
+                              ) : (
+                                <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-muted-foreground">
+                                  Não enviado
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant={c.birthdayMessage ? "outline" : "default"}
+                            className={c.birthdayMessage ? "text-xs" : "text-xs bg-pink-500 hover:bg-pink-600"}
+                            disabled={sendingClientId === c.id}
+                            onClick={() => handleSendBirthday(c.id)}
+                          >
+                            {sendingClientId === c.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <><Send className="w-3 h-3 mr-1" />{c.birthdayMessage ? "Reenviar" : "Enviar"}</>
+                            )}
+                          </Button>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{c.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {c.email} • {c.whatsapp}
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="upcoming7" className="mt-3">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Próximos 7 dias
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {loadingUpcoming7 ? (
+                    <div className="space-y-2">{[0,1,2].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div>
+                  ) : !bdUpcoming7?.length ? (
+                    <div className="text-center py-10 text-muted-foreground">
+                      <CalendarDays className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm">Nenhum aniversariante nos próximos 7 dias.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {bdUpcoming7.map((c) => (
+                        <div key={c.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
+                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm shrink-0">
+                            {c.daysUntil}d
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{c.name}</p>
+                            <p className="text-xs text-muted-foreground">{c.whatsapp} • {c.email}</p>
+                          </div>
+                          <Badge variant="outline" className="text-xs shrink-0">
+                            Em {c.daysUntil} dia{c.daysUntil !== 1 ? "s" : ""}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="upcoming30" className="mt-3">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Próximos 30 dias
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {loadingUpcoming30 ? (
+                    <div className="space-y-2">{[0,1,2].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div>
+                  ) : !bdUpcoming30?.length ? (
+                    <div className="text-center py-10 text-muted-foreground">
+                      <CalendarDays className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm">Nenhum aniversariante nos próximos 30 dias.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {bdUpcoming30.map((c) => (
+                        <div key={c.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
+                          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-bold text-sm shrink-0">
+                            {c.daysUntil}d
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{c.name}</p>
+                            <p className="text-xs text-muted-foreground">{c.whatsapp} • {c.email}</p>
+                          </div>
+                          <Badge variant="outline" className="text-xs shrink-0">
+                            Em {c.daysUntil} dias
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="history" className="mt-3">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Histórico de envios — {new Date().getFullYear()}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {loadingHistory ? (
+                    <div className="space-y-2 p-4">{[0,1,2].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+                  ) : !bdHistory?.length ? (
+                    <div className="text-center py-10 text-muted-foreground">
+                      <History className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm">Nenhum envio registrado este ano.</p>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Cliente</TableHead>
+                          <TableHead>Canais</TableHead>
+                          <TableHead>Cupom</TableHead>
+                          <TableHead>Data</TableHead>
+                          <TableHead>Origem</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {bdHistory.map((m) => (
+                          <TableRow key={m.id}>
+                            <TableCell className="font-medium">{m.client?.name ?? m.clientId}</TableCell>
+                            <TableCell>
+                              <div className="flex gap-1">
+                                {m.sentWhatsapp ? (
+                                  <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-green-400 text-green-700">
+                                    <MessageCircle className="w-2.5 h-2.5 mr-0.5" /> WA
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-muted-foreground">WA ✗</Badge>
+                                )}
+                                {m.sentEmail ? (
+                                  <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-blue-400 text-blue-700">
+                                    <Mail className="w-2.5 h-2.5 mr-0.5" /> Email
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-muted-foreground">Email ✗</Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="font-mono text-xs">{m.couponCode ?? "—"}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {new Date(m.createdAt).toLocaleDateString("pt-BR")}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={m.isManual ? "secondary" : "outline"} className="text-[10px] py-0">
+                                {m.isManual ? "Manual" : "Auto"}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="settings" className="mt-3">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Configurações de Aniversário</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {loadingSettings ? (
+                    <div className="space-y-4">{[0,1,2].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label className="text-sm font-medium">Envios automáticos</Label>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Ativar envio automático diário de mensagens de aniversário
                           </p>
                         </div>
-                        {isToday && (
-                          <Badge className="bg-pink-100 text-pink-800 shrink-0">
-                            Hoje!
-                          </Badge>
-                        )}
+                        <Switch
+                          checked={mergedSettings.enabled}
+                          onCheckedChange={(v) => handleSettingsChange("enabled", v)}
+                        />
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Desconto (%)</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={100}
+                            value={mergedSettings.discountPercent}
+                            onChange={(e) => handleSettingsChange("discountPercent", parseInt(e.target.value, 10))}
+                          />
+                          <p className="text-xs text-muted-foreground">Percentual de desconto do cupom</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Validade do cupom (dias)</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={365}
+                            value={mergedSettings.validDays}
+                            onChange={(e) => handleSettingsChange("validDays", parseInt(e.target.value, 10))}
+                          />
+                          <p className="text-xs text-muted-foreground">Quantos dias o cupom é válido</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <Label className="text-sm font-medium">Canais de envio</Label>
+                        <div className="flex items-center justify-between py-2 border-b">
+                          <div className="flex items-center gap-2">
+                            <MessageCircle className="w-4 h-4 text-green-600" />
+                            <span className="text-sm">WhatsApp (Evolution API)</span>
+                          </div>
+                          <Switch
+                            checked={mergedSettings.sendWhatsapp}
+                            onCheckedChange={(v) => handleSettingsChange("sendWhatsapp", v)}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between py-2">
+                          <div className="flex items-center gap-2">
+                            <Mail className="w-4 h-4 text-blue-600" />
+                            <span className="text-sm">Email</span>
+                          </div>
+                          <Switch
+                            checked={mergedSettings.sendEmail}
+                            onCheckedChange={(v) => handleSettingsChange("sendEmail", v)}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Mensagem WhatsApp personalizada</Label>
+                        <Textarea
+                          rows={5}
+                          placeholder={`Deixe em branco para usar a mensagem padrão.\n\nVariáveis disponíveis: {nome}, {cupom}, {desconto}, {validade}`}
+                          value={mergedSettings.whatsappMessage ?? ""}
+                          onChange={(e) => handleSettingsChange("whatsappMessage", e.target.value || undefined)}
+                          className="text-sm font-mono"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Use: {"{nome}"} {"{cupom}"} {"{desconto}"} {"{validade}"}
+                        </p>
+                      </div>
+
+                      <Button
+                        onClick={() => saveSettings.mutate(settingsForm)}
+                        disabled={!settingsDirty || saveSettings.isPending}
+                      >
+                        {saveSettings.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                        Salvar Configurações
+                      </Button>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </TabsContent>
       </Tabs>
     </div>

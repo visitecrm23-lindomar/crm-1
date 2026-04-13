@@ -14,6 +14,8 @@ export const couponsTable = pgTable("coupons", {
   isActive: boolean("is_active").notNull().default(true),
   validFrom: timestamp("valid_from", { withTimezone: true }),
   validUntil: timestamp("valid_until", { withTimezone: true }),
+  clientId: text("client_id"),
+  isBirthday: boolean("is_birthday").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

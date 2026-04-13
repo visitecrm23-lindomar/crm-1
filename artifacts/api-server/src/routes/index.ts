@@ -32,6 +32,7 @@ import storePublicRouter from "./store-public";
 import onboardingRouter from "./onboarding";
 import teamRouter from "./team";
 import notificationsRouter from "./notifications";
+import birthdayRouter from "./birthday";
 
 const router: IRouter = Router();
 
@@ -68,5 +69,6 @@ router.use(storePublicRouter);
 router.use(onboardingRouter);
 router.use(teamRouter);
 router.use(notificationsRouter);
+router.use(birthdayRouter);
 
 export default router;

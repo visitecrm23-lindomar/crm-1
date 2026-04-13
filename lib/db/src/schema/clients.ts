@@ -57,6 +57,8 @@ export const clientsTable = pgTable("clients", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
   lastContactAt: timestamp("last_contact_at", { withTimezone: true }),
+  whatsappOptIn: boolean("whatsapp_opt_in").notNull().default(true),
+  emailOptIn: boolean("email_opt_in").notNull().default(true),
 });
 
 export const insertClientSchema = createInsertSchema(clientsTable).omit({ createdAt: true, updatedAt: true });
