@@ -221,7 +221,7 @@ router.post("/clients", async (req, res): Promise<void> => {
     if (!upserted) { res.status(500).json({ error: "Failed to create client" }); return; }
 
     const isNew = upserted.id === id;
-    const message = isNew ? "Cliente cadastrado com sucesso." : "Cliente já cadastrado — dados atualizados com sucesso.";
+    const message = isNew ? "Cliente cadastrado com sucesso." : "Cliente já cadastrado — dados atualizados.";
     const statusCode = isNew ? 201 : 200;
     res.status(statusCode).json(formatClient(upserted, { isNew, message }));
   } catch (err) {

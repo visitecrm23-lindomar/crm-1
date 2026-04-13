@@ -387,10 +387,10 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
         toast({ title: "CPF é obrigatório", variant: "destructive" });
         return;
       }
-      if (!isValidCPF(form.cpf)) {
-        toast({ title: "CPF inválido", description: "Verifique o número e tente novamente.", variant: "destructive" });
-        return;
-      }
+    }
+    if (form.cpf && !isValidCPF(form.cpf)) {
+      toast({ title: "CPF inválido", description: "Verifique o número e tente novamente.", variant: "destructive" });
+      return;
     }
     const base = {
       name: form.name, email: form.email, whatsapp: form.whatsapp,
