@@ -37,11 +37,12 @@ const UpdateDealBody = z.object({
 const MoveDealBody = z.object({ stageId: z.string() });
 
 const DEFAULT_STAGES = [
-  { name: "Lead", order: 1, color: "#6366F1", isFinal: false },
-  { name: "Interessado", order: 2, color: "#F59E0B", isFinal: false },
-  { name: "Cliente", order: 3, color: "#10B981", isFinal: false },
-  { name: "Em Viagem", order: 4, color: "#06B6D4", isFinal: false },
-  { name: "Pós-venda", order: 5, color: "#6B7280", isFinal: true },
+  { name: "Lead", order: 1, color: "#6366F1", isFinal: false, isDefaultWeb: false },
+  { name: "Vitrine", order: 2, color: "#3B82F6", isFinal: false, isDefaultWeb: true },
+  { name: "Interessado", order: 3, color: "#F59E0B", isFinal: false, isDefaultWeb: false },
+  { name: "Cliente", order: 4, color: "#10B981", isFinal: false, isDefaultWeb: false },
+  { name: "Em Viagem", order: 5, color: "#06B6D4", isFinal: false, isDefaultWeb: false },
+  { name: "Pós-venda", order: 6, color: "#6B7280", isFinal: true, isDefaultWeb: false },
 ];
 
 async function ensureDefaultPipeline(tenantId: string): Promise<string> {
@@ -65,6 +66,7 @@ async function ensureDefaultPipeline(tenantId: string): Promise<string> {
       order: stage.order,
       color: stage.color,
       isFinal: stage.isFinal,
+      isDefaultWeb: stage.isDefaultWeb,
     });
   }
   return pipelineId;
@@ -73,7 +75,8 @@ async function ensureDefaultPipeline(tenantId: string): Promise<string> {
 function formatStage(s: typeof pipelineStagesTable.$inferSelect) {
   return {
     id: s.id, name: s.name, order: s.order, color: s.color,
-    isFinal: s.isFinal, tenantId: s.tenantId, pipelineId: s.pipelineId,
+    isFinal: s.isFinal, isDefaultWeb: s.isDefaultWeb,
+    tenantId: s.tenantId, pipelineId: s.pipelineId,
     createdAt: s.createdAt.toISOString(),
   };
 }
@@ -86,6 +89,8 @@ function formatDeal(d: typeof dealsTable.$inferSelect) {
     leadName: d.leadName, leadEmail: d.leadEmail, leadWhatsapp: d.leadWhatsapp,
     tripId: d.tripId, lostReason: d.lostReason,
     reservationId: d.reservationId ?? null,
+    source: d.source ?? "manual",
+    autoCreated: d.autoCreated ?? false,
     expectedCloseDate: d.expectedCloseDate?.toISOString() ?? null,
     closedAt: d.closedAt?.toISOString() ?? null,
     createdAt: d.createdAt.toISOString(), updatedAt: d.updatedAt.toISOString(),

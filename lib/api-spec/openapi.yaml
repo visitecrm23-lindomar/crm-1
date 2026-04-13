@@ -5293,6 +5293,10 @@ components:
           type: string
         lostReason:
           type: ["string", "null"]
+        source:
+          type: string
+        autoCreated:
+          type: boolean
         createdAt:
           type: string
         updatedAt:
@@ -5312,6 +5316,8 @@ components:
         - value
         - ownerId
         - status
+        - source
+        - autoCreated
         - createdAt
         - updatedAt
 
@@ -5413,11 +5419,13 @@ components:
           type: integer
         isFinal:
           type: boolean
+        isDefaultWeb:
+          type: boolean
         dealsCount:
           type: integer
         dealsValue:
           type: number
-      required: [id, name, color, order, isFinal, dealsCount, dealsValue]
+      required: [id, name, color, order, isFinal, isDefaultWeb, dealsCount, dealsValue]
 
     # ─── MESSAGE ───────────────────────────────────────────────────
     Message:

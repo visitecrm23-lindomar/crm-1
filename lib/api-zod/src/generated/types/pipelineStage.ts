@@ -12,6 +12,7 @@ export interface PipelineStage {
   color: string;
   order: number;
   isFinal: boolean;
+  isDefaultWeb: boolean;
   dealsCount: number;
   dealsValue: number;
 }

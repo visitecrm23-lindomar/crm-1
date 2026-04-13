@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Search, Trash2, Phone, Calendar, MapPin, X, Pencil, UserPen, Eye, BookOpen, ExternalLink } from "lucide-react";
+import { Plus, Search, Trash2, Phone, Calendar, MapPin, X, Pencil, UserPen, Eye, BookOpen, ExternalLink, ShoppingBag } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -65,7 +65,15 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
           {initials}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm leading-tight truncate">{name}</p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="font-semibold text-sm leading-tight truncate">{name}</p>
+            {deal.source === "website" && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-100 shrink-0">
+                <ShoppingBag className="w-2.5 h-2.5" />
+                Loja
+              </span>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground truncate">{deal.title}</p>
         </div>
         <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">

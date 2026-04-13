@@ -30,6 +30,7 @@ export const pipelineStagesTable = pgTable("pipeline_stages", {
   color: text("color").notNull(),
   order: integer("order").notNull(),
   isFinal: boolean("is_final").notNull().default(false),
+  isDefaultWeb: boolean("is_default_web").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -55,6 +56,8 @@ export const dealsTable = pgTable("deals", {
   status: text("status").notNull().default("open"),
   lostReason: text("lost_reason"),
   reservationId: text("reservation_id"),
+  source: text("source").notNull().default("manual"),
+  autoCreated: boolean("auto_created").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

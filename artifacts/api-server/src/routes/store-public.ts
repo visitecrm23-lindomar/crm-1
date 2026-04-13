@@ -15,6 +15,8 @@ import {
   referralsTable,
   referralTrackingTable,
   referralSettingsTable,
+  pipelineStagesTable,
+  dealsTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -578,6 +580,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
     // Phase 2.5: Find/create client and admin user for trip-linked reservation(s)
     let reservationClientId: string | null = null;
     let reservationCreatedById: string | null = null;
+    let vitrineStageId: string | null = null;
     if (tripLinkedProducts.size > 0) {
       // Find the first active user in the tenant (needed for reservation.createdById)
       const [adminUser] = await db.select({ id: usersTable.id })
@@ -605,6 +608,12 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
           });
           reservationClientId = newClientId;
         }
+        // Look up the "Vitrine" pipeline stage (isDefaultWeb=true, fallback: name='Vitrine')
+        const stages = await db.select({ id: pipelineStagesTable.id, isDefaultWeb: pipelineStagesTable.isDefaultWeb, name: pipelineStagesTable.name })
+          .from(pipelineStagesTable)
+          .where(eq(pipelineStagesTable.tenantId, store.tenantId));
+        const vitrine = stages.find(s => s.isDefaultWeb) ?? stages.find(s => s.name === "Vitrine");
+        vitrineStageId = vitrine?.id ?? null;
       } else {
         res.status(500).json({ error: "Não foi possível criar a reserva: nenhum usuário ativo encontrado para esta agência" });
         return;
@@ -712,7 +721,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
 
         // Create reservations for trip-linked products + decrement available_seats
         if (tripLinkedProducts.size > 0 && reservationClientId && reservationCreatedById) {
-          for (const [tripId, { totalQty, totalValue }] of tripLinkedProducts) {
+          for (const [tripId, { product, totalQty, totalValue }] of tripLinkedProducts) {
             const voucherCode = generateVoucherCode();
             const reservationId = generateId();
             // Use sequential placeholder seat IDs so cancellation logic can return the correct
@@ -740,6 +749,25 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
               availableSeats: sql`available_seats - ${totalQty}`,
               reservedSeats: sql`reserved_seats + ${totalQty}`,
             }).where(and(eq(tripsTable.id, tripId), eq(tripsTable.tenantId, store.tenantId)));
+
+            // Auto-create deal in "Vitrine" pipeline stage for this reservation
+            if (vitrineStageId && reservationCreatedById) {
+              const dealId = generateId();
+              await tx.insert(dealsTable).values({
+                id: dealId,
+                tenantId: store.tenantId,
+                stageId: vitrineStageId,
+                title: `${data.customerName} — ${product.name}`,
+                value: totalValue.toFixed(2),
+                clientId: reservationClientId,
+                tripId,
+                ownerId: reservationCreatedById,
+                status: "open",
+                source: "website",
+                autoCreated: true,
+                reservationId,
+              });
+            }
           }
         }
 

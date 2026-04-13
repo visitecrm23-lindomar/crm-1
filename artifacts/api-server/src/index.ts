@@ -282,6 +282,55 @@ async function runMigrations() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
     `);
+
+    // Pipeline: add is_default_web to stages, source + auto_created to deals
+    await client.query(`
+      ALTER TABLE pipeline_stages ADD COLUMN IF NOT EXISTS is_default_web boolean NOT NULL DEFAULT false;
+      ALTER TABLE deals ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual';
+      ALTER TABLE deals ADD COLUMN IF NOT EXISTS auto_created boolean NOT NULL DEFAULT false;
+    `);
+
+    // Pipeline: insert "Vitrine" stage (order=2) for existing tenants that don't have it yet,
+    // and shift Interessado/Cliente/Em Viagem/Pós-venda orders up by 1.
+    await client.query(`
+      DO $$
+      DECLARE
+        r RECORD;
+        vitrine_id text;
+        lead_stage RECORD;
+        interessado_stage RECORD;
+      BEGIN
+        FOR r IN
+          SELECT DISTINCT tenant_id, pipeline_id FROM pipeline_stages
+        LOOP
+          -- Only process pipelines that don't already have a "Vitrine" stage
+          IF NOT EXISTS (
+            SELECT 1 FROM pipeline_stages
+            WHERE tenant_id = r.tenant_id
+              AND pipeline_id = r.pipeline_id
+              AND name = 'Vitrine'
+          ) THEN
+            -- Find the current "Lead" stage order (should be 1)
+            SELECT "order" INTO lead_stage FROM pipeline_stages
+              WHERE tenant_id = r.tenant_id AND pipeline_id = r.pipeline_id AND name = 'Lead'
+              LIMIT 1;
+
+            -- Shift all stages with order >= 2 up by 1 to make room for Vitrine at order=2
+            UPDATE pipeline_stages
+              SET "order" = "order" + 1
+              WHERE tenant_id = r.tenant_id
+                AND pipeline_id = r.pipeline_id
+                AND "order" >= 2;
+
+            -- Insert the new Vitrine stage at order=2
+            vitrine_id := gen_random_uuid()::text;
+            INSERT INTO pipeline_stages (id, tenant_id, pipeline_id, name, color, "order", is_final, is_default_web, created_at)
+            VALUES (vitrine_id, r.tenant_id, r.pipeline_id, 'Vitrine', '#3B82F6', 2, false, true, now());
+          END IF;
+        END LOOP;
+      END $$;
+    `);
+
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");

@@ -875,6 +875,8 @@ export interface Deal {
   status: string;
   /** @nullable */
   lostReason?: string | null;
+  source: string;
+  autoCreated: boolean;
   createdAt: string;
   updatedAt: string;
   /** @nullable */
@@ -957,6 +959,7 @@ export interface PipelineStage {
   color: string;
   order: number;
   isFinal: boolean;
+  isDefaultWeb: boolean;
   dealsCount: number;
   dealsValue: number;
 }

@@ -31,6 +31,8 @@ export interface Deal {
   status: string;
   /** @nullable */
   lostReason?: string | null;
+  source: string;
+  autoCreated: boolean;
   createdAt: string;
   updatedAt: string;
   /** @nullable */
