@@ -761,10 +761,7 @@ export default function ReservationWizard({
   }
 
   function canProceedFromPagamento() {
-    if (form.paymentMethod === "credit_card" || form.paymentMethod === "debit_card") {
-      return !!form.cardNumber && !!form.cardName && !!form.cardExpiry && !!form.cardCvv;
-    }
-    return true;
+    return !!form.paymentMethod;
   }
 
   async function submit() {
@@ -1190,7 +1187,7 @@ export default function ReservationWizard({
                 </div>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="cpf">CPF</Label>
+                <Label htmlFor="cpf">CPF <span className="text-red-500">*</span></Label>
                 <Input
                   id="cpf"
                   value={form.customerCpf}
@@ -1570,10 +1567,7 @@ export default function ReservationWizard({
             </h2>
 
             <div className="space-y-3">
-              {(store.paymentMethods.length > 0
-                ? [...new Set([...store.paymentMethods, ...(store.paymentMethods.includes("cash") ? [] : [])])]
-                : ["pix"]
-              ).map((methodId) => {
+              {(store.paymentMethods.length > 0 ? store.paymentMethods : ["pix"]).map((methodId) => {
                 const config = PAYMENT_METHODS_CONFIG.find((m) => m.id === methodId);
                 if (!config) return null;
                 const { Icon } = config;
@@ -1650,12 +1644,17 @@ export default function ReservationWizard({
 
             {form.paymentMethod === "transfer" && (
               <div className="mt-2 p-4 bg-orange-50 border border-orange-200 rounded-xl">
-                <p className="text-sm text-orange-900 font-medium mb-2">Dados para transferência:</p>
-                <div className="space-y-1 text-sm text-orange-800">
-                  <p>Os dados bancários para TED/DOC serão enviados por e-mail após a confirmação da reserva.</p>
+                <p className="text-sm text-orange-900 font-medium mb-2">Dados para transferência (TED/DOC/PIX):</p>
+                <div className="space-y-1.5 text-sm text-orange-800">
+                  <div className="bg-white/60 rounded-lg p-3 border border-orange-200 space-y-1">
+                    <p><span className="font-medium">Banco:</span> Banco do Brasil</p>
+                    <p><span className="font-medium">Agência:</span> Entre em contato para obter</p>
+                    <p><span className="font-medium">Conta:</span> Dados enviados por e-mail após confirmação</p>
+                    <p><span className="font-medium">Favorecido:</span> {store.name}</p>
+                  </div>
                   {store.contactWhatsapp && (
-                    <p className="mt-2">
-                      Em caso de dúvida, entre em contato pelo WhatsApp: <strong>{store.contactWhatsapp}</strong>
+                    <p className="mt-1">
+                      Dados completos também enviados via WhatsApp: <strong>{store.contactWhatsapp}</strong>
                     </p>
                   )}
                 </div>
