@@ -94,6 +94,12 @@ export default function VitrineProduct({
 
   const basePrice = parseFloat(product.salePrice ?? product.price);
   const effectivePrice = selectedVariant ? selectedVariant.price : basePrice;
+  const images = product.images ?? [];
+  const includes = product.includes ?? [];
+  const excludes = product.excludes ?? [];
+  const features = product.features ?? [];
+  const requirements = product.requirements ?? [];
+  const variants = product.variants ?? [];
 
   function handleAddToCart() {
     addItem({
@@ -101,7 +107,7 @@ export default function VitrineProduct({
       productName: product!.name,
       unitPrice: effectivePrice,
       quantity: qty,
-      image: product!.images[0],
+      image: images[0],
       variantLabel: selectedVariant?.label,
     });
     openCart();
@@ -113,7 +119,7 @@ export default function VitrineProduct({
       productName: product!.name,
       unitPrice: effectivePrice,
       quantity: qty,
-      image: product!.images[0],
+      image: images[0],
       variantLabel: selectedVariant?.label,
     });
     navigate(`/loja/${slug}/checkout`);
@@ -151,8 +157,8 @@ export default function VitrineProduct({
 
   const tabs = [
     { key: "descricao" as const, label: "Descrição", show: !!product.description },
-    { key: "requisitos" as const, label: "Requisitos", show: product.requirements.length > 0 },
-    { key: "destaques" as const, label: "Destaques", show: product.features.length > 0 },
+    { key: "requisitos" as const, label: "Requisitos", show: requirements.length > 0 },
+    { key: "destaques" as const, label: "Destaques", show: features.length > 0 },
   ].filter((t) => t.show);
 
   const defaultTab = tabs[0]?.key ?? "descricao";
@@ -189,9 +195,9 @@ export default function VitrineProduct({
 
       {/* Full-width hero carousel */}
       <div className="relative rounded-xl overflow-hidden bg-muted h-80 mb-6">
-        {product.images[imgIndex] ? (
+        {images[imgIndex] ? (
           <img
-            src={product.images[imgIndex]}
+            src={images[imgIndex]}
             alt={product.name}
             className="w-full h-full object-cover"
           />
@@ -200,22 +206,22 @@ export default function VitrineProduct({
             <MapPin className="w-20 h-20 text-muted-foreground/20" />
           </div>
         )}
-        {product.images.length > 1 && (
+        {images.length > 1 && (
           <>
             <button
-              onClick={() => setImgIndex((i) => (i - 1 + product.images.length) % product.images.length)}
+              onClick={() => setImgIndex((i) => (i - 1 + images.length) % images.length)}
               className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors"
             >
               <PrevIcon className="w-5 h-5" />
             </button>
             <button
-              onClick={() => setImgIndex((i) => (i + 1) % product.images.length)}
+              onClick={() => setImgIndex((i) => (i + 1) % images.length)}
               className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors"
             >
               <NextIcon className="w-5 h-5" />
             </button>
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-              {product.images.map((_, i) => (
+              {images.map((_, i) => (
                 <button
                   key={i}
                   onClick={() => setImgIndex(i)}
@@ -228,9 +234,9 @@ export default function VitrineProduct({
       </div>
 
       {/* Thumbnails */}
-      {product.images.length > 1 && (
+      {images.length > 1 && (
         <div className="flex gap-2 mb-6 overflow-x-auto">
-          {product.images.map((img, i) => (
+          {images.map((img, i) => (
             <button
               key={i}
               onClick={() => setImgIndex(i)}
@@ -329,9 +335,9 @@ export default function VitrineProduct({
       )}
 
       {/* Variants */}
-      {product.variants.length > 0 && (
+      {variants.length > 0 && (
         <div className="mb-5 p-4 border rounded-xl bg-muted/30">
-          {product.variants.map((v) => (
+          {variants.map((v) => (
             <div key={v.name} className="mb-3 last:mb-0">
               <p className="font-medium text-sm mb-2">{v.name}</p>
               <div className="flex flex-wrap gap-2">
@@ -405,18 +411,18 @@ export default function VitrineProduct({
         </div>
       )}
 
-      {(product.includes.length > 0 || product.excludes.length > 0) && (
+      {(includes.length > 0 || excludes.length > 0) && (
         <div className="mt-10">
           <h2 className="text-xl font-bold mb-5">O que está incluso</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {product.includes.length > 0 && (
+            {includes.length > 0 && (
               <div className="rounded-xl border p-5 bg-green-50/40">
                 <h3 className="font-semibold text-green-700 mb-4 flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5" />
                   Incluído
                 </h3>
                 <ul className="space-y-2.5">
-                  {product.includes.map((item, i) => (
+                  {includes.map((item, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm">
                       <CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
                       {item}
@@ -425,14 +431,14 @@ export default function VitrineProduct({
                 </ul>
               </div>
             )}
-            {product.excludes.length > 0 && (
+            {excludes.length > 0 && (
               <div className="rounded-xl border p-5 bg-red-50/30">
                 <h3 className="font-semibold text-red-700 mb-4 flex items-center gap-2">
                   <XCircle className="w-5 h-5" />
                   Não incluído
                 </h3>
                 <ul className="space-y-2.5">
-                  {product.excludes.map((item, i) => (
+                  {excludes.map((item, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm">
                       <XCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
                       {item}
@@ -470,9 +476,9 @@ export default function VitrineProduct({
               </div>
             )}
 
-            {currentTab === "requisitos" && product.requirements.length > 0 && (
+            {currentTab === "requisitos" && requirements.length > 0 && (
               <ul className="space-y-2">
-                {product.requirements.map((r, i) => (
+                {requirements.map((r, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm">
                     <span className="w-2 h-2 rounded-full bg-amber-400 mt-1.5 shrink-0" />
                     {r}
@@ -481,9 +487,9 @@ export default function VitrineProduct({
               </ul>
             )}
 
-            {currentTab === "destaques" && product.features.length > 0 && (
+            {currentTab === "destaques" && features.length > 0 && (
               <ul className="space-y-2">
-                {product.features.map((f, i) => (
+                {features.map((f, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm">
                     <Star className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" />
                     {f}

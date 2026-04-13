@@ -69,6 +69,10 @@ export function ProductQuickView({
   const availableSeats =
     product.availableSeats ?? (product.trackInventory ? (product.stockQuantity ?? null) : null);
   const images = product.images ?? [];
+  const includes = product.includes ?? [];
+  const excludes = product.excludes ?? [];
+  const features = product.features ?? [];
+  const requirements = product.requirements ?? [];
   const startDate = product.departureDate ?? product.startDate;
   const typeLabel = TYPE_LABELS[product.type] ?? product.type;
 
@@ -260,15 +264,15 @@ export function ProductQuickView({
             </div>
           )}
 
-          {(product.includes.length > 0 || product.excludes.length > 0) && (
+          {(includes.length > 0 || excludes.length > 0) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {product.includes.length > 0 && (
+              {includes.length > 0 && (
                 <div>
                   <h3 className="text-sm font-semibold text-green-700 mb-2 flex items-center gap-1">
                     <CheckCircle2 className="w-4 h-4" /> O que inclui
                   </h3>
                   <ul className="space-y-1.5">
-                    {product.includes.map((item, i) => (
+                    {includes.map((item, i) => (
                       <li key={i} className="flex items-start gap-2 text-sm">
                         <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" />
                         <span>{item}</span>
@@ -277,13 +281,13 @@ export function ProductQuickView({
                   </ul>
                 </div>
               )}
-              {product.excludes.length > 0 && (
+              {excludes.length > 0 && (
                 <div>
                   <h3 className="text-sm font-semibold text-red-700 mb-2 flex items-center gap-1">
                     <XCircle className="w-4 h-4" /> Não inclui
                   </h3>
                   <ul className="space-y-1.5">
-                    {product.excludes.map((item, i) => (
+                    {excludes.map((item, i) => (
                       <li key={i} className="flex items-start gap-2 text-sm">
                         <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
                         <span>{item}</span>
@@ -295,11 +299,11 @@ export function ProductQuickView({
             </div>
           )}
 
-          {product.features.length > 0 && (
+          {features.length > 0 && (
             <div>
               <h3 className="text-sm font-semibold mb-2">Destaques</h3>
               <ul className="space-y-1.5">
-                {product.features.map((f, i) => (
+                {features.map((f, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm">
                     <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-400 shrink-0 mt-0.5" />
                     <span>{f}</span>
@@ -309,11 +313,11 @@ export function ProductQuickView({
             </div>
           )}
 
-          {product.requirements.length > 0 && (
+          {requirements.length > 0 && (
             <div>
               <h3 className="text-sm font-semibold mb-2">Requisitos</h3>
               <ul className="space-y-1.5">
-                {product.requirements.map((r, i) => (
+                {requirements.map((r, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm">
                     <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0 mt-1.5" />
                     <span>{r}</span>
