@@ -18,4 +18,6 @@ export type UserProfileTenant = {
   secondaryColor?: string | null;
   status: string;
   planId: string;
+  /** @nullable */
+  website?: string | null;
 } | null;

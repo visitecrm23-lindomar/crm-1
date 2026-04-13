@@ -1,0 +1,16 @@
+import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
+
+export const emailLogsTable = pgTable("email_logs", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  reservationId: text("reservation_id"),
+  recipient: text("recipient").notNull(),
+  subject: text("subject").notNull(),
+  status: text("status").notNull(),
+  messageId: text("message_id"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type EmailLog = typeof emailLogsTable.$inferSelect;
+export type InsertEmailLog = typeof emailLogsTable.$inferInsert;

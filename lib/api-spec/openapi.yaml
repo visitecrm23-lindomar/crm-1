@@ -6209,6 +6209,8 @@ components:
               type: string
             planId:
               type: string
+            website:
+              type: ["string", "null"]
           required: [id, name, slug, status, planId]
       required: [id, clerkId, name, email, role, isActive, referralCode, referralBalance, createdAt]
 
@@ -6298,6 +6300,8 @@ components:
           type: ["string", "null"]
         secondaryColor:
           type: ["string", "null"]
+        website:
+          type: ["string", "null"]
         reservationPrefix:
           type: ["string", "null"]
         createdAt:
@@ -6354,6 +6358,8 @@ components:
           type: ["integer", "null"]
         maxTripsOverride:
           type: ["integer", "null"]
+        website:
+          type: ["string", "null"]
         reservationPrefix:
           type: ["string", "null"]
 

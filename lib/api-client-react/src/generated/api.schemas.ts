@@ -1500,6 +1500,8 @@ export type UserProfileTenant = {
   secondaryColor?: string | null;
   status: string;
   planId: string;
+  /** @nullable */
+  website?: string | null;
 } | null;
 
 export interface UserProfile {
@@ -1571,6 +1573,8 @@ export interface Tenant {
   /** @nullable */
   secondaryColor?: string | null;
   /** @nullable */
+  website?: string | null;
+  /** @nullable */
   reservationPrefix?: string | null;
   createdAt: string;
 }
@@ -1607,6 +1611,8 @@ export interface UpdateTenantBody {
   maxClientsOverride?: number | null;
   /** @nullable */
   maxTripsOverride?: number | null;
+  /** @nullable */
+  website?: string | null;
   /** @nullable */
   reservationPrefix?: string | null;
 }

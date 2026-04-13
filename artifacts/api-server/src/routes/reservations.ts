@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, referralSettingsTable, dealsTable, pipelineStagesTable } from "@workspace/db";
+import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, referralSettingsTable, dealsTable, pipelineStagesTable, tenantsTable, emailLogsTable } from "@workspace/db";
 import { eq, and, sql, desc, asc, inArray, or, ilike } from "drizzle-orm";
 import { generateId, generateVoucherCode } from "../lib/id";
 import { getTenantReservationPrefix, tripTypeToCode, getYearMonth, nextReservationSequence, buildReservationNumber } from "../lib/reservation-number";
@@ -10,6 +10,7 @@ import { CreateReservationBody, UpdateReservationBody, CreatePassengerBody, Upda
 import { z } from "zod/v4";
 import { writeClientActivity } from "../lib/activities";
 import { syncReservationCommission } from "./payments";
+import { sendReservationConfirmationEmail } from "@workspace/email";
 
 const router = Router();
 
@@ -619,6 +620,70 @@ router.post("/reservations", async (req, res): Promise<void> => {
       writeClientActivity(reservation.clientId, "reservation_created", `Reserva ${voucherCode} criada — ${totalFormatted}`, me.id, { voucherCode, totalValue: Number(reservation.totalValue) })
         .catch((err) => req.log.error({ err }, "Error writing reservation creation activity"));
     }
+    // Fire-and-forget: confirmation email (never blocks reservation creation)
+    ;(async () => {
+      try {
+        const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, me.tenantId)).limit(1);
+        if (!tenant) return;
+        const clientEmail = client?.email;
+        if (!clientEmail) return;
+        const totalVal = Number(reservation.totalValue);
+        const paidVal = Number(reservation.paidValue);
+        const balanceVal = Number(reservation.balance);
+        const paymentStatus: "paid" | "partial" | "pending" =
+          paidVal >= totalVal ? "paid" : paidVal > 0 ? "partial" : "pending";
+        const dDate = formatted.trip.departureDate ? new Date(formatted.trip.departureDate) : null;
+        const departureDate = dDate
+          ? dDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+          : "";
+        const agencyPhone = tenant.whatsapp ?? tenant.phone ?? "";
+        const agencyWebsite = tenant.website ?? `https://${tenant.slug}.visitecrm.com.br`;
+        const whatsappNum = agencyPhone.replace(/\D/g, "");
+        const whatsappUrl = whatsappNum ? `https://wa.me/${whatsappNum}` : "";
+        const appBase = process.env.APP_URL ?? "https://app.visitecrm.com.br";
+        const voucherUrl = `${appBase}/reservations/${reservation.id}`;
+        const consultUrl = `${appBase}/dashboard`;
+        const emailResult = await sendReservationConfirmationEmail({
+          reservationNumber: reservation.reservationNumber ?? reservation.voucherCode,
+          voucherCode: reservation.voucherCode,
+          clientName: client?.name ?? "",
+          clientCpf: client?.cpf ?? "",
+          clientEmail,
+          clientPhone: client?.whatsapp ?? "",
+          tripTitle: formatted.trip.name,
+          destination: formatted.trip.destination,
+          departureDate,
+          duration: "",
+          seats: (reservation.seats ?? []) as string[],
+          totalAmount: totalVal,
+          amountPaid: paidVal,
+          amountPending: balanceVal,
+          paymentMethod: reservation.paymentMethod ?? "pix",
+          paymentStatus,
+          agencyName: tenant.name,
+          agencyLogo: tenant.logoUrl ?? "",
+          agencyPhone,
+          agencyEmail: tenant.email,
+          agencyWebsite,
+          voucherUrl,
+          consultUrl,
+          whatsappUrl,
+        });
+        await db.insert(emailLogsTable).values({
+          id: generateId(),
+          tenantId: me.tenantId,
+          reservationId: reservation.id,
+          recipient: clientEmail,
+          subject: `Reserva Confirmada — ${reservation.reservationNumber ?? reservation.voucherCode}`,
+          status: emailResult.success ? "sent" : "failed",
+          messageId: emailResult.messageId ?? null,
+          errorMessage: emailResult.error ?? null,
+        });
+        req.log.info({ reservationId: reservation.id, success: emailResult.success }, "Reservation confirmation email processed");
+      } catch (err) {
+        req.log.error({ err }, "Error sending reservation confirmation email");
+      }
+    })();
   } catch (err) {
     req.log.error({ err }, "Error creating reservation");
     res.status(500).json({ error: "Internal server error" });

@@ -24,6 +24,8 @@ export interface Tenant {
   /** @nullable */
   secondaryColor?: string | null;
   /** @nullable */
+  website?: string | null;
+  /** @nullable */
   reservationPrefix?: string | null;
   createdAt: string;
 }
