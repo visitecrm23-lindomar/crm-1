@@ -197,17 +197,25 @@ export async function processBirthdayForClient(
   let whatsappError: string | undefined;
   let emailError: string | undefined;
 
+  const firstName = client.name.split(" ")[0];
+  const agencyName = settings.senderName || tenant.name;
+
+  function interpolateTemplate(template: string): string {
+    return template
+      .replace(/\{\{name\}\}/gi, firstName)
+      .replace(/\{\{coupon_code\}\}/gi, couponCode)
+      .replace(/\{\{discount\}\}/gi, String(settings.discountPercent))
+      .replace(/\{\{valid_until\}\}/gi, validUntilStr)
+      .replace(/\{\{agency_name\}\}/gi, agencyName);
+  }
+
   if (settings.sendWhatsapp && client.whatsappOptIn !== false && client.whatsapp) {
     try {
       const evolutionConfig = await getSystemConfig<EvolutionConfig>(tenantId, "whatsapp_evolution");
       if (evolutionConfig?.apiUrl && evolutionConfig?.apiKey && evolutionConfig?.instanceName) {
         const defaultMsg = settings.whatsappMessage
-          ? settings.whatsappMessage
-              .replace("{nome}", client.name.split(" ")[0])
-              .replace("{cupom}", couponCode)
-              .replace("{desconto}", String(settings.discountPercent))
-              .replace("{validade}", validUntilStr)
-          : `🎂 Feliz Aniversário, ${client.name.split(" ")[0]}!\n\nA ${tenant.name} tem um presente especial para você: *${settings.discountPercent}% de desconto* na sua próxima viagem!\n\nUse o cupom: *${couponCode}*\nVálido até ${validUntilStr}\n\nAproveitie para planejar a viagem dos seus sonhos! 🌍`;
+          ? interpolateTemplate(settings.whatsappMessage)
+          : `🎂 Feliz Aniversário, ${firstName}!\n\nA ${agencyName} tem um presente especial para você: *${settings.discountPercent}% de desconto* na sua próxima viagem!\n\nUse o cupom: *${couponCode}*\nVálido até ${validUntilStr}\n\nAproveitie para planejar a viagem dos seus sonhos! 🌍`;
 
         await sendWhatsAppMessage(evolutionConfig, client.whatsapp, defaultMsg);
         sentWhatsapp = true;
@@ -223,12 +231,15 @@ export async function processBirthdayForClient(
       const result = await sendBirthdayEmail({
         clientName: client.name,
         clientEmail: client.email,
-        agencyName: tenant.name,
+        agencyName: agencyName,
         agencyEmail: tenant.email,
         agencyPhone: tenant.phone ?? "",
         couponCode,
         discountPercent: settings.discountPercent,
         validUntil: validUntilStr,
+      }, {
+        emailSubject: settings.emailSubject ?? null,
+        senderName: settings.senderName ?? null,
       });
       if (result.success) {
         sentEmail = true;

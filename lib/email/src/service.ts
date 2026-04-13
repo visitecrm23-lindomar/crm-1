@@ -47,8 +47,14 @@ export async function sendReservationConfirmationEmail(
   }
 }
 
+export interface SendBirthdayEmailOptions {
+  emailSubject?: string | null;
+  senderName?: string | null;
+}
+
 export async function sendBirthdayEmail(
-  props: BirthdayEmailProps
+  props: BirthdayEmailProps,
+  options?: SendBirthdayEmailOptions
 ): Promise<SendEmailResult> {
   try {
     const resend = getResend();
@@ -57,10 +63,20 @@ export async function sendBirthdayEmail(
     }
 
     const firstName = props.clientName.split(' ')[0];
+    const fromName = options?.senderName || props.agencyName;
+    const subject = options?.emailSubject
+      ? options.emailSubject
+          .replace(/\{\{name\}\}/gi, firstName)
+          .replace(/\{\{coupon_code\}\}/gi, props.couponCode)
+          .replace(/\{\{discount\}\}/gi, String(props.discountPercent))
+          .replace(/\{\{valid_until\}\}/gi, props.validUntil)
+          .replace(/\{\{agency_name\}\}/gi, props.agencyName)
+      : `🎂 Feliz Aniversário, ${firstName}! Um presente especial para você`;
+
     const { data, error } = await resend.emails.send({
-      from: `${props.agencyName} <reservas@visitecrm.com.br>`,
+      from: `${fromName} <reservas@visitecrm.com.br>`,
       to: [props.clientEmail],
-      subject: `🎂 Feliz Aniversário, ${firstName}! Um presente especial para você`,
+      subject,
       react: React.createElement(BirthdayEmail, props),
     });
 

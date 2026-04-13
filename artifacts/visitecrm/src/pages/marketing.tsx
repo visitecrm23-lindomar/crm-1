@@ -643,6 +643,11 @@ export default function Marketing() {
                                       <Gift className="w-2.5 h-2.5 mr-0.5" /> {c.birthdayMessage.couponCode}
                                     </Badge>
                                   )}
+                                  {c.birthdayMessage.converted && (
+                                    <Badge className="text-[10px] py-0 px-1.5 bg-emerald-500 hover:bg-emerald-500">
+                                      <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" /> Convertido
+                                    </Badge>
+                                  )}
                                 </div>
                               ) : (
                                 <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-muted-foreground">
@@ -898,36 +903,39 @@ export default function Marketing() {
                         <Label className="text-sm font-medium">Mensagem WhatsApp personalizada</Label>
                         <Textarea
                           rows={4}
-                          placeholder={`Deixe em branco para usar a mensagem padrão.\n\nVariáveis disponíveis: {nome}, {cupom}, {desconto}, {validade}`}
+                          placeholder={`Deixe em branco para usar a mensagem padrão.\n\nVariáveis: {{name}}, {{coupon_code}}, {{discount}}, {{valid_until}}, {{agency_name}}`}
                           value={mergedSettings.whatsappMessage ?? ""}
                           onChange={(e) => handleSettingsChange("whatsappMessage", e.target.value || null)}
                           className="text-sm font-mono"
                         />
                         <p className="text-xs text-muted-foreground">
-                          Use: {"{nome}"} {"{cupom}"} {"{desconto}"} {"{validade}"}
+                          Variáveis: {"{{name}}"} {"{{coupon_code}}"} {"{{discount}}"} {"{{valid_until}}"} {"{{agency_name}}"}
                         </p>
                       </div>
 
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">Assunto do email</Label>
                         <Input
-                          placeholder="Ex: Feliz aniversário! Seu cupom especial te espera 🎂"
+                          placeholder="Ex: Feliz aniversário, {{name}}! Seu cupom especial te espera"
                           value={mergedSettings.emailSubject ?? ""}
                           onChange={(e) => handleSettingsChange("emailSubject", e.target.value || null)}
                         />
+                        <p className="text-xs text-muted-foreground">
+                          Variáveis: {"{{name}}"} {"{{coupon_code}}"} {"{{discount}}"} {"{{valid_until}}"} {"{{agency_name}}"}
+                        </p>
                       </div>
 
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">Mensagem do email personalizada</Label>
                         <Textarea
                           rows={4}
-                          placeholder={`Deixe em branco para usar a mensagem padrão.\n\nVariáveis disponíveis: {nome}, {cupom}, {desconto}, {validade}`}
+                          placeholder={`Deixe em branco para usar o template padrão.\n\nVariáveis: {{name}}, {{coupon_code}}, {{discount}}, {{valid_until}}, {{agency_name}}`}
                           value={mergedSettings.emailMessage ?? ""}
                           onChange={(e) => handleSettingsChange("emailMessage", e.target.value || null)}
                           className="text-sm font-mono"
                         />
                         <p className="text-xs text-muted-foreground">
-                          Use: {"{nome}"} {"{cupom}"} {"{desconto}"} {"{validade}"}
+                          Variáveis: {"{{name}}"} {"{{coupon_code}}"} {"{{discount}}"} {"{{valid_until}}"} {"{{agency_name}}"}
                         </p>
                       </div>
 
