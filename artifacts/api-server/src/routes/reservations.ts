@@ -662,7 +662,7 @@ router.post("/reservations", async (req, res): Promise<void> => {
           tripTitle: formatted.trip.name,
           destination: formatted.trip.destination,
           departureDate,
-          duration: "",
+          duration,
           seats: (reservation.seats ?? []) as string[],
           totalAmount: totalVal,
           amountPaid: paidVal,
