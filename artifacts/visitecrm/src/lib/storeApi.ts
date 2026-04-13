@@ -204,7 +204,7 @@ export const publicStoreApi = {
     publicReq<ReferralValidation>("GET", `/public/store/${slug}/referral/info?code=${encodeURIComponent(code)}`),
   trackReferral: (slug: string, data: {
     code: string;
-    cookieId?: string;
+    serverCookieId?: string;
     landingPage?: string;
     utmSource?: string;
     utmMedium?: string;
@@ -573,6 +573,7 @@ export interface CreateOrderInput {
   }>;
   couponCode?: string;
   referralCode?: string;
+  referralCookieId?: string;
   paymentMethod?: string;
   notes?: string;
 }

@@ -49,6 +49,7 @@ export const clientsTable = pgTable("clients", {
   createdById: text("created_by_id").notNull(),
   userId: text("user_id"),
   referralCode: text("referral_code"),
+  referralCodeGeneratedAt: timestamp("referral_code_generated_at", { withTimezone: true }),
   referredById: text("referred_by_id"),
   totalReferrals: integer("total_referrals").notNull().default(0),
   successfulReferrals: integer("successful_referrals").notNull().default(0),

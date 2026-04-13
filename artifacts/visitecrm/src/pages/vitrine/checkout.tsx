@@ -361,6 +361,9 @@ export default function VitrineCheckout({
         })),
         couponCode: couponResult?.valid ? form.couponCode : undefined,
         referralCode: referralResult?.valid && !couponResult?.valid ? form.referralCode : undefined,
+        referralCookieId: referralResult?.valid && !couponResult?.valid
+          ? (localStorage.getItem("referral_server_cookie_id") ?? undefined)
+          : undefined,
         paymentMethod: form.paymentMethod,
         notes: form.notes || undefined,
       });

@@ -703,6 +703,8 @@ export default function ReservationWizard({
           },
         ],
         couponCode: couponResult?.valid ? form.couponCode : undefined,
+        referralCode: referralApplied ? referralCode.trim().toUpperCase() : undefined,
+        referralCookieId: referralApplied ? (localStorage.getItem("referral_server_cookie_id") ?? undefined) : undefined,
         paymentMethod: form.paymentMethod,
         notes: extraNotes || undefined,
       });

@@ -231,6 +231,7 @@ async function runMigrations() {
       ALTER TABLE clients ADD COLUMN IF NOT EXISTS total_referrals integer NOT NULL DEFAULT 0;
       ALTER TABLE clients ADD COLUMN IF NOT EXISTS successful_referrals integer NOT NULL DEFAULT 0;
       ALTER TABLE clients ADD COLUMN IF NOT EXISTS referral_earnings numeric(10,2) NOT NULL DEFAULT 0;
+      ALTER TABLE clients ADD COLUMN IF NOT EXISTS referral_code_generated_at TIMESTAMPTZ;
     `);
     await client.query(`
       CREATE TABLE IF NOT EXISTS referral_tracking (

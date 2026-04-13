@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable } from "@workspace/db";
 import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
-import { generateId } from "../lib/id";
+import { generateId, generateReferralCode } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import {
   CreateClientBody,
@@ -512,16 +512,14 @@ router.post("/clients/:clientId/referral/generate", async (req, res): Promise<vo
       return;
     }
 
-    // Generate unique referral code: NOME2026 format (up to 4 letters from name + year)
-    const year = new Date().getFullYear();
-    const namePart = (client.name ?? "REF").replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 4);
-    let code = `${namePart}${year}`;
+    // Generate unique referral code using utility: NOME2026 format
+    let code = generateReferralCode(client.name ?? "REF");
+    const namePart = code.replace(/\d+$/, "");
 
-    // Ensure uniqueness per tenant - add suffix if collision
+    // Ensure uniqueness per tenant - add numeric suffix if collision
     let attempt = 0;
     while (attempt < 10) {
-      const suffix = attempt === 0 ? "" : String(attempt);
-      const candidate = `${namePart}${year}${suffix}`;
+      const candidate = attempt === 0 ? code : `${namePart}${new Date().getFullYear()}${attempt}`;
       const [existing] = await db.select({ id: clientsTable.id })
         .from(clientsTable)
         .where(and(
@@ -532,8 +530,9 @@ router.post("/clients/:clientId/referral/generate", async (req, res): Promise<vo
       attempt++;
     }
 
+    const generatedAt = new Date();
     await db.update(clientsTable)
-      .set({ referralCode: code })
+      .set({ referralCode: code, referralCodeGeneratedAt: generatedAt })
       .where(eq(clientsTable.id, client.id));
 
     res.json({ code });

@@ -10,15 +10,7 @@ interface Props {
   store: PublicStore;
 }
 
-const COOKIE_KEY = "referral_cookie_id";
-
-function getOrCreateCookieId(): string {
-  const stored = localStorage.getItem(COOKIE_KEY);
-  if (stored) return stored;
-  const id = crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36);
-  localStorage.setItem(COOKIE_KEY, id);
-  return id;
-}
+const SERVER_COOKIE_KEY = "referral_server_cookie_id";
 
 function getUrlParams() {
   const params = new URLSearchParams(window.location.search);
@@ -44,19 +36,22 @@ export default function ReferralLanding({ slug, store }: Props) {
 
   const trackVisit = useCallback(async (code: string) => {
     try {
-      const cookieId = getOrCreateCookieId();
-      await publicStoreApi.trackReferral(slug, {
+      // Send previously server-issued ID if we have one (for return visitors)
+      const existingServerCookieId = localStorage.getItem(SERVER_COOKIE_KEY) ?? undefined;
+      const result = await publicStoreApi.trackReferral(slug, {
         code,
-        cookieId,
+        serverCookieId: existingServerCookieId,
         landingPage: window.location.href,
         utmSource,
         utmMedium,
         utmCampaign,
       });
       setTracked(true);
-      // Persist the code in localStorage so checkout can auto-apply it
+      // Persist the code and the server-issued cookie ID in localStorage
       localStorage.setItem("referral_code", code);
-      localStorage.setItem("referral_cookie_id", cookieId);
+      if (result?.cookieId) {
+        localStorage.setItem(SERVER_COOKIE_KEY, result.cookieId);
+      }
     } catch {
       // Non-critical: tracking failure shouldn't block the page
     }

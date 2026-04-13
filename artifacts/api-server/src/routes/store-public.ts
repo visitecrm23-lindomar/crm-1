@@ -908,7 +908,7 @@ router.post("/public/store/:slug/referral/validate", async (req, res): Promise<v
       name: clientsTable.name,
       email: clientsTable.email,
       referralCode: clientsTable.referralCode,
-      createdAt: clientsTable.createdAt,
+      referralCodeGeneratedAt: clientsTable.referralCodeGeneratedAt,
     }).from(clientsTable)
       .where(and(
         eq(clientsTable.tenantId, store.tenantId),
@@ -935,12 +935,12 @@ router.post("/public/store/:slug/referral/validate", async (req, res): Promise<v
       return;
     }
 
-    // Enforce expiration: code is expired if referrer account is older than expirationDays
+    // Enforce expiration based on when the code was generated (not account age)
     const expirationDays = settings?.expirationDays ?? 30;
-    if (referrer.createdAt) {
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - expirationDays);
-      if (referrer.createdAt < cutoff) {
+    if (referrer.referralCodeGeneratedAt) {
+      const cutoff = new Date(referrer.referralCodeGeneratedAt);
+      cutoff.setDate(cutoff.getDate() + expirationDays);
+      if (new Date() > cutoff) {
         res.status(400).json({ valid: false, error: "Código de indicação expirado" });
         return;
       }
@@ -1030,7 +1030,7 @@ router.post("/public/store/:slug/referral/track", async (req, res): Promise<void
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
     const parsed = z.object({
       code: z.string().min(1),
-      cookieId: z.string().optional(),
+      serverCookieId: z.string().optional(),
       landingPage: z.string().optional(),
       utmSource: z.string().optional(),
       utmMedium: z.string().optional(),
@@ -1044,24 +1044,39 @@ router.post("/public/store/:slug/referral/track", async (req, res): Promise<void
     const ipAddress = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
       ?? req.socket?.remoteAddress ?? "";
 
-    // Generate or use provided cookie ID
-    const cookieId = parsed.data.cookieId || generateCookieId();
+    // Only accept server-issued cookie IDs (those that exist in DB for this tenant)
+    // Never trust client-provided IDs that don't match an existing record
+    let cookieId: string;
+    let existingRecord: { id: string; pagesVisited: unknown } | undefined;
 
-    // Try to update existing tracking record (scoped to tenant + cookieId)
-    const [existing] = await db.select({ id: referralTrackingTable.id, pagesVisited: referralTrackingTable.pagesVisited })
-      .from(referralTrackingTable)
-      .where(and(
-        eq(referralTrackingTable.tenantId, store.tenantId),
-        eq(referralTrackingTable.cookieId, cookieId),
-      )).limit(1);
+    if (parsed.data.serverCookieId) {
+      // Verify the provided ID is actually server-issued (exists in DB for this tenant)
+      const [found] = await db.select({ id: referralTrackingTable.id, pagesVisited: referralTrackingTable.pagesVisited })
+        .from(referralTrackingTable)
+        .where(and(
+          eq(referralTrackingTable.tenantId, store.tenantId),
+          eq(referralTrackingTable.cookieId, parsed.data.serverCookieId),
+        )).limit(1);
+      if (found) {
+        // Recognized server-issued ID — update existing record
+        cookieId = parsed.data.serverCookieId;
+        existingRecord = found;
+      } else {
+        // Unrecognized — ignore and issue a new one
+        cookieId = generateCookieId();
+      }
+    } else {
+      // First visit — always generate server-side
+      cookieId = generateCookieId();
+    }
 
-    if (existing) {
-      const pages = Array.isArray(existing.pagesVisited) ? existing.pagesVisited : [];
+    if (existingRecord) {
+      const pages = Array.isArray(existingRecord.pagesVisited) ? existingRecord.pagesVisited as string[] : [];
       if (parsed.data.landingPage) pages.push(parsed.data.landingPage);
       await db.update(referralTrackingTable).set({
         lastVisit: new Date(),
         visitsCount: sql`visits_count + 1`,
-        pagesVisited: pages as string[],
+        pagesVisited: pages,
         updatedAt: new Date(),
       }).where(and(
         eq(referralTrackingTable.tenantId, store.tenantId),
@@ -1087,7 +1102,7 @@ router.post("/public/store/:slug/referral/track", async (req, res): Promise<void
       });
     }
 
-    // Set server-generated cookie ID in response header for client persistence
+    // Always return the server-issued cookie ID in header for client persistence
     res.setHeader("X-Referral-Cookie-Id", cookieId);
 
     res.json({ cookieId, tracked: true });
