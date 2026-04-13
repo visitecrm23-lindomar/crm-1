@@ -633,37 +633,37 @@ function ClientDashboard() {
         <KpiCard title="Saldo de Indicação" value={formatCurrency(me?.referralBalance ?? 0)} sub="Indique amigos e ganhe" icon={DollarSign} loading={isLoading} color="text-green-600" />
       </div>
 
-      {nextTrip && (
-        myReservation && myReservation.reservationNumber ? (
-          <Card className="overflow-hidden">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2">
-                Sua Próxima Viagem
-                {daysToTrip != null && daysToTrip > 0 && (
-                  <Badge variant="outline">Faltam {daysToTrip} dias</Badge>
-                )}
-                {daysToTrip === 0 && <Badge className="bg-green-600">Hoje!</Badge>}
-              </CardTitle>
-              <CardDescription>{nextTrip.name} · {nextTrip.destination}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ReservationCardVisual
-                reservation={myReservation}
-                clientName={me?.name ?? myReservation.client.name}
-                agencyName={me?.tenant?.name ?? "Agência"}
-                agencyLogo={me?.tenant?.logoUrl}
-                departureDate={format(parseISO(nextTrip.departureDate), "dd/MM/yyyy")}
-                onViewVoucher={() => { setVoucherReservation(myReservation); setVoucherAutoDownload(false); setVoucherOpen(true); }}
-                onDownloadPdf={() => { setVoucherReservation(myReservation); setVoucherAutoDownload(true); setVoucherOpen(true); }}
-              />
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>Sua Próxima Viagem</CardTitle>
-            </CardHeader>
-            <CardContent>
+      {nextTrip && myReservation && myReservation.reservationNumber ? (
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2">
+              Sua Próxima Viagem
+              {daysToTrip != null && daysToTrip > 0 && (
+                <Badge variant="outline">Faltam {daysToTrip} dias</Badge>
+              )}
+              {daysToTrip === 0 && <Badge className="bg-green-600">Hoje!</Badge>}
+            </CardTitle>
+            <CardDescription>{nextTrip.name} · {nextTrip.destination}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ReservationCardVisual
+              reservation={myReservation}
+              clientName={me?.name ?? myReservation.client.name}
+              agencyName={me?.tenant?.name ?? "Agência"}
+              agencyLogo={me?.tenant?.logoUrl}
+              departureDate={format(parseISO(nextTrip.departureDate), "dd/MM/yyyy")}
+              onViewVoucher={() => { setVoucherReservation(myReservation); setVoucherAutoDownload(false); setVoucherOpen(true); }}
+              onDownloadPdf={() => { setVoucherReservation(myReservation); setVoucherAutoDownload(true); setVoucherOpen(true); }}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Sua Próxima Viagem</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {nextTrip ? (
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-bold">{nextTrip.name}</h3>
@@ -684,9 +684,11 @@ function ClientDashboard() {
                   </div>
                 )}
               </div>
-            </CardContent>
-          </Card>
-        )
+            ) : (
+              <p className="text-muted-foreground text-sm">Nenhuma viagem agendada no momento.</p>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       <VoucherModal reservation={voucherReservation} open={voucherOpen} onClose={() => { setVoucherOpen(false); setVoucherAutoDownload(false); }} autoDownload={voucherAutoDownload} />
