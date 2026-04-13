@@ -356,7 +356,7 @@ export function ProductQuickView({
                 navigate(`/loja/${storeSlug}/produtos/${product.slug}`);
                 onClose();
               }}
-              className="hidden sm:flex items-center gap-1"
+              className="flex items-center gap-1"
             >
               <ExternalLink className="w-3.5 h-3.5" />
               Ver Detalhes

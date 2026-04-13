@@ -76,11 +76,21 @@ function ProductCard({
     window.open(`https://wa.me/${wa}?text=${text}`, "_blank");
   }
 
+  function handleCardClick() {
+    if (onQuickView) {
+      onQuickView(product);
+    } else {
+      navigate(`/loja/${slug}/produtos/${product.slug}`);
+    }
+  }
+
   return (
-    <div className="bg-white rounded-xl border shadow-sm overflow-hidden hover:shadow-md transition-shadow group">
+    <div
+      className="bg-white rounded-xl border shadow-sm overflow-hidden hover:shadow-md transition-shadow group cursor-pointer"
+      onClick={handleCardClick}
+    >
       <div
-        className="relative h-44 cursor-pointer overflow-hidden bg-gradient-to-br from-blue-200 to-blue-400"
-        onClick={() => onQuickView ? onQuickView(product) : navigate(`/loja/${slug}/produtos/${product.slug}`)}
+        className="relative h-44 overflow-hidden bg-gradient-to-br from-blue-200 to-blue-400"
       >
         {product.images?.[0] ? (
           <img
@@ -122,8 +132,7 @@ function ProductCard({
       </div>
       <div className="p-3">
         <h3
-          className="font-semibold text-sm mb-1 line-clamp-2 cursor-pointer hover:underline"
-          onClick={() => onQuickView ? onQuickView(product) : navigate(`/loja/${slug}/produtos/${product.slug}`)}
+          className="font-semibold text-sm mb-1 line-clamp-2 hover:underline"
         >
           {product.name}
         </h3>
@@ -193,7 +202,7 @@ function ProductCard({
                 size="icon"
                 variant="outline"
                 className="h-8 w-8 text-green-600 border-green-300 hover:bg-green-50"
-                onClick={handleWhatsApp}
+                onClick={(e) => { e.stopPropagation(); handleWhatsApp(); }}
                 title="Perguntar via WhatsApp"
               >
                 <MessageCircle className="w-3 h-3" />
@@ -201,7 +210,7 @@ function ProductCard({
             )}
             <Button
               size="sm"
-              onClick={handleAdd}
+              onClick={(e) => { e.stopPropagation(); handleAdd(); }}
               disabled={isOutOfStock}
               style={!isOutOfStock ? { backgroundColor: primaryColor } : undefined}
               className={`h-8 px-3 ${isOutOfStock ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "text-white"}`}

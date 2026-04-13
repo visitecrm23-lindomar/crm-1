@@ -187,225 +187,223 @@ export default function VitrineProduct({
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        <div>
-          <div className="relative rounded-xl overflow-hidden bg-muted aspect-video">
-            {product.images[imgIndex] ? (
-              <img
-                src={product.images[imgIndex]}
-                alt={product.name}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <MapPin className="w-20 h-20 text-muted-foreground/20" />
-              </div>
-            )}
-            {product.images.length > 1 && (
-              <>
-                <button
-                  onClick={() => setImgIndex((i) => Math.max(0, i - 1))}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60"
-                >
-                  <PrevIcon className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() =>
-                    setImgIndex((i) => Math.min(product.images.length - 1, i + 1))
-                  }
-                  className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60"
-                >
-                  <NextIcon className="w-4 h-4" />
-                </button>
-              </>
-            )}
+      {/* Full-width hero carousel */}
+      <div className="relative rounded-xl overflow-hidden bg-muted h-80 mb-6">
+        {product.images[imgIndex] ? (
+          <img
+            src={product.images[imgIndex]}
+            alt={product.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <MapPin className="w-20 h-20 text-muted-foreground/20" />
           </div>
-          {product.images.length > 1 && (
-            <div className="flex gap-2 mt-2 overflow-x-auto">
-              {product.images.map((img, i) => (
+        )}
+        {product.images.length > 1 && (
+          <>
+            <button
+              onClick={() => setImgIndex((i) => Math.max(0, i - 1))}
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors"
+            >
+              <PrevIcon className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setImgIndex((i) => Math.min(product.images.length - 1, i + 1))}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors"
+            >
+              <NextIcon className="w-5 h-5" />
+            </button>
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+              {product.images.map((_, i) => (
                 <button
                   key={i}
                   onClick={() => setImgIndex(i)}
-                  className={`w-16 h-16 rounded border-2 overflow-hidden shrink-0 ${
-                    i === imgIndex ? "border-primary" : "border-transparent"
-                  }`}
-                >
-                  <img src={img} alt="" className="w-full h-full object-cover" />
-                </button>
+                  className={`rounded-full transition-all ${i === imgIndex ? "w-5 h-2 bg-white" : "w-2 h-2 bg-white/60 hover:bg-white/80"}`}
+                />
               ))}
             </div>
-          )}
-        </div>
-
-        <div>
-          <div className="flex items-start gap-2 mb-2">
-            <Badge variant="outline">
-              {product.type === "package"
-                ? "Pacote"
-                : product.type === "service"
-                ? "Serviço"
-                : "Produto"}
-            </Badge>
-            {product.isFeatured && (
-              <Badge style={{ backgroundColor: store.accentColor }} className="text-white">
-                ★ Destaque
-              </Badge>
-            )}
-          </div>
-
-          <h1 className="text-3xl font-bold mb-3">{product.name}</h1>
-
-          {product.shortDescription && (
-            <p className="text-muted-foreground mb-4">{product.shortDescription}</p>
-          )}
-
-          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-4">
-            {product.destination && (
-              <div className="flex items-center gap-1">
-                <MapPin className="w-4 h-4" />
-                {product.destination}
-              </div>
-            )}
-            {product.durationDays && (
-              <div className="flex items-center gap-1">
-                <Clock className="w-4 h-4" />
-                {product.durationDays} dia(s)
-              </div>
-            )}
-            {product.startDate && (
-              <div className="flex items-center gap-1">
-                <Calendar className="w-4 h-4" />
-                Saída:{" "}
-                {new Date(product.startDate.length <= 10 ? product.startDate + "T12:00:00" : product.startDate).toLocaleDateString("pt-BR", {
-                  day: "2-digit",
-                  month: "long",
-                  year: "numeric",
-                })}
-              </div>
-            )}
-            {product.endDate && (
-              <div className="flex items-center gap-1">
-                <Calendar className="w-4 h-4" />
-                Volta:{" "}
-                {new Date(product.endDate.length <= 10 ? product.endDate + "T12:00:00" : product.endDate).toLocaleDateString("pt-BR", {
-                  day: "2-digit",
-                  month: "long",
-                  year: "numeric",
-                })}
-              </div>
-            )}
-          </div>
-
-          {product.trackInventory && product.stockQuantity != null && product.stockQuantity <= 10 && product.stockQuantity > 0 && (
-            <p className="text-sm text-orange-500 font-medium mb-3">
-              ⚡ Apenas {product.stockQuantity} vagas disponíveis!
-            </p>
-          )}
-          {product.trackInventory && product.stockQuantity != null && product.stockQuantity <= 0 && (
-            <p className="text-sm text-red-500 font-medium mb-3">
-              Esgotado
-            </p>
-          )}
-
-          {product.variants.length > 0 && (
-            <div className="mb-4">
-              {product.variants.map((v) => (
-                <div key={v.name} className="mb-3">
-                  <p className="font-medium text-sm mb-2">{v.name}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {v.options.map((opt) => (
-                      <button
-                        key={opt.label}
-                        onClick={() =>
-                          setSelectedVariant({
-                            variantName: v.name,
-                            label: opt.label,
-                            price: opt.price,
-                          })
-                        }
-                        className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
-                          selectedVariant?.label === opt.label
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border hover:bg-muted"
-                        }`}
-                      >
-                        {opt.label}
-                        {opt.price !== basePrice && (
-                          <span className="ml-1 text-xs">
-                            (R$ {opt.price.toFixed(2)})
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="flex items-center gap-3 mb-6">
-            {product.salePrice && (
-              <span className="text-lg text-muted-foreground line-through">
-                R$ {parseFloat(product.price).toFixed(2)}
-              </span>
-            )}
-            <span
-              className="text-4xl font-bold"
-              style={{ color: store.primaryColor }}
-            >
-              R$ {effectivePrice.toFixed(2)}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3 mb-3">
-            <div className="flex items-center border rounded-lg">
-              <button
-                onClick={() => setQty((q) => Math.max(1, q - 1))}
-                className="px-3 py-2 hover:bg-muted"
-              >
-                −
-              </button>
-              <span className="px-4 py-2 font-medium">{qty}</span>
-              <button
-                onClick={() => setQty((q) => q + 1)}
-                className="px-3 py-2 hover:bg-muted"
-              >
-                +
-              </button>
-            </div>
-            <Button
-              className="flex-1 h-11 text-white font-semibold"
-              style={{ backgroundColor: store.primaryColor }}
-              onClick={handleAddToCart}
-              disabled={product.trackInventory && product.stockQuantity != null && product.stockQuantity <= 0}
-            >
-              <ShoppingCart className="w-5 h-5 mr-2" />
-              Adicionar ao Carrinho
-            </Button>
-          </div>
-
-          {store.contactWhatsapp && (
-            <Button
-              variant="outline"
-              className="w-full h-11 font-semibold border-green-500 text-green-600 hover:bg-green-50 mb-4"
-              onClick={handleWhatsApp}
-            >
-              <MessageCircle className="w-5 h-5 mr-2" />
-              Comprar pelo WhatsApp
-            </Button>
-          )}
-
-          {product.reviews.length > 0 && (
-            <div className="flex items-center gap-2 text-sm">
-              <StarRating rating={Math.round(avgRating)} />
-              <span className="font-medium">{avgRating.toFixed(1)}</span>
-              <span className="text-muted-foreground">
-                ({product.reviews.length} avaliação(ões))
-              </span>
-            </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
+
+      {/* Thumbnails */}
+      {product.images.length > 1 && (
+        <div className="flex gap-2 mb-6 overflow-x-auto">
+          {product.images.map((img, i) => (
+            <button
+              key={i}
+              onClick={() => setImgIndex(i)}
+              className={`w-16 h-16 rounded-lg border-2 overflow-hidden shrink-0 transition-colors ${
+                i === imgIndex ? "border-primary" : "border-transparent hover:border-muted-foreground/30"
+              }`}
+            >
+              <img src={img} alt="" className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Hero info */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Badge variant="outline">
+            {product.type === "package" ? "Pacote" : product.type === "service" ? "Serviço" : product.type === "tour" ? "Passeio" : product.type === "excursion" ? "Excursão" : "Produto"}
+          </Badge>
+          {product.isFeatured && (
+            <Badge style={{ backgroundColor: "#FBBF24", color: "#78350F" }}>
+              ★ Destaque
+            </Badge>
+          )}
+        </div>
+
+        <h1 className="text-3xl font-bold mb-2">{product.name}</h1>
+
+        {product.destination && (
+          <p className="text-muted-foreground flex items-center gap-1.5 mb-3">
+            <MapPin className="w-4 h-4 shrink-0" />
+            {product.destination}
+          </p>
+        )}
+
+        {product.shortDescription && (
+          <p className="text-muted-foreground leading-relaxed">{product.shortDescription}</p>
+        )}
+      </div>
+
+      {/* Info grid */}
+      {(product.startDate || product.departureDate || product.durationDays || product.endDate || (product.trackInventory && product.stockQuantity != null)) && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          {(product.departureDate ?? product.startDate) && (
+            <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl">
+              <Calendar className="w-5 h-5 text-blue-600 shrink-0" />
+              <div>
+                <p className="text-[11px] text-muted-foreground">Saída</p>
+                <p className="text-xs font-semibold">
+                  {new Date(
+                    ((product.departureDate ?? product.startDate) as string).length <= 10
+                      ? ((product.departureDate ?? product.startDate) as string) + "T12:00:00"
+                      : (product.departureDate ?? product.startDate) as string
+                  ).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
+                </p>
+              </div>
+            </div>
+          )}
+          {product.endDate && (
+            <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl">
+              <Calendar className="w-5 h-5 text-blue-600 shrink-0" />
+              <div>
+                <p className="text-[11px] text-muted-foreground">Volta</p>
+                <p className="text-xs font-semibold">
+                  {new Date(
+                    product.endDate.length <= 10 ? product.endDate + "T12:00:00" : product.endDate
+                  ).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
+                </p>
+              </div>
+            </div>
+          )}
+          {product.durationDays && (
+            <div className="flex items-center gap-2 p-3 bg-purple-50 rounded-xl">
+              <Clock className="w-5 h-5 text-purple-600 shrink-0" />
+              <div>
+                <p className="text-[11px] text-muted-foreground">Duração</p>
+                <p className="text-xs font-semibold">
+                  {product.durationDays} dia{product.durationDays > 1 ? "s" : ""}
+                  {product.durationNights ? ` / ${product.durationNights}n` : ""}
+                </p>
+              </div>
+            </div>
+          )}
+          {product.trackInventory && product.stockQuantity != null && (
+            <div className={`flex items-center gap-2 p-3 rounded-xl ${product.stockQuantity <= 0 ? "bg-red-50" : product.stockQuantity <= 10 ? "bg-orange-50" : "bg-green-50"}`}>
+              <span className={`text-lg shrink-0 ${product.stockQuantity <= 0 ? "text-red-600" : product.stockQuantity <= 10 ? "text-orange-600" : "text-green-600"}`}>👥</span>
+              <div>
+                <p className="text-[11px] text-muted-foreground">Vagas</p>
+                <p className={`text-xs font-semibold ${product.stockQuantity <= 0 ? "text-red-600" : product.stockQuantity <= 10 ? "text-orange-600" : ""}`}>
+                  {product.stockQuantity <= 0 ? "Esgotado" : `${product.stockQuantity} disponíveis`}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Variants */}
+      {product.variants.length > 0 && (
+        <div className="mb-5 p-4 border rounded-xl bg-muted/30">
+          {product.variants.map((v) => (
+            <div key={v.name} className="mb-3 last:mb-0">
+              <p className="font-medium text-sm mb-2">{v.name}</p>
+              <div className="flex flex-wrap gap-2">
+                {v.options.map((opt) => (
+                  <button
+                    key={opt.label}
+                    onClick={() => setSelectedVariant({ variantName: v.name, label: opt.label, price: opt.price })}
+                    className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                      selectedVariant?.label === opt.label
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border hover:bg-muted"
+                    }`}
+                  >
+                    {opt.label}
+                    {opt.price !== basePrice && <span className="ml-1 text-xs">(R$ {opt.price.toFixed(2)})</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Price */}
+      <div className="flex items-center gap-3 mb-5">
+        {product.salePrice && (
+          <span className="text-lg text-muted-foreground line-through">
+            R$ {parseFloat(product.price).toFixed(2)}
+          </span>
+        )}
+        <span className="text-4xl font-bold" style={{ color: store.primaryColor }}>
+          R$ {effectivePrice.toFixed(2)}
+        </span>
+        <span className="text-sm text-muted-foreground self-end mb-1">/ pessoa</span>
+      </div>
+
+      {/* In-page cart controls */}
+      <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-center border rounded-lg">
+          <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="px-3 py-2 hover:bg-muted">−</button>
+          <span className="px-4 py-2 font-medium">{qty}</span>
+          <button onClick={() => setQty((q) => q + 1)} className="px-3 py-2 hover:bg-muted">+</button>
+        </div>
+        <Button
+          className="flex-1 h-11 text-white font-semibold"
+          style={{ backgroundColor: store.primaryColor }}
+          onClick={handleAddToCart}
+          disabled={product.trackInventory && product.stockQuantity != null && product.stockQuantity <= 0}
+        >
+          <ShoppingCart className="w-5 h-5 mr-2" />
+          Adicionar ao Carrinho
+        </Button>
+      </div>
+
+      {store.contactWhatsapp && (
+        <Button
+          variant="outline"
+          className="w-full h-11 font-semibold border-green-500 text-green-600 hover:bg-green-50 mb-4"
+          onClick={handleWhatsApp}
+        >
+          <MessageCircle className="w-5 h-5 mr-2" />
+          Comprar pelo WhatsApp
+        </Button>
+      )}
+
+      {product.reviews.length > 0 && (
+        <div className="flex items-center gap-2 text-sm mb-4">
+          <StarRating rating={Math.round(avgRating)} />
+          <span className="font-medium">{avgRating.toFixed(1)}</span>
+          <span className="text-muted-foreground">({product.reviews.length} avaliação(ões))</span>
+        </div>
+      )}
 
       {(product.includes.length > 0 || product.excludes.length > 0) && (
         <div className="mt-10">
