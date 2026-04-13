@@ -3520,45 +3520,123 @@ export const UpdateCommissionResponse = zod.object({
 });
 
 /**
- * @summary List referrals
+ * @summary Get public referral info by code
  */
-export const ListReferralsResponseItem = zod.object({
-  id: zod.string(),
-  tenantId: zod.string(),
-  referrerId: zod.string(),
-  referredId: zod.string().nullish(),
-  referredEmail: zod.string().nullish(),
-  referredName: zod.string().nullish(),
-  referredPhone: zod.string().nullish(),
-  referrerName: zod.string().nullish(),
-  referrerEmail: zod.string().nullish(),
-  referrerPhone: zod.string().nullish(),
-  code: zod.string(),
-  status: zod.string(),
-  bonusAmount: zod.string(),
-  bonusPaid: zod.boolean(),
-  bonusPaidAt: zod.string().nullish(),
-  discountType: zod.string(),
-  discountValue: zod.string(),
-  discountApplied: zod.boolean(),
-  discountAmount: zod.string().nullish(),
-  cookieId: zod.string().nullish(),
-  ipAddress: zod.string().nullish(),
-  utmSource: zod.string().nullish(),
-  utmMedium: zod.string().nullish(),
-  utmCampaign: zod.string().nullish(),
-  visitsCount: zod.number(),
-  firstVisit: zod.string().nullish(),
-  lastVisit: zod.string().nullish(),
-  expiresAt: zod.string().nullish(),
-  isActive: zod.boolean(),
-  reservationId: zod.string().nullish(),
-  notes: zod.string().nullish(),
-  convertedAt: zod.string().nullish(),
-  createdAt: zod.string(),
-  updatedAt: zod.string(),
+export const GetPublicReferralInfoParams = zod.object({
+  slug: zod.coerce.string(),
 });
-export const ListReferralsResponse = zod.array(ListReferralsResponseItem);
+
+export const GetPublicReferralInfoQueryParams = zod.object({
+  code: zod.coerce.string(),
+});
+
+export const GetPublicReferralInfoResponse = zod.object({
+  code: zod.string(),
+  referrerName: zod.string(),
+  discountPercent: zod.number(),
+  discountType: zod.string(),
+});
+
+/**
+ * @summary Validate a referral code at checkout
+ */
+export const ValidatePublicReferralCodeParams = zod.object({
+  slug: zod.coerce.string(),
+});
+
+export const ValidatePublicReferralCodeBody = zod.object({
+  code: zod.string(),
+});
+
+export const ValidatePublicReferralCodeResponse = zod.object({
+  valid: zod.boolean(),
+  code: zod.string().optional(),
+  referrerName: zod.string().optional(),
+  discountPercent: zod.number().optional(),
+  discountType: zod.string().optional(),
+  description: zod.string().optional(),
+});
+
+/**
+ * @summary Track a referral landing page visit
+ */
+export const TrackPublicReferralVisitParams = zod.object({
+  slug: zod.coerce.string(),
+});
+
+export const TrackPublicReferralVisitBody = zod.object({
+  code: zod.string(),
+  cookieId: zod.string().optional(),
+  landingPage: zod.string().optional(),
+  utmSource: zod.string().optional(),
+  utmMedium: zod.string().optional(),
+  utmCampaign: zod.string().optional(),
+});
+
+export const TrackPublicReferralVisitResponse = zod.object({
+  cookieId: zod.string(),
+  tracked: zod.boolean(),
+});
+
+/**
+ * @summary List referrals with pagination and filters
+ */
+export const listReferralsQueryPageDefault = 1;
+export const listReferralsQueryLimitDefault = 20;
+
+export const ListReferralsQueryParams = zod.object({
+  page: zod.coerce.number().default(listReferralsQueryPageDefault),
+  limit: zod.coerce.number().default(listReferralsQueryLimitDefault),
+  status: zod.coerce.string().optional(),
+  search: zod.coerce.string().optional(),
+});
+
+export const ListReferralsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string(),
+      tenantId: zod.string(),
+      referrerId: zod.string(),
+      referredId: zod.string().nullish(),
+      referredEmail: zod.string().nullish(),
+      referredName: zod.string().nullish(),
+      referredPhone: zod.string().nullish(),
+      referrerName: zod.string().nullish(),
+      referrerEmail: zod.string().nullish(),
+      referrerPhone: zod.string().nullish(),
+      code: zod.string(),
+      status: zod.string(),
+      bonusAmount: zod.string(),
+      bonusPaid: zod.boolean(),
+      bonusPaidAt: zod.string().nullish(),
+      discountType: zod.string(),
+      discountValue: zod.string(),
+      discountApplied: zod.boolean(),
+      discountAmount: zod.string().nullish(),
+      cookieId: zod.string().nullish(),
+      ipAddress: zod.string().nullish(),
+      utmSource: zod.string().nullish(),
+      utmMedium: zod.string().nullish(),
+      utmCampaign: zod.string().nullish(),
+      visitsCount: zod.number(),
+      firstVisit: zod.string().nullish(),
+      lastVisit: zod.string().nullish(),
+      expiresAt: zod.string().nullish(),
+      isActive: zod.boolean(),
+      reservationId: zod.string().nullish(),
+      notes: zod.string().nullish(),
+      convertedAt: zod.string().nullish(),
+      createdAt: zod.string(),
+      updatedAt: zod.string(),
+    }),
+  ),
+  pagination: zod.object({
+    page: zod.number(),
+    limit: zod.number(),
+    total: zod.number(),
+    totalPages: zod.number(),
+  }),
+});
 
 /**
  * @summary Create a referral

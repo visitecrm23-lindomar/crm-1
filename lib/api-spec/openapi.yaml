@@ -3042,21 +3042,186 @@ paths:
               schema:
                 $ref: "#/components/schemas/Commission"
 
+  # ─── PUBLIC REFERRAL ROUTES (no auth) ───────────────────────────
+  /public/store/{slug}/referral/info:
+    get:
+      operationId: getPublicReferralInfo
+      summary: Get public referral info by code
+      tags: [PublicStore]
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Referral info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  referrerName:
+                    type: string
+                  discountPercent:
+                    type: number
+                  discountType:
+                    type: string
+                required: [code, referrerName, discountPercent, discountType]
+        "404":
+          description: Referral not found
+
+  /public/store/{slug}/referral/validate:
+    post:
+      operationId: validatePublicReferralCode
+      summary: Validate a referral code at checkout
+      tags: [PublicStore]
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+              required: [code]
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  code:
+                    type: string
+                  referrerName:
+                    type: string
+                  discountPercent:
+                    type: number
+                  discountType:
+                    type: string
+                  description:
+                    type: string
+                required: [valid]
+        "400":
+          description: Invalid code
+
+  /public/store/{slug}/referral/track:
+    post:
+      operationId: trackPublicReferralVisit
+      summary: Track a referral landing page visit
+      tags: [PublicStore]
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+                cookieId:
+                  type: string
+                landingPage:
+                  type: string
+                utmSource:
+                  type: string
+                utmMedium:
+                  type: string
+                utmCampaign:
+                  type: string
+              required: [code]
+      responses:
+        "200":
+          description: Tracked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cookieId:
+                    type: string
+                  tracked:
+                    type: boolean
+                required: [cookieId, tracked]
+
   # ─── REFERRALS ──────────────────────────────────────────────────
   /referrals:
     get:
       operationId: listReferrals
-      summary: List referrals
+      summary: List referrals with pagination and filters
       tags: [Referrals]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
       responses:
         "200":
-          description: List of referrals
+          description: Paginated list of referrals
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Referral"
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Referral"
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      total:
+                        type: integer
+                      totalPages:
+                        type: integer
+                    required: [page, limit, total, totalPages]
+                required: [data, pagination]
     post:
       operationId: createReferral
       summary: Create a referral

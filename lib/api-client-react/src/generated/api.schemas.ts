@@ -2686,3 +2686,60 @@ export type SendNpsSurveyBody = {
 export type SendNpsSurvey200 = {
   links: NpsSendLink[];
 };
+
+export type GetPublicReferralInfoParams = {
+  code: string;
+};
+
+export type GetPublicReferralInfo200 = {
+  code: string;
+  referrerName: string;
+  discountPercent: number;
+  discountType: string;
+};
+
+export type ValidatePublicReferralCodeBody = {
+  code: string;
+};
+
+export type ValidatePublicReferralCode200 = {
+  valid: boolean;
+  code?: string;
+  referrerName?: string;
+  discountPercent?: number;
+  discountType?: string;
+  description?: string;
+};
+
+export type TrackPublicReferralVisitBody = {
+  code: string;
+  cookieId?: string;
+  landingPage?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+};
+
+export type TrackPublicReferralVisit200 = {
+  cookieId: string;
+  tracked: boolean;
+};
+
+export type ListReferralsParams = {
+  page?: number;
+  limit?: number;
+  status?: string;
+  search?: string;
+};
+
+export type ListReferrals200Pagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+export type ListReferrals200 = {
+  data: Referral[];
+  pagination: ListReferrals200Pagination;
+};

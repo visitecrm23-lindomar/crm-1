@@ -493,31 +493,36 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
       }
     }
     // Referral code gives discount (only if no coupon discount already applied)
-    let appliedReferralId: string | undefined;
     let appliedReferralReferrerId: string | undefined;
     let appliedReferralDiscountValue = 5;
     if (data.referralCode && !couponId) {
-      const [referral] = await db.select({
-        id: referralsTable.id,
-        code: referralsTable.code,
-        referrerId: referralsTable.referrerId,
-        isActive: referralsTable.isActive,
-        expiresAt: referralsTable.expiresAt,
-        discountType: referralsTable.discountType,
-        discountValue: referralsTable.discountValue,
-      }).from(referralsTable)
+      const upperCode = data.referralCode.toUpperCase();
+      // Look up by client's permanent referral code
+      const [referrer] = await db.select({
+        id: clientsTable.id,
+        name: clientsTable.name,
+      }).from(clientsTable)
         .where(and(
-          eq(referralsTable.tenantId, store.tenantId),
-          eq(referralsTable.code, data.referralCode.toUpperCase()),
-          eq(referralsTable.status, "pending"),
+          eq(clientsTable.tenantId, store.tenantId),
+          eq(clientsTable.referralCode, upperCode),
         )).limit(1);
-      if (referral && referral.isActive && !(referral.expiresAt && new Date() > referral.expiresAt)) {
-        const discPct = referral.discountType === "percentage" ? Number(referral.discountValue) : 5;
-        discountAmount = subtotal * (discPct / 100);
-        appliedReferralCode = referral.code;
-        appliedReferralId = referral.id;
-        appliedReferralReferrerId = referral.referrerId;
-        appliedReferralDiscountValue = discPct;
+
+      if (referrer) {
+        // Get discount % from referral settings
+        const [refSettings] = await db.select({
+          discountValue: referralSettingsTable.discountValue,
+          discountType: referralSettingsTable.discountType,
+          isActive: referralSettingsTable.isActive,
+        }).from(referralSettingsTable)
+          .where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
+
+        if (!refSettings || refSettings.isActive !== false) {
+          const discPct = refSettings?.discountType === "percentage" ? Number(refSettings.discountValue) : 5;
+          discountAmount = subtotal * (discPct / 100);
+          appliedReferralCode = upperCode;
+          appliedReferralReferrerId = referrer.id;
+          appliedReferralDiscountValue = discPct;
+        }
       }
     }
 
@@ -682,6 +687,8 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
               qrCode: `QR-${voucherCode}`,
               storeOrderId: orderNumber,
               createdById: reservationCreatedById,
+              discountReferralCode: appliedReferralCode ?? undefined,
+              discountReferralAmount: appliedReferralCode ? discountAmount.toFixed(2) : undefined,
             });
             // Decrement trip available_seats and increment reserved_seats
             await tx.update(tripsTable).set({
@@ -698,41 +705,39 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
             .where(eq(storeCouponsTable.id, couponId));
         }
 
-        // Mark referral as converted, update client stats, update reservation referral fields
-        if (appliedReferralCode && appliedReferralId) {
+        // Record referral conversion: insert a new completed referral record
+        if (appliedReferralCode && appliedReferralReferrerId) {
           const discountAmountForReferral = discountAmount;
-          // Get referral settings for bonus amount
+          // Get bonus amount from referral settings
           const [refSettings] = await tx.select({ bonusValue: referralSettingsTable.bonusValue, bonusType: referralSettingsTable.bonusType })
             .from(referralSettingsTable).where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
           const bonusValue = refSettings ? Number(refSettings.bonusValue) : 10;
 
-          await tx.update(referralsTable)
-            .set({
-              status: "completed",
-              convertedAt: new Date(),
-              referredId: reservationClientId,
-              referredEmail: data.customerEmail,
-              referredName: data.customerName,
-              discountApplied: true,
-              discountAmount: discountAmountForReferral.toFixed(2),
-              bonusAmount: bonusValue.toFixed(2),
-              updatedAt: new Date(),
-            })
-            .where(and(
-              eq(referralsTable.tenantId, store.tenantId),
-              eq(referralsTable.code, appliedReferralCode),
-              eq(referralsTable.status, "pending"),
-            ));
+          // Insert a new completed referral record for this conversion
+          await tx.insert(referralsTable).values({
+            id: generateId(),
+            tenantId: store.tenantId,
+            referrerId: appliedReferralReferrerId,
+            code: appliedReferralCode,
+            status: "completed",
+            referredId: reservationClientId,
+            referredEmail: data.customerEmail,
+            referredName: data.customerName,
+            discountApplied: true,
+            discountValue: (appliedReferralDiscountValue).toFixed(2),
+            discountType: "percentage",
+            discountAmount: discountAmountForReferral.toFixed(2),
+            bonusAmount: bonusValue.toFixed(2),
+            convertedAt: new Date(),
+          });
 
           // Update referrer client stats
-          if (appliedReferralReferrerId) {
-            await tx.update(clientsTable)
-              .set({
-                successfulReferrals: sql`COALESCE(successful_referrals, 0) + 1`,
-                referralEarnings: sql`COALESCE(referral_earnings, 0) + ${bonusValue.toFixed(2)}`,
-              })
-              .where(eq(clientsTable.id, appliedReferralReferrerId));
-          }
+          await tx.update(clientsTable)
+            .set({
+              successfulReferrals: sql`COALESCE(successful_referrals, 0) + 1`,
+              referralEarnings: sql`COALESCE(referral_earnings, 0) + ${bonusValue.toFixed(2)}`,
+            })
+            .where(eq(clientsTable.id, appliedReferralReferrerId));
 
           // Mark referral_tracking as converted if we have a cookie
           await tx.update(referralTrackingTable)
@@ -857,52 +862,48 @@ router.post("/public/store/:slug/referral/validate", async (req, res): Promise<v
     const parsed = z.object({ code: z.string().min(1) }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const code = parsed.data.code.toUpperCase();
-    const [referral] = await db.select({
-      id: referralsTable.id,
-      code: referralsTable.code,
-      referrerId: referralsTable.referrerId,
-      referrerName: referralsTable.referrerName,
-      status: referralsTable.status,
-      isActive: referralsTable.isActive,
-      expiresAt: referralsTable.expiresAt,
-      discountValue: referralsTable.discountValue,
-      discountType: referralsTable.discountType,
-    }).from(referralsTable)
+
+    // Look up by client's permanent referral code
+    const [referrer] = await db.select({
+      id: clientsTable.id,
+      name: clientsTable.name,
+      referralCode: clientsTable.referralCode,
+    }).from(clientsTable)
       .where(and(
-        eq(referralsTable.tenantId, store.tenantId),
-        eq(referralsTable.code, code),
-        eq(referralsTable.status, "pending"),
+        eq(clientsTable.tenantId, store.tenantId),
+        eq(clientsTable.referralCode, code),
       )).limit(1);
-    if (!referral) {
-      res.status(400).json({ valid: false, error: "Código de indicação inválido ou já utilizado" });
+
+    if (!referrer) {
+      res.status(400).json({ valid: false, error: "Código de indicação inválido" });
       return;
     }
-    if (!referral.isActive) {
-      res.status(400).json({ valid: false, error: "Código de indicação inativo" });
+
+    // Get discount % from referral settings
+    const [settings] = await db.select({
+      discountValue: referralSettingsTable.discountValue,
+      discountType: referralSettingsTable.discountType,
+      isActive: referralSettingsTable.isActive,
+      expiryDays: referralSettingsTable.expiryDays,
+    }).from(referralSettingsTable)
+      .where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
+
+    if (settings && !settings.isActive) {
+      res.status(400).json({ valid: false, error: "Programa de indicação inativo" });
       return;
     }
-    if (referral.expiresAt && new Date() > referral.expiresAt) {
-      await db.update(referralsTable).set({ status: "expired", isActive: false })
-        .where(eq(referralsTable.id, referral.id));
-      res.status(400).json({ valid: false, error: "Código de indicação expirado" });
-      return;
-    }
-    // Get referrer name from clients if not stored on referral
-    let referrerName = referral.referrerName;
-    if (!referrerName) {
-      const [client] = await db.select({ name: clientsTable.name })
-        .from(clientsTable).where(eq(clientsTable.id, referral.referrerId)).limit(1);
-      referrerName = client?.name ?? "um amigo";
-    }
-    const discountPercent = referral.discountType === "percentage"
-      ? Number(referral.discountValue)
+
+    const discountPercent = settings?.discountType === "percentage"
+      ? Number(settings.discountValue)
       : 5;
+
+    const referrerName = referrer.name ?? "um amigo";
     res.json({
       valid: true,
-      code: referral.code,
+      code,
       referrerName,
       discountPercent,
-      discountType: referral.discountType,
+      discountType: settings?.discountType ?? "percentage",
       description: `Desconto de ${discountPercent}% por indicação de ${referrerName}`,
     });
   } catch (err) {
@@ -917,39 +918,44 @@ router.get("/public/store/:slug/referral/info", async (req, res): Promise<void> 
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
     const code = (req.query.code as string | undefined)?.toUpperCase();
     if (!code) { res.status(400).json({ error: "code is required" }); return; }
-    const [referral] = await db.select({
-      id: referralsTable.id,
-      code: referralsTable.code,
-      referrerId: referralsTable.referrerId,
-      referrerName: referralsTable.referrerName,
-      isActive: referralsTable.isActive,
-      expiresAt: referralsTable.expiresAt,
-      discountValue: referralsTable.discountValue,
-      discountType: referralsTable.discountType,
-    }).from(referralsTable)
+
+    // Look up by client's permanent referral code
+    const [referrer] = await db.select({
+      id: clientsTable.id,
+      name: clientsTable.name,
+    }).from(clientsTable)
       .where(and(
-        eq(referralsTable.tenantId, store.tenantId),
-        eq(referralsTable.code, code),
-        eq(referralsTable.status, "pending"),
+        eq(clientsTable.tenantId, store.tenantId),
+        eq(clientsTable.referralCode, code),
       )).limit(1);
-    if (!referral || !referral.isActive) {
+
+    if (!referrer) {
       res.status(404).json({ error: "Referral not found" });
       return;
     }
-    let referrerName = referral.referrerName;
-    if (!referrerName) {
-      const [client] = await db.select({ name: clientsTable.name })
-        .from(clientsTable).where(eq(clientsTable.id, referral.referrerId)).limit(1);
-      referrerName = client?.name ?? "um amigo";
+
+    // Get discount % from referral settings
+    const [settings] = await db.select({
+      discountValue: referralSettingsTable.discountValue,
+      discountType: referralSettingsTable.discountType,
+      isActive: referralSettingsTable.isActive,
+    }).from(referralSettingsTable)
+      .where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
+
+    if (settings && !settings.isActive) {
+      res.status(404).json({ error: "Referral program is inactive" });
+      return;
     }
-    const discountPercent = referral.discountType === "percentage"
-      ? Number(referral.discountValue)
+
+    const discountPercent = settings?.discountType === "percentage"
+      ? Number(settings.discountValue)
       : 5;
+
     res.json({
-      code: referral.code,
-      referrerName,
+      code,
+      referrerName: referrer.name ?? "um amigo",
       discountPercent,
-      discountType: referral.discountType,
+      discountType: settings?.discountType ?? "percentage",
     });
   } catch (err) {
     req.log.error({ err }, "Error getting referral info");
@@ -1013,23 +1019,13 @@ router.post("/public/store/:slug/referral/track", async (req, res): Promise<void
       });
     }
 
-    // Update the referral record with tracking info (first visit)
-    await db.update(referralsTable).set({
-      cookieId,
-      ipAddress,
-      userAgent,
-      landingPage: parsed.data.landingPage,
-      utmSource: parsed.data.utmSource,
-      utmMedium: parsed.data.utmMedium,
-      utmCampaign: parsed.data.utmCampaign,
-      firstVisit: sql`COALESCE(first_visit, now())`,
-      lastVisit: new Date(),
-      visitsCount: sql`visits_count + 1`,
-      updatedAt: new Date(),
-    }).where(and(
-      eq(referralsTable.tenantId, store.tenantId),
-      eq(referralsTable.code, code),
-    ));
+    // Increment visit count on the referrer client
+    await db.update(clientsTable)
+      .set({ totalReferrals: sql`COALESCE(total_referrals, 0) + 1` })
+      .where(and(
+        eq(clientsTable.tenantId, store.tenantId),
+        eq(clientsTable.referralCode, code),
+      ));
 
     res.json({ cookieId, tracked: true });
   } catch (err) {

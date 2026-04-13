@@ -71,7 +71,8 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function Indicacoes() {
   const { toast } = useToast();
-  const { data: referrals = [], refetch } = useListReferrals();
+  const { data: referralsResponse, refetch } = useListReferrals();
+  const referrals = (referralsResponse as { data?: Referral[] } | undefined)?.data ?? (Array.isArray(referralsResponse) ? referralsResponse as Referral[] : []);
   const { data: stats } = useGetReferralStats();
   const { data: settings, refetch: refetchSettings } = useGetReferralSettings();
   const updateReferral = useUpdateReferral();

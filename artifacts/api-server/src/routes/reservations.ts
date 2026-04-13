@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, dealsTable, pipelineStagesTable } from "@workspace/db";
+import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, referralSettingsTable, dealsTable, pipelineStagesTable } from "@workspace/db";
 import { eq, and, sql, desc, asc, inArray, or, ilike } from "drizzle-orm";
 import { generateId, generateVoucherCode } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -388,19 +388,32 @@ router.post("/reservations", async (req, res): Promise<void> => {
 
     let serverReferralCode: string | null = null;
     let serverReferralAmount = 0;
+    let serverReferralReferrerId: string | null = null;
 
     if (parsed.data.discountReferralCode) {
-      const [referral] = await db.select().from(referralsTable)
+      const upperCode = parsed.data.discountReferralCode.toUpperCase();
+      // Look up referrer by permanent client referral code
+      const [referrer] = await db.select({ id: clientsTable.id, name: clientsTable.name })
+        .from(clientsTable)
         .where(and(
-          eq(referralsTable.tenantId, me.tenantId),
-          eq(referralsTable.code, parsed.data.discountReferralCode),
-          eq(referralsTable.status, "pending"),
+          eq(clientsTable.tenantId, me.tenantId),
+          eq(clientsTable.referralCode, upperCode),
         )).limit(1);
-      if (!referral) {
-        res.status(400).json({ error: "Código de indicação inválido ou já utilizado" }); return;
+      if (!referrer) {
+        res.status(400).json({ error: "Código de indicação inválido" }); return;
       }
-      serverReferralCode = referral.code;
-      serverReferralAmount = Number(referral.bonusAmount ?? "0");
+      // Get discount/bonus from referral settings
+      const [refSettings] = await db.select({
+        bonusValue: referralSettingsTable.bonusValue,
+        isActive: referralSettingsTable.isActive,
+      }).from(referralSettingsTable)
+        .where(eq(referralSettingsTable.tenantId, me.tenantId)).limit(1);
+      if (refSettings && refSettings.isActive === false) {
+        res.status(400).json({ error: "Programa de indicação inativo" }); return;
+      }
+      serverReferralCode = upperCode;
+      serverReferralReferrerId = referrer.id;
+      serverReferralAmount = Number(refSettings?.bonusValue ?? "10");
     }
 
     // Apply discounts in priority order against running remaining balance
@@ -529,21 +542,29 @@ router.post("/reservations", async (req, res): Promise<void> => {
         });
       }
 
-      if (serverReferralCode && appliedReferralAmount > 0) {
-        const referralLock = await tx.execute(
-          sql`SELECT id, status FROM referrals WHERE tenant_id = ${me.tenantId} AND code = ${serverReferralCode} AND status = 'pending' FOR UPDATE`
-        );
-        const referralRow = (referralLock as unknown as { rows: Array<{ id: string; status: string }> }).rows[0];
-        if (!referralRow) {
-          return { error: "Código de indicação já foi utilizado por outro processo", status: 400 };
-        }
-        const referralResult = await tx.execute(
-          sql`UPDATE referrals SET status = 'converted', converted_at = NOW() WHERE tenant_id = ${me.tenantId} AND code = ${serverReferralCode} AND status = 'pending'`
-        );
-        const referralAffected = (referralResult as unknown as { rowCount: number }).rowCount ?? 0;
-        if (referralAffected === 0) {
-          return { error: "Código de indicação já foi utilizado", status: 400 };
-        }
+      if (serverReferralCode && serverReferralReferrerId && appliedReferralAmount > 0) {
+        // Insert a new completed referral record for this CRM reservation conversion
+        await tx.insert(referralsTable).values({
+          id: generateId(),
+          tenantId: me.tenantId,
+          referrerId: serverReferralReferrerId,
+          code: serverReferralCode,
+          status: "completed",
+          referredId: parsed.data.clientId,
+          discountApplied: true,
+          discountType: "fixed",
+          discountValue: appliedReferralAmount.toFixed(2),
+          discountAmount: appliedReferralAmount.toFixed(2),
+          bonusAmount: appliedReferralAmount.toFixed(2),
+          convertedAt: new Date(),
+        });
+        // Update referrer client stats
+        await tx.update(clientsTable)
+          .set({
+            successfulReferrals: sql`COALESCE(successful_referrals, 0) + 1`,
+            referralEarnings: sql`COALESCE(referral_earnings, 0) + ${appliedReferralAmount.toFixed(2)}`,
+          })
+          .where(eq(clientsTable.id, serverReferralReferrerId));
       }
 
       return { ok: true };

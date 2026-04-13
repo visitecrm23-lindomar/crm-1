@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable } from "@workspace/db";
+import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable } from "@workspace/db";
 import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -512,27 +512,29 @@ router.post("/clients/:clientId/referral/generate", async (req, res): Promise<vo
       return;
     }
 
-    // Generate unique referral code from first letters of name + random
+    // Generate unique referral code: NOME2026 format (up to 4 letters from name + year)
+    const year = new Date().getFullYear();
     const namePart = (client.name ?? "REF").replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 4);
-    const randPart = Math.random().toString(36).toUpperCase().slice(2, 6);
-    const code = `${namePart}${randPart}`;
+    let code = `${namePart}${year}`;
+
+    // Ensure uniqueness per tenant - add suffix if collision
+    let attempt = 0;
+    while (attempt < 10) {
+      const suffix = attempt === 0 ? "" : String(attempt);
+      const candidate = `${namePart}${year}${suffix}`;
+      const [existing] = await db.select({ id: clientsTable.id })
+        .from(clientsTable)
+        .where(and(
+          eq(clientsTable.tenantId, me.tenantId),
+          eq(clientsTable.referralCode, candidate),
+        )).limit(1);
+      if (!existing) { code = candidate; break; }
+      attempt++;
+    }
 
     await db.update(clientsTable)
       .set({ referralCode: code })
       .where(eq(clientsTable.id, client.id));
-
-    // Create a pending referral record for this code
-    const referralId = generateId();
-    await db.insert(referralsTable).values({
-      id: referralId,
-      tenantId: me.tenantId,
-      referrerId: client.id,
-      referrerName: client.name ?? undefined,
-      referrerEmail: client.email ?? undefined,
-      referrerPhone: client.whatsapp ?? undefined,
-      code,
-      status: "pending",
-    });
 
     res.json({ code });
   } catch (err) {

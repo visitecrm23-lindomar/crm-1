@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, referralsTable, clientsTable, referralSettingsTable, referralTrackingTable } from "@workspace/db";
-import { eq, and, desc, sql, count } from "drizzle-orm";
+import { eq, and, desc, sql, count, ilike, or } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
@@ -101,10 +101,38 @@ router.get("/referrals", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+
+    const page = Math.max(1, parseInt((req.query.page as string) ?? "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt((req.query.limit as string) ?? "20", 10)));
+    const offset = (page - 1) * limit;
+    const status = req.query.status as string | undefined;
+    const search = req.query.search as string | undefined;
+
+    const conditions = [eq(referralsTable.tenantId, me.tenantId)];
+    if (status) conditions.push(eq(referralsTable.status, status));
+    if (search) {
+      conditions.push(or(
+        ilike(referralsTable.code, `%${search}%`),
+        ilike(referralsTable.referrerName, `%${search}%`),
+        ilike(referralsTable.referredEmail, `%${search}%`),
+        ilike(referralsTable.referredName, `%${search}%`),
+      )!);
+    }
+
+    const [totalRow] = await db.select({ total: count() }).from(referralsTable)
+      .where(and(...conditions));
+    const total = Number(totalRow?.total ?? 0);
+
     const referrals = await db.select().from(referralsTable)
-      .where(eq(referralsTable.tenantId, me.tenantId))
-      .orderBy(desc(referralsTable.createdAt));
-    res.json(referrals);
+      .where(and(...conditions))
+      .orderBy(desc(referralsTable.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    res.json({
+      data: referrals,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
   } catch (err) {
     req.log.error({ err }, "Error listing referrals");
     res.status(500).json({ error: "Internal server error" });

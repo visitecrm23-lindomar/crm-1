@@ -89,6 +89,8 @@ import type {
   FinancialSummary,
   GenerateClientReferralCode200,
   GetDashboardRevenueChartParams,
+  GetPublicReferralInfo200,
+  GetPublicReferralInfoParams,
   HealthStatus,
   Invoice,
   InvoiceWithTenant,
@@ -103,6 +105,8 @@ import type {
   ListOrdersParams,
   ListPaymentsParams,
   ListProductsParams,
+  ListReferrals200,
+  ListReferralsParams,
   ListReservationsParams,
   ListTripsParams,
   LoyaltyMember,
@@ -147,6 +151,8 @@ import type {
   Tenant,
   TenantDetails,
   TenantWithCount,
+  TrackPublicReferralVisit200,
+  TrackPublicReferralVisitBody,
   Trip,
   TripListResponse,
   TripSummary,
@@ -181,6 +187,8 @@ import type {
   UpsertSystemConfigBody,
   UserProfile,
   ValidateCouponBody,
+  ValidatePublicReferralCode200,
+  ValidatePublicReferralCodeBody,
   Vehicle,
 } from "./api.schemas";
 
@@ -12350,43 +12358,361 @@ export const useUpdateCommission = <
 };
 
 /**
- * @summary List referrals
+ * @summary Get public referral info by code
  */
-export const getListReferralsUrl = () => {
-  return `/api/referrals`;
+export const getGetPublicReferralInfoUrl = (
+  slug: string,
+  params: GetPublicReferralInfoParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/public/store/${slug}/referral/info?${stringifiedParams}`
+    : `/api/public/store/${slug}/referral/info`;
+};
+
+export const getPublicReferralInfo = async (
+  slug: string,
+  params: GetPublicReferralInfoParams,
+  options?: RequestInit,
+): Promise<GetPublicReferralInfo200> => {
+  return customFetch<GetPublicReferralInfo200>(
+    getGetPublicReferralInfoUrl(slug, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetPublicReferralInfoQueryKey = (
+  slug: string,
+  params?: GetPublicReferralInfoParams,
+) => {
+  return [
+    `/api/public/store/${slug}/referral/info`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetPublicReferralInfoQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPublicReferralInfo>>,
+  TError = ErrorType<void>,
+>(
+  slug: string,
+  params: GetPublicReferralInfoParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPublicReferralInfo>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetPublicReferralInfoQueryKey(slug, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getPublicReferralInfo>>
+  > = ({ signal }) =>
+    getPublicReferralInfo(slug, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!slug,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPublicReferralInfo>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPublicReferralInfoQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPublicReferralInfo>>
+>;
+export type GetPublicReferralInfoQueryError = ErrorType<void>;
+
+/**
+ * @summary Get public referral info by code
+ */
+
+export function useGetPublicReferralInfo<
+  TData = Awaited<ReturnType<typeof getPublicReferralInfo>>,
+  TError = ErrorType<void>,
+>(
+  slug: string,
+  params: GetPublicReferralInfoParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPublicReferralInfo>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPublicReferralInfoQueryOptions(
+    slug,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Validate a referral code at checkout
+ */
+export const getValidatePublicReferralCodeUrl = (slug: string) => {
+  return `/api/public/store/${slug}/referral/validate`;
+};
+
+export const validatePublicReferralCode = async (
+  slug: string,
+  validatePublicReferralCodeBody: ValidatePublicReferralCodeBody,
+  options?: RequestInit,
+): Promise<ValidatePublicReferralCode200> => {
+  return customFetch<ValidatePublicReferralCode200>(
+    getValidatePublicReferralCodeUrl(slug),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(validatePublicReferralCodeBody),
+    },
+  );
+};
+
+export const getValidatePublicReferralCodeMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof validatePublicReferralCode>>,
+    TError,
+    { slug: string; data: BodyType<ValidatePublicReferralCodeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof validatePublicReferralCode>>,
+  TError,
+  { slug: string; data: BodyType<ValidatePublicReferralCodeBody> },
+  TContext
+> => {
+  const mutationKey = ["validatePublicReferralCode"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof validatePublicReferralCode>>,
+    { slug: string; data: BodyType<ValidatePublicReferralCodeBody> }
+  > = (props) => {
+    const { slug, data } = props ?? {};
+
+    return validatePublicReferralCode(slug, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ValidatePublicReferralCodeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof validatePublicReferralCode>>
+>;
+export type ValidatePublicReferralCodeMutationBody =
+  BodyType<ValidatePublicReferralCodeBody>;
+export type ValidatePublicReferralCodeMutationError = ErrorType<void>;
+
+/**
+ * @summary Validate a referral code at checkout
+ */
+export const useValidatePublicReferralCode = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof validatePublicReferralCode>>,
+    TError,
+    { slug: string; data: BodyType<ValidatePublicReferralCodeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof validatePublicReferralCode>>,
+  TError,
+  { slug: string; data: BodyType<ValidatePublicReferralCodeBody> },
+  TContext
+> => {
+  return useMutation(getValidatePublicReferralCodeMutationOptions(options));
+};
+
+/**
+ * @summary Track a referral landing page visit
+ */
+export const getTrackPublicReferralVisitUrl = (slug: string) => {
+  return `/api/public/store/${slug}/referral/track`;
+};
+
+export const trackPublicReferralVisit = async (
+  slug: string,
+  trackPublicReferralVisitBody: TrackPublicReferralVisitBody,
+  options?: RequestInit,
+): Promise<TrackPublicReferralVisit200> => {
+  return customFetch<TrackPublicReferralVisit200>(
+    getTrackPublicReferralVisitUrl(slug),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(trackPublicReferralVisitBody),
+    },
+  );
+};
+
+export const getTrackPublicReferralVisitMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof trackPublicReferralVisit>>,
+    TError,
+    { slug: string; data: BodyType<TrackPublicReferralVisitBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof trackPublicReferralVisit>>,
+  TError,
+  { slug: string; data: BodyType<TrackPublicReferralVisitBody> },
+  TContext
+> => {
+  const mutationKey = ["trackPublicReferralVisit"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof trackPublicReferralVisit>>,
+    { slug: string; data: BodyType<TrackPublicReferralVisitBody> }
+  > = (props) => {
+    const { slug, data } = props ?? {};
+
+    return trackPublicReferralVisit(slug, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TrackPublicReferralVisitMutationResult = NonNullable<
+  Awaited<ReturnType<typeof trackPublicReferralVisit>>
+>;
+export type TrackPublicReferralVisitMutationBody =
+  BodyType<TrackPublicReferralVisitBody>;
+export type TrackPublicReferralVisitMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Track a referral landing page visit
+ */
+export const useTrackPublicReferralVisit = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof trackPublicReferralVisit>>,
+    TError,
+    { slug: string; data: BodyType<TrackPublicReferralVisitBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof trackPublicReferralVisit>>,
+  TError,
+  { slug: string; data: BodyType<TrackPublicReferralVisitBody> },
+  TContext
+> => {
+  return useMutation(getTrackPublicReferralVisitMutationOptions(options));
+};
+
+/**
+ * @summary List referrals with pagination and filters
+ */
+export const getListReferralsUrl = (params?: ListReferralsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/referrals?${stringifiedParams}`
+    : `/api/referrals`;
 };
 
 export const listReferrals = async (
+  params?: ListReferralsParams,
   options?: RequestInit,
-): Promise<Referral[]> => {
-  return customFetch<Referral[]>(getListReferralsUrl(), {
+): Promise<ListReferrals200> => {
+  return customFetch<ListReferrals200>(getListReferralsUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getListReferralsQueryKey = () => {
-  return [`/api/referrals`] as const;
+export const getListReferralsQueryKey = (params?: ListReferralsParams) => {
+  return [`/api/referrals`, ...(params ? [params] : [])] as const;
 };
 
 export const getListReferralsQueryOptions = <
   TData = Awaited<ReturnType<typeof listReferrals>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listReferrals>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: ListReferralsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listReferrals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListReferralsQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getListReferralsQueryKey(params);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof listReferrals>>> = ({
     signal,
-  }) => listReferrals({ signal, ...requestOptions });
+  }) => listReferrals(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listReferrals>>,
@@ -12401,21 +12727,24 @@ export type ListReferralsQueryResult = NonNullable<
 export type ListReferralsQueryError = ErrorType<unknown>;
 
 /**
- * @summary List referrals
+ * @summary List referrals with pagination and filters
  */
 
 export function useListReferrals<
   TData = Awaited<ReturnType<typeof listReferrals>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listReferrals>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListReferralsQueryOptions(options);
+>(
+  params?: ListReferralsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listReferrals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListReferralsQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
