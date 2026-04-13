@@ -12,8 +12,7 @@ export interface CreateClientBody {
   whatsapp: string;
   /** @nullable */
   phone?: string | null;
-  /** @nullable */
-  cpf?: string | null;
+  cpf: string;
   /** @nullable */
   rg?: string | null;
   /** @nullable */

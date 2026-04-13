@@ -35,6 +35,34 @@ function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function cleanCPF(cpf: string): string {
+  return cpf.replace(/\D/g, "");
+}
+
+function maskCPF(value: string): string {
+  const digits = cleanCPF(value).slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+}
+
+function isValidCPF(cpf: string): boolean {
+  const c = cleanCPF(cpf);
+  if (c.length !== 11) return false;
+  if (/^(\d)\1{10}$/.test(c)) return false;
+  let sum = 0;
+  for (let i = 1; i <= 9; i++) sum += parseInt(c[i - 1]) * (11 - i);
+  let rem = (sum * 10) % 11;
+  if (rem === 10 || rem === 11) rem = 0;
+  if (rem !== parseInt(c[9])) return false;
+  sum = 0;
+  for (let i = 1; i <= 10; i++) sum += parseInt(c[i - 1]) * (12 - i);
+  rem = (sum * 10) % 11;
+  if (rem === 10 || rem === 11) rem = 0;
+  return rem === parseInt(c[10]);
+}
+
 function downloadCsv(rows: string[][], filename: string) {
   const content = rows.map(r => r.map(cell => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
   const blob = new Blob(["\uFEFF" + content], { type: "text/csv;charset=utf-8;" });
@@ -117,9 +145,12 @@ function CsvImportModal({ open, onClose, onImported }: CsvImportModalProps) {
         const r = rows[i];
         const get = (h: string) => { const idx = colIdx(h); return idx >= 0 ? (r[idx] ?? "").trim() : ""; };
         const name = get("nome"); const email = get("email"); const whatsapp = get("whatsapp") || get("celular") || get("tel");
+        const rawCpf = get("cpf");
+        const cpfDigits = cleanCPF(rawCpf);
         if (!name || !email || !whatsapp) { errs.push(`Linha ${i + 2}: nome, e-mail e WhatsApp são obrigatórios`); setProgress(Math.round(((i + 1) / rows.length) * 100)); continue; }
+        if (!cpfDigits || !isValidCPF(cpfDigits)) { errs.push(`Linha ${i + 2}: ${name} — CPF inválido ou ausente`); setProgress(Math.round(((i + 1) / rows.length) * 100)); continue; }
         try {
-          await createClient.mutateAsync({ data: { name, email, whatsapp, phone: get("telefone") || undefined, cpf: get("cpf") || undefined, addressCity: get("cidade") || undefined, addressState: get("estado") || undefined, observations: get("observacoes") || undefined } });
+          await createClient.mutateAsync({ data: { name, email, whatsapp, phone: get("telefone") || undefined, cpf: cpfDigits, addressCity: get("cidade") || undefined, addressState: get("estado") || undefined, observations: get("observacoes") || undefined } });
         } catch { errs.push(`Linha ${i + 2}: ${name} — erro ao criar`); }
         setProgress(Math.round(((i + 1) / rows.length) * 100));
       }
@@ -137,7 +168,7 @@ function CsvImportModal({ open, onClose, onImported }: CsvImportModalProps) {
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Importar Clientes via CSV</DialogTitle>
-          <DialogDescription>O arquivo deve ter cabeçalhos: Nome, Email, WhatsApp (obrigatórios) + Telefone, CPF, Cidade, Estado, Instagram, Observacoes.</DialogDescription>
+          <DialogDescription>O arquivo deve ter cabeçalhos: Nome, Email, WhatsApp, CPF (obrigatórios) + Telefone, Cidade, Estado, Instagram, Observacoes.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/20 transition-colors" onClick={() => inputRef.current?.click()}>
@@ -351,9 +382,19 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
       toast({ title: "Nome e WhatsApp são obrigatórios", variant: "destructive" });
       return;
     }
+    if (!isEditing) {
+      if (!form.cpf) {
+        toast({ title: "CPF é obrigatório", variant: "destructive" });
+        return;
+      }
+      if (!isValidCPF(form.cpf)) {
+        toast({ title: "CPF inválido", description: "Verifique o número e tente novamente.", variant: "destructive" });
+        return;
+      }
+    }
     const base = {
       name: form.name, email: form.email, whatsapp: form.whatsapp,
-      phone: form.phone || undefined, cpf: form.cpf || undefined,
+      phone: form.phone || undefined, cpf: form.cpf ? cleanCPF(form.cpf) : undefined,
       rg: form.rg || undefined,
       birthDate: form.birthDate ? new Date(form.birthDate).toISOString() : undefined,
       gender: form.gender !== "none" ? form.gender : undefined,
@@ -386,8 +427,11 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
         });
         savedId = editClient.id;
       } else {
-        const result = await createClient.mutateAsync({ data: base });
+        const result = await createClient.mutateAsync({ data: { ...base, cpf: cleanCPF(form.cpf) } });
         savedId = result.id;
+        if (result.isNew === false) {
+          toast({ title: "Cliente já cadastrado", description: "Os dados do cadastro existente foram atualizados com sucesso." });
+        }
         if (savedId) {
           const hasTrip = form.tripId !== "none";
           const commission = parseFloat(form.commission) || 0;
@@ -478,8 +522,16 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
                 <Input placeholder="+55 31 99999-9999" value={form.whatsapp} onChange={e => set("whatsapp")(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label>CPF</Label>
-                <Input placeholder="000.000.000-00" value={form.cpf} onChange={e => set("cpf")(e.target.value)} />
+                <Label>CPF {!isEditing && <span className="text-destructive">*</span>}</Label>
+                <Input
+                  placeholder="000.000.000-00"
+                  value={form.cpf}
+                  onChange={e => set("cpf")(maskCPF(e.target.value))}
+                  className={form.cpf && !isValidCPF(form.cpf) ? "border-destructive" : ""}
+                />
+                {form.cpf && !isValidCPF(form.cpf) && (
+                  <p className="text-xs text-destructive mt-1">CPF inválido</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>E-mail</Label>

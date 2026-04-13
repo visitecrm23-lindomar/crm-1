@@ -625,6 +625,7 @@ export const ListClientsResponse = zod.object({
       foodPreferences: zod.string().nullish(),
       internalRating: zod.number().nullish(),
       companyNps: zod.number().nullish(),
+      isNew: zod.boolean().nullish(),
     }),
   ),
   total: zod.number(),
@@ -640,7 +641,7 @@ export const CreateClientBody = zod.object({
   email: zod.string(),
   whatsapp: zod.string(),
   phone: zod.string().nullish(),
-  cpf: zod.string().nullish(),
+  cpf: zod.string(),
   rg: zod.string().nullish(),
   birthDate: zod.string().nullish(),
   gender: zod.string().nullish(),
@@ -705,6 +706,7 @@ export const GetClientResponse = zod.object({
   foodPreferences: zod.string().nullish(),
   internalRating: zod.number().nullish(),
   companyNps: zod.number().nullish(),
+  isNew: zod.boolean().nullish(),
 });
 
 /**
@@ -782,6 +784,7 @@ export const UpdateClientResponse = zod.object({
   foodPreferences: zod.string().nullish(),
   internalRating: zod.number().nullish(),
   companyNps: zod.number().nullish(),
+  isNew: zod.boolean().nullish(),
 });
 
 /**
@@ -859,6 +862,7 @@ export const UpdateClientPipelineStageResponse = zod.object({
   foodPreferences: zod.string().nullish(),
   internalRating: zod.number().nullish(),
   companyNps: zod.number().nullish(),
+  isNew: zod.boolean().nullish(),
 });
 
 /**

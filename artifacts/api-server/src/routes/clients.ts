@@ -4,6 +4,7 @@ import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTa
 import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
 import { generateId, generateReferralCode } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
+import { validateCPF, cleanCPF } from "../lib/cpf";
 import {
   CreateClientBody,
   UpdateClientBody,
@@ -13,7 +14,7 @@ import {
 
 const router = Router();
 
-function formatClient(c: typeof clientsTable.$inferSelect) {
+function formatClient(c: typeof clientsTable.$inferSelect, extra?: { isNew?: boolean }) {
   return {
     id: c.id,
     name: c.name,
@@ -49,6 +50,7 @@ function formatClient(c: typeof clientsTable.$inferSelect) {
     foodPreferences: c.foodPreferences ?? null,
     internalRating: c.internalRating ?? null,
     companyNps: c.companyNps ?? null,
+    isNew: extra?.isNew ?? null,
   };
 }
 
@@ -88,10 +90,12 @@ router.get("/clients", async (req, res): Promise<void> => {
     }
 
     if (search) {
+      const searchClean = cleanCPF(search);
       conditions.push(or(
         ilike(clientsTable.name, `%${search}%`),
         ilike(clientsTable.email, `%${search}%`),
         ilike(clientsTable.whatsapp, `%${search}%`),
+        searchClean.length >= 3 ? ilike(clientsTable.cpf, `%${searchClean}%`) : undefined,
       ) as ReturnType<typeof eq>);
     }
     if (status) conditions.push(eq(clientsTable.status, status));
@@ -164,15 +168,19 @@ router.post("/clients", async (req, res): Promise<void> => {
     const parsed = CreateClientBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-    const id = generateId();
-    await db.insert(clientsTable).values({
-      id,
-      tenantId: me.tenantId,
+    let cleanedCpf: string;
+    try {
+      cleanedCpf = validateCPF(parsed.data.cpf);
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "CPF inválido" });
+      return;
+    }
+
+    const sharedFields = {
       name: parsed.data.name,
       email: parsed.data.email,
       whatsapp: parsed.data.whatsapp,
       phone: parsed.data.phone ?? null,
-      cpf: parsed.data.cpf ?? null,
       rg: parsed.data.rg ?? null,
       birthDate: parsed.data.birthDate ? new Date(parsed.data.birthDate) : null,
       gender: parsed.data.gender ?? null,
@@ -192,6 +200,26 @@ router.post("/clients", async (req, res): Promise<void> => {
       foodPreferences: parsed.data.foodPreferences ?? null,
       internalRating: parsed.data.internalRating ?? null,
       companyNps: parsed.data.companyNps ?? null,
+    };
+
+    const [existing] = await db.select().from(clientsTable)
+      .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.cpf, cleanedCpf)))
+      .limit(1);
+
+    if (existing) {
+      const [updated] = await db.update(clientsTable)
+        .set({ ...sharedFields, updatedAt: new Date() })
+        .where(eq(clientsTable.id, existing.id))
+        .returning();
+      return void res.status(200).json(formatClient(updated, { isNew: false }));
+    }
+
+    const id = generateId();
+    await db.insert(clientsTable).values({
+      id,
+      tenantId: me.tenantId,
+      cpf: cleanedCpf,
+      ...sharedFields,
       createdById: me.id,
     });
 
@@ -199,7 +227,7 @@ router.post("/clients", async (req, res): Promise<void> => {
       .where(and(eq(clientsTable.id, id), eq(clientsTable.tenantId, me.tenantId)))
       .limit(1);
     if (!client) { res.status(500).json({ error: "Failed to create client" }); return; }
-    res.status(201).json(formatClient(client));
+    res.status(201).json(formatClient(client, { isNew: true }));
   } catch (err) {
     req.log.error({ err }, "Error creating client");
     res.status(500).json({ error: "Internal server error" });

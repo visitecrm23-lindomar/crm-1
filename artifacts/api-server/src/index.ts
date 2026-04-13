@@ -392,6 +392,12 @@ async function runMigrations() {
     `);
 
     await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS clients_tenant_cpf_unique
+        ON clients (tenant_id, cpf)
+        WHERE cpf IS NOT NULL;
+    `);
+
+    await client.query(`
       ALTER TABLE birthday_messages ADD COLUMN IF NOT EXISTS email_opened boolean NOT NULL DEFAULT false;
       ALTER TABLE birthday_messages ADD COLUMN IF NOT EXISTS email_opened_at TIMESTAMPTZ;
     `);

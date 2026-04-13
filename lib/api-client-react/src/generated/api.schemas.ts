@@ -118,6 +118,8 @@ export interface Client {
   internalRating?: number | null;
   /** @nullable */
   companyNps?: number | null;
+  /** @nullable */
+  isNew?: boolean | null;
 }
 
 export interface ClientListResponse {
@@ -133,8 +135,7 @@ export interface CreateClientBody {
   whatsapp: string;
   /** @nullable */
   phone?: string | null;
-  /** @nullable */
-  cpf?: string | null;
+  cpf: string;
   /** @nullable */
   rg?: string | null;
   /** @nullable */

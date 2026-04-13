@@ -4306,6 +4306,8 @@ components:
           type: ["integer", "null"]
         companyNps:
           type: ["integer", "null"]
+        isNew:
+          type: ["boolean", "null"]
       required:
         - id
         - name
@@ -4348,7 +4350,7 @@ components:
         phone:
           type: ["string", "null"]
         cpf:
-          type: ["string", "null"]
+          type: string
         rg:
           type: ["string", "null"]
         birthDate:
@@ -4391,7 +4393,7 @@ components:
           type: ["integer", "null"]
         companyNps:
           type: ["integer", "null"]
-      required: [name, email, whatsapp]
+      required: [name, email, whatsapp, cpf]
 
     UpdateClientBody:
       type: object

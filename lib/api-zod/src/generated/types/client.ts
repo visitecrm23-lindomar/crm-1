@@ -64,4 +64,6 @@ export interface Client {
   internalRating?: number | null;
   /** @nullable */
   companyNps?: number | null;
+  /** @nullable */
+  isNew?: boolean | null;
 }

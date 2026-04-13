@@ -1,5 +1,5 @@
-import { pgTable, text, timestamp, boolean, numeric, integer } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { pgTable, text, timestamp, boolean, numeric, integer, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql, relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { tenantsTable } from "./tenants";
@@ -59,7 +59,9 @@ export const clientsTable = pgTable("clients", {
   lastContactAt: timestamp("last_contact_at", { withTimezone: true }),
   whatsappOptIn: boolean("whatsapp_opt_in").notNull().default(true),
   emailOptIn: boolean("email_opt_in").notNull().default(true),
-});
+}, (table) => [
+  uniqueIndex("clients_tenant_cpf_unique").on(table.tenantId, table.cpf).where(sql`${table.cpf} IS NOT NULL`),
+]);
 
 export const insertClientSchema = createInsertSchema(clientsTable).omit({ createdAt: true, updatedAt: true });
 export type InsertClient = z.infer<typeof insertClientSchema>;
