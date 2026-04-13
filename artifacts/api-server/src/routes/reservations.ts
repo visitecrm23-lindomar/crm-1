@@ -632,17 +632,26 @@ router.post("/reservations", async (req, res): Promise<void> => {
         const balanceVal = Number(reservation.balance);
         const paymentStatus: "paid" | "partial" | "pending" =
           paidVal >= totalVal ? "paid" : paidVal > 0 ? "partial" : "pending";
+        // Fetch trip for returnDate (duration computation)
+        const [tripRecord] = await db.select().from(tripsTable).where(eq(tripsTable.id, reservation.tripId)).limit(1);
         const dDate = formatted.trip.departureDate ? new Date(formatted.trip.departureDate) : null;
         const departureDate = dDate
           ? dDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
           : "";
+        let duration = "";
+        if (dDate && tripRecord?.returnDate) {
+          const diffMs = tripRecord.returnDate.getTime() - dDate.getTime();
+          const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+          if (diffDays > 0) duration = `${diffDays} dia${diffDays !== 1 ? "s" : ""}`;
+        }
         const agencyPhone = tenant.whatsapp ?? tenant.phone ?? "";
         const agencyWebsite = tenant.website ?? `https://${tenant.slug}.visitecrm.com.br`;
         const whatsappNum = agencyPhone.replace(/\D/g, "");
         const whatsappUrl = whatsappNum ? `https://wa.me/${whatsappNum}` : "";
-        const appBase = process.env.APP_URL ?? "https://app.visitecrm.com.br";
-        const voucherUrl = `${appBase}/reservations/${reservation.id}`;
-        const consultUrl = `${appBase}/dashboard`;
+        // Public client-facing URLs (tenant subdomain or agency website)
+        const publicBase = agencyWebsite.replace(/\/$/, "");
+        const voucherUrl = `${publicBase}/reserva/${reservation.voucherCode}`;
+        const consultUrl = `${publicBase}/reservas`;
         const emailResult = await sendReservationConfirmationEmail({
           reservationNumber: reservation.reservationNumber ?? reservation.voucherCode,
           voucherCode: reservation.voucherCode,
