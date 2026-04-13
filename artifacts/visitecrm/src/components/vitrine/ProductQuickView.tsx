@@ -316,8 +316,8 @@ export function ProductQuickView({
           <div className="h-1" />
         </div>
 
-        <div className="border-t px-5 pt-3 pb-2 bg-white shrink-0 space-y-2">
-          <div className="flex items-center justify-between gap-4">
+        <div className="border-t px-5 py-3 bg-white shrink-0">
+          <div className="flex items-center justify-between gap-4 mb-1.5">
             <div>
               <p className="text-[11px] text-muted-foreground">Preço por pessoa</p>
               <div className="flex items-baseline gap-2">
@@ -368,15 +368,11 @@ export function ProductQuickView({
                 disabled={isOutOfStock}
                 onClick={handleReserve}
               >
-                {isOutOfStock
-                  ? "Esgotado"
-                  : product.hasVariants
-                  ? "Ver Opções"
-                  : "Reservar Agora"}
+                {isOutOfStock ? "Esgotado" : "Reservar Agora"}
               </Button>
             </div>
           </div>
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between">
             <button
               onClick={() => {
                 navigate(`/loja/${storeSlug}/consultar-pedido`);
@@ -385,7 +381,7 @@ export function ProductQuickView({
               className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 flex items-center gap-0.5 transition-colors"
             >
               Consultar pedido existente
-              <ExternalLink className="w-3 h-3" />
+              <ExternalLink className="w-3 h-3 ml-0.5" />
             </button>
           </div>
         </div>

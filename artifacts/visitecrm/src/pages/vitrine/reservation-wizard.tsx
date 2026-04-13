@@ -371,7 +371,7 @@ function Voucher({
   return (
     <div
       id="voucher"
-      className="border-2 border-dashed border-primary/40 rounded-2xl p-6 bg-white max-w-lg mx-auto print:border-solid print:border-gray-300"
+      className="border-2 border-dashed border-primary/40 rounded-2xl p-6 bg-white max-w-lg mx-auto print:block print:border-solid print:border-gray-300"
     >
       <div className="flex items-center justify-between mb-4">
         <div>
