@@ -675,6 +675,8 @@ export interface BoardingPassenger {
   id: string;
   reservationId: string;
   voucherCode: string;
+  /** @nullable */
+  reservationNumber?: string | null;
   clientName: string;
   name: string;
   /** @nullable */

@@ -4983,6 +4983,8 @@ components:
           type: string
         voucherCode:
           type: string
+        reservationNumber:
+          type: ["string", "null"]
         clientName:
           type: string
         name:

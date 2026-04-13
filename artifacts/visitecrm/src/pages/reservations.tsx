@@ -1831,7 +1831,7 @@ export default function Reservations() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Voucher</TableHead>
+              <TableHead>Nº Reserva</TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead>Viagem</TableHead>
               <TableHead>Embarque</TableHead>

@@ -11,8 +11,6 @@ const TRIP_TYPE_CODES: Record<string, string> = {
   bate_volta: "BTV",
   "bate-e-volta": "BTV",
   "bate-volta": "BTV",
-  transfer: "TRF",
-  custom: "RES",
 };
 
 export function tripTypeToCode(tripType: string | null | undefined): string {

@@ -246,7 +246,7 @@ function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: strin
     ? passengers.filter(p =>
         p.name.toLowerCase().includes(search.toLowerCase()) ||
         p.seatNumber?.toLowerCase().includes(search.toLowerCase()) ||
-        p.voucherCode.toLowerCase().includes(search.toLowerCase()) ||
+        (p.reservationNumber ?? p.voucherCode).toLowerCase().includes(search.toLowerCase()) ||
         p.clientName.toLowerCase().includes(search.toLowerCase())
       )
     : passengers;
@@ -315,7 +315,7 @@ function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: strin
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por nome, assento ou voucher..."
+                placeholder="Buscar por nome, assento ou nº de reserva..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="pl-9"
@@ -348,7 +348,7 @@ function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: strin
                       <div className="flex gap-3 mt-0.5 flex-wrap text-xs text-muted-foreground">
                         <span>{p.clientName}</span>
                         {p.cpf && <span>CPF: {p.cpf}</span>}
-                        <span className="font-mono opacity-70">{p.voucherCode}</span>
+                        <span className="font-mono opacity-70">{p.reservationNumber ?? p.voucherCode}</span>
                       </div>
                     </div>
                     <div className="shrink-0 ml-2 flex items-center gap-1">
@@ -2087,7 +2087,7 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
               <tr>
                 {[
                   { key: "name", label: "Passageiro" },
-                  { key: "voucher", label: "Voucher" },
+                  { key: "voucher", label: "Nº Reserva" },
                   { key: "seats", label: "Assento(s)" },
                   { key: "status", label: "Status" },
                   { key: "payment", label: "Pagamento" },
@@ -2110,7 +2110,7 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
                     <td className="p-2 font-medium">
                       <button className="hover:underline text-left" onClick={() => setClient360Id(r.client.id)}>{r.client.name}</button>
                     </td>
-                    <td className="p-2"><code className="text-xs bg-muted px-1.5 py-0.5 rounded">{r.voucherCode}</code></td>
+                    <td className="p-2"><code className="text-xs bg-muted px-1.5 py-0.5 rounded">{r.reservationNumber ?? r.voucherCode}</code></td>
                     <td className="p-2">{r.seats.join(", ") || "—"}</td>
                     <td className="p-2">
                       {isEditing ? (

@@ -1350,6 +1350,7 @@ export const GetTripBoardingPanelResponse = zod.object({
       id: zod.string(),
       reservationId: zod.string(),
       voucherCode: zod.string(),
+      reservationNumber: zod.string().nullish(),
       clientName: zod.string(),
       name: zod.string(),
       cpf: zod.string().nullish(),

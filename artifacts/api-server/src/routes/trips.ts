@@ -381,6 +381,7 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
         id: p.id,
         reservationId: p.reservationId,
         voucherCode: reservation?.voucherCode ?? "",
+        reservationNumber: reservation?.reservationNumber ?? null,
         clientName: client?.name ?? "—",
         name: p.name,
         cpf: p.cpf ?? null,
