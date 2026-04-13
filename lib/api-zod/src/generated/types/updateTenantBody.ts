@@ -30,4 +30,6 @@ export interface UpdateTenantBody {
   website?: string | null;
   /** @nullable */
   reservationPrefix?: string | null;
+  /** @nullable */
+  birthdayMessagesEnabled?: boolean | null;
 }

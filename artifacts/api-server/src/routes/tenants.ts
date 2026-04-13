@@ -26,6 +26,7 @@ const UpdateTenantBody = z.object({
   maxTripsOverride: z.number().int().nullable().optional(),
   website: z.string().nullable().optional(),
   reservationPrefix: z.string().max(5).optional().nullable(),
+  birthdayMessagesEnabled: z.boolean().nullable().optional(),
 });
 
 router.get("/admin/stats", async (req, res): Promise<void> => {
@@ -148,9 +149,15 @@ router.patch("/tenants/:id", async (req, res): Promise<void> => {
     }
     const parsed = UpdateTenantBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const updateData = { ...parsed.data };
+    const { birthdayMessagesEnabled, ...rest } = parsed.data;
+    const updateData: Record<string, unknown> = { ...rest };
     if (updateData.reservationPrefix != null) {
-      updateData.reservationPrefix = updateData.reservationPrefix.trim().toUpperCase().slice(0, 5) || null;
+      updateData.reservationPrefix = (updateData.reservationPrefix as string).trim().toUpperCase().slice(0, 5) || null;
+    }
+    if (birthdayMessagesEnabled !== undefined) {
+      const [existing] = await db.select({ settings: tenantsTable.settings }).from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
+      const currentSettings = (existing?.settings ?? {}) as Record<string, unknown>;
+      updateData.settings = { ...currentSettings, birthdayMessagesEnabled: birthdayMessagesEnabled ?? true };
     }
     await db.update(tenantsTable).set(updateData).where(eq(tenantsTable.id, req.params.id));
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);

@@ -6514,6 +6514,8 @@ components:
           type: ["string", "null"]
         reservationPrefix:
           type: ["string", "null"]
+        birthdayMessagesEnabled:
+          type: ["boolean", "null"]
 
     # ─── BOARDING LOCATION ─────────────────────────────────────────
     BoardingLocation:
@@ -7864,6 +7866,10 @@ components:
           type: ["string", "null"]
         couponCode:
           type: ["string", "null"]
+        emailOpened:
+          type: boolean
+        emailOpenedAt:
+          type: ["string", "null"]
         converted:
           type: boolean
         isManual:
@@ -7872,7 +7878,7 @@ components:
           type: ["string", "null"]
         createdAt:
           type: string
-      required: [id, tenantId, clientId, birthdayYear, sentWhatsapp, sentEmail, converted, isManual, createdAt]
+      required: [id, tenantId, clientId, birthdayYear, sentWhatsapp, sentEmail, emailOpened, converted, isManual, createdAt]
 
     BirthdayClient:
       type: object
@@ -7922,6 +7928,8 @@ components:
           type: integer
         emailSent:
           type: integer
+        emailOpened:
+          type: integer
         converted:
           type: integer
         conversionRate:
@@ -7930,7 +7938,9 @@ components:
           type: integer
         upcomingWeek:
           type: integer
-      required: [totalSentYear, sentThisMonth, whatsappSent, emailSent, converted, conversionRate, todayCount, upcomingWeek]
+        revenueGenerated:
+          type: number
+      required: [totalSentYear, sentThisMonth, whatsappSent, emailSent, emailOpened, converted, conversionRate, todayCount, upcomingWeek, revenueGenerated]
 
     BirthdaySendResult:
       type: object
@@ -7957,6 +7967,12 @@ components:
         sendEmail:
           type: boolean
         whatsappMessage:
+          type: ["string", "null"]
+        emailSubject:
+          type: ["string", "null"]
+        emailMessage:
+          type: ["string", "null"]
+        senderName:
           type: ["string", "null"]
       required: [enabled, discountPercent, validDays, sendWhatsapp, sendEmail]
 

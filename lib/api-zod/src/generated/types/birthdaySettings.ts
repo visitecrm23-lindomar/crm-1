@@ -14,4 +14,10 @@ export interface BirthdaySettings {
   sendEmail: boolean;
   /** @nullable */
   whatsappMessage?: string | null;
+  /** @nullable */
+  emailSubject?: string | null;
+  /** @nullable */
+  emailMessage?: string | null;
+  /** @nullable */
+  senderName?: string | null;
 }

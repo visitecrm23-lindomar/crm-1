@@ -18,6 +18,9 @@ interface BirthdaySettings {
   sendWhatsapp: boolean;
   sendEmail: boolean;
   whatsappMessage?: string;
+  emailSubject?: string;
+  emailMessage?: string;
+  senderName?: string;
 }
 
 const DEFAULT_SETTINGS: BirthdaySettings = {

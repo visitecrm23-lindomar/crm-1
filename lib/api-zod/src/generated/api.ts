@@ -3367,6 +3367,7 @@ export const UpdateTenantBody = zod.object({
   maxTripsOverride: zod.number().nullish(),
   website: zod.string().nullish(),
   reservationPrefix: zod.string().nullish(),
+  birthdayMessagesEnabled: zod.boolean().nullish(),
 });
 
 export const UpdateTenantResponse = zod.object({
@@ -3877,6 +3878,8 @@ export const GetBirthdayTodayResponseItem = zod.object({
         emailError: zod.string().nullish(),
         couponId: zod.string().nullish(),
         couponCode: zod.string().nullish(),
+        emailOpened: zod.boolean(),
+        emailOpenedAt: zod.string().nullish(),
         converted: zod.boolean(),
         isManual: zod.boolean(),
         sentById: zod.string().nullish(),
@@ -3923,6 +3926,8 @@ export const GetBirthdayUpcomingResponseItem = zod.object({
         emailError: zod.string().nullish(),
         couponId: zod.string().nullish(),
         couponCode: zod.string().nullish(),
+        emailOpened: zod.boolean(),
+        emailOpenedAt: zod.string().nullish(),
         converted: zod.boolean(),
         isManual: zod.boolean(),
         sentById: zod.string().nullish(),
@@ -3958,6 +3963,8 @@ export const GetBirthdayHistoryResponseItem = zod
     emailError: zod.string().nullish(),
     couponId: zod.string().nullish(),
     couponCode: zod.string().nullish(),
+    emailOpened: zod.boolean(),
+    emailOpenedAt: zod.string().nullish(),
     converted: zod.boolean(),
     isManual: zod.boolean(),
     sentById: zod.string().nullish(),
@@ -3992,6 +3999,8 @@ export const GetBirthdayHistoryResponseItem = zod
                   emailError: zod.string().nullish(),
                   couponId: zod.string().nullish(),
                   couponCode: zod.string().nullish(),
+                  emailOpened: zod.boolean(),
+                  emailOpenedAt: zod.string().nullish(),
                   converted: zod.boolean(),
                   isManual: zod.boolean(),
                   sentById: zod.string().nullish(),
@@ -4018,10 +4027,12 @@ export const GetBirthdayStatsResponse = zod.object({
   sentThisMonth: zod.number(),
   whatsappSent: zod.number(),
   emailSent: zod.number(),
+  emailOpened: zod.number(),
   converted: zod.number(),
   conversionRate: zod.number(),
   todayCount: zod.number(),
   upcomingWeek: zod.number(),
+  revenueGenerated: zod.number(),
 });
 
 /**
@@ -4058,6 +4069,9 @@ export const GetBirthdaySettingsResponse = zod.object({
   sendWhatsapp: zod.boolean(),
   sendEmail: zod.boolean(),
   whatsappMessage: zod.string().nullish(),
+  emailSubject: zod.string().nullish(),
+  emailMessage: zod.string().nullish(),
+  senderName: zod.string().nullish(),
 });
 
 /**
@@ -4070,6 +4084,9 @@ export const UpdateBirthdaySettingsBody = zod.object({
   sendWhatsapp: zod.boolean(),
   sendEmail: zod.boolean(),
   whatsappMessage: zod.string().nullish(),
+  emailSubject: zod.string().nullish(),
+  emailMessage: zod.string().nullish(),
+  senderName: zod.string().nullish(),
 });
 
 export const UpdateBirthdaySettingsResponse = zod.object({
@@ -4079,6 +4096,9 @@ export const UpdateBirthdaySettingsResponse = zod.object({
   sendWhatsapp: zod.boolean(),
   sendEmail: zod.boolean(),
   whatsappMessage: zod.string().nullish(),
+  emailSubject: zod.string().nullish(),
+  emailMessage: zod.string().nullish(),
+  senderName: zod.string().nullish(),
 });
 
 /**

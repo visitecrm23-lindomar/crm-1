@@ -1615,6 +1615,8 @@ export interface UpdateTenantBody {
   website?: string | null;
   /** @nullable */
   reservationPrefix?: string | null;
+  /** @nullable */
+  birthdayMessagesEnabled?: boolean | null;
 }
 
 export interface BoardingLocation {
@@ -2463,6 +2465,9 @@ export interface BirthdayMessage {
   couponId?: string | null;
   /** @nullable */
   couponCode?: string | null;
+  emailOpened: boolean;
+  /** @nullable */
+  emailOpenedAt?: string | null;
   converted: boolean;
   isManual: boolean;
   /** @nullable */
@@ -2494,10 +2499,12 @@ export interface BirthdayStats {
   sentThisMonth: number;
   whatsappSent: number;
   emailSent: number;
+  emailOpened: number;
   converted: number;
   conversionRate: number;
   todayCount: number;
   upcomingWeek: number;
+  revenueGenerated: number;
 }
 
 export interface BirthdaySendResult {
@@ -2516,6 +2523,12 @@ export interface BirthdaySettings {
   sendEmail: boolean;
   /** @nullable */
   whatsappMessage?: string | null;
+  /** @nullable */
+  emailSubject?: string | null;
+  /** @nullable */
+  emailMessage?: string | null;
+  /** @nullable */
+  senderName?: string | null;
 }
 
 export interface PlatformSetting {

@@ -522,7 +522,7 @@ export default function Marketing() {
         </TabsContent>
 
         <TabsContent value="birthdays" className="mt-4 space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <Card>
               <CardContent className="pt-4 pb-3">
                 <div className="flex items-center gap-2 mb-1">
@@ -553,10 +553,30 @@ export default function Marketing() {
             <Card>
               <CardContent className="pt-4 pb-3">
                 <div className="flex items-center gap-2 mb-1">
+                  <Mail className="w-4 h-4 text-sky-500" />
+                  <span className="text-xs text-muted-foreground">Emails abertos</span>
+                </div>
+                <p className="text-2xl font-bold">{bdStats?.emailOpened ?? 0}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4 pb-3">
+                <div className="flex items-center gap-2 mb-1">
                   <TrendingUp className="w-4 h-4 text-purple-500" />
                   <span className="text-xs text-muted-foreground">Taxa conversão</span>
                 </div>
                 <p className="text-2xl font-bold">{bdStats?.conversionRate ?? 0}%</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4 pb-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Gift className="w-4 h-4 text-emerald-500" />
+                  <span className="text-xs text-muted-foreground">Receita gerada</span>
+                </div>
+                <p className="text-2xl font-bold">
+                  R$ {(bdStats?.revenueGenerated ?? 0).toFixed(0)}
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -865,12 +885,45 @@ export default function Marketing() {
                       </div>
 
                       <div className="space-y-2">
+                        <Label className="text-sm font-medium">Nome do remetente</Label>
+                        <Input
+                          placeholder="Ex: Agência Visita Brasil"
+                          value={mergedSettings.senderName ?? ""}
+                          onChange={(e) => handleSettingsChange("senderName", e.target.value || null)}
+                        />
+                        <p className="text-xs text-muted-foreground">Nome exibido no email e no WhatsApp</p>
+                      </div>
+
+                      <div className="space-y-2">
                         <Label className="text-sm font-medium">Mensagem WhatsApp personalizada</Label>
                         <Textarea
-                          rows={5}
+                          rows={4}
                           placeholder={`Deixe em branco para usar a mensagem padrão.\n\nVariáveis disponíveis: {nome}, {cupom}, {desconto}, {validade}`}
                           value={mergedSettings.whatsappMessage ?? ""}
-                          onChange={(e) => handleSettingsChange("whatsappMessage", e.target.value || undefined)}
+                          onChange={(e) => handleSettingsChange("whatsappMessage", e.target.value || null)}
+                          className="text-sm font-mono"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Use: {"{nome}"} {"{cupom}"} {"{desconto}"} {"{validade}"}
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Assunto do email</Label>
+                        <Input
+                          placeholder="Ex: Feliz aniversário! Seu cupom especial te espera 🎂"
+                          value={mergedSettings.emailSubject ?? ""}
+                          onChange={(e) => handleSettingsChange("emailSubject", e.target.value || null)}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Mensagem do email personalizada</Label>
+                        <Textarea
+                          rows={4}
+                          placeholder={`Deixe em branco para usar a mensagem padrão.\n\nVariáveis disponíveis: {nome}, {cupom}, {desconto}, {validade}`}
+                          value={mergedSettings.emailMessage ?? ""}
+                          onChange={(e) => handleSettingsChange("emailMessage", e.target.value || null)}
                           className="text-sm font-mono"
                         />
                         <p className="text-xs text-muted-foreground">

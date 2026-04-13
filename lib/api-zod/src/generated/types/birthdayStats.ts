@@ -11,8 +11,10 @@ export interface BirthdayStats {
   sentThisMonth: number;
   whatsappSent: number;
   emailSent: number;
+  emailOpened: number;
   converted: number;
   conversionRate: number;
   todayCount: number;
   upcomingWeek: number;
+  revenueGenerated: number;
 }

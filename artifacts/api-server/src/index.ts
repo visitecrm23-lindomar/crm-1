@@ -391,6 +391,11 @@ async function runMigrations() {
         WHERE is_manual = false;
     `);
 
+    await client.query(`
+      ALTER TABLE birthday_messages ADD COLUMN IF NOT EXISTS email_opened boolean NOT NULL DEFAULT false;
+      ALTER TABLE birthday_messages ADD COLUMN IF NOT EXISTS email_opened_at TIMESTAMPTZ;
+    `);
+
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");

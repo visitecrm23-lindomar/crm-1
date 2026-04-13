@@ -25,6 +25,9 @@ export interface BirthdayMessage {
   couponId?: string | null;
   /** @nullable */
   couponCode?: string | null;
+  emailOpened: boolean;
+  /** @nullable */
+  emailOpenedAt?: string | null;
   converted: boolean;
   isManual: boolean;
   /** @nullable */

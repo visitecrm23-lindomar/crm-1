@@ -182,8 +182,24 @@ router.get("/birthday/stats", async (req, res): Promise<void> => {
 
     const whatsappSent = allMessages.filter((m) => m.sentWhatsapp).length;
     const emailSent = allMessages.filter((m) => m.sentEmail).length;
+    const emailOpened = allMessages.filter((m) => m.emailOpened).length;
     const converted = allMessages.filter((m) => m.converted).length;
     const totalSent = allMessages.length;
+
+    const convertedCouponCodes = allMessages
+      .filter((m) => m.converted && m.couponCode)
+      .map((m) => m.couponCode!);
+
+    let revenueGenerated = 0;
+    if (convertedCouponCodes.length > 0) {
+      const usedCoupons = await db
+        .select({ code: couponsTable.code, value: couponsTable.value })
+        .from(couponsTable)
+        .where(and(eq(couponsTable.tenantId, me.tenantId), sql`code = ANY(${convertedCouponCodes})`));
+      for (const c of usedCoupons) {
+        revenueGenerated += Number(c.value) || 0;
+      }
+    }
 
     const allClients = await db
       .select({ id: clientsTable.id, birthDate: clientsTable.birthDate })
@@ -209,10 +225,12 @@ router.get("/birthday/stats", async (req, res): Promise<void> => {
       sentThisMonth: thisMonth.length,
       whatsappSent,
       emailSent,
+      emailOpened,
       converted,
       conversionRate: totalSent > 0 ? Math.round((converted / totalSent) * 100) : 0,
       todayCount,
       upcomingWeek,
+      revenueGenerated,
     });
   } catch (err) {
     req.log.error({ err }, "Error getting birthday stats");
@@ -247,6 +265,7 @@ router.post("/birthday/mark-converted", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
     const { couponCode } = req.body as { couponCode?: string };
     if (!couponCode) { res.status(400).json({ error: "couponCode required" }); return; }
 
@@ -295,7 +314,10 @@ const BirthdaySettingsBody = z.object({
   validDays: z.number().int().min(1).max(365).optional(),
   sendWhatsapp: z.boolean().optional(),
   sendEmail: z.boolean().optional(),
-  whatsappMessage: z.string().optional(),
+  whatsappMessage: z.string().nullable().optional(),
+  emailSubject: z.string().nullable().optional(),
+  emailMessage: z.string().nullable().optional(),
+  senderName: z.string().nullable().optional(),
 });
 
 router.put("/birthday/settings", async (req, res): Promise<void> => {

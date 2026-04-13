@@ -15,6 +15,8 @@ export const birthdayMessagesTable = pgTable("birthday_messages", {
   emailError: text("email_error"),
   couponId: text("coupon_id"),
   couponCode: text("coupon_code"),
+  emailOpened: boolean("email_opened").notNull().default(false),
+  emailOpenedAt: timestamp("email_opened_at", { withTimezone: true }),
   converted: boolean("converted").notNull().default(false),
   isManual: boolean("is_manual").notNull().default(false),
   sentById: text("sent_by_id"),
