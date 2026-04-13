@@ -498,11 +498,12 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
     let appliedReferralDiscountValue = 5;
     if (data.referralCode && !couponId) {
       const upperCode = data.referralCode.toUpperCase();
-      // Look up by client's permanent referral code
+      // Look up referrer by permanent client referral code
       const [referrer] = await db.select({
         id: clientsTable.id,
         name: clientsTable.name,
         email: clientsTable.email,
+        referralCodeGeneratedAt: clientsTable.referralCodeGeneratedAt,
       }).from(clientsTable)
         .where(and(
           eq(clientsTable.tenantId, store.tenantId),
@@ -510,7 +511,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
         )).limit(1);
 
       if (referrer) {
-        // Get referral settings for policy enforcement
+        // Fetch referral settings for comprehensive policy enforcement
         const [refSettings] = await db.select({
           discountValue: referralSettingsTable.discountValue,
           discountType: referralSettingsTable.discountType,
@@ -518,22 +519,52 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
           expirationDays: referralSettingsTable.expirationDays,
           allowSelfReferral: referralSettingsTable.allowSelfReferral,
           requireFirstPurchase: referralSettingsTable.requireFirstPurchase,
+          bonusValue: referralSettingsTable.bonusValue,
         }).from(referralSettingsTable)
           .where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
 
+        // Check program is enabled
         if (!refSettings || refSettings.isEnabled !== false) {
-          // Self-referral check
-          const isSelfReferral = !refSettings?.allowSelfReferral
-            && referrer.email
-            && data.customerEmail
-            && referrer.email.toLowerCase() === data.customerEmail.toLowerCase();
+          let referralEligible = true;
 
-          if (!isSelfReferral) {
-            const discPct = refSettings?.discountType === "percentage" ? Number(refSettings.discountValue) : 5;
-            discountAmount = subtotal * (discPct / 100);
+          // Expiration check (code lifecycle, not account age)
+          if (referrer.referralCodeGeneratedAt && refSettings) {
+            const expirationDays = refSettings.expirationDays ?? 30;
+            const cutoff = new Date(referrer.referralCodeGeneratedAt);
+            cutoff.setDate(cutoff.getDate() + expirationDays);
+            if (new Date() > cutoff) referralEligible = false;
+          }
+
+          // Self-referral check
+          if (referralEligible && !refSettings?.allowSelfReferral && referrer.email && data.customerEmail) {
+            if (referrer.email.toLowerCase() === data.customerEmail.toLowerCase()) referralEligible = false;
+          }
+
+          // requireFirstPurchase: customer must not have any prior completed orders
+          if (referralEligible && refSettings?.requireFirstPurchase && data.customerEmail) {
+            const [priorOrder] = await db.select({ id: storeOrdersTable.id })
+              .from(storeOrdersTable)
+              .where(and(
+                eq(storeOrdersTable.tenantId, store.tenantId),
+                eq(storeOrdersTable.customerEmail, data.customerEmail.toLowerCase()),
+                eq(storeOrdersTable.status, "completed"),
+              )).limit(1);
+            if (priorOrder) referralEligible = false;
+          }
+
+          if (referralEligible) {
+            // Apply discount — respect discountType (percentage or fixed)
+            const discValue = Number(refSettings?.discountValue ?? "5");
+            if (refSettings?.discountType === "fixed") {
+              discountAmount = Math.min(discValue, subtotal);
+              appliedReferralDiscountValue = discValue;
+            } else {
+              // Default: percentage
+              discountAmount = subtotal * (discValue / 100);
+              appliedReferralDiscountValue = discValue;
+            }
             appliedReferralCode = upperCode;
             appliedReferralReferrerId = referrer.id;
-            appliedReferralDiscountValue = discPct;
           }
         }
       }
