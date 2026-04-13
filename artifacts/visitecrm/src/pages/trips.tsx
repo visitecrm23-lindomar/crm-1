@@ -27,7 +27,7 @@ import {
   Plus, Search, MapPin, Calendar, Users, Bus, Edit, Trash2, Eye, ChevronsLeft, ChevronsRight,
   LayoutGrid, List, ChevronLeft, ChevronRight, ArrowLeft, Check, X, Download, Send, Copy,
   AlertCircle, DollarSign, ClipboardList, LogIn, RotateCcw, CheckCircle, UserRound, RefreshCw,
-  ShoppingBag, Loader2,
+  ShoppingBag, Loader2, Clock, Star, CheckCircle2, XCircle,
 } from "lucide-react";
 import {
   format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay,
@@ -665,6 +665,51 @@ function generateProductSlug(name: string): string {
     + "-" + Math.random().toString(36).slice(2, 7);
 }
 
+function buildTripProductPayload(trip: Trip) {
+  const images = [
+    ...(trip.coverImage ? [trip.coverImage] : []),
+    ...(Array.isArray(trip.gallery) ? trip.gallery : []),
+  ];
+
+  let durationDays: number | undefined;
+  let durationNights: number | undefined;
+  if (trip.departureDate && trip.returnDate) {
+    const dep = new Date(trip.departureDate);
+    const ret = new Date(trip.returnDate);
+    const diffMs = ret.getTime() - dep.getTime();
+    const days = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    if (days > 0) {
+      durationDays = days + 1;
+      durationNights = days;
+    }
+  }
+
+  return {
+    name: trip.name,
+    description: trip.description ?? "",
+    type: trip.type,
+    price: String(trip.priceAdult),
+    thumbnail: trip.coverImage || undefined,
+    images: images.length > 0 ? images : undefined,
+    gallery: trip.gallery?.length > 0 ? trip.gallery : undefined,
+    destination: `${trip.destinationCity}, ${trip.destinationState}`,
+    productCity: trip.destinationCity,
+    productState: trip.destinationState,
+    country: "Brasil",
+    hasDates: true,
+    startDate: trip.departureDate,
+    endDate: trip.returnDate ?? undefined,
+    durationDays,
+    durationNights,
+    includes: trip.inclusions?.length > 0 ? trip.inclusions : undefined,
+    excludes: trip.exclusions?.length > 0 ? trip.exclusions : undefined,
+    trackInventory: true,
+    stockQuantity: trip.availableSeats > 0 ? trip.availableSeats : undefined,
+    isFeatured: trip.isFeatured,
+    status: "active" as const,
+  };
+}
+
 function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boolean; onClose: () => void }) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -698,28 +743,7 @@ function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boole
     setLoading(true);
     try {
       const slug = generateProductSlug(trip.name);
-      const images = [
-        ...(trip.coverImage ? [trip.coverImage] : []),
-        ...(Array.isArray((trip as Record<string, unknown>).gallery) ? ((trip as Record<string, unknown>).gallery as string[]) : []),
-      ];
-      await storeApi.createProduct({
-        name: trip.name,
-        slug,
-        description: trip.description ?? "",
-        price: String(trip.priceAdult),
-        thumbnail: trip.coverImage || undefined,
-        images: images.length > 0 ? images : undefined,
-        destination: `${trip.destinationCity}, ${trip.destinationState}`,
-        type: trip.type,
-        tripId: trip.id,
-        status: "active",
-        hasDates: true,
-        startDate: trip.departureDate,
-        endDate: trip.returnDate ?? undefined,
-        includes: Array.isArray((trip as Record<string, unknown>).inclusions) && ((trip as Record<string, unknown>).inclusions as string[]).length > 0
-          ? (trip as Record<string, unknown>).inclusions as string[]
-          : undefined,
-      });
+      await storeApi.createProduct({ ...buildTripProductPayload(trip), slug, tripId: trip.id });
       toast({ title: "Publicado na loja!", description: `${trip.name} já está disponível na vitrine.` });
       onClose();
       navigate("/loja/produtos");
@@ -731,17 +755,38 @@ function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boole
     }
   }
 
+  async function sync() {
+    if (!existingProductId) return;
+    setLoading(true);
+    try {
+      await storeApi.updateProduct(existingProductId, buildTripProductPayload(trip));
+      toast({ title: "Dados sincronizados!", description: `${trip.name} foi atualizado na vitrine com os dados mais recentes.` });
+      onClose();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao sincronizar";
+      toast({ title: "Erro ao sincronizar", description: msg, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function goToProduct() {
     navigate("/loja/produtos");
     onClose();
   }
 
+  const payload = buildTripProductPayload(trip);
+  const durationLabel = payload.durationDays
+    ? `${payload.durationDays} dia${payload.durationDays > 1 ? "s" : ""}${payload.durationNights ? ` / ${payload.durationNights} noite${payload.durationNights > 1 ? "s" : ""}` : ""}`
+    : null;
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <ShoppingBag className="w-5 h-5" /> Publicar na Loja
+            <ShoppingBag className="w-5 h-5" />
+            {existingProductId ? "Sincronizar com a Loja" : "Publicar na Loja"}
           </DialogTitle>
         </DialogHeader>
         {checking ? (
@@ -759,38 +804,136 @@ function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boole
               <Button onClick={() => { navigate("/loja/configuracoes"); onClose(); }}>Ir para Configurações</Button>
             </div>
           </div>
-        ) : existingProductId ? (
-          <div className="space-y-4 py-2">
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
-              <ShoppingBag className="w-5 h-5 text-amber-600 shrink-0" />
-              <p className="text-sm text-amber-800">
-                Esta viagem já está publicada na loja. Você pode editar o produto na seção Loja → Produtos.
-              </p>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={onClose}>Fechar</Button>
-              <Button onClick={goToProduct}>Ver na Loja</Button>
-            </div>
-          </div>
         ) : (
-          <div className="space-y-4 py-2">
-            <div className="p-3 rounded-lg bg-muted">
-              <p className="text-sm font-medium">{trip.name}</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {trip.destinationCity}, {trip.destinationState} · R$ {Number(trip.priceAdult).toFixed(2)}/pessoa
-              </p>
-              {trip.coverImage && (
-                <img src={trip.coverImage} alt={trip.name} className="w-full h-28 object-cover rounded mt-2" />
+          <div className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-1">
+            {existingProductId && (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                <ShoppingBag className="w-5 h-5 text-amber-600 shrink-0" />
+                <p className="text-sm text-amber-800">
+                  Esta viagem já está publicada. Clique em <strong>Sincronizar Dados</strong> para atualizar o produto com as informações atuais.
+                </p>
+              </div>
+            )}
+
+            {trip.coverImage && (
+              <img src={trip.coverImage} alt={trip.name} className="w-full h-36 object-cover rounded-lg" />
+            )}
+
+            <div className="rounded-lg border p-3 space-y-2.5">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-semibold text-sm">{trip.name}</p>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                    <MapPin className="w-3 h-3" />
+                    {trip.destinationCity}, {trip.destinationState}
+                  </p>
+                </div>
+                <span className="text-sm font-bold text-primary whitespace-nowrap">
+                  R$ {Number(trip.priceAdult).toFixed(2)}<span className="text-xs font-normal text-muted-foreground">/pessoa</span>
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3 shrink-0" />
+                  <span>
+                    {new Date(trip.departureDate).toLocaleDateString("pt-BR")}
+                    {trip.returnDate && ` → ${new Date(trip.returnDate).toLocaleDateString("pt-BR")}`}
+                  </span>
+                </div>
+                {durationLabel && (
+                  <div className="flex items-center gap-1">
+                    <Clock className="w-3 h-3 shrink-0" />
+                    <span>{durationLabel}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-1">
+                  <Users className="w-3 h-3 shrink-0" />
+                  <span>{trip.availableSeats} vagas disponíveis</span>
+                </div>
+                {trip.isFeatured && (
+                  <div className="flex items-center gap-1 text-amber-600">
+                    <Star className="w-3 h-3 shrink-0" />
+                    <span>Destaque na loja</span>
+                  </div>
+                )}
+              </div>
+
+              {(trip.inclusions?.length > 0 || trip.exclusions?.length > 0) && (
+                <div className="grid grid-cols-2 gap-2 pt-1 border-t">
+                  {trip.inclusions?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-green-700 mb-1">Incluso ({trip.inclusions.length})</p>
+                      <ul className="space-y-0.5">
+                        {trip.inclusions.slice(0, 4).map((inc, i) => (
+                          <li key={i} className="text-xs text-muted-foreground flex items-start gap-1">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-green-500 shrink-0 mt-0.5" />
+                            <span className="truncate">{inc}</span>
+                          </li>
+                        ))}
+                        {trip.inclusions.length > 4 && (
+                          <li className="text-xs text-muted-foreground">+{trip.inclusions.length - 4} itens</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                  {trip.exclusions?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-red-700 mb-1">Não incluso ({trip.exclusions.length})</p>
+                      <ul className="space-y-0.5">
+                        {trip.exclusions.slice(0, 4).map((exc, i) => (
+                          <li key={i} className="text-xs text-muted-foreground flex items-start gap-1">
+                            <XCircle className="w-2.5 h-2.5 text-red-400 shrink-0 mt-0.5" />
+                            <span className="truncate">{exc}</span>
+                          </li>
+                        ))}
+                        {trip.exclusions.length > 4 && (
+                          <li className="text-xs text-muted-foreground">+{trip.exclusions.length - 4} itens</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {trip.gallery?.length > 0 && (
+                <div className="flex gap-1 pt-1 border-t overflow-x-auto">
+                  {trip.gallery.slice(0, 5).map((img, i) => (
+                    <img key={i} src={img} alt="" className="w-12 h-12 object-cover rounded shrink-0" />
+                  ))}
+                  {trip.gallery.length > 5 && (
+                    <div className="w-12 h-12 rounded bg-muted flex items-center justify-center shrink-0 text-xs text-muted-foreground">
+                      +{trip.gallery.length - 5}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
-            <p className="text-sm text-muted-foreground">
-              A viagem será publicada na vitrine pública com os dados atuais (nome, preço, destino, fotos e inclusões). Você pode ajustá-la depois em Loja → Produtos.
-            </p>
+
+            {!existingProductId && (
+              <p className="text-xs text-muted-foreground">
+                Todos os dados acima serão publicados automaticamente na sua vitrine pública. Você pode ajustar detalhes adicionais depois em Loja → Produtos.
+              </p>
+            )}
+
             <div className="flex justify-end gap-2 pt-1">
-              <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
-              <Button onClick={publish} disabled={loading}>
-                {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Publicando...</> : "Publicar na Loja"}
+              <Button variant="outline" onClick={onClose} disabled={loading}>
+                {existingProductId ? "Fechar" : "Cancelar"}
               </Button>
+              {existingProductId ? (
+                <>
+                  <Button variant="outline" onClick={goToProduct} disabled={loading}>
+                    Ver na Loja
+                  </Button>
+                  <Button onClick={sync} disabled={loading}>
+                    {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sincronizando...</> : "Sincronizar Dados"}
+                  </Button>
+                </>
+              ) : (
+                <Button onClick={publish} disabled={loading}>
+                  {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Publicando...</> : "Publicar na Loja"}
+                </Button>
+              )}
             </div>
           </div>
         )}
