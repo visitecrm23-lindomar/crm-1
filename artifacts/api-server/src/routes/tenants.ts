@@ -24,6 +24,7 @@ const UpdateTenantBody = z.object({
   maxUsersOverride: z.number().int().nullable().optional(),
   maxClientsOverride: z.number().int().nullable().optional(),
   maxTripsOverride: z.number().int().nullable().optional(),
+  website: z.string().nullable().optional(),
   reservationPrefix: z.string().max(5).optional().nullable(),
 });
 

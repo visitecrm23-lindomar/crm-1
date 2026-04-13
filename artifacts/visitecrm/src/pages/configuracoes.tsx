@@ -132,6 +132,7 @@ function AgencyProfileTab() {
         secondaryColor: fullTenant.secondaryColor ?? "#8B5CF6",
         whatsapp: fullTenant.whatsapp ?? "",
         phone: fullTenant.phone ?? "",
+        website: (fullTenant as unknown as { website?: string | null }).website ?? "",
         reservationPrefix: fullTenant.reservationPrefix ?? "",
       });
     } else if (me?.tenant) {
@@ -200,6 +201,14 @@ function AgencyProfileTab() {
             onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
           />
         </div>
+      </div>
+      <div className="space-y-1">
+        <Label>Website</Label>
+        <Input
+          value={(form as unknown as { website?: string | null }).website ?? ""}
+          onChange={(e) => setForm((f) => ({ ...f, website: e.target.value } as typeof f))}
+          placeholder="https://suaagencia.com.br"
+        />
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
