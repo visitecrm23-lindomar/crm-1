@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { useCart } from "@/contexts/CartContext";
 import { useLocation } from "wouter";
 import { PublicStore, StoreProduct } from "@/lib/storeApi";
 import {
@@ -61,7 +60,6 @@ export function ProductQuickView({
     setImgIndex(0);
   }, [product.id, open]);
 
-  const { addItem } = useCart();
 
   const displayPrice = parseFloat(product.salePrice ?? product.price);
   const hasDiscount = !!product.salePrice;
@@ -84,19 +82,7 @@ export function ProductQuickView({
   }
 
   function handleReserve() {
-    if (product.hasVariants) {
-      navigate(`/loja/${storeSlug}/produtos/${product.slug}`);
-      onClose();
-      return;
-    }
-    addItem({
-      productId: product.id,
-      productName: product.name,
-      unitPrice: displayPrice,
-      quantity: 1,
-      image: product.images?.[0],
-    });
-    navigate(`/loja/${storeSlug}/checkout`);
+    navigate(`/loja/${storeSlug}/reservar/${product.slug}`);
     onClose();
   }
 
@@ -330,63 +316,77 @@ export function ProductQuickView({
           <div className="h-1" />
         </div>
 
-        <div className="border-t px-5 py-3 flex items-center justify-between gap-4 bg-white shrink-0">
-          <div>
-            <p className="text-[11px] text-muted-foreground">Preço por pessoa</p>
-            <div className="flex items-baseline gap-2">
-              {hasDiscount && (
-                <span className="text-sm text-muted-foreground line-through">
-                  R$ {parseFloat(product.price).toFixed(2)}
+        <div className="border-t px-5 pt-3 pb-2 bg-white shrink-0 space-y-2">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[11px] text-muted-foreground">Preço por pessoa</p>
+              <div className="flex items-baseline gap-2">
+                {hasDiscount && (
+                  <span className="text-sm text-muted-foreground line-through">
+                    R$ {parseFloat(product.price).toFixed(2)}
+                  </span>
+                )}
+                <span
+                  className="text-2xl font-bold"
+                  style={{ color: store.primaryColor }}
+                >
+                  R$ {displayPrice.toFixed(2)}
                 </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {store.contactWhatsapp && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleWhatsApp}
+                  className="border-green-500 text-green-600 hover:bg-green-50"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                </Button>
               )}
-              <span
-                className="text-2xl font-bold"
-                style={{ color: store.primaryColor }}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  navigate(`/loja/${storeSlug}/produtos/${product.slug}`);
+                  onClose();
+                }}
+                className="flex items-center gap-1"
               >
-                R$ {displayPrice.toFixed(2)}
-              </span>
+                <ExternalLink className="w-3.5 h-3.5" />
+                Ver Detalhes
+              </Button>
+              <Button
+                size="sm"
+                className="font-semibold text-white px-5"
+                style={
+                  !isOutOfStock
+                    ? { backgroundColor: store.accentColor || store.primaryColor }
+                    : undefined
+                }
+                disabled={isOutOfStock}
+                onClick={handleReserve}
+              >
+                {isOutOfStock
+                  ? "Esgotado"
+                  : product.hasVariants
+                  ? "Ver Opções"
+                  : "Reservar Agora"}
+              </Button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {store.contactWhatsapp && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleWhatsApp}
-                className="border-green-500 text-green-600 hover:bg-green-50"
-              >
-                <MessageCircle className="w-4 h-4" />
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant="outline"
+          <div className="flex justify-end">
+            <button
               onClick={() => {
-                navigate(`/loja/${storeSlug}/produtos/${product.slug}`);
+                navigate(`/loja/${storeSlug}/consultar-pedido`);
                 onClose();
               }}
-              className="flex items-center gap-1"
+              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 flex items-center gap-0.5 transition-colors"
             >
-              <ExternalLink className="w-3.5 h-3.5" />
-              Ver Detalhes
-            </Button>
-            <Button
-              size="sm"
-              className="font-semibold text-white px-5"
-              style={
-                !isOutOfStock
-                  ? { backgroundColor: store.accentColor || store.primaryColor }
-                  : undefined
-              }
-              disabled={isOutOfStock}
-              onClick={handleReserve}
-            >
-              {isOutOfStock
-                ? "Esgotado"
-                : product.hasVariants
-                ? "Ver Opções"
-                : "Reservar Agora"}
-            </Button>
+              Consultar pedido existente
+              <ExternalLink className="w-3 h-3" />
+            </button>
           </div>
         </div>
       </DialogContent>

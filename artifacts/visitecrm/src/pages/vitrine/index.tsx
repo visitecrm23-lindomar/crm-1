@@ -8,6 +8,7 @@ import VitrineCatalog from "./catalog";
 import VitrineProduct from "./product";
 import VitrineCheckout from "./checkout";
 import VitrineOrderTracking from "./order-tracking";
+import ReservationWizard from "./reservation-wizard";
 import { Loader2 } from "lucide-react";
 
 function StoreRouter({ slug }: { slug: string }) {
@@ -74,6 +75,15 @@ function StoreRouter({ slug }: { slug: string }) {
         <Route path={`/loja/${slug}/produtos/:productSlug`}>
           {(params: Record<string, string>) => (
             <VitrineProduct
+              slug={slug}
+              productSlug={params.productSlug}
+              store={store}
+            />
+          )}
+        </Route>
+        <Route path={`/loja/${slug}/reservar/:productSlug`}>
+          {(params: Record<string, string>) => (
+            <ReservationWizard
               slug={slug}
               productSlug={params.productSlug}
               store={store}

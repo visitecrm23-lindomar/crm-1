@@ -22,6 +22,7 @@ import {
   Copy,
   Check,
   Zap,
+  Search,
 } from "lucide-react";
 
 function StarRating({ rating }: { rating: number }) {
@@ -114,15 +115,7 @@ export default function VitrineProduct({
   }
 
   function handleReserveNow() {
-    addItem({
-      productId: product!.id,
-      productName: product!.name,
-      unitPrice: effectivePrice,
-      quantity: qty,
-      image: images[0],
-      variantLabel: selectedVariant?.label,
-    });
-    navigate(`/loja/${slug}/checkout`);
+    navigate(`/loja/${slug}/reservar/${productSlug}`);
   }
 
   function handleWhatsApp() {
@@ -608,16 +601,23 @@ export default function VitrineProduct({
               <span className="hidden sm:inline ml-2">Carrinho</span>
             </Button>
             <Button
+              variant="outline"
+              className="h-11 px-4 font-medium hidden sm:flex items-center gap-2"
+              onClick={() => navigate(`/loja/${slug}/consultar-pedido`)}
+            >
+              <Search className="w-4 h-4" />
+              Consultar Pedido
+            </Button>
+            <Button
               className="h-11 px-6 font-bold text-white"
               style={{ backgroundColor: store.accentColor || store.primaryColor }}
               onClick={handleReserveNow}
               disabled={
-                (product.trackInventory && product.stockQuantity != null && product.stockQuantity <= 0) ||
-                (product.hasVariants && !selectedVariant)
+                product.trackInventory && product.stockQuantity != null && product.stockQuantity <= 0
               }
             >
               <Zap className="w-5 h-5 mr-2" />
-              {product.hasVariants && !selectedVariant ? "Selecione uma opção" : "Reservar Agora"}
+              Reservar Agora
             </Button>
           </div>
         </div>
