@@ -389,6 +389,7 @@ router.post("/reservations", async (req, res): Promise<void> => {
     let serverReferralCode: string | null = null;
     let serverReferralAmount = 0;
     let serverReferralBonusValue = 0;
+    let serverReferralDiscountPct = 5;
     let serverReferralReferrerId: string | null = null;
 
     if (parsed.data.discountReferralCode) {
@@ -417,8 +418,8 @@ router.post("/reservations", async (req, res): Promise<void> => {
       serverReferralCode = upperCode;
       serverReferralReferrerId = referrer.id;
       // Discount for the referred customer (percentage of base value)
-      const discPct = Number(refSettings?.discountValue ?? "5");
-      serverReferralAmount = Math.round((baseValue * (discPct / 100)) * 100) / 100;
+      serverReferralDiscountPct = Number(refSettings?.discountValue ?? "5");
+      serverReferralAmount = Math.round((baseValue * (serverReferralDiscountPct / 100)) * 100) / 100;
       // Bonus earned by the referrer
       serverReferralBonusValue = Number(refSettings?.bonusValue ?? "10");
     }
@@ -560,7 +561,7 @@ router.post("/reservations", async (req, res): Promise<void> => {
           referredId: parsed.data.clientId,
           discountApplied: true,
           discountType: "percentage",
-          discountValue: appliedReferralAmount.toFixed(2),
+          discountValue: serverReferralDiscountPct.toFixed(2),
           discountAmount: appliedReferralAmount.toFixed(2),
           bonusAmount: serverReferralBonusValue.toFixed(2),
           convertedAt: new Date(),

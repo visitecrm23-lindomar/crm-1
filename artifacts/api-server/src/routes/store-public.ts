@@ -332,6 +332,7 @@ const CreateOrderBody = z.object({
   })).min(1),
   couponCode: z.string().optional(),
   referralCode: z.string().optional(),
+  referralCookieId: z.string().optional(),
   paymentMethod: z.string().optional(),
   paymentProvider: z.string().optional(),
   notes: z.string().optional(),
@@ -509,21 +510,25 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
         )).limit(1);
 
       if (referrer) {
-        // Prevent self-referral
-        const isSelfReferral = referrer.email
-          && data.customerEmail
-          && referrer.email.toLowerCase() === data.customerEmail.toLowerCase();
+        // Get referral settings for policy enforcement
+        const [refSettings] = await db.select({
+          discountValue: referralSettingsTable.discountValue,
+          discountType: referralSettingsTable.discountType,
+          isEnabled: referralSettingsTable.isEnabled,
+          expirationDays: referralSettingsTable.expirationDays,
+          allowSelfReferral: referralSettingsTable.allowSelfReferral,
+          requireFirstPurchase: referralSettingsTable.requireFirstPurchase,
+        }).from(referralSettingsTable)
+          .where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
 
-        if (!isSelfReferral) {
-          // Get discount % from referral settings
-          const [refSettings] = await db.select({
-            discountValue: referralSettingsTable.discountValue,
-            discountType: referralSettingsTable.discountType,
-            isActive: referralSettingsTable.isEnabled,
-          }).from(referralSettingsTable)
-            .where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
+        if (!refSettings || refSettings.isEnabled !== false) {
+          // Self-referral check
+          const isSelfReferral = !refSettings?.allowSelfReferral
+            && referrer.email
+            && data.customerEmail
+            && referrer.email.toLowerCase() === data.customerEmail.toLowerCase();
 
-          if (!refSettings || refSettings.isActive !== false) {
+          if (!isSelfReferral) {
             const discPct = refSettings?.discountType === "percentage" ? Number(refSettings.discountValue) : 5;
             discountAmount = subtotal * (discPct / 100);
             appliedReferralCode = upperCode;
@@ -758,13 +763,22 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
               ));
           }
 
-          // Mark referral_tracking as converted — scoped to tenant + code
-          await tx.update(referralTrackingTable)
-            .set({ converted: true, convertedAt: new Date(), updatedAt: new Date() })
-            .where(and(
-              eq(referralTrackingTable.tenantId, store.tenantId),
-              eq(referralTrackingTable.referralCode, appliedReferralCode),
-            ));
+          // Mark referral_tracking as converted — prefer cookieId for precision, fall back to code+tenant
+          if (data.referralCookieId) {
+            await tx.update(referralTrackingTable)
+              .set({ converted: true, convertedAt: new Date(), updatedAt: new Date() })
+              .where(and(
+                eq(referralTrackingTable.tenantId, store.tenantId),
+                eq(referralTrackingTable.cookieId, data.referralCookieId),
+              ));
+          } else {
+            await tx.update(referralTrackingTable)
+              .set({ converted: true, convertedAt: new Date(), updatedAt: new Date() })
+              .where(and(
+                eq(referralTrackingTable.tenantId, store.tenantId),
+                eq(referralTrackingTable.referralCode, appliedReferralCode),
+              ));
+          }
         }
 
         // Update store order count atomically
@@ -881,7 +895,10 @@ router.post("/public/store/:slug/referral/validate", async (req, res): Promise<v
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
-    const parsed = z.object({ code: z.string().min(1) }).safeParse(req.body);
+    const parsed = z.object({
+      code: z.string().min(1),
+      customerEmail: z.string().optional(),
+    }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const code = parsed.data.code.toUpperCase();
 
@@ -889,7 +906,9 @@ router.post("/public/store/:slug/referral/validate", async (req, res): Promise<v
     const [referrer] = await db.select({
       id: clientsTable.id,
       name: clientsTable.name,
+      email: clientsTable.email,
       referralCode: clientsTable.referralCode,
+      createdAt: clientsTable.createdAt,
     }).from(clientsTable)
       .where(and(
         eq(clientsTable.tenantId, store.tenantId),
@@ -905,14 +924,34 @@ router.post("/public/store/:slug/referral/validate", async (req, res): Promise<v
     const [settings] = await db.select({
       discountValue: referralSettingsTable.discountValue,
       discountType: referralSettingsTable.discountType,
-      isActive: referralSettingsTable.isEnabled,
-      expiryDays: referralSettingsTable.expirationDays,
+      isEnabled: referralSettingsTable.isEnabled,
+      expirationDays: referralSettingsTable.expirationDays,
+      allowSelfReferral: referralSettingsTable.allowSelfReferral,
     }).from(referralSettingsTable)
       .where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
 
-    if (settings && !settings.isActive) {
+    if (settings && !settings.isEnabled) {
       res.status(400).json({ valid: false, error: "Programa de indicação inativo" });
       return;
+    }
+
+    // Enforce expiration: code is expired if referrer account is older than expirationDays
+    const expirationDays = settings?.expirationDays ?? 30;
+    if (referrer.createdAt) {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - expirationDays);
+      if (referrer.createdAt < cutoff) {
+        res.status(400).json({ valid: false, error: "Código de indicação expirado" });
+        return;
+      }
+    }
+
+    // Self-referral check when customer email is provided
+    if (!settings?.allowSelfReferral && parsed.data.customerEmail && referrer.email) {
+      if (referrer.email.toLowerCase() === parsed.data.customerEmail.toLowerCase()) {
+        res.status(400).json({ valid: false, error: "Você não pode usar seu próprio código de indicação" });
+        return;
+      }
     }
 
     const discountPercent = settings?.discountType === "percentage"
