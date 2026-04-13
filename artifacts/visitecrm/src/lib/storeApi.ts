@@ -127,8 +127,20 @@ async function publicReq<T>(
 }
 
 export const publicStoreApi = {
-  getStore: (slug: string) =>
-    publicReq<PublicStore>("GET", `/public/store/${slug}`),
+  getStore: async (slug: string): Promise<PublicStore> => {
+    const raw = await publicReq<Record<string, unknown>>("GET", `/public/store/${slug}`);
+    return {
+      ...raw,
+      logoUrl: (raw.logoUrl ?? raw.logo) as string | null,
+      contactEmail: (raw.contactEmail ?? raw.email) as string | null,
+      contactPhone: (raw.contactPhone ?? raw.phone) as string | null,
+      contactWhatsapp: (raw.contactWhatsapp ?? raw.whatsapp) as string | null,
+      contactAddress: (raw.contactAddress ?? raw.address) as string | null,
+      socialInstagram: (raw.socialInstagram ?? raw.instagramUrl) as string | null,
+      socialFacebook: (raw.socialFacebook ?? raw.facebookUrl) as string | null,
+      socialYoutube: (raw.socialYoutube ?? raw.youtubeUrl) as string | null,
+    } as PublicStore;
+  },
   getCategories: (slug: string) =>
     publicReq<StoreCategory[]>("GET", `/public/store/${slug}/categories`),
   getProducts: (

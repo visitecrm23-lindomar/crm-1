@@ -401,7 +401,7 @@ function Router() {
 
       {/* Public vitrine — must be after admin routes */}
       <Route path="/loja/:slug" component={Vitrine} />
-      <Route path="/loja/:slug/:rest*" component={Vitrine} />
+      <Route path="/loja/:slug/*" component={Vitrine} />
 
       <Route
         component={() => <ProtectedRoute component={() => <Redirect to="/dashboard" />} />}
