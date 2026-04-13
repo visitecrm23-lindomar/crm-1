@@ -26,6 +26,7 @@ import {
   Printer,
   Search,
   Bus,
+  AlertTriangle,
 } from "lucide-react";
 
 type Step = "dados" | "revisao" | "assento" | "pagamento" | "confirmado";
@@ -528,10 +529,16 @@ export default function ReservationWizard({
   const couponDiscount = couponResult?.valid ? Number(couponResult.discountAmount ?? 0) : 0;
   const finalTotal = Math.max(0, subtotal - couponDiscount);
 
-  const maxSeats =
-    product?.availableSeats != null ? Math.max(1, product.availableSeats) : 99;
   const showSeatGrid =
     product?.totalCapacity != null && product.totalCapacity > 0 && product.totalCapacity <= 60;
+
+  const maxSeats = (() => {
+    if (product?.availableSeats != null) return product.availableSeats;
+    if (showSeatGrid && product?.totalCapacity) return product.totalCapacity;
+    return 99;
+  })();
+
+  const isSoldOut = maxSeats === 0;
 
   const occupiedSeats: number[] = (() => {
     if (!product?.totalCapacity) return [];
@@ -570,7 +577,9 @@ export default function ReservationWizard({
   }
 
   function canProceedFromRevisao() {
+    if (isSoldOut) return false;
     if (product?.hasVariants && !selectedVariant) return false;
+    if (showSeatGrid && product?.totalCapacity && qty > product.totalCapacity) return false;
     return qty >= 1;
   }
 
@@ -855,7 +864,14 @@ export default function ReservationWizard({
             </div>
           )}
 
-          <div className="flex items-center justify-between p-4 border rounded-xl">
+          {isSoldOut && (
+            <div className="flex items-center gap-2 p-4 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 font-medium">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              Este produto está esgotado e não pode ser reservado no momento.
+            </div>
+          )}
+
+          <div className={`flex items-center justify-between p-4 border rounded-xl ${isSoldOut ? "opacity-50 pointer-events-none" : ""}`}>
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-muted-foreground" />
               <span className="text-sm font-medium">Quantidade de passageiros</span>
