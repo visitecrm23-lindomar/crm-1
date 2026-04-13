@@ -5,6 +5,7 @@ import {
 } from "@workspace/api-client-react";
 import type { Reservation } from "@workspace/api-client-react";
 import { VoucherModal } from "./reservations";
+import { ReservationCardVisual } from "@/components/reservation-card-visual";
 import { Users, Map, DollarSign, Star, Briefcase, CalendarCheck, AlertTriangle, ArrowUpRight, Plus, Clock, Check, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -633,41 +634,48 @@ function ClientDashboard() {
       </div>
 
       {nextTrip && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Sua Próxima Viagem</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-bold">{nextTrip.name}</h3>
-                <p className="text-muted-foreground">{nextTrip.destination}</p>
-                <p className="text-sm mt-1">
-                  <span className="font-medium">{format(parseISO(nextTrip.departureDate), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</span>
-                  {daysToTrip != null && daysToTrip > 0 && <Badge className="ml-2" variant="outline">Faltam {daysToTrip} dias</Badge>}
-                </p>
+        myReservation ? (
+          <Card className="overflow-hidden">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2">
+                Sua Próxima Viagem
+                {daysToTrip != null && daysToTrip > 0 && (
+                  <Badge variant="outline">Faltam {daysToTrip} dias</Badge>
+                )}
+                {daysToTrip === 0 && <Badge className="bg-green-600">Hoje!</Badge>}
+              </CardTitle>
+              <CardDescription>{nextTrip.name} · {nextTrip.destination}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ReservationCardVisual
+                reservation={myReservation}
+                agencyName={me?.tenant?.name ?? "Agência"}
+                agencyLogo={me?.tenant?.logoUrl}
+                departureDate={format(parseISO(nextTrip.departureDate), "dd/MM/yyyy")}
+                onViewVoucher={() => { setVoucherReservation(myReservation); setVoucherAutoDownload(false); setVoucherOpen(true); }}
+                onDownloadPdf={() => { setVoucherReservation(myReservation); setVoucherAutoDownload(true); setVoucherOpen(true); }}
+              />
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle>Sua Próxima Viagem</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold">{nextTrip.name}</h3>
+                  <p className="text-muted-foreground">{nextTrip.destination}</p>
+                  <p className="text-sm mt-1">
+                    <span className="font-medium">{format(parseISO(nextTrip.departureDate), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</span>
+                    {daysToTrip != null && daysToTrip > 0 && <Badge className="ml-2" variant="outline">Faltam {daysToTrip} dias</Badge>}
+                  </p>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!myReservation}
-                  onClick={() => { setVoucherReservation(myReservation); setVoucherAutoDownload(false); setVoucherOpen(true); }}
-                >
-                  Ver Voucher
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!myReservation}
-                  onClick={() => { setVoucherReservation(myReservation); setVoucherAutoDownload(true); setVoucherOpen(true); }}
-                >
-                  Baixar PDF
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )
       )}
 
       <VoucherModal reservation={voucherReservation} open={voucherOpen} onClose={() => { setVoucherOpen(false); setVoucherAutoDownload(false); }} autoDownload={voucherAutoDownload} />
