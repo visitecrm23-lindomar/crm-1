@@ -6,8 +6,9 @@ import {
   useListTrips, useCreateTrip, useGetTrip, useUpdateTrip, useDeleteTrip,
   useGetTripSeatMap, getGetTripSeatMapQueryKey, useGetDashboardUpcomingTrips, useListReservations, useListClients, useCreateReservation, useUpdateReservation, useCreateClient,
   useGetTripBoardingPanel, useCheckInPassenger, useUndoCheckInPassenger, useSyncTripPassengers,
+  useListLayouts,
 } from "@workspace/api-client-react";
-import type { Trip, Seat, BoardingPassenger } from "@workspace/api-client-react";
+import type { Trip, Seat, BoardingPassenger, VehicleLayout, LayoutCell } from "@workspace/api-client-react";
 import { storeApi } from "@/lib/storeApi";
 import { Client360Modal } from "@/components/client360-modal";
 import { useEditor, EditorContent } from "@tiptap/react";
@@ -1021,6 +1022,7 @@ interface TripFormData {
   type: string; category: string;
   departureDate: string; returnDate: string;
   totalCapacity: string; seatLayout: string;
+  layoutId: string;
   priceAdult: string; priceChild: string; priceSenior: string;
   inclusions: string; exclusions: string;
   coverImage: string;
@@ -1040,7 +1042,7 @@ const newCost = (): CostItem => ({ id: crypto.randomUUID(), label: "", amount: "
 const EMPTY_FORM: TripFormData = {
   name: "", description: "", destination: "", destinationCity: "", destinationState: "",
   type: "excursion", category: "standard", departureDate: "", returnDate: "",
-  totalCapacity: "46", seatLayout: "2x2",
+  totalCapacity: "46", seatLayout: "2x2", layoutId: "",
   priceAdult: "", priceChild: "", priceSenior: "",
   inclusions: "", exclusions: "", coverImage: "",
   vehicleType: "", vehiclePlate: "", driverName: "", status: "draft",
@@ -1058,6 +1060,7 @@ const toTripFormData = (trip: Trip): TripFormData => ({
   returnDate: trip.returnDate?.split("T")[0] ?? "",
   totalCapacity: String(trip.totalCapacity),
   seatLayout: trip.seatLayout ?? "2x2",
+  layoutId: trip.layoutId ?? "",
   priceAdult: String(trip.priceAdult),
   priceChild: trip.priceChild ? String(trip.priceChild) : "",
   priceSenior: trip.priceSenior ? String(trip.priceSenior) : "",
@@ -1083,14 +1086,22 @@ export function TripForm({ tripId }: { tripId?: string }) {
   const [form, setForm] = useState<TripFormData>(EMPTY_FORM);
 
   const { data: existingTrip } = useGetTrip(tripId ?? "", { query: { enabled: !!tripId, queryKey: ["/api/trips", tripId] } });
+  const { data: layouts = [] } = useListLayouts({ query: { queryKey: ["layouts"] } });
   const createTrip = useCreateTrip();
   const updateTrip = useUpdateTrip();
   const isPending = createTrip.isPending || updateTrip.isPending;
+
+  const selectedLayout = layouts.find(l => l.id === form.layoutId) ?? null;
 
   useEffect(() => {
     if (!existingTrip || !tripId) return;
     setForm(toTripFormData(existingTrip));
   }, [existingTrip?.id, tripId]);
+
+  useEffect(() => {
+    if (!selectedLayout) return;
+    setForm(prev => ({ ...prev, totalCapacity: String(selectedLayout.seatCount) }));
+  }, [form.layoutId, selectedLayout?.seatCount]);
 
   const set = (k: keyof TripFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(prev => ({ ...prev, [k]: e.target.value }));
@@ -1131,7 +1142,8 @@ export function TripForm({ tripId }: { tripId?: string }) {
             priceSenior: form.priceSenior ? parseFloat(form.priceSenior) : undefined,
             inclusions: inclArr, exclusions: exclArr,
             coverImage: form.coverImage || undefined,
-            seatLayout: form.seatLayout,
+            seatLayout: form.layoutId ? undefined : form.seatLayout,
+            layoutId: form.layoutId || null,
             vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined,
             status: statusToSave,
             itinerary: itineraryToSave.length ? itineraryToSave : undefined,
@@ -1154,7 +1166,8 @@ export function TripForm({ tripId }: { tripId?: string }) {
             priceSenior: form.priceSenior ? parseFloat(form.priceSenior) : undefined,
             inclusions: inclArr, exclusions: exclArr,
             coverImage: form.coverImage || undefined,
-            seatLayout: form.seatLayout,
+            seatLayout: form.layoutId ? undefined : form.seatLayout,
+            layoutId: form.layoutId || null,
             vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined,
             status: statusToSave,
             itinerary: itineraryToSave.length ? itineraryToSave : undefined,
@@ -1240,19 +1253,57 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 <Label>Data de Retorno</Label>
                 <Input type="date" value={form.returnDate} onChange={set("returnDate")} />
               </div>
-              <div className="space-y-2">
-                <Label>Capacidade Total (assentos) *</Label>
-                <Input type="number" min="1" max="200" value={form.totalCapacity} onChange={set("totalCapacity")} />
-              </div>
-              <div className="space-y-2">
-                <Label>Layout dos Assentos</Label>
-                <Select value={form.seatLayout} onValueChange={setVal("seatLayout")}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+              <div className="space-y-2 col-span-2">
+                <Label>Layout de Assentos</Label>
+                <Select
+                  value={form.layoutId || `__std_${form.seatLayout}`}
+                  onValueChange={v => {
+                    if (v.startsWith("__std_")) {
+                      setForm(prev => ({ ...prev, layoutId: "", seatLayout: v.replace("__std_", "") }));
+                    } else {
+                      setForm(prev => ({ ...prev, layoutId: v }));
+                    }
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Selecione um layout..." /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="2x2">2x2 (Padrão)</SelectItem>
-                    <SelectItem value="2x1">2x1 (Premium)</SelectItem>
+                    <SelectItem value="__std_2x2">Padrão 2x2 (automático)</SelectItem>
+                    <SelectItem value="__std_2x1">Premium 2x1 (automático)</SelectItem>
+                    {layouts.length > 0 && (
+                      <>
+                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-t mt-1 pt-2">
+                          Layouts personalizados
+                        </div>
+                        {layouts.map(l => (
+                          <SelectItem key={l.id} value={l.id}>
+                            {l.name} — {l.seatCount} assentos
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
+                {selectedLayout && (
+                  <div className="mt-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-sm space-y-1">
+                    <p className="font-medium text-indigo-800">✓ Layout personalizado: {selectedLayout.name}</p>
+                    <p className="text-indigo-600 text-xs">
+                      {selectedLayout.rows} fileiras × {selectedLayout.cols} colunas · {selectedLayout.seatCount} assentos · numeração {selectedLayout.numberingType === "by_row" ? "por fileira" : "sequencial"}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label>Capacidade Total (assentos) *</Label>
+                <Input
+                  type="number" min="1" max="500"
+                  value={form.totalCapacity}
+                  onChange={set("totalCapacity")}
+                  disabled={!!selectedLayout}
+                  title={selectedLayout ? "Calculado automaticamente a partir do layout" : undefined}
+                />
+                {selectedLayout && (
+                  <p className="text-xs text-muted-foreground">Calculado automaticamente ({selectedLayout.seatCount} assentos)</p>
+                )}
               </div>
             </div>
           </div>

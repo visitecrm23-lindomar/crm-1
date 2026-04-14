@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Truck, Bus, Hotel, MapPin, Package } from "lucide-react";
+import { Truck, Bus, Hotel, MapPin, Package, LayoutGrid } from "lucide-react";
 
 const SECTIONS = [
   {
@@ -42,6 +42,14 @@ const SECTIONS = [
     href: "/cadastros/produtos",
     color: "text-pink-500",
     bg: "bg-pink-50",
+  },
+  {
+    title: "Layouts de Assentos",
+    description: "Crie mapas de assentos personalizados para vincular às viagens",
+    icon: LayoutGrid,
+    href: "/cadastros/layouts",
+    color: "text-indigo-500",
+    bg: "bg-indigo-50",
   },
 ];
 

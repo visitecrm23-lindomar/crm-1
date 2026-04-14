@@ -1,11 +1,66 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable } from "@workspace/db";
+import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable } from "@workspace/db";
+import type { LayoutCell } from "@workspace/db";
 import { eq, and, ilike, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { deriveAgeCategory, getAgeYears } from "../lib/passenger";
 import { CreateTripBody, UpdateTripBody } from "@workspace/api-zod";
+
+type SeatMapEntry = { row: number; col: number; status: string; type?: string };
+
+function generateSeatMapFromLayout(
+  cells: LayoutCell[],
+  numberingType: string,
+): Record<string, SeatMapEntry> {
+  const seatMap: Record<string, SeatMapEntry> = {};
+  const seatTypes = ["seat", "vip", "accessible"] as const;
+  const seatCells = cells
+    .filter(c => seatTypes.includes(c.type as (typeof seatTypes)[number]))
+    .sort((a, b) => (a.row !== b.row ? a.row - b.row : a.col - b.col));
+
+  const keyOf = (c: LayoutCell) => `${c.row}-${c.col}-${c.floor}`;
+  const seatLabels = new Map<string, string>();
+
+  if (numberingType === "by_row") {
+    const rowGroups = new Map<number, LayoutCell[]>();
+    for (const cell of seatCells) {
+      if (!rowGroups.has(cell.row)) rowGroups.set(cell.row, []);
+      rowGroups.get(cell.row)!.push(cell);
+    }
+    for (const [row, rowCells] of [...rowGroups.entries()].sort(([a], [b]) => a - b)) {
+      rowCells.sort((a, b) => a.col - b.col);
+      rowCells.forEach((cell, i) => {
+        seatLabels.set(keyOf(cell), `${row}${String.fromCharCode(65 + i)}`);
+      });
+    }
+  } else {
+    seatCells.forEach((cell, i) => {
+      seatLabels.set(keyOf(cell), cell.label ?? String(i + 1));
+    });
+  }
+
+  const nonSeatCounters: Record<string, number> = {};
+  const typePrefix: Record<string, string> = { wc: "WC", stairs: "ESC", fridge: "FRG", blocked: "BLQ" };
+
+  for (const cell of cells) {
+    if (cell.type === "empty") continue;
+    const k = keyOf(cell);
+    if (seatTypes.includes(cell.type as (typeof seatTypes)[number])) {
+      const label = cell.label || seatLabels.get(k) || String(cells.indexOf(cell) + 1);
+      seatMap[label] = { row: cell.row, col: cell.col, status: "available", type: cell.type };
+    } else {
+      nonSeatCounters[cell.type] = (nonSeatCounters[cell.type] ?? 0) + 1;
+      const n = nonSeatCounters[cell.type];
+      const prefix = typePrefix[cell.type] ?? cell.type.toUpperCase();
+      const label = `${prefix}${n > 1 ? n : ""}`;
+      seatMap[label] = { row: cell.row, col: cell.col, status: cell.type, type: cell.type };
+    }
+  }
+
+  return seatMap;
+}
 
 const router = Router();
 
@@ -42,6 +97,7 @@ function formatTrip(t: typeof tripsTable.$inferSelect) {
     vehicleType: t.vehicleType,
     driverName: t.driverName,
     seatLayout: t.seatLayout,
+    layoutId: t.layoutId ?? null,
     fixedCosts: t.fixedCosts ? Number(t.fixedCosts) : null,
     variableCosts: t.variableCosts ? Number(t.variableCosts) : null,
     createdAt: t.createdAt.toISOString(),
@@ -92,16 +148,30 @@ router.post("/trips", async (req, res): Promise<void> => {
     const id = generateId();
     const slug = parsed.data.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + id.slice(0, 4);
 
-    const seatMap: Record<string, unknown> = {};
+    let seatMap: Record<string, unknown> = {};
     const layout = parsed.data.seatLayout ?? "2x2";
-    const cols = layout === "2x1" ? 3 : 4;
-    const rows = Math.ceil(parsed.data.totalCapacity / cols);
-    let seatNum = 1;
-    for (let r = 1; r <= rows; r++) {
-      for (let c = 1; c <= cols; c++) {
-        if (seatNum <= parsed.data.totalCapacity) {
-          seatMap[`${seatNum}`] = { row: r, col: c, status: "available" };
-          seatNum++;
+    let totalCapacity = parsed.data.totalCapacity;
+    let layoutId: string | null = parsed.data.layoutId ?? null;
+
+    if (layoutId) {
+      const [layoutRow] = await db.select().from(vehicleLayoutsTable)
+        .where(and(eq(vehicleLayoutsTable.id, layoutId), eq(vehicleLayoutsTable.tenantId, me.tenantId)))
+        .limit(1);
+      if (!layoutRow) { res.status(400).json({ error: "Layout não encontrado" }); return; }
+      const cells = (layoutRow.cells ?? []) as LayoutCell[];
+      seatMap = generateSeatMapFromLayout(cells, layoutRow.numberingType);
+      const seatCount = cells.filter(c => ["seat", "vip", "accessible"].includes(c.type)).length;
+      totalCapacity = seatCount;
+    } else {
+      const cols = layout === "2x1" ? 3 : 4;
+      const rows = Math.ceil(totalCapacity / cols);
+      let seatNum = 1;
+      for (let r = 1; r <= rows; r++) {
+        for (let c = 1; c <= cols; c++) {
+          if (seatNum <= totalCapacity) {
+            seatMap[`${seatNum}`] = { row: r, col: c, status: "available" };
+            seatNum++;
+          }
         }
       }
     }
@@ -119,8 +189,8 @@ router.post("/trips", async (req, res): Promise<void> => {
       category: parsed.data.category,
       departureDate: new Date(parsed.data.departureDate),
       returnDate: parsed.data.returnDate ? new Date(parsed.data.returnDate) : null,
-      totalCapacity: parsed.data.totalCapacity,
-      availableSeats: parsed.data.totalCapacity,
+      totalCapacity,
+      availableSeats: totalCapacity,
       priceAdult: String(parsed.data.priceAdult),
       priceChild: parsed.data.priceChild ? String(parsed.data.priceChild) : null,
       priceSenior: parsed.data.priceSenior ? String(parsed.data.priceSenior) : null,
@@ -128,6 +198,7 @@ router.post("/trips", async (req, res): Promise<void> => {
       exclusions: parsed.data.exclusions ?? [],
       coverImage: parsed.data.coverImage ?? null,
       seatLayout: layout,
+      layoutId: layoutId ?? null,
       itinerary: parsed.data.itinerary ?? null,
       boardingPoints: parsed.data.boardingPoints ?? [],
       fixedCosts: parsed.data.fixedCosts != null ? String(parsed.data.fixedCosts) : null,
@@ -189,9 +260,10 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
     if (parsed.data.totalCapacity != null) updates.totalCapacity = parsed.data.totalCapacity;
     if (parsed.data.coverImage !== undefined) updates.coverImage = parsed.data.coverImage ?? null;
     if (parsed.data.seatLayout !== undefined) updates.seatLayout = parsed.data.seatLayout ?? null;
+    if (parsed.data.layoutId !== undefined) updates.layoutId = parsed.data.layoutId ?? null;
 
     const capacityOrLayoutChanged =
-      parsed.data.totalCapacity != null || parsed.data.seatLayout !== undefined;
+      parsed.data.totalCapacity != null || parsed.data.seatLayout !== undefined || parsed.data.layoutId !== undefined;
     if (parsed.data.inclusions != null) updates.inclusions = parsed.data.inclusions;
     if (parsed.data.exclusions != null) updates.exclusions = parsed.data.exclusions;
     if (parsed.data.vehiclePlate !== undefined) updates.vehiclePlate = parsed.data.vehiclePlate ?? null;
@@ -214,18 +286,34 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
         .limit(1);
       if (!currentTrip) { res.status(404).json({ error: "Not found" }); return; }
 
-      const newCapacity = parsed.data.totalCapacity ?? currentTrip.totalCapacity;
-      const newLayout = parsed.data.seatLayout ?? currentTrip.seatLayout ?? "2x2";
-      const newCols = newLayout === "2x1" ? 3 : 4;
-      const newRows = Math.ceil(newCapacity / newCols);
+      const newLayoutId = parsed.data.layoutId !== undefined
+        ? (parsed.data.layoutId ?? null)
+        : (currentTrip.layoutId ?? null);
 
-      const newSeatMap: Record<string, { row: number; col: number; status: string }> = {};
-      let seatNum = 1;
-      for (let r = 1; r <= newRows; r++) {
-        for (let c = 1; c <= newCols; c++) {
-          if (seatNum <= newCapacity) {
-            newSeatMap[`${seatNum}`] = { row: r, col: c, status: "available" };
-            seatNum++;
+      let newSeatMap: Record<string, { row: number; col: number; status: string; type?: string }> = {};
+      let newCapacity = parsed.data.totalCapacity ?? currentTrip.totalCapacity;
+
+      if (newLayoutId) {
+        const [layoutRow] = await db.select().from(vehicleLayoutsTable)
+          .where(and(eq(vehicleLayoutsTable.id, newLayoutId), eq(vehicleLayoutsTable.tenantId, me.tenantId)))
+          .limit(1);
+        if (!layoutRow) { res.status(400).json({ error: "Layout não encontrado" }); return; }
+        const cells = (layoutRow.cells ?? []) as LayoutCell[];
+        const generated = generateSeatMapFromLayout(cells, layoutRow.numberingType);
+        newSeatMap = generated as typeof newSeatMap;
+        newCapacity = cells.filter(c => ["seat", "vip", "accessible"].includes(c.type)).length;
+        updates.totalCapacity = newCapacity;
+      } else {
+        const newLayout = parsed.data.seatLayout ?? currentTrip.seatLayout ?? "2x2";
+        const newCols = newLayout === "2x1" ? 3 : 4;
+        const newRows = Math.ceil(newCapacity / newCols);
+        let seatNum = 1;
+        for (let r = 1; r <= newRows; r++) {
+          for (let c = 1; c <= newCols; c++) {
+            if (seatNum <= newCapacity) {
+              newSeatMap[`${seatNum}`] = { row: r, col: c, status: "available" };
+              seatNum++;
+            }
           }
         }
       }
@@ -307,20 +395,25 @@ router.get("/trips/:id/seat-map", async (req, res): Promise<void> => {
       }
     }
 
-    const seatMap = trip.seatMap as Record<string, { row: number; col: number; status: string }>;
+    const seatMap = trip.seatMap as Record<string, { row: number; col: number; status: string; type?: string }>;
     const seats = Object.entries(seatMap).map(([num, data]) => ({
       number: num,
       row: data.row,
       col: data.col,
-      status: occupiedSeats[num] ? occupiedSeats[num].seatStatus : "available",
+      type: data.type ?? "seat",
+      status: occupiedSeats[num]
+        ? occupiedSeats[num].seatStatus
+        : (data.type && !["seat", "vip", "accessible"].includes(data.type) ? data.type : "available"),
       passengerName: occupiedSeats[num]?.passengerName ?? null,
       reservationId: occupiedSeats[num]?.reservationId ?? null,
     }));
 
+    const maxCol = Math.max(...seats.map(s => s.col), 4);
     res.json({
       tripId: trip.id,
       layout: trip.seatLayout ?? "2x2",
       totalSeats: trip.totalCapacity,
+      cols: maxCol,
       seats,
     });
   } catch (err) {

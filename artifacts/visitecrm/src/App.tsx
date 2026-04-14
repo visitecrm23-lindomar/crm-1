@@ -35,6 +35,7 @@ import Settings from "@/pages/settings";
 // Task 6 pages
 import Fornecedores from "@/pages/cadastros/fornecedores";
 import Veiculos from "@/pages/cadastros/veiculos";
+import Layouts from "@/pages/cadastros/layouts";
 import Hospedagens from "@/pages/cadastros/hospedagens";
 import Destinos from "@/pages/cadastros/destinos";
 import Produtos from "@/pages/cadastros/produtos";
@@ -336,6 +337,10 @@ function Router() {
       <Route
         path="/cadastros/produtos"
         component={() => <ProtectedRoute component={Produtos} />}
+      />
+      <Route
+        path="/cadastros/layouts"
+        component={() => <ProtectedRoute component={Layouts} />}
       />
 
       {/* Analytics */}

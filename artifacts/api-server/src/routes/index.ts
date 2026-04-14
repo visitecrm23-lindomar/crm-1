@@ -71,5 +71,6 @@ router.use(onboardingRouter);
 router.use(teamRouter);
 router.use(notificationsRouter);
 router.use(birthdayRouter);
+router.use(layoutsRouter);
 
 export default router;

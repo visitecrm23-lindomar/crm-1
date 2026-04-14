@@ -3,6 +3,9 @@ import { useGetTripSeatMap } from "@workspace/api-client-react";
 import type { Seat } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
+// Seat types that are clickable / reservable
+const CLICKABLE_TYPES = ["seat", "vip", "accessible"];
+
 interface SeatMapPickerProps {
   tripId: string;
   selectedSeats: string[];
@@ -10,16 +13,62 @@ interface SeatMapPickerProps {
   maxSeats?: number;
 }
 
-export function getSeatColor(status: string, selected: boolean) {
+type SeatWithType = Seat & { type?: string };
+
+export function getSeatColor(status: string, selected: boolean, type?: string) {
   if (selected) return "bg-primary border-2 border-primary text-primary-foreground cursor-pointer";
+
+  // Non-seat cells
+  if (type === "wc") return "bg-cyan-100 border-2 border-cyan-300 text-cyan-700 cursor-not-allowed";
+  if (type === "stairs") return "bg-purple-100 border-2 border-purple-300 text-purple-700 cursor-not-allowed";
+  if (type === "fridge") return "bg-sky-100 border-2 border-sky-300 text-sky-700 cursor-not-allowed";
+  if (type === "blocked") return "bg-gray-100 border-2 border-gray-300 text-gray-400 cursor-not-allowed";
+
+  // Seat types
   switch (status) {
-    case "available": return "bg-white border-2 border-gray-200 hover:border-primary hover:bg-primary/10 cursor-pointer";
+    case "available":
+      if (type === "vip") return "bg-amber-50 border-2 border-amber-400 hover:border-amber-600 hover:bg-amber-100 text-amber-800 cursor-pointer";
+      if (type === "accessible") return "bg-green-50 border-2 border-green-400 hover:border-green-600 hover:bg-green-100 text-green-800 cursor-pointer";
+      return "bg-white border-2 border-gray-200 hover:border-primary hover:bg-primary/10 cursor-pointer";
     case "reserved":
-    case "occupied": return "bg-orange-400 border-2 border-orange-500 text-white cursor-not-allowed";
-    case "confirmed": return "bg-green-500 border-2 border-green-600 text-white cursor-not-allowed";
-    case "blocked": return "bg-gray-300 border-2 border-gray-400 text-gray-600 cursor-not-allowed";
-    default: return "bg-gray-100 border-2 border-gray-200 cursor-not-allowed";
+    case "occupied":
+      return "bg-orange-400 border-2 border-orange-500 text-white cursor-not-allowed";
+    case "confirmed":
+      return "bg-green-500 border-2 border-green-600 text-white cursor-not-allowed";
+    case "blocked":
+    case "wc":
+    case "stairs":
+    case "fridge":
+      return "bg-gray-100 border-2 border-gray-200 text-gray-400 cursor-not-allowed";
+    default:
+      return "bg-gray-100 border-2 border-gray-200 cursor-not-allowed";
   }
+}
+
+function getCellIcon(type?: string, seatNumber?: string): string {
+  switch (type) {
+    case "wc": return "🚽";
+    case "stairs": return "🪜";
+    case "fridge": return "🧊";
+    case "blocked": return "✕";
+    case "vip": return "★";
+    case "accessible": return "♿";
+    default: return seatNumber ?? "";
+  }
+}
+
+function getCellTitle(seat: SeatWithType, selected: boolean): string {
+  const typeLabel: Record<string, string> = {
+    wc: "Banheiro",
+    stairs: "Escada",
+    fridge: "Frigobar",
+    blocked: "Bloqueado",
+    vip: `Assento VIP ${seat.number}`,
+    accessible: `Assento Acessível ${seat.number}`,
+  };
+  if (seat.type && typeLabel[seat.type]) return typeLabel[seat.type];
+  if (selected) return `Assento ${seat.number} — Selecionado`;
+  return `Assento ${seat.number} — ${seat.status}`;
 }
 
 export function SeatMapPicker({ tripId, selectedSeats, onSeatsChange, maxSeats }: SeatMapPickerProps) {
@@ -27,23 +76,31 @@ export function SeatMapPicker({ tripId, selectedSeats, onSeatsChange, maxSeats }
     query: { queryKey: ["seat-map-picker", tripId], refetchInterval: 8000 },
   });
 
-  const seats = useMemo(() => {
+  const seats = useMemo<SeatWithType[]>(() => {
     if (!seatMap?.seats) return [];
-    return [...seatMap.seats].sort((a, b) => {
+    return [...(seatMap.seats as SeatWithType[])].sort((a, b) => {
       if (a.row !== b.row) return a.row - b.row;
       return a.col - b.col;
     });
   }, [seatMap]);
 
   const maxRow = useMemo(() => Math.max(...seats.map(s => s.row), 0), [seats]);
+  const maxCol = useMemo(() => Math.max(...seats.map(s => s.col), 4), [seats]);
+  const aisleAfterCol = Math.ceil(maxCol / 2);
+
+  const clickableSeats = useMemo(() =>
+    seats.filter(s => CLICKABLE_TYPES.includes(s.type ?? "seat")),
+    [seats]
+  );
 
   const seatCounts = useMemo(() => ({
-    available: seats.filter(s => s.status === "available").length,
-    reserved: seats.filter(s => s.status === "reserved" || s.status === "occupied").length,
-    confirmed: seats.filter(s => s.status === "confirmed").length,
-  }), [seats]);
+    available: clickableSeats.filter(s => s.status === "available").length,
+    reserved: clickableSeats.filter(s => s.status === "reserved" || s.status === "occupied").length,
+    confirmed: clickableSeats.filter(s => s.status === "confirmed").length,
+  }), [clickableSeats]);
 
-  const handleSeatClick = (seat: Seat) => {
+  const handleSeatClick = (seat: SeatWithType) => {
+    if (!CLICKABLE_TYPES.includes(seat.type ?? "seat")) return;
     if (seat.status !== "available") return;
     const isSelected = selectedSeats.includes(seat.number);
     if (isSelected) {
@@ -72,6 +129,8 @@ export function SeatMapPicker({ tripId, selectedSeats, onSeatsChange, maxSeats }
     );
   }
 
+  const hasCustomTypes = seats.some(s => s.type && s.type !== "seat");
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -85,38 +144,49 @@ export function SeatMapPicker({ tripId, selectedSeats, onSeatsChange, maxSeats }
         {Array.from({ length: maxRow }).map((_, rowIdx) => {
           const rowNum = rowIdx + 1;
           const rowSeats = seats.filter(s => s.row === rowNum);
-          const leftSeats = rowSeats.filter(s => s.col <= 2);
-          const rightSeats = rowSeats.filter(s => s.col > 2);
+          const leftSeats = rowSeats.filter(s => s.col <= aisleAfterCol);
+          const rightSeats = rowSeats.filter(s => s.col > aisleAfterCol);
+
           return (
             <div key={rowNum} className="flex items-center gap-2 justify-center">
               <div className="flex gap-1">
-                {leftSeats.map(seat => (
-                  <button
-                    key={seat.number}
-                    type="button"
-                    className={`w-9 h-9 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(seat.status, selectedSeats.includes(seat.number))}`}
-                    onClick={() => handleSeatClick(seat)}
-                    title={`Assento ${seat.number} — ${selectedSeats.includes(seat.number) ? "Selecionado" : seat.status}`}
-                    disabled={seat.status !== "available" && !selectedSeats.includes(seat.number)}
-                  >
-                    {seat.number}
-                  </button>
-                ))}
+                {leftSeats.map(seat => {
+                  const s = seat as SeatWithType;
+                  const isClickable = CLICKABLE_TYPES.includes(s.type ?? "seat");
+                  const isSelected = selectedSeats.includes(s.number);
+                  return (
+                    <button
+                      key={s.number}
+                      type="button"
+                      className={`w-9 h-9 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(s.status, isSelected, s.type)}`}
+                      onClick={() => handleSeatClick(s)}
+                      title={getCellTitle(s, isSelected)}
+                      disabled={!isClickable || (s.status !== "available" && !isSelected)}
+                    >
+                      {getCellIcon(s.type, isSelected ? "✓" : s.number)}
+                    </button>
+                  );
+                })}
               </div>
               <div className="w-4 text-center text-xs text-muted-foreground shrink-0">|</div>
               <div className="flex gap-1">
-                {rightSeats.map(seat => (
-                  <button
-                    key={seat.number}
-                    type="button"
-                    className={`w-9 h-9 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(seat.status, selectedSeats.includes(seat.number))}`}
-                    onClick={() => handleSeatClick(seat)}
-                    title={`Assento ${seat.number} — ${selectedSeats.includes(seat.number) ? "Selecionado" : seat.status}`}
-                    disabled={seat.status !== "available" && !selectedSeats.includes(seat.number)}
-                  >
-                    {seat.number}
-                  </button>
-                ))}
+                {rightSeats.map(seat => {
+                  const s = seat as SeatWithType;
+                  const isClickable = CLICKABLE_TYPES.includes(s.type ?? "seat");
+                  const isSelected = selectedSeats.includes(s.number);
+                  return (
+                    <button
+                      key={s.number}
+                      type="button"
+                      className={`w-9 h-9 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(s.status, isSelected, s.type)}`}
+                      onClick={() => handleSeatClick(s)}
+                      title={getCellTitle(s, isSelected)}
+                      disabled={!isClickable || (s.status !== "available" && !isSelected)}
+                    >
+                      {getCellIcon(s.type, isSelected ? "✓" : s.number)}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           );
@@ -127,9 +197,14 @@ export function SeatMapPicker({ tripId, selectedSeats, onSeatsChange, maxSeats }
         {[
           { color: "bg-primary", label: "Selecionado" },
           { color: "bg-white border-2 border-gray-200", label: "Disponível" },
+          { color: "bg-amber-50 border-2 border-amber-400", label: "VIP" },
           { color: "bg-orange-400", label: "Reservado" },
           { color: "bg-green-500", label: "Confirmado" },
           { color: "bg-gray-300", label: "Bloqueado" },
+          ...(hasCustomTypes ? [
+            { color: "bg-cyan-100 border-2 border-cyan-300", label: "Banheiro" },
+            { color: "bg-purple-100 border-2 border-purple-300", label: "Escada" },
+          ] : []),
         ].map(l => (
           <div key={l.label} className="flex items-center gap-1">
             <div className={`w-3.5 h-3.5 rounded ${l.color}`} />
