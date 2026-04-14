@@ -1079,6 +1079,42 @@ const toTripFormData = (trip: Trip): TripFormData => ({
   gallery: trip.gallery ?? [],
 });
 
+const CELL_COLORS: Record<string, string> = {
+  seat: "bg-blue-200",
+  vip: "bg-amber-300",
+  accessible: "bg-green-300",
+  wc: "bg-cyan-200",
+  stairs: "bg-purple-200",
+  fridge: "bg-sky-200",
+  blocked: "bg-gray-200",
+  empty: "bg-transparent",
+};
+
+function LayoutMiniPreview({ cells, rows, cols }: { cells: { row: number; col: number; floor?: number; type: string }[]; rows: number; cols: number }) {
+  const floor1 = cells.filter(c => (c.floor ?? 1) === 1);
+  const cellMap = new Map(floor1.map(c => [`${c.row}-${c.col}`, c.type]));
+  const size = Math.max(4, Math.min(10, Math.floor(120 / Math.max(rows, cols))));
+  return (
+    <div className="flex flex-col gap-0.5 mt-1">
+      {Array.from({ length: rows }).map((_, ri) => (
+        <div key={ri} className="flex gap-0.5">
+          {Array.from({ length: cols }).map((_, ci) => {
+            const type = cellMap.get(`${ri + 1}-${ci + 1}`) ?? "empty";
+            return (
+              <div
+                key={ci}
+                className={`rounded-sm ${CELL_COLORS[type] ?? "bg-gray-100"}`}
+                style={{ width: size, height: size }}
+                title={type}
+              />
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function TripForm({ tripId }: { tripId?: string }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -1284,11 +1320,22 @@ export function TripForm({ tripId }: { tripId?: string }) {
                   </SelectContent>
                 </Select>
                 {selectedLayout && (
-                  <div className="mt-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-sm space-y-1">
-                    <p className="font-medium text-indigo-800">✓ Layout personalizado: {selectedLayout.name}</p>
-                    <p className="text-indigo-600 text-xs">
-                      {selectedLayout.rows} fileiras × {selectedLayout.cols} colunas · {selectedLayout.seatCount} assentos · numeração {selectedLayout.numberingType === "by_row" ? "por fileira" : "sequencial"}
-                    </p>
+                  <div className="mt-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-sm">
+                    <div className="flex items-start gap-3">
+                      <div className="shrink-0">
+                        <LayoutMiniPreview cells={selectedLayout.cells} rows={selectedLayout.rows} cols={selectedLayout.cols} />
+                      </div>
+                      <div className="space-y-0.5 min-w-0">
+                        <p className="font-medium text-indigo-800 truncate">✓ {selectedLayout.name}</p>
+                        <p className="text-indigo-600 text-xs">
+                          {selectedLayout.rows} fil. × {selectedLayout.cols} col. · {selectedLayout.seatCount} assentos
+                        </p>
+                        <p className="text-indigo-500 text-xs">
+                          {selectedLayout.floors > 1 ? `${selectedLayout.floors} andares · ` : ""}
+                          Numeração: {selectedLayout.numberingType === "by_row" ? "por fileira" : "sequencial"}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

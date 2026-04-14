@@ -49,7 +49,6 @@ import {
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
-// ─── Cell type definitions ──────────────────────────────────────────────────
 type CellType = LayoutCell["type"];
 
 interface CellTypeInfo {
@@ -74,7 +73,6 @@ const CELL_TYPES: CellTypeInfo[] = [
 
 const cellTypeMap = Object.fromEntries(CELL_TYPES.map(c => [c.type, c])) as Record<CellType, CellTypeInfo>;
 
-// ─── Templates ──────────────────────────────────────────────────────────────
 interface LayoutTemplate {
   name: string;
   rows: number;
@@ -167,9 +165,32 @@ const TEMPLATES: LayoutTemplate[] = [
       return cells;
     },
   },
+  {
+    name: "Double Decker (2 andares)",
+    rows: 12,
+    cols: 4,
+    floors: 2,
+    numberingType: "by_row",
+    vehicleType: "Ônibus",
+    generate: (rows, cols) => {
+      const cells: LayoutCell[] = [];
+      for (let floor = 1; floor <= 2; floor++) {
+        for (let r = 1; r <= rows; r++) {
+          for (let c = 1; c <= cols; c++) {
+            const isLastRow = r === rows;
+            const isFirstRow = r === 1;
+            let type: CellType = "seat";
+            if (floor === 1 && isLastRow && (c === 3 || c === 4)) type = "wc";
+            if (floor === 2 && isFirstRow && c === cols) type = "stairs";
+            cells.push({ row: r, col: c, floor, type });
+          }
+        }
+      }
+      return cells;
+    },
+  },
 ];
 
-// ─── Default cells generator ─────────────────────────────────────────────────
 function generateDefaultCells(rows: number, cols: number, existing: LayoutCell[] = []): LayoutCell[] {
   const existingMap = new Map(existing.map(c => [`${c.row}-${c.col}-${c.floor ?? 1}`, c]));
   const cells: LayoutCell[] = [];
@@ -182,7 +203,6 @@ function generateDefaultCells(rows: number, cols: number, existing: LayoutCell[]
   return cells;
 }
 
-// ─── Cell rendering ──────────────────────────────────────────────────────────
 function GridCell({
   cell,
   selected,
@@ -215,7 +235,6 @@ function GridCell({
   );
 }
 
-// ─── Stats bar ───────────────────────────────────────────────────────────────
 function LayoutStats({ cells }: { cells: LayoutCell[] }) {
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -239,7 +258,6 @@ function LayoutStats({ cells }: { cells: LayoutCell[] }) {
   );
 }
 
-// ─── Layout Editor Modal ──────────────────────────────────────────────────────
 interface EditorState {
   name: string;
   description: string;
@@ -513,7 +531,6 @@ function LayoutEditorModal({
   );
 }
 
-// ─── Layout Card ──────────────────────────────────────────────────────────────
 function LayoutCard({
   layout,
   onEdit,
@@ -615,7 +632,6 @@ function LayoutCard({
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
 export default function LayoutsPage() {
   const { data: layouts = [], isLoading, refetch } = useListLayouts({ query: { queryKey: ["layouts"] } });
   const createLayout = useCreateLayout();
