@@ -5005,6 +5005,9 @@ components:
           type: string
         totalSeats:
           type: integer
+        cols:
+          type: integer
+          description: Number of columns in the seat layout grid
         seats:
           type: array
           items:
@@ -5022,6 +5025,9 @@ components:
           type: integer
         status:
           type: string
+        type:
+          type: string
+          description: Cell type (seat, vip, accessible, wc, stairs, fridge, blocked)
         passengerName:
           type: ["string", "null"]
         reservationId:

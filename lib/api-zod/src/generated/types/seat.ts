@@ -11,6 +11,8 @@ export interface Seat {
   row: number;
   col: number;
   status: string;
+  /** Cell type (seat, vip, accessible, wc, stairs, fridge, blocked) */
+  type?: string;
   /** @nullable */
   passengerName?: string | null;
   /** @nullable */

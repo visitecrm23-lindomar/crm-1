@@ -1527,12 +1527,22 @@ export const GetTripSeatMapResponse = zod.object({
   tripId: zod.string(),
   layout: zod.string(),
   totalSeats: zod.number(),
+  cols: zod
+    .number()
+    .optional()
+    .describe("Number of columns in the seat layout grid"),
   seats: zod.array(
     zod.object({
       number: zod.string(),
       row: zod.number(),
       col: zod.number(),
       status: zod.string(),
+      type: zod
+        .string()
+        .optional()
+        .describe(
+          "Cell type (seat, vip, accessible, wc, stairs, fridge, blocked)",
+        ),
       passengerName: zod.string().nullish(),
       reservationId: zod.string().nullish(),
     }),

@@ -5,6 +5,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import type { LayoutCell } from "@workspace/db";
+import { CreateLayoutBody, UpdateLayoutBody } from "@workspace/api-zod";
 
 const router = Router();
 
@@ -56,11 +57,12 @@ router.post("/layouts", async (req, res): Promise<void> => {
       return;
     }
 
-    const { name, description, vehicleType, rows, cols, floors, numberingType, cells } = req.body;
-    if (!name || !cells || rows == null || cols == null) {
-      res.status(400).json({ error: "name, rows, cols and cells are required" });
+    const parsed = CreateLayoutBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Validation failed", details: parsed.error.flatten() });
       return;
     }
+    const { name, description, vehicleType, rows, cols, floors, numberingType, cells } = parsed.data;
 
     const id = generateId();
     await db.insert(vehicleLayoutsTable).values({
@@ -69,9 +71,9 @@ router.post("/layouts", async (req, res): Promise<void> => {
       name,
       description: description ?? null,
       vehicleType: vehicleType ?? null,
-      rows: Number(rows),
-      cols: Number(cols),
-      floors: Number(floors ?? 1),
+      rows,
+      cols,
+      floors: floors ?? 1,
       numberingType: numberingType ?? "sequential",
       cells: cells as LayoutCell[],
     });
@@ -119,15 +121,20 @@ router.put("/layouts/:id", async (req, res): Promise<void> => {
       .limit(1);
     if (!existing) { res.status(404).json({ error: "Not found" }); return; }
 
-    const { name, description, vehicleType, rows, cols, floors, numberingType, cells } = req.body;
+    const parsed = UpdateLayoutBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Validation failed", details: parsed.error.flatten() });
+      return;
+    }
+    const { name, description, vehicleType, rows, cols, floors, numberingType, cells } = parsed.data;
 
     const updates: Partial<typeof vehicleLayoutsTable.$inferInsert> = {};
     if (name != null) updates.name = name;
     if (description !== undefined) updates.description = description ?? null;
     if (vehicleType !== undefined) updates.vehicleType = vehicleType ?? null;
-    if (rows != null) updates.rows = Number(rows);
-    if (cols != null) updates.cols = Number(cols);
-    if (floors != null) updates.floors = Number(floors);
+    if (rows != null) updates.rows = rows;
+    if (cols != null) updates.cols = cols;
+    if (floors != null) updates.floors = floors;
     if (numberingType != null) updates.numberingType = numberingType;
     if (cells != null) updates.cells = cells as LayoutCell[];
 

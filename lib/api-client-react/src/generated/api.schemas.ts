@@ -537,6 +537,8 @@ export interface Seat {
   row: number;
   col: number;
   status: string;
+  /** Cell type (seat, vip, accessible, wc, stairs, fridge, blocked) */
+  type?: string;
   /** @nullable */
   passengerName?: string | null;
   /** @nullable */
@@ -547,6 +549,8 @@ export interface SeatMap {
   tripId: string;
   layout: string;
   totalSeats: number;
+  /** Number of columns in the seat layout grid */
+  cols?: number;
   seats: Seat[];
 }
 

@@ -11,5 +11,7 @@ export interface SeatMap {
   tripId: string;
   layout: string;
   totalSeats: number;
+  /** Number of columns in the seat layout grid */
+  cols?: number;
   seats: Seat[];
 }
