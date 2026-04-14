@@ -18,21 +18,38 @@ function generateSeatMapFromLayout(
   const seatTypes = ["seat", "vip", "accessible"] as const;
   const seatCells = cells
     .filter(c => seatTypes.includes(c.type as (typeof seatTypes)[number]))
-    .sort((a, b) => (a.row !== b.row ? a.row - b.row : a.col - b.col));
+    .sort((a, b) => {
+      const fa = a.floor ?? 1, fb = b.floor ?? 1;
+      if (fa !== fb) return fa - fb;
+      if (a.row !== b.row) return a.row - b.row;
+      return a.col - b.col;
+    });
 
-  const keyOf = (c: LayoutCell) => `${c.row}-${c.col}-${c.floor}`;
+  const keyOf = (c: LayoutCell) => `${c.floor ?? 1}-${c.row}-${c.col}`;
   const seatLabels = new Map<string, string>();
 
+  const maxFloor = Math.max(...cells.map(c => c.floor ?? 1), 1);
+  const isMultiFloor = maxFloor > 1;
+
   if (numberingType === "by_row") {
-    const rowGroups = new Map<number, LayoutCell[]>();
+    // Group by (floor, row) to avoid label collisions across floors
+    const floorRowGroups = new Map<string, LayoutCell[]>();
     for (const cell of seatCells) {
-      if (!rowGroups.has(cell.row)) rowGroups.set(cell.row, []);
-      rowGroups.get(cell.row)!.push(cell);
+      const floor = cell.floor ?? 1;
+      const groupKey = `${floor}-${cell.row}`;
+      if (!floorRowGroups.has(groupKey)) floorRowGroups.set(groupKey, []);
+      floorRowGroups.get(groupKey)!.push(cell);
     }
-    for (const [row, rowCells] of [...rowGroups.entries()].sort(([a], [b]) => a - b)) {
-      rowCells.sort((a, b) => a.col - b.col);
-      rowCells.forEach((cell, i) => {
-        seatLabels.set(keyOf(cell), `${row}${String.fromCharCode(65 + i)}`);
+    for (const [groupKey, groupCells] of [...floorRowGroups.entries()].sort(([a], [b]) => {
+      const [fa, ra] = a.split("-").map(Number);
+      const [fb, rb] = b.split("-").map(Number);
+      return fa !== fb ? fa - fb : ra - rb;
+    })) {
+      const [floor, row] = groupKey.split("-").map(Number);
+      groupCells.sort((a, b) => a.col - b.col);
+      groupCells.forEach((cell, i) => {
+        const floorPrefix = isMultiFloor ? `A${floor}-` : "";
+        seatLabels.set(keyOf(cell), `${floorPrefix}${row}${String.fromCharCode(65 + i)}`);
       });
     }
   } else {

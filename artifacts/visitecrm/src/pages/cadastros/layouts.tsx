@@ -191,13 +191,15 @@ const TEMPLATES: LayoutTemplate[] = [
   },
 ];
 
-function generateDefaultCells(rows: number, cols: number, existing: LayoutCell[] = []): LayoutCell[] {
-  const existingMap = new Map(existing.map(c => [`${c.row}-${c.col}-${c.floor ?? 1}`, c]));
+function generateDefaultCells(rows: number, cols: number, existing: LayoutCell[] = [], floors = 1): LayoutCell[] {
+  const existingMap = new Map(existing.map(c => [`${c.floor ?? 1}-${c.row}-${c.col}`, c]));
   const cells: LayoutCell[] = [];
-  for (let r = 1; r <= rows; r++) {
-    for (let c = 1; c <= cols; c++) {
-      const key = `${r}-${c}-1`;
-      cells.push(existingMap.get(key) ?? { row: r, col: c, floor: 1, type: "seat" });
+  for (let f = 1; f <= floors; f++) {
+    for (let r = 1; r <= rows; r++) {
+      for (let c = 1; c <= cols; c++) {
+        const key = `${f}-${r}-${c}`;
+        cells.push(existingMap.get(key) ?? { row: r, col: c, floor: f, type: "seat" });
+      }
     }
   }
   return cells;
@@ -292,23 +294,27 @@ function LayoutEditorModal({
       cols: 4,
       floors: 1,
       numberingType: "sequential",
-      cells: generateDefaultCells(12, 4),
+      cells: generateDefaultCells(12, 4, [], 1),
     }
   );
   const [selectedType, setSelectedType] = useState<CellType>("seat");
+  const [editingFloor, setEditingFloor] = useState(1);
 
   const setField = <K extends keyof EditorState>(k: K) => (v: EditorState[K]) =>
     setForm(f => ({ ...f, [k]: v }));
 
-  const adjustDimension = (dim: "rows" | "cols", delta: number) => {
+  const adjustDimension = (dim: "rows" | "cols" | "floors", delta: number) => {
     setForm(f => {
-      const newVal = Math.max(1, Math.min(20, f[dim] + delta));
+      const maxVal = dim === "floors" ? 3 : 20;
+      const newVal = Math.max(1, Math.min(maxVal, f[dim] + delta));
       const updated = { ...f, [dim]: newVal };
       updated.cells = generateDefaultCells(
         dim === "rows" ? newVal : f.rows,
         dim === "cols" ? newVal : f.cols,
         f.cells,
+        dim === "floors" ? newVal : f.floors,
       );
+      if (dim === "floors" && editingFloor > newVal) setEditingFloor(newVal);
       return updated;
     });
   };
@@ -324,19 +330,21 @@ function LayoutEditorModal({
       cells: tpl.generate(tpl.rows, tpl.cols),
       name: f.name || tpl.name,
     }));
+    setEditingFloor(1);
   };
 
-  const handleCellClick = useCallback((row: number, col: number) => {
+  const handleCellClick = useCallback((row: number, col: number, floor: number) => {
     setForm(f => ({
       ...f,
       cells: f.cells.map(c =>
-        c.row === row && c.col === col ? { ...c, type: selectedType } : c,
+        c.row === row && c.col === col && (c.floor ?? 1) === floor ? { ...c, type: selectedType } : c,
       ),
     }));
   }, [selectedType]);
 
   const aisleAfterCol = Math.ceil(form.cols / 2);
   const cellSize = Math.min(42, Math.floor(320 / form.cols));
+  const activeFloorCells = form.cells.filter(c => (c.floor ?? 1) === editingFloor);
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
@@ -401,9 +409,9 @@ function LayoutEditorModal({
             {/* Dimensions */}
             <div className="border rounded-lg p-3 space-y-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dimensões</p>
-              {(["rows", "cols"] as const).map(dim => (
+              {(["rows", "cols", "floors"] as const).map(dim => (
                 <div key={dim} className="flex items-center justify-between gap-2">
-                  <span className="text-sm">{dim === "rows" ? "Fileiras" : "Colunas"}</span>
+                  <span className="text-sm">{dim === "rows" ? "Fileiras" : dim === "cols" ? "Colunas" : "Andares"}</span>
                   <div className="flex items-center gap-2">
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjustDimension(dim, -1)}>
                       <MinusCircle className="h-4 w-4" />
@@ -466,16 +474,39 @@ function LayoutEditorModal({
               </div>
             </div>
 
+            {/* Floor tabs (only when floors > 1) */}
+            {form.floors > 1 && (
+              <div className="flex gap-1">
+                {Array.from({ length: form.floors }).map((_, i) => {
+                  const f = i + 1;
+                  return (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setEditingFloor(f)}
+                      className={`px-3 py-1.5 rounded text-xs font-semibold border transition-all ${
+                        editingFloor === f
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-white text-muted-foreground border-gray-200 hover:border-gray-400"
+                      }`}
+                    >
+                      {f}º Andar
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Grid */}
             <div className="border rounded-lg p-4 bg-slate-50 overflow-auto">
               <div className="bg-slate-700 text-white text-center py-1.5 rounded-t text-xs font-semibold mb-3">
-                🚌 FRENTE DO VEÍCULO
+                🚌 FRENTE DO VEÍCULO{form.floors > 1 ? ` — ${editingFloor}º ANDAR` : ""}
               </div>
 
               <div className="space-y-1 inline-block min-w-full">
                 {Array.from({ length: form.rows }).map((_, rIdx) => {
                   const row = rIdx + 1;
-                  const rowCells = form.cells.filter(c => c.row === row).sort((a, b) => a.col - b.col);
+                  const rowCells = activeFloorCells.filter(c => c.row === row).sort((a, b) => a.col - b.col);
                   const leftCells = rowCells.filter(c => c.col <= aisleAfterCol);
                   const rightCells = rowCells.filter(c => c.col > aisleAfterCol);
 
@@ -485,10 +516,10 @@ function LayoutEditorModal({
                       <div className="flex gap-1">
                         {leftCells.map(cell => (
                           <GridCell
-                            key={`${cell.row}-${cell.col}`}
+                            key={`${cell.floor ?? 1}-${cell.row}-${cell.col}`}
                             cell={cell}
                             selected={false}
-                            onClick={() => handleCellClick(cell.row, cell.col)}
+                            onClick={() => handleCellClick(cell.row, cell.col, cell.floor ?? 1)}
                             cellSize={cellSize}
                           />
                         ))}
@@ -497,10 +528,10 @@ function LayoutEditorModal({
                       <div className="flex gap-1">
                         {rightCells.map(cell => (
                           <GridCell
-                            key={`${cell.row}-${cell.col}`}
+                            key={`${cell.floor ?? 1}-${cell.row}-${cell.col}`}
                             cell={cell}
                             selected={false}
-                            onClick={() => handleCellClick(cell.row, cell.col)}
+                            onClick={() => handleCellClick(cell.row, cell.col, cell.floor ?? 1)}
                             cellSize={cellSize}
                           />
                         ))}
