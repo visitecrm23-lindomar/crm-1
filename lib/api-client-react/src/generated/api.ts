@@ -65,6 +65,7 @@ import type {
   CreateExpenseBody,
   CreateFeatureFlagBody,
   CreateInvoiceBody,
+  CreateLayoutBody,
   CreateLoyaltyMemberBody,
   CreateLoyaltyProgramBody,
   CreateLoyaltyTransactionBody,
@@ -177,6 +178,7 @@ import type {
   UpdateExpenseBody,
   UpdateFeatureFlagBody,
   UpdateInvoiceBody,
+  UpdateLayoutBody,
   UpdateMessageTemplateBody,
   UpdateOrderBody,
   UpdatePassengerBody,
@@ -199,6 +201,7 @@ import type {
   ValidatePublicReferralCode200,
   ValidatePublicReferralCodeBody,
   Vehicle,
+  VehicleLayout,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -3912,6 +3915,423 @@ export const useUpdateReferralSettings = <
   TContext
 > => {
   return useMutation(getUpdateReferralSettingsMutationOptions(options));
+};
+
+/**
+ * @summary List vehicle layouts
+ */
+export const getListLayoutsUrl = () => {
+  return `/api/layouts`;
+};
+
+export const listLayouts = async (
+  options?: RequestInit,
+): Promise<VehicleLayout[]> => {
+  return customFetch<VehicleLayout[]>(getListLayoutsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListLayoutsQueryKey = () => {
+  return [`/api/layouts`] as const;
+};
+
+export const getListLayoutsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listLayouts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listLayouts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListLayoutsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listLayouts>>> = ({
+    signal,
+  }) => listLayouts({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listLayouts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListLayoutsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listLayouts>>
+>;
+export type ListLayoutsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List vehicle layouts
+ */
+
+export function useListLayouts<
+  TData = Awaited<ReturnType<typeof listLayouts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listLayouts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListLayoutsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create vehicle layout
+ */
+export const getCreateLayoutUrl = () => {
+  return `/api/layouts`;
+};
+
+export const createLayout = async (
+  createLayoutBody: CreateLayoutBody,
+  options?: RequestInit,
+): Promise<VehicleLayout> => {
+  return customFetch<VehicleLayout>(getCreateLayoutUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createLayoutBody),
+  });
+};
+
+export const getCreateLayoutMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createLayout>>,
+    TError,
+    { data: BodyType<CreateLayoutBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createLayout>>,
+  TError,
+  { data: BodyType<CreateLayoutBody> },
+  TContext
+> => {
+  const mutationKey = ["createLayout"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createLayout>>,
+    { data: BodyType<CreateLayoutBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createLayout(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateLayoutMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createLayout>>
+>;
+export type CreateLayoutMutationBody = BodyType<CreateLayoutBody>;
+export type CreateLayoutMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create vehicle layout
+ */
+export const useCreateLayout = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createLayout>>,
+    TError,
+    { data: BodyType<CreateLayoutBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createLayout>>,
+  TError,
+  { data: BodyType<CreateLayoutBody> },
+  TContext
+> => {
+  return useMutation(getCreateLayoutMutationOptions(options));
+};
+
+/**
+ * @summary Get vehicle layout
+ */
+export const getGetLayoutUrl = (id: string) => {
+  return `/api/layouts/${id}`;
+};
+
+export const getLayout = async (
+  id: string,
+  options?: RequestInit,
+): Promise<VehicleLayout> => {
+  return customFetch<VehicleLayout>(getGetLayoutUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLayoutQueryKey = (id: string) => {
+  return [`/api/layouts/${id}`] as const;
+};
+
+export const getGetLayoutQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLayout>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLayout>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetLayoutQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLayout>>> = ({
+    signal,
+  }) => getLayout(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getLayout>>, TError, TData> & {
+    queryKey: QueryKey;
+  };
+};
+
+export type GetLayoutQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLayout>>
+>;
+export type GetLayoutQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get vehicle layout
+ */
+
+export function useGetLayout<
+  TData = Awaited<ReturnType<typeof getLayout>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLayout>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLayoutQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update vehicle layout
+ */
+export const getUpdateLayoutUrl = (id: string) => {
+  return `/api/layouts/${id}`;
+};
+
+export const updateLayout = async (
+  id: string,
+  updateLayoutBody: UpdateLayoutBody,
+  options?: RequestInit,
+): Promise<VehicleLayout> => {
+  return customFetch<VehicleLayout>(getUpdateLayoutUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateLayoutBody),
+  });
+};
+
+export const getUpdateLayoutMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateLayout>>,
+    TError,
+    { id: string; data: BodyType<UpdateLayoutBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateLayout>>,
+  TError,
+  { id: string; data: BodyType<UpdateLayoutBody> },
+  TContext
+> => {
+  const mutationKey = ["updateLayout"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateLayout>>,
+    { id: string; data: BodyType<UpdateLayoutBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateLayout(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateLayoutMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateLayout>>
+>;
+export type UpdateLayoutMutationBody = BodyType<UpdateLayoutBody>;
+export type UpdateLayoutMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update vehicle layout
+ */
+export const useUpdateLayout = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateLayout>>,
+    TError,
+    { id: string; data: BodyType<UpdateLayoutBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateLayout>>,
+  TError,
+  { id: string; data: BodyType<UpdateLayoutBody> },
+  TContext
+> => {
+  return useMutation(getUpdateLayoutMutationOptions(options));
+};
+
+/**
+ * @summary Delete vehicle layout
+ */
+export const getDeleteLayoutUrl = (id: string) => {
+  return `/api/layouts/${id}`;
+};
+
+export const deleteLayout = async (
+  id: string,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getDeleteLayoutUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteLayoutMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteLayout>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteLayout>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteLayout"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteLayout>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteLayout(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteLayoutMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteLayout>>
+>;
+
+export type DeleteLayoutMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete vehicle layout
+ */
+export const useDeleteLayout = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteLayout>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteLayout>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteLayoutMutationOptions(options));
 };
 
 /**

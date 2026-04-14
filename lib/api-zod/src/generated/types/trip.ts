@@ -53,6 +53,8 @@ export interface Trip {
   fixedCosts?: number | null;
   /** @nullable */
   variableCosts?: number | null;
+  /** @nullable */
+  layoutId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

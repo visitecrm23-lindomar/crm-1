@@ -26,3 +26,4 @@ export * from "./hurb";
 export * from "./invites";
 export * from "./email";
 export * from "./birthday";
+export * from "./vehicle-layouts";

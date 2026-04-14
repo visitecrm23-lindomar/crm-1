@@ -974,6 +974,98 @@ paths:
               schema:
                 $ref: "#/components/schemas/ReferralSettings"
 
+  # ─── LAYOUTS ─────────────────────────────────────────────────────
+  /layouts:
+    get:
+      operationId: listLayouts
+      tags: [layouts]
+      summary: List vehicle layouts
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VehicleLayout"
+    post:
+      operationId: createLayout
+      tags: [layouts]
+      summary: Create vehicle layout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLayoutBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VehicleLayout"
+
+  /layouts/{id}:
+    get:
+      operationId: getLayout
+      tags: [layouts]
+      summary: Get vehicle layout
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VehicleLayout"
+    put:
+      operationId: updateLayout
+      tags: [layouts]
+      summary: Update vehicle layout
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLayoutBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VehicleLayout"
+    delete:
+      operationId: deleteLayout
+      tags: [layouts]
+      summary: Delete vehicle layout
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
   # ─── TRIPS ───────────────────────────────────────────────────────
   /trips:
     get:
@@ -4619,6 +4711,8 @@ components:
           type: ["number", "null"]
         variableCosts:
           type: ["number", "null"]
+        layoutId:
+          type: ["string", "null"]
         createdAt:
           type: string
         updatedAt:
@@ -4646,6 +4740,100 @@ components:
         - isFeatured
         - createdAt
         - updatedAt
+
+    LayoutCell:
+      type: object
+      properties:
+        row:
+          type: integer
+        col:
+          type: integer
+        floor:
+          type: integer
+        type:
+          type: string
+          enum: [seat, vip, accessible, wc, stairs, fridge, empty, blocked]
+        label:
+          type: ["string", "null"]
+      required: [row, col, floor, type]
+
+    VehicleLayout:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        vehicleType:
+          type: ["string", "null"]
+        rows:
+          type: integer
+        cols:
+          type: integer
+        floors:
+          type: integer
+        numberingType:
+          type: string
+        cells:
+          type: array
+          items:
+            $ref: "#/components/schemas/LayoutCell"
+        seatCount:
+          type: integer
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, tenantId, name, rows, cols, floors, numberingType, cells, seatCount, createdAt, updatedAt]
+
+    CreateLayoutBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        vehicleType:
+          type: ["string", "null"]
+        rows:
+          type: integer
+        cols:
+          type: integer
+        floors:
+          type: integer
+        numberingType:
+          type: string
+        cells:
+          type: array
+          items:
+            $ref: "#/components/schemas/LayoutCell"
+      required: [name, rows, cols, cells]
+
+    UpdateLayoutBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        vehicleType:
+          type: ["string", "null"]
+        rows:
+          type: ["integer", "null"]
+        cols:
+          type: ["integer", "null"]
+        floors:
+          type: ["integer", "null"]
+        numberingType:
+          type: ["string", "null"]
+        cells:
+          type: array
+          items:
+            $ref: "#/components/schemas/LayoutCell"
 
     TripListResponse:
       type: object
@@ -4725,6 +4913,8 @@ components:
           type: ["number", "null"]
         variableCosts:
           type: ["number", "null"]
+        layoutId:
+          type: ["string", "null"]
       required:
         - name
         - destination
@@ -4803,6 +4993,8 @@ components:
           type: ["number", "null"]
         variableCosts:
           type: ["number", "null"]
+        layoutId:
+          type: ["string", "null"]
 
     SeatMap:
       type: object

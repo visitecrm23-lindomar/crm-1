@@ -421,6 +421,27 @@ async function runMigrations() {
       ALTER TABLE birthday_messages ADD COLUMN IF NOT EXISTS email_opened_at TIMESTAMPTZ;
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS vehicle_layouts (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        description TEXT,
+        vehicle_type TEXT,
+        rows INTEGER NOT NULL DEFAULT 12,
+        cols INTEGER NOT NULL DEFAULT 4,
+        floors INTEGER NOT NULL DEFAULT 1,
+        numbering_type TEXT NOT NULL DEFAULT 'sequential',
+        cells JSONB NOT NULL DEFAULT '[]'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await client.query(`
+      ALTER TABLE trips ADD COLUMN IF NOT EXISTS layout_id TEXT REFERENCES vehicle_layouts(id) ON DELETE SET NULL;
+    `);
+
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");

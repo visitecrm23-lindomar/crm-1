@@ -55,6 +55,7 @@ export const tripsTable = pgTable("trips", {
   cancellationPolicy: text("cancellation_policy"),
   metaTitle: text("meta_title"),
   metaDescription: text("meta_description"),
+  layoutId: text("layout_id"),
   createdById: text("created_by_id").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

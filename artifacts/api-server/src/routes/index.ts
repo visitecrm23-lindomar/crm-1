@@ -33,6 +33,7 @@ import onboardingRouter from "./onboarding";
 import teamRouter from "./team";
 import notificationsRouter from "./notifications";
 import birthdayRouter from "./birthday";
+import layoutsRouter from "./layouts";
 
 const router: IRouter = Router();
 

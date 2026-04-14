@@ -43,4 +43,6 @@ export interface CreateTripBody {
   fixedCosts?: number | null;
   /** @nullable */
   variableCosts?: number | null;
+  /** @nullable */
+  layoutId?: string | null;
 }

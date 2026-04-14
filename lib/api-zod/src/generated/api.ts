@@ -1074,6 +1074,195 @@ export const UpdateReferralSettingsResponse = zod.object({
 });
 
 /**
+ * @summary List vehicle layouts
+ */
+export const ListLayoutsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  vehicleType: zod.string().nullish(),
+  rows: zod.number(),
+  cols: zod.number(),
+  floors: zod.number(),
+  numberingType: zod.string(),
+  cells: zod.array(
+    zod.object({
+      row: zod.number(),
+      col: zod.number(),
+      floor: zod.number(),
+      type: zod.enum([
+        "seat",
+        "vip",
+        "accessible",
+        "wc",
+        "stairs",
+        "fridge",
+        "empty",
+        "blocked",
+      ]),
+      label: zod.string().nullish(),
+    }),
+  ),
+  seatCount: zod.number(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+export const ListLayoutsResponse = zod.array(ListLayoutsResponseItem);
+
+/**
+ * @summary Create vehicle layout
+ */
+export const CreateLayoutBody = zod.object({
+  name: zod.string(),
+  description: zod.string().nullish(),
+  vehicleType: zod.string().nullish(),
+  rows: zod.number(),
+  cols: zod.number(),
+  floors: zod.number().optional(),
+  numberingType: zod.string().optional(),
+  cells: zod.array(
+    zod.object({
+      row: zod.number(),
+      col: zod.number(),
+      floor: zod.number(),
+      type: zod.enum([
+        "seat",
+        "vip",
+        "accessible",
+        "wc",
+        "stairs",
+        "fridge",
+        "empty",
+        "blocked",
+      ]),
+      label: zod.string().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary Get vehicle layout
+ */
+export const GetLayoutParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetLayoutResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  vehicleType: zod.string().nullish(),
+  rows: zod.number(),
+  cols: zod.number(),
+  floors: zod.number(),
+  numberingType: zod.string(),
+  cells: zod.array(
+    zod.object({
+      row: zod.number(),
+      col: zod.number(),
+      floor: zod.number(),
+      type: zod.enum([
+        "seat",
+        "vip",
+        "accessible",
+        "wc",
+        "stairs",
+        "fridge",
+        "empty",
+        "blocked",
+      ]),
+      label: zod.string().nullish(),
+    }),
+  ),
+  seatCount: zod.number(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Update vehicle layout
+ */
+export const UpdateLayoutParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateLayoutBody = zod.object({
+  name: zod.string().nullish(),
+  description: zod.string().nullish(),
+  vehicleType: zod.string().nullish(),
+  rows: zod.number().nullish(),
+  cols: zod.number().nullish(),
+  floors: zod.number().nullish(),
+  numberingType: zod.string().nullish(),
+  cells: zod
+    .array(
+      zod.object({
+        row: zod.number(),
+        col: zod.number(),
+        floor: zod.number(),
+        type: zod.enum([
+          "seat",
+          "vip",
+          "accessible",
+          "wc",
+          "stairs",
+          "fridge",
+          "empty",
+          "blocked",
+        ]),
+        label: zod.string().nullish(),
+      }),
+    )
+    .optional(),
+});
+
+export const UpdateLayoutResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  vehicleType: zod.string().nullish(),
+  rows: zod.number(),
+  cols: zod.number(),
+  floors: zod.number(),
+  numberingType: zod.string(),
+  cells: zod.array(
+    zod.object({
+      row: zod.number(),
+      col: zod.number(),
+      floor: zod.number(),
+      type: zod.enum([
+        "seat",
+        "vip",
+        "accessible",
+        "wc",
+        "stairs",
+        "fridge",
+        "empty",
+        "blocked",
+      ]),
+      label: zod.string().nullish(),
+    }),
+  ),
+  seatCount: zod.number(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Delete vehicle layout
+ */
+export const DeleteLayoutParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const DeleteLayoutResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
  * @summary List trips
  */
 export const listTripsQueryPageDefault = 1;
@@ -1131,6 +1320,7 @@ export const ListTripsResponse = zod.object({
       itinerary: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
       fixedCosts: zod.number().nullish(),
       variableCosts: zod.number().nullish(),
+      layoutId: zod.string().nullish(),
       createdAt: zod.string(),
       updatedAt: zod.string(),
     }),
@@ -1170,6 +1360,7 @@ export const CreateTripBody = zod.object({
   itinerary: zod.array(zod.unknown()).optional(),
   fixedCosts: zod.number().nullish(),
   variableCosts: zod.number().nullish(),
+  layoutId: zod.string().nullish(),
 });
 
 /**
@@ -1222,6 +1413,7 @@ export const GetTripResponse = zod.object({
   itinerary: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
   fixedCosts: zod.number().nullish(),
   variableCosts: zod.number().nullish(),
+  layoutId: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -1262,6 +1454,7 @@ export const UpdateTripBody = zod.object({
   itinerary: zod.array(zod.unknown()).optional(),
   fixedCosts: zod.number().nullish(),
   variableCosts: zod.number().nullish(),
+  layoutId: zod.string().nullish(),
 });
 
 export const UpdateTripResponse = zod.object({
@@ -1307,6 +1500,7 @@ export const UpdateTripResponse = zod.object({
   itinerary: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
   fixedCosts: zod.number().nullish(),
   variableCosts: zod.number().nullish(),
+  layoutId: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });

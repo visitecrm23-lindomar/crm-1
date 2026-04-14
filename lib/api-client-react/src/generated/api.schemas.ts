@@ -348,8 +348,82 @@ export interface Trip {
   fixedCosts?: number | null;
   /** @nullable */
   variableCosts?: number | null;
+  /** @nullable */
+  layoutId?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type LayoutCellType =
+  (typeof LayoutCellType)[keyof typeof LayoutCellType];
+
+export const LayoutCellType = {
+  seat: "seat",
+  vip: "vip",
+  accessible: "accessible",
+  wc: "wc",
+  stairs: "stairs",
+  fridge: "fridge",
+  empty: "empty",
+  blocked: "blocked",
+} as const;
+
+export interface LayoutCell {
+  row: number;
+  col: number;
+  floor: number;
+  type: LayoutCellType;
+  /** @nullable */
+  label?: string | null;
+}
+
+export interface VehicleLayout {
+  id: string;
+  tenantId: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  vehicleType?: string | null;
+  rows: number;
+  cols: number;
+  floors: number;
+  numberingType: string;
+  cells: LayoutCell[];
+  seatCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateLayoutBody {
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  vehicleType?: string | null;
+  rows: number;
+  cols: number;
+  floors?: number;
+  numberingType?: string;
+  cells: LayoutCell[];
+}
+
+export interface UpdateLayoutBody {
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  vehicleType?: string | null;
+  /** @nullable */
+  rows?: number | null;
+  /** @nullable */
+  cols?: number | null;
+  /** @nullable */
+  floors?: number | null;
+  /** @nullable */
+  numberingType?: string | null;
+  cells?: LayoutCell[];
 }
 
 export interface TripListResponse {
@@ -396,6 +470,8 @@ export interface CreateTripBody {
   fixedCosts?: number | null;
   /** @nullable */
   variableCosts?: number | null;
+  /** @nullable */
+  layoutId?: string | null;
 }
 
 export interface UpdateTripBody {
@@ -452,6 +528,8 @@ export interface UpdateTripBody {
   fixedCosts?: number | null;
   /** @nullable */
   variableCosts?: number | null;
+  /** @nullable */
+  layoutId?: string | null;
 }
 
 export interface Seat {
