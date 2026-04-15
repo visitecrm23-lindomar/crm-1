@@ -220,6 +220,14 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
 function AgenciaRoute({ component: Component }: { component: React.ComponentType }) {
   const { data: me, isLoading } = useGetMe();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (isLoading || !me) return;
+    if (!me.tenantId && me.role !== "superadmin") {
+      setLocation("/onboarding");
+    }
+  }, [me, isLoading]);
 
   return (
     <>
