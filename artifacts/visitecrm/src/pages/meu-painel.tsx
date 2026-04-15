@@ -330,21 +330,28 @@ export default function MeuPainel() {
                   <TableHead>Cliente</TableHead>
                   <TableHead>Viagem</TableHead>
                   <TableHead>Valor</TableHead>
+                  <TableHead className="text-green-600">Comissão</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {myReservations.slice(0, 10).map((r) => (
+                {myReservations.slice(0, 10).map((r) => {
+                  const comm = myCommissions.find((c) => c.reservationId === r.id);
+                  return (
                   <TableRow key={r.id}>
                     <TableCell className="font-mono text-xs">{r.voucherCode}</TableCell>
                     <TableCell>{r.client.name}</TableCell>
                     <TableCell className="truncate max-w-[180px]">{r.trip.name}</TableCell>
                     <TableCell>{fmtCurrency(r.totalValue)}</TableCell>
+                    <TableCell className="text-green-600 font-medium">
+                      {comm ? fmtCurrency(comm.commissionAmount) : <span className="text-muted-foreground text-xs">—</span>}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="secondary" className="text-xs">{r.status}</Badge>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>
