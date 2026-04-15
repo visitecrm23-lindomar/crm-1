@@ -1675,6 +1675,7 @@ export interface CommissionPreview {
   commissionRate?: number | null;
   commissionType: string;
   source: string;
+  saleAmount: number;
 }
 
 export type AdminStatsByStatus = { [key: string]: number };
@@ -1815,6 +1816,10 @@ export interface Commission {
   reservationId?: string | null;
   baseAmount: string;
   commissionAmount: string;
+  /** @nullable */
+  commissionRate?: string | null;
+  /** @nullable */
+  commissionType?: string | null;
   status: string;
   /** @nullable */
   paidAt?: string | null;

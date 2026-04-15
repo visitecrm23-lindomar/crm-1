@@ -16,6 +16,10 @@ export interface Commission {
   reservationId?: string | null;
   baseAmount: string;
   commissionAmount: string;
+  /** @nullable */
+  commissionRate?: string | null;
+  /** @nullable */
+  commissionType?: string | null;
   status: string;
   /** @nullable */
   paidAt?: string | null;

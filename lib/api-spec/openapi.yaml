@@ -6783,7 +6783,9 @@ components:
           type: string
         source:
           type: string
-      required: [commissionAmount, commissionType, source]
+        saleAmount:
+          type: number
+      required: [commissionAmount, commissionType, source, saleAmount]
 
     # ─── TENANT ────────────────────────────────────────────────────
     AdminStats:
@@ -7003,6 +7005,10 @@ components:
           type: string
         commissionAmount:
           type: string
+        commissionRate:
+          type: ["string", "null"]
+        commissionType:
+          type: ["string", "null"]
         status:
           type: string
         paidAt:

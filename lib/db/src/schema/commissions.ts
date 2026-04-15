@@ -27,6 +27,8 @@ export const commissionsTable = pgTable("commissions", {
   reservationId: text("reservation_id"),
   baseAmount: numeric("base_amount", { precision: 10, scale: 2 }).notNull(),
   commissionAmount: numeric("commission_amount", { precision: 10, scale: 2 }).notNull(),
+  commissionRate: numeric("commission_rate", { precision: 8, scale: 4 }),
+  commissionType: text("commission_type"),
   status: text("status").notNull().default("pending"),
   paidAt: timestamp("paid_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

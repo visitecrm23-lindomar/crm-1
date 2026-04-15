@@ -38,19 +38,18 @@ router.get("/sales-goals", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
 
     const { userId, month } = req.query as Record<string, string>;
-    let query = db.select().from(salesGoalsTable)
-      .where(eq(salesGoalsTable.tenantId, me.tenantId))
-      .$dynamic();
-    if (userId) query = query.where(eq(salesGoalsTable.userId, userId));
-    if (month) query = query.where(eq(salesGoalsTable.month, month));
+
+    // Vendedores can only see their own goals; admins can query any userId
+    const effectiveUserId = ADMIN_ROLES.includes(me.role)
+      ? userId
+      : me.id;
 
     const goals = await db.select().from(salesGoalsTable)
       .where(and(
         eq(salesGoalsTable.tenantId, me.tenantId),
-        ...(userId ? [eq(salesGoalsTable.userId, userId)] : []),
+        ...(effectiveUserId ? [eq(salesGoalsTable.userId, effectiveUserId)] : []),
         ...(month ? [eq(salesGoalsTable.month, month)] : []),
       ))
       .orderBy(desc(salesGoalsTable.createdAt));

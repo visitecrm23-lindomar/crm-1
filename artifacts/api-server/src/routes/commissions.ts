@@ -115,6 +115,7 @@ router.get("/commissions/calculate", async (req, res): Promise<void> => {
         commissionRate: parseFloat(String(rule.value)),
         commissionType: rule.type ?? "percentage",
         source: "rule",
+        saleAmount: amount,
       });
       return;
     }
@@ -134,12 +135,12 @@ router.get("/commissions/calculate", async (req, res): Promise<void> => {
     const fixed = parseFloat(String(seller.commissionFixed ?? "0"));
 
     if (seller.commissionType === "fixed" && fixed > 0) {
-      res.json({ commissionAmount: fixed, commissionRate: null, commissionType: "fixed", source: "seller" });
+      res.json({ commissionAmount: fixed, commissionRate: null, commissionType: "fixed", source: "seller", saleAmount: amount });
     } else if (rate > 0) {
       const commissionAmount = Math.round((amount * rate / 100) * 100) / 100;
-      res.json({ commissionAmount, commissionRate: rate, commissionType: "percentage", source: "seller" });
+      res.json({ commissionAmount, commissionRate: rate, commissionType: "percentage", source: "seller", saleAmount: amount });
     } else {
-      res.json({ commissionAmount: 0, commissionRate: 0, commissionType: "percentage", source: "none" });
+      res.json({ commissionAmount: 0, commissionRate: 0, commissionType: "percentage", source: "none", saleAmount: amount });
     }
   } catch (err) {
     req.log.error({ err }, "Error calculating commission");
@@ -151,10 +152,21 @@ router.get("/commissions", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
-    const commissions = await db.select().from(commissionsTable)
-      .where(eq(commissionsTable.tenantId, me.tenantId))
-      .orderBy(desc(commissionsTable.createdAt));
+
+    // Vendedores can see their own commissions only; admins see all
+    let commissions;
+    if (ADMIN_ROLES.includes(me.role)) {
+      commissions = await db.select().from(commissionsTable)
+        .where(eq(commissionsTable.tenantId, me.tenantId))
+        .orderBy(desc(commissionsTable.createdAt));
+    } else {
+      commissions = await db.select().from(commissionsTable)
+        .where(and(
+          eq(commissionsTable.tenantId, me.tenantId),
+          eq(commissionsTable.userId, me.id),
+        ))
+        .orderBy(desc(commissionsTable.createdAt));
+    }
     res.json(commissions);
   } catch (err) {
     req.log.error({ err }, "Error listing commissions");

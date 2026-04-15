@@ -12,4 +12,5 @@ export interface CommissionPreview {
   commissionRate?: number | null;
   commissionType: string;
   source: string;
+  saleAmount: number;
 }

@@ -469,6 +469,11 @@ async function runMigrations() {
         WHERE status = 'active';
     `);
 
+    await client.query(`
+      ALTER TABLE commissions ADD COLUMN IF NOT EXISTS commission_rate numeric(8,4);
+      ALTER TABLE commissions ADD COLUMN IF NOT EXISTS commission_type text;
+    `);
+
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");

@@ -218,6 +218,27 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   );
 }
 
+function VendedorRoute({ component: Component }: { component: React.ComponentType }) {
+  const { data: me, isLoading } = useGetMe();
+
+  return (
+    <>
+      <Show when="signed-out">
+        <Redirect to="/" />
+      </Show>
+      <Show when="signed-in">
+        {isLoading ? null : me?.role === "vendedor" ? (
+          <Layout>
+            <Component />
+          </Layout>
+        ) : (
+          <Redirect to="/dashboard" />
+        )}
+      </Show>
+    </>
+  );
+}
+
 function AdminRoute({ component: Component }: { component: React.ComponentType }) {
   const { data: me, isLoading } = useGetMe();
 
@@ -365,7 +386,7 @@ function Router() {
       />
 
       {/* Seller dashboard */}
-      <Route path="/meu-painel" component={() => <ProtectedRoute component={MeuPainel} />} />
+      <Route path="/meu-painel" component={() => <VendedorRoute component={MeuPainel} />} />
 
       {/* Legacy redirect */}
       <Route path="/settings" component={() => <Redirect to="/configuracoes" />} />

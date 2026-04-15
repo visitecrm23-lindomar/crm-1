@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { paymentsTable, expensesTable, reservationsTable, clientsTable, commissionRulesTable, commissionsTable, usersTable } from "@workspace/db";
+import { paymentsTable, expensesTable, reservationsTable, clientsTable, commissionRulesTable, commissionsTable, usersTable, salesGoalsTable } from "@workspace/db";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -59,6 +59,36 @@ async function syncReservationPaymentStatus(reservationId: string, tenantId: str
     .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)));
 }
 
+async function syncMonthlyGoalProgress(sellerId: string, tenantId: string): Promise<void> {
+  try {
+    const now = new Date();
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    // Aggregate base revenue from commissions for this seller this month
+    const result = await db.execute(sql`
+      SELECT COALESCE(SUM(base_amount::numeric), 0) AS total
+      FROM commissions
+      WHERE tenant_id = ${tenantId}
+        AND user_id = ${sellerId}
+        AND status != 'cancelled'
+        AND to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM') = ${month}
+    `);
+    const total = parseFloat(String((result.rows[0] as Record<string, unknown>)?.total ?? "0"));
+
+    // Update active goals for this seller/month
+    await db.update(salesGoalsTable)
+      .set({ achievedAmount: String(total) })
+      .where(and(
+        eq(salesGoalsTable.tenantId, tenantId),
+        eq(salesGoalsTable.userId, sellerId),
+        eq(salesGoalsTable.month, month),
+        eq(salesGoalsTable.status, "active"),
+      ));
+  } catch {
+    // Fire-and-forget: swallow errors to avoid breaking commission sync
+  }
+}
+
 export async function syncReservationCommission(reservationId: string, tenantId: string): Promise<void> {
   const [reservation] = await db.select().from(reservationsTable)
     .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)))
@@ -72,12 +102,15 @@ export async function syncReservationCommission(reservationId: string, tenantId:
 
   // Determine commission amount and seller based on whether direct commission is set
   let commissionAmount: number | null = null;
+  let commissionRate: number | null = null;
+  let commissionType: string | null = null;
   let ruleId: string | null = null;
   let sellerId: string | null = null;
 
   if (hasDirectCommission) {
     // Direct commission path: explicit amount set, validate sellerId or fall back to creator (any role)
     commissionAmount = parseFloat(directAmount!);
+    commissionType = "direct";
     const explicitSellerId = reservation.sellerId ?? null;
     if (explicitSellerId) {
       // Validate sellerId belongs to the same tenant
@@ -115,9 +148,11 @@ export async function syncReservationCommission(reservationId: string, tenantId:
     const rule = tripSpecificRule ?? allRule;
     if (rule) {
       ruleId = rule.id;
+      commissionType = rule.type ?? "percentage";
+      commissionRate = parseFloat(String(rule.value));
       commissionAmount = rule.type === "percentage"
-        ? (baseAmount * parseFloat(String(rule.value))) / 100
-        : parseFloat(String(rule.value));
+        ? (baseAmount * commissionRate) / 100
+        : commissionRate;
     } else {
       // Fallback: use per-seller commission configuration
       const [sellerConfig] = await db.select({
@@ -128,12 +163,15 @@ export async function syncReservationCommission(reservationId: string, tenantId:
         .where(and(eq(usersTable.id, sellerId), eq(usersTable.tenantId, tenantId)))
         .limit(1);
       if (sellerConfig) {
+        commissionType = sellerConfig.commissionType ?? "percentage";
         const rate = parseFloat(String(sellerConfig.commissionRate ?? "0"));
         const fixed = parseFloat(String(sellerConfig.commissionFixed ?? "0"));
         if (sellerConfig.commissionType === "fixed" && fixed > 0) {
           commissionAmount = fixed;
+          commissionRate = fixed;
         } else if (rate > 0) {
           commissionAmount = (baseAmount * rate) / 100;
+          commissionRate = rate;
         }
       }
     }
@@ -160,7 +198,13 @@ export async function syncReservationCommission(reservationId: string, tenantId:
   if (existingForSeller) {
     if (existingForSeller.status === "pending") {
       await db.update(commissionsTable)
-        .set({ ruleId: ruleId ?? undefined, baseAmount: String(baseAmount), commissionAmount: String(commissionAmount.toFixed(2)) })
+        .set({
+          ruleId: ruleId ?? undefined,
+          baseAmount: String(baseAmount),
+          commissionAmount: String(commissionAmount.toFixed(2)),
+          commissionRate: commissionRate != null ? String(commissionRate) : undefined,
+          commissionType: commissionType ?? undefined,
+        })
         .where(eq(commissionsTable.id, existingForSeller.id));
     }
   } else {
@@ -172,9 +216,14 @@ export async function syncReservationCommission(reservationId: string, tenantId:
       reservationId,
       baseAmount: String(baseAmount),
       commissionAmount: String(commissionAmount.toFixed(2)),
+      commissionRate: commissionRate != null ? String(commissionRate) : undefined,
+      commissionType: commissionType ?? undefined,
       status: "pending",
     });
   }
+
+  // Fire-and-forget: update monthly goal progress for the seller
+  syncMonthlyGoalProgress(sellerId, tenantId).catch(() => undefined);
 }
 
 router.get("/trips/:tripId/financial-report", async (req, res): Promise<void> => {

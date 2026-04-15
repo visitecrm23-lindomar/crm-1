@@ -3764,6 +3764,8 @@ export const ListCommissionsResponseItem = zod.object({
   reservationId: zod.string().nullish(),
   baseAmount: zod.string(),
   commissionAmount: zod.string(),
+  commissionRate: zod.string().nullish(),
+  commissionType: zod.string().nullish(),
   status: zod.string(),
   paidAt: zod.string().nullish(),
   createdAt: zod.string(),
@@ -3784,6 +3786,7 @@ export const CalculateCommissionResponse = zod.object({
   commissionRate: zod.number().nullish(),
   commissionType: zod.string(),
   source: zod.string(),
+  saleAmount: zod.number(),
 });
 
 /**
@@ -3868,6 +3871,8 @@ export const UpdateCommissionResponse = zod.object({
   reservationId: zod.string().nullish(),
   baseAmount: zod.string(),
   commissionAmount: zod.string(),
+  commissionRate: zod.string().nullish(),
+  commissionType: zod.string().nullish(),
   status: zod.string(),
   paidAt: zod.string().nullish(),
   createdAt: zod.string(),
