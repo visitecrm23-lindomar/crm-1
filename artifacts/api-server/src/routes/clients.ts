@@ -214,6 +214,7 @@ router.post("/clients", async (req, res): Promise<void> => {
       })
       .onConflictDoUpdate({
         target: [clientsTable.tenantId, clientsTable.cpf],
+        targetWhere: sql`${clientsTable.cpf} IS NOT NULL`,
         set: { ...sharedFields, updatedAt: new Date() },
       })
       .returning();
