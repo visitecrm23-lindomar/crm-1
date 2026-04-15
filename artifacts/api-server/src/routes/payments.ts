@@ -64,10 +64,10 @@ async function syncMonthlyGoalProgress(sellerId: string, tenantId: string): Prom
     const now = new Date();
     const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-    // Aggregate revenue + count from commissions for this seller this month (paid and approved)
+    // Aggregate commission_amount + count from commissions for this seller this month (paid and approved)
     const result = await db.execute(sql`
       SELECT
-        COALESCE(SUM(base_amount::numeric), 0) AS total_revenue,
+        COALESCE(SUM(commission_amount::numeric), 0) AS total_commission,
         COUNT(*) AS total_count
       FROM commissions
       WHERE tenant_id = ${tenantId}
@@ -76,7 +76,7 @@ async function syncMonthlyGoalProgress(sellerId: string, tenantId: string): Prom
         AND to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM') = ${month}
     `);
     const row = result.rows[0] as Record<string, unknown>;
-    const totalRevenue = parseFloat(String(row?.total_revenue ?? "0"));
+    const totalCommission = parseFloat(String(row?.total_commission ?? "0"));
     const totalCount = parseInt(String(row?.total_count ?? "0"), 10);
 
     // Fetch active monthly goals for this seller/month to compute progressPercentage
@@ -91,11 +91,11 @@ async function syncMonthlyGoalProgress(sellerId: string, tenantId: string): Prom
 
     for (const goal of goals) {
       const goalAmount = parseFloat(String(goal.goalAmount));
-      const progressPct = goalAmount > 0 ? Math.min(100, (totalRevenue / goalAmount) * 100) : 0;
+      const progressPct = goalAmount > 0 ? Math.min(100, (totalCommission / goalAmount) * 100) : 0;
 
       await db.update(salesGoalsTable)
         .set({
-          achievedAmount: String(totalRevenue.toFixed(2)),
+          achievedAmount: String(totalCommission.toFixed(2)),
           achievedQuantity: String(totalCount),
           progressPercentage: String(progressPct.toFixed(2)),
         })

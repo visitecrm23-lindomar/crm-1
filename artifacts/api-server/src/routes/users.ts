@@ -50,6 +50,10 @@ router.get("/users/me", async (req, res): Promise<void> => {
       role: user.role, avatarUrl: user.avatarUrl, isActive: user.isActive,
       tenantId: user.tenantId, referralCode: user.referralCode,
       referralBalance: Number(user.referralBalance), createdAt: user.createdAt.toISOString(),
+      commissionType: user.commissionType ?? "percentage",
+      commissionRate: user.commissionRate != null ? Number(user.commissionRate) : null,
+      commissionFixed: user.commissionFixed != null ? Number(user.commissionFixed) : null,
+      monthlyGoal: user.monthlyGoal != null ? Number(user.monthlyGoal) : null,
       tenant,
     });
   } catch (err) {

@@ -92,14 +92,14 @@ export default function MeuPainel() {
   const closedDeals = myDeals.filter((d) => d.status === "won" || d.status === "lost").length;
   const conversionRate = closedDeals > 0 ? Math.round((wonDeals / closedDeals) * 100) : 0;
 
-  const activeGoal = goals.find((g) => g.status === "active");
-  const monthlyGoal = activeGoal?.goalAmount ?? me?.monthlyGoal ?? 0;
-  const goalPct = monthlyGoal > 0 ? Math.min(100, (totalRevenue / monthlyGoal) * 100) : 0;
-
   const month = currentMonth();
   const monthlyCommissions = myCommissions.filter((c) => c.createdAt.startsWith(month));
   const monthlyRevenue = monthlyCommissions.reduce((s, c) => s + parseFloat(c.baseAmount ?? "0"), 0);
   const monthlyCommissionTotal = monthlyCommissions.reduce((s, c) => s + parseFloat(c.commissionAmount ?? "0"), 0);
+
+  const activeGoal = goals.find((g) => g.status === "active");
+  const monthlyGoal = activeGoal?.goalAmount ?? me?.monthlyGoal ?? 0;
+  const goalPct = monthlyGoal > 0 ? Math.min(100, (monthlyRevenue / monthlyGoal) * 100) : 0;
 
   return (
     <div className="space-y-6">
