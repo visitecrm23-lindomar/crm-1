@@ -30,6 +30,7 @@ import {
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
+import { SeatMapPicker } from "@/components/SeatMapPicker";
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -338,6 +339,7 @@ interface ClientModalProps {
 export function ClientModal({ open, onClose, editClient, onSave, defaultStageId }: ClientModalProps) {
   const [tab, setTab] = useState("personal");
   const [form, setForm] = useState<ClientFormData>(EMPTY_CLIENT);
+  const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const { toast } = useToast();
   const { data: stages } = useListPipelineStages();
   const { data: tripsData } = useListTrips({ limit: 100 });
@@ -351,6 +353,7 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
     if (open) {
       setTab("personal");
       setForm(editClient ? clientToForm(editClient) : EMPTY_CLIENT);
+      setSelectedSeats([]);
     }
   }, [open, editClient]);
 
@@ -597,7 +600,13 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2 space-y-2">
                 <Label>Viagem</Label>
-                <Select value={form.tripId} onValueChange={v => setForm(prev => ({ ...prev, tripId: v, boardingPoint: "none" }))}>
+                <Select
+                  value={form.tripId}
+                  onValueChange={v => {
+                    setForm(prev => ({ ...prev, tripId: v, boardingPoint: "none", seatNumber: "" }));
+                    setSelectedSeats([]);
+                  }}
+                >
                   <SelectTrigger><SelectValue placeholder="Selecionar viagem..." /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Nenhuma</SelectItem>
@@ -631,6 +640,7 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
                     <span className={`font-semibold ${selectedTrip.availableSeats <= 5 ? "text-destructive" : "text-green-600"}`}>
                       {selectedTrip.availableSeats}
                     </span>
+                    <span className="text-muted-foreground"> de {selectedTrip.totalCapacity}</span>
                   </div>
                 </div>
               )}
@@ -646,10 +656,30 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
                   </Select>
                 </div>
               )}
-              <div className="space-y-2">
-                <Label>Poltrona</Label>
-                <Input type="number" min="1" placeholder="Ex: 12" value={form.seatNumber} onChange={e => set("seatNumber")(e.target.value)} />
-              </div>
+              {selectedTrip && form.tripId !== "none" ? (
+                <div className="col-span-2 space-y-2">
+                  <Label>Selecionar Poltrona</Label>
+                  <SeatMapPicker
+                    tripId={form.tripId}
+                    selectedSeats={selectedSeats}
+                    onSeatsChange={seats => {
+                      setSelectedSeats(seats);
+                      setForm(prev => ({ ...prev, seatNumber: seats[0] ?? "" }));
+                    }}
+                    maxSeats={1}
+                  />
+                  {form.seatNumber && (
+                    <p className="text-xs text-muted-foreground">
+                      Poltrona selecionada: <span className="font-semibold text-foreground">{form.seatNumber}</span>
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label>Poltrona</Label>
+                  <Input type="number" min="1" placeholder="Ex: 12" value={form.seatNumber} onChange={e => set("seatNumber")(e.target.value)} />
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Tipo de Viagem</Label>
                 <Select value={form.travelType} onValueChange={set("travelType")}>
