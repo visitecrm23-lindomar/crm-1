@@ -1710,6 +1710,14 @@ export interface CommissionPreview {
   saleAmount: number;
 }
 
+export interface CommissionRank {
+  /** @nullable */
+  rank?: number | null;
+  totalSellers: number;
+  monthlyCommission: number;
+  month: string;
+}
+
 export type AdminStatsByStatus = { [key: string]: number };
 
 export type AdminStatsByPlan = { [key: string]: number };

@@ -4,7 +4,7 @@ import {
   useListClients, useCreateClient, useUpdateClient,
   useListPipelineStages, useListTrips, useListUsers,
   useCreateDeal, useListPayments, useCreateReservation,
-  useCalculateCommission,
+  useCalculateCommission, useGetMe,
 } from "@workspace/api-client-react";
 import type { Client } from "@workspace/api-client-react";
 import { Client360Modal } from "@/components/client360-modal";
@@ -384,6 +384,7 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
   const { data: stages } = useListPipelineStages();
   const { data: tripsData } = useListTrips({ limit: 100 });
   const { data: usersData } = useListUsers();
+  const { data: me } = useGetMe();
   const createClient = useCreateClient();
   const updateClient = useUpdateClient();
   const createDeal = useCreateDeal();
@@ -834,7 +835,13 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
               </div>
             </div>
             <CommissionPreview
-              sellerId={form.consultantId}
+              sellerId={
+                form.consultantId !== "none"
+                  ? form.consultantId
+                  : me?.role === "vendedor"
+                  ? me.id
+                  : form.consultantId
+              }
               saleAmount={valorTotal}
               tripId={form.tripId}
               onApply={(amount) => set("commission")(String(amount))}

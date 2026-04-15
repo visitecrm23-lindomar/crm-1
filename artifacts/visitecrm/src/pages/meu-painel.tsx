@@ -5,6 +5,7 @@ import {
   useListReservations,
   useListDeals,
   useListSalesGoals,
+  useGetMyCommissionRank,
 } from "@workspace/api-client-react";
 import type { Commission } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { DollarSign, TrendingUp, Award, Target, Gauge } from "lucide-react";
+import { DollarSign, TrendingUp, Award, Target, Gauge, Medal } from "lucide-react";
 
 function fmtCurrency(v: number | string | null | undefined) {
   if (v == null) return "R$ 0,00";
@@ -41,6 +42,7 @@ export default function MeuPainel() {
     userId: me?.id,
     month: currentMonth(),
   });
+  const { data: rankData } = useGetMyCommissionRank();
 
   const myCommissions: Commission[] = useMemo(
     () => (me ? allCommissions.filter((c) => c.userId === me.id) : []),
@@ -112,7 +114,7 @@ export default function MeuPainel() {
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -134,7 +136,10 @@ export default function MeuPainel() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-green-600">{fmtCurrency(totalCommission)}</p>
-            <p className="text-xs text-muted-foreground">{fmtCurrency(paidCommission)} pago</p>
+            <p className="text-xs text-muted-foreground">
+              {fmtCurrency(paidCommission)} pago ·{" "}
+              {fmtCurrency(myCommissions.filter(c => c.status === "approved").reduce((s, c) => s + parseFloat(c.commissionAmount ?? "0"), 0))} aprovado
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -161,6 +166,30 @@ export default function MeuPainel() {
             <p className="text-xs text-muted-foreground">a receber</p>
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Medal className="w-4 h-4" />
+              Ranking do Mês
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {rankData?.rank != null ? (
+              <>
+                <p className="text-2xl font-bold text-primary">
+                  #{rankData.rank}
+                  <span className="text-base text-muted-foreground font-normal"> de {rankData.totalSellers}</span>
+                </p>
+                <p className="text-xs text-muted-foreground">entre vendedores</p>
+              </>
+            ) : (
+              <>
+                <p className="text-2xl font-bold text-muted-foreground">—</p>
+                <p className="text-xs text-muted-foreground">sem dados este mês</p>
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Commission config banner */}
@@ -171,16 +200,16 @@ export default function MeuPainel() {
               <div>
                 <p className="text-xs text-muted-foreground">Tipo de comissão</p>
                 <p className="font-semibold">
-                  {me.commissionType === "fixed" ? "Valor fixo" : "Percentual"}
+                  {me.commissionType === "fixed" ? "Valor fixo" : me.commissionType === "hybrid" ? "Híbrido (% + fixo)" : "Percentual"}
                 </p>
               </div>
-              {me.commissionType === "percentage" && (
+              {(me.commissionType === "percentage" || me.commissionType === "hybrid") && (
                 <div>
-                  <p className="text-xs text-muted-foreground">Taxa</p>
+                  <p className="text-xs text-muted-foreground">Taxa %</p>
                   <p className="font-semibold">{me.commissionRate ?? 0}%</p>
                 </div>
               )}
-              {me.commissionType === "fixed" && (
+              {(me.commissionType === "fixed" || me.commissionType === "hybrid") && (
                 <div>
                   <p className="text-xs text-muted-foreground">Valor fixo</p>
                   <p className="font-semibold">{fmtCurrency(me.commissionFixed)}</p>
@@ -273,10 +302,10 @@ export default function MeuPainel() {
                     </TableCell>
                     <TableCell>
                       <Badge
-                        variant={c.status === "paid" ? "default" : "secondary"}
-                        className="text-xs"
+                        variant={c.status === "paid" || c.status === "approved" ? "default" : "secondary"}
+                        className={`text-xs ${c.status === "approved" ? "bg-blue-600" : ""}`}
                       >
-                        {c.status === "paid" ? "Pago" : c.status === "pending" ? "Pendente" : c.status}
+                        {c.status === "paid" ? "Pago" : c.status === "approved" ? "Aprovado" : c.status === "pending" ? "Pendente" : c.status}
                       </Badge>
                     </TableCell>
                   </TableRow>

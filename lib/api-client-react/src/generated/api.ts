@@ -46,6 +46,7 @@ import type {
   ClientReferralInfo,
   Commission,
   CommissionPreview,
+  CommissionRank,
   CommissionRule,
   Coupon,
   CouponValidationResult,
@@ -12697,6 +12698,81 @@ export function useListCommissions<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListCommissionsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get the authenticated seller's ranking position for the current month
+ */
+export const getGetMyCommissionRankUrl = () => {
+  return `/api/commissions/my-rank`;
+};
+
+export const getMyCommissionRank = async (
+  options?: RequestInit,
+): Promise<CommissionRank> => {
+  return customFetch<CommissionRank>(getGetMyCommissionRankUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMyCommissionRankQueryKey = () => {
+  return [`/api/commissions/my-rank`] as const;
+};
+
+export const getGetMyCommissionRankQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMyCommissionRank>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyCommissionRank>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMyCommissionRankQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getMyCommissionRank>>
+  > = ({ signal }) => getMyCommissionRank({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMyCommissionRank>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMyCommissionRankQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMyCommissionRank>>
+>;
+export type GetMyCommissionRankQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the authenticated seller's ranking position for the current month
+ */
+
+export function useGetMyCommissionRank<
+  TData = Awaited<ReturnType<typeof getMyCommissionRank>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyCommissionRank>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMyCommissionRankQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

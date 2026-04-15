@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, commissionRulesTable, commissionsTable, usersTable } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
@@ -136,6 +136,10 @@ router.get("/commissions/calculate", async (req, res): Promise<void> => {
 
     if (seller.commissionType === "fixed" && fixed > 0) {
       res.json({ commissionAmount: fixed, commissionRate: null, commissionType: "fixed", source: "seller", saleAmount: amount });
+    } else if (seller.commissionType === "hybrid") {
+      const pct = rate > 0 ? Math.round((amount * rate / 100) * 100) / 100 : 0;
+      const commissionAmount = Math.round((pct + fixed) * 100) / 100;
+      res.json({ commissionAmount, commissionRate: rate, commissionType: "hybrid", source: "seller", saleAmount: amount });
     } else if (rate > 0) {
       const commissionAmount = Math.round((amount * rate / 100) * 100) / 100;
       res.json({ commissionAmount, commissionRate: rate, commissionType: "percentage", source: "seller", saleAmount: amount });
@@ -144,6 +148,42 @@ router.get("/commissions/calculate", async (req, res): Promise<void> => {
     }
   } catch (err) {
     req.log.error({ err }, "Error calculating commission");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/commissions/my-rank", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    const now = new Date();
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    const result = await db.execute(sql`
+      SELECT
+        user_id,
+        COALESCE(SUM(commission_amount::numeric), 0) AS total_commission
+      FROM commissions
+      WHERE tenant_id = ${me.tenantId}
+        AND status IN ('pending', 'paid', 'approved')
+        AND to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM') = ${month}
+      GROUP BY user_id
+      ORDER BY total_commission DESC
+    `);
+
+    const rows = result.rows as Array<{ user_id: string; total_commission: string }>;
+    const userIndex = rows.findIndex(r => r.user_id === me.id);
+    const myRow = rows.find(r => r.user_id === me.id);
+
+    res.json({
+      rank: userIndex >= 0 ? userIndex + 1 : null,
+      totalSellers: rows.length,
+      monthlyCommission: myRow ? parseFloat(myRow.total_commission) : 0,
+      month,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error computing commission rank");
     res.status(500).json({ error: "Internal server error" });
   }
 });

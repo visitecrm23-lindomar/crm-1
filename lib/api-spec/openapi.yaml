@@ -3111,6 +3111,19 @@ paths:
                 items:
                   $ref: "#/components/schemas/Commission"
 
+  /commissions/my-rank:
+    get:
+      operationId: getMyCommissionRank
+      summary: Get the authenticated seller's ranking position for the current month
+      tags: [Commissions]
+      responses:
+        "200":
+          description: Commission rank
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommissionRank"
+
   /commissions/calculate:
     get:
       operationId: calculateCommission
@@ -6826,6 +6839,19 @@ components:
         saleAmount:
           type: number
       required: [commissionAmount, commissionType, source, saleAmount]
+
+    CommissionRank:
+      type: object
+      properties:
+        rank:
+          type: ["integer", "null"]
+        totalSellers:
+          type: integer
+        monthlyCommission:
+          type: number
+        month:
+          type: string
+      required: [totalSellers, monthlyCommission, month]
 
     # ─── TENANT ────────────────────────────────────────────────────
     AdminStats:

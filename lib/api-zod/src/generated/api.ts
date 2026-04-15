@@ -3773,6 +3773,16 @@ export const ListCommissionsResponseItem = zod.object({
 export const ListCommissionsResponse = zod.array(ListCommissionsResponseItem);
 
 /**
+ * @summary Get the authenticated seller's ranking position for the current month
+ */
+export const GetMyCommissionRankResponse = zod.object({
+  rank: zod.number().nullish(),
+  totalSellers: zod.number(),
+  monthlyCommission: zod.number(),
+  month: zod.string(),
+});
+
+/**
  * @summary Preview commission for a sale
  */
 export const CalculateCommissionQueryParams = zod.object({

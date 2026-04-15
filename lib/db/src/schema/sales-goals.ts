@@ -8,7 +8,7 @@ export const salesGoalsTable = pgTable("sales_goals", {
   userId: text("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
   periodType: text("period_type").notNull().default("monthly"),
   year: integer("year"),
-  month: text("month").notNull(),
+  month: text("month"),
   monthInt: integer("month_int"),
   quarter: integer("quarter"),
   goalAmount: numeric("goal_amount", { precision: 10, scale: 2 }).notNull().default("0"),

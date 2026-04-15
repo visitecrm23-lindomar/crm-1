@@ -224,7 +224,7 @@ function CommissionConfigDialog({
       await updateUser.mutateAsync({
         id: seller.id,
         data: {
-          commissionType: commissionType as "percentage" | "fixed" | "none",
+          commissionType: commissionType as "percentage" | "fixed" | "hybrid" | "none",
           commissionRate: commissionRate !== "" ? parseFloat(commissionRate) : null,
           commissionFixed: commissionFixed !== "" ? parseFloat(commissionFixed) : null,
           monthlyGoal: monthlyGoal !== "" ? parseFloat(monthlyGoal) : null,
@@ -259,14 +259,15 @@ function CommissionConfigDialog({
               <SelectContent>
                 <SelectItem value="percentage">Percentual (%)</SelectItem>
                 <SelectItem value="fixed">Valor fixo (R$)</SelectItem>
+                <SelectItem value="hybrid">Híbrido (% + fixo)</SelectItem>
                 <SelectItem value="none">Sem comissão</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {commissionType === "percentage" && (
+          {(commissionType === "percentage" || commissionType === "hybrid") && (
             <div className="space-y-1.5">
-              <Label>Taxa (%)</Label>
+              <Label>Taxa percentual (%)</Label>
               <Input
                 type="number"
                 min={0}
@@ -279,9 +280,9 @@ function CommissionConfigDialog({
             </div>
           )}
 
-          {commissionType === "fixed" && (
+          {(commissionType === "fixed" || commissionType === "hybrid") && (
             <div className="space-y-1.5">
-              <Label>Valor fixo por venda (R$)</Label>
+              <Label>{commissionType === "hybrid" ? "Valor fixo adicional (R$)" : "Valor fixo por venda (R$)"}</Label>
               <Input
                 type="number"
                 min={0}
@@ -291,6 +292,12 @@ function CommissionConfigDialog({
                 onChange={(e) => setCommissionFixed(e.target.value)}
               />
             </div>
+          )}
+
+          {commissionType === "hybrid" && (
+            <p className="text-xs text-muted-foreground rounded bg-muted/50 p-2">
+              Híbrido: comissão = (% do valor da venda) + valor fixo por venda
+            </p>
           )}
 
           <div className="space-y-1.5">
@@ -329,23 +336,56 @@ function GoalsTab({ seller }: { seller: UserProfile }) {
   const updateGoal = useUpdateSalesGoal();
   const deleteGoal = useDeleteSalesGoal();
 
-  const [newMonth, setNewMonth] = useState(currentMonthStr());
-  const [newGoalAmount, setNewGoalAmount] = useState("");
+  const curYear = new Date().getFullYear();
+  const [periodType, setPeriodType] = useState<"monthly" | "quarterly" | "annual">("monthly");
+  const [year, setYear] = useState(String(curYear));
+  const [monthStr, setMonthStr] = useState(currentMonthStr());
+  const [quarter, setQuarter] = useState("1");
+  const [goalAmount, setGoalAmount] = useState("");
+  const [goalQuantity, setGoalQuantity] = useState("");
+  const [bonusAmount, setBonusAmount] = useState("");
   const [adding, setAdding] = useState(false);
 
+  function getMonthValue(): string {
+    if (periodType === "monthly") return monthStr;
+    if (periodType === "quarterly") {
+      const startMonth = (parseInt(quarter) - 1) * 3 + 1;
+      return `${year}-${String(startMonth).padStart(2, "0")}`;
+    }
+    return year;
+  }
+
+  function getPeriodLabel(g: { periodType?: string | null; month?: string | null; quarter?: number | null; year?: number | null }): string {
+    if (g.periodType === "annual") return `Anual ${g.year ?? ""}`;
+    if (g.periodType === "quarterly") return `T${g.quarter ?? "?"} ${g.year ?? ""}`;
+    return g.month ?? "";
+  }
+
   async function handleAdd() {
-    if (!newGoalAmount) return;
+    if (!goalAmount) return;
     setAdding(true);
     try {
       await createGoal.mutateAsync({
         data: {
           userId: seller.id,
-          month: newMonth,
-          goalAmount: parseFloat(newGoalAmount),
-        },
+          periodType,
+          year: parseInt(year),
+          month: getMonthValue(),
+          monthInt: periodType === "monthly"
+            ? parseInt(monthStr.split("-")[1])
+            : periodType === "quarterly"
+            ? (parseInt(quarter) - 1) * 3 + 1
+            : null,
+          quarter: periodType === "quarterly" ? parseInt(quarter) : null,
+          goalAmount: parseFloat(goalAmount),
+          goalQuantity: goalQuantity ? parseFloat(goalQuantity) : null,
+          bonusAmount: bonusAmount ? parseFloat(bonusAmount) : null,
+        } as Parameters<typeof createGoal.mutateAsync>[0]["data"],
       });
       toast({ title: "Meta criada" });
-      setNewGoalAmount("");
+      setGoalAmount("");
+      setGoalQuantity("");
+      setBonusAmount("");
       refetch();
     } catch {
       toast({ title: "Erro ao criar meta", variant: "destructive" });
@@ -372,28 +412,108 @@ function GoalsTab({ seller }: { seller: UserProfile }) {
       {/* Add new goal */}
       <div className="rounded-lg border p-3 space-y-3">
         <p className="text-sm font-medium">Nova Meta</p>
-        <div className="flex gap-2">
-          <div className="space-y-1 flex-1">
-            <Label className="text-xs">Mês</Label>
+
+        {/* Period type */}
+        <div className="space-y-1">
+          <Label className="text-xs">Período</Label>
+          <Select value={periodType} onValueChange={(v) => setPeriodType(v as "monthly" | "quarterly" | "annual")}>
+            <SelectTrigger className="h-8 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="monthly">Mensal</SelectItem>
+              <SelectItem value="quarterly">Trimestral</SelectItem>
+              <SelectItem value="annual">Anual</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {/* Year */}
+          <div className="space-y-1">
+            <Label className="text-xs">Ano</Label>
             <Input
-              type="month"
-              value={newMonth}
-              onChange={(e) => setNewMonth(e.target.value)}
+              type="number"
+              min={2020}
+              max={2100}
+              value={year}
+              onChange={(e) => setYear(e.target.value)}
+              className="h-8 text-sm"
             />
           </div>
-          <div className="space-y-1 flex-1">
-            <Label className="text-xs">Meta (R$)</Label>
+
+          {/* Month (monthly only) */}
+          {periodType === "monthly" && (
+            <div className="space-y-1">
+              <Label className="text-xs">Mês</Label>
+              <Input
+                type="month"
+                value={monthStr}
+                onChange={(e) => setMonthStr(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </div>
+          )}
+
+          {/* Quarter (quarterly only) */}
+          {periodType === "quarterly" && (
+            <div className="space-y-1">
+              <Label className="text-xs">Trimestre</Label>
+              <Select value={quarter} onValueChange={setQuarter}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">T1 (Jan–Mar)</SelectItem>
+                  <SelectItem value="2">T2 (Abr–Jun)</SelectItem>
+                  <SelectItem value="3">T3 (Jul–Set)</SelectItem>
+                  <SelectItem value="4">T4 (Out–Dez)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Meta em R$</Label>
             <Input
               type="number"
               min={0}
               step={100}
-              placeholder="Ex: 50000"
-              value={newGoalAmount}
-              onChange={(e) => setNewGoalAmount(e.target.value)}
+              placeholder="50000"
+              value={goalAmount}
+              onChange={(e) => setGoalAmount(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Qtd. vendas (opcional)</Label>
+            <Input
+              type="number"
+              min={0}
+              step={1}
+              placeholder="Ex: 10"
+              value={goalQuantity}
+              onChange={(e) => setGoalQuantity(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Bônus (R$, opcional)</Label>
+            <Input
+              type="number"
+              min={0}
+              step={50}
+              placeholder="Ex: 500"
+              value={bonusAmount}
+              onChange={(e) => setBonusAmount(e.target.value)}
+              className="h-8 text-sm"
             />
           </div>
         </div>
-        <Button size="sm" onClick={handleAdd} disabled={adding || !newGoalAmount}>
+
+        <Button size="sm" onClick={handleAdd} disabled={adding || !goalAmount}>
           <Plus className="w-3 h-3 mr-1" />
           {adding ? "Criando…" : "Adicionar Meta"}
         </Button>
@@ -406,34 +526,64 @@ function GoalsTab({ seller }: { seller: UserProfile }) {
         </p>
       ) : (
         <div className="space-y-2">
-          {goals.map((g) => (
-            <div
-              key={g.id}
-              className="flex items-center justify-between rounded-lg border p-3"
-            >
-              <div>
-                <p className="text-sm font-medium">{g.month}</p>
-                <p className="text-sm text-muted-foreground">{fmtCurrency(g.goalAmount)}</p>
+          {goals.map((g) => {
+            const progress = typeof g.progressPercentage === "number"
+              ? g.progressPercentage
+              : g.goalAmount && parseFloat(String(g.goalAmount)) > 0
+              ? Math.min(100, ((parseFloat(String(g.achievedAmount ?? 0)) / parseFloat(String(g.goalAmount))) * 100))
+              : 0;
+            return (
+              <div
+                key={g.id}
+                className="rounded-lg border p-3 space-y-2"
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-medium flex items-center gap-1.5">
+                      <Badge variant="outline" className="text-[10px] px-1 py-0">
+                        {g.periodType === "annual" ? "Anual" : g.periodType === "quarterly" ? "Trimestral" : "Mensal"}
+                      </Badge>
+                      {getPeriodLabel(g)}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Meta: {fmtCurrency(g.goalAmount)}
+                      {g.goalQuantity ? ` · ${g.goalQuantity} vendas` : ""}
+                      {g.bonusAmount && parseFloat(String(g.bonusAmount)) > 0 ? ` · Bônus: ${fmtCurrency(g.bonusAmount)}` : ""}
+                    </p>
+                    {g.achievedAmount != null && (
+                      <p className="text-xs text-green-600 mt-0.5">
+                        Realizado: {fmtCurrency(g.achievedAmount)}
+                        {g.achievedQuantity ? ` · ${g.achievedQuantity} vendas` : ""}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge
+                      variant={g.status === "active" ? "default" : "secondary"}
+                      className="cursor-pointer text-xs"
+                      onClick={() => handleToggle(g.id, g.status)}
+                    >
+                      {g.status === "active" ? "Ativa" : "Inativa"}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive"
+                      onClick={() => handleDelete(g.id)}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+                {g.status === "active" && (
+                  <div className="space-y-0.5">
+                    <Progress value={progress} className="h-1.5" />
+                    <p className="text-[10px] text-muted-foreground text-right">{Math.round(progress)}%</p>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant={g.status === "active" ? "default" : "secondary"}
-                  className="cursor-pointer text-xs"
-                  onClick={() => handleToggle(g.id, g.status)}
-                >
-                  {g.status === "active" ? "Ativa" : "Inativa"}
-                </Badge>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-destructive"
-                  onClick={() => handleDelete(g.id)}
-                >
-                  <Trash2 className="w-3 h-3" />
-                </Button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -64,7 +64,7 @@ async function syncMonthlyGoalProgress(sellerId: string, tenantId: string): Prom
     const now = new Date();
     const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-    // Aggregate revenue + count from commissions for this seller this month (paid and pending)
+    // Aggregate revenue + count from commissions for this seller this month (paid and approved)
     const result = await db.execute(sql`
       SELECT
         COALESCE(SUM(base_amount::numeric), 0) AS total_revenue,
@@ -72,20 +72,21 @@ async function syncMonthlyGoalProgress(sellerId: string, tenantId: string): Prom
       FROM commissions
       WHERE tenant_id = ${tenantId}
         AND user_id = ${sellerId}
-        AND status IN ('pending', 'paid')
+        AND status IN ('paid', 'approved')
         AND to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM') = ${month}
     `);
     const row = result.rows[0] as Record<string, unknown>;
     const totalRevenue = parseFloat(String(row?.total_revenue ?? "0"));
     const totalCount = parseInt(String(row?.total_count ?? "0"), 10);
 
-    // Fetch active goals for this seller/month to compute progressPercentage
+    // Fetch active monthly goals for this seller/month to compute progressPercentage
     const goals = await db.select().from(salesGoalsTable)
       .where(and(
         eq(salesGoalsTable.tenantId, tenantId),
         eq(salesGoalsTable.userId, sellerId),
         eq(salesGoalsTable.month, month),
         eq(salesGoalsTable.status, "active"),
+        eq(salesGoalsTable.periodType, "monthly"),
       ));
 
     for (const goal of goals) {
@@ -145,17 +146,28 @@ export async function syncReservationCommission(reservationId: string, tenantId:
       if (creator) sellerId = creator.id;
     }
   } else {
-    // Rule-based commission path: requires fully paid reservation and creator must be "vendedor"
+    // Rule-based commission path: requires fully paid reservation
     const paidValue = parseFloat(String(reservation.paidValue));
     const totalValue = parseFloat(String(reservation.totalValue));
     if (paidValue < totalValue) return;
 
-    const [creator] = await db.select({ id: usersTable.id, role: usersTable.role })
-      .from(usersTable)
-      .where(and(eq(usersTable.id, reservation.createdById), eq(usersTable.tenantId, tenantId)))
-      .limit(1);
-    if (!creator || creator.role !== "vendedor") return;
-    sellerId = creator.id;
+    // Prefer explicit sellerId on reservation (set by admin), fallback to vendedor creator
+    const explicitSellerId = reservation.sellerId ?? null;
+    if (explicitSellerId) {
+      const [seller] = await db.select({ id: usersTable.id })
+        .from(usersTable)
+        .where(and(eq(usersTable.id, explicitSellerId), eq(usersTable.tenantId, tenantId)))
+        .limit(1);
+      if (!seller) return;
+      sellerId = seller.id;
+    } else {
+      const [creator] = await db.select({ id: usersTable.id, role: usersTable.role })
+        .from(usersTable)
+        .where(and(eq(usersTable.id, reservation.createdById), eq(usersTable.tenantId, tenantId)))
+        .limit(1);
+      if (!creator || creator.role !== "vendedor") return;
+      sellerId = creator.id;
+    }
 
     const rules = await db.select().from(commissionRulesTable)
       .where(and(eq(commissionRulesTable.tenantId, tenantId), eq(commissionRulesTable.isActive, true)));
@@ -185,6 +197,10 @@ export async function syncReservationCommission(reservationId: string, tenantId:
         if (sellerConfig.commissionType === "fixed" && fixed > 0) {
           commissionAmount = fixed;
           commissionRate = fixed;
+        } else if (sellerConfig.commissionType === "hybrid") {
+          const pct = rate > 0 ? (baseAmount * rate) / 100 : 0;
+          commissionAmount = pct + fixed;
+          commissionRate = rate;
         } else if (rate > 0) {
           commissionAmount = (baseAmount * rate) / 100;
           commissionRate = rate;

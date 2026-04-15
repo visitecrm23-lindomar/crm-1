@@ -48,6 +48,7 @@ export * from "./clientLoyaltyInfo";
 export * from "./clientReferralInfo";
 export * from "./commission";
 export * from "./commissionPreview";
+export * from "./commissionRank";
 export * from "./commissionRule";
 export * from "./coupon";
 export * from "./couponValidationResult";

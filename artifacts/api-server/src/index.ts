@@ -475,6 +475,10 @@ async function runMigrations() {
     `);
 
     await client.query(`
+      ALTER TABLE sales_goals ALTER COLUMN month DROP NOT NULL;
+    `);
+
+    await client.query(`
       ALTER TABLE sales_goals ADD COLUMN IF NOT EXISTS period_type text NOT NULL DEFAULT 'monthly';
       ALTER TABLE sales_goals ADD COLUMN IF NOT EXISTS year integer;
       ALTER TABLE sales_goals ADD COLUMN IF NOT EXISTS month_int integer;
