@@ -134,7 +134,9 @@ router.get("/commissions/calculate", async (req, res): Promise<void> => {
     const rate = parseFloat(String(seller.commissionRate ?? "0"));
     const fixed = parseFloat(String(seller.commissionFixed ?? "0"));
 
-    if (seller.commissionType === "fixed" && fixed > 0) {
+    if (seller.commissionType === "none") {
+      res.json({ commissionAmount: 0, commissionRate: null, commissionType: "none", source: "seller", saleAmount: amount });
+    } else if (seller.commissionType === "fixed" && fixed > 0) {
       res.json({ commissionAmount: fixed, commissionRate: null, commissionType: "fixed", source: "seller", saleAmount: amount });
     } else if (seller.commissionType === "hybrid") {
       const pct = rate > 0 ? Math.round((amount * rate / 100) * 100) / 100 : 0;

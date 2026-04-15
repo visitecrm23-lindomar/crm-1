@@ -194,7 +194,9 @@ export async function syncReservationCommission(reservationId: string, tenantId:
         commissionType = sellerConfig.commissionType ?? "percentage";
         const rate = parseFloat(String(sellerConfig.commissionRate ?? "0"));
         const fixed = parseFloat(String(sellerConfig.commissionFixed ?? "0"));
-        if (sellerConfig.commissionType === "fixed" && fixed > 0) {
+        if (sellerConfig.commissionType === "none") {
+          // Seller explicitly has no commission — commissionAmount stays null → early return below
+        } else if (sellerConfig.commissionType === "fixed" && fixed > 0) {
           commissionAmount = fixed;
           commissionRate = fixed;
         } else if (sellerConfig.commissionType === "hybrid") {
