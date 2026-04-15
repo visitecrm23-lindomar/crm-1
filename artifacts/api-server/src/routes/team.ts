@@ -117,11 +117,19 @@ router.post("/team/invite", async (req, res): Promise<void> => {
     let clerkInviteId: string | null = null;
 
     try {
+      const proxyUrl = process.env.CLERK_PROXY_URL;
+      const frontendUrl = process.env.FRONTEND_URL;
+      const baseUrl =
+        frontendUrl ||
+        (proxyUrl ? proxyUrl.replace(/\/api\/__clerk\/?$/, "") : null);
+      const redirectUrl = baseUrl ? `${baseUrl}/sign-up` : undefined;
+
       const clerkInvite = await clerkClient.invitations.createInvitation({
         emailAddress: email,
         expiresInDays: 7,
         ignoreExisting: true,
         notify: true,
+        redirectUrl,
         publicMetadata: {
           tenantId: me.tenantId,
           role,
