@@ -6737,28 +6737,58 @@ components:
           type: string
         userId:
           type: string
+        periodType:
+          type: string
+        year:
+          type: ["integer", "null"]
         month:
           type: string
+        monthInt:
+          type: ["integer", "null"]
+        quarter:
+          type: ["integer", "null"]
         goalAmount:
           type: number
         achievedAmount:
           type: number
+        goalQuantity:
+          type: ["number", "null"]
+        achievedQuantity:
+          type: ["number", "null"]
+        progressPercentage:
+          type: ["number", "null"]
+        bonusAmount:
+          type: ["number", "null"]
+        bonusPaid:
+          type: boolean
         status:
           type: string
         createdAt:
           type: string
         updatedAt:
           type: string
-      required: [id, tenantId, userId, month, goalAmount, achievedAmount, status, createdAt, updatedAt]
+      required: [id, tenantId, userId, periodType, month, goalAmount, achievedAmount, bonusPaid, status, createdAt, updatedAt]
 
     CreateSalesGoalBody:
       type: object
       properties:
         userId:
           type: string
+        periodType:
+          type: string
+        year:
+          type: integer
         month:
           type: string
+        monthInt:
+          type: integer
+        quarter:
+          type: integer
         goalAmount:
+          type: number
+        goalQuantity:
+          type: number
+        bonusAmount:
           type: number
       required: [userId, month, goalAmount]
 
@@ -6769,6 +6799,16 @@ components:
           type: ["number", "null"]
         achievedAmount:
           type: ["number", "null"]
+        goalQuantity:
+          type: ["number", "null"]
+        achievedQuantity:
+          type: ["number", "null"]
+        progressPercentage:
+          type: ["number", "null"]
+        bonusAmount:
+          type: ["number", "null"]
+        bonusPaid:
+          type: ["boolean", "null"]
         status:
           type: ["string", "null"]
 

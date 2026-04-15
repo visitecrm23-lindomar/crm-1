@@ -8,6 +8,12 @@
 
 export interface CreateSalesGoalBody {
   userId: string;
+  periodType?: string;
+  year?: number;
   month: string;
+  monthInt?: number;
+  quarter?: number;
   goalAmount: number;
+  goalQuantity?: number;
+  bonusAmount?: number;
 }

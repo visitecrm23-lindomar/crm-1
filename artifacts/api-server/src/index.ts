@@ -474,6 +474,18 @@ async function runMigrations() {
       ALTER TABLE commissions ADD COLUMN IF NOT EXISTS commission_type text;
     `);
 
+    await client.query(`
+      ALTER TABLE sales_goals ADD COLUMN IF NOT EXISTS period_type text NOT NULL DEFAULT 'monthly';
+      ALTER TABLE sales_goals ADD COLUMN IF NOT EXISTS year integer;
+      ALTER TABLE sales_goals ADD COLUMN IF NOT EXISTS month_int integer;
+      ALTER TABLE sales_goals ADD COLUMN IF NOT EXISTS quarter integer;
+      ALTER TABLE sales_goals ADD COLUMN IF NOT EXISTS goal_quantity numeric(10,0);
+      ALTER TABLE sales_goals ADD COLUMN IF NOT EXISTS achieved_quantity numeric(10,0) DEFAULT 0;
+      ALTER TABLE sales_goals ADD COLUMN IF NOT EXISTS progress_percentage numeric(5,2) DEFAULT 0;
+      ALTER TABLE sales_goals ADD COLUMN IF NOT EXISTS bonus_amount numeric(10,2);
+      ALTER TABLE sales_goals ADD COLUMN IF NOT EXISTS bonus_paid boolean NOT NULL DEFAULT false;
+    `);
+
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");

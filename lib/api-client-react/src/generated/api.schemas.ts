@@ -1646,9 +1646,25 @@ export interface SalesGoal {
   id: string;
   tenantId: string;
   userId: string;
+  periodType: string;
+  /** @nullable */
+  year?: number | null;
   month: string;
+  /** @nullable */
+  monthInt?: number | null;
+  /** @nullable */
+  quarter?: number | null;
   goalAmount: number;
   achievedAmount: number;
+  /** @nullable */
+  goalQuantity?: number | null;
+  /** @nullable */
+  achievedQuantity?: number | null;
+  /** @nullable */
+  progressPercentage?: number | null;
+  /** @nullable */
+  bonusAmount?: number | null;
+  bonusPaid: boolean;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -1656,8 +1672,14 @@ export interface SalesGoal {
 
 export interface CreateSalesGoalBody {
   userId: string;
+  periodType?: string;
+  year?: number;
   month: string;
+  monthInt?: number;
+  quarter?: number;
   goalAmount: number;
+  goalQuantity?: number;
+  bonusAmount?: number;
 }
 
 export interface UpdateSalesGoalBody {
@@ -1665,6 +1687,16 @@ export interface UpdateSalesGoalBody {
   goalAmount?: number | null;
   /** @nullable */
   achievedAmount?: number | null;
+  /** @nullable */
+  goalQuantity?: number | null;
+  /** @nullable */
+  achievedQuantity?: number | null;
+  /** @nullable */
+  progressPercentage?: number | null;
+  /** @nullable */
+  bonusAmount?: number | null;
+  /** @nullable */
+  bonusPaid?: boolean | null;
   /** @nullable */
   status?: string | null;
 }

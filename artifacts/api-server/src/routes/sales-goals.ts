@@ -13,9 +13,18 @@ function formatGoal(g: typeof salesGoalsTable.$inferSelect) {
     id: g.id,
     tenantId: g.tenantId,
     userId: g.userId,
+    periodType: g.periodType,
+    year: g.year,
     month: g.month,
+    monthInt: g.monthInt,
+    quarter: g.quarter,
     goalAmount: Number(g.goalAmount),
     achievedAmount: Number(g.achievedAmount),
+    goalQuantity: g.goalQuantity != null ? Number(g.goalQuantity) : null,
+    achievedQuantity: g.achievedQuantity != null ? Number(g.achievedQuantity) : null,
+    progressPercentage: g.progressPercentage != null ? Number(g.progressPercentage) : null,
+    bonusAmount: g.bonusAmount != null ? Number(g.bonusAmount) : null,
+    bonusPaid: g.bonusPaid,
     status: g.status,
     createdAt: g.createdAt.toISOString(),
     updatedAt: g.updatedAt.toISOString(),
@@ -24,13 +33,24 @@ function formatGoal(g: typeof salesGoalsTable.$inferSelect) {
 
 const CreateGoalBody = z.object({
   userId: z.string().min(1),
+  periodType: z.string().optional(),
+  year: z.number().int().optional(),
   month: z.string().min(1),
+  monthInt: z.number().int().min(1).max(12).optional(),
+  quarter: z.number().int().min(1).max(4).optional(),
   goalAmount: z.number().min(0),
+  goalQuantity: z.number().min(0).optional(),
+  bonusAmount: z.number().min(0).optional(),
 });
 
 const UpdateGoalBody = z.object({
   goalAmount: z.number().min(0).optional(),
   achievedAmount: z.number().min(0).optional(),
+  goalQuantity: z.number().min(0).nullish(),
+  achievedQuantity: z.number().min(0).nullish(),
+  progressPercentage: z.number().min(0).max(100).nullish(),
+  bonusAmount: z.number().min(0).nullish(),
+  bonusPaid: z.boolean().optional(),
   status: z.string().optional(),
 });
 
@@ -81,9 +101,18 @@ router.post("/sales-goals", async (req, res): Promise<void> => {
       id,
       tenantId: me.tenantId,
       userId: parsed.data.userId,
+      periodType: parsed.data.periodType ?? "monthly",
+      year: parsed.data.year ?? null,
       month: parsed.data.month,
+      monthInt: parsed.data.monthInt ?? null,
+      quarter: parsed.data.quarter ?? null,
       goalAmount: String(parsed.data.goalAmount),
       achievedAmount: "0",
+      goalQuantity: parsed.data.goalQuantity != null ? String(parsed.data.goalQuantity) : null,
+      achievedQuantity: "0",
+      progressPercentage: "0",
+      bonusAmount: parsed.data.bonusAmount != null ? String(parsed.data.bonusAmount) : null,
+      bonusPaid: false,
       status: "active",
     });
 
@@ -110,6 +139,11 @@ router.patch("/sales-goals/:id", async (req, res): Promise<void> => {
     const updates: Partial<typeof salesGoalsTable.$inferInsert> = {};
     if (parsed.data.goalAmount != null) updates.goalAmount = String(parsed.data.goalAmount);
     if (parsed.data.achievedAmount != null) updates.achievedAmount = String(parsed.data.achievedAmount);
+    if (parsed.data.goalQuantity != null) updates.goalQuantity = String(parsed.data.goalQuantity);
+    if (parsed.data.achievedQuantity != null) updates.achievedQuantity = String(parsed.data.achievedQuantity);
+    if (parsed.data.progressPercentage != null) updates.progressPercentage = String(parsed.data.progressPercentage);
+    if (parsed.data.bonusAmount != null) updates.bonusAmount = String(parsed.data.bonusAmount);
+    if (parsed.data.bonusPaid != null) updates.bonusPaid = parsed.data.bonusPaid;
     if (parsed.data.status != null) updates.status = parsed.data.status;
 
     await db.update(salesGoalsTable).set(updates)

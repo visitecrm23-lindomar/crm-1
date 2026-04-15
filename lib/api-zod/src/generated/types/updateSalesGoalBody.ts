@@ -12,5 +12,15 @@ export interface UpdateSalesGoalBody {
   /** @nullable */
   achievedAmount?: number | null;
   /** @nullable */
+  goalQuantity?: number | null;
+  /** @nullable */
+  achievedQuantity?: number | null;
+  /** @nullable */
+  progressPercentage?: number | null;
+  /** @nullable */
+  bonusAmount?: number | null;
+  /** @nullable */
+  bonusPaid?: boolean | null;
+  /** @nullable */
   status?: string | null;
 }

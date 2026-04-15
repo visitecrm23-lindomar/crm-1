@@ -23,7 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { getSeatColor } from "@/components/SeatMapPicker";
+import { getSeatColor, getCellIcon } from "@/components/SeatMapPicker";
 import {
   Plus, Search, MapPin, Calendar, Users, Bus, Edit, Trash2, Eye, ChevronsLeft, ChevronsRight,
   LayoutGrid, List, ChevronLeft, ChevronRight, ArrowLeft, Check, X, Download, Send, Copy,
@@ -1674,7 +1674,8 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   }, [seatMap]);
 
   const maxRow = useMemo(() => Math.max(...seats.map(s => s.row), 0), [seats]);
-  const cols = seatMap?.layout === "2x1" ? 3 : 4;
+  const maxCol = useMemo(() => Math.max(...seats.map(s => s.col), 4), [seats]);
+  const aisleAfterCol = Math.ceil(maxCol / 2);
 
   const seatCounts = useMemo(() => {
     const statusList = seats.map(s => optimisticSeats[s.number] ?? s.status);
@@ -1791,48 +1792,55 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
               {Array.from({ length: maxRow }).map((_, rowIdx) => {
                 const rowNum = rowIdx + 1;
                 const rowSeats = seats.filter(s => s.row === rowNum);
-                const leftSeats = rowSeats.filter(s => s.col <= 2);
-                const rightSeats = rowSeats.filter(s => s.col > 2);
+                const leftSeats = rowSeats.filter(s => s.col <= aisleAfterCol);
+                const rightSeats = rowSeats.filter(s => s.col > aisleAfterCol);
+
+                const renderSeat = (seat: Seat) => {
+                  const seatType = (seat as Seat & { type?: string }).type;
+                  const isNonSeat = ["wc", "stairs", "fridge", "blocked", "empty"].includes(seatType ?? "");
+                  const effectiveStatus = getEffectiveStatus(seat);
+                  const cellClass = `w-10 h-10 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(effectiveStatus, false, seatType)}`;
+                  if (isNonSeat) {
+                    const labels: Record<string, string> = { wc: "Banheiro", stairs: "Escada", fridge: "Frigobar", blocked: "Bloqueado", empty: "" };
+                    return (
+                      <div key={seat.number} className={cellClass} title={labels[seatType ?? ""] ?? seatType ?? ""} aria-label={labels[seatType ?? ""] ?? seatType ?? ""}>
+                        {getCellIcon(seatType)}
+                      </div>
+                    );
+                  }
+                  return (
+                    <button
+                      key={seat.number}
+                      className={cellClass}
+                      onClick={() => handleSeatClick(seat)}
+                      title={`Assento ${seat.number} (${seatType ?? "padrão"}) — ${effectiveStatus}`}
+                      disabled={effectiveStatus !== "available"}
+                    >
+                      {getCellIcon(seatType, seat.number)}
+                    </button>
+                  );
+                };
+
                 return (
                   <div key={rowNum} className="flex items-center gap-2 justify-center">
-                    <div className="flex gap-1">
-                      {leftSeats.map(seat => (
-                        <button
-                          key={seat.number}
-                          className={`w-10 h-10 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(getEffectiveStatus(seat), false)}`}
-                          onClick={() => handleSeatClick(seat)}
-                          title={`Assento ${seat.number} — ${getEffectiveStatus(seat)}`}
-                          disabled={getEffectiveStatus(seat) !== "available"}
-                        >
-                          {seat.number}
-                        </button>
-                      ))}
-                    </div>
+                    <div className="flex gap-1">{leftSeats.map(renderSeat)}</div>
                     <div className="w-5 text-center text-xs text-muted-foreground shrink-0">|</div>
-                    <div className="flex gap-1">
-                      {rightSeats.map(seat => (
-                        <button
-                          key={seat.number}
-                          className={`w-10 h-10 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(getEffectiveStatus(seat), false)}`}
-                          onClick={() => handleSeatClick(seat)}
-                          title={`Assento ${seat.number} — ${getEffectiveStatus(seat)}`}
-                          disabled={getEffectiveStatus(seat) !== "available"}
-                        >
-                          {seat.number}
-                        </button>
-                      ))}
-                    </div>
+                    <div className="flex gap-1">{rightSeats.map(renderSeat)}</div>
                   </div>
                 );
               })}
             </div>
 
-            <div className="flex items-center gap-4 justify-center text-xs flex-wrap">
+            <div className="flex items-center gap-3 justify-center text-xs flex-wrap">
               {[
                 { color: "bg-white border-2 border-gray-200", label: "Disponível" },
+                { color: "bg-yellow-50 border-2 border-yellow-500", label: "VIP ★" },
+                { color: "bg-blue-50 border-2 border-blue-400", label: "Acessível ♿" },
                 { color: "bg-orange-400", label: "Reservado" },
                 { color: "bg-green-500", label: "Confirmado" },
                 { color: "bg-gray-300", label: "Bloqueado" },
+                { color: "bg-cyan-100 border-2 border-cyan-300", label: "Banheiro 🚽" },
+                { color: "bg-purple-100 border-2 border-purple-300", label: "Escada 🪜" },
               ].map(l => (
                 <div key={l.label} className="flex items-center gap-1.5">
                   <div className={`w-4 h-4 rounded ${l.color}`} />

@@ -28,8 +28,8 @@ export function getSeatColor(status: string, selected: boolean, type?: string) {
   // Seat types
   switch (status) {
     case "available":
-      if (type === "vip") return "bg-amber-50 border-2 border-amber-400 hover:border-amber-600 hover:bg-amber-100 text-amber-800 cursor-pointer";
-      if (type === "accessible") return "bg-green-50 border-2 border-green-400 hover:border-green-600 hover:bg-green-100 text-green-800 cursor-pointer";
+      if (type === "vip") return "bg-yellow-50 border-2 border-yellow-500 hover:border-yellow-600 hover:bg-yellow-100 text-yellow-800 cursor-pointer shadow-[0_0_0_1px_theme(colors.yellow.400)]";
+      if (type === "accessible") return "bg-blue-50 border-2 border-blue-400 hover:border-blue-600 hover:bg-blue-100 text-blue-800 cursor-pointer";
       return "bg-white border-2 border-gray-200 hover:border-primary hover:bg-primary/10 cursor-pointer";
     case "reserved":
     case "occupied":
@@ -46,7 +46,7 @@ export function getSeatColor(status: string, selected: boolean, type?: string) {
   }
 }
 
-function getCellIcon(type?: string, seatNumber?: string): string {
+export function getCellIcon(type?: string, seatNumber?: string): string {
   switch (type) {
     case "wc": return "🚽";
     case "stairs": return "🪜";
@@ -57,6 +57,8 @@ function getCellIcon(type?: string, seatNumber?: string): string {
     default: return seatNumber ?? "";
   }
 }
+
+const NON_SEAT_TYPES = ["wc", "stairs", "fridge", "blocked", "empty"];
 
 function getCellTitle(seat: SeatWithType, selected: boolean): string {
   const typeLabel: Record<string, string> = {
@@ -159,13 +161,22 @@ export function SeatMapPicker({ tripId, selectedSeats, onSeatsChange, maxSeats, 
               <div className="flex gap-1">
                 {leftSeats.map(seat => {
                   const s = seat as SeatWithType;
+                  const isNonSeat = NON_SEAT_TYPES.includes(s.type ?? "");
                   const isClickable = CLICKABLE_TYPES.includes(s.type ?? "seat");
                   const isSelected = selectedSeats.includes(s.number);
+                  const cellClass = `w-9 h-9 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(s.status, isSelected, s.type)}`;
+                  if (isNonSeat) {
+                    return (
+                      <div key={s.number} className={cellClass} title={getCellTitle(s, false)} aria-label={getCellTitle(s, false)}>
+                        {getCellIcon(s.type)}
+                      </div>
+                    );
+                  }
                   return (
                     <button
                       key={s.number}
                       type="button"
-                      className={`w-9 h-9 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(s.status, isSelected, s.type)}`}
+                      className={cellClass}
                       onClick={() => handleSeatClick(s)}
                       title={getCellTitle(s, isSelected)}
                       disabled={!isClickable || (s.status !== "available" && !isSelected)}
@@ -179,13 +190,22 @@ export function SeatMapPicker({ tripId, selectedSeats, onSeatsChange, maxSeats, 
               <div className="flex gap-1">
                 {rightSeats.map(seat => {
                   const s = seat as SeatWithType;
+                  const isNonSeat = NON_SEAT_TYPES.includes(s.type ?? "");
                   const isClickable = CLICKABLE_TYPES.includes(s.type ?? "seat");
                   const isSelected = selectedSeats.includes(s.number);
+                  const cellClass = `w-9 h-9 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(s.status, isSelected, s.type)}`;
+                  if (isNonSeat) {
+                    return (
+                      <div key={s.number} className={cellClass} title={getCellTitle(s, false)} aria-label={getCellTitle(s, false)}>
+                        {getCellIcon(s.type)}
+                      </div>
+                    );
+                  }
                   return (
                     <button
                       key={s.number}
                       type="button"
-                      className={`w-9 h-9 rounded-md text-xs font-bold flex items-center justify-center transition-all ${getSeatColor(s.status, isSelected, s.type)}`}
+                      className={cellClass}
                       onClick={() => handleSeatClick(s)}
                       title={getCellTitle(s, isSelected)}
                       disabled={!isClickable || (s.status !== "available" && !isSelected)}
@@ -204,13 +224,14 @@ export function SeatMapPicker({ tripId, selectedSeats, onSeatsChange, maxSeats, 
         {[
           { color: "bg-primary", label: "Selecionado" },
           { color: "bg-white border-2 border-gray-200", label: "Disponível" },
-          { color: "bg-amber-50 border-2 border-amber-400", label: "VIP" },
+          { color: "bg-yellow-50 border-2 border-yellow-500", label: "VIP ★" },
+          { color: "bg-blue-50 border-2 border-blue-400", label: "Acessível ♿" },
           { color: "bg-orange-400", label: "Reservado" },
           { color: "bg-green-500", label: "Confirmado" },
           { color: "bg-gray-300", label: "Bloqueado" },
           ...(hasCustomTypes ? [
-            { color: "bg-cyan-100 border-2 border-cyan-300", label: "Banheiro" },
-            { color: "bg-purple-100 border-2 border-purple-300", label: "Escada" },
+            { color: "bg-cyan-100 border-2 border-cyan-300", label: "Banheiro 🚽" },
+            { color: "bg-purple-100 border-2 border-purple-300", label: "Escada 🪜" },
           ] : []),
         ].map(l => (
           <div key={l.label} className="flex items-center gap-1">

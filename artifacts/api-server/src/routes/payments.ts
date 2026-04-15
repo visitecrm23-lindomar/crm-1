@@ -64,26 +64,42 @@ async function syncMonthlyGoalProgress(sellerId: string, tenantId: string): Prom
     const now = new Date();
     const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-    // Aggregate base revenue from commissions for this seller this month
+    // Aggregate revenue + count from commissions for this seller this month (paid and pending)
     const result = await db.execute(sql`
-      SELECT COALESCE(SUM(base_amount::numeric), 0) AS total
+      SELECT
+        COALESCE(SUM(base_amount::numeric), 0) AS total_revenue,
+        COUNT(*) AS total_count
       FROM commissions
       WHERE tenant_id = ${tenantId}
         AND user_id = ${sellerId}
-        AND status != 'cancelled'
+        AND status IN ('pending', 'paid')
         AND to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM') = ${month}
     `);
-    const total = parseFloat(String((result.rows[0] as Record<string, unknown>)?.total ?? "0"));
+    const row = result.rows[0] as Record<string, unknown>;
+    const totalRevenue = parseFloat(String(row?.total_revenue ?? "0"));
+    const totalCount = parseInt(String(row?.total_count ?? "0"), 10);
 
-    // Update active goals for this seller/month
-    await db.update(salesGoalsTable)
-      .set({ achievedAmount: String(total) })
+    // Fetch active goals for this seller/month to compute progressPercentage
+    const goals = await db.select().from(salesGoalsTable)
       .where(and(
         eq(salesGoalsTable.tenantId, tenantId),
         eq(salesGoalsTable.userId, sellerId),
         eq(salesGoalsTable.month, month),
         eq(salesGoalsTable.status, "active"),
       ));
+
+    for (const goal of goals) {
+      const goalAmount = parseFloat(String(goal.goalAmount));
+      const progressPct = goalAmount > 0 ? Math.min(100, (totalRevenue / goalAmount) * 100) : 0;
+
+      await db.update(salesGoalsTable)
+        .set({
+          achievedAmount: String(totalRevenue.toFixed(2)),
+          achievedQuantity: String(totalCount),
+          progressPercentage: String(progressPct.toFixed(2)),
+        })
+        .where(eq(salesGoalsTable.id, goal.id));
+    }
   } catch {
     // Fire-and-forget: swallow errors to avoid breaking commission sync
   }
