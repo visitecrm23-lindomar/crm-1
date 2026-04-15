@@ -218,6 +218,27 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   );
 }
 
+function AgenciaRoute({ component: Component }: { component: React.ComponentType }) {
+  const { data: me, isLoading } = useGetMe();
+
+  return (
+    <>
+      <Show when="signed-out">
+        <Redirect to="/" />
+      </Show>
+      <Show when="signed-in">
+        {isLoading ? null : me?.role === "vendedor" ? (
+          <Redirect to="/trips" />
+        ) : (
+          <Layout>
+            <Component />
+          </Layout>
+        )}
+      </Show>
+    </>
+  );
+}
+
 function VendedorRoute({ component: Component }: { component: React.ComponentType }) {
   const { data: me, isLoading } = useGetMe();
 
@@ -300,9 +321,9 @@ function Router() {
       <Route path="/clients" component={() => <ProtectedRoute component={Clients} />} />
       <Route path="/clients/:id" component={() => <ProtectedRoute component={Clients} />} />
       <Route path="/trips" component={() => <ProtectedRoute component={Trips} />} />
-      <Route path="/trips/new" component={() => <ProtectedRoute component={Trips} />} />
+      <Route path="/trips/new" component={() => <AgenciaRoute component={Trips} />} />
       <Route path="/trips/calendar" component={() => <ProtectedRoute component={Trips} />} />
-      <Route path="/trips/:id/edit" component={() => <ProtectedRoute component={Trips} />} />
+      <Route path="/trips/:id/edit" component={() => <AgenciaRoute component={Trips} />} />
       <Route path="/trips/:id/seat-map" component={() => <ProtectedRoute component={Trips} />} />
       <Route
         path="/trips/:id/passengers-overview"

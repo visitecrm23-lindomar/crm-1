@@ -6,7 +6,7 @@ import {
   useListTrips, useCreateTrip, useGetTrip, useUpdateTrip, useDeleteTrip,
   useGetTripSeatMap, getGetTripSeatMapQueryKey, useGetDashboardUpcomingTrips, useListReservations, useListClients, useCreateReservation, useUpdateReservation, useCreateClient,
   useGetTripBoardingPanel, useCheckInPassenger, useUndoCheckInPassenger, useSyncTripPassengers,
-  useListLayouts,
+  useListLayouts, useGetMe,
 } from "@workspace/api-client-react";
 import type { Trip, Seat, BoardingPassenger, VehicleLayout, LayoutCell } from "@workspace/api-client-react";
 import { storeApi } from "@/lib/storeApi";
@@ -402,6 +402,8 @@ export function TripList() {
   const [boardingTrip, setBoardingTrip] = useState<{ id: string; name: string } | null>(null);
   const [publishingTrip, setPublishingTrip] = useState<Trip | null>(null);
   const [, navigate] = useLocation();
+  const { data: me } = useGetMe();
+  const isVendedor = me?.role === "vendedor";
 
   const { data: tripsData, isLoading, refetch } = useListTrips({
     search: search || undefined,
@@ -479,13 +481,24 @@ export function TripList() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Viagens</h1>
-          <p className="text-muted-foreground text-sm">Gerencie excursões e pacotes da agência</p>
+          <p className="text-muted-foreground text-sm">
+            {isVendedor ? "Visualize as excursões e pacotes disponíveis" : "Gerencie excursões e pacotes da agência"}
+          </p>
         </div>
         <div className="flex gap-2">
           <Link href="/trips/calendar"><Button variant="outline"><Calendar className="w-4 h-4 mr-2" />Calendário</Button></Link>
-          <Link href="/trips/new"><Button><Plus className="w-4 h-4 mr-2" />Nova Viagem</Button></Link>
+          {!isVendedor && (
+            <Link href="/trips/new"><Button><Plus className="w-4 h-4 mr-2" />Nova Viagem</Button></Link>
+          )}
         </div>
       </div>
+
+      {isVendedor && (
+        <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-blue-800 text-sm">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>Você está no modo visualização. Apenas a agência pode criar ou editar viagens.</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
@@ -567,13 +580,13 @@ export function TripList() {
         <div className="text-center py-20 text-muted-foreground">
           <MapPin className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="font-medium">Nenhuma viagem encontrada</p>
-          <p className="text-sm mt-1">Crie sua primeira viagem para começar</p>
-          <Link href="/trips/new"><Button className="mt-4">Nova Viagem</Button></Link>
+          <p className="text-sm mt-1">{isVendedor ? "Nenhuma viagem disponível no momento" : "Crie sua primeira viagem para começar"}</p>
+          {!isVendedor && <Link href="/trips/new"><Button className="mt-4">Nova Viagem</Button></Link>}
         </div>
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {trips.map(trip => (
-            <TripCard key={trip.id} trip={trip} onDelete={() => setDeletingId(trip.id)} onDuplicate={() => handleDuplicate(trip)} onBoarding={() => setBoardingTrip({ id: trip.id, name: trip.name })} navigate={navigate} />
+            <TripCard key={trip.id} trip={trip} isVendedor={isVendedor} onDelete={() => setDeletingId(trip.id)} onDuplicate={() => handleDuplicate(trip)} onBoarding={() => setBoardingTrip({ id: trip.id, name: trip.name })} navigate={navigate} />
           ))}
         </div>
       ) : (
@@ -601,10 +614,10 @@ export function TripList() {
                 <Link href={`/trips/${trip.id}/passengers`}><Button size="icon" variant="ghost" className="h-8 w-8" title="Passageiros"><Users className="w-4 h-4" /></Button></Link>
                 <Button size="icon" variant="ghost" className="h-8 w-8 text-green-700" onClick={() => setBoardingTrip({ id: trip.id, name: trip.name })} title="Painel de Embarque"><ClipboardList className="w-4 h-4" /></Button>
                 <Link href={`/trips/${trip.id}/seat-map`}><Button size="icon" variant="ghost" className="h-8 w-8" title="Mapa de Assentos"><Bus className="w-4 h-4" /></Button></Link>
-                <Link href={`/trips/${trip.id}/edit`}><Button size="icon" variant="ghost" className="h-8 w-8" title="Editar"><Edit className="w-4 h-4" /></Button></Link>
-                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleDuplicate(trip)} title="Duplicar"><Copy className="w-4 h-4" /></Button>
-                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => setDeletingId(trip.id)} title="Excluir"><Trash2 className="w-4 h-4" /></Button>
-                <Button size="icon" variant="ghost" className="h-8 w-8 text-primary" onClick={() => setPublishingTrip(trip)} title="Publicar na Loja"><ShoppingBag className="w-4 h-4" /></Button>
+                {!isVendedor && <Link href={`/trips/${trip.id}/edit`}><Button size="icon" variant="ghost" className="h-8 w-8" title="Editar"><Edit className="w-4 h-4" /></Button></Link>}
+                {!isVendedor && <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleDuplicate(trip)} title="Duplicar"><Copy className="w-4 h-4" /></Button>}
+                {!isVendedor && <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => setDeletingId(trip.id)} title="Excluir"><Trash2 className="w-4 h-4" /></Button>}
+                {!isVendedor && <Button size="icon" variant="ghost" className="h-8 w-8 text-primary" onClick={() => setPublishingTrip(trip)} title="Publicar na Loja"><ShoppingBag className="w-4 h-4" /></Button>}
               </div>
             </div>
           ))}
@@ -960,7 +973,7 @@ function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boole
   );
 }
 
-function TripCard({ trip, onDelete, onDuplicate, onBoarding, navigate }: { trip: Trip; onDelete: () => void; onDuplicate: () => void; onBoarding: () => void; navigate: (to: string) => void }) {
+function TripCard({ trip, isVendedor, onDelete, onDuplicate, onBoarding, navigate }: { trip: Trip; isVendedor?: boolean; onDelete: () => void; onDuplicate: () => void; onBoarding: () => void; navigate: (to: string) => void }) {
   const pct = trip.totalCapacity > 0 ? Math.round((trip.reservedSeats + trip.confirmedSeats) / trip.totalCapacity * 100) : 0;
   const statusInfo = STATUS_MAP[trip.status] ?? { label: trip.status, color: "bg-gray-100 text-gray-600" };
   const [publishOpen, setPublishOpen] = useState(false);
@@ -998,14 +1011,18 @@ function TripCard({ trip, onDelete, onDuplicate, onBoarding, navigate }: { trip:
           <Link href={`/trips/${trip.id}/seat-map`}>
             <Button variant="outline" size="sm" className="text-xs"><Bus className="w-3 h-3 mr-1" />Mapa</Button>
           </Link>
-          <Link href={`/trips/${trip.id}/edit`}>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" title="Editar"><Edit className="w-4 h-4" /></Button>
-          </Link>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={onDuplicate} title="Duplicar">
-            <Copy className="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={onDelete} title="Excluir"><Trash2 className="w-4 h-4" /></Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => setPublishOpen(true)} title="Publicar na Loja"><ShoppingBag className="w-4 h-4" /></Button>
+          {!isVendedor && (
+            <Link href={`/trips/${trip.id}/edit`}>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" title="Editar"><Edit className="w-4 h-4" /></Button>
+            </Link>
+          )}
+          {!isVendedor && (
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={onDuplicate} title="Duplicar">
+              <Copy className="w-4 h-4" />
+            </Button>
+          )}
+          {!isVendedor && <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={onDelete} title="Excluir"><Trash2 className="w-4 h-4" /></Button>}
+          {!isVendedor && <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => setPublishOpen(true)} title="Publicar na Loja"><ShoppingBag className="w-4 h-4" /></Button>}
         </div>
       </div>
       <PublishToStoreDialog trip={trip} open={publishOpen} onClose={() => setPublishOpen(false)} />
