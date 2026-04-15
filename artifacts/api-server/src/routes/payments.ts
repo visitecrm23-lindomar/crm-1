@@ -118,6 +118,24 @@ export async function syncReservationCommission(reservationId: string, tenantId:
       commissionAmount = rule.type === "percentage"
         ? (baseAmount * parseFloat(String(rule.value))) / 100
         : parseFloat(String(rule.value));
+    } else {
+      // Fallback: use per-seller commission configuration
+      const [sellerConfig] = await db.select({
+        commissionType: usersTable.commissionType,
+        commissionRate: usersTable.commissionRate,
+        commissionFixed: usersTable.commissionFixed,
+      }).from(usersTable)
+        .where(and(eq(usersTable.id, sellerId), eq(usersTable.tenantId, tenantId)))
+        .limit(1);
+      if (sellerConfig) {
+        const rate = parseFloat(String(sellerConfig.commissionRate ?? "0"));
+        const fixed = parseFloat(String(sellerConfig.commissionFixed ?? "0"));
+        if (sellerConfig.commissionType === "fixed" && fixed > 0) {
+          commissionAmount = fixed;
+        } else if (rate > 0) {
+          commissionAmount = (baseAmount * rate) / 100;
+        }
+      }
     }
   }
 

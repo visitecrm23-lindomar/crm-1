@@ -13,4 +13,12 @@ export interface UpdateUserBody {
   role?: string | null;
   /** @nullable */
   isActive?: boolean | null;
+  /** @nullable */
+  commissionType?: string | null;
+  /** @nullable */
+  commissionRate?: number | null;
+  /** @nullable */
+  commissionFixed?: number | null;
+  /** @nullable */
+  monthlyGoal?: number | null;
 }

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, commissionRulesTable, commissionsTable } from "@workspace/db";
+import { db, commissionRulesTable, commissionsTable, usersTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
@@ -78,6 +78,71 @@ router.delete("/commission-rules/:id", async (req, res): Promise<void> => {
     res.status(204).end();
   } catch (err) {
     req.log.error({ err }, "Error deleting commission rule");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/commissions/calculate", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    const { sellerId, saleAmount, tripId } = req.query as Record<string, string>;
+    if (!sellerId || !saleAmount) {
+      res.status(400).json({ error: "sellerId and saleAmount are required" });
+      return;
+    }
+    const amount = parseFloat(saleAmount);
+    if (isNaN(amount) || amount <= 0) {
+      res.status(400).json({ error: "saleAmount must be a positive number" });
+      return;
+    }
+
+    // Check commission rules first (trip-specific, then all)
+    const rules = await db.select().from(commissionRulesTable)
+      .where(and(eq(commissionRulesTable.tenantId, me.tenantId), eq(commissionRulesTable.isActive, true)));
+
+    const tripSpecificRule = tripId ? rules.find(r => r.appliesTo === "trip" && r.tripId === tripId) : undefined;
+    const allRule = rules.find(r => r.appliesTo === "all");
+    const rule = tripSpecificRule ?? allRule;
+
+    if (rule) {
+      const commissionAmount = rule.type === "percentage"
+        ? (amount * parseFloat(String(rule.value))) / 100
+        : parseFloat(String(rule.value));
+      res.json({
+        commissionAmount: Math.round(commissionAmount * 100) / 100,
+        commissionRate: parseFloat(String(rule.value)),
+        commissionType: rule.type ?? "percentage",
+        source: "rule",
+      });
+      return;
+    }
+
+    // Fallback: seller's personal commission config
+    const [seller] = await db.select({
+      commissionType: usersTable.commissionType,
+      commissionRate: usersTable.commissionRate,
+      commissionFixed: usersTable.commissionFixed,
+    }).from(usersTable)
+      .where(and(eq(usersTable.id, sellerId), eq(usersTable.tenantId, me.tenantId)))
+      .limit(1);
+
+    if (!seller) { res.status(404).json({ error: "Seller not found" }); return; }
+
+    const rate = parseFloat(String(seller.commissionRate ?? "0"));
+    const fixed = parseFloat(String(seller.commissionFixed ?? "0"));
+
+    if (seller.commissionType === "fixed" && fixed > 0) {
+      res.json({ commissionAmount: fixed, commissionRate: null, commissionType: "fixed", source: "seller" });
+    } else if (rate > 0) {
+      const commissionAmount = Math.round((amount * rate / 100) * 100) / 100;
+      res.json({ commissionAmount, commissionRate: rate, commissionType: "percentage", source: "seller" });
+    } else {
+      res.json({ commissionAmount: 0, commissionRate: 0, commissionType: "percentage", source: "none" });
+    }
+  } catch (err) {
+    req.log.error({ err }, "Error calculating commission");
     res.status(500).json({ error: "Internal server error" });
   }
 });

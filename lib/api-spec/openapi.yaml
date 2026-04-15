@@ -3111,6 +3111,116 @@ paths:
                 items:
                   $ref: "#/components/schemas/Commission"
 
+  /commissions/calculate:
+    get:
+      operationId: calculateCommission
+      summary: Preview commission for a sale
+      tags: [Commissions]
+      parameters:
+        - in: query
+          name: sellerId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: saleAmount
+          required: true
+          schema:
+            type: number
+        - in: query
+          name: tripId
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Commission preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommissionPreview"
+
+  /sales-goals:
+    get:
+      operationId: listSalesGoals
+      summary: List sales goals
+      tags: [Commissions]
+      parameters:
+        - in: query
+          name: userId
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: month
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of sales goals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SalesGoal"
+    post:
+      operationId: createSalesGoal
+      summary: Create a sales goal
+      tags: [Commissions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSalesGoalBody"
+      responses:
+        "201":
+          description: Created sales goal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesGoal"
+
+  /sales-goals/{id}:
+    patch:
+      operationId: updateSalesGoal
+      summary: Update a sales goal
+      tags: [Commissions]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSalesGoalBody"
+      responses:
+        "200":
+          description: Updated sales goal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesGoal"
+    delete:
+      operationId: deleteSalesGoal
+      summary: Delete a sales goal
+      tags: [Commissions]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
   /commissions/{id}:
     patch:
       operationId: updateCommission
@@ -6541,6 +6651,14 @@ components:
           type: string
         referralBalance:
           type: number
+        commissionType:
+          type: string
+        commissionRate:
+          type: number
+        commissionFixed:
+          type: number
+        monthlyGoal:
+          type: ["number", "null"]
         createdAt:
           type: string
         tenant:
@@ -6601,6 +6719,71 @@ components:
           type: ["string", "null"]
         isActive:
           type: ["boolean", "null"]
+        commissionType:
+          type: ["string", "null"]
+        commissionRate:
+          type: ["number", "null"]
+        commissionFixed:
+          type: ["number", "null"]
+        monthlyGoal:
+          type: ["number", "null"]
+
+    SalesGoal:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        userId:
+          type: string
+        month:
+          type: string
+        goalAmount:
+          type: number
+        achievedAmount:
+          type: number
+        status:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, tenantId, userId, month, goalAmount, achievedAmount, status, createdAt, updatedAt]
+
+    CreateSalesGoalBody:
+      type: object
+      properties:
+        userId:
+          type: string
+        month:
+          type: string
+        goalAmount:
+          type: number
+      required: [userId, month, goalAmount]
+
+    UpdateSalesGoalBody:
+      type: object
+      properties:
+        goalAmount:
+          type: ["number", "null"]
+        achievedAmount:
+          type: ["number", "null"]
+        status:
+          type: ["string", "null"]
+
+    CommissionPreview:
+      type: object
+      properties:
+        commissionAmount:
+          type: number
+        commissionRate:
+          type: ["number", "null"]
+        commissionType:
+          type: string
+        source:
+          type: string
+      required: [commissionAmount, commissionType, source]
 
     # ─── TENANT ────────────────────────────────────────────────────
     AdminStats:

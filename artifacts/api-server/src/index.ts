@@ -442,6 +442,33 @@ async function runMigrations() {
       ALTER TABLE trips ADD COLUMN IF NOT EXISTS layout_id TEXT REFERENCES vehicle_layouts(id) ON DELETE SET NULL;
     `);
 
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS commission_type text NOT NULL DEFAULT 'percentage';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS commission_rate numeric(5,2) NOT NULL DEFAULT 0;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS commission_fixed numeric(10,2) NOT NULL DEFAULT 0;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS monthly_goal numeric(10,2);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sales_goals (
+        id text PRIMARY KEY,
+        tenant_id text NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        month text NOT NULL,
+        goal_amount numeric(10,2) NOT NULL DEFAULT 0,
+        achieved_amount numeric(10,2) NOT NULL DEFAULT 0,
+        status text NOT NULL DEFAULT 'active',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    `);
+
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS sales_goals_tenant_user_month_unique
+        ON sales_goals (tenant_id, user_id, month)
+        WHERE status = 'active';
+    `);
+
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");

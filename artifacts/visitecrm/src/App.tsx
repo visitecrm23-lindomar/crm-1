@@ -40,6 +40,7 @@ import Hospedagens from "@/pages/cadastros/hospedagens";
 import Destinos from "@/pages/cadastros/destinos";
 import Produtos from "@/pages/cadastros/produtos";
 import Vendedores from "@/pages/vendedores";
+import MeuPainel from "@/pages/meu-painel";
 import Vouchers from "@/pages/vouchers";
 import Indicacoes from "@/pages/indicacoes";
 import Configuracoes from "@/pages/configuracoes";
@@ -362,6 +363,9 @@ function Router() {
         path="/downloads"
         component={() => <ProtectedRoute component={Downloads} />}
       />
+
+      {/* Seller dashboard */}
+      <Route path="/meu-painel" component={() => <ProtectedRoute component={MeuPainel} />} />
 
       {/* Legacy redirect */}
       <Route path="/settings" component={() => <Redirect to="/configuracoes" />} />

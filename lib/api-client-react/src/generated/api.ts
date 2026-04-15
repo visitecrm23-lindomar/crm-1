@@ -33,6 +33,7 @@ import type {
   BirthdayStats,
   BoardingLocation,
   BoardingPanel,
+  CalculateCommissionParams,
   Campaign,
   CartItem,
   ChartDataPoint,
@@ -44,6 +45,7 @@ import type {
   ClientLoyaltyInfo,
   ClientReferralInfo,
   Commission,
+  CommissionPreview,
   CommissionRule,
   Coupon,
   CouponValidationResult,
@@ -80,6 +82,7 @@ import type {
   CreateProductImageBody,
   CreateReferralBody,
   CreateReservationBody,
+  CreateSalesGoalBody,
   CreateSupplierBody,
   CreateTenantBody,
   CreateTripBody,
@@ -116,6 +119,7 @@ import type {
   ListReferrals200,
   ListReferralsParams,
   ListReservationsParams,
+  ListSalesGoalsParams,
   ListTripsParams,
   LoyaltyMember,
   LoyaltyProgram,
@@ -149,6 +153,7 @@ import type {
   Reservation,
   ReservationListResponse,
   ReservationStats,
+  SalesGoal,
   SeatMap,
   SendMessageBody,
   SendNpsSurvey200,
@@ -190,6 +195,7 @@ import type {
   UpdateReferralBody,
   UpdateReferralSettingsBody,
   UpdateReservationBody,
+  UpdateSalesGoalBody,
   UpdateSupplierBody,
   UpdateTenantBody,
   UpdateTripBody,
@@ -12698,6 +12704,457 @@ export function useListCommissions<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Preview commission for a sale
+ */
+export const getCalculateCommissionUrl = (
+  params: CalculateCommissionParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/commissions/calculate?${stringifiedParams}`
+    : `/api/commissions/calculate`;
+};
+
+export const calculateCommission = async (
+  params: CalculateCommissionParams,
+  options?: RequestInit,
+): Promise<CommissionPreview> => {
+  return customFetch<CommissionPreview>(getCalculateCommissionUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getCalculateCommissionQueryKey = (
+  params?: CalculateCommissionParams,
+) => {
+  return [`/api/commissions/calculate`, ...(params ? [params] : [])] as const;
+};
+
+export const getCalculateCommissionQueryOptions = <
+  TData = Awaited<ReturnType<typeof calculateCommission>>,
+  TError = ErrorType<unknown>,
+>(
+  params: CalculateCommissionParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof calculateCommission>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getCalculateCommissionQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof calculateCommission>>
+  > = ({ signal }) =>
+    calculateCommission(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof calculateCommission>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type CalculateCommissionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof calculateCommission>>
+>;
+export type CalculateCommissionQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Preview commission for a sale
+ */
+
+export function useCalculateCommission<
+  TData = Awaited<ReturnType<typeof calculateCommission>>,
+  TError = ErrorType<unknown>,
+>(
+  params: CalculateCommissionParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof calculateCommission>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getCalculateCommissionQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List sales goals
+ */
+export const getListSalesGoalsUrl = (params?: ListSalesGoalsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/sales-goals?${stringifiedParams}`
+    : `/api/sales-goals`;
+};
+
+export const listSalesGoals = async (
+  params?: ListSalesGoalsParams,
+  options?: RequestInit,
+): Promise<SalesGoal[]> => {
+  return customFetch<SalesGoal[]>(getListSalesGoalsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSalesGoalsQueryKey = (params?: ListSalesGoalsParams) => {
+  return [`/api/sales-goals`, ...(params ? [params] : [])] as const;
+};
+
+export const getListSalesGoalsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSalesGoals>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListSalesGoalsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSalesGoals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListSalesGoalsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listSalesGoals>>> = ({
+    signal,
+  }) => listSalesGoals(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSalesGoals>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSalesGoalsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSalesGoals>>
+>;
+export type ListSalesGoalsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List sales goals
+ */
+
+export function useListSalesGoals<
+  TData = Awaited<ReturnType<typeof listSalesGoals>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListSalesGoalsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSalesGoals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSalesGoalsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a sales goal
+ */
+export const getCreateSalesGoalUrl = () => {
+  return `/api/sales-goals`;
+};
+
+export const createSalesGoal = async (
+  createSalesGoalBody: CreateSalesGoalBody,
+  options?: RequestInit,
+): Promise<SalesGoal> => {
+  return customFetch<SalesGoal>(getCreateSalesGoalUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createSalesGoalBody),
+  });
+};
+
+export const getCreateSalesGoalMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSalesGoal>>,
+    TError,
+    { data: BodyType<CreateSalesGoalBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createSalesGoal>>,
+  TError,
+  { data: BodyType<CreateSalesGoalBody> },
+  TContext
+> => {
+  const mutationKey = ["createSalesGoal"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createSalesGoal>>,
+    { data: BodyType<CreateSalesGoalBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createSalesGoal(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateSalesGoalMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createSalesGoal>>
+>;
+export type CreateSalesGoalMutationBody = BodyType<CreateSalesGoalBody>;
+export type CreateSalesGoalMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a sales goal
+ */
+export const useCreateSalesGoal = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSalesGoal>>,
+    TError,
+    { data: BodyType<CreateSalesGoalBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createSalesGoal>>,
+  TError,
+  { data: BodyType<CreateSalesGoalBody> },
+  TContext
+> => {
+  return useMutation(getCreateSalesGoalMutationOptions(options));
+};
+
+/**
+ * @summary Update a sales goal
+ */
+export const getUpdateSalesGoalUrl = (id: string) => {
+  return `/api/sales-goals/${id}`;
+};
+
+export const updateSalesGoal = async (
+  id: string,
+  updateSalesGoalBody: UpdateSalesGoalBody,
+  options?: RequestInit,
+): Promise<SalesGoal> => {
+  return customFetch<SalesGoal>(getUpdateSalesGoalUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateSalesGoalBody),
+  });
+};
+
+export const getUpdateSalesGoalMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSalesGoal>>,
+    TError,
+    { id: string; data: BodyType<UpdateSalesGoalBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSalesGoal>>,
+  TError,
+  { id: string; data: BodyType<UpdateSalesGoalBody> },
+  TContext
+> => {
+  const mutationKey = ["updateSalesGoal"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSalesGoal>>,
+    { id: string; data: BodyType<UpdateSalesGoalBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateSalesGoal(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSalesGoalMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSalesGoal>>
+>;
+export type UpdateSalesGoalMutationBody = BodyType<UpdateSalesGoalBody>;
+export type UpdateSalesGoalMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a sales goal
+ */
+export const useUpdateSalesGoal = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSalesGoal>>,
+    TError,
+    { id: string; data: BodyType<UpdateSalesGoalBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSalesGoal>>,
+  TError,
+  { id: string; data: BodyType<UpdateSalesGoalBody> },
+  TContext
+> => {
+  return useMutation(getUpdateSalesGoalMutationOptions(options));
+};
+
+/**
+ * @summary Delete a sales goal
+ */
+export const getDeleteSalesGoalUrl = (id: string) => {
+  return `/api/sales-goals/${id}`;
+};
+
+export const deleteSalesGoal = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteSalesGoalUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteSalesGoalMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteSalesGoal>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteSalesGoal>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteSalesGoal"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteSalesGoal>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteSalesGoal(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteSalesGoalMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteSalesGoal>>
+>;
+
+export type DeleteSalesGoalMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a sales goal
+ */
+export const useDeleteSalesGoal = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteSalesGoal>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteSalesGoal>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteSalesGoalMutationOptions(options));
+};
 
 /**
  * @summary Update commission status

@@ -20,6 +20,10 @@ function formatUser(u: typeof usersTable.$inferSelect) {
     id: u.id, clerkId: u.clerkId, name: u.name, email: u.email, role: u.role,
     avatarUrl: u.avatarUrl, isActive: u.isActive, tenantId: u.tenantId,
     referralCode: u.referralCode, referralBalance: Number(u.referralBalance),
+    commissionType: u.commissionType ?? "percentage",
+    commissionRate: Number(u.commissionRate ?? 0),
+    commissionFixed: Number(u.commissionFixed ?? 0),
+    monthlyGoal: u.monthlyGoal != null ? Number(u.monthlyGoal) : null,
     createdAt: u.createdAt.toISOString(),
   };
 }
@@ -241,6 +245,19 @@ router.patch("/users/:id", async (req, res): Promise<void> => {
       }
       if (parsed.data.role != null) updates.role = parsed.data.role;
       if (parsed.data.isActive != null) updates.isActive = parsed.data.isActive;
+    }
+    // Commission config — admin only
+    const hasCommissionFields = parsed.data.commissionType != null || parsed.data.commissionRate != null || parsed.data.commissionFixed != null || "monthlyGoal" in parsed.data;
+    if (hasCommissionFields) {
+      const adminRoles = ["agencia", "superadmin"];
+      if (!adminRoles.includes(me.role)) {
+        res.status(403).json({ error: "Forbidden: apenas administradores podem alterar configuração de comissão" });
+        return;
+      }
+      if (parsed.data.commissionType != null) updates.commissionType = parsed.data.commissionType;
+      if (parsed.data.commissionRate != null) updates.commissionRate = String(parsed.data.commissionRate);
+      if (parsed.data.commissionFixed != null) updates.commissionFixed = String(parsed.data.commissionFixed);
+      if ("monthlyGoal" in parsed.data) updates.monthlyGoal = parsed.data.monthlyGoal != null ? String(parsed.data.monthlyGoal) : null;
     }
     await db.update(usersTable).set(updates)
       .where(and(eq(usersTable.id, req.params.id), eq(usersTable.tenantId, me.tenantId)));

@@ -5,13 +5,26 @@ import {
   useListReservations,
   useListDeals,
   useListPipelineStages,
-  useListSystemConfigs,
+  useUpdateUser,
+  useListSalesGoals,
+  useCreateSalesGoal,
+  useUpdateSalesGoal,
+  useDeleteSalesGoal,
 } from "@workspace/api-client-react";
 import type { UserProfile, Commission, Deal } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -25,9 +38,21 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, DollarSign, TrendingUp, Award, ChevronRight, Target } from "lucide-react";
+import {
+  Users,
+  DollarSign,
+  TrendingUp,
+  Award,
+  ChevronRight,
+  Target,
+  Settings2,
+  Plus,
+  Trash2,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 function fmtCurrency(v: number | string | null | undefined) {
   if (v == null) return "R$ 0,00";
@@ -45,15 +70,15 @@ interface SellerStats {
   dealValue: number;
 }
 
-function GoalsChart({ stats, monthlyGoal }: { stats: SellerStats[]; monthlyGoal: number }) {
-  const top = [...stats].sort((a, b) => b.revenue - a.revenue).slice(0, 6);
+function GoalsChart({ stats }: { stats: SellerStats[] }) {
+  const top = [...stats].sort((a, b) => b.revenue - a.revenue).slice(0, 8);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Target className="w-4 h-4" />
-          Metas vs Realizado — Meta mensal por vendedor: {fmtCurrency(monthlyGoal)}
+          Metas vs Realizado — Por Vendedor
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -64,32 +89,40 @@ function GoalsChart({ stats, monthlyGoal }: { stats: SellerStats[]; monthlyGoal:
         ) : (
           <div className="space-y-4">
             {top.map((s) => {
-              const pct = Math.min(100, (s.revenue / monthlyGoal) * 100);
+              const goal: number = (s.user.monthlyGoal as number | null) ?? 0;
+              const pct = goal > 0 ? Math.min(100, (s.revenue / goal) * 100) : 0;
               return (
                 <div key={s.user.id} className="space-y-1">
                   <div className="flex justify-between items-center text-sm">
                     <span className="font-medium">{s.user.name}</span>
                     <span className="text-muted-foreground">
-                      {fmtCurrency(s.revenue)} / {fmtCurrency(monthlyGoal)}
+                      {fmtCurrency(s.revenue)}
+                      {goal > 0 ? ` / ${fmtCurrency(goal)}` : " — sem meta"}
                     </span>
                   </div>
-                  <div className="relative h-4 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        pct >= 100
-                          ? "bg-green-500"
-                          : pct >= 70
-                          ? "bg-primary"
-                          : pct >= 40
-                          ? "bg-yellow-500"
-                          : "bg-red-400"
-                      }`}
-                      style={{ width: `${pct}%` }}
-                    />
-                    <span className="absolute right-2 top-0 bottom-0 flex items-center text-xs font-bold text-foreground/80">
-                      {pct.toFixed(0)}%
-                    </span>
-                  </div>
+                  {goal > 0 ? (
+                    <div className="relative h-4 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          pct >= 100
+                            ? "bg-green-500"
+                            : pct >= 70
+                            ? "bg-primary"
+                            : pct >= 40
+                            ? "bg-yellow-500"
+                            : "bg-red-400"
+                        }`}
+                        style={{ width: `${pct}%` }}
+                      />
+                      <span className="absolute right-2 top-0 bottom-0 flex items-center text-xs font-bold text-foreground/80">
+                        {pct.toFixed(0)}%
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="h-4 rounded-full bg-muted/50 flex items-center px-2">
+                      <span className="text-xs text-muted-foreground">Meta não configurada</span>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -153,6 +186,260 @@ function PipelineView({
   );
 }
 
+function currentMonthStr() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function CommissionConfigDialog({
+  seller,
+  open,
+  onClose,
+}: {
+  seller: UserProfile;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const updateUser = useUpdateUser();
+
+  const [commissionType, setCommissionType] = useState<string>(
+    seller.commissionType ?? "percentage"
+  );
+  const [commissionRate, setCommissionRate] = useState<string>(
+    String(seller.commissionRate ?? "")
+  );
+  const [commissionFixed, setCommissionFixed] = useState<string>(
+    String(seller.commissionFixed ?? "")
+  );
+  const [monthlyGoal, setMonthlyGoal] = useState<string>(
+    String(seller.monthlyGoal ?? "")
+  );
+
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await updateUser.mutateAsync({
+        id: seller.id,
+        data: {
+          commissionType: commissionType as "percentage" | "fixed" | "none",
+          commissionRate: commissionRate !== "" ? parseFloat(commissionRate) : null,
+          commissionFixed: commissionFixed !== "" ? parseFloat(commissionFixed) : null,
+          monthlyGoal: monthlyGoal !== "" ? parseFloat(monthlyGoal) : null,
+        },
+      });
+      toast({ title: "Comissão salva", description: `Configurações de ${seller.name} atualizadas.` });
+      onClose();
+    } catch {
+      toast({ title: "Erro ao salvar", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Settings2 className="w-4 h-4" />
+            Configurar Comissão — {seller.name}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label>Tipo de comissão</Label>
+            <Select value={commissionType} onValueChange={setCommissionType}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="percentage">Percentual (%)</SelectItem>
+                <SelectItem value="fixed">Valor fixo (R$)</SelectItem>
+                <SelectItem value="none">Sem comissão</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {commissionType === "percentage" && (
+            <div className="space-y-1.5">
+              <Label>Taxa (%)</Label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step={0.01}
+                placeholder="Ex: 5"
+                value={commissionRate}
+                onChange={(e) => setCommissionRate(e.target.value)}
+              />
+            </div>
+          )}
+
+          {commissionType === "fixed" && (
+            <div className="space-y-1.5">
+              <Label>Valor fixo por venda (R$)</Label>
+              <Input
+                type="number"
+                min={0}
+                step={0.01}
+                placeholder="Ex: 150.00"
+                value={commissionFixed}
+                onChange={(e) => setCommissionFixed(e.target.value)}
+              />
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label>Meta mensal de receita (R$)</Label>
+            <Input
+              type="number"
+              min={0}
+              step={100}
+              placeholder="Ex: 50000"
+              value={monthlyGoal}
+              onChange={(e) => setMonthlyGoal(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Usado no dashboard do vendedor e no gráfico de metas
+            </p>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancelar
+          </Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? "Salvando…" : "Salvar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function GoalsTab({ seller }: { seller: UserProfile }) {
+  const { toast } = useToast();
+  const { data: goals = [], refetch } = useListSalesGoals({ userId: seller.id });
+  const createGoal = useCreateSalesGoal();
+  const updateGoal = useUpdateSalesGoal();
+  const deleteGoal = useDeleteSalesGoal();
+
+  const [newMonth, setNewMonth] = useState(currentMonthStr());
+  const [newGoalAmount, setNewGoalAmount] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  async function handleAdd() {
+    if (!newGoalAmount) return;
+    setAdding(true);
+    try {
+      await createGoal.mutateAsync({
+        data: {
+          userId: seller.id,
+          month: newMonth,
+          goalAmount: parseFloat(newGoalAmount),
+        },
+      });
+      toast({ title: "Meta criada" });
+      setNewGoalAmount("");
+      refetch();
+    } catch {
+      toast({ title: "Erro ao criar meta", variant: "destructive" });
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  async function handleToggle(id: string, status: string) {
+    await updateGoal.mutateAsync({
+      id,
+      data: { status: status === "active" ? "inactive" : "active" },
+    });
+    refetch();
+  }
+
+  async function handleDelete(id: string) {
+    await deleteGoal.mutateAsync({ id });
+    refetch();
+  }
+
+  return (
+    <div className="space-y-4 mt-2">
+      {/* Add new goal */}
+      <div className="rounded-lg border p-3 space-y-3">
+        <p className="text-sm font-medium">Nova Meta</p>
+        <div className="flex gap-2">
+          <div className="space-y-1 flex-1">
+            <Label className="text-xs">Mês</Label>
+            <Input
+              type="month"
+              value={newMonth}
+              onChange={(e) => setNewMonth(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1 flex-1">
+            <Label className="text-xs">Meta (R$)</Label>
+            <Input
+              type="number"
+              min={0}
+              step={100}
+              placeholder="Ex: 50000"
+              value={newGoalAmount}
+              onChange={(e) => setNewGoalAmount(e.target.value)}
+            />
+          </div>
+        </div>
+        <Button size="sm" onClick={handleAdd} disabled={adding || !newGoalAmount}>
+          <Plus className="w-3 h-3 mr-1" />
+          {adding ? "Criando…" : "Adicionar Meta"}
+        </Button>
+      </div>
+
+      {/* Goals list */}
+      {goals.length === 0 ? (
+        <p className="text-muted-foreground text-sm text-center py-4">
+          Nenhuma meta cadastrada para este vendedor
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {goals.map((g) => (
+            <div
+              key={g.id}
+              className="flex items-center justify-between rounded-lg border p-3"
+            >
+              <div>
+                <p className="text-sm font-medium">{g.month}</p>
+                <p className="text-sm text-muted-foreground">{fmtCurrency(g.goalAmount)}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant={g.status === "active" ? "default" : "secondary"}
+                  className="cursor-pointer text-xs"
+                  onClick={() => handleToggle(g.id, g.status)}
+                >
+                  {g.status === "active" ? "Ativa" : "Inativa"}
+                </Badge>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-destructive"
+                  onClick={() => handleDelete(g.id)}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Vendedores() {
   const { data: users = [] } = useListUsers();
   const { data: allCommissions = [] } = useListCommissions();
@@ -160,14 +447,9 @@ export default function Vendedores() {
   const reservations = reservationsData?.data ?? [];
   const { data: allDeals = [] } = useListDeals();
   const { data: stages = [] } = useListPipelineStages();
-  const { data: configs } = useListSystemConfigs();
-  const monthlyGoal = (() => {
-    const v = (configs ?? []).find((c) => c.key === "salesMonthlyGoal")?.value;
-    const parsed = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : NaN;
-    return isNaN(parsed) || parsed <= 0 ? 50000 : parsed;
-  })();
 
   const [selectedSeller, setSelectedSeller] = useState<SellerStats | null>(null);
+  const [configSeller, setConfigSeller] = useState<UserProfile | null>(null);
 
   const sellers = users.filter(
     (u) => u.role === "vendedor" || u.role === "agencia" || u.role === "superadmin"
@@ -207,10 +489,6 @@ export default function Vendedores() {
 
   const sorted = [...stats].sort((a, b) => b.revenue - a.revenue);
 
-  function openSeller(s: SellerStats) {
-    setSelectedSeller(s);
-  }
-
   const sellerReservations = selectedSeller
     ? reservations.filter(
         (r) =>
@@ -227,6 +505,10 @@ export default function Vendedores() {
   const sellerDeals: Deal[] = selectedSeller
     ? allDeals.filter((d) => d.ownerId === selectedSeller.user.id)
     : [];
+
+  const sellerGoal: number = selectedSeller
+    ? ((selectedSeller.user.monthlyGoal as number | null) ?? 0)
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -287,8 +569,8 @@ export default function Vendedores() {
         </Card>
       </div>
 
-      {/* Goals vs actual chart */}
-      <GoalsChart stats={stats} monthlyGoal={monthlyGoal} />
+      {/* Goals vs actual chart (per-seller goals) */}
+      <GoalsChart stats={stats} />
 
       {/* Ranking table */}
       <Card>
@@ -302,82 +584,133 @@ export default function Vendedores() {
                 <TableHead className="w-10">#</TableHead>
                 <TableHead>Vendedor</TableHead>
                 <TableHead>Função</TableHead>
+                <TableHead>Comissão Config.</TableHead>
+                <TableHead>Meta Mensal</TableHead>
                 <TableHead>Vendas</TableHead>
                 <TableHead>Receita</TableHead>
                 <TableHead>Comissão</TableHead>
-                <TableHead>Negócios</TableHead>
                 <TableHead>Conversão</TableHead>
-                <TableHead className="w-12"></TableHead>
+                <TableHead className="w-20"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sorted.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground py-10">
+                  <TableCell colSpan={10} className="text-center text-muted-foreground py-10">
                     Nenhum vendedor com dados de comissão
                   </TableCell>
                 </TableRow>
               ) : (
-                sorted.map((s, idx) => (
-                  <TableRow key={s.user.id}>
-                    <TableCell>
-                      <span
-                        className={`font-bold ${
-                          idx === 0
-                            ? "text-yellow-500"
-                            : idx === 1
-                            ? "text-gray-400"
-                            : idx === 2
-                            ? "text-orange-400"
-                            : "text-muted-foreground"
-                        }`}
-                      >
-                        {idx + 1}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{s.user.name}</p>
-                        <p className="text-xs text-muted-foreground">{s.user.email}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className="text-xs">
-                        {s.user.role}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{s.salesCount}</TableCell>
-                    <TableCell>{fmtCurrency(s.revenue)}</TableCell>
-                    <TableCell className="text-green-600 font-medium">
-                      {fmtCurrency(s.commission)}
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm">{s.dealCount}</span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Progress value={s.conversionRate} className="w-16 h-1.5" />
-                        <span className="text-xs">{s.conversionRate}%</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openSeller(s)}
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
+                sorted.map((s, idx) => {
+                  const commType = s.user.commissionType;
+                  const commLabel =
+                    commType === "percentage"
+                      ? `${s.user.commissionRate ?? 0}%`
+                      : commType === "fixed"
+                      ? fmtCurrency(s.user.commissionFixed)
+                      : "—";
+                  const goal: number = (s.user.monthlyGoal as number | null) ?? 0;
+                  return (
+                    <TableRow key={s.user.id}>
+                      <TableCell>
+                        <span
+                          className={`font-bold ${
+                            idx === 0
+                              ? "text-yellow-500"
+                              : idx === 1
+                              ? "text-gray-400"
+                              : idx === 2
+                              ? "text-orange-400"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {idx + 1}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{s.user.name}</p>
+                          <p className="text-xs text-muted-foreground">{s.user.email}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="text-xs">
+                          {s.user.role}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {commType ? (
+                          <Badge
+                            variant={commType === "none" ? "secondary" : "outline"}
+                            className="text-xs font-mono"
+                          >
+                            {commType === "percentage"
+                              ? `% ${commLabel}`
+                              : commType === "fixed"
+                              ? `Fixo ${commLabel}`
+                              : "Nenhuma"}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">Não config.</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {goal > 0 ? (
+                          <span className="text-sm">{fmtCurrency(goal)}</span>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>{s.salesCount}</TableCell>
+                      <TableCell>{fmtCurrency(s.revenue)}</TableCell>
+                      <TableCell className="text-green-600 font-medium">
+                        {fmtCurrency(s.commission)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Progress value={s.conversionRate} className="w-16 h-1.5" />
+                          <span className="text-xs">{s.conversionRate}%</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Configurar comissão"
+                            onClick={() => setConfigSeller(s.user)}
+                          >
+                            <Settings2 className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Ver detalhes"
+                            onClick={() => setSelectedSeller(s)}
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
 
-      {/* Per-seller detail */}
+      {/* Commission config dialog */}
+      {configSeller && (
+        <CommissionConfigDialog
+          seller={configSeller}
+          open={!!configSeller}
+          onClose={() => setConfigSeller(null)}
+        />
+      )}
+
+      {/* Per-seller detail dialog */}
       <Dialog open={!!selectedSeller} onOpenChange={() => setSelectedSeller(null)}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -409,26 +742,29 @@ export default function Vendedores() {
                 </div>
               </div>
 
-              {/* Goal progress */}
-              <div className="rounded-lg border p-3">
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="font-medium">Meta mensal</span>
-                  <span className="text-muted-foreground">
-                    {fmtCurrency(selectedSeller.revenue)} / {fmtCurrency(monthlyGoal)}
-                  </span>
+              {/* Goal progress (per-seller goal) */}
+              {sellerGoal > 0 && (
+                <div className="rounded-lg border p-3">
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="font-medium">Meta mensal</span>
+                    <span className="text-muted-foreground">
+                      {fmtCurrency(selectedSeller.revenue)} / {fmtCurrency(sellerGoal)}
+                    </span>
+                  </div>
+                  <Progress
+                    value={Math.min(100, (selectedSeller.revenue / sellerGoal) * 100)}
+                    className="h-3"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {Math.min(100, Math.round((selectedSeller.revenue / sellerGoal) * 100))}% da meta atingida
+                  </p>
                 </div>
-                <Progress
-                  value={Math.min(100, (selectedSeller.revenue / monthlyGoal) * 100)}
-                  className="h-3"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  {Math.min(100, Math.round((selectedSeller.revenue / monthlyGoal) * 100))}% da meta atingida
-                </p>
-              </div>
+              )}
 
               <Tabs defaultValue="commissions">
                 <TabsList>
                   <TabsTrigger value="commissions">Comissões</TabsTrigger>
+                  <TabsTrigger value="goals">Metas</TabsTrigger>
                   <TabsTrigger value="pipeline">
                     Pipeline ({sellerDeals.length})
                   </TabsTrigger>
@@ -479,6 +815,10 @@ export default function Vendedores() {
                       </TableBody>
                     </Table>
                   </div>
+                </TabsContent>
+
+                <TabsContent value="goals">
+                  <GoalsTab seller={selectedSeller.user} />
                 </TabsContent>
 
                 <TabsContent value="pipeline" className="mt-2">

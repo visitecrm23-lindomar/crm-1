@@ -27,3 +27,4 @@ export * from "./invites";
 export * from "./email";
 export * from "./birthday";
 export * from "./vehicle-layouts";
+export * from "./sales-goals";

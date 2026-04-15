@@ -20,6 +20,11 @@ export interface UserProfile {
   tenantId?: string | null;
   referralCode: string;
   referralBalance: number;
+  commissionType?: string;
+  commissionRate?: number;
+  commissionFixed?: number;
+  /** @nullable */
+  monthlyGoal?: number | null;
   createdAt: string;
   tenant?: UserProfileTenant;
 }

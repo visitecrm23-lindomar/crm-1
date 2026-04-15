@@ -1602,6 +1602,11 @@ export interface UserProfile {
   tenantId?: string | null;
   referralCode: string;
   referralBalance: number;
+  commissionType?: string;
+  commissionRate?: number;
+  commissionFixed?: number;
+  /** @nullable */
+  monthlyGoal?: number | null;
   createdAt: string;
   tenant?: UserProfileTenant;
 }
@@ -1627,6 +1632,49 @@ export interface UpdateUserBody {
   role?: string | null;
   /** @nullable */
   isActive?: boolean | null;
+  /** @nullable */
+  commissionType?: string | null;
+  /** @nullable */
+  commissionRate?: number | null;
+  /** @nullable */
+  commissionFixed?: number | null;
+  /** @nullable */
+  monthlyGoal?: number | null;
+}
+
+export interface SalesGoal {
+  id: string;
+  tenantId: string;
+  userId: string;
+  month: string;
+  goalAmount: number;
+  achievedAmount: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateSalesGoalBody {
+  userId: string;
+  month: string;
+  goalAmount: number;
+}
+
+export interface UpdateSalesGoalBody {
+  /** @nullable */
+  goalAmount?: number | null;
+  /** @nullable */
+  achievedAmount?: number | null;
+  /** @nullable */
+  status?: string | null;
+}
+
+export interface CommissionPreview {
+  commissionAmount: number;
+  /** @nullable */
+  commissionRate?: number | null;
+  commissionType: string;
+  source: string;
 }
 
 export type AdminStatsByStatus = { [key: string]: number };
@@ -2877,6 +2925,17 @@ export type SendNpsSurveyBody = {
 
 export type SendNpsSurvey200 = {
   links: NpsSendLink[];
+};
+
+export type CalculateCommissionParams = {
+  sellerId: string;
+  saleAmount: number;
+  tripId?: string;
+};
+
+export type ListSalesGoalsParams = {
+  userId?: string;
+  month?: string;
 };
 
 export type GetPublicReferralInfoParams = {

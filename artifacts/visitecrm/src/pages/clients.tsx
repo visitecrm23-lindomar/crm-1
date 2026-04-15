@@ -4,6 +4,7 @@ import {
   useListClients, useCreateClient, useUpdateClient,
   useListPipelineStages, useListTrips, useListUsers,
   useCreateDeal, useListPayments, useCreateReservation,
+  useCalculateCommission,
 } from "@workspace/api-client-react";
 import type { Client } from "@workspace/api-client-react";
 import { Client360Modal } from "@/components/client360-modal";
@@ -241,6 +242,44 @@ const ROOM_TYPE_OPTIONS = ["Quarto Casal", "Quarto Triplo", "Quarto Quádruplo",
 const TRAVEL_REASON_OPTIONS = ["Lazer", "Aniversário", "Família", "Romance", "Negócios"];
 const PAYMENT_METHOD_OPTIONS = ["Dinheiro", "PIX", "Cartão Débito", "Cartão Crédito", "Boleto", "Transferência"];
 const INTERNAL_RATING_LABELS: Record<number, string> = { 1: "Difícil", 2: "Neutro", 3: "Fácil", 4: "Ótimo", 5: "Excelente" };
+
+function CommissionPreview({
+  sellerId,
+  saleAmount,
+  tripId,
+  onApply,
+}: {
+  sellerId: string;
+  saleAmount: number;
+  tripId?: string;
+  onApply: (amount: number) => void;
+}) {
+  const enabled = !!sellerId && sellerId !== "none" && saleAmount > 0;
+  const { data } = useCalculateCommission(
+    { sellerId, saleAmount, tripId: tripId && tripId !== "none" ? tripId : undefined },
+    { query: { enabled, queryKey: ["commission-preview", sellerId, saleAmount, tripId] } }
+  );
+  if (!enabled || !data) return null;
+  const estimated = parseFloat(String(data.commissionAmount ?? 0));
+  if (estimated <= 0) return null;
+  return (
+    <div className="flex items-center gap-2 mt-1 p-2 bg-green-50 dark:bg-green-950/30 rounded-md border border-green-200 dark:border-green-800">
+      <span className="text-xs text-green-700 dark:text-green-300 flex-1">
+        Comissão estimada:{" "}
+        <strong>{estimated.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong>
+        {data.commissionType === "percentage" && ` (${data.commissionRate}%)`}
+        {data.commissionType === "fixed" && " (valor fixo)"}
+      </span>
+      <button
+        type="button"
+        className="text-xs font-medium text-green-700 dark:text-green-300 hover:underline"
+        onClick={() => onApply(estimated)}
+      >
+        Usar
+      </button>
+    </div>
+  );
+}
 
 interface ClientFormData {
   name: string; email: string; whatsapp: string; phone: string; cpf: string; rg: string;
@@ -794,6 +833,12 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
                 </Select>
               </div>
             </div>
+            <CommissionPreview
+              sellerId={form.consultantId}
+              saleAmount={valorTotal}
+              tripId={form.tripId}
+              onApply={(amount) => set("commission")(String(amount))}
+            />
             {(ticketPrice > 0 || amountPaid > 0) && (
               <div className="grid grid-cols-3 gap-3 pt-3 border-t">
                 <div className="rounded-lg border bg-muted/30 p-3">

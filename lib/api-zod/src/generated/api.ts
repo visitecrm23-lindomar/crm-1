@@ -427,6 +427,10 @@ export const ListTenantUsersResponseItem = zod.object({
   tenantId: zod.string().nullish(),
   referralCode: zod.string(),
   referralBalance: zod.number(),
+  commissionType: zod.string().optional(),
+  commissionRate: zod.number().optional(),
+  commissionFixed: zod.number().optional(),
+  monthlyGoal: zod.number().nullish(),
   createdAt: zod.string(),
   tenant: zod
     .object({
@@ -3358,6 +3362,10 @@ export const GetMeResponse = zod.object({
   tenantId: zod.string().nullish(),
   referralCode: zod.string(),
   referralBalance: zod.number(),
+  commissionType: zod.string().optional(),
+  commissionRate: zod.number().optional(),
+  commissionFixed: zod.number().optional(),
+  monthlyGoal: zod.number().nullish(),
   createdAt: zod.string(),
   tenant: zod
     .object({
@@ -3395,6 +3403,10 @@ export const SyncMeResponse = zod.object({
   tenantId: zod.string().nullish(),
   referralCode: zod.string(),
   referralBalance: zod.number(),
+  commissionType: zod.string().optional(),
+  commissionRate: zod.number().optional(),
+  commissionFixed: zod.number().optional(),
+  monthlyGoal: zod.number().nullish(),
   createdAt: zod.string(),
   tenant: zod
     .object({
@@ -3425,6 +3437,10 @@ export const ListUsersResponseItem = zod.object({
   tenantId: zod.string().nullish(),
   referralCode: zod.string(),
   referralBalance: zod.number(),
+  commissionType: zod.string().optional(),
+  commissionRate: zod.number().optional(),
+  commissionFixed: zod.number().optional(),
+  monthlyGoal: zod.number().nullish(),
   createdAt: zod.string(),
   tenant: zod
     .object({
@@ -3462,6 +3478,10 @@ export const UpdateUserBody = zod.object({
   name: zod.string().nullish(),
   role: zod.string().nullish(),
   isActive: zod.boolean().nullish(),
+  commissionType: zod.string().nullish(),
+  commissionRate: zod.number().nullish(),
+  commissionFixed: zod.number().nullish(),
+  monthlyGoal: zod.number().nullish(),
 });
 
 export const UpdateUserResponse = zod.object({
@@ -3475,6 +3495,10 @@ export const UpdateUserResponse = zod.object({
   tenantId: zod.string().nullish(),
   referralCode: zod.string(),
   referralBalance: zod.number(),
+  commissionType: zod.string().optional(),
+  commissionRate: zod.number().optional(),
+  commissionFixed: zod.number().optional(),
+  monthlyGoal: zod.number().nullish(),
   createdAt: zod.string(),
   tenant: zod
     .object({
@@ -3745,6 +3769,84 @@ export const ListCommissionsResponseItem = zod.object({
   createdAt: zod.string(),
 });
 export const ListCommissionsResponse = zod.array(ListCommissionsResponseItem);
+
+/**
+ * @summary Preview commission for a sale
+ */
+export const CalculateCommissionQueryParams = zod.object({
+  sellerId: zod.coerce.string(),
+  saleAmount: zod.coerce.number(),
+  tripId: zod.coerce.string().optional(),
+});
+
+export const CalculateCommissionResponse = zod.object({
+  commissionAmount: zod.number(),
+  commissionRate: zod.number().nullish(),
+  commissionType: zod.string(),
+  source: zod.string(),
+});
+
+/**
+ * @summary List sales goals
+ */
+export const ListSalesGoalsQueryParams = zod.object({
+  userId: zod.coerce.string().optional(),
+  month: zod.coerce.string().optional(),
+});
+
+export const ListSalesGoalsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  userId: zod.string(),
+  month: zod.string(),
+  goalAmount: zod.number(),
+  achievedAmount: zod.number(),
+  status: zod.string(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+export const ListSalesGoalsResponse = zod.array(ListSalesGoalsResponseItem);
+
+/**
+ * @summary Create a sales goal
+ */
+export const CreateSalesGoalBody = zod.object({
+  userId: zod.string(),
+  month: zod.string(),
+  goalAmount: zod.number(),
+});
+
+/**
+ * @summary Update a sales goal
+ */
+export const UpdateSalesGoalParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateSalesGoalBody = zod.object({
+  goalAmount: zod.number().nullish(),
+  achievedAmount: zod.number().nullish(),
+  status: zod.string().nullish(),
+});
+
+export const UpdateSalesGoalResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  userId: zod.string(),
+  month: zod.string(),
+  goalAmount: zod.number(),
+  achievedAmount: zod.number(),
+  status: zod.string(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Delete a sales goal
+ */
+export const DeleteSalesGoalParams = zod.object({
+  id: zod.coerce.string(),
+});
 
 /**
  * @summary Update commission status

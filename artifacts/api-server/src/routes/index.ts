@@ -34,6 +34,7 @@ import teamRouter from "./team";
 import notificationsRouter from "./notifications";
 import birthdayRouter from "./birthday";
 import layoutsRouter from "./layouts";
+import salesGoalsRouter from "./sales-goals";
 
 const router: IRouter = Router();
 
@@ -72,5 +73,6 @@ router.use(teamRouter);
 router.use(notificationsRouter);
 router.use(birthdayRouter);
 router.use(layoutsRouter);
+router.use(salesGoalsRouter);
 
 export default router;

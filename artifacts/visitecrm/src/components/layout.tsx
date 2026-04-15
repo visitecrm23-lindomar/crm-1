@@ -36,6 +36,7 @@ import {
   AlertTriangle,
   Info,
   XCircle,
+  Gauge,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -53,6 +54,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 interface NavItem {
   name: string;
   href: string;
+  roles?: string[];
   icon: React.ComponentType<{ className?: string }>;
   children?: NavItem[];
 }
@@ -93,6 +95,7 @@ const NAVIGATION: NavItem[] = [
       { name: "Avaliações", href: "/loja/avaliacoes", icon: MessageCircle },
     ],
   },
+  { name: "Meu Painel", href: "/meu-painel", icon: Gauge, roles: ["vendedor"] },
   { name: "Indicações", href: "/indicacoes", icon: Share2 },
   { name: "Downloads", href: "/downloads", icon: Download },
   { name: "Configurações", href: "/configuracoes", icon: Settings },
@@ -210,7 +213,7 @@ export default function Layout({ children }: { children: ReactNode }) {
 
         {/* Navigation */}
         <div className="flex-1 overflow-y-auto py-3 px-2 flex flex-col gap-0.5">
-          {NAVIGATION.map((item) => (
+          {NAVIGATION.filter(item => !item.roles || (userRole && item.roles.includes(userRole))).map((item) => (
             <NavLink key={item.name} item={item} location={location} />
           ))}
         </div>
