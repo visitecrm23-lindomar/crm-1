@@ -353,8 +353,9 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
   useEffect(() => {
     if (open) {
       setTab("personal");
-      setForm(editClient ? clientToForm(editClient) : EMPTY_CLIENT);
-      setSelectedSeats([]);
+      const formData = editClient ? clientToForm(editClient) : EMPTY_CLIENT;
+      setForm(formData);
+      setSelectedSeats(formData.seatNumber ? [formData.seatNumber] : []);
       setHasSeatMap(null);
     }
   }, [open, editClient]);
