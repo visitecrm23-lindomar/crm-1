@@ -657,7 +657,7 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
                 </div>
               )}
               {selectedTrip && form.tripId !== "none" ? (
-                <div className="col-span-2 space-y-2">
+                <div className="col-span-2 space-y-3">
                   <Label>Selecionar Poltrona</Label>
                   <SeatMapPicker
                     tripId={form.tripId}
@@ -668,11 +668,20 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
                     }}
                     maxSeats={1}
                   />
-                  {form.seatNumber && (
-                    <p className="text-xs text-muted-foreground">
-                      Poltrona selecionada: <span className="font-semibold text-foreground">{form.seatNumber}</span>
-                    </p>
-                  )}
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Poltrona (manual)</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      placeholder="Ou informe o número manualmente..."
+                      value={form.seatNumber}
+                      onChange={e => {
+                        const v = e.target.value;
+                        set("seatNumber")(v);
+                        setSelectedSeats(v ? [v] : []);
+                      }}
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-2">
