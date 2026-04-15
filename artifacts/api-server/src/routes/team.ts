@@ -119,9 +119,11 @@ router.post("/team/invite", async (req, res): Promise<void> => {
     try {
       const proxyUrl = process.env.CLERK_PROXY_URL;
       const frontendUrl = process.env.FRONTEND_URL;
-      const baseUrl =
+      const baseUrl = (
+        (proxyUrl ? proxyUrl.replace(/\/api\/__clerk\/?$/, "") : null) ||
         frontendUrl ||
-        (proxyUrl ? proxyUrl.replace(/\/api\/__clerk\/?$/, "") : null);
+        null
+      )?.replace(/\/$/, "");
       const redirectUrl = baseUrl ? `${baseUrl}/sign-up` : undefined;
 
       const clerkInvite = await clerkClient.invitations.createInvitation({
