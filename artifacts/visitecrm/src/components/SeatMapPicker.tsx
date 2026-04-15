@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import { useGetTripSeatMap } from "@workspace/api-client-react";
 import type { Seat } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,6 +11,7 @@ interface SeatMapPickerProps {
   selectedSeats: string[];
   onSeatsChange: (seats: string[]) => void;
   maxSeats?: number;
+  onHasMap?: (hasMap: boolean) => void;
 }
 
 type SeatWithType = Seat & { type?: string };
@@ -71,7 +72,7 @@ function getCellTitle(seat: SeatWithType, selected: boolean): string {
   return `Assento ${seat.number} — ${seat.status}`;
 }
 
-export function SeatMapPicker({ tripId, selectedSeats, onSeatsChange, maxSeats }: SeatMapPickerProps) {
+export function SeatMapPicker({ tripId, selectedSeats, onSeatsChange, maxSeats, onHasMap }: SeatMapPickerProps) {
   const { data: seatMap, isLoading } = useGetTripSeatMap(tripId, {
     query: { queryKey: ["seat-map-picker", tripId], refetchInterval: 8000 },
   });
@@ -83,6 +84,12 @@ export function SeatMapPicker({ tripId, selectedSeats, onSeatsChange, maxSeats }
       return a.col - b.col;
     });
   }, [seatMap]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      onHasMap?.(seats.length > 0);
+    }
+  }, [isLoading, seats.length]);
 
   const maxRow = useMemo(() => Math.max(...seats.map(s => s.row), 0), [seats]);
   const maxCol = useMemo(() => Math.max(...seats.map(s => s.col), 4), [seats]);

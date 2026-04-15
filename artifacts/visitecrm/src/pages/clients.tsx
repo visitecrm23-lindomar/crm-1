@@ -340,6 +340,7 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
   const [tab, setTab] = useState("personal");
   const [form, setForm] = useState<ClientFormData>(EMPTY_CLIENT);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
+  const [hasSeatMap, setHasSeatMap] = useState<boolean | null>(null);
   const { toast } = useToast();
   const { data: stages } = useListPipelineStages();
   const { data: tripsData } = useListTrips({ limit: 100 });
@@ -354,6 +355,7 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
       setTab("personal");
       setForm(editClient ? clientToForm(editClient) : EMPTY_CLIENT);
       setSelectedSeats([]);
+      setHasSeatMap(null);
     }
   }, [open, editClient]);
 
@@ -605,6 +607,7 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
                   onValueChange={v => {
                     setForm(prev => ({ ...prev, tripId: v, boardingPoint: "none", seatNumber: "" }));
                     setSelectedSeats([]);
+                    setHasSeatMap(null);
                   }}
                 >
                   <SelectTrigger><SelectValue placeholder="Selecionar viagem..." /></SelectTrigger>
@@ -667,21 +670,20 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
                       setForm(prev => ({ ...prev, seatNumber: seats[0] ?? "" }));
                     }}
                     maxSeats={1}
+                    onHasMap={setHasSeatMap}
                   />
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Poltrona (manual)</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      placeholder="Ou informe o número manualmente..."
-                      value={form.seatNumber}
-                      onChange={e => {
-                        const v = e.target.value;
-                        set("seatNumber")(v);
-                        setSelectedSeats(v ? [v] : []);
-                      }}
-                    />
-                  </div>
+                  {hasSeatMap === false && (
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Poltrona (manual)</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        placeholder="Informe o número da poltrona..."
+                        value={form.seatNumber}
+                        onChange={e => set("seatNumber")(e.target.value)}
+                      />
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2">
