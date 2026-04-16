@@ -19,8 +19,9 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 async function runMigrations() {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query(`
       ALTER TABLE trips ADD COLUMN IF NOT EXISTS boarding_points json DEFAULT '[]'::json;
     `);
@@ -494,22 +495,24 @@ async function runMigrations() {
   } catch (err) {
     logger.error({ err }, "Startup migration failed");
   } finally {
-    client.release();
+    client?.release();
   }
 }
 
-runMigrations().then(() => {
-  cron.schedule("0 0 * * *", () => {
-    logger.info("[birthday] Daily cron triggered");
-    runBirthdayCron().catch((err) => logger.error({ err }, "[birthday] Cron failed"));
-  }, { timezone: "America/Sao_Paulo" });
+runMigrations()
+  .catch((err) => logger.error({ err }, "runMigrations threw unexpectedly"))
+  .then(() => {
+    cron.schedule("0 0 * * *", () => {
+      logger.info("[birthday] Daily cron triggered");
+      runBirthdayCron().catch((err) => logger.error({ err }, "[birthday] Cron failed"));
+    }, { timezone: "America/Sao_Paulo" });
 
-  app.listen(port, (err) => {
-    if (err) {
-      logger.error({ err }, "Error listening on port");
-      process.exit(1);
-    }
+    app.listen(port, (err) => {
+      if (err) {
+        logger.error({ err }, "Error listening on port");
+        process.exit(1);
+      }
 
-    logger.info({ port }, "Server listening");
+      logger.info({ port }, "Server listening");
+    });
   });
-});
