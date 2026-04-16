@@ -122,7 +122,7 @@ function NavLink({
   depth?: number;
 }) {
   const visibleChildren = item.children?.filter(
-    (c) => (!c.hiddenFor || !userRole || !c.hiddenFor.includes(userRole))
+    (c) => (!c.hiddenFor || (userRole && !c.hiddenFor.includes(userRole)))
   );
   const isActive =
     location === item.href ||
@@ -222,7 +222,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         <div className="flex-1 overflow-y-auto py-3 px-2 flex flex-col gap-0.5">
           {NAVIGATION
             .filter(item => !item.roles || (userRole && item.roles.includes(userRole)))
-            .filter(item => !item.hiddenFor || !userRole || !item.hiddenFor.includes(userRole))
+            .filter(item => !item.hiddenFor || (userRole && !item.hiddenFor.includes(userRole)))
             .map((item) => (
               <NavLink key={item.name} item={item} location={location} userRole={userRole} />
             ))}
