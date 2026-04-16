@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useUser } from "@clerk/react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetTenant,
@@ -49,6 +50,7 @@ import {
   Loader2,
   Trash2,
   Target,
+  Lock,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -104,6 +106,96 @@ function SalesGoalSection() {
           Salvar
         </Button>
       </div>
+    </div>
+  );
+}
+
+/* ──────────────────── Change Password Section ──────────────────── */
+function ChangePasswordSection() {
+  const { user } = useUser();
+  const { toast } = useToast();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      toast({ title: "As senhas não coincidem", variant: "destructive" });
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast({ title: "A nova senha deve ter pelo menos 8 caracteres", variant: "destructive" });
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await user?.updatePassword({ currentPassword, newPassword, signOutOfOtherSessions: false });
+      toast({ title: "Senha alterada com sucesso" });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Erro ao alterar senha";
+      toast({ title: msg, variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3 mt-4">
+      <div className="flex items-center gap-2">
+        <Lock className="w-4 h-4 text-muted-foreground" />
+        <h3 className="text-sm font-semibold">Alterar Senha</h3>
+      </div>
+      {user?.passwordEnabled === false ? (
+        <p className="text-xs text-muted-foreground">
+          Sua conta usa login pelo Google — não é necessário definir uma senha.
+        </p>
+      ) : (
+        <form onSubmit={handleChangePassword} className="space-y-3 max-w-sm">
+          <div className="space-y-1">
+            <Label htmlFor="currentPassword" className="text-xs">Senha Atual</Label>
+            <Input
+              id="currentPassword"
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="newPassword" className="text-xs">Nova Senha</Label>
+            <Input
+              id="newPassword"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              autoComplete="new-password"
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="confirmPassword" className="text-xs">Confirmar Nova Senha</Label>
+            <Input
+              id="confirmPassword"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              autoComplete="new-password"
+              required
+            />
+          </div>
+          <Button type="submit" size="sm" disabled={isLoading}>
+            {isLoading && <Loader2 className="w-3 h-3 mr-2 animate-spin" />}
+            Alterar Senha
+          </Button>
+        </form>
+      )}
     </div>
   );
 }
@@ -264,6 +356,7 @@ function AgencyProfileTab() {
       </Button>
 
       <SalesGoalSection />
+      <ChangePasswordSection />
     </div>
   );
 }
