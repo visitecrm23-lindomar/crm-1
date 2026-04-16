@@ -552,7 +552,7 @@ export function VoucherModal({ reservation, open, onClose, autoDownload }: { res
     const printEl = document.createElement("div");
     printEl.setAttribute("data-voucher-print", "true");
     printEl.style.cssText = "display:none;position:fixed;inset:0;background:white;z-index:99999;padding:20mm;box-sizing:border-box;";
-    printEl.innerHTML = voucherRef.current.outerHTML;
+    printEl.appendChild(voucherRef.current.cloneNode(true));
     document.body.appendChild(printEl);
 
     const styleEl = document.createElement("style");
