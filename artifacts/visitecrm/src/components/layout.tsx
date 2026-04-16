@@ -67,11 +67,11 @@ const NAVIGATION: NavItem[] = [
   { name: "Viagens", href: "/trips", icon: Map },
   { name: "Reservas", href: "/reservations", icon: CalendarCheck },
   { name: "Vouchers", href: "/vouchers", icon: QrCode },
-  { name: "Financeiro", href: "/financeiro", icon: DollarSign },
+  { name: "Financeiro", href: "/financeiro", icon: DollarSign, hiddenFor: ["vendedor"] },
   { name: "Comunicação", href: "/comunicacao", icon: MessageSquare },
   { name: "Campanhas", href: "/comunicacao/campanhas", icon: Megaphone },
-  { name: "Automações", href: "/automacoes", icon: Zap },
-  { name: "Marketing", href: "/marketing", icon: Target },
+  { name: "Automações", href: "/automacoes", icon: Zap, hiddenFor: ["vendedor"] },
+  { name: "Marketing", href: "/marketing", icon: Target, hiddenFor: ["vendedor"] },
   { name: "Fidelidade", href: "/fidelidade", icon: Star, hiddenFor: ["vendedor"] },
   { name: "NPS", href: "/nps", icon: TrendingUp, hiddenFor: ["vendedor"] },
   { name: "Cadastros", href: "/cadastros", icon: BookOpen, hiddenFor: ["vendedor"] },
@@ -79,8 +79,9 @@ const NAVIGATION: NavItem[] = [
     name: "Analíticos",
     href: "/analytics",
     icon: BarChart2,
+    hiddenFor: ["vendedor"],
     children: [
-      { name: "Vendedores", href: "/analytics/vendedores", icon: UserCheck },
+      { name: "Vendedores", href: "/analytics/vendedores", icon: UserCheck, hiddenFor: ["vendedor"] },
     ],
   },
   {
@@ -99,7 +100,7 @@ const NAVIGATION: NavItem[] = [
   },
   { name: "Meu Painel", href: "/meu-painel", icon: Gauge, roles: ["vendedor"] },
   { name: "Indicações", href: "/indicacoes", icon: Share2, hiddenFor: ["vendedor"] },
-  { name: "Downloads", href: "/downloads", icon: Download },
+  { name: "Downloads", href: "/downloads", icon: Download, hiddenFor: ["vendedor"] },
   { name: "Configurações", href: "/configuracoes", icon: Settings, hiddenFor: ["vendedor"] },
 ];
 
