@@ -72,6 +72,18 @@ const STATUS_LABELS: Record<string, string> = {
   completed: "Concluída",
   cancelled: "Cancelada",
 };
+const TRIP_TYPE_LABELS: Record<string, string> = {
+  excursao: "Excursão",
+  bate_volta: "Bate-Volta",
+  trilha: "Trilha",
+  rota: "Rota",
+  transfer: "Transfer",
+  pacote_fechado: "Pacote Fechado",
+  personalizada: "Viagem Personalizada",
+  excursion: "Excursão",
+  package: "Pacote Fechado",
+  custom: "Viagem Personalizada",
+};
 const METHOD_LABELS: Record<string, string> = {
   pix: "PIX",
   credit_card: "Cartão de Crédito",
@@ -1246,15 +1258,14 @@ function NewReservationWizard({ open, onClose, onSuccess, initialTripId, initial
 
             {selectedTripFull && (
               <div className="rounded-lg border bg-muted/40 p-3 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-sm">
+                <div className="col-span-2 sm:col-span-3 pb-1 border-b">
+                  <p className="text-xs text-muted-foreground">Viagem</p>
+                  <p className="font-semibold leading-tight">{selectedTripFull.name}</p>
+                </div>
                 {selectedTripFull.type && (
                   <div>
                     <p className="text-xs text-muted-foreground">Tipo</p>
-                    <p className="font-medium">{({
-                      excursao: "Excursão", bate_volta: "Bate-Volta", trilha: "Trilha",
-                      rota: "Rota", transfer: "Transfer", pacote_fechado: "Pacote Fechado",
-                      personalizada: "Viagem Personalizada", excursion: "Excursão",
-                      package: "Pacote", custom: "Personalizado",
-                    } as Record<string, string>)[selectedTripFull.type] ?? selectedTripFull.type}</p>
+                    <p className="font-medium">{TRIP_TYPE_LABELS[selectedTripFull.type] ?? selectedTripFull.type}</p>
                   </div>
                 )}
                 {selectedTripFull.destination && (

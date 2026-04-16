@@ -169,6 +169,19 @@ function StepIndicator({ current }: { current: Step }) {
   );
 }
 
+const TRIP_TYPE_LABELS: Record<string, string> = {
+  excursao: "Excursão",
+  bate_volta: "Bate-Volta",
+  trilha: "Trilha",
+  rota: "Rota",
+  transfer: "Transfer",
+  pacote_fechado: "Pacote Fechado",
+  personalizada: "Viagem Personalizada",
+  excursion: "Excursão",
+  package: "Pacote Fechado",
+  custom: "Viagem Personalizada",
+};
+
 function ProductCard({ product, store }: { product: StoreProduct; store: PublicStore }) {
   const images = product.images ?? [];
   const startDate = product.departureDate ?? product.startDate;
@@ -185,12 +198,7 @@ function ProductCard({ product, store }: { product: StoreProduct; store: PublicS
         <p className="font-semibold text-sm leading-tight mb-1 line-clamp-2">{product.name}</p>
         {product.tripType && (
           <span className="inline-block mb-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-            {({
-              excursao: "Excursão", bate_volta: "Bate-Volta", trilha: "Trilha",
-              rota: "Rota", transfer: "Transfer", pacote_fechado: "Pacote Fechado",
-              personalizada: "Viagem Personalizada", excursion: "Excursão",
-              package: "Pacote", custom: "Personalizado",
-            } as Record<string, string>)[product.tripType] ?? product.tripType}
+            {TRIP_TYPE_LABELS[product.tripType] ?? product.tripType}
           </span>
         )}
         {product.destination && (
@@ -1045,7 +1053,14 @@ export default function ReservationWizard({
       </div>
 
       <h1 className="text-2xl font-bold mb-2 print:hidden">Reservar Viagem</h1>
-      <p className="text-muted-foreground text-sm mb-6 print:hidden">{product.name}</p>
+      <div className="flex flex-wrap items-center gap-2 mb-6 print:hidden">
+        <p className="text-muted-foreground text-sm">{product.name}</p>
+        {product.tripType && (
+          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+            {TRIP_TYPE_LABELS[product.tripType] ?? product.tripType}
+          </span>
+        )}
+      </div>
 
       <StepIndicator current={step} />
 
@@ -1615,12 +1630,7 @@ export default function ReservationWizard({
                   <p className="font-medium leading-tight">{product.name}</p>
                   {product.tripType && (
                     <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                      {({
-                        excursao: "Excursão", bate_volta: "Bate-Volta", trilha: "Trilha",
-                        rota: "Rota", transfer: "Transfer", pacote_fechado: "Pacote Fechado",
-                        personalizada: "Viagem Personalizada", excursion: "Excursão",
-                        package: "Pacote", custom: "Personalizado",
-                      } as Record<string, string>)[product.tripType] ?? product.tripType}
+                      {TRIP_TYPE_LABELS[product.tripType] ?? product.tripType}
                     </span>
                   )}
                 </div>
