@@ -121,6 +121,10 @@ function ChangePasswordSection() {
 
   async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault();
+    if (!user) {
+      toast({ title: "Usuário não autenticado", variant: "destructive" });
+      return;
+    }
     if (newPassword !== confirmPassword) {
       toast({ title: "As senhas não coincidem", variant: "destructive" });
       return;
@@ -131,7 +135,7 @@ function ChangePasswordSection() {
     }
     setIsLoading(true);
     try {
-      await user?.updatePassword({ currentPassword, newPassword, signOutOfOtherSessions: false });
+      await user.updatePassword({ currentPassword, newPassword, signOutOfOtherSessions: false });
       toast({ title: "Senha alterada com sucesso" });
       setCurrentPassword("");
       setNewPassword("");
