@@ -55,6 +55,7 @@ interface NavItem {
   name: string;
   href: string;
   roles?: string[];
+  hiddenFor?: string[];
   icon: React.ComponentType<{ className?: string }>;
   children?: NavItem[];
 }
@@ -71,9 +72,9 @@ const NAVIGATION: NavItem[] = [
   { name: "Campanhas", href: "/comunicacao/campanhas", icon: Megaphone },
   { name: "Automações", href: "/automacoes", icon: Zap },
   { name: "Marketing", href: "/marketing", icon: Target },
-  { name: "Fidelidade", href: "/fidelidade", icon: Star },
-  { name: "NPS", href: "/nps", icon: TrendingUp },
-  { name: "Cadastros", href: "/cadastros", icon: BookOpen },
+  { name: "Fidelidade", href: "/fidelidade", icon: Star, hiddenFor: ["vendedor"] },
+  { name: "NPS", href: "/nps", icon: TrendingUp, hiddenFor: ["vendedor"] },
+  { name: "Cadastros", href: "/cadastros", icon: BookOpen, hiddenFor: ["vendedor"] },
   {
     name: "Analíticos",
     href: "/analytics",
@@ -86,19 +87,20 @@ const NAVIGATION: NavItem[] = [
     name: "Minha Loja",
     href: "/loja",
     icon: ShoppingBag,
+    hiddenFor: ["vendedor"],
     children: [
-      { name: "Configurações", href: "/loja/configuracoes", icon: Settings },
-      { name: "Produtos", href: "/loja/produtos", icon: Package },
-      { name: "Categorias", href: "/loja/categorias", icon: FolderOpen },
-      { name: "Pedidos", href: "/loja/pedidos", icon: ShoppingCart },
-      { name: "Cupons", href: "/loja/cupons", icon: Tag },
-      { name: "Avaliações", href: "/loja/avaliacoes", icon: MessageCircle },
+      { name: "Configurações", href: "/loja/configuracoes", icon: Settings, hiddenFor: ["vendedor"] },
+      { name: "Produtos", href: "/loja/produtos", icon: Package, hiddenFor: ["vendedor"] },
+      { name: "Categorias", href: "/loja/categorias", icon: FolderOpen, hiddenFor: ["vendedor"] },
+      { name: "Pedidos", href: "/loja/pedidos", icon: ShoppingCart, hiddenFor: ["vendedor"] },
+      { name: "Cupons", href: "/loja/cupons", icon: Tag, hiddenFor: ["vendedor"] },
+      { name: "Avaliações", href: "/loja/avaliacoes", icon: MessageCircle, hiddenFor: ["vendedor"] },
     ],
   },
   { name: "Meu Painel", href: "/meu-painel", icon: Gauge, roles: ["vendedor"] },
-  { name: "Indicações", href: "/indicacoes", icon: Share2 },
+  { name: "Indicações", href: "/indicacoes", icon: Share2, hiddenFor: ["vendedor"] },
   { name: "Downloads", href: "/downloads", icon: Download },
-  { name: "Configurações", href: "/configuracoes", icon: Settings },
+  { name: "Configurações", href: "/configuracoes", icon: Settings, hiddenFor: ["vendedor"] },
 ];
 
 const ROLE_LABELS: Record<string, string> = {
@@ -111,17 +113,22 @@ const ROLE_LABELS: Record<string, string> = {
 function NavLink({
   item,
   location,
+  userRole,
   depth = 0,
 }: {
   item: NavItem;
   location: string;
+  userRole?: string;
   depth?: number;
 }) {
+  const visibleChildren = item.children?.filter(
+    (c) => (!c.hiddenFor || !userRole || !c.hiddenFor.includes(userRole))
+  );
   const isActive =
     location === item.href ||
     (item.href !== "/" && location.startsWith(item.href));
-  const hasChildren = item.children && item.children.length > 0;
-  const childActive = item.children?.some(
+  const hasChildren = visibleChildren && visibleChildren.length > 0;
+  const childActive = visibleChildren?.some(
     (c) => location === c.href || (c.href !== "/" && location.startsWith(c.href))
   );
 
@@ -147,8 +154,8 @@ function NavLink({
       </Link>
       {hasChildren && (isActive || childActive) && (
         <div className="mt-0.5 space-y-0.5">
-          {item.children!.map((child) => (
-            <NavLink key={child.href} item={child} location={location} depth={depth + 1} />
+          {visibleChildren!.map((child) => (
+            <NavLink key={child.href} item={child} location={location} userRole={userRole} depth={depth + 1} />
           ))}
         </div>
       )}
@@ -213,9 +220,12 @@ export default function Layout({ children }: { children: ReactNode }) {
 
         {/* Navigation */}
         <div className="flex-1 overflow-y-auto py-3 px-2 flex flex-col gap-0.5">
-          {NAVIGATION.filter(item => !item.roles || (userRole && item.roles.includes(userRole))).map((item) => (
-            <NavLink key={item.name} item={item} location={location} />
-          ))}
+          {NAVIGATION
+            .filter(item => !item.roles || (userRole && item.roles.includes(userRole)))
+            .filter(item => !item.hiddenFor || !userRole || !item.hiddenFor.includes(userRole))
+            .map((item) => (
+              <NavLink key={item.name} item={item} location={location} userRole={userRole} />
+            ))}
         </div>
 
         {/* User block */}
