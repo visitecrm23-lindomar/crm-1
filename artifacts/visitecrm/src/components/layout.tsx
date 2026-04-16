@@ -359,13 +359,17 @@ export default function Layout({ children }: { children: ReactNode }) {
                     </Badge>
                   </div>
                 )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/configuracoes" className="cursor-pointer w-full flex items-center">
-                    <Settings className="w-4 h-4 mr-2" />
-                    Configurações
-                  </Link>
-                </DropdownMenuItem>
+                {userRole !== "vendedor" && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/configuracoes" className="cursor-pointer w-full flex items-center">
+                        <Settings className="w-4 h-4 mr-2" />
+                        Configurações
+                      </Link>
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive cursor-pointer"
