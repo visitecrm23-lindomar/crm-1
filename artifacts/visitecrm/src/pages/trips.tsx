@@ -156,9 +156,11 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   cancelled:  { label: "Cancelada",  color: "bg-red-100 text-red-700" },
 };
 const VEHICLE_TYPES = ["Ônibus", "Micro-ônibus", "Van", "Carro", "Outro"];
-const TRIP_TYPES = ["excursion", "package", "custom", "transfer"];
+const TRIP_TYPES = ["excursao", "bate_volta", "trilha", "rota", "transfer", "pacote_fechado", "personalizada"];
 const TRIP_TYPE_LABELS: Record<string, string> = {
-  excursion: "Excursão", package: "Pacote", custom: "Personalizado", transfer: "Transfer",
+  excursao: "Excursão", bate_volta: "Bate-Volta", trilha: "Trilha", rota: "Rota",
+  transfer: "Transfer", pacote_fechado: "Pacote Fechado", personalizada: "Viagem Personalizada",
+  excursion: "Excursão", package: "Pacote", custom: "Personalizado",
 };
 
 function OccupancyBar({ reserved, confirmed, total }: { reserved: number; confirmed: number; total: number }) {
