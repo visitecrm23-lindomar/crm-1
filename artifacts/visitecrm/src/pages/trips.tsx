@@ -1060,7 +1060,7 @@ const newDay = (day: number): ItineraryDay => ({ day, title: "", description: ""
 const newCost = (): CostItem => ({ id: crypto.randomUUID(), label: "", amount: "" });
 const EMPTY_FORM: TripFormData = {
   name: "", description: "", destination: "", destinationCity: "", destinationState: "",
-  type: "excursion", category: "standard", departureDate: "", returnDate: "",
+  type: "excursao", category: "standard", departureDate: "", returnDate: "",
   totalCapacity: "46", seatLayout: "2x2", layoutId: "",
   priceAdult: "", priceChild: "", priceSenior: "",
   inclusions: "", exclusions: "", coverImage: "",
@@ -1297,7 +1297,10 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 <Label>Tipo</Label>
                 <Select value={form.type} onValueChange={setVal("type")}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{TRIP_TYPES.map(t => <SelectItem key={t} value={t}>{TRIP_TYPE_LABELS[t] ?? t}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {form.type && !TRIP_TYPES.includes(form.type) && <SelectItem value={form.type}>{TRIP_TYPE_LABELS[form.type] ?? form.type}</SelectItem>}
+                    {TRIP_TYPES.map(t => <SelectItem key={t} value={t}>{TRIP_TYPE_LABELS[t] ?? t}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
