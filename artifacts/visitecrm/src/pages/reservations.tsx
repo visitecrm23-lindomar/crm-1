@@ -1244,6 +1244,52 @@ function NewReservationWizard({ open, onClose, onSuccess, initialTripId, initial
               </div>
             </div>
 
+            {selectedTripFull && (
+              <div className="rounded-lg border bg-muted/40 p-3 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-sm">
+                {selectedTripFull.type && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Tipo</p>
+                    <p className="font-medium">{({
+                      excursao: "Excursão", bate_volta: "Bate-Volta", trilha: "Trilha",
+                      rota: "Rota", transfer: "Transfer", pacote_fechado: "Pacote Fechado",
+                      personalizada: "Viagem Personalizada", excursion: "Excursão",
+                      package: "Pacote", custom: "Personalizado",
+                    } as Record<string, string>)[selectedTripFull.type] ?? selectedTripFull.type}</p>
+                  </div>
+                )}
+                {selectedTripFull.destination && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Destino</p>
+                    <p className="font-medium">{selectedTripFull.destination}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-muted-foreground">Data de Saída</p>
+                  <p className="font-medium">{new Date(selectedTripFull.departureDate).toLocaleDateString("pt-BR")}</p>
+                </div>
+                {selectedTripFull.returnDate && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Data de Retorno</p>
+                    <p className="font-medium">{new Date(selectedTripFull.returnDate).toLocaleDateString("pt-BR")}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-muted-foreground">Vagas Disponíveis</p>
+                  <p className="font-medium">{selectedTripFull.availableSeats ?? "—"}</p>
+                </div>
+                {selectedTripFull.vehicleType && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Veículo</p>
+                    <p className="font-medium">{selectedTripFull.vehicleType}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-muted-foreground">Preço Base</p>
+                  <p className="font-medium">R$ {(selectedTripFull.priceAdult ?? 0).toFixed(2)}/pessoa</p>
+                </div>
+              </div>
+            )}
+
             {(boardingRaw ?? []).length > 0 && (
               <div className="space-y-2">
                 <label className="text-sm font-medium">Ponto de Embarque</label>

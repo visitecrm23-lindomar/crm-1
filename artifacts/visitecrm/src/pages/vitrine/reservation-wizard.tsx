@@ -183,6 +183,16 @@ function ProductCard({ product, store }: { product: StoreProduct; store: PublicS
       </div>
       <div className="min-w-0 flex-1">
         <p className="font-semibold text-sm leading-tight mb-1 line-clamp-2">{product.name}</p>
+        {product.tripType && (
+          <span className="inline-block mb-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+            {({
+              excursao: "Excursão", bate_volta: "Bate-Volta", trilha: "Trilha",
+              rota: "Rota", transfer: "Transfer", pacote_fechado: "Pacote Fechado",
+              personalizada: "Viagem Personalizada", excursion: "Excursão",
+              package: "Pacote", custom: "Personalizado",
+            } as Record<string, string>)[product.tripType] ?? product.tripType}
+          </span>
+        )}
         {product.destination && (
           <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
             <MapPin className="w-3 h-3 shrink-0" />
@@ -1603,6 +1613,16 @@ export default function ReservationWizard({
                 <div>
                   <p className="text-xs text-muted-foreground">Viagem</p>
                   <p className="font-medium leading-tight">{product.name}</p>
+                  {product.tripType && (
+                    <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                      {({
+                        excursao: "Excursão", bate_volta: "Bate-Volta", trilha: "Trilha",
+                        rota: "Rota", transfer: "Transfer", pacote_fechado: "Pacote Fechado",
+                        personalizada: "Viagem Personalizada", excursion: "Excursão",
+                        package: "Pacote", custom: "Personalizado",
+                      } as Record<string, string>)[product.tripType] ?? product.tripType}
+                    </span>
+                  )}
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Passageiros</span>

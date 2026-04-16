@@ -342,6 +342,7 @@ export interface StoreProduct {
   totalCapacity?: number | null;
   departureDate?: string | null;
   inclusions?: string[] | null;
+  tripType?: string | null;
   type: string;
   name: string;
   slug: string;

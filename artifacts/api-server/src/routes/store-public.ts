@@ -214,6 +214,7 @@ router.get("/public/store/:slug/products", async (req, res): Promise<void> => {
       totalCapacity: tripsTable.totalCapacity,
       departureDate: tripsTable.departureDate,
       inclusions: tripsTable.inclusions,
+      tripType: tripsTable.type,
     };
     const whereClause = and(...conditions);
     const limit = limitStr ? Math.min(Number(limitStr) || 20, 200) : undefined;
@@ -293,6 +294,7 @@ router.get("/public/store/:slug/products/:productSlug", async (req, res): Promis
       totalCapacity: tripsTable.totalCapacity,
       departureDate: tripsTable.departureDate,
       inclusions: tripsTable.inclusions,
+      tripType: tripsTable.type,
     })
       .from(storeProductsTable)
       .leftJoin(tripsTable, eq(storeProductsTable.tripId, tripsTable.id))
