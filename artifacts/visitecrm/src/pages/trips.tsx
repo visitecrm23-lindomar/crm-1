@@ -30,6 +30,8 @@ import {
   AlertCircle, DollarSign, ClipboardList, LogIn, RotateCcw, CheckCircle, UserRound, RefreshCw,
   ShoppingBag, Loader2, Clock, Star, CheckCircle2, XCircle,
 } from "lucide-react";
+import { CoverImageUpload } from "@/components/cover-image-upload";
+import { GalleryUpload } from "@/components/gallery-upload";
 import {
   format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay,
   addMonths, subMonths, isSameDay, isToday, startOfWeek, addDays,
@@ -1145,6 +1147,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
   const createTrip = useCreateTrip();
   const updateTrip = useUpdateTrip();
   const isPending = createTrip.isPending || updateTrip.isPending;
+  const [isUploading, setIsUploading] = useState(false);
 
   const selectedLayout = layouts.find(l => l.id === form.layoutId) ?? null;
 
@@ -1606,35 +1609,26 @@ export function TripForm({ tripId }: { tripId?: string }) {
         </TabsContent>
 
         <TabsContent value="midia" className="space-y-4 mt-6">
-          <div className="bg-card border rounded-lg p-6 space-y-4">
-            <h3 className="font-semibold">Imagem de Capa</h3>
-            <div className="space-y-2">
-              <Label>URL da Imagem de Capa</Label>
-              <Input placeholder="https://exemplo.com/imagem.jpg" value={form.coverImage} onChange={set("coverImage")} />
-            </div>
-            {form.coverImage && (
-              <div className="mt-3 rounded-lg overflow-hidden h-48 bg-muted">
-                <img src={form.coverImage} alt="Preview" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-              </div>
-            )}
+          <div className="bg-card border rounded-lg p-6 space-y-6">
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="font-medium text-sm">Galeria de Imagens</h4>
-                <Button size="sm" variant="outline" onClick={() => setForm(prev => ({ ...prev, gallery: [...prev.gallery, ""] }))}>
-                  <Plus className="w-4 h-4 mr-1" />Adicionar URL
-                </Button>
-              </div>
-              {form.gallery.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">Nenhuma imagem na galeria. Adicione URLs de imagens.</p>
-              )}
-              <div className="space-y-2">
-                {form.gallery.map((url, idx) => (
-                  <div key={idx} className="flex gap-2 items-center">
-                    <Input placeholder="https://exemplo.com/foto.jpg" value={url} onChange={e => setForm(prev => ({ ...prev, gallery: prev.gallery.map((u, i) => i === idx ? e.target.value : u) }))} className="flex-1" />
-                    <Button size="icon" variant="ghost" className="text-destructive" onClick={() => setForm(prev => ({ ...prev, gallery: prev.gallery.filter((_, i) => i !== idx) }))}><X className="w-4 h-4" /></Button>
-                  </div>
-                ))}
-              </div>
+              <h3 className="font-semibold">Imagem de Capa</h3>
+              <p className="text-xs text-muted-foreground">Envie 1 imagem para a capa da viagem (PNG, JPG, WEBP · máx. 4 MB)</p>
+              <CoverImageUpload
+                value={form.coverImage}
+                onChange={(url) => setForm(prev => ({ ...prev, coverImage: url }))}
+                onUploadingChange={setIsUploading}
+                disabled={isPending}
+              />
+            </div>
+            <div className="border-t pt-5 space-y-3">
+              <h3 className="font-semibold">Galeria de Imagens</h3>
+              <p className="text-xs text-muted-foreground">Envie até 3 imagens para a galeria da viagem (PNG, JPG, WEBP · máx. 4 MB cada)</p>
+              <GalleryUpload
+                value={form.gallery}
+                onChange={(urls) => setForm(prev => ({ ...prev, gallery: urls }))}
+                onUploadingChange={setIsUploading}
+                disabled={isPending}
+              />
             </div>
           </div>
         </TabsContent>
@@ -1643,11 +1637,11 @@ export function TripForm({ tripId }: { tripId?: string }) {
       <div className="flex items-center justify-between bg-card border rounded-lg p-4">
         <Button variant="ghost" onClick={() => navigate("/trips")}>Cancelar</Button>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => handleSave(false)} disabled={isPending || !canSave}>
+          <Button variant="outline" onClick={() => handleSave(false)} disabled={isPending || isUploading || !canSave}>
             {isPending ? "Salvando..." : "Salvar como Rascunho"}
           </Button>
-          <Button onClick={() => handleSave(true)} disabled={isPending || !canSave}>
-            {isPending ? "Publicando..." : "Publicar Viagem"}
+          <Button onClick={() => handleSave(true)} disabled={isPending || isUploading || !canSave}>
+            {isPending ? "Publicando..." : isUploading ? "Aguardando upload..." : "Publicar Viagem"}
           </Button>
         </div>
       </div>

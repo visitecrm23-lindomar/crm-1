@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { uploadthingRouter } from "./uploadthing";
 import healthRouter from "./health";
 import usersRouter from "./users";
 import clientsRouter from "./clients";
@@ -74,5 +75,6 @@ router.use(notificationsRouter);
 router.use(birthdayRouter);
 router.use(layoutsRouter);
 router.use(salesGoalsRouter);
+router.use("/uploadthing", uploadthingRouter);
 
 export default router;
