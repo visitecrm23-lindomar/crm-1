@@ -10,8 +10,9 @@ type OurFileRouter = {
   tripGalleryImages: AnyFileRoute;
 };
 
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-const url = `${BASE}/api/uploadthing`;
+const url =
+  (import.meta.env.VITE_UPLOADTHING_URL as string | undefined) ??
+  `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api/uploadthing`;
 
 export const { useUploadThing, uploadFiles } =
   generateReactHelpers<OurFileRouter>({ url });
