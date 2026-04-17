@@ -230,6 +230,23 @@ export default function VitrineProduct({
       .finally(() => setLoading(false));
   }, [slug, productSlug]);
 
+  useEffect(() => {
+    if (!product) return;
+    const params = new URLSearchParams(window.location.search);
+    const photoParam = params.get("photo");
+    if (photoParam === null) return;
+    const idx = parseInt(photoParam, 10);
+    const allImgs = [...(product.images ?? []), ...(product.gallery ?? [])];
+    if (!isNaN(idx) && idx >= 0 && idx < allImgs.length) {
+      setLightboxImages(allImgs);
+      setLightboxIndex(idx);
+      setLightboxOpen(true);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("photo");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [product?.id]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -424,10 +441,13 @@ export default function VitrineProduct({
                 className="relative aspect-square rounded-xl overflow-hidden bg-muted group focus:outline-none focus:ring-2 focus:ring-primary"
                 aria-label={`Ver foto ${i + 1}`}
               >
+                <div className="absolute inset-0 bg-muted animate-pulse" aria-hidden="true" />
                 <img
                   src={img}
                   alt={`Galeria ${i + 1}`}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  className="relative w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-0"
+                  style={{ transition: "opacity 0.3s, transform 0.3s" }}
+                  onLoad={(e) => { (e.target as HTMLImageElement).style.opacity = "1"; }}
                 />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
                   <Maximize2 className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />

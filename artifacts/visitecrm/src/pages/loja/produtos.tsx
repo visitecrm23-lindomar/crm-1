@@ -46,6 +46,8 @@ import {
   Star,
   X,
   Archive,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 function slugify(text: string): string {
@@ -295,6 +297,14 @@ function ProductForm({
     }
   }
 
+  function moveImage(from: number, direction: -1 | 1) {
+    const imgs = [...(form.images ?? [])];
+    const to = from + direction;
+    if (to < 0 || to >= imgs.length) return;
+    [imgs[from], imgs[to]] = [imgs[to], imgs[from]];
+    set("images", imgs);
+  }
+
   async function handleSave() {
     if (!form.name) {
       toast({ title: "Nome é obrigatório", variant: "destructive" });
@@ -446,29 +456,64 @@ function ProductForm({
 
             {/* Images */}
             <div className="col-span-2 space-y-2">
-              <Label>Imagens do Produto</Label>
+              <div className="flex items-center gap-2">
+                <Label>Imagens do Produto</Label>
+                <span className="text-xs text-muted-foreground">— a primeira é a capa exibida no catálogo</span>
+              </div>
               <div className="grid grid-cols-2 gap-3">
-                {(form.images ?? []).map((url, i) => (
-                  <CoverImageUpload
-                    key={i}
-                    endpoint="storeProductImage"
-                    value={url}
-                    onChange={(newUrl) => {
-                      const updated = [...(form.images ?? [])];
-                      if (newUrl) {
-                        updated[i] = newUrl;
-                      } else {
-                        updated.splice(i, 1);
-                      }
-                      set("images", updated);
-                    }}
-                    previewClassName="h-36"
-                    objectFit="cover"
-                    emptyLabel="Clique ou arraste"
-                  />
-                ))}
+                {(form.images ?? []).map((url, i) => {
+                  const total = (form.images ?? []).length;
+                  return (
+                    <div key={i} className="relative">
+                      {i === 0 && (
+                        <span className="absolute top-1.5 left-1.5 z-10 text-[10px] font-bold bg-black/60 text-white px-1.5 py-0.5 rounded-full pointer-events-none">
+                          Capa
+                        </span>
+                      )}
+                      <CoverImageUpload
+                        endpoint="storeProductImage"
+                        value={url}
+                        onChange={(newUrl) => {
+                          const updated = [...(form.images ?? [])];
+                          if (newUrl) {
+                            updated[i] = newUrl;
+                          } else {
+                            updated.splice(i, 1);
+                          }
+                          set("images", updated);
+                        }}
+                        previewClassName="h-36"
+                        objectFit="cover"
+                        emptyLabel="Clique ou arraste"
+                      />
+                      {total > 1 && (
+                        <div className="absolute bottom-1.5 right-1.5 z-10 flex gap-1">
+                          {i > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => moveImage(i, -1)}
+                              className="bg-black/60 hover:bg-black/80 text-white rounded p-0.5 transition"
+                              title="Mover para esquerda"
+                            >
+                              <ChevronLeft className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {i < total - 1 && (
+                            <button
+                              type="button"
+                              onClick={() => moveImage(i, 1)}
+                              className="bg-black/60 hover:bg-black/80 text-white rounded p-0.5 transition"
+                              title="Mover para direita"
+                            >
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
                 <CoverImageUpload
-                  key="new"
                   endpoint="storeProductImage"
                   value=""
                   onChange={(newUrl) => {
