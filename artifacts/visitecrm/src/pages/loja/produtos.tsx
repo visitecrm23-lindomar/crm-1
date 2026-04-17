@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { CoverImageUpload } from "@/components/cover-image-upload";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -445,20 +446,45 @@ function ProductForm({
 
             {/* Images */}
             <div className="col-span-2 space-y-2">
-              <Label>Imagens (URLs, uma por linha)</Label>
-              <Textarea
-                value={(form.images ?? []).join("\n")}
-                onChange={(e) => set("images", e.target.value.split("\n").filter(Boolean))}
-                rows={3}
-                placeholder="https://exemplo.com/imagem1.jpg"
-              />
-              {(form.images ?? []).length > 0 && (
-                <div className="flex gap-2 flex-wrap">
-                  {(form.images ?? []).slice(0, 4).map((url, i) => (
-                    <img key={i} src={url} alt="" className="w-16 h-16 object-cover rounded border" />
-                  ))}
-                </div>
-              )}
+              <Label>Imagens do Produto</Label>
+              <div className="grid grid-cols-2 gap-3">
+                {(form.images ?? []).map((url, i) => (
+                  <CoverImageUpload
+                    key={i}
+                    endpoint="storeProductImage"
+                    value={url}
+                    onChange={(newUrl) => {
+                      const updated = [...(form.images ?? [])];
+                      if (newUrl) {
+                        updated[i] = newUrl;
+                      } else {
+                        updated.splice(i, 1);
+                      }
+                      set("images", updated);
+                    }}
+                    previewClassName="h-36"
+                    objectFit="cover"
+                    emptyLabel="Clique ou arraste"
+                  />
+                ))}
+                <CoverImageUpload
+                  key="new"
+                  endpoint="storeProductImage"
+                  value=""
+                  onChange={(newUrl) => {
+                    if (newUrl) {
+                      set("images", [...(form.images ?? []), newUrl]);
+                    }
+                  }}
+                  previewClassName="h-36"
+                  objectFit="cover"
+                  emptyLabel={
+                    (form.images ?? []).length === 0
+                      ? "Clique ou arraste a imagem principal"
+                      : "Adicionar imagem"
+                  }
+                />
+              </div>
             </div>
 
             {/* Switches */}

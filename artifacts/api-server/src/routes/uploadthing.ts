@@ -41,6 +41,16 @@ export const uploadRouter = {
     .onUploadComplete(async ({ file }) => {
       return { url: file.ufsUrl };
     }),
+
+  storeProductImage: f({ image: { maxFileSize: "4MB", maxFileCount: 1 } })
+    .middleware(async ({ req }) => {
+      const { userId } = getAuth(req);
+      if (!userId) throw new Error("Unauthorized");
+      return { userId };
+    })
+    .onUploadComplete(async ({ file }) => {
+      return { url: file.ufsUrl };
+    }),
 } satisfies FileRouter;
 
 export const uploadthingRouter = createRouteHandler({ router: uploadRouter });

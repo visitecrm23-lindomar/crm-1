@@ -10,6 +10,7 @@ export type OurFileRouter = {
   tripGalleryImages: AnyFileRoute;
   storeLogo: AnyFileRoute;
   storeBanner: AnyFileRoute;
+  storeProductImage: AnyFileRoute;
 };
 
 const url =
