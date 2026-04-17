@@ -26,6 +26,7 @@ import {
   X,
   Maximize2,
   Images,
+  Download,
 } from "lucide-react";
 
 function StarRating({ rating }: { rating: number }) {
@@ -53,6 +54,7 @@ function Lightbox({
   onClose: () => void;
 }) {
   const [index, setIndex] = useState(initialIndex);
+  const [shareCopied, setShareCopied] = useState(false);
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -64,18 +66,78 @@ function Lightbox({
     return () => document.removeEventListener("keydown", handleKey);
   }, [images.length, onClose]);
 
+  function handleSharePhoto(e: React.MouseEvent) {
+    e.stopPropagation();
+    const shareUrl = `${window.location.href.split("?")[0]}?photo=${index + 1}`;
+    if (navigator.share) {
+      navigator.share({ url: shareUrl, text: `Foto ${index + 1}` }).catch(() => {});
+    } else if (navigator.clipboard) {
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 2000);
+      }).catch(() => {});
+    }
+  }
+
+  function handleDownload(e: React.MouseEvent) {
+    e.stopPropagation();
+    const imageUrl = images[index];
+    const filename = imageUrl.split("/").pop()?.split("?")[0] ?? `foto-${index + 1}.jpg`;
+    const a = document.createElement("a");
+    a.href = imageUrl;
+    a.download = filename;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
       onClick={onClose}
     >
-      <button
-        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors z-10"
-        onClick={onClose}
-        aria-label="Fechar"
-      >
-        <X className="w-5 h-5" />
-      </button>
+      {/* Top bar */}
+      <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 z-10" onClick={(e) => e.stopPropagation()}>
+        <p className="text-white/60 text-sm">
+          {index + 1} / {images.length}
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm transition-colors"
+            onClick={handleSharePhoto}
+            aria-label="Compartilhar foto"
+          >
+            {shareCopied ? (
+              <>
+                <Check className="w-4 h-4 text-green-400" />
+                <span className="text-green-400">Copiado!</span>
+              </>
+            ) : (
+              <>
+                <Share2 className="w-4 h-4" />
+                <span>Compartilhar</span>
+              </>
+            )}
+          </button>
+          <button
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm transition-colors"
+            onClick={handleDownload}
+            aria-label="Baixar foto"
+          >
+            <Download className="w-4 h-4" />
+            <span>Baixar</span>
+          </button>
+          <button
+            className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+            onClick={onClose}
+            aria-label="Fechar"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
 
       {images.length > 1 && (
         <>
@@ -97,13 +159,13 @@ function Lightbox({
       )}
 
       <div
-        className="relative max-w-5xl max-h-[85vh] mx-4 flex flex-col items-center gap-3"
+        className="relative max-w-5xl max-h-[85vh] mx-4 flex flex-col items-center gap-3 mt-12"
         onClick={(e) => e.stopPropagation()}
       >
         <img
           src={images[index]}
           alt={`Imagem ${index + 1}`}
-          className="max-h-[78vh] max-w-full object-contain rounded-lg shadow-2xl"
+          className="max-h-[75vh] max-w-full object-contain rounded-lg shadow-2xl"
         />
         {images.length > 1 && (
           <div className="flex gap-1.5">
@@ -117,7 +179,7 @@ function Lightbox({
           </div>
         )}
         <p className="text-white/60 text-xs">
-          {index + 1} / {images.length} &nbsp;·&nbsp; Use ← → para navegar, Esc para fechar
+          Use ← → para navegar, Esc para fechar
         </p>
       </div>
     </div>
