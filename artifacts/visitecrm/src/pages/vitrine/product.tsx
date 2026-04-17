@@ -23,6 +23,9 @@ import {
   Check,
   Zap,
   Search,
+  X,
+  Maximize2,
+  Images,
 } from "lucide-react";
 
 function StarRating({ rating }: { rating: number }) {
@@ -36,6 +39,87 @@ function StarRating({ rating }: { rating: number }) {
           }`}
         />
       ))}
+    </div>
+  );
+}
+
+function Lightbox({
+  images,
+  initialIndex,
+  onClose,
+}: {
+  images: string[];
+  initialIndex: number;
+  onClose: () => void;
+}) {
+  const [index, setIndex] = useState(initialIndex);
+
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowLeft") setIndex((i) => (i - 1 + images.length) % images.length);
+      if (e.key === "ArrowRight") setIndex((i) => (i + 1) % images.length);
+    }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [images.length, onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+      onClick={onClose}
+    >
+      <button
+        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors z-10"
+        onClick={onClose}
+        aria-label="Fechar"
+      >
+        <X className="w-5 h-5" />
+      </button>
+
+      {images.length > 1 && (
+        <>
+          <button
+            className="absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors z-10"
+            onClick={(e) => { e.stopPropagation(); setIndex((i) => (i - 1 + images.length) % images.length); }}
+            aria-label="Anterior"
+          >
+            <PrevIcon className="w-6 h-6" />
+          </button>
+          <button
+            className="absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors z-10"
+            onClick={(e) => { e.stopPropagation(); setIndex((i) => (i + 1) % images.length); }}
+            aria-label="Próxima"
+          >
+            <NextIcon className="w-6 h-6" />
+          </button>
+        </>
+      )}
+
+      <div
+        className="relative max-w-5xl max-h-[85vh] mx-4 flex flex-col items-center gap-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <img
+          src={images[index]}
+          alt={`Imagem ${index + 1}`}
+          className="max-h-[78vh] max-w-full object-contain rounded-lg shadow-2xl"
+        />
+        {images.length > 1 && (
+          <div className="flex gap-1.5">
+            {images.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setIndex(i)}
+                className={`rounded-full transition-all ${i === index ? "w-5 h-2 bg-white" : "w-2 h-2 bg-white/40 hover:bg-white/60"}`}
+              />
+            ))}
+          </div>
+        )}
+        <p className="text-white/60 text-xs">
+          {index + 1} / {images.length} &nbsp;·&nbsp; Use ← → para navegar, Esc para fechar
+        </p>
+      </div>
     </div>
   );
 }
@@ -59,6 +143,16 @@ export default function VitrineProduct({
   const [qty, setQty] = useState(1);
   const [activeTab, setActiveTab] = useState<"descricao" | "requisitos" | "destaques">("descricao");
   const [related, setRelated] = useState<StoreProduct[]>([]);
+  const [lightboxImages, setLightboxImages] = useState<string[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  function openLightbox(imgs: string[], idx: number) {
+    setLightboxImages(imgs);
+    setLightboxIndex(idx);
+    setLightboxOpen(true);
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -96,6 +190,8 @@ export default function VitrineProduct({
   const basePrice = parseFloat(product.salePrice ?? product.price);
   const effectivePrice = selectedVariant ? selectedVariant.price : basePrice;
   const images = product.images ?? [];
+  const gallery = product.gallery ?? [];
+  const allImages = [...images, ...gallery];
   const includes = product.includes ?? [];
   const excludes = product.excludes ?? [];
   const features = product.features ?? [];
@@ -132,8 +228,6 @@ export default function VitrineProduct({
     product.reviews.length > 0
       ? product.reviews.reduce((a, r) => a + r.rating, 0) / product.reviews.length
       : 0;
-
-  const [copied, setCopied] = useState(false);
 
   function handleShare() {
     if (!product) return;
@@ -189,11 +283,20 @@ export default function VitrineProduct({
       {/* Full-width hero carousel */}
       <div className="relative rounded-xl overflow-hidden bg-muted h-80 mb-6">
         {images[imgIndex] ? (
-          <img
-            src={images[imgIndex]}
-            alt={product.name}
-            className="w-full h-full object-cover"
-          />
+          <button
+            className="w-full h-full block relative group"
+            onClick={() => openLightbox(allImages, imgIndex)}
+            aria-label="Ampliar imagem"
+          >
+            <img
+              src={images[imgIndex]}
+              alt={product.name}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+              <Maximize2 className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+            </div>
+          </button>
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <MapPin className="w-20 h-20 text-muted-foreground/20" />
@@ -240,6 +343,36 @@ export default function VitrineProduct({
               <img src={img} alt="" className="w-full h-full object-cover" />
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Gallery grid */}
+      {gallery.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+            <Images className="w-5 h-5 text-muted-foreground" />
+            Galeria de Fotos
+            <span className="text-sm font-normal text-muted-foreground">({gallery.length} foto{gallery.length !== 1 ? "s" : ""})</span>
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+            {gallery.map((img, i) => (
+              <button
+                key={i}
+                onClick={() => openLightbox(allImages, images.length + i)}
+                className="relative aspect-square rounded-xl overflow-hidden bg-muted group focus:outline-none focus:ring-2 focus:ring-primary"
+                aria-label={`Ver foto ${i + 1}`}
+              >
+                <img
+                  src={img}
+                  alt={`Galeria ${i + 1}`}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                  <Maximize2 className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -570,6 +703,14 @@ export default function VitrineProduct({
             })}
           </div>
         </div>
+      )}
+
+      {lightboxOpen && lightboxImages.length > 0 && (
+        <Lightbox
+          images={lightboxImages}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxOpen(false)}
+        />
       )}
 
       <div
