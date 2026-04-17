@@ -64,16 +64,45 @@ function ProductCard({
   ].slice(0, 3);
   const hasSlideshow = slideImages.length > 1;
   const [slideIndex, setSlideIndex] = useState(0);
+  const [galleryReady, setGalleryReady] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const touchStartX = useRef<number | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setIsTouchDevice(window.matchMedia("(hover: none) and (pointer: coarse)").matches);
   }, []);
 
+  useEffect(() => {
+    if (!hasSlideshow) return;
+    const extraUrls = slideImages.slice(1);
+    const el = cardRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          observer.disconnect();
+          let loaded = 0;
+          extraUrls.forEach((src) => {
+            const img = new Image();
+            img.onload = img.onerror = () => {
+              loaded += 1;
+              if (loaded === extraUrls.length) setGalleryReady(true);
+            };
+            img.src = src;
+          });
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasSlideshow, slideImages.join(",")]);
+
   function handleMouseEnter() {
-    if (!hasSlideshow || isTouchDevice) return;
+    if (!hasSlideshow || isTouchDevice || !galleryReady) return;
     intervalRef.current = setInterval(() => {
       setSlideIndex((i) => (i + 1) % slideImages.length);
     }, 900);
@@ -99,7 +128,7 @@ function ProductCard({
     if (touchStartX.current === null) return;
     const dx = e.changedTouches[0].clientX - touchStartX.current;
     touchStartX.current = null;
-    if (!hasSlideshow) return;
+    if (!hasSlideshow || !galleryReady) return;
     if (Math.abs(dx) < 10) {
       didSwipeRef.current = false;
     } else if (dx < -30) {
@@ -112,7 +141,7 @@ function ProductCard({
   }
 
   function handleImageAreaClick(e: React.MouseEvent) {
-    if (!isTouchDevice || !hasSlideshow) return;
+    if (!isTouchDevice || !hasSlideshow || !galleryReady) return;
     if (didSwipeRef.current) {
       didSwipeRef.current = false;
       e.stopPropagation();
@@ -154,8 +183,11 @@ function ProductCard({
     }
   }
 
+  const visibleSlides = hasSlideshow && galleryReady ? slideImages : slideImages.slice(0, 1);
+
   return (
     <div
+      ref={cardRef}
       className="bg-white rounded-xl border shadow-sm overflow-hidden hover:shadow-md transition-shadow group cursor-pointer"
       onClick={handleCardClick}
       onMouseEnter={handleMouseEnter}
@@ -169,9 +201,9 @@ function ProductCard({
       >
         {slideImages.length > 0 ? (
           <>
-            {slideImages.map((src, i) => (
+            {visibleSlides.map((src, i) => (
               <img
-                key={i}
+                key={src}
                 src={src}
                 alt={product.name}
                 className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${
