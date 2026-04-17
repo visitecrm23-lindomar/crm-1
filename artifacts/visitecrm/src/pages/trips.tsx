@@ -2134,7 +2134,9 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-sm text-muted-foreground">Status da viagem:</span>
           <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${STATUS_MAP[trip.status]?.color ?? "bg-gray-100 text-gray-600"}`}>{STATUS_MAP[trip.status]?.label ?? trip.status}</span>
-          {trip.driverName && <span className="text-sm text-muted-foreground">Guia/Motorista: <strong>{trip.driverName}</strong></span>}
+          {trip.driverName && <span className="text-sm text-muted-foreground">Motorista: <strong>{trip.driverName}</strong></span>}
+          {trip.tourGuide && <span className="text-sm text-muted-foreground">Guia Turístico: <strong>{trip.tourGuide}</strong></span>}
+          {trip.tripOrganizer && <span className="text-sm text-muted-foreground">Responsável: <strong>{trip.tripOrganizer}</strong></span>}
           {trip.vehicleType && <span className="text-sm text-muted-foreground">Veículo: <strong>{trip.vehicleType}</strong></span>}
           {trip.vehiclePlate && <span className="text-sm text-muted-foreground">Placa: <strong>{trip.vehiclePlate}</strong></span>}
         </div>
