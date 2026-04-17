@@ -299,6 +299,7 @@ function ProductForm({
   }
 
   const dragIdx = useRef<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   function moveImage(from: number, direction: -1 | 1) {
     const imgs = [...(form.images ?? [])];
@@ -314,6 +315,7 @@ function ProductForm({
 
   function handleDragOver(e: React.DragEvent, i: number) {
     e.preventDefault();
+    setDragOverIdx(i);
     if (dragIdx.current === null || dragIdx.current === i) return;
     const imgs = [...(form.images ?? [])];
     const [dragged] = imgs.splice(dragIdx.current, 1);
@@ -322,8 +324,15 @@ function ProductForm({
     set("images", imgs);
   }
 
+  function handleDragLeave(e: React.DragEvent) {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverIdx(null);
+    }
+  }
+
   function handleDragEnd() {
     dragIdx.current = null;
+    setDragOverIdx(null);
   }
 
   async function handleSave() {
@@ -484,13 +493,18 @@ function ProductForm({
               <div className="grid grid-cols-2 gap-3">
                 {(form.images ?? []).map((url, i) => {
                   const total = (form.images ?? []).length;
+                  const isDragTarget = dragOverIdx === i;
                   return (
                     <div
                       key={url + i}
-                      className="relative"
+                      className={[
+                        "relative rounded-md transition-all",
+                        isDragTarget ? "ring-2 ring-primary ring-offset-1" : "",
+                      ].join(" ")}
                       draggable
                       onDragStart={() => handleDragStart(i)}
                       onDragOver={(e) => handleDragOver(e, i)}
+                      onDragLeave={handleDragLeave}
                       onDragEnd={handleDragEnd}
                     >
                       {i === 0 && (
