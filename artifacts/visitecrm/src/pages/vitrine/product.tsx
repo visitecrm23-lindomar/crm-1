@@ -426,18 +426,18 @@ export default function VitrineProduct({
       )}
 
       {/* Gallery grid */}
-      {gallery.length > 0 && (
+      {allImages.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
             <Images className="w-5 h-5 text-muted-foreground" />
             Galeria de Fotos
-            <span className="text-sm font-normal text-muted-foreground">({gallery.length} foto{gallery.length !== 1 ? "s" : ""})</span>
+            <span className="text-sm font-normal text-muted-foreground">({allImages.length} foto{allImages.length !== 1 ? "s" : ""})</span>
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-            {gallery.map((img, i) => (
+            {allImages.map((img, i) => (
               <button
                 key={i}
-                onClick={() => openLightbox(allImages, images.length + i)}
+                onClick={() => openLightbox(allImages, i)}
                 className="relative aspect-square rounded-xl overflow-hidden bg-muted group focus:outline-none focus:ring-2 focus:ring-primary"
                 aria-label={`Ver foto ${i + 1}`}
               >
