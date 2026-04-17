@@ -48,6 +48,8 @@ export const tripsTable = pgTable("trips", {
   vehicleId: text("vehicle_id"),
   vehicleType: text("vehicle_type"),
   driverName: text("driver_name"),
+  tourGuide: text("tour_guide"),
+  tripOrganizer: text("trip_organizer"),
   driverCnh: text("driver_cnh"),
   driverPhone: text("driver_phone"),
   fixedCosts: numeric("fixed_costs", { precision: 10, scale: 2 }),

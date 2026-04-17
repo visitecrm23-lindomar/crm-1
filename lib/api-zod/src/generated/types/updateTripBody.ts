@@ -42,6 +42,10 @@ export interface UpdateTripBody {
   /** @nullable */
   driverName?: string | null;
   /** @nullable */
+  tourGuide?: string | null;
+  /** @nullable */
+  tripOrganizer?: string | null;
+  /** @nullable */
   seatLayout?: string | null;
   /** @nullable */
   destination?: string | null;

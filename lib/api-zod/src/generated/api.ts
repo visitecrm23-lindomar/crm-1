@@ -1310,6 +1310,8 @@ export const ListTripsResponse = zod.object({
       vehiclePlate: zod.string().nullish(),
       vehicleType: zod.string().nullish(),
       driverName: zod.string().nullish(),
+      tourGuide: zod.string().nullish(),
+      tripOrganizer: zod.string().nullish(),
       seatLayout: zod.string().nullish(),
       boardingPoints: zod
         .array(
@@ -1358,6 +1360,8 @@ export const CreateTripBody = zod.object({
   vehiclePlate: zod.string().nullish(),
   vehicleType: zod.string().nullish(),
   driverName: zod.string().nullish(),
+  tourGuide: zod.string().nullish(),
+  tripOrganizer: zod.string().nullish(),
   status: zod.string().optional(),
   gallery: zod.array(zod.string()).optional(),
   boardingPoints: zod.array(zod.unknown()).optional(),
@@ -1403,6 +1407,8 @@ export const GetTripResponse = zod.object({
   vehiclePlate: zod.string().nullish(),
   vehicleType: zod.string().nullish(),
   driverName: zod.string().nullish(),
+  tourGuide: zod.string().nullish(),
+  tripOrganizer: zod.string().nullish(),
   seatLayout: zod.string().nullish(),
   boardingPoints: zod
     .array(
@@ -1447,6 +1453,8 @@ export const UpdateTripBody = zod.object({
   vehiclePlate: zod.string().nullish(),
   vehicleType: zod.string().nullish(),
   driverName: zod.string().nullish(),
+  tourGuide: zod.string().nullish(),
+  tripOrganizer: zod.string().nullish(),
   seatLayout: zod.string().nullish(),
   destination: zod.string().nullish(),
   destinationCity: zod.string().nullish(),
@@ -1490,6 +1498,8 @@ export const UpdateTripResponse = zod.object({
   vehiclePlate: zod.string().nullish(),
   vehicleType: zod.string().nullish(),
   driverName: zod.string().nullish(),
+  tourGuide: zod.string().nullish(),
+  tripOrganizer: zod.string().nullish(),
   seatLayout: zod.string().nullish(),
   boardingPoints: zod
     .array(

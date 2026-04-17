@@ -35,6 +35,10 @@ export interface CreateTripBody {
   vehicleType?: string | null;
   /** @nullable */
   driverName?: string | null;
+  /** @nullable */
+  tourGuide?: string | null;
+  /** @nullable */
+  tripOrganizer?: string | null;
   status?: string;
   gallery?: string[];
   boardingPoints?: unknown[];

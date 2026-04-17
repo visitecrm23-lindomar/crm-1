@@ -491,6 +491,11 @@ async function runMigrations() {
       ALTER TABLE sales_goals ADD COLUMN IF NOT EXISTS bonus_paid boolean NOT NULL DEFAULT false;
     `);
 
+    await client.query(`
+      ALTER TABLE trips ADD COLUMN IF NOT EXISTS tour_guide text;
+      ALTER TABLE trips ADD COLUMN IF NOT EXISTS trip_organizer text;
+    `);
+
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");

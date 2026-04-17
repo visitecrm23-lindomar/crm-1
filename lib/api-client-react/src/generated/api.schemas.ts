@@ -341,6 +341,10 @@ export interface Trip {
   /** @nullable */
   driverName?: string | null;
   /** @nullable */
+  tourGuide?: string | null;
+  /** @nullable */
+  tripOrganizer?: string | null;
+  /** @nullable */
   seatLayout?: string | null;
   boardingPoints?: TripBoardingPointsItem[];
   itinerary?: TripItineraryItem[];
@@ -462,6 +466,10 @@ export interface CreateTripBody {
   vehicleType?: string | null;
   /** @nullable */
   driverName?: string | null;
+  /** @nullable */
+  tourGuide?: string | null;
+  /** @nullable */
+  tripOrganizer?: string | null;
   status?: string;
   gallery?: string[];
   boardingPoints?: unknown[];
@@ -509,6 +517,10 @@ export interface UpdateTripBody {
   vehicleType?: string | null;
   /** @nullable */
   driverName?: string | null;
+  /** @nullable */
+  tourGuide?: string | null;
+  /** @nullable */
+  tripOrganizer?: string | null;
   /** @nullable */
   seatLayout?: string | null;
   /** @nullable */

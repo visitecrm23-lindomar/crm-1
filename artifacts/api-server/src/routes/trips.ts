@@ -113,6 +113,8 @@ function formatTrip(t: typeof tripsTable.$inferSelect) {
     vehiclePlate: t.vehiclePlate,
     vehicleType: t.vehicleType,
     driverName: t.driverName,
+    tourGuide: t.tourGuide,
+    tripOrganizer: t.tripOrganizer,
     seatLayout: t.seatLayout,
     layoutId: t.layoutId ?? null,
     fixedCosts: t.fixedCosts ? Number(t.fixedCosts) : null,
@@ -225,6 +227,8 @@ router.post("/trips", async (req, res): Promise<void> => {
       vehiclePlate: parsed.data.vehiclePlate ?? null,
       vehicleType: parsed.data.vehicleType ?? null,
       driverName: parsed.data.driverName ?? null,
+      tourGuide: parsed.data.tourGuide ?? null,
+      tripOrganizer: parsed.data.tripOrganizer ?? null,
       createdById: me.id,
       ...(parsed.data.status ? { status: parsed.data.status } : {}),
     });
@@ -286,6 +290,8 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
     if (parsed.data.vehiclePlate !== undefined) updates.vehiclePlate = parsed.data.vehiclePlate ?? null;
     if (parsed.data.vehicleType !== undefined) updates.vehicleType = parsed.data.vehicleType ?? null;
     if (parsed.data.driverName !== undefined) updates.driverName = parsed.data.driverName ?? null;
+    if (parsed.data.tourGuide !== undefined) updates.tourGuide = parsed.data.tourGuide ?? null;
+    if (parsed.data.tripOrganizer !== undefined) updates.tripOrganizer = parsed.data.tripOrganizer ?? null;
     if (parsed.data.destination !== undefined) updates.destination = parsed.data.destination ?? "";
     if (parsed.data.destinationCity !== undefined) updates.destinationCity = parsed.data.destinationCity ?? "";
     if (parsed.data.destinationState !== undefined) updates.destinationState = parsed.data.destinationState ?? "";

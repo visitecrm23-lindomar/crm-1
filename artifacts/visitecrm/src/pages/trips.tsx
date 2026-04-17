@@ -1047,7 +1047,7 @@ interface TripFormData {
   priceAdult: string; priceChild: string; priceSenior: string;
   inclusions: string; exclusions: string;
   coverImage: string;
-  vehicleType: string; vehiclePlate: string; driverName: string;
+  vehicleType: string; vehiclePlate: string; driverName: string; tourGuide: string; tripOrganizer: string;
   status: string;
   boardingPoints: BoardingPoint[];
   itinerary: ItineraryDay[];
@@ -1066,7 +1066,7 @@ const EMPTY_FORM: TripFormData = {
   totalCapacity: "46", seatLayout: "2x2", layoutId: "",
   priceAdult: "", priceChild: "", priceSenior: "",
   inclusions: "", exclusions: "", coverImage: "",
-  vehicleType: "", vehiclePlate: "", driverName: "", status: "draft",
+  vehicleType: "", vehiclePlate: "", driverName: "", tourGuide: "", tripOrganizer: "", status: "draft",
   boardingPoints: [newBP()], itinerary: [newDay(1)], costs: [], fixedCosts: "", variableCosts: "", gallery: [],
 };
 const toTripFormData = (trip: Trip): TripFormData => ({
@@ -1091,6 +1091,8 @@ const toTripFormData = (trip: Trip): TripFormData => ({
   vehicleType: trip.vehicleType ?? "",
   vehiclePlate: trip.vehiclePlate ?? "",
   driverName: trip.driverName ?? "",
+  tourGuide: trip.tourGuide ?? "",
+  tripOrganizer: trip.tripOrganizer ?? "",
   status: trip.status,
   boardingPoints: trip.boardingPoints?.length ? (trip.boardingPoints as BoardingPoint[]) : [newBP()],
   itinerary: trip.itinerary?.length ? (trip.itinerary as unknown as ItineraryDay[]) : [newDay(1)],
@@ -1205,7 +1207,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
             coverImage: form.coverImage || undefined,
             seatLayout: form.layoutId ? undefined : form.seatLayout,
             layoutId: form.layoutId || null,
-            vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined,
+            vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined, tourGuide: form.tourGuide || undefined, tripOrganizer: form.tripOrganizer || undefined,
             status: statusToSave,
             itinerary: itineraryToSave.length ? itineraryToSave : undefined,
             boardingPoints: boardingPointsToSave.length ? boardingPointsToSave : undefined,
@@ -1229,7 +1231,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
             coverImage: form.coverImage || undefined,
             seatLayout: form.layoutId ? undefined : form.seatLayout,
             layoutId: form.layoutId || null,
-            vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined,
+            vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined, tourGuide: form.tourGuide || undefined, tripOrganizer: form.tripOrganizer || undefined,
             status: statusToSave,
             itinerary: itineraryToSave.length ? itineraryToSave : undefined,
             boardingPoints: boardingPointsToSave.length ? boardingPointsToSave : undefined,
@@ -1599,9 +1601,12 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 <Input placeholder="João da Silva" value={form.driverName} onChange={set("driverName")} />
               </div>
               <div className="space-y-2">
-                <Label className="text-muted-foreground">Guia Turístico</Label>
-                <Input placeholder="Maria Costa" disabled className="opacity-50 cursor-not-allowed" />
-                <p className="text-xs text-muted-foreground">Cadastro de guias disponível em módulo futuro.</p>
+                <Label>Guia Turístico</Label>
+                <Input placeholder="Maria Costa" value={form.tourGuide} onChange={set("tourGuide")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Responsável da Viagem</Label>
+                <Input placeholder="Nome do responsável" value={form.tripOrganizer} onChange={set("tripOrganizer")} />
               </div>
             </div>
           </div>

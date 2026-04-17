@@ -4809,6 +4809,10 @@ components:
           type: ["string", "null"]
         driverName:
           type: ["string", "null"]
+        tourGuide:
+          type: ["string", "null"]
+        tripOrganizer:
+          type: ["string", "null"]
         seatLayout:
           type: ["string", "null"]
         boardingPoints:
@@ -5020,6 +5024,10 @@ components:
           type: ["string", "null"]
         driverName:
           type: ["string", "null"]
+        tourGuide:
+          type: ["string", "null"]
+        tripOrganizer:
+          type: ["string", "null"]
         status:
           type: string
         gallery:
@@ -5089,6 +5097,10 @@ components:
         vehicleType:
           type: ["string", "null"]
         driverName:
+          type: ["string", "null"]
+        tourGuide:
+          type: ["string", "null"]
+        tripOrganizer:
           type: ["string", "null"]
         seatLayout:
           type: ["string", "null"]

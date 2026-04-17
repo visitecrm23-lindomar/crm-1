@@ -46,6 +46,10 @@ export interface Trip {
   /** @nullable */
   driverName?: string | null;
   /** @nullable */
+  tourGuide?: string | null;
+  /** @nullable */
+  tripOrganizer?: string | null;
+  /** @nullable */
   seatLayout?: string | null;
   boardingPoints?: TripBoardingPointsItem[];
   itinerary?: TripItineraryItem[];
