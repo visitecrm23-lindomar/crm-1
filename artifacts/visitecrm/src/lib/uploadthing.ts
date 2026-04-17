@@ -5,9 +5,11 @@ import {
 } from "@uploadthing/react";
 import type { AnyFileRoute } from "uploadthing/types";
 
-type OurFileRouter = {
+export type OurFileRouter = {
   tripCoverImage: AnyFileRoute;
   tripGalleryImages: AnyFileRoute;
+  storeLogo: AnyFileRoute;
+  storeBanner: AnyFileRoute;
 };
 
 const url =

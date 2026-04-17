@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { CoverImageUpload } from "@/components/cover-image-upload";
 import { useToast } from "@/hooks/use-toast";
 import { storeApi, StoreSettings, InitStoreInput } from "@/lib/storeApi";
 import { Button } from "@/components/ui/button";
@@ -254,6 +255,10 @@ export default function LojaConfiguracoes() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingCount, setUploadingCount] = useState(0);
+  const isUploading = uploadingCount > 0;
+  const handleUploadingChange = (uploading: boolean) =>
+    setUploadingCount((prev) => (uploading ? prev + 1 : Math.max(0, prev - 1)));
   const [store, setStore] = useState<StoreSettings | null>(null);
   const [form, setForm] = useState<Partial<StoreSettings>>({});
 
@@ -347,9 +352,9 @@ export default function LojaConfiguracoes() {
             )}
           </div>
         </div>
-        <Button onClick={save} disabled={saving}>
-          {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-          Salvar Alterações
+        <Button onClick={save} disabled={saving || isUploading}>
+          {(saving || isUploading) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+          {isUploading ? "Aguardando upload..." : "Salvar Alterações"}
         </Button>
       </div>
 
@@ -514,32 +519,35 @@ export default function LojaConfiguracoes() {
           <Card>
             <CardHeader>
               <CardTitle>Imagens</CardTitle>
-              <CardDescription>Logo e banner da sua loja. Insira as URLs das imagens hospedadas.</CardDescription>
+              <CardDescription>Envie o logo e o banner da sua loja (PNG, JPG, WEBP).</CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>URL do Logo</Label>
-                  <Input
-                    value={form.logo ?? ""}
-                    onChange={(e) => set("logo", e.target.value)}
-                    placeholder="https://..."
-                  />
-                  {form.logo && (
-                    <img src={form.logo} alt="Logo preview" className="h-12 object-contain border rounded" />
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label>URL do Banner Principal</Label>
-                  <Input
-                    value={form.bannerHome ?? ""}
-                    onChange={(e) => set("bannerHome", e.target.value)}
-                    placeholder="https://..."
-                  />
-                  {form.bannerHome && (
-                    <img src={form.bannerHome} alt="Banner preview" className="h-12 w-full object-cover border rounded" />
-                  )}
-                </div>
+            <CardContent className="grid gap-6">
+              <div className="space-y-2">
+                <Label>Logo da Loja</Label>
+                <p className="text-xs text-muted-foreground">Recomendado: fundo transparente (PNG) · máx. 2 MB</p>
+                <CoverImageUpload
+                  endpoint="storeLogo"
+                  value={form.logo ?? ""}
+                  onChange={(url) => set("logo", url)}
+                  onUploadingChange={handleUploadingChange}
+                  disabled={saving}
+                  previewClassName="h-32"
+                  emptyLabel="Clique ou arraste o logo aqui"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Banner Principal</Label>
+                <p className="text-xs text-muted-foreground">Exibido na página inicial da sua vitrine · máx. 4 MB</p>
+                <CoverImageUpload
+                  endpoint="storeBanner"
+                  value={form.bannerHome ?? ""}
+                  onChange={(url) => set("bannerHome", url)}
+                  onUploadingChange={handleUploadingChange}
+                  disabled={saving}
+                  previewClassName="h-40"
+                  emptyLabel="Clique ou arraste o banner aqui"
+                  objectFit="cover"
+                />
               </div>
             </CardContent>
           </Card>

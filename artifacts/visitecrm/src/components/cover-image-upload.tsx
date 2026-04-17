@@ -3,25 +3,36 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Upload, X, Loader2, Image as ImageIcon } from "lucide-react";
 import { useUploadThing } from "@/lib/uploadthing";
+import type { OurFileRouter } from "@/lib/uploadthing";
+
+type SingleImageEndpoint = Exclude<keyof OurFileRouter, "tripGalleryImages">;
 
 interface CoverImageUploadProps {
+  endpoint?: SingleImageEndpoint;
   value: string;
   onChange: (url: string) => void;
   onUploadingChange?: (uploading: boolean) => void;
   disabled?: boolean;
+  previewClassName?: string;
+  emptyLabel?: string;
+  objectFit?: "contain" | "cover";
 }
 
 export function CoverImageUpload({
+  endpoint = "tripCoverImage",
   value,
   onChange,
   onUploadingChange,
   disabled,
+  previewClassName = "h-48",
+  emptyLabel = "Clique ou arraste a imagem aqui",
+  objectFit = "contain",
 }: CoverImageUploadProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const { startUpload, isUploading } = useUploadThing("tripCoverImage", {
+  const { startUpload, isUploading } = useUploadThing(endpoint, {
     onUploadBegin: () => onUploadingChange?.(true),
     onClientUploadComplete: (res) => {
       onUploadingChange?.(false);
@@ -79,11 +90,11 @@ export function CoverImageUpload({
       />
 
       {value ? (
-        <div className="relative rounded-lg overflow-hidden h-48 bg-muted group">
+        <div className={`relative rounded-lg overflow-hidden bg-muted group ${previewClassName}`}>
           <img
             src={value}
-            alt="Imagem de capa"
-            className="w-full h-full object-cover"
+            alt="Preview"
+            className={`w-full h-full ${objectFit === "cover" ? "object-cover" : "object-contain"}`}
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = "none";
             }}
@@ -124,8 +135,9 @@ export function CoverImageUpload({
           onDrop={handleDrop}
           disabled={disabled || isUploading}
           className={[
-            "w-full h-40 border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-2 transition-colors",
+            "w-full border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-2 transition-colors",
             "disabled:opacity-50 disabled:cursor-not-allowed",
+            previewClassName,
             isDragging
               ? "border-primary bg-primary/5"
               : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30",
@@ -147,10 +159,10 @@ export function CoverImageUpload({
             <>
               <ImageIcon className="w-8 h-8 text-muted-foreground" />
               <span className="text-sm font-medium text-muted-foreground">
-                Clique ou arraste a imagem de capa aqui
+                {emptyLabel}
               </span>
               <span className="text-xs text-muted-foreground">
-                PNG, JPG, WEBP · máx. 4 MB
+                PNG, JPG, WEBP · máx. {endpoint === "storeLogo" ? "2 MB" : "4 MB"}
               </span>
             </>
           )}

@@ -1621,6 +1621,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 onChange={(url) => setForm(prev => ({ ...prev, coverImage: url }))}
                 onUploadingChange={handleUploadingChange}
                 disabled={isPending}
+                objectFit="cover"
               />
             </div>
             <div className="border-t pt-5 space-y-3">
