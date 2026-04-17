@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { storeApi, StoreProduct, StoreCategory, ProductInput, VariantItem } from "@/lib/storeApi";
 import { Button } from "@/components/ui/button";
@@ -48,6 +48,7 @@ import {
   Archive,
   ChevronLeft,
   ChevronRight,
+  GripVertical,
 } from "lucide-react";
 
 function slugify(text: string): string {
@@ -297,12 +298,32 @@ function ProductForm({
     }
   }
 
+  const dragIdx = useRef<number | null>(null);
+
   function moveImage(from: number, direction: -1 | 1) {
     const imgs = [...(form.images ?? [])];
     const to = from + direction;
     if (to < 0 || to >= imgs.length) return;
     [imgs[from], imgs[to]] = [imgs[to], imgs[from]];
     set("images", imgs);
+  }
+
+  function handleDragStart(i: number) {
+    dragIdx.current = i;
+  }
+
+  function handleDragOver(e: React.DragEvent, i: number) {
+    e.preventDefault();
+    if (dragIdx.current === null || dragIdx.current === i) return;
+    const imgs = [...(form.images ?? [])];
+    const [dragged] = imgs.splice(dragIdx.current, 1);
+    imgs.splice(i, 0, dragged);
+    dragIdx.current = i;
+    set("images", imgs);
+  }
+
+  function handleDragEnd() {
+    dragIdx.current = null;
   }
 
   async function handleSave() {
@@ -464,11 +485,26 @@ function ProductForm({
                 {(form.images ?? []).map((url, i) => {
                   const total = (form.images ?? []).length;
                   return (
-                    <div key={i} className="relative">
+                    <div
+                      key={url + i}
+                      className="relative"
+                      draggable
+                      onDragStart={() => handleDragStart(i)}
+                      onDragOver={(e) => handleDragOver(e, i)}
+                      onDragEnd={handleDragEnd}
+                    >
                       {i === 0 && (
                         <span className="absolute top-1.5 left-1.5 z-10 text-[10px] font-bold bg-black/60 text-white px-1.5 py-0.5 rounded-full pointer-events-none">
                           Capa
                         </span>
+                      )}
+                      {total > 1 && (
+                        <div
+                          className="absolute top-1.5 right-1.5 z-10 cursor-grab active:cursor-grabbing bg-black/50 rounded p-0.5 text-white"
+                          title="Arrastar para reordenar"
+                        >
+                          <GripVertical className="w-3.5 h-3.5" />
+                        </div>
                       )}
                       <CoverImageUpload
                         endpoint="storeProductImage"
