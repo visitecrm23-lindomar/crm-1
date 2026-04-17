@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useSearch } from "wouter";
 import { publicStoreApi, PublicStore, StoreProduct, StoreCategory } from "@/lib/storeApi";
 import { useCart } from "@/contexts/CartContext";
@@ -58,6 +58,35 @@ function ProductCard({
   const inclusions = allInclusions.slice(0, 3);
   const inclusionsOverflow = allInclusions.length > 3 ? allInclusions.length - 3 : 0;
 
+  const slideImages = [
+    ...(product.images ?? []),
+    ...(product.gallery ?? []),
+  ].slice(0, 3);
+  const hasSlideshow = slideImages.length > 1;
+  const [slideIndex, setSlideIndex] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function handleMouseEnter() {
+    if (!hasSlideshow) return;
+    intervalRef.current = setInterval(() => {
+      setSlideIndex((i) => (i + 1) % slideImages.length);
+    }, 900);
+  }
+
+  function handleMouseLeave() {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    setSlideIndex(0);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
+
   function handleAdd() {
     if (isOutOfStock) return;
     addItem({
@@ -88,16 +117,25 @@ function ProductCard({
     <div
       className="bg-white rounded-xl border shadow-sm overflow-hidden hover:shadow-md transition-shadow group cursor-pointer"
       onClick={handleCardClick}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       <div
         className="relative h-44 overflow-hidden bg-gradient-to-br from-blue-200 to-blue-400"
       >
-        {product.images?.[0] ? (
-          <img
-            src={product.images[0]}
-            alt={product.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          />
+        {slideImages.length > 0 ? (
+          <>
+            {slideImages.map((src, i) => (
+              <img
+                key={i}
+                src={src}
+                alt={product.name}
+                className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${
+                  i === slideIndex ? "opacity-100" : "opacity-0"
+                } ${i === 0 && !hasSlideshow ? "group-hover:scale-105 transition-transform duration-300" : ""}`}
+              />
+            ))}
+          </>
         ) : (
           <div className="w-full h-full flex items-center justify-center text-white/40">
             <MapPin className="w-12 h-12" />
@@ -128,6 +166,18 @@ function ProductCard({
           >
             <Star className="w-3 h-3" /> Destaque
           </span>
+        )}
+        {hasSlideshow && (
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {slideImages.map((_, i) => (
+              <span
+                key={i}
+                className={`block rounded-full transition-all duration-300 ${
+                  i === slideIndex ? "w-4 h-1.5 bg-white" : "w-1.5 h-1.5 bg-white/60"
+                }`}
+              />
+            ))}
+          </div>
         )}
       </div>
       <div className="p-3">
