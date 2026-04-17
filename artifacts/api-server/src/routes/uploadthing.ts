@@ -51,6 +51,16 @@ export const uploadRouter = {
     .onUploadComplete(async ({ file }) => {
       return { url: file.ufsUrl };
     }),
+
+  agencyLogo: f({ image: { maxFileSize: "2MB", maxFileCount: 1 } })
+    .middleware(async ({ req }) => {
+      const { userId } = getAuth(req);
+      if (!userId) throw new Error("Unauthorized");
+      return { userId };
+    })
+    .onUploadComplete(async ({ file }) => {
+      return { url: file.ufsUrl };
+    }),
 } satisfies FileRouter;
 
 export const uploadthingRouter = createRouteHandler({ router: uploadRouter });

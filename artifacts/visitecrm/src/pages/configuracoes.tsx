@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { CoverImageUpload } from "@/components/cover-image-upload";
 import { useUser } from "@clerk/react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -219,6 +220,11 @@ function AgencyProfileTab() {
   const updateTenant = useUpdateTenant();
 
   const [form, setForm] = useState<UpdateTenantBody>({});
+  const [uploadingCount, setUploadingCount] = useState(0);
+  const handleUploadingChange = useCallback((uploading: boolean) => {
+    setUploadingCount((n) => n + (uploading ? 1 : -1));
+  }, []);
+
   useEffect(() => {
     if (fullTenant) {
       setForm({
@@ -267,19 +273,16 @@ function AgencyProfileTab() {
         />
       </div>
       <div className="space-y-1">
-        <Label>URL do Logo</Label>
-        <Input
+        <Label>Logo</Label>
+        <CoverImageUpload
+          endpoint="agencyLogo"
           value={form.logoUrl ?? ""}
-          onChange={(e) => setForm((f) => ({ ...f, logoUrl: e.target.value }))}
-          placeholder="https://..."
+          onChange={(url) => setForm((f) => ({ ...f, logoUrl: url }))}
+          onUploadingChange={handleUploadingChange}
+          emptyLabel="Clique ou arraste o logo aqui"
+          previewClassName="h-32"
+          objectFit="contain"
         />
-        {form.logoUrl && (
-          <img
-            src={form.logoUrl}
-            alt=""
-            className="mt-2 h-12 rounded border object-contain bg-muted p-1"
-          />
-        )}
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
@@ -355,8 +358,8 @@ function AgencyProfileTab() {
           </span>
         </div>
       </div>
-      <Button onClick={handleSave} disabled={updateTenant.isPending}>
-        Salvar Perfil
+      <Button onClick={handleSave} disabled={updateTenant.isPending || uploadingCount > 0}>
+        {uploadingCount > 0 ? "Aguardando upload..." : updateTenant.isPending ? "Salvando..." : "Salvar Perfil"}
       </Button>
 
       <SalesGoalSection />
@@ -713,6 +716,10 @@ function CustomizationTab() {
   const [primaryColor, setPrimaryColor] = useState(me?.tenant?.primaryColor ?? "#3B82F6");
   const [secondaryColor, setSecondaryColor] = useState(me?.tenant?.secondaryColor ?? "#8B5CF6");
   const [logoUrl, setLogoUrl] = useState(me?.tenant?.logoUrl ?? "");
+  const [uploadingCount, setUploadingCount] = useState(0);
+  const handleUploadingChange = useCallback((uploading: boolean) => {
+    setUploadingCount((n) => n + (uploading ? 1 : -1));
+  }, []);
 
   useEffect(() => {
     if (fullTenant) {
@@ -786,22 +793,15 @@ function CustomizationTab() {
 
       <div className="space-y-2">
         <h3 className="font-semibold text-sm">Logotipo</h3>
-        <Label>URL do logotipo</Label>
-        <Input
+        <CoverImageUpload
+          endpoint="agencyLogo"
           value={logoUrl}
-          onChange={(e) => setLogoUrl(e.target.value)}
-          placeholder="https://exemplo.com/logo.png"
+          onChange={setLogoUrl}
+          onUploadingChange={handleUploadingChange}
+          emptyLabel="Clique ou arraste o logo aqui"
+          previewClassName="h-32"
+          objectFit="contain"
         />
-        {logoUrl && (
-          <div className="rounded-lg border p-4 bg-muted/30 flex items-center justify-center">
-            <img
-              src={logoUrl}
-              alt="Logo preview"
-              className="max-h-16 max-w-[200px] object-contain"
-              onError={(e) => { (e.target as HTMLImageElement).style.opacity = "0.3"; }}
-            />
-          </div>
-        )}
         <p className="text-xs text-muted-foreground">
           Recomendado: PNG com fundo transparente, tamanho mínimo 200x60px
         </p>
@@ -819,8 +819,8 @@ function CustomizationTab() {
         </div>
       </div>
 
-      <Button onClick={handleSave} disabled={updateTenant.isPending}>
-        {updateTenant.isPending ? "Salvando..." : "Salvar personalização"}
+      <Button onClick={handleSave} disabled={updateTenant.isPending || uploadingCount > 0}>
+        {uploadingCount > 0 ? "Aguardando upload..." : updateTenant.isPending ? "Salvando..." : "Salvar personalização"}
       </Button>
     </div>
   );

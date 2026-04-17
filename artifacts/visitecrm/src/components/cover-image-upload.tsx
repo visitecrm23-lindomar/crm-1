@@ -166,7 +166,7 @@ export function CoverImageUpload({
                 {labelText}
               </span>
               <span className="text-xs text-muted-foreground">
-                PNG, JPG, WEBP · máx. {endpoint === "storeLogo" ? "2 MB" : "4 MB"}
+                PNG, JPG, WEBP · máx. {endpoint === "storeLogo" || endpoint === "agencyLogo" ? "2 MB" : "4 MB"}
               </span>
             </>
           )}

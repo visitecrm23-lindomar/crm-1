@@ -11,6 +11,7 @@ export type OurFileRouter = {
   storeLogo: AnyFileRoute;
   storeBanner: AnyFileRoute;
   storeProductImage: AnyFileRoute;
+  agencyLogo: AnyFileRoute;
 };
 
 const url =
