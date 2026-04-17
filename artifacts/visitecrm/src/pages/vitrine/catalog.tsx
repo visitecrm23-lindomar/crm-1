@@ -65,20 +65,61 @@ function ProductCard({
   const hasSlideshow = slideImages.length > 1;
   const [slideIndex, setSlideIndex] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const touchStartX = useRef<number | null>(null);
+
+  useEffect(() => {
+    setIsTouchDevice(window.matchMedia("(hover: none) and (pointer: coarse)").matches);
+  }, []);
 
   function handleMouseEnter() {
-    if (!hasSlideshow) return;
+    if (!hasSlideshow || isTouchDevice) return;
     intervalRef.current = setInterval(() => {
       setSlideIndex((i) => (i + 1) % slideImages.length);
     }, 900);
   }
 
   function handleMouseLeave() {
+    if (isTouchDevice) return;
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
     setSlideIndex(0);
+  }
+
+  const didSwipeRef = useRef(false);
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX;
+    didSwipeRef.current = false;
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (!hasSlideshow) return;
+    if (Math.abs(dx) < 10) {
+      didSwipeRef.current = false;
+    } else if (dx < -30) {
+      didSwipeRef.current = true;
+      setSlideIndex((i) => (i + 1) % slideImages.length);
+    } else if (dx > 30) {
+      didSwipeRef.current = true;
+      setSlideIndex((i) => (i - 1 + slideImages.length) % slideImages.length);
+    }
+  }
+
+  function handleImageAreaClick(e: React.MouseEvent) {
+    if (!isTouchDevice || !hasSlideshow) return;
+    if (didSwipeRef.current) {
+      didSwipeRef.current = false;
+      e.stopPropagation();
+      return;
+    }
+    e.stopPropagation();
+    setSlideIndex((i) => (i + 1) % slideImages.length);
   }
 
   useEffect(() => {
@@ -122,6 +163,9 @@ function ProductCard({
     >
       <div
         className="relative h-44 overflow-hidden bg-gradient-to-br from-blue-200 to-blue-400"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onClick={handleImageAreaClick}
       >
         {slideImages.length > 0 ? (
           <>
@@ -168,7 +212,7 @@ function ProductCard({
           </span>
         )}
         {hasSlideshow && (
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className={`absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1 transition-opacity ${isTouchDevice ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
             {slideImages.map((_, i) => (
               <span
                 key={i}
