@@ -55,6 +55,11 @@ function Lightbox({
 }) {
   const [index, setIndex] = useState(initialIndex);
   const [shareCopied, setShareCopied] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
+
+  useEffect(() => {
+    setImgLoaded(false);
+  }, [index]);
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -162,10 +167,18 @@ function Lightbox({
         className="relative max-w-5xl max-h-[85vh] mx-4 flex flex-col items-center gap-3 mt-12"
         onClick={(e) => e.stopPropagation()}
       >
+        {!imgLoaded && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <Loader2 className="w-10 h-10 animate-spin text-white/60" />
+          </div>
+        )}
         <img
+          key={images[index]}
           src={images[index]}
           alt={`Imagem ${index + 1}`}
-          className="max-h-[75vh] max-w-full object-contain rounded-lg shadow-2xl"
+          className="max-h-[75vh] max-w-full object-contain rounded-lg shadow-2xl transition-opacity duration-300"
+          style={{ opacity: imgLoaded ? 1 : 0 }}
+          onLoad={() => setImgLoaded(true)}
         />
         {images.length > 1 && (
           <div className="flex gap-1.5">
