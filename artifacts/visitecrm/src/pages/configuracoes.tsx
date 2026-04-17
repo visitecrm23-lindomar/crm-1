@@ -222,7 +222,7 @@ function AgencyProfileTab() {
   const [form, setForm] = useState<UpdateTenantBody>({});
   const [uploadingCount, setUploadingCount] = useState(0);
   const handleUploadingChange = useCallback((uploading: boolean) => {
-    setUploadingCount((n) => n + (uploading ? 1 : -1));
+    setUploadingCount((n) => Math.max(0, n + (uploading ? 1 : -1)));
   }, []);
 
   useEffect(() => {
@@ -359,7 +359,11 @@ function AgencyProfileTab() {
         </div>
       </div>
       <Button onClick={handleSave} disabled={updateTenant.isPending || uploadingCount > 0}>
-        {uploadingCount > 0 ? "Aguardando upload..." : updateTenant.isPending ? "Salvando..." : "Salvar Perfil"}
+        {uploadingCount > 0 ? (
+          <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Aguardando upload...</>
+        ) : updateTenant.isPending ? (
+          <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Salvando...</>
+        ) : "Salvar Perfil"}
       </Button>
 
       <SalesGoalSection />
@@ -718,7 +722,7 @@ function CustomizationTab() {
   const [logoUrl, setLogoUrl] = useState(me?.tenant?.logoUrl ?? "");
   const [uploadingCount, setUploadingCount] = useState(0);
   const handleUploadingChange = useCallback((uploading: boolean) => {
-    setUploadingCount((n) => n + (uploading ? 1 : -1));
+    setUploadingCount((n) => Math.max(0, n + (uploading ? 1 : -1)));
   }, []);
 
   useEffect(() => {
@@ -820,7 +824,11 @@ function CustomizationTab() {
       </div>
 
       <Button onClick={handleSave} disabled={updateTenant.isPending || uploadingCount > 0}>
-        {uploadingCount > 0 ? "Aguardando upload..." : updateTenant.isPending ? "Salvando..." : "Salvar personalização"}
+        {uploadingCount > 0 ? (
+          <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Aguardando upload...</>
+        ) : updateTenant.isPending ? (
+          <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Salvando...</>
+        ) : "Salvar personalização"}
       </Button>
     </div>
   );
