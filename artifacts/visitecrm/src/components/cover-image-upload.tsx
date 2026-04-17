@@ -15,6 +15,7 @@ interface CoverImageUploadProps {
   disabled?: boolean;
   previewClassName?: string;
   emptyLabel?: string;
+  placeholder?: string;
   objectFit?: "contain" | "cover";
 }
 
@@ -25,7 +26,8 @@ export function CoverImageUpload({
   onUploadingChange,
   disabled,
   previewClassName = "h-48",
-  emptyLabel = "Clique ou arraste a imagem aqui",
+  emptyLabel,
+  placeholder,
   objectFit = "contain",
 }: CoverImageUploadProps) {
   const { toast } = useToast();
@@ -77,6 +79,8 @@ export function CoverImageUpload({
   };
 
   const handleRemove = () => onChange("");
+
+  const labelText = emptyLabel ?? placeholder ?? "Clique ou arraste a imagem aqui";
 
   return (
     <div className="space-y-3">
@@ -159,7 +163,7 @@ export function CoverImageUpload({
             <>
               <ImageIcon className="w-8 h-8 text-muted-foreground" />
               <span className="text-sm font-medium text-muted-foreground">
-                {emptyLabel}
+                {labelText}
               </span>
               <span className="text-xs text-muted-foreground">
                 PNG, JPG, WEBP · máx. {endpoint === "storeLogo" ? "2 MB" : "4 MB"}

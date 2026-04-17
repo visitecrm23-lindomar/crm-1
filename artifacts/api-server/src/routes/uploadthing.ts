@@ -18,15 +18,19 @@ export const uploadRouter = {
       if (!userId) throw new Error("Unauthorized");
       return { userId };
     })
-    .onUploadComplete(async ({ file }) => ({ url: file.ufsUrl })),
+    .onUploadComplete(async ({ file }) => {
+      return { url: file.ufsUrl };
+    }),
 
-  storeLogo: f({ image: { maxFileSize: "2MB", maxFileCount: 1 } })
+  storeLogo: f({ image: { maxFileSize: "4MB", maxFileCount: 1 } })
     .middleware(async ({ req }) => {
       const { userId } = getAuth(req);
       if (!userId) throw new Error("Unauthorized");
       return { userId };
     })
-    .onUploadComplete(async ({ file }) => ({ url: file.ufsUrl })),
+    .onUploadComplete(async ({ file }) => {
+      return { url: file.ufsUrl };
+    }),
 
   storeBanner: f({ image: { maxFileSize: "4MB", maxFileCount: 1 } })
     .middleware(async ({ req }) => {
@@ -34,7 +38,9 @@ export const uploadRouter = {
       if (!userId) throw new Error("Unauthorized");
       return { userId };
     })
-    .onUploadComplete(async ({ file }) => ({ url: file.ufsUrl })),
+    .onUploadComplete(async ({ file }) => {
+      return { url: file.ufsUrl };
+    }),
 } satisfies FileRouter;
 
 export const uploadthingRouter = createRouteHandler({ router: uploadRouter });

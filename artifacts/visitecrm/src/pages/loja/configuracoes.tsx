@@ -531,7 +531,8 @@ export default function LojaConfiguracoes() {
                   onChange={(url) => set("logo", url)}
                   onUploadingChange={handleUploadingChange}
                   disabled={saving}
-                  previewClassName="h-32"
+                  previewClassName="h-24"
+                  objectFit="contain"
                   emptyLabel="Clique ou arraste o logo aqui"
                 />
               </div>
@@ -544,9 +545,9 @@ export default function LojaConfiguracoes() {
                   onChange={(url) => set("bannerHome", url)}
                   onUploadingChange={handleUploadingChange}
                   disabled={saving}
-                  previewClassName="h-40"
-                  emptyLabel="Clique ou arraste o banner aqui"
+                  previewClassName="h-48"
                   objectFit="cover"
+                  emptyLabel="Clique ou arraste o banner aqui"
                 />
               </div>
             </CardContent>
