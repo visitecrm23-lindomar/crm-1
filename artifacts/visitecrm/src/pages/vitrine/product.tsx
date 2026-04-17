@@ -235,7 +235,8 @@ export default function VitrineProduct({
     const params = new URLSearchParams(window.location.search);
     const photoParam = params.get("photo");
     if (photoParam === null) return;
-    const idx = parseInt(photoParam, 10);
+    const oneBased = parseInt(photoParam, 10);
+    const idx = oneBased - 1;
     const allImgs = [...(product.images ?? []), ...(product.gallery ?? [])];
     if (!isNaN(idx) && idx >= 0 && idx < allImgs.length) {
       setLightboxImages(allImgs);
