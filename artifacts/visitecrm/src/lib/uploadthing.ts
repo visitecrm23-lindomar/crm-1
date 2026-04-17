@@ -1,8 +1,21 @@
-import { generateReactHelpers } from "@uploadthing/react";
+import {
+  generateReactHelpers,
+  generateUploadButton,
+  generateUploadDropzone,
+} from "@uploadthing/react";
+import type { AnyFileRoute } from "uploadthing/types";
+
+type OurFileRouter = {
+  tripCoverImage: AnyFileRoute;
+  tripGalleryImages: AnyFileRoute;
+};
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+const url = `${BASE}/api/uploadthing`;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const { useUploadThing } = generateReactHelpers<any>({
-  url: `${BASE}/api/uploadthing`,
-});
+export const { useUploadThing, uploadFiles } =
+  generateReactHelpers<OurFileRouter>({ url });
+
+export const UploadButton = generateUploadButton<OurFileRouter>({ url });
+
+export const UploadDropzone = generateUploadDropzone<OurFileRouter>({ url });

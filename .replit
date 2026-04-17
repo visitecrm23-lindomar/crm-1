@@ -38,7 +38,6 @@ VITE_APP_URL = "https://visitecrm.com"
 VITE_CLERK_PROXY_URL = "https://visitecrm.com/api/__clerk"
 
 [userenv.shared]
-UPLOADTHING_TOKEN = "eyJhcGlLZXkiOiJza19saXZlXzQxZTQzN2FkMzUxYmVhOTJlMTBlNjlhN2Y5YWJhZTY5NTk1YTE5ZGIyY2EzM2JmMWE2ZjI5ZWM2NzcxZDY1NWEiLCJhcHBJZCI6ImNqZG15cmZ3ZHciLCJyZWdpb25zIjpbInNlYTEiXX0="
 
 [userenv.development]
 CLERK_PROXY_URL = "https://visite-crm.replit.app/api/__clerk"

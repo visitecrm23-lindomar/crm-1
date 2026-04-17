@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Upload, X, Loader2, Image as ImageIcon } from "lucide-react";
@@ -11,9 +11,15 @@ interface CoverImageUploadProps {
   disabled?: boolean;
 }
 
-export function CoverImageUpload({ value, onChange, onUploadingChange, disabled }: CoverImageUploadProps) {
+export function CoverImageUpload({
+  value,
+  onChange,
+  onUploadingChange,
+  disabled,
+}: CoverImageUploadProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const { startUpload, isUploading } = useUploadThing("tripCoverImage", {
     onUploadBegin: () => onUploadingChange?.(true),
@@ -29,16 +35,37 @@ export function CoverImageUpload({ value, onChange, onUploadingChange, disabled 
     },
   });
 
+  const upload = (file: File) => startUpload([file]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    startUpload([file]);
+    upload(file);
     e.target.value = "";
   };
 
-  const handleRemove = () => {
-    onChange("");
+  const handleDragOver = (e: React.DragEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!disabled && !isUploading) setIsDragging(true);
   };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (disabled || isUploading) return;
+    const file = e.dataTransfer.files?.[0];
+    if (file) upload(file);
+  };
+
+  const handleRemove = () => onChange("");
 
   return (
     <div className="space-y-3">
@@ -57,7 +84,9 @@ export function CoverImageUpload({ value, onChange, onUploadingChange, disabled 
             src={value}
             alt="Imagem de capa"
             className="w-full h-full object-cover"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
           />
           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
             <Button
@@ -67,7 +96,11 @@ export function CoverImageUpload({ value, onChange, onUploadingChange, disabled 
               onClick={() => fileInputRef.current?.click()}
               disabled={disabled || isUploading}
             >
-              {isUploading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}
+              {isUploading ? (
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+              ) : (
+                <Upload className="w-4 h-4 mr-1" />
+              )}
               Trocar
             </Button>
             <Button
@@ -86,19 +119,39 @@ export function CoverImageUpload({ value, onChange, onUploadingChange, disabled 
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
           disabled={disabled || isUploading}
-          className="w-full h-40 border-2 border-dashed border-muted-foreground/30 rounded-lg flex flex-col items-center justify-center gap-2 hover:border-primary/50 hover:bg-muted/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className={[
+            "w-full h-40 border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-2 transition-colors",
+            "disabled:opacity-50 disabled:cursor-not-allowed",
+            isDragging
+              ? "border-primary bg-primary/5"
+              : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30",
+          ].join(" ")}
         >
           {isUploading ? (
             <>
               <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
               <span className="text-sm text-muted-foreground">Enviando...</span>
             </>
+          ) : isDragging ? (
+            <>
+              <Upload className="w-8 h-8 text-primary" />
+              <span className="text-sm font-medium text-primary">
+                Solte para enviar
+              </span>
+            </>
           ) : (
             <>
               <ImageIcon className="w-8 h-8 text-muted-foreground" />
-              <span className="text-sm font-medium text-muted-foreground">Clique para enviar imagem de capa</span>
-              <span className="text-xs text-muted-foreground">PNG, JPG, WEBP · máx. 4 MB</span>
+              <span className="text-sm font-medium text-muted-foreground">
+                Clique ou arraste a imagem de capa aqui
+              </span>
+              <span className="text-xs text-muted-foreground">
+                PNG, JPG, WEBP · máx. 4 MB
+              </span>
             </>
           )}
         </button>

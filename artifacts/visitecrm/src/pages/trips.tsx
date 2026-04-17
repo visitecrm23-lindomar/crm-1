@@ -1147,7 +1147,10 @@ export function TripForm({ tripId }: { tripId?: string }) {
   const createTrip = useCreateTrip();
   const updateTrip = useUpdateTrip();
   const isPending = createTrip.isPending || updateTrip.isPending;
-  const [isUploading, setIsUploading] = useState(false);
+  const [uploadingCount, setUploadingCount] = useState(0);
+  const isUploading = uploadingCount > 0;
+  const handleUploadingChange = (uploading: boolean) =>
+    setUploadingCount((prev) => (uploading ? prev + 1 : Math.max(0, prev - 1)));
 
   const selectedLayout = layouts.find(l => l.id === form.layoutId) ?? null;
 
@@ -1616,7 +1619,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
               <CoverImageUpload
                 value={form.coverImage}
                 onChange={(url) => setForm(prev => ({ ...prev, coverImage: url }))}
-                onUploadingChange={setIsUploading}
+                onUploadingChange={handleUploadingChange}
                 disabled={isPending}
               />
             </div>
@@ -1626,7 +1629,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
               <GalleryUpload
                 value={form.gallery}
                 onChange={(urls) => setForm(prev => ({ ...prev, gallery: urls }))}
-                onUploadingChange={setIsUploading}
+                onUploadingChange={handleUploadingChange}
                 disabled={isPending}
               />
             </div>

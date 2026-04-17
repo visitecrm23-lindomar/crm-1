@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Upload, X, Loader2, Images } from "lucide-react";
@@ -13,9 +13,15 @@ interface GalleryUploadProps {
   disabled?: boolean;
 }
 
-export function GalleryUpload({ value, onChange, onUploadingChange, disabled }: GalleryUploadProps) {
+export function GalleryUpload({
+  value,
+  onChange,
+  onUploadingChange,
+  disabled,
+}: GalleryUploadProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const canAdd = value.length < MAX_GALLERY;
 
@@ -34,16 +40,41 @@ export function GalleryUpload({ value, onChange, onUploadingChange, disabled }: 
     },
   });
 
+  const upload = (files: File[]) => {
+    const toUpload = files.slice(0, MAX_GALLERY - value.length);
+    if (!toUpload.length) return;
+    startUpload(toUpload);
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []).slice(0, MAX_GALLERY - value.length);
-    if (!files.length) return;
-    startUpload(files);
+    const files = Array.from(e.target.files ?? []);
+    upload(files);
     e.target.value = "";
   };
 
-  const handleRemove = (idx: number) => {
-    onChange(value.filter((_, i) => i !== idx));
+  const handleDragOver = (e: React.DragEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!disabled && !isUploading && canAdd) setIsDragging(true);
   };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (disabled || isUploading || !canAdd) return;
+    const files = Array.from(e.dataTransfer.files);
+    upload(files);
+  };
+
+  const handleRemove = (idx: number) =>
+    onChange(value.filter((_, i) => i !== idx));
 
   return (
     <div className="space-y-3">
@@ -70,9 +101,15 @@ export function GalleryUpload({ value, onChange, onUploadingChange, disabled }: 
             disabled={disabled || isUploading}
           >
             {isUploading ? (
-              <><Loader2 className="w-4 h-4 mr-1 animate-spin" />Enviando...</>
+              <>
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                Enviando...
+              </>
             ) : (
-              <><Upload className="w-4 h-4 mr-1" />Adicionar Imagens</>
+              <>
+                <Upload className="w-4 h-4 mr-1" />
+                Adicionar Imagens
+              </>
             )}
           </Button>
         )}
@@ -82,24 +119,53 @@ export function GalleryUpload({ value, onChange, onUploadingChange, disabled }: 
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
           disabled={disabled || isUploading}
-          className="w-full h-32 border-2 border-dashed border-muted-foreground/30 rounded-lg flex flex-col items-center justify-center gap-2 hover:border-primary/50 hover:bg-muted/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className={[
+            "w-full h-32 border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-2 transition-colors",
+            "disabled:opacity-50 disabled:cursor-not-allowed",
+            isDragging
+              ? "border-primary bg-primary/5"
+              : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30",
+          ].join(" ")}
         >
-          <Images className="w-7 h-7 text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">Clique para adicionar até {MAX_GALLERY} imagens</span>
-          <span className="text-xs text-muted-foreground">PNG, JPG, WEBP · máx. 4 MB cada</span>
+          {isDragging ? (
+            <>
+              <Upload className="w-7 h-7 text-primary" />
+              <span className="text-sm font-medium text-primary">
+                Solte para enviar
+              </span>
+            </>
+          ) : (
+            <>
+              <Images className="w-7 h-7 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">
+                Clique ou arraste até {MAX_GALLERY} imagens aqui
+              </span>
+              <span className="text-xs text-muted-foreground">
+                PNG, JPG, WEBP · máx. 4 MB cada
+              </span>
+            </>
+          )}
         </button>
       )}
 
       {(value.length > 0 || isUploading) && (
         <div className="grid grid-cols-3 gap-2">
           {value.map((url, idx) => (
-            <div key={idx} className="relative rounded-lg overflow-hidden aspect-video bg-muted group">
+            <div
+              key={idx}
+              className="relative rounded-lg overflow-hidden aspect-video bg-muted group"
+            >
               <img
                 src={url}
                 alt={`Galeria ${idx + 1}`}
                 className="w-full h-full object-cover"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
               />
               <button
                 type="button"
