@@ -395,10 +395,14 @@ export default function VitrineProduct({
             onClick={() => openLightbox(allImages, imgIndex)}
             aria-label="Ampliar imagem"
           >
+            <div className="absolute inset-0 bg-muted animate-pulse" aria-hidden="true" />
             <img
+              key={imgIndex}
               src={images[imgIndex]}
               alt={product.name}
-              className="w-full h-full object-cover"
+              className="relative w-full h-full object-cover opacity-0"
+              style={{ transition: "opacity 0.3s" }}
+              onLoad={(e) => { (e.target as HTMLImageElement).style.opacity = "1"; }}
             />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
               <Maximize2 className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
