@@ -62,6 +62,20 @@ function Lightbox({
   }, [index]);
 
   useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("photo", String(index + 1));
+    window.history.replaceState({}, "", url.toString());
+  }, [index]);
+
+  useEffect(() => {
+    return () => {
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("photo");
+      window.history.replaceState({}, "", cleanUrl.toString());
+    };
+  }, []);
+
+  useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
       if (e.key === "ArrowLeft") setIndex((i) => (i - 1 + images.length) % images.length);
