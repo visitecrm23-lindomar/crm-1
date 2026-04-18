@@ -417,16 +417,16 @@ router.patch("/accommodations/:id", async (req, res): Promise<void> => {
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.totalRooms !== undefined) updates.totalRooms = parsed.data.totalRooms ?? null;
     if (parsed.data.amenities != null) updates.amenities = parsed.data.amenities;
-    if (parsed.data.galleryUrls != null) {
-      updates.gallery = parsed.data.galleryUrls;
-      await deleteOrphanedImages(existing.gallery ?? [], parsed.data.galleryUrls, req.log);
-    }
+    if (parsed.data.galleryUrls != null) updates.gallery = parsed.data.galleryUrls;
     await db.update(accommodationsTable).set(updates)
       .where(and(eq(accommodationsTable.id, req.params.id), eq(accommodationsTable.tenantId, me.tenantId)));
     const [accommodation] = await db.select().from(accommodationsTable)
       .where(and(eq(accommodationsTable.id, req.params.id), eq(accommodationsTable.tenantId, me.tenantId)))
       .limit(1);
     if (!accommodation) { res.status(404).json({ error: "Not found" }); return; }
+    if (parsed.data.galleryUrls != null) {
+      await deleteOrphanedImages(existing.gallery ?? [], parsed.data.galleryUrls, req.log);
+    }
     res.json(formatAccommodation(accommodation));
   } catch (err) {
     req.log.error({ err }, "Error updating accommodation");
