@@ -196,7 +196,7 @@ function AgencyDashboard() {
           loading={loadingSummary || loadingExpenses}
           color={financialKpis.netProfit >= 0 ? "text-emerald-600" : "text-red-600"}
         />
-        <KpiCard title="Total de Clientes" value={summary?.totalClients ?? 0} sub={`+${summary?.newClientsThisMonth ?? 0} este mês`} icon={Users} loading={loadingSummary} />
+        <KpiCard title="Margem %" value={loadingSummary || loadingExpenses ? "—" : `${financialKpis.margin.toFixed(1)}%`} sub={financialKpis.netProfit >= 0 ? "Resultado positivo" : "Resultado negativo"} icon={Percent} loading={false} color={financialKpis.netProfit >= 0 ? "text-emerald-600" : "text-red-600"} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -209,7 +209,7 @@ function AgencyDashboard() {
           color="text-blue-600"
         />
         <KpiCard
-          title="A Pagar (Despesas)"
+          title="A Pagar"
           value={formatCurrency(financialKpis.pendingExpenses)}
           sub={financialKpis.overdueExpenses > 0 ? `Vencido: ${formatCurrency(financialKpis.overdueExpenses)}` : "Sem vencimentos"}
           icon={financialKpis.overdueExpenses > 0 ? AlertCircle : Clock}
@@ -219,6 +219,16 @@ function AgencyDashboard() {
         <KpiCard title="Viagens Ativas" value={summary?.activeTrips ?? 0} sub={`De ${summary?.totalTrips ?? 0} no total`} icon={Map} loading={loadingSummary} color="text-blue-600" />
         <KpiCard title="NPS Médio" value={npsLabel} sub={`${summary?.confirmedReservations ?? 0} reservas confirmadas`} icon={Star} loading={loadingSummary} color="text-yellow-500" />
       </div>
+
+      {financialKpis.overdueExpenses > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-destructive/50 bg-destructive/5 px-4 py-3">
+          <AlertCircle className="w-5 h-5 text-destructive shrink-0" />
+          <p className="text-sm font-medium text-destructive">
+            Atenção: você tem <strong>{formatCurrency(financialKpis.overdueExpenses)}</strong> em despesas vencidas.
+          </p>
+          <Link href="/financeiro/expenses" className="ml-auto text-sm font-medium text-destructive underline underline-offset-2">Ver detalhes</Link>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-7">
         <Card className="lg:col-span-4">

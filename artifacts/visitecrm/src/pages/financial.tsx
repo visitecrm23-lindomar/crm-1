@@ -222,7 +222,17 @@ export default function Financial() {
   );
 
   const totalExpensesSum = useMemo(() =>
-    (allExpensesData?.data ?? []).reduce((s, e) => s + Number(e.amount), 0),
+    (allExpensesData?.data ?? []).filter(e => e.status === "paid").reduce((s, e) => s + Number(e.amount), 0),
+    [allExpensesData]
+  );
+
+  const overdueExpensesSum = useMemo(() =>
+    (allExpensesData?.data ?? []).filter(e => e.status === "overdue").reduce((s, e) => s + Number(e.amount), 0),
+    [allExpensesData]
+  );
+
+  const pendingExpensesSum = useMemo(() =>
+    (allExpensesData?.data ?? []).filter(e => e.status === "pending").reduce((s, e) => s + Number(e.amount), 0),
     [allExpensesData]
   );
 
@@ -414,8 +424,6 @@ export default function Financial() {
       {(() => {
         const netProfit = totalRevenue - totalExpensesSum;
         const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
-        const pendingExpenses = (allExpensesData?.data ?? []).filter(e => e.status === "pending").reduce((s, e) => s + Number(e.amount), 0);
-        const overdueExpenses = (allExpensesData?.data ?? []).filter(e => e.status === "overdue").reduce((s, e) => s + Number(e.amount), 0);
         const isProfit = netProfit >= 0;
         return (
           <Card className={`border-2 ${isProfit ? "border-emerald-200 bg-emerald-50/30 dark:border-emerald-800 dark:bg-emerald-950/20" : "border-red-200 bg-red-50/30 dark:border-red-800 dark:bg-red-950/20"}`}>
@@ -440,9 +448,9 @@ export default function Financial() {
                     <p className="text-[10px] text-muted-foreground">Recebido no mês: {fmt(summary?.collectedThisMonth ?? 0)}</p>
                   </div>
                   <div className="rounded-lg bg-muted/60 p-3">
-                    <p className="text-xs text-muted-foreground">Total Despesas</p>
+                    <p className="text-xs text-muted-foreground">Despesas Pagas</p>
                     <p className="text-lg font-semibold text-red-600">{fmt(totalExpensesSum)}</p>
-                    <p className="text-[10px] text-muted-foreground">A pagar: {fmt(pendingExpenses)}</p>
+                    <p className="text-[10px] text-muted-foreground">A pagar: {fmt(pendingExpensesSum)}</p>
                   </div>
                   <div className="rounded-lg bg-muted/60 p-3">
                     <p className="text-xs text-muted-foreground">A Receber</p>
@@ -450,9 +458,9 @@ export default function Financial() {
                     <p className="text-[10px] text-muted-foreground">Vencido: {fmt(summary?.overdueReceivable ?? 0)}</p>
                   </div>
                   <div className="rounded-lg bg-muted/60 p-3">
-                    <p className="text-xs text-muted-foreground">A Pagar</p>
-                    <p className="text-lg font-semibold text-orange-600">{fmt(pendingExpenses)}</p>
-                    <p className="text-[10px] text-muted-foreground">Vencido: {fmt(overdueExpenses)}</p>
+                    <p className="text-xs text-muted-foreground">A Pagar Pendente</p>
+                    <p className="text-lg font-semibold text-orange-600">{fmt(pendingExpensesSum)}</p>
+                    <p className="text-[10px] text-muted-foreground">Vencido: {fmt(overdueExpensesSum)}</p>
                   </div>
                   <div className="rounded-lg bg-muted/60 p-3">
                     <p className="text-xs text-muted-foreground">Recebido (Mês)</p>
@@ -460,9 +468,9 @@ export default function Financial() {
                     <p className="text-[10px] text-muted-foreground">Acumulado: {fmt(totalRevenue)}</p>
                   </div>
                   <div className="rounded-lg bg-muted/60 p-3">
-                    <p className="text-xs text-muted-foreground">Vencidos (Rec.)</p>
-                    <p className={`text-lg font-semibold ${(summary?.overdueReceivable ?? 0) > 0 ? "text-red-500" : "text-muted-foreground"}`}>{fmt(summary?.overdueReceivable ?? 0)}</p>
-                    <p className="text-[10px] text-muted-foreground">Pendentes em atraso</p>
+                    <p className="text-xs text-muted-foreground">Despesas Vencidas</p>
+                    <p className={`text-lg font-semibold ${overdueExpensesSum > 0 ? "text-red-500" : "text-muted-foreground"}`}>{fmt(overdueExpensesSum)}</p>
+                    <p className="text-[10px] text-muted-foreground">Aguardando pagamento</p>
                   </div>
                 </div>
               </div>

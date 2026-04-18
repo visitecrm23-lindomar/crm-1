@@ -68,7 +68,9 @@ export default function Commissions() {
     const paid = all.filter(c => c.status === "paid").reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
     const pending = all.filter(c => c.status === "pending").reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
     const approved = all.filter(c => c.status === "approved").reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
-    return { total, paid, pending, approved };
+    const pendingOrApproved = pending + approved;
+    const count = all.length;
+    return { total, paid, pending, approved, pendingOrApproved, count };
   }, [commissionsRaw]);
 
   const handleApprove = async (id: string) => {
@@ -151,10 +153,11 @@ export default function Commissions() {
         <Card>
           <CardContent className="p-5">
             <div className="flex items-start gap-3">
-              <div className="p-2 rounded-md bg-muted text-blue-600 mt-1"><CheckCircle className="w-5 h-5" /></div>
+              <div className="p-2 rounded-md bg-muted text-yellow-600 mt-1"><Clock className="w-5 h-5" /></div>
               <div>
-                <p className="text-sm text-muted-foreground">Aprovadas</p>
-                <p className="text-xl font-bold text-blue-600">{fmt(kpis.approved)}</p>
+                <p className="text-sm text-muted-foreground">Pendentes/Aprovadas</p>
+                <p className="text-xl font-bold text-yellow-600">{fmt(kpis.pendingOrApproved)}</p>
+                <p className="text-xs text-muted-foreground">Pendente: {fmt(kpis.pending)} · Aprovada: {fmt(kpis.approved)}</p>
               </div>
             </div>
           </CardContent>
@@ -162,10 +165,11 @@ export default function Commissions() {
         <Card>
           <CardContent className="p-5">
             <div className="flex items-start gap-3">
-              <div className="p-2 rounded-md bg-muted text-yellow-600 mt-1"><Clock className="w-5 h-5" /></div>
+              <div className="p-2 rounded-md bg-muted text-purple-600 mt-1"><DollarSign className="w-5 h-5" /></div>
               <div>
-                <p className="text-sm text-muted-foreground">Pendentes</p>
-                <p className="text-xl font-bold text-yellow-600">{fmt(kpis.pending)}</p>
+                <p className="text-sm text-muted-foreground">Número de Comissões</p>
+                <p className="text-xl font-bold text-purple-600">{kpis.count}</p>
+                <p className="text-xs text-muted-foreground">{loadingCommissions ? "—" : `${(Array.isArray(commissionsRaw) ? commissionsRaw : []).filter(c => c.status === "paid").length} pagas`}</p>
               </div>
             </div>
           </CardContent>

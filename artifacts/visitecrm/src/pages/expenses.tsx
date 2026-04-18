@@ -213,32 +213,35 @@ export default function Expenses() {
 
       <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card><CardContent className="p-5 flex items-start gap-3">
-          <div className="mt-1 p-2 rounded-md bg-muted text-red-600"><TrendingDown className="w-5 h-5" /></div>
+          <div className="mt-1 p-2 rounded-md bg-muted text-yellow-600"><Clock className="w-5 h-5" /></div>
           <div>
-            <p className="text-sm text-muted-foreground">Total {periodFilter !== "all" ? "(período)" : "Geral"}</p>
-            <p className="text-xl font-bold">{fmt(kpis.total)}</p>
+            <p className="text-sm text-muted-foreground">Total Pendente</p>
+            <p className="text-xl font-bold text-yellow-600">{fmt(kpis.pending)}</p>
+            <p className="text-xs text-muted-foreground">{periodFilter !== "all" ? "No período" : "Em aberto"}</p>
           </div>
         </CardContent></Card>
         <Card><CardContent className="p-5 flex items-start gap-3">
           <div className="mt-1 p-2 rounded-md bg-muted text-green-600"><CheckCircle className="w-5 h-5" /></div>
           <div>
-            <p className="text-sm text-muted-foreground">Pagas (período)</p>
-            <p className="text-xl font-bold text-green-600">{fmt(kpis.paid)}</p>
-            <p className="text-xs text-muted-foreground">Mês atual: {fmt(kpis.paidThisMonth)}</p>
-          </div>
-        </CardContent></Card>
-        <Card><CardContent className="p-5 flex items-start gap-3">
-          <div className="mt-1 p-2 rounded-md bg-muted text-yellow-600"><Clock className="w-5 h-5" /></div>
-          <div>
-            <p className="text-sm text-muted-foreground">Pendentes</p>
-            <p className="text-xl font-bold text-yellow-600">{fmt(kpis.pending)}</p>
+            <p className="text-sm text-muted-foreground">Pago este Mês</p>
+            <p className="text-xl font-bold text-green-600">{fmt(kpis.paidThisMonth)}</p>
+            <p className="text-xs text-muted-foreground">Pagas no período: {fmt(kpis.paid)}</p>
           </div>
         </CardContent></Card>
         <Card><CardContent className="p-5 flex items-start gap-3">
           <div className="mt-1 p-2 rounded-md bg-muted text-destructive"><AlertCircle className="w-5 h-5" /></div>
           <div>
-            <p className="text-sm text-muted-foreground">Vencidas</p>
+            <p className="text-sm text-muted-foreground">Em Atraso</p>
             <p className="text-xl font-bold text-destructive">{fmt(kpis.overdue)}</p>
+            <p className="text-xs text-muted-foreground">Vencidas sem pagamento</p>
+          </div>
+        </CardContent></Card>
+        <Card><CardContent className="p-5 flex items-start gap-3">
+          <div className="mt-1 p-2 rounded-md bg-muted text-red-600"><TrendingDown className="w-5 h-5" /></div>
+          <div>
+            <p className="text-sm text-muted-foreground">Total Geral</p>
+            <p className="text-xl font-bold">{fmt(kpis.total)}</p>
+            <p className="text-xs text-muted-foreground">{periodFilter !== "all" ? "No período selecionado" : "Todas as despesas"}</p>
           </div>
         </CardContent></Card>
       </div>
