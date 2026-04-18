@@ -4850,8 +4850,12 @@ components:
           items: {}
         freeOrganizers:
           type: ["integer", "null"]
+          minimum: 0
+          maximum: 2
         freeGuides:
           type: ["integer", "null"]
+          minimum: 0
+          maximum: 2
         layoutId:
           type: ["string", "null"]
         createdAt:
@@ -5070,8 +5074,12 @@ components:
           items: {}
         freeOrganizers:
           type: ["integer", "null"]
+          minimum: 0
+          maximum: 2
         freeGuides:
           type: ["integer", "null"]
+          minimum: 0
+          maximum: 2
         layoutId:
           type: ["string", "null"]
       required:
@@ -5168,8 +5176,12 @@ components:
           items: {}
         freeOrganizers:
           type: ["integer", "null"]
+          minimum: 0
+          maximum: 2
         freeGuides:
           type: ["integer", "null"]
+          minimum: 0
+          maximum: 2
         layoutId:
           type: ["string", "null"]
 

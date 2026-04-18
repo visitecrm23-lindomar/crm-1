@@ -70,9 +70,17 @@ export interface UpdateTripBody {
   itinerary?: unknown[];
   fixedCosts?: unknown[];
   variableCosts?: unknown[];
-  /** @nullable */
+  /**
+   * @minimum 0
+   * @maximum 2
+   * @nullable
+   */
   freeOrganizers?: number | null;
-  /** @nullable */
+  /**
+   * @minimum 0
+   * @maximum 2
+   * @nullable
+   */
   freeGuides?: number | null;
   /** @nullable */
   layoutId?: string | null;

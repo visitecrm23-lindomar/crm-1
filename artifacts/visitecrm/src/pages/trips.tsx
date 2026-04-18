@@ -1210,7 +1210,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
   const totalVariablePax = form.variableCostItems.reduce((s, c) => s + c.valuePax, 0);
   const totalVariable = totalVariablePax * cap;
   const totalOperational = totalFixed + totalVariable;
-  const costPerPax = cap > 0 ? totalOperational / cap : 0;
+  const costPerPax = paidCap > 0 ? totalOperational / paidCap : 0;
   const profit = grossRevenue - totalOperational;
   const marginPct = grossRevenue > 0 ? Math.round(profit / grossRevenue * 100) : 0;
 
@@ -1685,7 +1685,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 { label: "Total Custos Fixos", value: formatCurrency(totalFixed), muted: false },
                 { label: `Total Custos Variáveis (${cap} pax)`, value: formatCurrency(totalVariable), muted: false },
                 { label: "Custo Operacional Total", value: formatCurrency(totalOperational), muted: false },
-                { label: "Custo por Passageiro", value: formatCurrency(costPerPax), muted: false },
+                { label: freeSeats > 0 ? "Custo por Pagante" : "Custo por Passageiro", value: formatCurrency(costPerPax), muted: false },
                 { label: `Receita Bruta (${paidCap} pagantes, 100%)`, value: formatCurrency(grossRevenue), muted: false },
                 { label: `Receita Bruta (${paidCap} pagantes, 80%)`, value: formatCurrency(grossRevenue * 0.8), muted: true },
               ].map(row => (

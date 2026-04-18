@@ -1279,6 +1279,12 @@ export const ListTripsQueryParams = zod.object({
   limit: zod.coerce.number().default(listTripsQueryLimitDefault),
 });
 
+export const listTripsResponseDataItemFreeOrganizersMin = 0;
+export const listTripsResponseDataItemFreeOrganizersMax = 2;
+
+export const listTripsResponseDataItemFreeGuidesMin = 0;
+export const listTripsResponseDataItemFreeGuidesMax = 2;
+
 export const ListTripsResponse = zod.object({
   data: zod.array(
     zod.object({
@@ -1330,8 +1336,16 @@ export const ListTripsResponse = zod.object({
       itinerary: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
       fixedCosts: zod.array(zod.unknown()).optional(),
       variableCosts: zod.array(zod.unknown()).optional(),
-      freeOrganizers: zod.number().nullish(),
-      freeGuides: zod.number().nullish(),
+      freeOrganizers: zod
+        .number()
+        .min(listTripsResponseDataItemFreeOrganizersMin)
+        .max(listTripsResponseDataItemFreeOrganizersMax)
+        .nullish(),
+      freeGuides: zod
+        .number()
+        .min(listTripsResponseDataItemFreeGuidesMin)
+        .max(listTripsResponseDataItemFreeGuidesMax)
+        .nullish(),
       layoutId: zod.string().nullish(),
       createdAt: zod.string(),
       updatedAt: zod.string(),
@@ -1345,6 +1359,12 @@ export const ListTripsResponse = zod.object({
 /**
  * @summary Create a trip
  */
+export const createTripBodyFreeOrganizersMin = 0;
+export const createTripBodyFreeOrganizersMax = 2;
+
+export const createTripBodyFreeGuidesMin = 0;
+export const createTripBodyFreeGuidesMax = 2;
+
 export const CreateTripBody = zod.object({
   name: zod.string(),
   description: zod.string().nullish(),
@@ -1378,8 +1398,16 @@ export const CreateTripBody = zod.object({
   itinerary: zod.array(zod.unknown()).optional(),
   fixedCosts: zod.array(zod.unknown()).optional(),
   variableCosts: zod.array(zod.unknown()).optional(),
-  freeOrganizers: zod.number().nullish(),
-  freeGuides: zod.number().nullish(),
+  freeOrganizers: zod
+    .number()
+    .min(createTripBodyFreeOrganizersMin)
+    .max(createTripBodyFreeOrganizersMax)
+    .nullish(),
+  freeGuides: zod
+    .number()
+    .min(createTripBodyFreeGuidesMin)
+    .max(createTripBodyFreeGuidesMax)
+    .nullish(),
   layoutId: zod.string().nullish(),
 });
 
@@ -1389,6 +1417,12 @@ export const CreateTripBody = zod.object({
 export const GetTripParams = zod.object({
   id: zod.coerce.string(),
 });
+
+export const getTripResponseFreeOrganizersMin = 0;
+export const getTripResponseFreeOrganizersMax = 2;
+
+export const getTripResponseFreeGuidesMin = 0;
+export const getTripResponseFreeGuidesMax = 2;
 
 export const GetTripResponse = zod.object({
   id: zod.string(),
@@ -1439,8 +1473,16 @@ export const GetTripResponse = zod.object({
   itinerary: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
   fixedCosts: zod.array(zod.unknown()).optional(),
   variableCosts: zod.array(zod.unknown()).optional(),
-  freeOrganizers: zod.number().nullish(),
-  freeGuides: zod.number().nullish(),
+  freeOrganizers: zod
+    .number()
+    .min(getTripResponseFreeOrganizersMin)
+    .max(getTripResponseFreeOrganizersMax)
+    .nullish(),
+  freeGuides: zod
+    .number()
+    .min(getTripResponseFreeGuidesMin)
+    .max(getTripResponseFreeGuidesMax)
+    .nullish(),
   layoutId: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
@@ -1452,6 +1494,12 @@ export const GetTripResponse = zod.object({
 export const UpdateTripParams = zod.object({
   id: zod.coerce.string(),
 });
+
+export const updateTripBodyFreeOrganizersMin = 0;
+export const updateTripBodyFreeOrganizersMax = 2;
+
+export const updateTripBodyFreeGuidesMin = 0;
+export const updateTripBodyFreeGuidesMax = 2;
 
 export const UpdateTripBody = zod.object({
   name: zod.string().nullish(),
@@ -1488,10 +1536,24 @@ export const UpdateTripBody = zod.object({
   itinerary: zod.array(zod.unknown()).optional(),
   fixedCosts: zod.array(zod.unknown()).optional(),
   variableCosts: zod.array(zod.unknown()).optional(),
-  freeOrganizers: zod.number().nullish(),
-  freeGuides: zod.number().nullish(),
+  freeOrganizers: zod
+    .number()
+    .min(updateTripBodyFreeOrganizersMin)
+    .max(updateTripBodyFreeOrganizersMax)
+    .nullish(),
+  freeGuides: zod
+    .number()
+    .min(updateTripBodyFreeGuidesMin)
+    .max(updateTripBodyFreeGuidesMax)
+    .nullish(),
   layoutId: zod.string().nullish(),
 });
+
+export const updateTripResponseFreeOrganizersMin = 0;
+export const updateTripResponseFreeOrganizersMax = 2;
+
+export const updateTripResponseFreeGuidesMin = 0;
+export const updateTripResponseFreeGuidesMax = 2;
 
 export const UpdateTripResponse = zod.object({
   id: zod.string(),
@@ -1542,8 +1604,16 @@ export const UpdateTripResponse = zod.object({
   itinerary: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
   fixedCosts: zod.array(zod.unknown()).optional(),
   variableCosts: zod.array(zod.unknown()).optional(),
-  freeOrganizers: zod.number().nullish(),
-  freeGuides: zod.number().nullish(),
+  freeOrganizers: zod
+    .number()
+    .min(updateTripResponseFreeOrganizersMin)
+    .max(updateTripResponseFreeOrganizersMax)
+    .nullish(),
+  freeGuides: zod
+    .number()
+    .min(updateTripResponseFreeGuidesMin)
+    .max(updateTripResponseFreeGuidesMax)
+    .nullish(),
   layoutId: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
