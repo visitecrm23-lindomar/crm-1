@@ -299,7 +299,7 @@ function ProductForm({
   }
 
   const dragIdx = useRef<number | null>(null);
-  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const [dragging, setDragging] = useState<number | null>(null);
 
   function moveImage(from: number, direction: -1 | 1) {
     const imgs = [...(form.images ?? [])];
@@ -309,30 +309,34 @@ function ProductForm({
     set("images", imgs);
   }
 
-  function handleDragStart(i: number) {
+  function handleGripPointerDown(e: React.PointerEvent, i: number) {
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     dragIdx.current = i;
+    setDragging(i);
   }
 
-  function handleDragOver(e: React.DragEvent, i: number) {
-    e.preventDefault();
-    setDragOverIdx(i);
-    if (dragIdx.current === null || dragIdx.current === i) return;
+  function handleGripPointerMove(e: React.PointerEvent) {
+    if (dragIdx.current === null) return;
+    const grip = e.currentTarget as HTMLElement;
+    grip.style.pointerEvents = "none";
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    grip.style.pointerEvents = "";
+    const cell = el?.closest("[data-imgidx]") as HTMLElement | null;
+    if (!cell) return;
+    const targetIdx = parseInt(cell.dataset.imgidx ?? "-1", 10);
+    if (isNaN(targetIdx) || targetIdx === dragIdx.current) return;
     const imgs = [...(form.images ?? [])];
     const [dragged] = imgs.splice(dragIdx.current, 1);
-    imgs.splice(i, 0, dragged);
-    dragIdx.current = i;
+    imgs.splice(targetIdx, 0, dragged);
+    dragIdx.current = targetIdx;
+    setDragging(targetIdx);
     set("images", imgs);
   }
 
-  function handleDragLeave(e: React.DragEvent) {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setDragOverIdx(null);
-    }
-  }
-
-  function handleDragEnd() {
+  function handleGripPointerUp() {
     dragIdx.current = null;
-    setDragOverIdx(null);
+    setDragging(null);
   }
 
   async function handleSave() {
@@ -493,19 +497,11 @@ function ProductForm({
               <div className="grid grid-cols-2 gap-3">
                 {(form.images ?? []).map((url, i) => {
                   const total = (form.images ?? []).length;
-                  const isDragTarget = dragOverIdx === i;
                   return (
                     <div
                       key={url + i}
-                      className={[
-                        "relative rounded-md transition-all",
-                        isDragTarget ? "ring-2 ring-primary ring-offset-1" : "",
-                      ].join(" ")}
-                      draggable
-                      onDragStart={() => handleDragStart(i)}
-                      onDragOver={(e) => handleDragOver(e, i)}
-                      onDragLeave={handleDragLeave}
-                      onDragEnd={handleDragEnd}
+                      data-imgidx={i}
+                      className={`relative rounded-md transition-all ${dragging === i ? "opacity-60 ring-2 ring-primary ring-offset-1" : ""}`}
                     >
                       {i === 0 && (
                         <span className="absolute top-1.5 left-1.5 z-10 text-[10px] font-bold bg-black/60 text-white px-1.5 py-0.5 rounded-full pointer-events-none">
@@ -514,8 +510,12 @@ function ProductForm({
                       )}
                       {total > 1 && (
                         <div
-                          className="absolute top-1.5 right-1.5 z-10 cursor-grab active:cursor-grabbing bg-black/50 rounded p-0.5 text-white"
+                          className="absolute top-1.5 right-1.5 z-10 cursor-grab active:cursor-grabbing bg-black/50 rounded p-0.5 text-white touch-none select-none"
                           title="Arrastar para reordenar"
+                          onPointerDown={(e) => handleGripPointerDown(e, i)}
+                          onPointerMove={handleGripPointerMove}
+                          onPointerUp={handleGripPointerUp}
+                          onPointerCancel={handleGripPointerUp}
                         >
                           <GripVertical className="w-3.5 h-3.5" />
                         </div>
