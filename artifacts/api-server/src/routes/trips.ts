@@ -683,6 +683,12 @@ router.patch("/trips/:tripId/passengers/:passengerId", async (req, res): Promise
       return;
     }
 
+    const VALID_DOCUMENT_TYPES = ["RG", "CNH", "PASSAPORTE", "Certidão de Nascimento"];
+    if (documentType !== undefined && documentType !== null && !VALID_DOCUMENT_TYPES.includes(documentType)) {
+      res.status(422).json({ error: `Invalid documentType. Must be one of: ${VALID_DOCUMENT_TYPES.join(", ")}` });
+      return;
+    }
+
     const boardingPointIds = new Set(
       ((trip.boardingPoints ?? []) as Array<{ id: string }>).map(bp => bp.id)
     );
