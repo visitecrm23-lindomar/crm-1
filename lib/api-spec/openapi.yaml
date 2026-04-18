@@ -5620,7 +5620,7 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BoardingPoint"
-      required: [tripId, tripName, departureDate, totalPassengers, checkedIn, passengers, tenantName]
+      required: [tripId, tripName, departureDate, totalPassengers, checkedIn, passengers, tenantName, boardingPoints]
 
     UpdatePassengerBoardingBody:
       type: object

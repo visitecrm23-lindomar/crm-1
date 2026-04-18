@@ -866,7 +866,7 @@ export interface BoardingPanel {
   tenantName: string;
   /** @nullable */
   tenantCnpj?: string | null;
-  boardingPoints?: BoardingPoint[];
+  boardingPoints: BoardingPoint[];
 }
 
 export interface UpdatePassengerBoardingBody {

@@ -668,6 +668,11 @@ router.patch("/trips/:tripId/passengers/:passengerId", async (req, res): Promise
       .limit(1);
     if (!reservation || reservation.tripId !== trip.id) { res.status(404).json({ error: "Passenger not found" }); return; }
 
+    if (boardingLocationId === undefined && disembarkLocationId === undefined) {
+      res.status(422).json({ error: "At least one field (boardingLocationId or disembarkLocationId) must be provided" });
+      return;
+    }
+
     const boardingPointIds = new Set(
       ((trip.boardingPoints ?? []) as Array<{ id: string }>).map(bp => bp.id)
     );
