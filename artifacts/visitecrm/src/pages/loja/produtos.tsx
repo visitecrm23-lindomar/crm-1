@@ -276,6 +276,7 @@ function ProductForm({
     endDate: product?.endDate ?? "",
     durationDays: product?.durationDays ?? undefined,
     images: product?.images ?? [],
+    gallery: product?.gallery ?? [],
     features: product?.features ?? [],
     includes: product?.includes ?? [],
     excludes: product?.excludes ?? [],
@@ -577,6 +578,52 @@ function ProductForm({
                     (form.images ?? []).length === 0
                       ? "Clique ou arraste a imagem principal"
                       : "Adicionar imagem"
+                  }
+                />
+              </div>
+            </div>
+
+            {/* Gallery */}
+            <div className="col-span-2 space-y-2">
+              <div className="flex items-center gap-2">
+                <Label>Galeria Adicional</Label>
+                <span className="text-xs text-muted-foreground">— fotos complementares exibidas na página do produto</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {(form.gallery ?? []).map((url, i) => (
+                  <div key={url + i} className="relative rounded-md">
+                    <CoverImageUpload
+                      endpoint="storeProductImage"
+                      value={url}
+                      onChange={(newUrl) => {
+                        const updated = [...(form.gallery ?? [])];
+                        if (newUrl) {
+                          updated[i] = newUrl;
+                        } else {
+                          updated.splice(i, 1);
+                        }
+                        set("gallery", updated);
+                      }}
+                      previewClassName="h-36"
+                      objectFit="cover"
+                      emptyLabel="Clique ou arraste"
+                    />
+                  </div>
+                ))}
+                <CoverImageUpload
+                  endpoint="storeProductImage"
+                  value=""
+                  onChange={(newUrl) => {
+                    if (newUrl) {
+                      set("gallery", [...(form.gallery ?? []), newUrl]);
+                    }
+                  }}
+                  previewClassName="h-36"
+                  objectFit="cover"
+                  emptyLabel={
+                    (form.gallery ?? []).length === 0
+                      ? "Clique ou arraste para adicionar fotos da galeria"
+                      : "Adicionar foto"
                   }
                 />
               </div>
