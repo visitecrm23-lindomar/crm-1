@@ -555,7 +555,19 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
           .limit(1);
         assigned = refreshed?.manifestNumber;
       }
-      trip.manifestNumber = assigned ?? `MAN-${year}-000000`;
+      if (!assigned) {
+        const [final] = await db.select({ manifestNumber: tripsTable.manifestNumber })
+          .from(tripsTable)
+          .where(and(eq(tripsTable.id, trip.id), eq(tripsTable.tenantId, me.tenantId)))
+          .limit(1);
+        assigned = final?.manifestNumber;
+      }
+      if (!assigned) {
+        req.log.error({ tripId: trip.id }, "Failed to assign manifest number after 5 attempts");
+        res.status(500).json({ error: "Não foi possível gerar o número do manifesto. Tente novamente." });
+        return;
+      }
+      trip.manifestNumber = assigned;
     }
 
     const reservations = await db.select().from(reservationsTable)
