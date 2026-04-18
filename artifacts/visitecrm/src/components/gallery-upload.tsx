@@ -3,14 +3,16 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Upload, X, Loader2, Images } from "lucide-react";
 import { useUploadThing } from "@/lib/uploadthing";
-
-const MAX_GALLERY = 3;
+import type { OurFileRouter } from "@/lib/uploadthing";
 
 interface GalleryUploadProps {
   value: string[];
   onChange: (urls: string[]) => void;
   onUploadingChange?: (uploading: boolean) => void;
   disabled?: boolean;
+  endpoint?: keyof OurFileRouter;
+  maxImages?: number;
+  fileSizeMB?: string;
 }
 
 export function GalleryUpload({
@@ -18,20 +20,23 @@ export function GalleryUpload({
   onChange,
   onUploadingChange,
   disabled,
+  endpoint = "tripGalleryImages",
+  maxImages = 3,
+  fileSizeMB = "4",
 }: GalleryUploadProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const canAdd = value.length < MAX_GALLERY;
+  const canAdd = value.length < maxImages;
 
-  const { startUpload, isUploading } = useUploadThing("tripGalleryImages", {
+  const { startUpload, isUploading } = useUploadThing(endpoint, {
     onUploadBegin: () => onUploadingChange?.(true),
     onClientUploadComplete: (res) => {
       onUploadingChange?.(false);
       if (res?.length) {
         const newUrls = res.map((r) => r.ufsUrl ?? r.url);
-        onChange([...value, ...newUrls].slice(0, MAX_GALLERY));
+        onChange([...value, ...newUrls].slice(0, maxImages));
       }
     },
     onUploadError: (err) => {
@@ -41,7 +46,7 @@ export function GalleryUpload({
   });
 
   const upload = (files: File[]) => {
-    const toUpload = files.slice(0, MAX_GALLERY - value.length);
+    const toUpload = files.slice(0, maxImages - value.length);
     if (!toUpload.length) return;
     startUpload(toUpload);
   };
@@ -90,7 +95,7 @@ export function GalleryUpload({
 
       <div className="flex items-center justify-between">
         <span className="text-xs text-muted-foreground">
-          {value.length}/{MAX_GALLERY} imagens
+          {value.length}/{maxImages} imagens
         </span>
         {canAdd && (
           <Button
@@ -142,10 +147,10 @@ export function GalleryUpload({
             <>
               <Images className="w-7 h-7 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">
-                Clique ou arraste até {MAX_GALLERY} imagens aqui
+                Clique ou arraste até {maxImages} imagens aqui
               </span>
               <span className="text-xs text-muted-foreground">
-                PNG, JPG, WEBP · máx. 4 MB cada
+                PNG, JPG, WEBP · máx. {fileSizeMB} MB cada
               </span>
             </>
           )}

@@ -5,6 +5,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { z } from "zod";
+import { deleteOrphanedImages } from "../lib/uploadthing";
 
 const router = Router();
 const ADMIN_ROLES = ["agencia", "superadmin"];
@@ -405,6 +406,10 @@ router.patch("/accommodations/:id", async (req, res): Promise<void> => {
     if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
     const parsed = UpdateAccommodationBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    const [existing] = await db.select().from(accommodationsTable)
+      .where(and(eq(accommodationsTable.id, req.params.id), eq(accommodationsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!existing) { res.status(404).json({ error: "Not found" }); return; }
     const updates: Partial<typeof accommodationsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.pricePerNight != null) updates.pricePerNight = String(parsed.data.pricePerNight);
@@ -412,7 +417,10 @@ router.patch("/accommodations/:id", async (req, res): Promise<void> => {
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.totalRooms !== undefined) updates.totalRooms = parsed.data.totalRooms ?? null;
     if (parsed.data.amenities != null) updates.amenities = parsed.data.amenities;
-    if (parsed.data.galleryUrls != null) updates.gallery = parsed.data.galleryUrls;
+    if (parsed.data.galleryUrls != null) {
+      updates.gallery = parsed.data.galleryUrls;
+      await deleteOrphanedImages(existing.gallery ?? [], parsed.data.galleryUrls, req.log);
+    }
     await db.update(accommodationsTable).set(updates)
       .where(and(eq(accommodationsTable.id, req.params.id), eq(accommodationsTable.tenantId, me.tenantId)));
     const [accommodation] = await db.select().from(accommodationsTable)

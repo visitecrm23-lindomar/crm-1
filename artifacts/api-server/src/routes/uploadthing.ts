@@ -61,6 +61,16 @@ export const uploadRouter = {
     .onUploadComplete(async ({ file }) => {
       return { url: file.ufsUrl };
     }),
+
+  accommodationGallery: f({ image: { maxFileSize: "8MB", maxFileCount: 10 } })
+    .middleware(async ({ req }) => {
+      const { userId } = getAuth(req);
+      if (!userId) throw new Error("Unauthorized");
+      return { userId };
+    })
+    .onUploadComplete(async ({ file }) => {
+      return { url: file.ufsUrl };
+    }),
 } satisfies FileRouter;
 
 export const uploadthingRouter = createRouteHandler({ router: uploadRouter });
