@@ -3107,7 +3107,6 @@ export function PassengersList({ tripId }: { tripId: string }) {
     const organizador = escapeHtml(p?.tenantName ?? "");
     const cnpj = escapeHtml(p?.tenantCnpj ?? "");
     const manifestNumber = escapeHtml(p?.manifestNumber ?? "");
-    const hasBoardingPoints = boardingPoints.length > 0;
 
     const vehiclePlate = escapeHtml(p?.vehiclePlate ?? "");
     const vehicleType = escapeHtml(p?.vehicleType ?? "");
@@ -3140,7 +3139,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
       const nasc = pass.birthDate ? escapeHtml(new Date(pass.birthDate).toLocaleDateString("pt-BR")) : "—";
       const cat = escapeHtml(AGE_CATEGORY_LABELS[pass.ageCategory] ?? pass.ageCategory);
       const poltrona = escapeHtml(pass.seatNumber ?? "—");
-      const embarque = hasBoardingPoints ? escapeHtml(getBoardingPointName(pass.boardingLocationId) || "—") : "";
+      const embarque = escapeHtml(getBoardingPointName(pass.boardingLocationId) || "—");
       const obsLines = [pass.documentType, pass.specialNeeds, pass.observations].filter(Boolean).map(escapeHtml);
       const obs = obsLines.length > 0 ? obsLines.join(" | ") : "";
       return `<tr>
@@ -3150,7 +3149,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
         <td>${nasc}</td>
         <td>${cat}</td>
         <td class="seat">${poltrona}</td>
-        ${hasBoardingPoints ? `<td>${embarque}</td>` : ""}
+        <td>${embarque}</td>
         <td class="obs-cell">${obs}</td>
         <td class="sig"></td>
       </tr>`;
@@ -3255,7 +3254,7 @@ ${crewRows ? `<div class="section">
       <th>Data Nasc.</th>
       <th>Categoria</th>
       <th class="seat">Assento</th>
-      ${hasBoardingPoints ? "<th>Embarque</th>" : ""}
+      <th>Embarque</th>
       <th>Obs.</th>
       <th class="sig">Assinatura</th>
     </tr>

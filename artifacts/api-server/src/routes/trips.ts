@@ -528,26 +528,34 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
 
     if (!trip.manifestNumber) {
       const year = trip.departureDate.getFullYear();
-      const [countRow] = await db.select({ count: sql<number>`count(*)` })
-        .from(tripsTable)
-        .where(and(
-          eq(tripsTable.tenantId, me.tenantId),
-          sql`manifest_number IS NOT NULL`,
-          sql`EXTRACT(YEAR FROM departure_date) = ${year}`,
-        ));
-      const seq = (Number(countRow?.count ?? 0) + 1).toString().padStart(6, "0");
-      const manifestNumber = `MAN-${year}-${seq}`;
-      await db.update(tripsTable).set({ manifestNumber })
-        .where(and(
-          eq(tripsTable.id, trip.id),
-          eq(tripsTable.tenantId, me.tenantId),
-          sql`manifest_number IS NULL`,
-        ));
-      const [refreshed] = await db.select({ manifestNumber: tripsTable.manifestNumber })
-        .from(tripsTable)
-        .where(and(eq(tripsTable.id, trip.id), eq(tripsTable.tenantId, me.tenantId)))
-        .limit(1);
-      trip.manifestNumber = refreshed?.manifestNumber ?? manifestNumber;
+      let assigned: string | null | undefined = null;
+      for (let attempt = 0; attempt < 5 && !assigned; attempt++) {
+        const [countRow] = await db.select({ count: sql<number>`count(*)` })
+          .from(tripsTable)
+          .where(and(
+            eq(tripsTable.tenantId, me.tenantId),
+            sql`manifest_number IS NOT NULL`,
+            sql`EXTRACT(YEAR FROM departure_date) = ${year}`,
+          ));
+        const seq = (Number(countRow?.count ?? 0) + 1 + attempt).toString().padStart(6, "0");
+        const candidate = `MAN-${year}-${seq}`;
+        try {
+          await db.update(tripsTable).set({ manifestNumber: candidate })
+            .where(and(
+              eq(tripsTable.id, trip.id),
+              eq(tripsTable.tenantId, me.tenantId),
+              sql`manifest_number IS NULL`,
+            ));
+        } catch {
+          continue;
+        }
+        const [refreshed] = await db.select({ manifestNumber: tripsTable.manifestNumber })
+          .from(tripsTable)
+          .where(and(eq(tripsTable.id, trip.id), eq(tripsTable.tenantId, me.tenantId)))
+          .limit(1);
+        assigned = refreshed?.manifestNumber;
+      }
+      trip.manifestNumber = assigned ?? `MAN-${year}-000000`;
     }
 
     const reservations = await db.select().from(reservationsTable)
