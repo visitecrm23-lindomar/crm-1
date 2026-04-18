@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { publicStoreApi, PublicStore, StoreProduct, StoreReview } from "@/lib/storeApi";
 import { useCart } from "@/contexts/CartContext";
@@ -28,6 +28,66 @@ import {
   Images,
   Download,
 } from "lucide-react";
+
+function GalleryThumb({
+  src,
+  index,
+  onClick,
+}: {
+  src: string;
+  index: number;
+  onClick: () => void;
+}) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [inView, setInView] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <button
+      ref={ref}
+      onClick={onClick}
+      className="relative aspect-square rounded-xl overflow-hidden bg-muted group focus:outline-none focus:ring-2 focus:ring-primary"
+      aria-label={`Ver foto ${index + 1}`}
+    >
+      <div
+        className="absolute inset-0 bg-muted animate-pulse"
+        style={{ opacity: loaded ? 0 : 1, transition: "opacity 0.3s" }}
+        aria-hidden="true"
+      />
+      {inView && (
+        <img
+          src={src}
+          alt={`Galeria ${index + 1}`}
+          className="relative w-full h-full object-cover group-hover:scale-105"
+          style={{
+            opacity: loaded ? 1 : 0,
+            transition: "opacity 0.4s ease, transform 0.3s",
+          }}
+          onLoad={() => setLoaded(true)}
+        />
+      )}
+      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+        <Maximize2 className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+      </div>
+    </button>
+  );
+}
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -467,24 +527,12 @@ export default function VitrineProduct({
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
             {allImages.map((img, i) => (
-              <button
+              <GalleryThumb
                 key={i}
+                src={img}
+                index={i}
                 onClick={() => openLightbox(allImages, i)}
-                className="relative aspect-square rounded-xl overflow-hidden bg-muted group focus:outline-none focus:ring-2 focus:ring-primary"
-                aria-label={`Ver foto ${i + 1}`}
-              >
-                <div className="absolute inset-0 bg-muted animate-pulse" aria-hidden="true" />
-                <img
-                  src={img}
-                  alt={`Galeria ${i + 1}`}
-                  className="relative w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-0"
-                  style={{ transition: "opacity 0.3s, transform 0.3s" }}
-                  onLoad={(e) => { (e.target as HTMLImageElement).style.opacity = "1"; }}
-                />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                  <Maximize2 className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
-                </div>
-              </button>
+              />
             ))}
           </div>
         </div>
