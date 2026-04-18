@@ -127,7 +127,8 @@ export default function Expenses() {
       const cutoff = new Date(now); cutoff.setMonth(now.getMonth() - 3);
       all = allFull.filter(e => e.dueDate && new Date(e.dueDate) >= cutoff);
     } else if (periodFilter === "year") {
-      all = allFull.filter(e => e.dueDate && new Date(e.dueDate).getFullYear() === now.getFullYear());
+      const cutoff = new Date(now); cutoff.setFullYear(now.getFullYear() - 1);
+      all = allFull.filter(e => e.dueDate && new Date(e.dueDate) >= cutoff);
     }
     const total = all.reduce((s, e) => s + parseFloat(String(e.amount)), 0);
     const paid = all.filter(e => e.status === "paid").reduce((s, e) => s + parseFloat(String(e.amount)), 0);
@@ -206,7 +207,7 @@ export default function Expenses() {
             <SelectItem value="all">Todos os períodos</SelectItem>
             <SelectItem value="month">Este mês</SelectItem>
             <SelectItem value="quarter">Últimos 3 meses</SelectItem>
-            <SelectItem value="year">Este ano</SelectItem>
+            <SelectItem value="year">Último ano</SelectItem>
           </SelectContent>
         </Select>
       </div>
