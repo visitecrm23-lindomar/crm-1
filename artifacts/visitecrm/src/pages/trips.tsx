@@ -3106,32 +3106,33 @@ export function PassengersList({ tripId }: { tripId: string }) {
     const emitidoEm = escapeHtml(new Date().toLocaleString("pt-BR"));
     const organizador = escapeHtml(p?.tenantName ?? "");
     const cnpj = escapeHtml(p?.tenantCnpj ?? "");
-    const manifestNumber = escapeHtml((p as { manifestNumber?: string | null })?.manifestNumber ?? "");
+    const manifestNumber = escapeHtml(p?.manifestNumber ?? "");
     const hasBoardingPoints = boardingPoints.length > 0;
 
-    const vehiclePlate = escapeHtml((p as { vehiclePlate?: string | null })?.vehiclePlate ?? "");
-    const vehicleType = escapeHtml((p as { vehicleType?: string | null })?.vehicleType ?? "");
-    const driverName = escapeHtml((p as { driverName?: string | null })?.driverName ?? "");
-    const driver1Cpf = escapeHtml((p as { driver1Cpf?: string | null })?.driver1Cpf ?? "");
-    const driver1Cnh = escapeHtml((p as { driver1Cnh?: string | null })?.driver1Cnh ?? "");
-    const driver1CnhCat = escapeHtml((p as { driver1CnhCategory?: string | null })?.driver1CnhCategory ?? "");
-    const driver1CnhExp = escapeHtml((p as { driver1CnhExpiry?: string | null })?.driver1CnhExpiry ?? "");
-    const driver2Name = escapeHtml((p as { driver2Name?: string | null })?.driver2Name ?? "");
-    const driver2Cpf = escapeHtml((p as { driver2Cpf?: string | null })?.driver2Cpf ?? "");
-    const driver2Cnh = escapeHtml((p as { driver2Cnh?: string | null })?.driver2Cnh ?? "");
-    const driver2CnhCat = escapeHtml((p as { driver2CnhCategory?: string | null })?.driver2CnhCategory ?? "");
-    const driver2CnhExp = escapeHtml((p as { driver2CnhExpiry?: string | null })?.driver2CnhExpiry ?? "");
-    const tourGuide = escapeHtml((p as { tourGuide?: string | null })?.tourGuide ?? "");
-    const tourGuideCpf = escapeHtml((p as { tourGuideCpf?: string | null })?.tourGuideCpf ?? "");
-    const tourGuideReg = escapeHtml((p as { tourGuideRegistration?: string | null })?.tourGuideRegistration ?? "");
+    const vehiclePlate = escapeHtml(p?.vehiclePlate ?? "");
+    const vehicleType = escapeHtml(p?.vehicleType ?? "");
+    const driverName = escapeHtml(p?.driverName ?? "");
+    const driver1Cpf = escapeHtml(p?.driver1Cpf ?? "");
+    const driver1Cnh = escapeHtml(p?.driver1Cnh ?? "");
+    const driver1CnhCat = escapeHtml(p?.driver1CnhCategory ?? "");
+    const driver1CnhExp = escapeHtml(p?.driver1CnhExpiry ?? "");
+    const driver2Name = escapeHtml(p?.driver2Name ?? "");
+    const driver2Cpf = escapeHtml(p?.driver2Cpf ?? "");
+    const driver2Cnh = escapeHtml(p?.driver2Cnh ?? "");
+    const driver2CnhCat = escapeHtml(p?.driver2CnhCategory ?? "");
+    const driver2CnhExp = escapeHtml(p?.driver2CnhExpiry ?? "");
+    const tourGuide = escapeHtml(p?.tourGuide ?? "");
+    const tourGuideCpf = escapeHtml(p?.tourGuideCpf ?? "");
+    const tourGuideReg = escapeHtml(p?.tourGuideRegistration ?? "");
 
-    const categoryCounts: Record<string, number> = {};
-    for (const pass of allPassengers) {
-      const cat = pass.ageCategory;
-      categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
-    }
+    const anttBucket: Record<string, string> = { adult: "adulto", child: "crianca", senior: "idoso", baby: "gratuidade", pcd: "pcd" };
     const catOrder = ["adulto", "crianca", "idoso", "pcd", "gratuidade"];
     const catLabel: Record<string, string> = { adulto: "Adultos", crianca: "Crianças", idoso: "Idosos", pcd: "PCDs", gratuidade: "Gratuidades" };
+    const categoryCounts: Record<string, number> = {};
+    for (const pass of allPassengers) {
+      const bucket = anttBucket[pass.ageCategory] ?? "adulto";
+      categoryCounts[bucket] = (categoryCounts[bucket] ?? 0) + 1;
+    }
 
     const rows = allPassengers.map((pass, i) => {
       const nome = escapeHtml(pass.name);

@@ -57,6 +57,13 @@
       "when": 1745300000000,
       "tag": "0007_add_crew_manifest_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1745400000000,
+      "tag": "0008_manifest_number_unique_index",
+      "breakpoints": true
     }
   ]
 }
