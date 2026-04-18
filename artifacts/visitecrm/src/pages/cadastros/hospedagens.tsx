@@ -420,7 +420,7 @@ export default function Hospedagens() {
                 <GalleryUpload
                   endpoint="accommodationGallery"
                   maxImages={10}
-                  fileSizeMB="5"
+                  fileSizeMB="8"
                   value={galleryUrls}
                   onChange={setGalleryUrls}
                   onUploadingChange={setIsUploading}
