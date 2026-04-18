@@ -1,6 +1,6 @@
 import { UTApi } from "uploadthing/server";
 
-const utapi = new UTApi();
+export const utapi = new UTApi();
 
 const UPLOADTHING_HOSTNAME_SUFFIXES = ["utfs.io", "ufs.io", "uploadthing.com"];
 const UPLOADTHING_PATH_PREFIX = "/f/";

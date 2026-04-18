@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { db, tenantsTable, usersTable, auditLogsTable, plansTable, invoicesTable, featureFlagsTable } from "@workspace/db";
+import { db, tenantsTable, usersTable, auditLogsTable, plansTable, invoicesTable, featureFlagsTable, storesTable, storeProductsTable, storeCategoriesTable, storeOrderItemsTable, storeReviewsTable, tripsTable, productCategoriesTable, productImagesTable, vehiclesTable, accommodationsTable, destinationsTable, clientsTable, hurbProductsTable } from "@workspace/db";
 import { eq, desc, asc, count, sql, and, gte, lte, ne } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { utapi, extractVerifiedUploadThingKey } from "../lib/uploadthing";
 
 const router = Router();
 
@@ -477,6 +478,155 @@ router.post("/admin/tenants/:id/activate", async (req, res): Promise<void> => {
     res.json(tenant);
   } catch (err) {
     req.log.error({ err }, "Error activating tenant");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── ORPHANED UPLOADTHING FILE CLEANUP ───────────────────────────────────────
+//
+// Operator runbook:
+//   1. POST /admin/cleanup-orphaned-uploadthing-files          (dry-run, default)
+//      Review "wouldDelete" count and "orphanedKeys" list in the response.
+//   2. POST /admin/cleanup-orphaned-uploadthing-files?dryRun=false
+//      Executes deletion only after you have confirmed the dry-run output.
+//
+// This endpoint covers all UploadThing-backed media across the entire database:
+// tenant logos, store assets (logo, logoDark, favicon, banners), store product
+// images/galleries, store review photos, store category images, trip covers and
+// galleries, catalog product images, vehicle photos, accommodation/destination
+// covers and galleries, client profile photos, user avatars, and Hurb product
+// thumbnails. extractVerifiedUploadThingKey() filters out non-UploadThing URLs
+// (Clerk avatars, external links, Hurb CDN images) so they are never deleted.
+
+router.post("/admin/cleanup-orphaned-uploadthing-files", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!requireSuperAdmin(me.role, res)) return;
+
+    // dry-run mode: pass ?dryRun=false to actually delete; default is true (safe preview).
+    const dryRun = req.query["dryRun"] !== "false";
+    // verbose mode: pass ?verbose=true to include the full key list in the response.
+    const verbose = req.query["verbose"] === "true";
+
+    // 1. Collect all UploadThing file keys currently referenced anywhere in the DB.
+    //    Every table that may hold an UploadThing-hosted URL is included so that
+    //    no still-referenced file is ever mistakenly deleted.
+    //    Note: extractVerifiedUploadThingKey() returns null for non-UploadThing
+    //    URLs (Clerk avatars, Hurb CDN links, etc.), so those are harmlessly skipped.
+    const [
+      tenants, stores, storeCategories, storeProducts, storeOrderItems, storeReviews,
+      trips, productCategories, productImages,
+      vehicles, accommodations, destinations,
+      clients, users, hurbProducts,
+    ] = await Promise.all([
+      db.select({ logoUrl: tenantsTable.logoUrl }).from(tenantsTable),
+      db.select({ logo: storesTable.logo, logoDark: storesTable.logoDark, favicon: storesTable.favicon, bannerHome: storesTable.bannerHome, bannerMobile: storesTable.bannerMobile }).from(storesTable),
+      db.select({ image: storeCategoriesTable.image }).from(storeCategoriesTable),
+      db.select({ images: storeProductsTable.images, thumbnail: storeProductsTable.thumbnail, gallery: storeProductsTable.gallery }).from(storeProductsTable),
+      db.select({ productImage: storeOrderItemsTable.productImage }).from(storeOrderItemsTable),
+      db.select({ images: storeReviewsTable.images }).from(storeReviewsTable),
+      db.select({ coverImage: tripsTable.coverImage, gallery: tripsTable.gallery }).from(tripsTable),
+      db.select({ imageUrl: productCategoriesTable.imageUrl }).from(productCategoriesTable),
+      db.select({ url: productImagesTable.url }).from(productImagesTable),
+      db.select({ photoUrl: vehiclesTable.photoUrl }).from(vehiclesTable),
+      db.select({ coverImage: accommodationsTable.coverImage, gallery: accommodationsTable.gallery }).from(accommodationsTable),
+      db.select({ coverImage: destinationsTable.coverImage, gallery: destinationsTable.gallery }).from(destinationsTable),
+      db.select({ photoUrl: clientsTable.photoUrl }).from(clientsTable),
+      db.select({ avatarUrl: usersTable.avatarUrl }).from(usersTable),
+      db.select({ images: hurbProductsTable.images, thumbnail: hurbProductsTable.thumbnail }).from(hurbProductsTable),
+    ]);
+
+    const referencedKeys = new Set<string>();
+
+    function addKey(url: string | null | undefined) {
+      if (!url) return;
+      const key = extractVerifiedUploadThingKey(url);
+      if (key) referencedKeys.add(key);
+    }
+
+    for (const r of tenants) addKey(r.logoUrl);
+    for (const r of stores) { addKey(r.logo); addKey(r.logoDark); addKey(r.favicon); addKey(r.bannerHome); addKey(r.bannerMobile); }
+    for (const r of storeCategories) addKey(r.image);
+    for (const r of storeProducts) {
+      addKey(r.thumbnail);
+      for (const url of r.images ?? []) addKey(url);
+      for (const url of r.gallery ?? []) addKey(url);
+    }
+    for (const r of storeOrderItems) addKey(r.productImage);
+    for (const r of storeReviews) {
+      for (const url of r.images ?? []) addKey(url);
+    }
+    for (const r of trips) {
+      addKey(r.coverImage);
+      for (const url of r.gallery ?? []) addKey(url);
+    }
+    for (const r of productCategories) addKey(r.imageUrl);
+    for (const r of productImages) addKey(r.url);
+    for (const r of vehicles) addKey(r.photoUrl);
+    for (const r of accommodations) {
+      addKey(r.coverImage);
+      for (const url of r.gallery ?? []) addKey(url);
+    }
+    for (const r of destinations) {
+      addKey(r.coverImage);
+      for (const url of r.gallery ?? []) addKey(url);
+    }
+    for (const r of clients) addKey(r.photoUrl);
+    for (const r of users) addKey(r.avatarUrl);
+    for (const r of hurbProducts) {
+      addKey(r.thumbnail);
+      for (const url of r.images ?? []) addKey(url);
+    }
+
+    // 2. List all files in UploadThing (paginate with offset)
+    const PAGE_SIZE = 500;
+    const allFileKeys: string[] = [];
+    let offset = 0;
+    while (true) {
+      const page = await utapi.listFiles({ limit: PAGE_SIZE, offset });
+      for (const f of page.files) allFileKeys.push(f.key);
+      if (!page.hasMore) break;
+      offset += PAGE_SIZE;
+    }
+
+    // 3. Identify orphaned keys (files in UploadThing not referenced in any DB column)
+    const orphanedKeys = allFileKeys.filter((key) => !referencedKeys.has(key));
+
+    if (dryRun || orphanedKeys.length === 0) {
+      res.json({
+        dryRun,
+        deleted: 0,
+        wouldDelete: orphanedKeys.length,
+        ...(verbose ? { orphanedKeys } : {}),
+      });
+      return;
+    }
+
+    // 4. Delete orphaned files in batches of 100; track per-batch success
+    const BATCH_SIZE = 100;
+    let deletedCount = 0;
+    const failedKeys: string[] = [];
+    for (let i = 0; i < orphanedKeys.length; i += BATCH_SIZE) {
+      const batch = orphanedKeys.slice(i, i + BATCH_SIZE);
+      try {
+        const result = await utapi.deleteFiles(batch);
+        deletedCount += result.deletedCount;
+      } catch (batchErr) {
+        req.log.warn({ batchErr, batchSize: batch.length }, "Failed to delete a batch of orphaned files");
+        failedKeys.push(...batch);
+      }
+    }
+
+    req.log.info({ deletedCount, failedCount: failedKeys.length }, "Orphaned UploadThing files cleanup complete");
+    res.json({
+      dryRun: false,
+      deleted: deletedCount,
+      failed: failedKeys.length,
+      ...(verbose ? { failedKeys, orphanedKeys } : {}),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error cleaning up orphaned UploadThing files");
     res.status(500).json({ error: "Internal server error" });
   }
 });
