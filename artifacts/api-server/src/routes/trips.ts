@@ -650,7 +650,8 @@ router.patch("/trips/:tripId/passengers/:passengerId", async (req, res): Promise
       disembarkLocationId?: string | null;
     };
 
-    const [trip] = await db.select({ id: tripsTable.id }).from(tripsTable)
+    const [trip] = await db.select({ id: tripsTable.id, boardingPoints: tripsTable.boardingPoints })
+      .from(tripsTable)
       .where(and(eq(tripsTable.id, tripId), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);
     if (!trip) { res.status(404).json({ error: "Trip not found" }); return; }
@@ -666,6 +667,19 @@ router.patch("/trips/:tripId/passengers/:passengerId", async (req, res): Promise
       .where(and(eq(reservationsTable.id, passenger.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
       .limit(1);
     if (!reservation || reservation.tripId !== trip.id) { res.status(404).json({ error: "Passenger not found" }); return; }
+
+    const boardingPointIds = new Set(
+      ((trip.boardingPoints ?? []) as Array<{ id: string }>).map(bp => bp.id)
+    );
+
+    if (boardingLocationId !== undefined && boardingLocationId !== null && !boardingPointIds.has(boardingLocationId)) {
+      res.status(422).json({ error: "Invalid boardingLocationId: not in trip boarding points" });
+      return;
+    }
+    if (disembarkLocationId !== undefined && disembarkLocationId !== null && !boardingPointIds.has(disembarkLocationId)) {
+      res.status(422).json({ error: "Invalid disembarkLocationId: not in trip boarding points" });
+      return;
+    }
 
     const updateData: Partial<typeof passengersTable.$inferSelect> = {};
     if (boardingLocationId !== undefined) updateData.boardingLocationId = boardingLocationId;

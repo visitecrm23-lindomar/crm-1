@@ -71,6 +71,7 @@ export const passengersTable = pgTable("passengers", {
   isChildUnder7: boolean("is_child_under_7").notNull().default(false),
   isPrimary: boolean("is_primary").notNull().default(false),
   checkedInAt: timestamp("checked_in_at", { withTimezone: true }),
+  // References trip.boardingPoints[].id (JSON array, not a FK-able table row)
   boardingLocationId: text("boarding_location_id"),
   disembarkLocationId: text("disembark_location_id"),
 });
