@@ -1041,8 +1041,10 @@ interface VariableCostItem { id: string; category: string; description: string; 
 interface TripFormData {
   name: string; description: string;
   destination: string; destinationCity: string; destinationState: string;
+  originCity: string; originState: string;
   type: string; category: string;
   departureDate: string; returnDate: string;
+  departureTime: string; returnTime: string;
   totalCapacity: string; seatLayout: string;
   layoutId: string;
   priceAdult: string; priceChild: string; priceSenior: string;
@@ -1077,7 +1079,9 @@ const newBP = (): BoardingPoint => ({ id: crypto.randomUUID(), name: "", time: "
 const newDay = (day: number): ItineraryDay => ({ day, title: "", description: "" });
 const EMPTY_FORM: TripFormData = {
   name: "", description: "", destination: "", destinationCity: "", destinationState: "",
+  originCity: "", originState: "",
   type: "excursao", category: "standard", departureDate: "", returnDate: "",
+  departureTime: "", returnTime: "",
   totalCapacity: "46", seatLayout: "2x2", layoutId: "",
   priceAdult: "", priceChild: "", priceSenior: "",
   inclusions: "", exclusions: "", coverImage: "",
@@ -1090,10 +1094,14 @@ const toTripFormData = (trip: Trip): TripFormData => ({
   destination: trip.destination,
   destinationCity: trip.destinationCity,
   destinationState: trip.destinationState,
+  originCity: trip.originCity ?? "",
+  originState: trip.originState ?? "",
   type: trip.type,
   category: trip.category,
   departureDate: trip.departureDate.split("T")[0],
   returnDate: trip.returnDate?.split("T")[0] ?? "",
+  departureTime: trip.departureTime ?? "",
+  returnTime: trip.returnTime ?? "",
   totalCapacity: String(trip.totalCapacity),
   seatLayout: trip.seatLayout ?? "2x2",
   layoutId: trip.layoutId ?? "",
@@ -1216,8 +1224,10 @@ export function TripForm({ tripId }: { tripId?: string }) {
           data: {
             name: form.name, description: form.description || undefined,
             destination: form.destination, destinationCity: form.destinationCity, destinationState: form.destinationState,
+            originCity: form.originCity || undefined, originState: form.originState || undefined,
             type: form.type, category: form.category,
             departureDate: form.departureDate, returnDate: form.returnDate || undefined,
+            departureTime: form.departureTime || undefined, returnTime: form.returnTime || undefined,
             totalCapacity: parseInt(form.totalCapacity),
             priceAdult: parseFloat(form.priceAdult),
             priceChild: form.priceChild ? parseFloat(form.priceChild) : undefined,
@@ -1240,8 +1250,10 @@ export function TripForm({ tripId }: { tripId?: string }) {
           data: {
             name: form.name, description: form.description || undefined,
             destination: form.destination, destinationCity: form.destinationCity, destinationState: form.destinationState,
+            originCity: form.originCity || undefined, originState: form.originState || undefined,
             type: form.type, category: form.category,
             departureDate: form.departureDate, returnDate: form.returnDate || undefined,
+            departureTime: form.departureTime || undefined, returnTime: form.returnTime || undefined,
             totalCapacity: parseInt(form.totalCapacity),
             priceAdult: parseFloat(form.priceAdult),
             priceChild: form.priceChild ? parseFloat(form.priceChild) : undefined,
@@ -1308,15 +1320,23 @@ export function TripForm({ tripId }: { tripId?: string }) {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
+                <Label>Cidade de Origem</Label>
+                <Input placeholder="São Paulo" value={form.originCity} onChange={set("originCity")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Estado (UF) de Origem</Label>
+                <Input placeholder="SP" maxLength={2} value={form.originState} onChange={set("originState")} />
+              </div>
+              <div className="space-y-2">
                 <Label>Destino / Título *</Label>
                 <Input placeholder="Nordeste Brasileiro" value={form.destination} onChange={set("destination")} />
               </div>
               <div className="space-y-2">
-                <Label>Cidade *</Label>
+                <Label>Cidade de Destino *</Label>
                 <Input placeholder="Natal" value={form.destinationCity} onChange={set("destinationCity")} />
               </div>
               <div className="space-y-2">
-                <Label>Estado (UF) *</Label>
+                <Label>Estado (UF) de Destino *</Label>
                 <Input placeholder="RN" maxLength={2} value={form.destinationState} onChange={set("destinationState")} />
               </div>
               <div className="space-y-2">
@@ -1334,8 +1354,16 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 <Input type="date" value={form.departureDate} onChange={set("departureDate")} />
               </div>
               <div className="space-y-2">
+                <Label>Horário de Saída</Label>
+                <Input type="time" value={form.departureTime} onChange={set("departureTime")} />
+              </div>
+              <div className="space-y-2">
                 <Label>Data de Retorno</Label>
                 <Input type="date" value={form.returnDate} onChange={set("returnDate")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Horário de Retorno</Label>
+                <Input type="time" value={form.returnTime} onChange={set("returnTime")} />
               </div>
               <div className="space-y-2 col-span-2">
                 <Label>Layout de Assentos</Label>

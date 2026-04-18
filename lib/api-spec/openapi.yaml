@@ -4761,6 +4761,10 @@ components:
           type: string
         destinationState:
           type: string
+        originCity:
+          type: ["string", "null"]
+        originState:
+          type: ["string", "null"]
         type:
           type: string
         category:
@@ -4768,6 +4772,10 @@ components:
         departureDate:
           type: string
         returnDate:
+          type: ["string", "null"]
+        departureTime:
+          type: ["string", "null"]
+        returnTime:
           type: ["string", "null"]
         totalCapacity:
           type: integer
@@ -4992,6 +5000,10 @@ components:
           type: string
         destinationState:
           type: string
+        originCity:
+          type: ["string", "null"]
+        originState:
+          type: ["string", "null"]
         type:
           type: string
         category:
@@ -4999,6 +5011,10 @@ components:
         departureDate:
           type: string
         returnDate:
+          type: ["string", "null"]
+        departureTime:
+          type: ["string", "null"]
+        returnTime:
           type: ["string", "null"]
         totalCapacity:
           type: integer
@@ -5078,6 +5094,10 @@ components:
           type: ["string", "null"]
         returnDate:
           type: ["string", "null"]
+        departureTime:
+          type: ["string", "null"]
+        returnTime:
+          type: ["string", "null"]
         priceAdult:
           type: ["number", "null"]
         priceChild:
@@ -5113,6 +5133,10 @@ components:
         destinationCity:
           type: ["string", "null"]
         destinationState:
+          type: ["string", "null"]
+        originCity:
+          type: ["string", "null"]
+        originState:
           type: ["string", "null"]
         type:
           type: ["string", "null"]

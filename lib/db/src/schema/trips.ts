@@ -18,6 +18,8 @@ export const tripsTable = pgTable("trips", {
   destinationCity: text("destination_city").notNull(),
   destinationState: text("destination_state").notNull(),
   destinationCountry: text("destination_country").default("Brasil"),
+  originCity: text("origin_city"),
+  originState: text("origin_state"),
   type: text("type").notNull(),
   category: text("category").notNull(),
   departureDate: timestamp("departure_date", { withTimezone: true }).notNull(),

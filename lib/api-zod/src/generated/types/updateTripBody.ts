@@ -22,6 +22,10 @@ export interface UpdateTripBody {
   /** @nullable */
   returnDate?: string | null;
   /** @nullable */
+  departureTime?: string | null;
+  /** @nullable */
+  returnTime?: string | null;
+  /** @nullable */
   priceAdult?: number | null;
   /** @nullable */
   priceChild?: number | null;
@@ -53,6 +57,10 @@ export interface UpdateTripBody {
   destinationCity?: string | null;
   /** @nullable */
   destinationState?: string | null;
+  /** @nullable */
+  originCity?: string | null;
+  /** @nullable */
+  originState?: string | null;
   /** @nullable */
   type?: string | null;
   /** @nullable */

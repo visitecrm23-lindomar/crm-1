@@ -312,11 +312,19 @@ export interface Trip {
   destination: string;
   destinationCity: string;
   destinationState: string;
+  /** @nullable */
+  originCity?: string | null;
+  /** @nullable */
+  originState?: string | null;
   type: string;
   category: string;
   departureDate: string;
   /** @nullable */
   returnDate?: string | null;
+  /** @nullable */
+  departureTime?: string | null;
+  /** @nullable */
+  returnTime?: string | null;
   totalCapacity: number;
   availableSeats: number;
   reservedSeats: number;
@@ -442,11 +450,19 @@ export interface CreateTripBody {
   destination: string;
   destinationCity: string;
   destinationState: string;
+  /** @nullable */
+  originCity?: string | null;
+  /** @nullable */
+  originState?: string | null;
   type: string;
   category: string;
   departureDate: string;
   /** @nullable */
   returnDate?: string | null;
+  /** @nullable */
+  departureTime?: string | null;
+  /** @nullable */
+  returnTime?: string | null;
   totalCapacity: number;
   priceAdult: number;
   /** @nullable */
@@ -494,6 +510,10 @@ export interface UpdateTripBody {
   /** @nullable */
   returnDate?: string | null;
   /** @nullable */
+  departureTime?: string | null;
+  /** @nullable */
+  returnTime?: string | null;
+  /** @nullable */
   priceAdult?: number | null;
   /** @nullable */
   priceChild?: number | null;
@@ -525,6 +545,10 @@ export interface UpdateTripBody {
   destinationCity?: string | null;
   /** @nullable */
   destinationState?: string | null;
+  /** @nullable */
+  originCity?: string | null;
+  /** @nullable */
+  originState?: string | null;
   /** @nullable */
   type?: string | null;
   /** @nullable */

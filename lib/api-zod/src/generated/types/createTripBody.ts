@@ -13,11 +13,19 @@ export interface CreateTripBody {
   destination: string;
   destinationCity: string;
   destinationState: string;
+  /** @nullable */
+  originCity?: string | null;
+  /** @nullable */
+  originState?: string | null;
   type: string;
   category: string;
   departureDate: string;
   /** @nullable */
   returnDate?: string | null;
+  /** @nullable */
+  departureTime?: string | null;
+  /** @nullable */
+  returnTime?: string | null;
   totalCapacity: number;
   priceAdult: number;
   /** @nullable */
