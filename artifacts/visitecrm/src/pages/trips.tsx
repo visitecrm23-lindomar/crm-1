@@ -1058,18 +1058,19 @@ interface TripFormData {
 }
 
 const FIXED_COST_CATEGORIES: Record<string, string[]> = {
-  "Transporte": ["Aluguel de ônibus", "Motorista", "Pedágio e combustível", "Manutenção", "Outro"],
-  "Equipe": ["Guia turístico", "Coordenador de viagem", "Equipe de apoio", "Outro"],
-  "Estrutura": ["Seguro viagem", "Taxas e licenças", "Equipamentos", "Outro"],
-  "Marketing": ["Publicidade digital", "Material impresso", "Comissão de vendas", "Outro"],
-  "Operacional": ["Escritório / Overhead", "Sistema / Software", "Comunicação", "Outro"],
+  "Transporte": ["Fretamento", "Combustível", "Manutenção", "Seguro do veículo", "Outro"],
+  "Equipe": ["Motorista (diária)", "Guia turístico", "Coordenador de viagem", "Outro"],
+  "Estrutura": ["Hospedagem da equipe", "Alimentação da equipe", "Outro"],
+  "Obrigações": ["Seguro da viagem", "Licenças e autorizações", "Taxas administrativas", "Outro"],
+  "Marketing": ["Tráfego pago", "Design", "Comissões de vendedores", "Divulgação", "Outro"],
+  "Operacional": ["Sistema de som", "Kit primeiros socorros", "Uniformes", "Estacionamentos e pedágios", "Outro"],
 };
 const VARIABLE_COST_CATEGORIES: Record<string, string[]> = {
-  "Alimentação": ["Café da manhã", "Almoço", "Jantar", "Lanche / Café", "Outro"],
-  "Hospedagem": ["Hotel 2 estrelas", "Hotel 3 estrelas", "Pousada", "Hostel", "Outro"],
-  "Experiência": ["Ingresso", "Passeio guiado", "Atividade / Atração", "Outro"],
-  "Logística": ["Transfer local", "Barco / Lanchas", "Outro"],
-  "Extras": ["Seguro individual", "Kit boas-vindas", "Gorjeta guia", "Outro"],
+  "Alimentação": ["Alimentação dos passageiros", "Água e lanches", "Kits de viagem", "Outro"],
+  "Experiência": ["Ingressos (parques/atrações)", "Passeios opcionais", "Guias locais", "Outro"],
+  "Hospedagem": ["Hospedagem por pessoa", "Outro"],
+  "Logística": ["Transportes adicionais", "Transfers internos", "Outro"],
+  "Extras": ["Brindes", "Taxas ambientais/locais", "Consumos extras", "Outro"],
 };
 
 const newBP = (): BoardingPoint => ({ id: crypto.randomUUID(), name: "", time: "", address: "" });
