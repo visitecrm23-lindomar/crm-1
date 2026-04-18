@@ -5,6 +5,7 @@ import type { LayoutCell, FixedCostItem, VariableCostItem } from "@workspace/db"
 import { eq, and, ilike, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
+import { deleteOrphanedFile } from "../lib/uploadthing";
 import { deriveAgeCategory, getAgeYears } from "../lib/passenger";
 import { CreateTripBody, UpdateTripBody } from "@workspace/api-zod";
 
@@ -285,6 +286,17 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
 
     const capacityOrLayoutChanged =
       parsed.data.totalCapacity != null || parsed.data.seatLayout !== undefined || parsed.data.layoutId !== undefined;
+    const coverImageChanged = parsed.data.coverImage !== undefined;
+
+    let existingTripForCleanup: { coverImage?: string | null } | null = null;
+    if ((capacityOrLayoutChanged || coverImageChanged) && !existingTripForCleanup) {
+      const [fetched] = await db.select().from(tripsTable)
+        .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
+        .limit(1);
+      if (!fetched) { res.status(404).json({ error: "Not found" }); return; }
+      existingTripForCleanup = fetched;
+    }
+
     if (parsed.data.inclusions != null) updates.inclusions = parsed.data.inclusions;
     if (parsed.data.exclusions != null) updates.exclusions = parsed.data.exclusions;
     if (parsed.data.vehiclePlate !== undefined) updates.vehiclePlate = parsed.data.vehiclePlate ?? null;
@@ -304,9 +316,11 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
     if (parsed.data.gallery !== undefined) updates.gallery = parsed.data.gallery ?? [];
 
     if (capacityOrLayoutChanged) {
-      const [currentTrip] = await db.select().from(tripsTable)
-        .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
-        .limit(1);
+      const currentTrip = existingTripForCleanup as typeof existingTripForCleanup & {
+        layoutId?: string | null;
+        totalCapacity: number;
+        seatLayout?: string | null;
+      } | null;
       if (!currentTrip) { res.status(404).json({ error: "Not found" }); return; }
 
       const newLayoutId = parsed.data.layoutId !== undefined
@@ -368,6 +382,11 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
 
     await db.update(tripsTable).set(updates)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)));
+
+    if (coverImageChanged && existingTripForCleanup) {
+      await deleteOrphanedFile(existingTripForCleanup.coverImage, parsed.data.coverImage, req.log);
+    }
+
     const [trip] = await db.select().from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);

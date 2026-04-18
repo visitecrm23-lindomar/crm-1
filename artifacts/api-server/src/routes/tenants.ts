@@ -2,48 +2,9 @@ import { Router } from "express";
 import { db, tenantsTable, usersTable, plansTable } from "@workspace/db";
 import { eq, desc, count } from "drizzle-orm";
 import { z } from "zod/v4";
-import { UTApi } from "uploadthing/server";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
-
-const utapi = new UTApi();
-
-const UPLOADTHING_HOSTNAME_SUFFIXES = ["utfs.io", "ufs.io", "uploadthing.com"];
-const UPLOADTHING_PATH_PREFIX = "/f/";
-
-function extractVerifiedUploadThingKey(url: string): string | null {
-  try {
-    const u = new URL(url);
-    const hostname = u.hostname.toLowerCase();
-    const isKnownHost = UPLOADTHING_HOSTNAME_SUFFIXES.some(
-      (suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`)
-    );
-    if (!isKnownHost) return null;
-    if (!u.pathname.startsWith(UPLOADTHING_PATH_PREFIX)) return null;
-    const key = u.pathname.slice(UPLOADTHING_PATH_PREFIX.length);
-    return key || null;
-  } catch {
-    return null;
-  }
-}
-
-async function deleteOrphanedLogo(
-  oldUrl: string | null | undefined,
-  newUrl: string | null | undefined,
-  log: { warn: (obj: object, msg: string) => void }
-): Promise<void> {
-  if (!oldUrl || oldUrl === newUrl) return;
-  const key = extractVerifiedUploadThingKey(oldUrl);
-  if (!key) {
-    log.warn({ oldUrl }, "Skipped orphaned logo deletion: URL did not match known UploadThing hosts");
-    return;
-  }
-  try {
-    await utapi.deleteFiles(key);
-  } catch (err) {
-    log.warn({ err, fileKey: key }, "Failed to delete orphaned logo from UploadThing");
-  }
-}
+import { deleteOrphanedFile } from "../lib/uploadthing";
 
 const router = Router();
 
@@ -204,7 +165,7 @@ router.patch("/tenants/:id", async (req, res): Promise<void> => {
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
     if (!tenant) { res.status(404).json({ error: "Not found" }); return; }
     if ("logoUrl" in parsed.data) {
-      await deleteOrphanedLogo(oldLogoUrl, parsed.data.logoUrl, req.log);
+      await deleteOrphanedFile(oldLogoUrl, parsed.data.logoUrl, req.log);
     }
     res.json(tenant);
   } catch (err) {

@@ -16,6 +16,7 @@ import { eq, and, desc, asc, count, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { deleteOrphanedFile, deleteOrphanedImages } from "../lib/uploadthing";
 
 const router = Router();
 const ADMIN_ROLES = ["agencia", "superadmin"];
@@ -243,6 +244,17 @@ router.put("/store/settings", async (req, res): Promise<void> => {
     }
     await db.update(storesTable).set(parsed.data as Record<string, unknown>)
       .where(eq(storesTable.tenantId, me.tenantId));
+
+    if (existingStore) {
+      const d = parsed.data;
+      await Promise.all([
+        deleteOrphanedFile(existingStore.logo, d.logo ?? null, req.log),
+        deleteOrphanedFile(existingStore.logoDark, d.logoDark ?? null, req.log),
+        deleteOrphanedFile(existingStore.bannerHome, d.bannerHome ?? null, req.log),
+        deleteOrphanedFile(existingStore.bannerMobile, d.bannerMobile ?? null, req.log),
+      ]);
+    }
+
     const [updated] = await db.select().from(storesTable)
       .where(eq(storesTable.tenantId, me.tenantId)).limit(1);
     res.json(updated);
@@ -429,6 +441,11 @@ router.put("/store/products/:id", async (req, res): Promise<void> => {
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
     const parsed = ProductBody.partial().safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const [existingProduct] = await db.select().from(storeProductsTable)
+      .where(and(eq(storeProductsTable.id, req.params.id), eq(storeProductsTable.storeId, store.id))).limit(1);
+    if (!existingProduct) { res.status(404).json({ error: "Product not found" }); return; }
+
     const updates: Record<string, unknown> = { ...parsed.data };
     if (parsed.data.saleStartsAt) updates.saleStartsAt = new Date(parsed.data.saleStartsAt);
     if (parsed.data.saleEndsAt) updates.saleEndsAt = new Date(parsed.data.saleEndsAt);
@@ -436,6 +453,16 @@ router.put("/store/products/:id", async (req, res): Promise<void> => {
     if (parsed.data.endDate) updates.endDate = new Date(parsed.data.endDate);
     await db.update(storeProductsTable).set(updates)
       .where(and(eq(storeProductsTable.id, req.params.id), eq(storeProductsTable.storeId, store.id)));
+
+    await Promise.all([
+      parsed.data.images !== undefined
+        ? deleteOrphanedImages(existingProduct.images as string[] | null, parsed.data.images, req.log)
+        : Promise.resolve(),
+      parsed.data.thumbnail !== undefined
+        ? deleteOrphanedFile(existingProduct.thumbnail as string | null, parsed.data.thumbnail, req.log)
+        : Promise.resolve(),
+    ]);
+
     const [product] = await db.select().from(storeProductsTable)
       .where(and(eq(storeProductsTable.id, req.params.id), eq(storeProductsTable.storeId, store.id))).limit(1);
     if (!product) { res.status(404).json({ error: "Product not found" }); return; }
