@@ -547,6 +547,10 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
         whatsapp: client?.whatsapp ?? null,
         boardingLocationId: effectiveBoardingLocationId,
         disembarkLocationId: p.disembarkLocationId ?? null,
+        passengerPhone: p.phone ?? null,
+        observations: p.observations ?? null,
+        specialNeeds: p.specialNeeds ?? null,
+        documentType: p.documentType ?? null,
       };
     });
 
@@ -645,9 +649,13 @@ router.patch("/trips/:tripId/passengers/:passengerId", async (req, res): Promise
     if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
 
     const { tripId, passengerId } = req.params;
-    const { boardingLocationId, disembarkLocationId } = req.body as {
+    const { boardingLocationId, disembarkLocationId, passengerPhone, observations, specialNeeds, documentType } = req.body as {
       boardingLocationId?: string | null;
       disembarkLocationId?: string | null;
+      passengerPhone?: string | null;
+      observations?: string | null;
+      specialNeeds?: string | null;
+      documentType?: string | null;
     };
 
     const [trip] = await db.select({ id: tripsTable.id, boardingPoints: tripsTable.boardingPoints })
@@ -668,8 +676,10 @@ router.patch("/trips/:tripId/passengers/:passengerId", async (req, res): Promise
       .limit(1);
     if (!reservation || reservation.tripId !== trip.id) { res.status(404).json({ error: "Passenger not found" }); return; }
 
-    if (boardingLocationId === undefined && disembarkLocationId === undefined) {
-      res.status(422).json({ error: "At least one field (boardingLocationId or disembarkLocationId) must be provided" });
+    if (boardingLocationId === undefined && disembarkLocationId === undefined &&
+        passengerPhone === undefined && observations === undefined &&
+        specialNeeds === undefined && documentType === undefined) {
+      res.status(422).json({ error: "At least one field must be provided" });
       return;
     }
 
@@ -689,13 +699,25 @@ router.patch("/trips/:tripId/passengers/:passengerId", async (req, res): Promise
     const updateData: Partial<typeof passengersTable.$inferSelect> = {};
     if (boardingLocationId !== undefined) updateData.boardingLocationId = boardingLocationId;
     if (disembarkLocationId !== undefined) updateData.disembarkLocationId = disembarkLocationId;
+    if (passengerPhone !== undefined) updateData.phone = passengerPhone;
+    if (observations !== undefined) updateData.observations = observations;
+    if (specialNeeds !== undefined) updateData.specialNeeds = specialNeeds;
+    if (documentType !== undefined) updateData.documentType = documentType;
 
     const [updated] = await db.update(passengersTable)
       .set(updateData)
       .where(eq(passengersTable.id, passengerId))
       .returning();
 
-    res.json({ id: updated.id, boardingLocationId: updated.boardingLocationId ?? null, disembarkLocationId: updated.disembarkLocationId ?? null });
+    res.json({
+      id: updated.id,
+      boardingLocationId: updated.boardingLocationId ?? null,
+      disembarkLocationId: updated.disembarkLocationId ?? null,
+      passengerPhone: updated.phone ?? null,
+      observations: updated.observations ?? null,
+      specialNeeds: updated.specialNeeds ?? null,
+      documentType: updated.documentType ?? null,
+    });
   } catch (err) {
     req.log.error({ err }, "Error updating passenger");
     res.status(500).json({ error: "Internal server error" });

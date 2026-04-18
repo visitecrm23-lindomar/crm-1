@@ -1693,6 +1693,10 @@ export const GetTripBoardingPanelResponse = zod.object({
       whatsapp: zod.string().nullish(),
       boardingLocationId: zod.string().nullish(),
       disembarkLocationId: zod.string().nullish(),
+      passengerPhone: zod.string().nullish(),
+      observations: zod.string().nullish(),
+      specialNeeds: zod.string().nullish(),
+      documentType: zod.string().nullish(),
     }),
   ),
   tenantName: zod.string(),
@@ -1729,12 +1733,20 @@ export const UpdatePassengerBoardingParams = zod.object({
 export const UpdatePassengerBoardingBody = zod.object({
   boardingLocationId: zod.string().nullish(),
   disembarkLocationId: zod.string().nullish(),
+  passengerPhone: zod.string().nullish(),
+  observations: zod.string().nullish(),
+  specialNeeds: zod.string().nullish(),
+  documentType: zod.string().nullish(),
 });
 
 export const UpdatePassengerBoardingResponse = zod.object({
   id: zod.string(),
   boardingLocationId: zod.string().nullish(),
   disembarkLocationId: zod.string().nullish(),
+  passengerPhone: zod.string().nullish(),
+  observations: zod.string().nullish(),
+  specialNeeds: zod.string().nullish(),
+  documentType: zod.string().nullish(),
 });
 
 /**

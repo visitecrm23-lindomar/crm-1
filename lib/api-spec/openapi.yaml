@@ -5580,6 +5580,14 @@ components:
           type: ["string", "null"]
         disembarkLocationId:
           type: ["string", "null"]
+        passengerPhone:
+          type: ["string", "null"]
+        observations:
+          type: ["string", "null"]
+        specialNeeds:
+          type: ["string", "null"]
+        documentType:
+          type: ["string", "null"]
       required: [id, reservationId, voucherCode, clientName, name, ageCategory]
 
     BoardingPoint:
@@ -5629,6 +5637,14 @@ components:
           type: ["string", "null"]
         disembarkLocationId:
           type: ["string", "null"]
+        passengerPhone:
+          type: ["string", "null"]
+        observations:
+          type: ["string", "null"]
+        specialNeeds:
+          type: ["string", "null"]
+        documentType:
+          type: ["string", "null"]
 
     PassengerBoardingUpdate:
       type: object
@@ -5638,6 +5654,14 @@ components:
         boardingLocationId:
           type: ["string", "null"]
         disembarkLocationId:
+          type: ["string", "null"]
+        passengerPhone:
+          type: ["string", "null"]
+        observations:
+          type: ["string", "null"]
+        specialNeeds:
+          type: ["string", "null"]
+        documentType:
           type: ["string", "null"]
       required: [id]
 

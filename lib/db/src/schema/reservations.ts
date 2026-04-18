@@ -74,6 +74,10 @@ export const passengersTable = pgTable("passengers", {
   // References trip.boardingPoints[].id (JSON array, not a FK-able table row)
   boardingLocationId: text("boarding_location_id"),
   disembarkLocationId: text("disembark_location_id"),
+  phone: text("phone"),
+  observations: text("observations"),
+  specialNeeds: text("special_needs"),
+  documentType: text("document_type"),
 });
 
 export const insertPassengerSchema = createInsertSchema(passengersTable);

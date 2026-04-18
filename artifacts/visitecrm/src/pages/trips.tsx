@@ -29,7 +29,7 @@ import {
   Plus, Search, MapPin, Calendar, Users, Bus, Edit, Trash2, Eye, ChevronsLeft, ChevronsRight,
   LayoutGrid, List, ChevronLeft, ChevronRight, ArrowLeft, Check, X, Download, Send, Copy,
   AlertCircle, DollarSign, ClipboardList, LogIn, RotateCcw, CheckCircle, UserRound, RefreshCw,
-  ShoppingBag, Loader2, Clock, Star, CheckCircle2, XCircle,
+  ShoppingBag, Loader2, Clock, Star, CheckCircle2, XCircle, MessageSquare, Pencil, Phone,
 } from "lucide-react";
 import { CoverImageUpload } from "@/components/cover-image-upload";
 import { GalleryUpload } from "@/components/gallery-upload";
@@ -184,6 +184,107 @@ function OccupancyBar({ reserved, confirmed, total }: { reserved: number; confir
   );
 }
 
+const DOCUMENT_TYPES = ["RG", "CNH", "PASSAPORTE", "Certidão de Nascimento"] as const;
+
+function PassengerObsModal({ passenger, tripId, open, onClose, onSaved }: {
+  passenger: BoardingPassenger | null;
+  tripId: string;
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const updateBoarding = useUpdatePassengerBoarding();
+  const [form, setForm] = useState({ passengerPhone: "", documentType: "", specialNeeds: "", observations: "" });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (passenger) {
+      setForm({
+        passengerPhone: passenger.passengerPhone ?? "",
+        documentType: passenger.documentType ?? "",
+        specialNeeds: passenger.specialNeeds ?? "",
+        observations: passenger.observations ?? "",
+      });
+    }
+  }, [passenger]);
+
+  const handleSave = async () => {
+    if (!passenger) return;
+    setSaving(true);
+    try {
+      await updateBoarding.mutateAsync({
+        tripId,
+        passengerId: passenger.id,
+        data: {
+          passengerPhone: form.passengerPhone || null,
+          documentType: form.documentType || null,
+          specialNeeds: form.specialNeeds || null,
+          observations: form.observations || null,
+        },
+      });
+      onSaved();
+      onClose();
+    } catch {
+      toast({ title: "Erro ao salvar observações", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-primary" />
+            Informações do Passageiro
+          </DialogTitle>
+        </DialogHeader>
+        {passenger && (
+          <div className="space-y-4 py-1">
+            <div className="bg-muted/50 rounded p-2 text-sm font-medium">{passenger.name}</div>
+            <div className="space-y-1">
+              <Label htmlFor="obs-phone" className="text-xs">Telefone do passageiro</Label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Input id="obs-phone" placeholder="(00) 00000-0000" value={form.passengerPhone} className="pl-8"
+                  onChange={e => setForm(f => ({ ...f, passengerPhone: e.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="obs-doctype" className="text-xs">Tipo de documento</Label>
+              <Select value={form.documentType || "__none__"} onValueChange={v => setForm(f => ({ ...f, documentType: v === "__none__" ? "" : v }))}>
+                <SelectTrigger id="obs-doctype"><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— Não informado —</SelectItem>
+                  {DOCUMENT_TYPES.map(dt => <SelectItem key={dt} value={dt}>{dt}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="obs-special" className="text-xs">Necessidades especiais</Label>
+              <Input id="obs-special" placeholder="Ex: cadeirante, gestante, alergia..." value={form.specialNeeds}
+                onChange={e => setForm(f => ({ ...f, specialNeeds: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="obs-notes" className="text-xs">Observações gerais</Label>
+              <Textarea id="obs-notes" placeholder="Anotações, restrições alimentares, medicamentos..." rows={3} value={form.observations}
+                onChange={e => setForm(f => ({ ...f, observations: e.target.value }))} />
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Salvando...</> : "Salvar"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: string; tripName: string; open: boolean; onClose: () => void }) {
   const [search, setSearch] = useState("");
   const [client360Id, setClient360Id] = useState<string | null>(null);
@@ -211,6 +312,7 @@ function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: strin
   const updateBoarding = useUpdatePassengerBoarding();
   const [syncing, setSyncing] = useState(false);
   const [updatingLocationId, setUpdatingLocationId] = useState<string | null>(null);
+  const [editingPassenger, setEditingPassenger] = useState<BoardingPassenger | null>(null);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -353,6 +455,7 @@ function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: strin
                 const isCheckedIn = !!p.checkedInAt;
                 const currentLocationId = p.boardingLocationId ?? "";
                 const isUpdatingThis = updatingLocationId === p.id;
+                const hasObs = !!(p.observations || p.specialNeeds);
                 return (
                   <div key={p.id} className={`p-3 rounded-lg border ${isCheckedIn ? "bg-green-50 border-green-200" : "bg-muted/30"}`}>
                     <div className="flex items-center justify-between gap-2">
@@ -362,6 +465,12 @@ function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: strin
                             <span className="font-mono text-xs bg-gray-100 border border-gray-300 px-2 py-0.5 rounded font-bold">{p.seatNumber}</span>
                           )}
                           <span className="font-medium text-sm">{p.name}</span>
+                          {hasObs && (
+                            <span title={[p.specialNeeds, p.observations].filter(Boolean).join(" | ")}
+                              className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 cursor-help">
+                              <MessageSquare className="w-3 h-3" />
+                            </span>
+                          )}
                           {isCheckedIn && (
                             <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold border border-green-200">
                               <CheckCircle className="w-3 h-3" />
@@ -376,6 +485,13 @@ function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: strin
                         </div>
                       </div>
                       <div className="shrink-0 ml-2 flex items-center gap-1">
+                        <Button
+                          size="sm" variant="outline" className={`h-8 w-8 p-0 ${hasObs ? "text-amber-600 border-amber-300" : ""}`}
+                          onClick={() => setEditingPassenger(p)}
+                          title="Editar informações do passageiro"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </Button>
                         {reservationClientMap.get(p.reservationId) && (
                           <Button
                             size="sm" variant="outline" className="h-8 text-xs gap-1"
@@ -434,6 +550,13 @@ function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: strin
         )}
       </DialogContent>
       <Client360Modal open={!!client360Id} onClose={() => setClient360Id(null)} clientId={client360Id} />
+      <PassengerObsModal
+        passenger={editingPassenger}
+        tripId={tripId}
+        open={!!editingPassenger}
+        onClose={() => setEditingPassenger(null)}
+        onSaved={() => refetch()}
+      />
     </Dialog>
   );
 }
@@ -2755,6 +2878,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const syncMutation = useSyncTripPassengers();
   const updateBoarding = useUpdatePassengerBoarding();
   const [updatingLocationId, setUpdatingLocationId] = useState<string | null>(null);
+  const [editingPassenger, setEditingPassenger] = useState<BoardingPassenger | null>(null);
 
   const allPassengers = panel?.passengers ?? [];
   const boardingPoints: BoardingPoint[] = panel?.boardingPoints ?? [];
@@ -2834,7 +2958,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
 
   const handleCsvExport = () => {
     const activeCols = PASSENGER_COLS.filter(c => visibleCols[c.key]);
-    const header = ["Nº", ...activeCols.map(c => c.label)];
+    const header = ["Nº", ...activeCols.map(c => c.label), "Telefone Passageiro", "Tipo Doc.", "Nec. Especiais", "Observações"];
     const rows = filtered.map((p, i) => {
       const values: string[] = [String(i + 1)];
       for (const col of activeCols) {
@@ -2849,6 +2973,10 @@ export function PassengersList({ tripId }: { tripId: string }) {
           case "checkedInAt": values.push(p.checkedInAt ? "Sim" : "Não"); break;
         }
       }
+      values.push(p.passengerPhone ?? "");
+      values.push(p.documentType ?? "");
+      values.push(p.specialNeeds ?? "");
+      values.push(p.observations ?? "");
       return values;
     });
     const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -2884,6 +3012,8 @@ export function PassengersList({ tripId }: { tripId: string }) {
       const poltrona = escapeHtml(p.seatNumber ?? "—");
       const contato = escapeHtml(getPassengerContact(p));
       const embarque = hasBoardingPoints ? escapeHtml(getBoardingPointName(p.boardingLocationId) || "—") : "";
+      const obsLines = [p.documentType, p.specialNeeds, p.observations].filter(Boolean).map(escapeHtml);
+      const obs = obsLines.length > 0 ? obsLines.join(" | ") : "—";
       return `<tr>
         <td>${String(i + 1).padStart(2, "0")}</td>
         <td>${nome}</td>
@@ -2893,6 +3023,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
         <td>${poltrona}</td>
         ${hasBoardingPoints ? `<td>${embarque}</td>` : ""}
         <td>${contato}</td>
+        <td class="obs-cell">${obs}</td>
       </tr>`;
     }).join("");
     const html = `<!DOCTYPE html>
@@ -2911,6 +3042,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
   th { background: #1a1a1a; color: #fff; text-align: left; padding: 5px 6px; font-size: 10px; }
   td { padding: 4px 6px; border-bottom: 1px solid #e0e0e0; font-size: 11px; }
   tr:nth-child(even) td { background: #f7f7f7; }
+  .obs-cell { font-size: 10px; color: #555; max-width: 180px; }
   .footer { margin-top: 24px; display: flex; justify-content: space-between; font-size: 10px; color: #555; border-top: 1px solid #ccc; padding-top: 8px; }
   @media print { body { margin: 10mm; } button { display: none; } }
 </style>
@@ -2941,6 +3073,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
       <th>Poltrona</th>
       ${hasBoardingPoints ? "<th>Ponto de Embarque</th>" : ""}
       <th>WhatsApp/Telefone</th>
+      <th>Obs.</th>
     </tr>
   </thead>
   <tbody>${rows}</tbody>
@@ -3058,7 +3191,19 @@ export function PassengersList({ tripId }: { tripId: string }) {
                   return (
                     <tr key={p.id} className={`border-b hover:bg-muted/30 ${embarcou ? "bg-green-50/40" : ""}`}>
                       <td className="p-3 text-muted-foreground text-xs">{i + 1}</td>
-                      {visibleCols.nome && <td className="p-3 font-medium whitespace-nowrap">{p.name}</td>}
+                      {visibleCols.nome && (
+                        <td className="p-3 font-medium whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            {p.name}
+                            {!!(p.observations || p.specialNeeds) && (
+                              <span title={[p.specialNeeds, p.observations].filter(Boolean).join(" | ")}
+                                className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 cursor-help">
+                                <MessageSquare className="w-3 h-3" />
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      )}
                       {visibleCols.cpf && <td className="p-3 text-muted-foreground text-xs">{formatCpf(p.cpf)}</td>}
                       {visibleCols.birthDate && (
                         <td className="p-3 text-muted-foreground text-xs whitespace-nowrap">
@@ -3121,15 +3266,25 @@ export function PassengersList({ tripId }: { tripId: string }) {
                         </td>
                       )}
                       <td className="p-3 text-center">
-                        {embarcou ? (
-                          <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600 hover:text-red-700" onClick={() => handleUndoCheckIn(p)}>
-                            <RotateCcw className="w-3 h-3 mr-1" />Desfazer
+                        <div className="flex items-center justify-center gap-1">
+                          <Button
+                            size="sm" variant="ghost"
+                            className={`h-7 w-7 p-0 ${!!(p.observations || p.specialNeeds) ? "text-amber-600" : "text-muted-foreground"}`}
+                            title="Editar observações do passageiro"
+                            onClick={() => setEditingPassenger(p)}
+                          >
+                            <Pencil className="w-3 h-3" />
                           </Button>
-                        ) : (
-                          <Button size="sm" variant="ghost" className="h-7 text-xs text-green-700 hover:text-green-800" onClick={() => handleCheckIn(p)}>
-                            <LogIn className="w-3 h-3 mr-1" />Check-in
-                          </Button>
-                        )}
+                          {embarcou ? (
+                            <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600 hover:text-red-700" onClick={() => handleUndoCheckIn(p)}>
+                              <RotateCcw className="w-3 h-3 mr-1" />Desfazer
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="ghost" className="h-7 text-xs text-green-700 hover:text-green-800" onClick={() => handleCheckIn(p)}>
+                              <LogIn className="w-3 h-3 mr-1" />Check-in
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -3145,6 +3300,14 @@ export function PassengersList({ tripId }: { tripId: string }) {
           Exibindo {filtered.length} de {allPassengers.length} passageiro(s)
         </p>
       )}
+
+      <PassengerObsModal
+        passenger={editingPassenger}
+        tripId={tripId}
+        open={!!editingPassenger}
+        onClose={() => setEditingPassenger(null)}
+        onSaved={() => refetch()}
+      />
     </div>
   );
 }

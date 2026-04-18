@@ -12,4 +12,12 @@ export interface PassengerBoardingUpdate {
   boardingLocationId?: string | null;
   /** @nullable */
   disembarkLocationId?: string | null;
+  /** @nullable */
+  passengerPhone?: string | null;
+  /** @nullable */
+  observations?: string | null;
+  /** @nullable */
+  specialNeeds?: string | null;
+  /** @nullable */
+  documentType?: string | null;
 }
