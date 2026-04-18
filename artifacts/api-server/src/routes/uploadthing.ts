@@ -62,7 +62,8 @@ export const uploadRouter = {
       return { url: file.ufsUrl };
     }),
 
-  accommodationGallery: f({ image: { maxFileSize: "8MB", maxFileCount: 10 } })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  accommodationGallery: f({ image: { maxFileSize: "5MB" as any, maxFileCount: 10 } })
     .middleware(async ({ req }) => {
       const { userId } = getAuth(req);
       if (!userId) throw new Error("Unauthorized");
