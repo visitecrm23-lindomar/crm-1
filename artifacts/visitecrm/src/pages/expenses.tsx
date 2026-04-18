@@ -85,6 +85,7 @@ export default function Expenses() {
   const [tripFilter, setTripFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [periodFilter, setPeriodFilter] = useState("all");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [expenseMethod, setExpenseMethod] = useState("pix");
   const [supplierFilter, setSupplierFilter] = useState("");
@@ -92,10 +93,12 @@ export default function Expenses() {
   const [createSupplierId, setCreateSupplierId] = useState("none");
   const [createTripId, setCreateTripId] = useState("none");
 
+  const { data: allExpensesForKpi } = useListExpenses({ limit: 500 });
+
   const { data: expensesData, isLoading, refetch } = useListExpenses({
     status: statusFilter || undefined,
     tripId: tripFilter || undefined,
-    limit: 100,
+    limit: 200,
   });
   const { data: tripsData } = useListTrips({ limit: 100 });
   const { data: suppliersRaw } = useListSuppliers();
@@ -112,13 +115,27 @@ export default function Expenses() {
   }, [expensesData, categoryFilter, dateFrom, dateTo, supplierFilter]);
 
   const kpis = useMemo(() => {
-    const all = expensesData?.data ?? [];
+    const now = new Date();
+    const allFull = allExpensesForKpi?.data ?? [];
+    let all = allFull;
+    if (periodFilter === "month") {
+      all = allFull.filter(e => {
+        const d = e.dueDate ? new Date(e.dueDate) : null;
+        return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      });
+    } else if (periodFilter === "quarter") {
+      const cutoff = new Date(now); cutoff.setMonth(now.getMonth() - 3);
+      all = allFull.filter(e => e.dueDate && new Date(e.dueDate) >= cutoff);
+    } else if (periodFilter === "year") {
+      all = allFull.filter(e => e.dueDate && new Date(e.dueDate).getFullYear() === now.getFullYear());
+    }
     const total = all.reduce((s, e) => s + parseFloat(String(e.amount)), 0);
     const paid = all.filter(e => e.status === "paid").reduce((s, e) => s + parseFloat(String(e.amount)), 0);
     const pending = all.filter(e => e.status === "pending").reduce((s, e) => s + parseFloat(String(e.amount)), 0);
     const overdue = all.filter(e => e.status === "overdue").reduce((s, e) => s + parseFloat(String(e.amount)), 0);
-    return { total, paid, pending, overdue };
-  }, [expensesData]);
+    const paidThisMonth = allFull.filter(e => e.status === "paid" && e.paymentDate && new Date(e.paymentDate).getMonth() === now.getMonth() && new Date(e.paymentDate).getFullYear() === now.getFullYear()).reduce((s, e) => s + parseFloat(String(e.amount)), 0);
+    return { total, paid, pending, overdue, paidThisMonth };
+  }, [allExpensesForKpi, periodFilter]);
 
   const categoryBreakdown = useMemo(() => {
     const all = expenses;
@@ -181,22 +198,48 @@ export default function Expenses() {
         </Button>
       </div>
 
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">Resumo financeiro das despesas</p>
+        <Select value={periodFilter} onValueChange={setPeriodFilter}>
+          <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os períodos</SelectItem>
+            <SelectItem value="month">Este mês</SelectItem>
+            <SelectItem value="quarter">Últimos 3 meses</SelectItem>
+            <SelectItem value="year">Este ano</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card><CardContent className="p-5 flex items-start gap-3">
           <div className="mt-1 p-2 rounded-md bg-muted text-red-600"><TrendingDown className="w-5 h-5" /></div>
-          <div><p className="text-sm text-muted-foreground">Total</p><p className="text-xl font-bold">{fmt(kpis.total)}</p></div>
+          <div>
+            <p className="text-sm text-muted-foreground">Total {periodFilter !== "all" ? "(período)" : "Geral"}</p>
+            <p className="text-xl font-bold">{fmt(kpis.total)}</p>
+          </div>
         </CardContent></Card>
         <Card><CardContent className="p-5 flex items-start gap-3">
           <div className="mt-1 p-2 rounded-md bg-muted text-green-600"><CheckCircle className="w-5 h-5" /></div>
-          <div><p className="text-sm text-muted-foreground">Pagas</p><p className="text-xl font-bold text-green-600">{fmt(kpis.paid)}</p></div>
+          <div>
+            <p className="text-sm text-muted-foreground">Pagas (período)</p>
+            <p className="text-xl font-bold text-green-600">{fmt(kpis.paid)}</p>
+            <p className="text-xs text-muted-foreground">Mês atual: {fmt(kpis.paidThisMonth)}</p>
+          </div>
         </CardContent></Card>
         <Card><CardContent className="p-5 flex items-start gap-3">
           <div className="mt-1 p-2 rounded-md bg-muted text-yellow-600"><Clock className="w-5 h-5" /></div>
-          <div><p className="text-sm text-muted-foreground">Pendentes</p><p className="text-xl font-bold text-yellow-600">{fmt(kpis.pending)}</p></div>
+          <div>
+            <p className="text-sm text-muted-foreground">Pendentes</p>
+            <p className="text-xl font-bold text-yellow-600">{fmt(kpis.pending)}</p>
+          </div>
         </CardContent></Card>
         <Card><CardContent className="p-5 flex items-start gap-3">
           <div className="mt-1 p-2 rounded-md bg-muted text-destructive"><AlertCircle className="w-5 h-5" /></div>
-          <div><p className="text-sm text-muted-foreground">Vencidas</p><p className="text-xl font-bold text-destructive">{fmt(kpis.overdue)}</p></div>
+          <div>
+            <p className="text-sm text-muted-foreground">Vencidas</p>
+            <p className="text-xl font-bold text-destructive">{fmt(kpis.overdue)}</p>
+          </div>
         </CardContent></Card>
       </div>
 

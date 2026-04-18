@@ -2,11 +2,12 @@ import { useMemo, useState, useEffect, useRef, type ElementType } from "react";
 import {
   useGetDashboardSummary, useGetDashboardRevenueChart, useGetDashboardUpcomingTrips,
   useListPayments, useListClients, useGetMe, useListPipelineStages, useListDeals, useListReservations,
+  useGetPaymentsSummary, useListExpenses,
 } from "@workspace/api-client-react";
 import type { Reservation } from "@workspace/api-client-react";
 import { VoucherModal } from "./reservations";
 import { ReservationCardVisual } from "@/components/reservation-card-visual";
-import { Users, Map, DollarSign, Star, Briefcase, CalendarCheck, AlertTriangle, ArrowUpRight, Plus, Clock, Check, Trash2 } from "lucide-react";
+import { Users, Map, DollarSign, Star, Briefcase, CalendarCheck, AlertTriangle, ArrowUpRight, Plus, Clock, Check, Trash2, TrendingDown, TrendingUp, AlertCircle, Percent } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -137,8 +138,21 @@ function AgencyDashboard() {
   const { data: pendingPayments, isLoading: loadingPayments } = useListPayments({ status: "pending", limit: 10 });
   const { data: stages, isLoading: loadingStages } = useListPipelineStages();
   const { data: deals, isLoading: loadingDeals } = useListDeals({ status: "open" });
+  const { data: paymentSummary, isLoading: loadingPaySummary } = useGetPaymentsSummary();
+  const { data: allExpensesData, isLoading: loadingExpenses } = useListExpenses({ limit: 500 });
 
   const npsLabel = summary?.averageNps != null ? `${summary.averageNps.toFixed(1)} / 10` : "—";
+
+  const financialKpis = useMemo(() => {
+    const expenses = allExpensesData?.data ?? [];
+    const totalExpenses = expenses.reduce((s, e) => s + parseFloat(String(e.amount)), 0);
+    const pendingExpenses = expenses.filter(e => e.status === "pending").reduce((s, e) => s + parseFloat(String(e.amount)), 0);
+    const overdueExpenses = expenses.filter(e => e.status === "overdue").reduce((s, e) => s + parseFloat(String(e.amount)), 0);
+    const totalRevenue = summary?.totalRevenue ?? 0;
+    const netProfit = totalRevenue - totalExpenses;
+    const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+    return { totalExpenses, pendingExpenses, overdueExpenses, netProfit, margin };
+  }, [allExpensesData, summary]);
 
   const clientOriginData = useMemo(() => {
     const all = allClientsOrigin?.data ?? [];
@@ -172,8 +186,36 @@ function AgencyDashboard() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <KpiCard title="Receita Total" value={formatCurrency(summary?.totalRevenue ?? 0)} sub={`${formatCurrency(summary?.revenueThisMonth ?? 0)} este mês`} icon={TrendingUp} loading={loadingSummary} color="text-green-600" />
+        <KpiCard title="Total Despesas" value={formatCurrency(financialKpis.totalExpenses)} sub={`A pagar: ${formatCurrency(financialKpis.pendingExpenses)}`} icon={TrendingDown} loading={loadingExpenses} color="text-red-500" />
+        <KpiCard
+          title="Lucro Líquido"
+          value={formatCurrency(financialKpis.netProfit)}
+          sub={`Margem: ${financialKpis.margin.toFixed(1)}%`}
+          icon={DollarSign}
+          loading={loadingSummary || loadingExpenses}
+          color={financialKpis.netProfit >= 0 ? "text-emerald-600" : "text-red-600"}
+        />
         <KpiCard title="Total de Clientes" value={summary?.totalClients ?? 0} sub={`+${summary?.newClientsThisMonth ?? 0} este mês`} icon={Users} loading={loadingSummary} />
-        <KpiCard title="Receita Total" value={formatCurrency(summary?.totalRevenue ?? 0)} sub={`${formatCurrency(summary?.revenueThisMonth ?? 0)} este mês`} icon={DollarSign} loading={loadingSummary} color="text-green-600" />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          title="A Receber"
+          value={formatCurrency(paymentSummary?.totalReceivable ?? 0)}
+          sub={`Vencido: ${formatCurrency(paymentSummary?.overdueReceivable ?? 0)}`}
+          icon={CalendarCheck}
+          loading={loadingPaySummary}
+          color="text-blue-600"
+        />
+        <KpiCard
+          title="A Pagar (Despesas)"
+          value={formatCurrency(financialKpis.pendingExpenses)}
+          sub={financialKpis.overdueExpenses > 0 ? `Vencido: ${formatCurrency(financialKpis.overdueExpenses)}` : "Sem vencimentos"}
+          icon={financialKpis.overdueExpenses > 0 ? AlertCircle : Clock}
+          loading={loadingExpenses}
+          color={financialKpis.overdueExpenses > 0 ? "text-red-600" : "text-yellow-600"}
+        />
         <KpiCard title="Viagens Ativas" value={summary?.activeTrips ?? 0} sub={`De ${summary?.totalTrips ?? 0} no total`} icon={Map} loading={loadingSummary} color="text-blue-600" />
         <KpiCard title="NPS Médio" value={npsLabel} sub={`${summary?.confirmedReservations ?? 0} reservas confirmadas`} icon={Star} loading={loadingSummary} color="text-yellow-500" />
       </div>

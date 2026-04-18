@@ -411,6 +411,66 @@ export default function Financial() {
         />
       </div>
 
+      {(() => {
+        const netProfit = totalRevenue - totalExpensesSum;
+        const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+        const pendingExpenses = (allExpensesData?.data ?? []).filter(e => e.status === "pending").reduce((s, e) => s + Number(e.amount), 0);
+        const overdueExpenses = (allExpensesData?.data ?? []).filter(e => e.status === "overdue").reduce((s, e) => s + Number(e.amount), 0);
+        const isProfit = netProfit >= 0;
+        return (
+          <Card className={`border-2 ${isProfit ? "border-emerald-200 bg-emerald-50/30 dark:border-emerald-800 dark:bg-emerald-950/20" : "border-red-200 bg-red-50/30 dark:border-red-800 dark:bg-red-950/20"}`}>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <BarChart2 className="w-4 h-4" /> Resultado Financeiro
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-5">
+                <div className="md:col-span-2 flex flex-col items-center justify-center py-2">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Resultado Líquido</p>
+                  <p className={`text-3xl font-bold ${isProfit ? "text-emerald-600" : "text-red-600"}`}>
+                    {isProfit ? "+" : ""}{fmt(netProfit)}
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">Margem: {margin.toFixed(1)}%</p>
+                </div>
+                <div className="md:col-span-3 grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className="rounded-lg bg-muted/60 p-3">
+                    <p className="text-xs text-muted-foreground">Receita Bruta</p>
+                    <p className="text-lg font-semibold text-green-600">{fmt(totalRevenue)}</p>
+                    <p className="text-[10px] text-muted-foreground">Recebido no mês: {fmt(summary?.collectedThisMonth ?? 0)}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/60 p-3">
+                    <p className="text-xs text-muted-foreground">Total Despesas</p>
+                    <p className="text-lg font-semibold text-red-600">{fmt(totalExpensesSum)}</p>
+                    <p className="text-[10px] text-muted-foreground">A pagar: {fmt(pendingExpenses)}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/60 p-3">
+                    <p className="text-xs text-muted-foreground">A Receber</p>
+                    <p className="text-lg font-semibold text-blue-600">{fmt(summary?.totalReceivable ?? 0)}</p>
+                    <p className="text-[10px] text-muted-foreground">Vencido: {fmt(summary?.overdueReceivable ?? 0)}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/60 p-3">
+                    <p className="text-xs text-muted-foreground">A Pagar</p>
+                    <p className="text-lg font-semibold text-orange-600">{fmt(pendingExpenses)}</p>
+                    <p className="text-[10px] text-muted-foreground">Vencido: {fmt(overdueExpenses)}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/60 p-3">
+                    <p className="text-xs text-muted-foreground">Recebido (Mês)</p>
+                    <p className="text-lg font-semibold">{fmt(summary?.collectedThisMonth ?? 0)}</p>
+                    <p className="text-[10px] text-muted-foreground">Acumulado: {fmt(totalRevenue)}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/60 p-3">
+                    <p className="text-xs text-muted-foreground">Vencidos (Rec.)</p>
+                    <p className={`text-lg font-semibold ${(summary?.overdueReceivable ?? 0) > 0 ? "text-red-500" : "text-muted-foreground"}`}>{fmt(summary?.overdueReceivable ?? 0)}</p>
+                    <p className="text-[10px] text-muted-foreground">Pendentes em atraso</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
       {chartData && chartData.length > 0 && (
         <div className="grid gap-4 md:grid-cols-3">
           <Card className="md:col-span-2">

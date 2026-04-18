@@ -6,6 +6,7 @@ import {
   useListTrips,
   useListReservations,
   useListCommissions,
+  useListExpenses,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -150,6 +151,25 @@ function SalesFunnel({ data }: { data: Array<{ label: string; count: number; col
   );
 }
 
+const EXPENSE_CATEGORY_COLORS: Record<string, string> = {
+  transport: "#3B82F6",
+  accommodation: "#8B5CF6",
+  food: "#10B981",
+  marketing: "#F59E0B",
+  administrative: "#6366F1",
+  commission: "#EF4444",
+  other: "#94A3B8",
+};
+const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
+  transport: "Transporte",
+  accommodation: "Hospedagem",
+  food: "Alimentação",
+  marketing: "Marketing",
+  administrative: "Administrativo",
+  commission: "Comissão",
+  other: "Outro",
+};
+
 export default function Analytics() {
   const [period, setPeriod] = useState<GetDashboardRevenueChartPeriod>("12m");
   const { data: summary, isLoading } = useGetDashboardSummary();
@@ -158,6 +178,7 @@ export default function Analytics() {
   const { data: tripsData } = useListTrips({ limit: 20, status: "published" });
   const { data: reservationsData } = useListReservations({ limit: 100 });
   const { data: commissionsRaw } = useListCommissions();
+  const { data: expensesAllData } = useListExpenses({ limit: 500 });
   const commissions = Array.isArray(commissionsRaw) ? commissionsRaw : [];
 
   const topTrips = useMemo(() => {
@@ -193,6 +214,29 @@ export default function Analytics() {
   const totalExpenses = chartData?.reduce((s, d) => s + d.expenses, 0) ?? 0;
   const avgTicket = (summary?.totalReservations ?? 0) > 0 ? totalRevenue / (summary?.totalReservations ?? 1) : 0;
   const conversionRate = (summary?.openDeals ?? 0) > 0 ? ((summary?.confirmedReservations ?? 0) / (summary?.openDeals ?? 1) * 100) : 0;
+
+  const expenseCategoryData = useMemo(() => {
+    const all = expensesAllData?.data ?? [];
+    const map: Record<string, number> = {};
+    for (const e of all) {
+      map[e.category] = (map[e.category] ?? 0) + parseFloat(String(e.amount));
+    }
+    return Object.entries(map)
+      .map(([cat, total]) => ({ category: cat, total }))
+      .sort((a, b) => b.total - a.total);
+  }, [expensesAllData]);
+
+  const expenseTotalFromList = useMemo(() =>
+    (expensesAllData?.data ?? []).reduce((s, e) => s + parseFloat(String(e.amount)), 0),
+    [expensesAllData]
+  );
+
+  const expensePaidThisMonth = useMemo(() => {
+    const now = new Date();
+    return (expensesAllData?.data ?? [])
+      .filter(e => e.status === "paid" && e.paymentDate && new Date(e.paymentDate).getMonth() === now.getMonth() && new Date(e.paymentDate).getFullYear() === now.getFullYear())
+      .reduce((s, e) => s + parseFloat(String(e.amount)), 0);
+  }, [expensesAllData]);
 
   const categoryData = useMemo(() => {
     const trips = tripsData?.data ?? [];
@@ -240,13 +284,15 @@ export default function Analytics() {
         </div>
       </div>
 
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-3">
-        <KpiCard icon={DollarSign} label="Receita Total" value={fmtCompact(totalRevenue)} sub={`Despesas: ${fmtCompact(totalExpenses)}`} color="text-green-600" loading={isLoading} />
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+        <KpiCard icon={DollarSign} label="Receita Total" value={fmtCompact(totalRevenue)} sub={`${fmtCompact(summary?.revenueThisMonth ?? 0)} este mês`} color="text-green-600" loading={isLoading} />
+        <KpiCard icon={TrendingUp} label="Lucro Líquido" value={fmtCompact(totalRevenue - expenseTotalFromList)} sub={`Despesas: ${fmtCompact(expenseTotalFromList)}`} color={(totalRevenue - expenseTotalFromList) >= 0 ? "text-emerald-600" : "text-red-600"} loading={isLoading} />
         <KpiCard icon={CalendarCheck} label="Total de Reservas" value={String(summary?.totalReservations ?? 0)} sub={`${summary?.confirmedReservations ?? 0} confirmadas`} color="text-blue-600" loading={isLoading} />
         <KpiCard icon={Target} label="Ticket Medio" value={fmtCompact(avgTicket)} sub="por reserva" color="text-purple-600" loading={isLoading} />
         <KpiCard icon={TrendingUp} label="Taxa de Conversao" value={`${conversionRate.toFixed(1)}%`} sub="Reservas / Negocios" color="text-orange-600" loading={isLoading} />
         <KpiCard icon={Users} label="Total de Clientes" value={String(summary?.totalClients ?? 0)} sub={`+${summary?.newClientsThisMonth ?? 0} este mes`} color="text-teal-600" loading={isLoading} />
         <KpiCard icon={MapPin} label="Viagens Ativas" value={String(summary?.activeTrips ?? 0)} sub={`${summary?.occupancyRate?.toFixed(1) ?? 0}% ocupacao media`} color="text-indigo-600" loading={isLoading} />
+        <KpiCard icon={BarChart2} label="A Receber" value={fmtCompact(paymentSummary?.totalReceivable ?? 0)} sub={`Vencido: ${fmtCompact(paymentSummary?.overdueReceivable ?? 0)}`} color="text-blue-600" loading={isLoading} />
       </div>
 
       <Tabs defaultValue="overview">
@@ -286,6 +332,38 @@ export default function Analytics() {
               </CardContent>
             </Card>
           </div>
+
+          {expenseCategoryData.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <BarChart2 className="w-4 h-4" /> Despesas por Categoria
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {expenseCategoryData.map(d => {
+                    const maxVal = expenseCategoryData[0]?.total ?? 1;
+                    const pct = (d.total / maxVal) * 100;
+                    return (
+                      <div key={d.category} className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground w-28 shrink-0">{EXPENSE_CATEGORY_LABELS[d.category] ?? d.category}</span>
+                        <div className="flex-1 bg-muted rounded-full h-2.5">
+                          <div className="h-2.5 rounded-full" style={{ width: `${pct}%`, backgroundColor: EXPENSE_CATEGORY_COLORS[d.category] ?? "#94A3B8" }} />
+                        </div>
+                        <span className="text-xs font-semibold w-28 text-right">{fmt(d.total)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-4 pt-3 border-t flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Total de Despesas</span>
+                  <span className="font-bold text-red-600">{fmt(expenseTotalFromList)}</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <div className="grid gap-4 md:grid-cols-2">
             <Card>
               <CardHeader className="pb-2">
@@ -304,9 +382,19 @@ export default function Analytics() {
                   <span className="text-sm text-muted-foreground">Recebido no Mes</span>
                   <span className="font-semibold">{fmt(paymentSummary?.collectedThisMonth ?? 0)}</span>
                 </div>
-                <div className="flex justify-between items-center py-2">
+                <div className="flex justify-between items-center py-2 border-b">
                   <span className="text-sm text-muted-foreground">Vencidos (Receber)</span>
                   <span className="font-semibold text-yellow-600">{fmt(paymentSummary?.overdueReceivable ?? 0)}</span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b">
+                  <span className="text-sm text-muted-foreground">Despesas Pagas (Mês)</span>
+                  <span className="font-semibold text-red-500">{fmt(expensePaidThisMonth)}</span>
+                </div>
+                <div className="flex justify-between items-center py-2">
+                  <span className="text-sm font-medium">Resultado Líquido</span>
+                  <span className={`font-bold text-base ${(totalRevenue - expenseTotalFromList) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                    {totalRevenue - expenseTotalFromList >= 0 ? "+" : ""}{fmt(totalRevenue - expenseTotalFromList)}
+                  </span>
                 </div>
               </CardContent>
             </Card>
