@@ -843,6 +843,17 @@ export interface BoardingPassenger {
   phone?: string | null;
   /** @nullable */
   whatsapp?: string | null;
+  /** @nullable */
+  boardingLocationId?: string | null;
+  /** @nullable */
+  disembarkLocationId?: string | null;
+}
+
+export interface BoardingPoint {
+  id: string;
+  name: string;
+  time?: string;
+  address?: string;
 }
 
 export interface BoardingPanel {
@@ -855,6 +866,22 @@ export interface BoardingPanel {
   tenantName: string;
   /** @nullable */
   tenantCnpj?: string | null;
+  boardingPoints?: BoardingPoint[];
+}
+
+export interface UpdatePassengerBoardingBody {
+  /** @nullable */
+  boardingLocationId?: string | null;
+  /** @nullable */
+  disembarkLocationId?: string | null;
+}
+
+export interface PassengerBoardingUpdate {
+  id: string;
+  /** @nullable */
+  boardingLocationId?: string | null;
+  /** @nullable */
+  disembarkLocationId?: string | null;
 }
 
 export interface CreatePassengerBody {

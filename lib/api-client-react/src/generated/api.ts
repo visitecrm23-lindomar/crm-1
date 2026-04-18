@@ -138,6 +138,7 @@ import type {
   NpsSummary,
   Order,
   Passenger,
+  PassengerBoardingUpdate,
   Payment,
   PaymentListResponse,
   Pipeline,
@@ -187,6 +188,7 @@ import type {
   UpdateLayoutBody,
   UpdateMessageTemplateBody,
   UpdateOrderBody,
+  UpdatePassengerBoardingBody,
   UpdatePassengerBody,
   UpdatePaymentBody,
   UpdatePipelineBody,
@@ -5026,6 +5028,121 @@ export const useSyncTripPassengers = <
   TContext
 > => {
   return useMutation(getSyncTripPassengersMutationOptions(options));
+};
+
+/**
+ * @summary Update boarding location fields for a passenger
+ */
+export const getUpdatePassengerBoardingUrl = (
+  tripId: string,
+  passengerId: string,
+) => {
+  return `/api/trips/${tripId}/passengers/${passengerId}`;
+};
+
+export const updatePassengerBoarding = async (
+  tripId: string,
+  passengerId: string,
+  updatePassengerBoardingBody: UpdatePassengerBoardingBody,
+  options?: RequestInit,
+): Promise<PassengerBoardingUpdate> => {
+  return customFetch<PassengerBoardingUpdate>(
+    getUpdatePassengerBoardingUrl(tripId, passengerId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updatePassengerBoardingBody),
+    },
+  );
+};
+
+export const getUpdatePassengerBoardingMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePassengerBoarding>>,
+    TError,
+    {
+      tripId: string;
+      passengerId: string;
+      data: BodyType<UpdatePassengerBoardingBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updatePassengerBoarding>>,
+  TError,
+  {
+    tripId: string;
+    passengerId: string;
+    data: BodyType<UpdatePassengerBoardingBody>;
+  },
+  TContext
+> => {
+  const mutationKey = ["updatePassengerBoarding"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updatePassengerBoarding>>,
+    {
+      tripId: string;
+      passengerId: string;
+      data: BodyType<UpdatePassengerBoardingBody>;
+    }
+  > = (props) => {
+    const { tripId, passengerId, data } = props ?? {};
+
+    return updatePassengerBoarding(tripId, passengerId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdatePassengerBoardingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updatePassengerBoarding>>
+>;
+export type UpdatePassengerBoardingMutationBody =
+  BodyType<UpdatePassengerBoardingBody>;
+export type UpdatePassengerBoardingMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update boarding location fields for a passenger
+ */
+export const useUpdatePassengerBoarding = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePassengerBoarding>>,
+    TError,
+    {
+      tripId: string;
+      passengerId: string;
+      data: BodyType<UpdatePassengerBoardingBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updatePassengerBoarding>>,
+  TError,
+  {
+    tripId: string;
+    passengerId: string;
+    data: BodyType<UpdatePassengerBoardingBody>;
+  },
+  TContext
+> => {
+  return useMutation(getUpdatePassengerBoardingMutationOptions(options));
 };
 
 /**

@@ -1239,6 +1239,36 @@ paths:
                     description: Number of passenger records created
                 required: [created]
 
+  /trips/{tripId}/passengers/{passengerId}:
+    patch:
+      operationId: updatePassengerBoarding
+      tags: [trips]
+      summary: Update boarding location fields for a passenger
+      parameters:
+        - name: tripId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: passengerId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePassengerBoardingBody"
+      responses:
+        "200":
+          description: Updated passenger boarding info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PassengerBoardingUpdate"
+
   # ─── RESERVATIONS ─────────────────────────────────────────────────
   /reservations/stats:
     get:
@@ -5546,7 +5576,24 @@ components:
           type: ["string", "null"]
         whatsapp:
           type: ["string", "null"]
+        boardingLocationId:
+          type: ["string", "null"]
+        disembarkLocationId:
+          type: ["string", "null"]
       required: [id, reservationId, voucherCode, clientName, name, ageCategory]
+
+    BoardingPoint:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        time:
+          type: string
+        address:
+          type: string
+      required: [id, name]
 
     BoardingPanel:
       type: object
@@ -5569,7 +5616,30 @@ components:
           type: string
         tenantCnpj:
           type: ["string", "null"]
+        boardingPoints:
+          type: array
+          items:
+            $ref: "#/components/schemas/BoardingPoint"
       required: [tripId, tripName, departureDate, totalPassengers, checkedIn, passengers, tenantName]
+
+    UpdatePassengerBoardingBody:
+      type: object
+      properties:
+        boardingLocationId:
+          type: ["string", "null"]
+        disembarkLocationId:
+          type: ["string", "null"]
+
+    PassengerBoardingUpdate:
+      type: object
+      properties:
+        id:
+          type: string
+        boardingLocationId:
+          type: ["string", "null"]
+        disembarkLocationId:
+          type: ["string", "null"]
+      required: [id]
 
     CreatePassengerBody:
       type: object

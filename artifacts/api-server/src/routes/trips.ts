@@ -510,6 +510,7 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
         passengers: [],
         tenantName: tenantEarly?.name ?? "",
         tenantCnpj: tenantEarly?.cnpj ?? null,
+        boardingPoints: (trip.boardingPoints ?? []) as Array<{ id: string; name: string; time?: string; address?: string }>,
       });
       return;
     }
@@ -529,6 +530,7 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
     const boardingPassengers = passengers.map(p => {
       const reservation = reservationMap.get(p.reservationId);
       const client = reservation ? clientMap.get(reservation.clientId) : undefined;
+      const effectiveBoardingLocationId = p.boardingLocationId ?? reservation?.boardingLocationId ?? null;
       return {
         id: p.id,
         reservationId: p.reservationId,
@@ -543,6 +545,8 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
         birthDate: p.birthDate?.toISOString() ?? null,
         phone: client?.phone ?? null,
         whatsapp: client?.whatsapp ?? null,
+        boardingLocationId: effectiveBoardingLocationId,
+        disembarkLocationId: p.disembarkLocationId ?? null,
       };
     });
 
@@ -557,6 +561,7 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
       passengers: boardingPassengers,
       tenantName: tenant?.name ?? "",
       tenantCnpj: tenant?.cnpj ?? null,
+      boardingPoints: (trip.boardingPoints ?? []) as Array<{ id: string; name: string; time?: string; address?: string }>,
     });
   } catch (err) {
     req.log.error({ err }, "Error fetching boarding panel");
@@ -621,6 +626,7 @@ router.post("/trips/:id/sync-passengers", async (req, res): Promise<void> => {
         seatNumber: r.seats?.[0] ?? null,
         isChildUnder7: getAgeYears(client.birthDate ?? null) < 7,
         isPrimary: true,
+        boardingLocationId: r.boardingLocationId ?? null,
       }).onConflictDoNothing().returning({ id: passengersTable.id });
       if (inserted.length > 0) created++;
     }
@@ -628,6 +634,51 @@ router.post("/trips/:id/sync-passengers", async (req, res): Promise<void> => {
     res.json({ created });
   } catch (err) {
     req.log.error({ err }, "Error syncing passengers");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/trips/:tripId/passengers/:passengerId", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const { tripId, passengerId } = req.params;
+    const { boardingLocationId, disembarkLocationId } = req.body as {
+      boardingLocationId?: string | null;
+      disembarkLocationId?: string | null;
+    };
+
+    const [trip] = await db.select({ id: tripsTable.id }).from(tripsTable)
+      .where(and(eq(tripsTable.id, tripId), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!trip) { res.status(404).json({ error: "Trip not found" }); return; }
+
+    const [passenger] = await db.select({ id: passengersTable.id, reservationId: passengersTable.reservationId })
+      .from(passengersTable)
+      .where(eq(passengersTable.id, passengerId))
+      .limit(1);
+    if (!passenger) { res.status(404).json({ error: "Passenger not found" }); return; }
+
+    const [reservation] = await db.select({ tripId: reservationsTable.tripId })
+      .from(reservationsTable)
+      .where(and(eq(reservationsTable.id, passenger.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!reservation || reservation.tripId !== trip.id) { res.status(404).json({ error: "Passenger not found" }); return; }
+
+    const updateData: Partial<typeof passengersTable.$inferSelect> = {};
+    if (boardingLocationId !== undefined) updateData.boardingLocationId = boardingLocationId;
+    if (disembarkLocationId !== undefined) updateData.disembarkLocationId = disembarkLocationId;
+
+    const [updated] = await db.update(passengersTable)
+      .set(updateData)
+      .where(eq(passengersTable.id, passengerId))
+      .returning();
+
+    res.json({ id: updated.id, boardingLocationId: updated.boardingLocationId ?? null, disembarkLocationId: updated.disembarkLocationId ?? null });
+  } catch (err) {
+    req.log.error({ err }, "Error updating passenger");
     res.status(500).json({ error: "Internal server error" });
   }
 });

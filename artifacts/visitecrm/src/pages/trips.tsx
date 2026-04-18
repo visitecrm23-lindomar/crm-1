@@ -6,9 +6,10 @@ import {
   useListTrips, useCreateTrip, useGetTrip, useUpdateTrip, useDeleteTrip,
   useGetTripSeatMap, getGetTripSeatMapQueryKey, useGetDashboardUpcomingTrips, useListReservations, useListClients, useCreateReservation, useUpdateReservation, useCreateClient,
   useGetTripBoardingPanel, useCheckInPassenger, useUndoCheckInPassenger, useSyncTripPassengers,
+  useUpdatePassengerBoarding,
   useListLayouts, useGetMe,
 } from "@workspace/api-client-react";
-import type { Trip, Seat, BoardingPassenger, VehicleLayout, LayoutCell } from "@workspace/api-client-react";
+import type { Trip, Seat, BoardingPassenger, BoardingPoint, VehicleLayout, LayoutCell } from "@workspace/api-client-react";
 import { storeApi } from "@/lib/storeApi";
 import { Client360Modal } from "@/components/client360-modal";
 import { useEditor, EditorContent } from "@tiptap/react";
@@ -207,7 +208,9 @@ function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: strin
   const checkIn = useCheckInPassenger();
   const undoCheckIn = useUndoCheckInPassenger();
   const syncPassengers = useSyncTripPassengers();
+  const updateBoarding = useUpdatePassengerBoarding();
   const [syncing, setSyncing] = useState(false);
+  const [updatingLocationId, setUpdatingLocationId] = useState<string | null>(null);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -246,6 +249,19 @@ function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: strin
     }
   };
 
+  const handleBoardingLocationChange = async (p: BoardingPassenger, locationId: string | null) => {
+    setUpdatingLocationId(p.id);
+    try {
+      await updateBoarding.mutateAsync({ tripId, passengerId: p.id, data: { boardingLocationId: locationId } });
+      await refetch();
+    } catch {
+      toast({ title: "Erro ao atualizar local de embarque", variant: "destructive" });
+    } finally {
+      setUpdatingLocationId(null);
+    }
+  };
+
+  const boardingPoints: BoardingPoint[] = panel?.boardingPoints ?? [];
   const passengers = panel?.passengers ?? [];
   const filtered = search
     ? passengers.filter(p =>
@@ -335,54 +351,81 @@ function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: strin
                 </div>
               ) : filtered.map(p => {
                 const isCheckedIn = !!p.checkedInAt;
+                const currentLocationId = p.boardingLocationId ?? "";
+                const isUpdatingThis = updatingLocationId === p.id;
                 return (
-                  <div key={p.id} className={`flex items-center justify-between p-3 rounded-lg border ${isCheckedIn ? "bg-green-50 border-green-200" : "bg-muted/30"}`}>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {p.seatNumber && (
-                          <span className="font-mono text-xs bg-gray-100 border border-gray-300 px-2 py-0.5 rounded font-bold">{p.seatNumber}</span>
+                  <div key={p.id} className={`p-3 rounded-lg border ${isCheckedIn ? "bg-green-50 border-green-200" : "bg-muted/30"}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {p.seatNumber && (
+                            <span className="font-mono text-xs bg-gray-100 border border-gray-300 px-2 py-0.5 rounded font-bold">{p.seatNumber}</span>
+                          )}
+                          <span className="font-medium text-sm">{p.name}</span>
+                          {isCheckedIn && (
+                            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold border border-green-200">
+                              <CheckCircle className="w-3 h-3" />
+                              {new Date(p.checkedInAt!).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex gap-3 mt-0.5 flex-wrap text-xs text-muted-foreground">
+                          <span>{p.clientName}</span>
+                          {p.cpf && <span>CPF: {p.cpf}</span>}
+                          <span className="font-mono opacity-70">{p.reservationNumber ?? p.voucherCode}</span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 ml-2 flex items-center gap-1">
+                        {reservationClientMap.get(p.reservationId) && (
+                          <Button
+                            size="sm" variant="outline" className="h-8 text-xs gap-1"
+                            onClick={() => setClient360Id(reservationClientMap.get(p.reservationId)!)}
+                          >
+                            <UserRound className="w-3.5 h-3.5" /> Perfil 360°
+                          </Button>
                         )}
-                        <span className="font-medium text-sm">{p.name}</span>
-                        {isCheckedIn && (
-                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold border border-green-200">
-                            <CheckCircle className="w-3 h-3" />
-                            {new Date(p.checkedInAt!).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                          </span>
+                        {isCheckedIn ? (
+                          <Button
+                            size="sm" variant="outline" className="h-8 text-xs text-muted-foreground gap-1"
+                            onClick={() => handleUndoCheckIn(p)}
+                            disabled={undoCheckIn.isPending}
+                          >
+                            <RotateCcw className="w-3 h-3" /> Desfazer
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white gap-1"
+                            onClick={() => handleCheckIn(p)}
+                            disabled={checkIn.isPending}
+                          >
+                            <LogIn className="w-3 h-3" /> Embarcar
+                          </Button>
                         )}
                       </div>
-                      <div className="flex gap-3 mt-0.5 flex-wrap text-xs text-muted-foreground">
-                        <span>{p.clientName}</span>
-                        {p.cpf && <span>CPF: {p.cpf}</span>}
-                        <span className="font-mono opacity-70">{p.reservationNumber ?? p.voucherCode}</span>
+                    </div>
+                    {boardingPoints.length > 0 && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        <Select
+                          value={currentLocationId || "__none__"}
+                          onValueChange={v => handleBoardingLocationChange(p, v === "__none__" ? null : v)}
+                          disabled={isUpdatingThis}
+                        >
+                          <SelectTrigger className="h-7 text-xs flex-1 max-w-xs">
+                            <SelectValue placeholder="Ponto de embarque..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">— Não definido —</SelectItem>
+                            {boardingPoints.map(bp => (
+                              <SelectItem key={bp.id} value={bp.id}>
+                                {bp.name}{bp.time ? ` (${bp.time})` : ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {isUpdatingThis && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
                       </div>
-                    </div>
-                    <div className="shrink-0 ml-2 flex items-center gap-1">
-                      {reservationClientMap.get(p.reservationId) && (
-                        <Button
-                          size="sm" variant="outline" className="h-8 text-xs gap-1"
-                          onClick={() => setClient360Id(reservationClientMap.get(p.reservationId)!)}
-                        >
-                          <UserRound className="w-3.5 h-3.5" /> Perfil 360°
-                        </Button>
-                      )}
-                      {isCheckedIn ? (
-                        <Button
-                          size="sm" variant="outline" className="h-8 text-xs text-muted-foreground gap-1"
-                          onClick={() => handleUndoCheckIn(p)}
-                          disabled={undoCheckIn.isPending}
-                        >
-                          <RotateCcw className="w-3 h-3" /> Desfazer
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white gap-1"
-                          onClick={() => handleCheckIn(p)}
-                          disabled={checkIn.isPending}
-                        >
-                          <LogIn className="w-3 h-3" /> Embarcar
-                        </Button>
-                      )}
-                    </div>
+                    )}
                   </div>
                 );
               })}
@@ -2675,7 +2718,7 @@ function formatCpf(cpf: string | null | undefined): string {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
-type ColKey = "nome" | "cpf" | "birthDate" | "seatNumber" | "ageCategory" | "whatsapp" | "checkedInAt";
+type ColKey = "nome" | "cpf" | "birthDate" | "seatNumber" | "ageCategory" | "whatsapp" | "checkedInAt" | "boardingLocation";
 
 const PASSENGER_COLS: { key: ColKey; label: string }[] = [
   { key: "nome", label: "Nome" },
@@ -2683,13 +2726,14 @@ const PASSENGER_COLS: { key: ColKey; label: string }[] = [
   { key: "birthDate", label: "Dt. Nascimento" },
   { key: "seatNumber", label: "Poltrona" },
   { key: "ageCategory", label: "Categoria" },
+  { key: "boardingLocation", label: "Ponto de Embarque" },
   { key: "whatsapp", label: "WhatsApp/Telefone" },
   { key: "checkedInAt", label: "Embarque" },
 ];
 
 const ALL_COLS_ON: Record<ColKey, boolean> = {
   nome: true, cpf: true, birthDate: true, seatNumber: true,
-  ageCategory: true, whatsapp: true, checkedInAt: true,
+  ageCategory: true, boardingLocation: true, whatsapp: true, checkedInAt: true,
 };
 
 export function PassengersList({ tripId }: { tripId: string }) {
@@ -2709,8 +2753,28 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const checkIn = useCheckInPassenger();
   const undoCheckIn = useUndoCheckInPassenger();
   const syncMutation = useSyncTripPassengers();
+  const updateBoarding = useUpdatePassengerBoarding();
+  const [updatingLocationId, setUpdatingLocationId] = useState<string | null>(null);
 
   const allPassengers = panel?.passengers ?? [];
+  const boardingPoints: BoardingPoint[] = panel?.boardingPoints ?? [];
+
+  const getBoardingPointName = (id: string | null | undefined) => {
+    if (!id) return "";
+    return boardingPoints.find(bp => bp.id === id)?.name ?? id;
+  };
+
+  const handleBoardingLocationChange = async (p: BoardingPassenger, locationId: string | null) => {
+    setUpdatingLocationId(p.id);
+    try {
+      await updateBoarding.mutateAsync({ tripId, passengerId: p.id, data: { boardingLocationId: locationId } });
+      await refetch();
+    } catch {
+      toast({ title: "Erro ao atualizar local de embarque", variant: "destructive" });
+    } finally {
+      setUpdatingLocationId(null);
+    }
+  };
 
   const toggleCol = (key: ColKey) =>
     setVisibleCols(prev => ({ ...prev, [key]: !prev[key] }));
@@ -2780,6 +2844,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
           case "birthDate": values.push(p.birthDate ? new Date(p.birthDate).toLocaleDateString("pt-BR") : ""); break;
           case "seatNumber": values.push(p.seatNumber ?? ""); break;
           case "ageCategory": values.push(AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory); break;
+          case "boardingLocation": values.push(getBoardingPointName(p.boardingLocationId)); break;
           case "whatsapp": values.push(getPassengerContact(p)); break;
           case "checkedInAt": values.push(p.checkedInAt ? "Sim" : "Não"); break;
         }
@@ -2810,6 +2875,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
     const organizador = escapeHtml(panel?.tenantName ?? "");
     const cnpj = escapeHtml(panel?.tenantCnpj ?? "");
     const total = allPassengers.length;
+    const hasBoardingPoints = boardingPoints.length > 0;
     const rows = allPassengers.map((p, i) => {
       const nome = escapeHtml(p.name);
       const cpf = escapeHtml(formatCpf(p.cpf));
@@ -2817,6 +2883,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
       const cat = escapeHtml(AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory);
       const poltrona = escapeHtml(p.seatNumber ?? "—");
       const contato = escapeHtml(getPassengerContact(p));
+      const embarque = hasBoardingPoints ? escapeHtml(getBoardingPointName(p.boardingLocationId) || "—") : "";
       return `<tr>
         <td>${String(i + 1).padStart(2, "0")}</td>
         <td>${nome}</td>
@@ -2824,6 +2891,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
         <td>${nasc}</td>
         <td>${cat}</td>
         <td>${poltrona}</td>
+        ${hasBoardingPoints ? `<td>${embarque}</td>` : ""}
         <td>${contato}</td>
       </tr>`;
     }).join("");
@@ -2871,6 +2939,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
       <th>Dt. Nascimento</th>
       <th>Categoria</th>
       <th>Poltrona</th>
+      ${hasBoardingPoints ? "<th>Ponto de Embarque</th>" : ""}
       <th>WhatsApp/Telefone</th>
     </tr>
   </thead>
@@ -2968,6 +3037,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
                 {visibleCols.birthDate && <th className="text-left p-3 font-medium whitespace-nowrap">Dt. Nascimento</th>}
                 {visibleCols.seatNumber && <th className="text-left p-3 font-medium whitespace-nowrap">Poltrona</th>}
                 {visibleCols.ageCategory && <th className="text-left p-3 font-medium whitespace-nowrap">Categoria</th>}
+                {visibleCols.boardingLocation && <th className="text-left p-3 font-medium whitespace-nowrap">Ponto de Embarque</th>}
                 {visibleCols.whatsapp && <th className="text-left p-3 font-medium whitespace-nowrap">WhatsApp/Telefone</th>}
                 {visibleCols.checkedInAt && <th className="text-center p-3 font-medium whitespace-nowrap">Embarque</th>}
                 <th className="text-center p-3 font-medium whitespace-nowrap">Ação</th>
@@ -3006,6 +3076,34 @@ export function PassengersList({ tripId }: { tripId: string }) {
                           }`}>
                             {AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory}
                           </span>
+                        </td>
+                      )}
+                      {visibleCols.boardingLocation && (
+                        <td className="p-3 whitespace-nowrap">
+                          {boardingPoints.length > 0 ? (
+                            <div className="flex items-center gap-1">
+                              <Select
+                                value={p.boardingLocationId ?? "__none__"}
+                                onValueChange={v => handleBoardingLocationChange(p, v === "__none__" ? null : v)}
+                                disabled={updatingLocationId === p.id}
+                              >
+                                <SelectTrigger className="h-7 text-xs w-40">
+                                  <SelectValue placeholder="— Não definido —" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__">— Não definido —</SelectItem>
+                                  {boardingPoints.map(bp => (
+                                    <SelectItem key={bp.id} value={bp.id}>
+                                      {bp.name}{bp.time ? ` (${bp.time})` : ""}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {updatingLocationId === p.id && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">{getBoardingPointName(p.boardingLocationId) || "—"}</span>
+                          )}
                         </td>
                       )}
                       {visibleCols.whatsapp && (

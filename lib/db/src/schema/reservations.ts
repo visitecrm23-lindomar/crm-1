@@ -71,6 +71,8 @@ export const passengersTable = pgTable("passengers", {
   isChildUnder7: boolean("is_child_under_7").notNull().default(false),
   isPrimary: boolean("is_primary").notNull().default(false),
   checkedInAt: timestamp("checked_in_at", { withTimezone: true }),
+  boardingLocationId: text("boarding_location_id"),
+  disembarkLocationId: text("disembark_location_id"),
 });
 
 export const insertPassengerSchema = createInsertSchema(passengersTable);

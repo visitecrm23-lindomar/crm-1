@@ -1691,10 +1691,22 @@ export const GetTripBoardingPanelResponse = zod.object({
       birthDate: zod.string().nullish(),
       phone: zod.string().nullish(),
       whatsapp: zod.string().nullish(),
+      boardingLocationId: zod.string().nullish(),
+      disembarkLocationId: zod.string().nullish(),
     }),
   ),
   tenantName: zod.string(),
   tenantCnpj: zod.string().nullish(),
+  boardingPoints: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        name: zod.string(),
+        time: zod.string().optional(),
+        address: zod.string().optional(),
+      }),
+    )
+    .optional(),
 });
 
 /**
@@ -1706,6 +1718,25 @@ export const SyncTripPassengersParams = zod.object({
 
 export const SyncTripPassengersResponse = zod.object({
   created: zod.number().describe("Number of passenger records created"),
+});
+
+/**
+ * @summary Update boarding location fields for a passenger
+ */
+export const UpdatePassengerBoardingParams = zod.object({
+  tripId: zod.coerce.string(),
+  passengerId: zod.coerce.string(),
+});
+
+export const UpdatePassengerBoardingBody = zod.object({
+  boardingLocationId: zod.string().nullish(),
+  disembarkLocationId: zod.string().nullish(),
+});
+
+export const UpdatePassengerBoardingResponse = zod.object({
+  id: zod.string(),
+  boardingLocationId: zod.string().nullish(),
+  disembarkLocationId: zod.string().nullish(),
 });
 
 /**

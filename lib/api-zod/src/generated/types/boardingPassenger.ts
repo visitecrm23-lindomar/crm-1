@@ -27,4 +27,8 @@ export interface BoardingPassenger {
   phone?: string | null;
   /** @nullable */
   whatsapp?: string | null;
+  /** @nullable */
+  boardingLocationId?: string | null;
+  /** @nullable */
+  disembarkLocationId?: string | null;
 }

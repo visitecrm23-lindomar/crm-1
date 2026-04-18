@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { BoardingPassenger } from "./boardingPassenger";
+import type { BoardingPoint } from "./boardingPoint";
 
 export interface BoardingPanel {
   tripId: string;
@@ -17,4 +18,5 @@ export interface BoardingPanel {
   tenantName: string;
   /** @nullable */
   tenantCnpj?: string | null;
+  boardingPoints?: BoardingPoint[];
 }
