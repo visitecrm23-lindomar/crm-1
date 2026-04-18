@@ -248,9 +248,16 @@ function ProductCard({
             {slideImages.map((_, i) => (
               <span
                 key={i}
-                className={`block rounded-full transition-all duration-300 ${
+                role="button"
+                aria-label={`Ir para imagem ${i + 1}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSlideIndex(i);
+                }}
+                className={`block rounded-full transition-all duration-300 cursor-pointer ${
                   i === slideIndex ? "w-4 h-1.5 bg-white" : "w-1.5 h-1.5 bg-white/60"
                 }`}
+                style={{ padding: "6px", margin: "-6px", boxSizing: "content-box" }}
               />
             ))}
           </div>
