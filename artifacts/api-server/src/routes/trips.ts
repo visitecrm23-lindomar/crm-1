@@ -256,6 +256,17 @@ router.post("/trips", async (req, res): Promise<void> => {
       returnTime: parsed.data.returnTime ?? null,
       createdById: me.id,
       ...(parsed.data.status ? { status: parsed.data.status } : {}),
+      driver1Cpf: parsed.data.driver1Cpf ?? null,
+      driver1Cnh: parsed.data.driver1Cnh ?? null,
+      driver1CnhCategory: parsed.data.driver1CnhCategory ?? null,
+      driver1CnhExpiry: parsed.data.driver1CnhExpiry ?? null,
+      driver2Name: parsed.data.driver2Name ?? null,
+      driver2Cpf: parsed.data.driver2Cpf ?? null,
+      driver2Cnh: parsed.data.driver2Cnh ?? null,
+      driver2CnhCategory: parsed.data.driver2CnhCategory ?? null,
+      driver2CnhExpiry: parsed.data.driver2CnhExpiry ?? null,
+      tourGuideCpf: parsed.data.tourGuideCpf ?? null,
+      tourGuideRegistration: parsed.data.tourGuideRegistration ?? null,
     });
 
     const [trip] = await db.select().from(tripsTable)
@@ -527,8 +538,16 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
       const seq = (Number(countRow?.count ?? 0) + 1).toString().padStart(6, "0");
       const manifestNumber = `MAN-${year}-${seq}`;
       await db.update(tripsTable).set({ manifestNumber })
-        .where(and(eq(tripsTable.id, trip.id), eq(tripsTable.tenantId, me.tenantId)));
-      trip.manifestNumber = manifestNumber;
+        .where(and(
+          eq(tripsTable.id, trip.id),
+          eq(tripsTable.tenantId, me.tenantId),
+          sql`manifest_number IS NULL`,
+        ));
+      const [refreshed] = await db.select({ manifestNumber: tripsTable.manifestNumber })
+        .from(tripsTable)
+        .where(and(eq(tripsTable.id, trip.id), eq(tripsTable.tenantId, me.tenantId)))
+        .limit(1);
+      trip.manifestNumber = refreshed?.manifestNumber ?? manifestNumber;
     }
 
     const reservations = await db.select().from(reservationsTable)
