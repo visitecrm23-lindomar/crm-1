@@ -248,10 +248,10 @@ router.put("/store/settings", async (req, res): Promise<void> => {
     if (existingStore) {
       const d = parsed.data;
       await Promise.all([
-        deleteOrphanedFile(existingStore.logo, d.logo ?? null, req.log),
-        deleteOrphanedFile(existingStore.logoDark, d.logoDark ?? null, req.log),
-        deleteOrphanedFile(existingStore.bannerHome, d.bannerHome ?? null, req.log),
-        deleteOrphanedFile(existingStore.bannerMobile, d.bannerMobile ?? null, req.log),
+        d.logo !== undefined ? deleteOrphanedFile(existingStore.logo, d.logo ?? null, req.log) : Promise.resolve(),
+        d.logoDark !== undefined ? deleteOrphanedFile(existingStore.logoDark, d.logoDark ?? null, req.log) : Promise.resolve(),
+        d.bannerHome !== undefined ? deleteOrphanedFile(existingStore.bannerHome, d.bannerHome ?? null, req.log) : Promise.resolve(),
+        d.bannerMobile !== undefined ? deleteOrphanedFile(existingStore.bannerMobile, d.bannerMobile ?? null, req.log) : Promise.resolve(),
       ]);
     }
 
