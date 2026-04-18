@@ -47,6 +47,28 @@ export interface CreateTripBody {
   tourGuide?: string | null;
   /** @nullable */
   tripOrganizer?: string | null;
+  /** @nullable */
+  driver1Cpf?: string | null;
+  /** @nullable */
+  driver1Cnh?: string | null;
+  /** @nullable */
+  driver1CnhCategory?: string | null;
+  /** @nullable */
+  driver1CnhExpiry?: string | null;
+  /** @nullable */
+  driver2Name?: string | null;
+  /** @nullable */
+  driver2Cpf?: string | null;
+  /** @nullable */
+  driver2Cnh?: string | null;
+  /** @nullable */
+  driver2CnhCategory?: string | null;
+  /** @nullable */
+  driver2CnhExpiry?: string | null;
+  /** @nullable */
+  tourGuideCpf?: string | null;
+  /** @nullable */
+  tourGuideRegistration?: string | null;
   status?: string;
   gallery?: string[];
   boardingPoints?: unknown[];

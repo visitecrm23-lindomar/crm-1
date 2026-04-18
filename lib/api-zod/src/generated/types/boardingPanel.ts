@@ -19,4 +19,36 @@ export interface BoardingPanel {
   /** @nullable */
   tenantCnpj?: string | null;
   boardingPoints: BoardingPoint[];
+  /** @nullable */
+  manifestNumber?: string | null;
+  /** @nullable */
+  vehiclePlate?: string | null;
+  /** @nullable */
+  vehicleType?: string | null;
+  /** @nullable */
+  driverName?: string | null;
+  /** @nullable */
+  driver1Cpf?: string | null;
+  /** @nullable */
+  driver1Cnh?: string | null;
+  /** @nullable */
+  driver1CnhCategory?: string | null;
+  /** @nullable */
+  driver1CnhExpiry?: string | null;
+  /** @nullable */
+  driver2Name?: string | null;
+  /** @nullable */
+  driver2Cpf?: string | null;
+  /** @nullable */
+  driver2Cnh?: string | null;
+  /** @nullable */
+  driver2CnhCategory?: string | null;
+  /** @nullable */
+  driver2CnhExpiry?: string | null;
+  /** @nullable */
+  tourGuide?: string | null;
+  /** @nullable */
+  tourGuideCpf?: string | null;
+  /** @nullable */
+  tourGuideRegistration?: string | null;
 }

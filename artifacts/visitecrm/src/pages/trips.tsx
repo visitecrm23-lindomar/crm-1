@@ -9,7 +9,7 @@ import {
   useUpdatePassengerBoarding,
   useListLayouts, useGetMe,
 } from "@workspace/api-client-react";
-import type { Trip, Seat, BoardingPassenger, BoardingPoint, VehicleLayout, LayoutCell } from "@workspace/api-client-react";
+import type { Trip, Seat, BoardingPassenger, VehicleLayout, LayoutCell } from "@workspace/api-client-react";
 import { storeApi } from "@/lib/storeApi";
 import { Client360Modal } from "@/components/client360-modal";
 import { useEditor, EditorContent } from "@tiptap/react";
@@ -383,10 +383,15 @@ function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: strin
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <div className="flex items-center justify-between">
-            <DialogTitle className="flex items-center gap-2">
-              <ClipboardList className="w-5 h-5 text-primary" />
-              Painel de Embarque — {tripName}
-            </DialogTitle>
+            <div>
+              <DialogTitle className="flex items-center gap-2">
+                <ClipboardList className="w-5 h-5 text-primary" />
+                Painel de Embarque — {tripName}
+              </DialogTitle>
+              {panel?.manifestNumber && (
+                <p className="text-xs text-muted-foreground mt-0.5 font-mono">Manifesto: {panel.manifestNumber}</p>
+              )}
+            </div>
             <Button
               size="sm" variant="outline" className="h-8 text-xs gap-1.5 mr-2"
               onClick={handleSync}
@@ -850,7 +855,7 @@ function generateProductSlug(name: string): string {
 }
 
 function buildTripProductPayload(trip: Trip) {
-  const t = trip as Record<string, unknown>;
+  const t = trip as unknown as Record<string, unknown>;
   const images = [
     ...(trip.coverImage ? [trip.coverImage] : []),
     ...(Array.isArray(trip.gallery) ? trip.gallery : []),
@@ -1200,7 +1205,7 @@ function TripCard({ trip, isVendedor, onDelete, onDuplicate, onBoarding, navigat
   );
 }
 
-interface BoardingPoint { id: string; name: string; time: string; address: string; }
+interface BoardingPoint { id: string; name: string; time?: string; address?: string; }
 interface ItineraryDay { day: number; title: string; description: string; }
 interface FixedCostItem { id: string; category: string; description: string; value: number; }
 interface VariableCostItem { id: string; category: string; description: string; valuePax: number; }
@@ -1217,6 +1222,9 @@ interface TripFormData {
   inclusions: string; exclusions: string;
   coverImage: string;
   vehicleType: string; vehiclePlate: string; driverName: string; tourGuide: string; tripOrganizer: string;
+  driver1Cpf: string; driver1Cnh: string; driver1CnhCategory: string; driver1CnhExpiry: string;
+  driver2Name: string; driver2Cpf: string; driver2Cnh: string; driver2CnhCategory: string; driver2CnhExpiry: string;
+  tourGuideCpf: string; tourGuideRegistration: string;
   status: string;
   boardingPoints: BoardingPoint[];
   itinerary: ItineraryDay[];
@@ -1254,6 +1262,9 @@ const EMPTY_FORM: TripFormData = {
   priceAdult: "", priceChild: "", priceSenior: "",
   inclusions: "", exclusions: "", coverImage: "",
   vehicleType: "", vehiclePlate: "", driverName: "", tourGuide: "", tripOrganizer: "", status: "draft",
+  driver1Cpf: "", driver1Cnh: "", driver1CnhCategory: "", driver1CnhExpiry: "",
+  driver2Name: "", driver2Cpf: "", driver2Cnh: "", driver2CnhCategory: "", driver2CnhExpiry: "",
+  tourGuideCpf: "", tourGuideRegistration: "",
   boardingPoints: [newBP()], itinerary: [newDay(1)], fixedCostItems: [], variableCostItems: [], gallery: [],
   freeOrganizers: "0", freeGuides: "0",
 };
@@ -1285,6 +1296,17 @@ const toTripFormData = (trip: Trip): TripFormData => ({
   driverName: trip.driverName ?? "",
   tourGuide: trip.tourGuide ?? "",
   tripOrganizer: trip.tripOrganizer ?? "",
+  driver1Cpf: trip.driver1Cpf ?? "",
+  driver1Cnh: trip.driver1Cnh ?? "",
+  driver1CnhCategory: trip.driver1CnhCategory ?? "",
+  driver1CnhExpiry: trip.driver1CnhExpiry ?? "",
+  driver2Name: trip.driver2Name ?? "",
+  driver2Cpf: trip.driver2Cpf ?? "",
+  driver2Cnh: trip.driver2Cnh ?? "",
+  driver2CnhCategory: trip.driver2CnhCategory ?? "",
+  driver2CnhExpiry: trip.driver2CnhExpiry ?? "",
+  tourGuideCpf: trip.tourGuideCpf ?? "",
+  tourGuideRegistration: trip.tourGuideRegistration ?? "",
   status: trip.status,
   boardingPoints: trip.boardingPoints?.length ? (trip.boardingPoints as BoardingPoint[]) : [newBP()],
   itinerary: trip.itinerary?.length ? (trip.itinerary as unknown as ItineraryDay[]) : [newDay(1)],
@@ -1410,6 +1432,9 @@ export function TripForm({ tripId }: { tripId?: string }) {
             seatLayout: form.layoutId ? undefined : form.seatLayout,
             layoutId: form.layoutId || null,
             vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined, tourGuide: form.tourGuide || undefined, tripOrganizer: form.tripOrganizer || undefined,
+            driver1Cpf: form.driver1Cpf || null, driver1Cnh: form.driver1Cnh || null, driver1CnhCategory: form.driver1CnhCategory || null, driver1CnhExpiry: form.driver1CnhExpiry || null,
+            driver2Name: form.driver2Name || null, driver2Cpf: form.driver2Cpf || null, driver2Cnh: form.driver2Cnh || null, driver2CnhCategory: form.driver2CnhCategory || null, driver2CnhExpiry: form.driver2CnhExpiry || null,
+            tourGuideCpf: form.tourGuideCpf || null, tourGuideRegistration: form.tourGuideRegistration || null,
             freeOrganizers: parseInt(form.freeOrganizers || "0"),
             freeGuides: parseInt(form.freeGuides || "0"),
             status: statusToSave,
@@ -1438,6 +1463,9 @@ export function TripForm({ tripId }: { tripId?: string }) {
             seatLayout: form.layoutId ? undefined : form.seatLayout,
             layoutId: form.layoutId || null,
             vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined, tourGuide: form.tourGuide || undefined, tripOrganizer: form.tripOrganizer || undefined,
+            driver1Cpf: form.driver1Cpf || null, driver1Cnh: form.driver1Cnh || null, driver1CnhCategory: form.driver1CnhCategory || null, driver1CnhExpiry: form.driver1CnhExpiry || null,
+            driver2Name: form.driver2Name || null, driver2Cpf: form.driver2Cpf || null, driver2Cnh: form.driver2Cnh || null, driver2CnhCategory: form.driver2CnhCategory || null, driver2CnhExpiry: form.driver2CnhExpiry || null,
+            tourGuideCpf: form.tourGuideCpf || null, tourGuideRegistration: form.tourGuideRegistration || null,
             freeOrganizers: parseInt(form.freeOrganizers || "0"),
             freeGuides: parseInt(form.freeGuides || "0"),
             status: statusToSave,
@@ -1961,7 +1989,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
 
         <TabsContent value="transporte" className="space-y-4 mt-6">
           <div className="bg-card border rounded-lg p-6 space-y-4">
-            <h3 className="font-semibold">Veículo e Motorista</h3>
+            <h3 className="font-semibold">Veículo</h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Tipo de Veículo</Label>
@@ -1977,14 +2005,90 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 <Label>Placa do Veículo</Label>
                 <Input placeholder="ABC-1234" value={form.vehiclePlate} onChange={set("vehiclePlate")} />
               </div>
-              <div className="space-y-2">
-                <Label>Nome do Motorista</Label>
-                <Input placeholder="João da Silva" value={form.driverName} onChange={set("driverName")} />
+            </div>
+          </div>
+          <div className="bg-card border rounded-lg p-6 space-y-5">
+            <h3 className="font-semibold">Tripulação Completa</h3>
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Motorista 1</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Nome do Motorista</Label>
+                  <Input placeholder="João da Silva" value={form.driverName} onChange={set("driverName")} />
+                </div>
+                <div className="space-y-2">
+                  <Label>CPF do Motorista</Label>
+                  <Input placeholder="000.000.000-00" value={form.driver1Cpf} onChange={set("driver1Cpf")} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Nº CNH</Label>
+                  <Input placeholder="00000000000" value={form.driver1Cnh} onChange={set("driver1Cnh")} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Categoria CNH</Label>
+                  <Select value={form.driver1CnhCategory || "none"} onValueChange={v => setVal("driver1CnhCategory")(v === "none" ? "" : v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Não informado</SelectItem>
+                      {["D", "E"].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Validade CNH</Label>
+                  <Input type="date" value={form.driver1CnhExpiry} onChange={set("driver1CnhExpiry")} />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Guia Turístico</Label>
-                <Input placeholder="Maria Costa" value={form.tourGuide} onChange={set("tourGuide")} />
+            </div>
+            <div className="border-t pt-4 space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Motorista 2 (opcional)</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Nome</Label>
+                  <Input placeholder="Nome do 2º motorista" value={form.driver2Name} onChange={set("driver2Name")} />
+                </div>
+                <div className="space-y-2">
+                  <Label>CPF</Label>
+                  <Input placeholder="000.000.000-00" value={form.driver2Cpf} onChange={set("driver2Cpf")} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Nº CNH</Label>
+                  <Input placeholder="00000000000" value={form.driver2Cnh} onChange={set("driver2Cnh")} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Categoria CNH</Label>
+                  <Select value={form.driver2CnhCategory || "none"} onValueChange={v => setVal("driver2CnhCategory")(v === "none" ? "" : v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Não informado</SelectItem>
+                      {["D", "E"].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Validade CNH</Label>
+                  <Input type="date" value={form.driver2CnhExpiry} onChange={set("driver2CnhExpiry")} />
+                </div>
               </div>
+            </div>
+            <div className="border-t pt-4 space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Guia de Turismo</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Nome do Guia</Label>
+                  <Input placeholder="Maria Costa" value={form.tourGuide} onChange={set("tourGuide")} />
+                </div>
+                <div className="space-y-2">
+                  <Label>CPF do Guia</Label>
+                  <Input placeholder="000.000.000-00" value={form.tourGuideCpf} onChange={set("tourGuideCpf")} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Nº Registro CADASTUR</Label>
+                  <Input placeholder="00000/00" value={form.tourGuideRegistration} onChange={set("tourGuideRegistration")} />
+                </div>
+              </div>
+            </div>
+            <div className="border-t pt-4">
               <div className="space-y-2">
                 <Label>Responsável da Viagem</Label>
                 <Input placeholder="Nome do responsável" value={form.tripOrganizer} onChange={set("tripOrganizer")} />
@@ -2133,7 +2237,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
             name: manualName,
             email: manualEmail,
             whatsapp: manualPhone || "00000000000",
-            cpf: manualCpf || undefined,
+            cpf: manualCpf || "",
           },
         });
         await createReservation.mutateAsync({
@@ -2991,97 +3095,187 @@ export function PassengersList({ tripId }: { tripId: string }) {
   };
 
   const handlePdfPrint = () => {
-    const tripName = escapeHtml(panel?.tripName ?? "");
-    const destination = trip ? escapeHtml(`${trip.destinationCity}, ${trip.destinationState}`) : "";
-    const depDate = panel?.departureDate
-      ? escapeHtml(format(parseISO(panel.departureDate), "dd/MM/yyyy", { locale: ptBR }))
+    const p = panel;
+    const tripName = escapeHtml(p?.tripName ?? "");
+    const destination = trip ? escapeHtml(`${trip.destinationCity}/${trip.destinationState}`) : "";
+    const depDate = p?.departureDate
+      ? escapeHtml(format(parseISO(p.departureDate), "dd/MM/yyyy", { locale: ptBR }))
       : "";
-    const depTimeRaw = panel?.departureDate ? format(parseISO(panel.departureDate), "HH:mm") : "";
+    const depTimeRaw = p?.departureDate ? format(parseISO(p.departureDate), "HH:mm") : "";
     const depTime = depTimeRaw && depTimeRaw !== "00:00" ? escapeHtml(depTimeRaw) : "";
-    const depFull = depDate + (depTime ? ` às ${depTime}` : "");
     const emitidoEm = escapeHtml(new Date().toLocaleString("pt-BR"));
-    const organizador = escapeHtml(panel?.tenantName ?? "");
-    const cnpj = escapeHtml(panel?.tenantCnpj ?? "");
-    const total = allPassengers.length;
+    const organizador = escapeHtml(p?.tenantName ?? "");
+    const cnpj = escapeHtml(p?.tenantCnpj ?? "");
+    const manifestNumber = escapeHtml((p as { manifestNumber?: string | null })?.manifestNumber ?? "");
     const hasBoardingPoints = boardingPoints.length > 0;
-    const rows = allPassengers.map((p, i) => {
-      const nome = escapeHtml(p.name);
-      const cpf = escapeHtml(formatCpf(p.cpf));
-      const nasc = p.birthDate ? escapeHtml(new Date(p.birthDate).toLocaleDateString("pt-BR")) : "—";
-      const cat = escapeHtml(AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory);
-      const poltrona = escapeHtml(p.seatNumber ?? "—");
-      const contato = escapeHtml(getPassengerContact(p));
-      const embarque = hasBoardingPoints ? escapeHtml(getBoardingPointName(p.boardingLocationId) || "—") : "";
-      const obsLines = [p.documentType, p.specialNeeds, p.observations].filter(Boolean).map(escapeHtml);
-      const obs = obsLines.length > 0 ? obsLines.join(" | ") : "—";
+
+    const vehiclePlate = escapeHtml((p as { vehiclePlate?: string | null })?.vehiclePlate ?? "");
+    const vehicleType = escapeHtml((p as { vehicleType?: string | null })?.vehicleType ?? "");
+    const driverName = escapeHtml((p as { driverName?: string | null })?.driverName ?? "");
+    const driver1Cpf = escapeHtml((p as { driver1Cpf?: string | null })?.driver1Cpf ?? "");
+    const driver1Cnh = escapeHtml((p as { driver1Cnh?: string | null })?.driver1Cnh ?? "");
+    const driver1CnhCat = escapeHtml((p as { driver1CnhCategory?: string | null })?.driver1CnhCategory ?? "");
+    const driver1CnhExp = escapeHtml((p as { driver1CnhExpiry?: string | null })?.driver1CnhExpiry ?? "");
+    const driver2Name = escapeHtml((p as { driver2Name?: string | null })?.driver2Name ?? "");
+    const driver2Cpf = escapeHtml((p as { driver2Cpf?: string | null })?.driver2Cpf ?? "");
+    const driver2Cnh = escapeHtml((p as { driver2Cnh?: string | null })?.driver2Cnh ?? "");
+    const driver2CnhCat = escapeHtml((p as { driver2CnhCategory?: string | null })?.driver2CnhCategory ?? "");
+    const driver2CnhExp = escapeHtml((p as { driver2CnhExpiry?: string | null })?.driver2CnhExpiry ?? "");
+    const tourGuide = escapeHtml((p as { tourGuide?: string | null })?.tourGuide ?? "");
+    const tourGuideCpf = escapeHtml((p as { tourGuideCpf?: string | null })?.tourGuideCpf ?? "");
+    const tourGuideReg = escapeHtml((p as { tourGuideRegistration?: string | null })?.tourGuideRegistration ?? "");
+
+    const categoryCounts: Record<string, number> = {};
+    for (const pass of allPassengers) {
+      const cat = pass.ageCategory;
+      categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
+    }
+    const catOrder = ["adulto", "crianca", "idoso", "pcd", "gratuidade"];
+    const catLabel: Record<string, string> = { adulto: "Adultos", crianca: "Crianças", idoso: "Idosos", pcd: "PCDs", gratuidade: "Gratuidades" };
+
+    const rows = allPassengers.map((pass, i) => {
+      const nome = escapeHtml(pass.name);
+      const cpfStr = escapeHtml(formatCpf(pass.cpf));
+      const nasc = pass.birthDate ? escapeHtml(new Date(pass.birthDate).toLocaleDateString("pt-BR")) : "—";
+      const cat = escapeHtml(AGE_CATEGORY_LABELS[pass.ageCategory] ?? pass.ageCategory);
+      const poltrona = escapeHtml(pass.seatNumber ?? "—");
+      const embarque = hasBoardingPoints ? escapeHtml(getBoardingPointName(pass.boardingLocationId) || "—") : "";
+      const obsLines = [pass.documentType, pass.specialNeeds, pass.observations].filter(Boolean).map(escapeHtml);
+      const obs = obsLines.length > 0 ? obsLines.join(" | ") : "";
       return `<tr>
-        <td>${String(i + 1).padStart(2, "0")}</td>
+        <td class="num">${String(i + 1).padStart(2, "0")}</td>
         <td>${nome}</td>
-        <td>${cpf}</td>
+        <td>${cpfStr}</td>
         <td>${nasc}</td>
         <td>${cat}</td>
-        <td>${poltrona}</td>
+        <td class="seat">${poltrona}</td>
         ${hasBoardingPoints ? `<td>${embarque}</td>` : ""}
-        <td>${contato}</td>
         <td class="obs-cell">${obs}</td>
+        <td class="sig"></td>
       </tr>`;
     }).join("");
+
+    const totalsRow = catOrder
+      .filter(c => categoryCounts[c])
+      .map(c => `<span><strong>${catLabel[c] ?? c}:</strong> ${categoryCounts[c]}</span>`)
+      .join("&nbsp;&nbsp;|&nbsp;&nbsp;");
+
+    const crewRows = [
+      driverName || driver1Cpf || driver1Cnh
+        ? `<tr><td>Motorista 1</td><td>${driverName || "—"}</td><td>CNH ${driver1Cnh || "—"}${driver1CnhCat ? ` — Cat. ${driver1CnhCat}` : ""}${driver1CnhExp ? ` — Val. ${driver1CnhExp}` : ""}</td><td>CPF: ${driver1Cpf || "—"}</td></tr>`
+        : "",
+      driver2Name || driver2Cpf || driver2Cnh
+        ? `<tr><td>Motorista 2</td><td>${driver2Name || "—"}</td><td>CNH ${driver2Cnh || "—"}${driver2CnhCat ? ` — Cat. ${driver2CnhCat}` : ""}${driver2CnhExp ? ` — Val. ${driver2CnhExp}` : ""}</td><td>CPF: ${driver2Cpf || "—"}</td></tr>`
+        : "",
+      tourGuide || tourGuideCpf || tourGuideReg
+        ? `<tr><td>Guia de Turismo</td><td>${tourGuide || "—"}</td><td>CADASTUR: ${tourGuideReg || "—"}</td><td>CPF: ${tourGuideCpf || "—"}</td></tr>`
+        : "",
+    ].filter(Boolean).join("");
+
     const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8" />
-<title>Relação de Passageiros ANTT — ${tripName}</title>
+<title>Manifesto ANTT — ${tripName}</title>
 <style>
-  body { font-family: Arial, sans-serif; font-size: 11px; margin: 20px; color: #000; }
-  h1 { font-size: 15px; margin: 0 0 2px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .sub { font-size: 10px; color: #555; margin: 0 0 10px; }
-  .meta { border: 1px solid #ccc; padding: 6px 10px; background: #f9f9f9; margin-bottom: 6px; font-size: 11px; }
-  .meta-row { display: flex; flex-wrap: wrap; gap: 24px; margin-bottom: 2px; }
-  .meta-row label { font-weight: bold; }
-  table { width: 100%; border-collapse: collapse; margin-top: 4px; }
-  th { background: #1a1a1a; color: #fff; text-align: left; padding: 5px 6px; font-size: 10px; }
-  td { padding: 4px 6px; border-bottom: 1px solid #e0e0e0; font-size: 11px; }
-  tr:nth-child(even) td { background: #f7f7f7; }
-  .obs-cell { font-size: 10px; color: #555; max-width: 180px; }
-  .footer { margin-top: 24px; display: flex; justify-content: space-between; font-size: 10px; color: #555; border-top: 1px solid #ccc; padding-top: 8px; }
-  @media print { body { margin: 10mm; } button { display: none; } }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; font-size: 10.5px; margin: 12mm 14mm; color: #000; }
+  .header { border: 2px solid #1a1a1a; padding: 8px 10px; margin-bottom: 6px; }
+  .header-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .title { font-size: 14px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+  .subtitle { font-size: 9px; color: #555; }
+  .manifest-no { font-size: 13px; font-weight: bold; font-family: monospace; color: #1a3a6e; }
+  .section { border: 1px solid #ccc; padding: 5px 8px; margin-bottom: 5px; font-size: 10.5px; }
+  .section-title { font-size: 9px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; color: #555; margin-bottom: 4px; }
+  .meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 16px; }
+  .meta-item label { font-weight: bold; margin-right: 4px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #1a1a1a; color: #fff; text-align: left; padding: 4px 5px; font-size: 9.5px; }
+  td { padding: 3px 5px; border-bottom: 1px solid #e8e8e8; font-size: 10px; vertical-align: top; }
+  tr:nth-child(even) td { background: #f8f8f8; }
+  .num { width: 22px; text-align: center; }
+  .seat { width: 50px; text-align: center; }
+  .obs-cell { font-size: 9px; color: #555; max-width: 120px; }
+  .sig { width: 90px; border-bottom: 1px solid #999 !important; }
+  .crew-table td { border-bottom: 1px solid #e8e8e8; }
+  .crew-table td:first-child { font-weight: bold; width: 110px; }
+  .totals { margin-top: 6px; padding: 4px 8px; background: #f0f0f0; border: 1px solid #ccc; font-size: 10.5px; }
+  .footer { margin-top: 14px; border-top: 1px solid #ccc; padding-top: 8px; display: flex; justify-content: space-between; font-size: 9px; color: #555; }
+  .sig-block { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .sig-line { border-top: 1px solid #000; padding-top: 3px; font-size: 9px; text-align: center; color: #555; }
+  @media print { body { margin: 10mm; } }
 </style>
 </head>
 <body>
-<h1>Relação de Passageiros — ANTT</h1>
-<p class="sub">Documento obrigatório conforme Resolução ANTT n° 4.777/2015 — Transporte rodoviário interestadual e internacional de passageiros</p>
-<div class="meta">
-  <div class="meta-row">
-    <span><label>ORIGEM: </label>${tripName}</span>
-    ${destination ? `<span><label>Destino: </label>${destination}</span>` : ""}
-    <span><label>Data/Hora de Saída: </label>${depFull || depDate}</span>
-  </div>
-  ${organizador ? `<div class="meta-row"><span><label>ORGANIZADOR: </label>${organizador}</span>${cnpj ? `<span><label>CPF/CNPJ: </label>${cnpj}</span>` : ""}</div>` : ""}
-  <div class="meta-row">
-    <span><label>Total de Passageiros: </label>${total}</span>
-    <span><label>Emitido em: </label>${emitidoEm}</span>
+
+<div class="header">
+  <div class="header-top">
+    <div>
+      <div class="title">Manifesto de Passageiros — ANTT</div>
+      <div class="subtitle">Resolução ANTT nº 4.777/2015 — Transporte rodoviário de passageiros em excursão</div>
+    </div>
+    ${manifestNumber ? `<div class="manifest-no">${manifestNumber}</div>` : ""}
   </div>
 </div>
+
+<div class="section">
+  <div class="section-title">Dados da Excursão</div>
+  <div class="meta-grid">
+    <div class="meta-item"><label>Excursão:</label>${tripName}</div>
+    ${destination ? `<div class="meta-item"><label>Destino:</label>${destination}</div>` : ""}
+    <div class="meta-item"><label>Saída:</label>${depDate}${depTime ? ` às ${depTime}` : ""}</div>
+    ${organizador ? `<div class="meta-item"><label>Organizador:</label>${organizador}</div>` : ""}
+    ${cnpj ? `<div class="meta-item"><label>CNPJ:</label>${cnpj}</div>` : ""}
+    <div class="meta-item"><label>Total Passageiros:</label>${allPassengers.length}</div>
+    <div class="meta-item"><label>Emitido em:</label>${emitidoEm}</div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Veículo</div>
+  <div class="meta-grid">
+    ${vehicleType ? `<div class="meta-item"><label>Tipo:</label>${vehicleType}</div>` : ""}
+    ${vehiclePlate ? `<div class="meta-item"><label>Placa:</label>${vehiclePlate}</div>` : ""}
+    <div class="meta-item"><label>Capacidade:</label>${trip?.totalCapacity ?? "—"}</div>
+  </div>
+</div>
+
+${crewRows ? `<div class="section">
+  <div class="section-title">Tripulação</div>
+  <table class="crew-table"><tbody>${crewRows}</tbody></table>
+</div>` : ""}
+
 <table>
   <thead>
     <tr>
-      <th>Nº</th>
-      <th>Passageiro</th>
+      <th class="num">Nº</th>
+      <th>Nome Completo</th>
       <th>CPF</th>
-      <th>Dt. Nascimento</th>
+      <th>Data Nasc.</th>
       <th>Categoria</th>
-      <th>Poltrona</th>
-      ${hasBoardingPoints ? "<th>Ponto de Embarque</th>" : ""}
-      <th>WhatsApp/Telefone</th>
+      <th class="seat">Assento</th>
+      ${hasBoardingPoints ? "<th>Embarque</th>" : ""}
       <th>Obs.</th>
+      <th class="sig">Assinatura</th>
     </tr>
   </thead>
   <tbody>${rows}</tbody>
 </table>
+
+<div class="totals">
+  <strong>Totais por categoria:</strong>&nbsp;&nbsp;${totalsRow || `Total: ${allPassengers.length}`}
+</div>
+
+<div class="sig-block">
+  <div class="sig-line">Assinatura do Responsável pela Excursão</div>
+  <div class="sig-line">Assinatura do Motorista</div>
+</div>
+
 <div class="footer">
-  <span>VisiteCRM — Sistema de Gestão para Agências de Turismo</span>
+  <span>Nº Manifesto: <strong>${manifestNumber || "—"}</strong> &nbsp;|&nbsp; VisiteCRM — Gestão de Agências de Turismo</span>
   <span>Impresso em ${emitidoEm}</span>
 </div>
+
 </body>
 </html>`;
     const win = window.open("", "_blank");

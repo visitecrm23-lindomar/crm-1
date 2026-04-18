@@ -4851,6 +4851,30 @@ components:
           type: ["string", "null"]
         tripOrganizer:
           type: ["string", "null"]
+        driver1Cpf:
+          type: ["string", "null"]
+        driver1Cnh:
+          type: ["string", "null"]
+        driver1CnhCategory:
+          type: ["string", "null"]
+        driver1CnhExpiry:
+          type: ["string", "null"]
+        driver2Name:
+          type: ["string", "null"]
+        driver2Cpf:
+          type: ["string", "null"]
+        driver2Cnh:
+          type: ["string", "null"]
+        driver2CnhCategory:
+          type: ["string", "null"]
+        driver2CnhExpiry:
+          type: ["string", "null"]
+        tourGuideCpf:
+          type: ["string", "null"]
+        tourGuideRegistration:
+          type: ["string", "null"]
+        manifestNumber:
+          type: ["string", "null"]
         seatLayout:
           type: ["string", "null"]
         boardingPoints:
@@ -5084,6 +5108,28 @@ components:
           type: ["string", "null"]
         tripOrganizer:
           type: ["string", "null"]
+        driver1Cpf:
+          type: ["string", "null"]
+        driver1Cnh:
+          type: ["string", "null"]
+        driver1CnhCategory:
+          type: ["string", "null"]
+        driver1CnhExpiry:
+          type: ["string", "null"]
+        driver2Name:
+          type: ["string", "null"]
+        driver2Cpf:
+          type: ["string", "null"]
+        driver2Cnh:
+          type: ["string", "null"]
+        driver2CnhCategory:
+          type: ["string", "null"]
+        driver2CnhExpiry:
+          type: ["string", "null"]
+        tourGuideCpf:
+          type: ["string", "null"]
+        tourGuideRegistration:
+          type: ["string", "null"]
         status:
           type: string
         gallery:
@@ -5171,6 +5217,28 @@ components:
         tourGuide:
           type: ["string", "null"]
         tripOrganizer:
+          type: ["string", "null"]
+        driver1Cpf:
+          type: ["string", "null"]
+        driver1Cnh:
+          type: ["string", "null"]
+        driver1CnhCategory:
+          type: ["string", "null"]
+        driver1CnhExpiry:
+          type: ["string", "null"]
+        driver2Name:
+          type: ["string", "null"]
+        driver2Cpf:
+          type: ["string", "null"]
+        driver2Cnh:
+          type: ["string", "null"]
+        driver2CnhCategory:
+          type: ["string", "null"]
+        driver2CnhExpiry:
+          type: ["string", "null"]
+        tourGuideCpf:
+          type: ["string", "null"]
+        tourGuideRegistration:
           type: ["string", "null"]
         seatLayout:
           type: ["string", "null"]
@@ -5628,6 +5696,38 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BoardingPoint"
+        manifestNumber:
+          type: ["string", "null"]
+        vehiclePlate:
+          type: ["string", "null"]
+        vehicleType:
+          type: ["string", "null"]
+        driverName:
+          type: ["string", "null"]
+        driver1Cpf:
+          type: ["string", "null"]
+        driver1Cnh:
+          type: ["string", "null"]
+        driver1CnhCategory:
+          type: ["string", "null"]
+        driver1CnhExpiry:
+          type: ["string", "null"]
+        driver2Name:
+          type: ["string", "null"]
+        driver2Cpf:
+          type: ["string", "null"]
+        driver2Cnh:
+          type: ["string", "null"]
+        driver2CnhCategory:
+          type: ["string", "null"]
+        driver2CnhExpiry:
+          type: ["string", "null"]
+        tourGuide:
+          type: ["string", "null"]
+        tourGuideCpf:
+          type: ["string", "null"]
+        tourGuideRegistration:
+          type: ["string", "null"]
       required: [tripId, tripName, departureDate, totalPassengers, checkedIn, passengers, tenantName, boardingPoints]
 
     UpdatePassengerBoardingBody:

@@ -50,6 +50,13 @@
       "when": 1745200000000,
       "tag": "0006_add_passenger_observations",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1745300000000,
+      "tag": "0007_add_crew_manifest_fields",
+      "breakpoints": true
     }
   ]
 }

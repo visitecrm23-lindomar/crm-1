@@ -116,6 +116,18 @@ function formatTrip(t: typeof tripsTable.$inferSelect) {
     driverName: t.driverName,
     tourGuide: t.tourGuide,
     tripOrganizer: t.tripOrganizer,
+    driver1Cpf: t.driver1Cpf ?? null,
+    driver1Cnh: t.driver1Cnh ?? null,
+    driver1CnhCategory: t.driver1CnhCategory ?? null,
+    driver1CnhExpiry: t.driver1CnhExpiry ?? null,
+    driver2Name: t.driver2Name ?? null,
+    driver2Cpf: t.driver2Cpf ?? null,
+    driver2Cnh: t.driver2Cnh ?? null,
+    driver2CnhCategory: t.driver2CnhCategory ?? null,
+    driver2CnhExpiry: t.driver2CnhExpiry ?? null,
+    tourGuideCpf: t.tourGuideCpf ?? null,
+    tourGuideRegistration: t.tourGuideRegistration ?? null,
+    manifestNumber: t.manifestNumber ?? null,
     seatLayout: t.seatLayout,
     layoutId: t.layoutId ?? null,
     fixedCosts: Array.isArray(t.fixedCosts) ? t.fixedCosts as FixedCostItem[] : [],
@@ -323,6 +335,17 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
     if (parsed.data.originState !== undefined) updates.originState = parsed.data.originState ?? null;
     if (parsed.data.departureTime !== undefined) updates.departureTime = parsed.data.departureTime ?? null;
     if (parsed.data.returnTime !== undefined) updates.returnTime = parsed.data.returnTime ?? null;
+    if (parsed.data.driver1Cpf !== undefined) updates.driver1Cpf = parsed.data.driver1Cpf ?? null;
+    if (parsed.data.driver1Cnh !== undefined) updates.driver1Cnh = parsed.data.driver1Cnh ?? null;
+    if (parsed.data.driver1CnhCategory !== undefined) updates.driver1CnhCategory = parsed.data.driver1CnhCategory ?? null;
+    if (parsed.data.driver1CnhExpiry !== undefined) updates.driver1CnhExpiry = parsed.data.driver1CnhExpiry ?? null;
+    if (parsed.data.driver2Name !== undefined) updates.driver2Name = parsed.data.driver2Name ?? null;
+    if (parsed.data.driver2Cpf !== undefined) updates.driver2Cpf = parsed.data.driver2Cpf ?? null;
+    if (parsed.data.driver2Cnh !== undefined) updates.driver2Cnh = parsed.data.driver2Cnh ?? null;
+    if (parsed.data.driver2CnhCategory !== undefined) updates.driver2CnhCategory = parsed.data.driver2CnhCategory ?? null;
+    if (parsed.data.driver2CnhExpiry !== undefined) updates.driver2CnhExpiry = parsed.data.driver2CnhExpiry ?? null;
+    if (parsed.data.tourGuideCpf !== undefined) updates.tourGuideCpf = parsed.data.tourGuideCpf ?? null;
+    if (parsed.data.tourGuideRegistration !== undefined) updates.tourGuideRegistration = parsed.data.tourGuideRegistration ?? null;
 
     let oldCoverImage: string | null | undefined;
     if (capacityOrLayoutChanged || coverImageChanged) {
@@ -492,6 +515,22 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
       .limit(1);
     if (!trip) { res.status(404).json({ error: "Trip not found" }); return; }
 
+    if (!trip.manifestNumber) {
+      const year = trip.departureDate.getFullYear();
+      const [countRow] = await db.select({ count: sql<number>`count(*)` })
+        .from(tripsTable)
+        .where(and(
+          eq(tripsTable.tenantId, me.tenantId),
+          sql`manifest_number IS NOT NULL`,
+          sql`EXTRACT(YEAR FROM departure_date) = ${year}`,
+        ));
+      const seq = (Number(countRow?.count ?? 0) + 1).toString().padStart(6, "0");
+      const manifestNumber = `MAN-${year}-${seq}`;
+      await db.update(tripsTable).set({ manifestNumber })
+        .where(and(eq(tripsTable.id, trip.id), eq(tripsTable.tenantId, me.tenantId)));
+      trip.manifestNumber = manifestNumber;
+    }
+
     const reservations = await db.select().from(reservationsTable)
       .where(and(
         eq(reservationsTable.tripId, trip.id),
@@ -511,6 +550,22 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
         tenantName: tenantEarly?.name ?? "",
         tenantCnpj: tenantEarly?.cnpj ?? null,
         boardingPoints: (trip.boardingPoints ?? []) as Array<{ id: string; name: string; time?: string; address?: string }>,
+        manifestNumber: trip.manifestNumber ?? null,
+        vehiclePlate: trip.vehiclePlate ?? null,
+        vehicleType: trip.vehicleType ?? null,
+        driverName: trip.driverName ?? null,
+        driver1Cpf: trip.driver1Cpf ?? null,
+        driver1Cnh: trip.driver1Cnh ?? null,
+        driver1CnhCategory: trip.driver1CnhCategory ?? null,
+        driver1CnhExpiry: trip.driver1CnhExpiry ?? null,
+        driver2Name: trip.driver2Name ?? null,
+        driver2Cpf: trip.driver2Cpf ?? null,
+        driver2Cnh: trip.driver2Cnh ?? null,
+        driver2CnhCategory: trip.driver2CnhCategory ?? null,
+        driver2CnhExpiry: trip.driver2CnhExpiry ?? null,
+        tourGuide: trip.tourGuide ?? null,
+        tourGuideCpf: trip.tourGuideCpf ?? null,
+        tourGuideRegistration: trip.tourGuideRegistration ?? null,
       });
       return;
     }
@@ -566,6 +621,22 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
       tenantName: tenant?.name ?? "",
       tenantCnpj: tenant?.cnpj ?? null,
       boardingPoints: (trip.boardingPoints ?? []) as Array<{ id: string; name: string; time?: string; address?: string }>,
+      manifestNumber: trip.manifestNumber ?? null,
+      vehiclePlate: trip.vehiclePlate ?? null,
+      vehicleType: trip.vehicleType ?? null,
+      driverName: trip.driverName ?? null,
+      driver1Cpf: trip.driver1Cpf ?? null,
+      driver1Cnh: trip.driver1Cnh ?? null,
+      driver1CnhCategory: trip.driver1CnhCategory ?? null,
+      driver1CnhExpiry: trip.driver1CnhExpiry ?? null,
+      driver2Name: trip.driver2Name ?? null,
+      driver2Cpf: trip.driver2Cpf ?? null,
+      driver2Cnh: trip.driver2Cnh ?? null,
+      driver2CnhCategory: trip.driver2CnhCategory ?? null,
+      driver2CnhExpiry: trip.driver2CnhExpiry ?? null,
+      tourGuide: trip.tourGuide ?? null,
+      tourGuideCpf: trip.tourGuideCpf ?? null,
+      tourGuideRegistration: trip.tourGuideRegistration ?? null,
     });
   } catch (err) {
     req.log.error({ err }, "Error fetching boarding panel");
