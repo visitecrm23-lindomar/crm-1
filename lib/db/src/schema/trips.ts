@@ -4,6 +4,9 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { tenantsTable } from "./tenants";
 
+export interface FixedCostItem { id: string; category: string; description: string; value: number; }
+export interface VariableCostItem { id: string; category: string; description: string; valuePax: number; }
+
 export const tripsTable = pgTable("trips", {
   id: text("id").primaryKey(),
   tenantId: text("tenant_id").notNull().references(() => tenantsTable.id, { onDelete: "cascade" }),
@@ -52,8 +55,8 @@ export const tripsTable = pgTable("trips", {
   tripOrganizer: text("trip_organizer"),
   driverCnh: text("driver_cnh"),
   driverPhone: text("driver_phone"),
-  fixedCosts: numeric("fixed_costs", { precision: 10, scale: 2 }),
-  variableCosts: numeric("variable_costs", { precision: 10, scale: 2 }),
+  fixedCosts: json("fixed_costs").$type<FixedCostItem[]>().default([]),
+  variableCosts: json("variable_costs").$type<VariableCostItem[]>().default([]),
   cancellationPolicy: text("cancellation_policy"),
   metaTitle: text("meta_title"),
   metaDescription: text("meta_description"),

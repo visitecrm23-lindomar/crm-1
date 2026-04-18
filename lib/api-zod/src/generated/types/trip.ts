@@ -53,10 +53,8 @@ export interface Trip {
   seatLayout?: string | null;
   boardingPoints?: TripBoardingPointsItem[];
   itinerary?: TripItineraryItem[];
-  /** @nullable */
-  fixedCosts?: number | null;
-  /** @nullable */
-  variableCosts?: number | null;
+  fixedCosts?: unknown[];
+  variableCosts?: unknown[];
   /** @nullable */
   layoutId?: string | null;
   createdAt: string;

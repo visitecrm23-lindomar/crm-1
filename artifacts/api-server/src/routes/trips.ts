@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable } from "@workspace/db";
-import type { LayoutCell } from "@workspace/db";
+import type { LayoutCell, FixedCostItem, VariableCostItem } from "@workspace/db";
 import { eq, and, ilike, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -117,8 +117,8 @@ function formatTrip(t: typeof tripsTable.$inferSelect) {
     tripOrganizer: t.tripOrganizer,
     seatLayout: t.seatLayout,
     layoutId: t.layoutId ?? null,
-    fixedCosts: t.fixedCosts ? Number(t.fixedCosts) : null,
-    variableCosts: t.variableCosts ? Number(t.variableCosts) : null,
+    fixedCosts: Array.isArray(t.fixedCosts) ? t.fixedCosts as FixedCostItem[] : [],
+    variableCosts: Array.isArray(t.variableCosts) ? t.variableCosts as VariableCostItem[] : [],
     createdAt: t.createdAt.toISOString(),
     updatedAt: t.updatedAt.toISOString(),
   };
@@ -220,8 +220,8 @@ router.post("/trips", async (req, res): Promise<void> => {
       layoutId: layoutId ?? null,
       itinerary: parsed.data.itinerary ?? null,
       boardingPoints: parsed.data.boardingPoints ?? [],
-      fixedCosts: parsed.data.fixedCosts != null ? String(parsed.data.fixedCosts) : null,
-      variableCosts: parsed.data.variableCosts != null ? String(parsed.data.variableCosts) : null,
+      fixedCosts: Array.isArray(parsed.data.fixedCosts) ? (parsed.data.fixedCosts as FixedCostItem[]) : [],
+      variableCosts: Array.isArray(parsed.data.variableCosts) ? (parsed.data.variableCosts as VariableCostItem[]) : [],
       gallery: parsed.data.gallery ?? [],
       seatMap,
       vehiclePlate: parsed.data.vehiclePlate ?? null,
@@ -299,8 +299,8 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
     if (parsed.data.category !== undefined) updates.category = parsed.data.category ?? "";
     if (parsed.data.itinerary !== undefined) updates.itinerary = parsed.data.itinerary ?? null;
     if (parsed.data.boardingPoints !== undefined) updates.boardingPoints = parsed.data.boardingPoints ?? [];
-    if (parsed.data.fixedCosts !== undefined) updates.fixedCosts = parsed.data.fixedCosts != null ? String(parsed.data.fixedCosts) : null;
-    if (parsed.data.variableCosts !== undefined) updates.variableCosts = parsed.data.variableCosts != null ? String(parsed.data.variableCosts) : null;
+    if (parsed.data.fixedCosts !== undefined) updates.fixedCosts = Array.isArray(parsed.data.fixedCosts) ? (parsed.data.fixedCosts as FixedCostItem[]) : [];
+    if (parsed.data.variableCosts !== undefined) updates.variableCosts = Array.isArray(parsed.data.variableCosts) ? (parsed.data.variableCosts as VariableCostItem[]) : [];
     if (parsed.data.gallery !== undefined) updates.gallery = parsed.data.gallery ?? [];
 
     if (capacityOrLayoutChanged) {

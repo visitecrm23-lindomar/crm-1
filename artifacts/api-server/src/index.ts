@@ -496,6 +496,24 @@ async function runMigrations() {
       ALTER TABLE trips ADD COLUMN IF NOT EXISTS trip_organizer text;
     `);
 
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'trips' AND column_name = 'fixed_costs' AND data_type = 'numeric'
+        ) THEN
+          ALTER TABLE trips ALTER COLUMN fixed_costs TYPE json USING '[]'::json;
+        END IF;
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'trips' AND column_name = 'variable_costs' AND data_type = 'numeric'
+        ) THEN
+          ALTER TABLE trips ALTER COLUMN variable_costs TYPE json USING '[]'::json;
+        END IF;
+      END $$;
+    `);
+
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");

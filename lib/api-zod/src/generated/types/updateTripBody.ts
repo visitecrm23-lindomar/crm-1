@@ -60,10 +60,8 @@ export interface UpdateTripBody {
   gallery?: string[];
   boardingPoints?: unknown[];
   itinerary?: unknown[];
-  /** @nullable */
-  fixedCosts?: number | null;
-  /** @nullable */
-  variableCosts?: number | null;
+  fixedCosts?: unknown[];
+  variableCosts?: unknown[];
   /** @nullable */
   layoutId?: string | null;
 }

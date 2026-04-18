@@ -1324,8 +1324,8 @@ export const ListTripsResponse = zod.object({
         )
         .optional(),
       itinerary: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
-      fixedCosts: zod.number().nullish(),
-      variableCosts: zod.number().nullish(),
+      fixedCosts: zod.array(zod.unknown()).optional(),
+      variableCosts: zod.array(zod.unknown()).optional(),
       layoutId: zod.string().nullish(),
       createdAt: zod.string(),
       updatedAt: zod.string(),
@@ -1366,8 +1366,8 @@ export const CreateTripBody = zod.object({
   gallery: zod.array(zod.string()).optional(),
   boardingPoints: zod.array(zod.unknown()).optional(),
   itinerary: zod.array(zod.unknown()).optional(),
-  fixedCosts: zod.number().nullish(),
-  variableCosts: zod.number().nullish(),
+  fixedCosts: zod.array(zod.unknown()).optional(),
+  variableCosts: zod.array(zod.unknown()).optional(),
   layoutId: zod.string().nullish(),
 });
 
@@ -1421,8 +1421,8 @@ export const GetTripResponse = zod.object({
     )
     .optional(),
   itinerary: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
-  fixedCosts: zod.number().nullish(),
-  variableCosts: zod.number().nullish(),
+  fixedCosts: zod.array(zod.unknown()).optional(),
+  variableCosts: zod.array(zod.unknown()).optional(),
   layoutId: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
@@ -1464,8 +1464,8 @@ export const UpdateTripBody = zod.object({
   gallery: zod.array(zod.string()).optional(),
   boardingPoints: zod.array(zod.unknown()).optional(),
   itinerary: zod.array(zod.unknown()).optional(),
-  fixedCosts: zod.number().nullish(),
-  variableCosts: zod.number().nullish(),
+  fixedCosts: zod.array(zod.unknown()).optional(),
+  variableCosts: zod.array(zod.unknown()).optional(),
   layoutId: zod.string().nullish(),
 });
 
@@ -1512,8 +1512,8 @@ export const UpdateTripResponse = zod.object({
     )
     .optional(),
   itinerary: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
-  fixedCosts: zod.number().nullish(),
-  variableCosts: zod.number().nullish(),
+  fixedCosts: zod.array(zod.unknown()).optional(),
+  variableCosts: zod.array(zod.unknown()).optional(),
   layoutId: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),

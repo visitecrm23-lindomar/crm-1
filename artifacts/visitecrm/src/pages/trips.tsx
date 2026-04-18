@@ -1036,7 +1036,8 @@ function TripCard({ trip, isVendedor, onDelete, onDuplicate, onBoarding, navigat
 
 interface BoardingPoint { id: string; name: string; time: string; address: string; }
 interface ItineraryDay { day: number; title: string; description: string; }
-interface CostItem { id: string; label: string; amount: string; }
+interface FixedCostItem { id: string; category: string; description: string; value: number; }
+interface VariableCostItem { id: string; category: string; description: string; valuePax: number; }
 interface TripFormData {
   name: string; description: string;
   destination: string; destinationCity: string; destinationState: string;
@@ -1051,15 +1052,28 @@ interface TripFormData {
   status: string;
   boardingPoints: BoardingPoint[];
   itinerary: ItineraryDay[];
-  costs: CostItem[];
-  fixedCosts: string;
-  variableCosts: string;
+  fixedCostItems: FixedCostItem[];
+  variableCostItems: VariableCostItem[];
   gallery: string[];
 }
 
+const FIXED_COST_CATEGORIES: Record<string, string[]> = {
+  "Transporte": ["Aluguel de ônibus", "Motorista", "Pedágio e combustível", "Manutenção", "Outro"],
+  "Equipe": ["Guia turístico", "Coordenador de viagem", "Equipe de apoio", "Outro"],
+  "Estrutura": ["Seguro viagem", "Taxas e licenças", "Equipamentos", "Outro"],
+  "Marketing": ["Publicidade digital", "Material impresso", "Comissão de vendas", "Outro"],
+  "Operacional": ["Escritório / Overhead", "Sistema / Software", "Comunicação", "Outro"],
+};
+const VARIABLE_COST_CATEGORIES: Record<string, string[]> = {
+  "Alimentação": ["Café da manhã", "Almoço", "Jantar", "Lanche / Café", "Outro"],
+  "Hospedagem": ["Hotel 2 estrelas", "Hotel 3 estrelas", "Pousada", "Hostel", "Outro"],
+  "Experiência": ["Ingresso", "Passeio guiado", "Atividade / Atração", "Outro"],
+  "Logística": ["Transfer local", "Barco / Lanchas", "Outro"],
+  "Extras": ["Seguro individual", "Kit boas-vindas", "Gorjeta guia", "Outro"],
+};
+
 const newBP = (): BoardingPoint => ({ id: crypto.randomUUID(), name: "", time: "", address: "" });
 const newDay = (day: number): ItineraryDay => ({ day, title: "", description: "" });
-const newCost = (): CostItem => ({ id: crypto.randomUUID(), label: "", amount: "" });
 const EMPTY_FORM: TripFormData = {
   name: "", description: "", destination: "", destinationCity: "", destinationState: "",
   type: "excursao", category: "standard", departureDate: "", returnDate: "",
@@ -1067,7 +1081,7 @@ const EMPTY_FORM: TripFormData = {
   priceAdult: "", priceChild: "", priceSenior: "",
   inclusions: "", exclusions: "", coverImage: "",
   vehicleType: "", vehiclePlate: "", driverName: "", tourGuide: "", tripOrganizer: "", status: "draft",
-  boardingPoints: [newBP()], itinerary: [newDay(1)], costs: [], fixedCosts: "", variableCosts: "", gallery: [],
+  boardingPoints: [newBP()], itinerary: [newDay(1)], fixedCostItems: [], variableCostItems: [], gallery: [],
 };
 const toTripFormData = (trip: Trip): TripFormData => ({
   name: trip.name,
@@ -1096,9 +1110,8 @@ const toTripFormData = (trip: Trip): TripFormData => ({
   status: trip.status,
   boardingPoints: trip.boardingPoints?.length ? (trip.boardingPoints as BoardingPoint[]) : [newBP()],
   itinerary: trip.itinerary?.length ? (trip.itinerary as unknown as ItineraryDay[]) : [newDay(1)],
-  costs: [],
-  fixedCosts: trip.fixedCosts != null ? String(trip.fixedCosts) : "",
-  variableCosts: trip.variableCosts != null ? String(trip.variableCosts) : "",
+  fixedCostItems: Array.isArray(trip.fixedCosts) ? (trip.fixedCosts as unknown as FixedCostItem[]) : [],
+  variableCostItems: Array.isArray(trip.variableCosts) ? (trip.variableCosts as unknown as VariableCostItem[]) : [],
   gallery: trip.gallery ?? [],
 });
 
@@ -1154,6 +1167,11 @@ export function TripForm({ tripId }: { tripId?: string }) {
   const handleUploadingChange = (uploading: boolean) =>
     setUploadingCount((prev) => (uploading ? prev + 1 : Math.max(0, prev - 1)));
 
+  const EMPTY_NEW_FIXED = { category: "", description: "", customDesc: "", value: "" };
+  const EMPTY_NEW_VARIABLE = { category: "", description: "", customDesc: "", valuePax: "" };
+  const [newFixed, setNewFixed] = useState(EMPTY_NEW_FIXED);
+  const [newVariable, setNewVariable] = useState(EMPTY_NEW_VARIABLE);
+
   const selectedLayout = layouts.find(l => l.id === form.layoutId) ?? null;
 
   useEffect(() => {
@@ -1170,13 +1188,15 @@ export function TripForm({ tripId }: { tripId?: string }) {
     setForm(prev => ({ ...prev, [k]: e.target.value }));
   const setVal = (k: keyof TripFormData) => (v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
-  const totalCosts = form.costs.reduce((acc, c) => acc + (parseFloat(c.amount) || 0), 0);
-  const fixedCostsNum = parseFloat(form.fixedCosts || "0");
-  const variableCostsNum = parseFloat(form.variableCosts || "0");
-  const grossRevenue = parseFloat(form.priceAdult || "0") * parseInt(form.totalCapacity || "0");
-  const effectiveCosts = fixedCostsNum + variableCostsNum * parseInt(form.totalCapacity || "0");
-  const margin = grossRevenue - Math.max(effectiveCosts, totalCosts);
-  const marginPct = grossRevenue > 0 ? Math.round(margin / grossRevenue * 100) : 0;
+  const cap = parseInt(form.totalCapacity || "0");
+  const grossRevenue = parseFloat(form.priceAdult || "0") * cap;
+  const totalFixed = form.fixedCostItems.reduce((s, c) => s + c.value, 0);
+  const totalVariablePax = form.variableCostItems.reduce((s, c) => s + c.valuePax, 0);
+  const totalVariable = totalVariablePax * cap;
+  const totalOperational = totalFixed + totalVariable;
+  const costPerPax = cap > 0 ? totalOperational / cap : 0;
+  const profit = grossRevenue - totalOperational;
+  const marginPct = grossRevenue > 0 ? Math.round(profit / grossRevenue * 100) : 0;
 
   const handleSave = async (publish = false) => {
     if (!form.name || !form.destination || !form.destinationCity || !form.destinationState || !form.departureDate || !form.priceAdult) {
@@ -1188,8 +1208,6 @@ export function TripForm({ tripId }: { tripId?: string }) {
     const statusToSave = publish ? "active" : form.status;
     const itineraryToSave = form.itinerary.filter(d => d.title || d.description);
     const boardingPointsToSave = form.boardingPoints.filter(bp => bp.name);
-    const fixedCostsNum = form.fixedCosts ? parseFloat(form.fixedCosts) : undefined;
-    const variableCostsNum = form.variableCosts ? parseFloat(form.variableCosts) : undefined;
     try {
       if (tripId) {
         await updateTrip.mutateAsync({
@@ -1211,8 +1229,8 @@ export function TripForm({ tripId }: { tripId?: string }) {
             status: statusToSave,
             itinerary: itineraryToSave.length ? itineraryToSave : undefined,
             boardingPoints: boardingPointsToSave.length ? boardingPointsToSave : undefined,
-            fixedCosts: fixedCostsNum,
-            variableCosts: variableCostsNum,
+            fixedCosts: form.fixedCostItems,
+            variableCosts: form.variableCostItems,
             gallery: form.gallery.length ? form.gallery : undefined,
           },
         });
@@ -1235,8 +1253,8 @@ export function TripForm({ tripId }: { tripId?: string }) {
             status: statusToSave,
             itinerary: itineraryToSave.length ? itineraryToSave : undefined,
             boardingPoints: boardingPointsToSave.length ? boardingPointsToSave : undefined,
-            fixedCosts: fixedCostsNum,
-            variableCosts: variableCostsNum,
+            fixedCosts: form.fixedCostItems,
+            variableCosts: form.variableCostItems,
             gallery: form.gallery.length ? form.gallery : undefined,
           },
         });
@@ -1256,7 +1274,6 @@ export function TripForm({ tripId }: { tripId?: string }) {
     { id: "pontos", label: "Pontos de Embarque" },
     { id: "roteiro", label: "Roteiro" },
     { id: "inclusoes", label: "Inclusões / Exclusões" },
-    { id: "custos", label: "Financeiro / Custos" },
     { id: "transporte", label: "Transporte e Hospedagem" },
     { id: "midia", label: "Mídia" },
   ];
@@ -1387,6 +1404,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
         </TabsContent>
 
         <TabsContent value="precos" className="space-y-4 mt-6">
+          {/* Preços por Categoria */}
           <div className="bg-card border rounded-lg p-6 space-y-4">
             <h3 className="font-semibold">Preços por Categoria</h3>
             <div className="grid grid-cols-3 gap-4">
@@ -1419,15 +1437,198 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 ))}
               </div>
             </div>
-            {form.priceAdult && (
-              <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-                <p className="text-sm font-medium">Receita Estimada com {form.totalCapacity || 0} assentos</p>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div><span className="text-muted-foreground">Receita Bruta Máxima:</span><span className="ml-2 font-semibold">{formatCurrency(grossRevenue)}</span></div>
-                  <div><span className="text-muted-foreground">Ocupação 80%:</span><span className="ml-2 font-semibold">{formatCurrency(grossRevenue * 0.8)}</span></div>
+          </div>
+
+          {/* Custos Fixos */}
+          <div className="bg-card border rounded-lg p-6 space-y-4">
+            <div>
+              <h3 className="font-semibold">Custos Fixos</h3>
+              <p className="text-sm text-muted-foreground">Valores que não dependem do número de passageiros</p>
+            </div>
+            {form.fixedCostItems.length > 0 && (
+              <div className="space-y-2">
+                {form.fixedCostItems.map(item => (
+                  <div key={item.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg text-sm">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded shrink-0">{item.category}</span>
+                      <span className="truncate">{item.description}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-4">
+                      <span className="font-semibold text-sm">{formatCurrency(item.value)}</span>
+                      <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive"
+                        onClick={() => setForm(prev => ({ ...prev, fixedCostItems: prev.fixedCostItems.filter(c => c.id !== item.id) }))}>
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex justify-between items-center pt-1 text-sm font-semibold border-t">
+                  <span>Total Fixo</span>
+                  <span>{formatCurrency(totalFixed)}</span>
                 </div>
               </div>
             )}
+            {/* Add new fixed cost form */}
+            <div className="border rounded-lg p-4 space-y-3 bg-muted/10">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Adicionar Custo Fixo</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Categoria</Label>
+                  <select className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+                    value={newFixed.category}
+                    onChange={e => setNewFixed(prev => ({ ...prev, category: e.target.value, description: "", customDesc: "" }))}>
+                    <option value="">Selecione...</option>
+                    {Object.keys(FIXED_COST_CATEGORIES).map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Descrição</Label>
+                  {newFixed.category && newFixed.description !== "Outro" ? (
+                    <select className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+                      value={newFixed.description}
+                      onChange={e => setNewFixed(prev => ({ ...prev, description: e.target.value, customDesc: "" }))}>
+                      <option value="">Selecione...</option>
+                      {(FIXED_COST_CATEGORIES[newFixed.category] ?? []).map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  ) : newFixed.description === "Outro" ? (
+                    <Input placeholder="Descreva o custo..." value={newFixed.customDesc}
+                      onChange={e => setNewFixed(prev => ({ ...prev, customDesc: e.target.value }))} />
+                  ) : (
+                    <Input disabled placeholder="Selecione uma categoria primeiro" className="bg-muted/30" />
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-3 items-end">
+                <div className="space-y-1 flex-1">
+                  <Label className="text-xs">Valor Total (R$)</Label>
+                  <Input type="number" step="0.01" placeholder="0.00" value={newFixed.value}
+                    onChange={e => setNewFixed(prev => ({ ...prev, value: e.target.value }))} />
+                </div>
+                <Button size="sm" variant="outline"
+                  disabled={!newFixed.category || !newFixed.description || (newFixed.description === "Outro" && !newFixed.customDesc) || !newFixed.value}
+                  onClick={() => {
+                    const desc = newFixed.description === "Outro" ? newFixed.customDesc : newFixed.description;
+                    setForm(prev => ({
+                      ...prev,
+                      fixedCostItems: [...prev.fixedCostItems, { id: crypto.randomUUID(), category: newFixed.category, description: desc, value: parseFloat(newFixed.value) || 0 }],
+                    }));
+                    setNewFixed(EMPTY_NEW_FIXED);
+                  }}>
+                  <Plus className="w-4 h-4 mr-1" />Adicionar
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Custos Variáveis */}
+          <div className="bg-card border rounded-lg p-6 space-y-4">
+            <div>
+              <h3 className="font-semibold">Custos Variáveis</h3>
+              <p className="text-sm text-muted-foreground">Valores por passageiro — multiplicados pela capacidade total</p>
+            </div>
+            {form.variableCostItems.length > 0 && (
+              <div className="space-y-2">
+                {form.variableCostItems.map(item => (
+                  <div key={item.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg text-sm">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded shrink-0">{item.category}</span>
+                      <span className="truncate">{item.description}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-4">
+                      <span className="text-muted-foreground text-xs">{formatCurrency(item.valuePax)}/pax</span>
+                      <span className="font-semibold text-sm">{cap > 0 ? formatCurrency(item.valuePax * cap) : "—"}</span>
+                      <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive"
+                        onClick={() => setForm(prev => ({ ...prev, variableCostItems: prev.variableCostItems.filter(c => c.id !== item.id) }))}>
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex justify-between items-center pt-1 text-sm font-semibold border-t">
+                  <span>Total Variável ({cap} pax)</span>
+                  <span>{formatCurrency(totalVariable)}</span>
+                </div>
+              </div>
+            )}
+            {/* Add new variable cost form */}
+            <div className="border rounded-lg p-4 space-y-3 bg-muted/10">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Adicionar Custo Variável</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Categoria</Label>
+                  <select className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+                    value={newVariable.category}
+                    onChange={e => setNewVariable(prev => ({ ...prev, category: e.target.value, description: "", customDesc: "" }))}>
+                    <option value="">Selecione...</option>
+                    {Object.keys(VARIABLE_COST_CATEGORIES).map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Descrição</Label>
+                  {newVariable.category && newVariable.description !== "Outro" ? (
+                    <select className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+                      value={newVariable.description}
+                      onChange={e => setNewVariable(prev => ({ ...prev, description: e.target.value, customDesc: "" }))}>
+                      <option value="">Selecione...</option>
+                      {(VARIABLE_COST_CATEGORIES[newVariable.category] ?? []).map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  ) : newVariable.description === "Outro" ? (
+                    <Input placeholder="Descreva o custo..." value={newVariable.customDesc}
+                      onChange={e => setNewVariable(prev => ({ ...prev, customDesc: e.target.value }))} />
+                  ) : (
+                    <Input disabled placeholder="Selecione uma categoria primeiro" className="bg-muted/30" />
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-3 items-end">
+                <div className="space-y-1 flex-1">
+                  <Label className="text-xs">Valor por Passageiro (R$)</Label>
+                  <Input type="number" step="0.01" placeholder="0.00" value={newVariable.valuePax}
+                    onChange={e => setNewVariable(prev => ({ ...prev, valuePax: e.target.value }))} />
+                </div>
+                <Button size="sm" variant="outline"
+                  disabled={!newVariable.category || !newVariable.description || (newVariable.description === "Outro" && !newVariable.customDesc) || !newVariable.valuePax}
+                  onClick={() => {
+                    const desc = newVariable.description === "Outro" ? newVariable.customDesc : newVariable.description;
+                    setForm(prev => ({
+                      ...prev,
+                      variableCostItems: [...prev.variableCostItems, { id: crypto.randomUUID(), category: newVariable.category, description: desc, valuePax: parseFloat(newVariable.valuePax) || 0 }],
+                    }));
+                    setNewVariable(EMPTY_NEW_VARIABLE);
+                  }}>
+                  <Plus className="w-4 h-4 mr-1" />Adicionar
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Resumo Financeiro */}
+          <div className="bg-card border rounded-lg p-6 space-y-4">
+            <h3 className="font-semibold">Resumo Financeiro</h3>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              {[
+                { label: "Total Custos Fixos", value: formatCurrency(totalFixed), muted: false },
+                { label: `Total Custos Variáveis (${cap} pax)`, value: formatCurrency(totalVariable), muted: false },
+                { label: "Custo Operacional Total", value: formatCurrency(totalOperational), muted: false },
+                { label: "Custo por Passageiro", value: formatCurrency(costPerPax), muted: false },
+                { label: "Receita Bruta (100% ocupação)", value: formatCurrency(grossRevenue), muted: false },
+                { label: "Receita Bruta (80% ocupação)", value: formatCurrency(grossRevenue * 0.8), muted: true },
+              ].map(row => (
+                <div key={row.label} className={`flex justify-between p-3 rounded-lg ${row.muted ? "bg-muted/20" : "bg-muted/40"}`}>
+                  <span className="text-muted-foreground">{row.label}</span>
+                  <span className="font-medium">{row.value}</span>
+                </div>
+              ))}
+            </div>
+            <div className={`flex justify-between items-center p-4 rounded-lg border-2 text-sm font-semibold ${profit >= 0 ? "border-green-500/40 bg-green-50 dark:bg-green-950/20" : "border-red-500/40 bg-red-50 dark:bg-red-950/20"}`}>
+              <span className={profit >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}>
+                {profit >= 0 ? "Lucro Estimado" : "Prejuízo Estimado"}
+              </span>
+              <div className="text-right">
+                <span className={`text-lg ${profit >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>{formatCurrency(Math.abs(profit))}</span>
+                <span className="ml-2 text-xs text-muted-foreground">({marginPct}% margem)</span>
+              </div>
+            </div>
           </div>
         </TabsContent>
 
@@ -1514,67 +1715,6 @@ export function TripForm({ tripId }: { tripId?: string }) {
               <Textarea placeholder={"Despesas pessoais\nAlmoço e jantar\nIngresso para atrações opcionais"} value={form.exclusions} onChange={set("exclusions")} rows={8} className="font-mono text-sm" />
               <p className="text-xs text-muted-foreground">Um item por linha</p>
             </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="custos" className="space-y-4 mt-6">
-          <div className="bg-card border rounded-lg p-6 space-y-4">
-            <h3 className="font-semibold">Custos Operacionais</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Custo Fixo (R$)</Label>
-                <Input type="number" step="0.01" placeholder="0.00" value={form.fixedCosts} onChange={set("fixedCosts")} />
-                <p className="text-xs text-muted-foreground">Fretamento, guia, hotel, etc.</p>
-              </div>
-              <div className="space-y-2">
-                <Label>Custo Variável (R$)</Label>
-                <Input type="number" step="0.01" placeholder="0.00" value={form.variableCosts} onChange={set("variableCosts")} />
-                <p className="text-xs text-muted-foreground">Por passageiro: alimentação, ingressos, etc.</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-card border rounded-lg p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold">Detalhamento de Custos</h3>
-              <Button size="sm" variant="outline" onClick={() => setForm(prev => ({ ...prev, costs: [...prev.costs, newCost()] }))}>
-                <Plus className="w-4 h-4 mr-1" />Adicionar Item
-              </Button>
-            </div>
-            {form.costs.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">Nenhum item cadastrado. Use para detalhar os custos individualmente.</p>
-            )}
-            <div className="space-y-2">
-              {form.costs.map((cost) => (
-                <div key={cost.id} className="flex items-center gap-3">
-                  <Input placeholder="Descrição (ex: Fretamento do ônibus)" value={cost.label} onChange={e => setForm(prev => ({ ...prev, costs: prev.costs.map(c => c.id === cost.id ? { ...c, label: e.target.value } : c) }))} className="flex-1" />
-                  <Input type="number" step="0.01" placeholder="0.00" value={cost.amount} onChange={e => setForm(prev => ({ ...prev, costs: prev.costs.map(c => c.id === cost.id ? { ...c, amount: e.target.value } : c) }))} className="w-36" />
-                  <Button size="icon" variant="ghost" className="shrink-0 text-destructive" onClick={() => setForm(prev => ({ ...prev, costs: prev.costs.filter(c => c.id !== cost.id) }))}><X className="w-4 h-4" /></Button>
-                </div>
-              ))}
-            </div>
-            {form.costs.length > 0 && (
-              <div className="border-t pt-3 flex justify-between text-sm font-medium">
-                <span>Total Detalhado:</span><span>{formatCurrency(totalCosts)}</span>
-              </div>
-            )}
-          </div>
-          <div className="bg-card border rounded-lg p-6 space-y-3">
-            <h3 className="font-semibold">Análise de Margem</h3>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Receita Bruta Estimada:</span><span>{formatCurrency(grossRevenue)}</span>
-            </div>
-            <div className={`flex justify-between text-sm font-bold ${marginPct >= 20 ? "text-green-600" : marginPct >= 10 ? "text-amber-600" : "text-red-600"}`}>
-              <span>Margem Estimada ({marginPct}%):</span><span>{formatCurrency(margin)}</span>
-            </div>
-            <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full ${marginPct >= 20 ? "bg-green-500" : marginPct >= 10 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${Math.max(0, Math.min(100, marginPct))}%` }} />
-            </div>
-            {marginPct < 10 && (
-              <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 rounded-lg p-3">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>Atenção: margem abaixo de 10%. Revise os custos ou ajuste o preço.</span>
-              </div>
-            )}
           </div>
         </TabsContent>
 

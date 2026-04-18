@@ -4835,9 +4835,11 @@ components:
             type: object
             additionalProperties: true
         fixedCosts:
-          type: ["number", "null"]
+          type: array
+          items: {}
         variableCosts:
-          type: ["number", "null"]
+          type: array
+          items: {}
         layoutId:
           type: ["string", "null"]
         createdAt:
@@ -5041,9 +5043,11 @@ components:
           type: array
           items: {}
         fixedCosts:
-          type: ["number", "null"]
+          type: array
+          items: {}
         variableCosts:
-          type: ["number", "null"]
+          type: array
+          items: {}
         layoutId:
           type: ["string", "null"]
       required:
@@ -5125,9 +5129,11 @@ components:
           type: array
           items: {}
         fixedCosts:
-          type: ["number", "null"]
+          type: array
+          items: {}
         variableCosts:
-          type: ["number", "null"]
+          type: array
+          items: {}
         layoutId:
           type: ["string", "null"]
 
