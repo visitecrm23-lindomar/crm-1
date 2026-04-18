@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
@@ -17,6 +18,8 @@ import {
   Star,
   ExternalLink,
   MessageCircle,
+  Maximize2,
+  Loader2,
 } from "lucide-react";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -54,19 +57,37 @@ export function ProductQuickView({
   onClose: () => void;
 }) {
   const [imgIndex, setImgIndex] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxImgLoaded, setLightboxImgLoaded] = useState(false);
   const [, navigate] = useLocation();
+
+  const images = product.images ?? [];
 
   useEffect(() => {
     setImgIndex(0);
+    setLightboxOpen(false);
   }, [product.id, open]);
 
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setLightboxOpen(false);
+      if (e.key === "ArrowLeft") setImgIndex((i) => (i - 1 + images.length) % images.length);
+      if (e.key === "ArrowRight") setImgIndex((i) => (i + 1) % images.length);
+    }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [lightboxOpen, images.length]);
+
+  useEffect(() => {
+    setLightboxImgLoaded(false);
+  }, [imgIndex]);
 
   const displayPrice = parseFloat(product.salePrice ?? product.price);
   const hasDiscount = !!product.salePrice;
   const isOutOfStock = product.trackInventory && (product.stockQuantity ?? 0) <= 0;
   const availableSeats =
     product.availableSeats ?? (product.trackInventory ? (product.stockQuantity ?? null) : null);
-  const images = product.images ?? [];
   const includes = product.includes ?? [];
   const excludes = product.excludes ?? [];
   const features = product.features ?? [];
@@ -96,21 +117,36 @@ export function ProductQuickView({
   }
 
   return (
+    <>
     <Dialog
       open={open}
       onOpenChange={(v) => {
-        if (!v) onClose();
+        if (!v && !lightboxOpen) onClose();
       }}
     >
-      <DialogContent className="max-w-2xl p-0 overflow-hidden gap-0 [&>button.absolute]:hidden">
+      <DialogContent
+        className="max-w-2xl p-0 overflow-hidden gap-0 [&>button.absolute]:hidden"
+        onPointerDownOutside={(e) => { if (lightboxOpen) e.preventDefault(); }}
+        onEscapeKeyDown={() => { if (!lightboxOpen) onClose(); }}
+        onInteractOutside={(e) => { if (lightboxOpen) e.preventDefault(); }}
+      >
         <div className="relative h-72 bg-gradient-to-br from-blue-400 to-blue-600 overflow-hidden shrink-0">
           {images.length > 0 ? (
             <>
               <img
                 src={images[imgIndex]}
                 alt={product.name}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover cursor-zoom-in"
+                onClick={(e) => { e.stopPropagation(); setLightboxOpen(true); }}
               />
+              <button
+                className="absolute bottom-3 right-12 bg-black/50 hover:bg-black/70 text-white rounded-full p-1.5 transition-colors"
+                onClick={(e) => { e.stopPropagation(); setLightboxOpen(true); }}
+                onPointerDown={(e) => e.stopPropagation()}
+                aria-label="Ampliar imagem"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </button>
               {images.length > 1 && (
                 <>
                   <button
@@ -385,7 +421,85 @@ export function ProductQuickView({
             </button>
           </div>
         </div>
+
       </DialogContent>
     </Dialog>
+
+    {lightboxOpen && images.length > 0 && createPortal(
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90"
+        onClick={() => setLightboxOpen(false)}
+      >
+        <div
+          className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 z-10"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="text-white/60 text-sm">
+            {imgIndex + 1} / {images.length}
+          </p>
+          <button
+            className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+            onClick={(e) => { e.stopPropagation(); setLightboxOpen(false); }}
+            aria-label="Fechar"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {images.length > 1 && (
+          <>
+            <button
+              className="absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors z-10"
+              onClick={(e) => { e.stopPropagation(); setImgIndex((i) => (i - 1 + images.length) % images.length); }}
+              aria-label="Anterior"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+            <button
+              className="absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors z-10"
+              onClick={(e) => { e.stopPropagation(); setImgIndex((i) => (i + 1) % images.length); }}
+              aria-label="Próxima"
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
+          </>
+        )}
+
+        <div
+          className="relative max-w-5xl max-h-[85vh] mx-4 flex flex-col items-center gap-3 mt-12"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {!lightboxImgLoaded && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <Loader2 className="w-10 h-10 animate-spin text-white/60" />
+            </div>
+          )}
+          <img
+            key={images[imgIndex]}
+            src={images[imgIndex]}
+            alt={`Imagem ${imgIndex + 1}`}
+            className="max-h-[75vh] max-w-full object-contain rounded-lg shadow-2xl transition-opacity duration-300"
+            style={{ opacity: lightboxImgLoaded ? 1 : 0 }}
+            onLoad={() => setLightboxImgLoaded(true)}
+          />
+          {images.length > 1 && (
+            <div className="flex gap-1.5">
+              {images.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={(e) => { e.stopPropagation(); setImgIndex(i); }}
+                  className={`rounded-full transition-all ${i === imgIndex ? "w-5 h-2 bg-white" : "w-2 h-2 bg-white/40 hover:bg-white/60"}`}
+                />
+              ))}
+            </div>
+          )}
+          <p className="text-white/60 text-xs">
+            Use ← → para navegar, Esc para fechar
+          </p>
+        </div>
+      </div>,
+      document.body
+    )}
+    </>
   );
 }
