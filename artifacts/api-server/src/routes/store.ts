@@ -14,6 +14,7 @@ import {
 } from "@workspace/db";
 import { eq, and, desc, asc, count, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod/v4";
+import { UTApi } from "uploadthing/server";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { deleteOrphanedFile, deleteOrphanedImages } from "../lib/uploadthing";
@@ -242,18 +243,18 @@ router.put("/store/settings", async (req, res): Promise<void> => {
       res.status(201).json(newStore);
       return;
     }
+
     await db.update(storesTable).set(parsed.data as Record<string, unknown>)
       .where(eq(storesTable.tenantId, me.tenantId));
 
-    if (existingStore) {
-      const d = parsed.data;
-      await Promise.all([
-        d.logo !== undefined ? deleteOrphanedFile(existingStore.logo, d.logo ?? null, req.log) : Promise.resolve(),
-        d.logoDark !== undefined ? deleteOrphanedFile(existingStore.logoDark, d.logoDark ?? null, req.log) : Promise.resolve(),
-        d.bannerHome !== undefined ? deleteOrphanedFile(existingStore.bannerHome, d.bannerHome ?? null, req.log) : Promise.resolve(),
-        d.bannerMobile !== undefined ? deleteOrphanedFile(existingStore.bannerMobile, d.bannerMobile ?? null, req.log) : Promise.resolve(),
-      ]);
-    }
+    const d = parsed.data;
+    await Promise.all([
+      d.logo !== undefined ? deleteOrphanedFile(existingStore.logo, d.logo ?? null, req.log) : Promise.resolve(),
+      d.logoDark !== undefined ? deleteOrphanedFile(existingStore.logoDark, d.logoDark ?? null, req.log) : Promise.resolve(),
+      d.favicon !== undefined ? deleteOrphanedFile(existingStore.favicon, d.favicon ?? null, req.log) : Promise.resolve(),
+      d.bannerHome !== undefined ? deleteOrphanedFile(existingStore.bannerHome, d.bannerHome ?? null, req.log) : Promise.resolve(),
+      d.bannerMobile !== undefined ? deleteOrphanedFile(existingStore.bannerMobile, d.bannerMobile ?? null, req.log) : Promise.resolve(),
+    ]);
 
     const [updated] = await db.select().from(storesTable)
       .where(eq(storesTable.tenantId, me.tenantId)).limit(1);
@@ -441,7 +442,6 @@ router.put("/store/products/:id", async (req, res): Promise<void> => {
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
     const parsed = ProductBody.partial().safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-
     const [existingProduct] = await db.select().from(storeProductsTable)
       .where(and(eq(storeProductsTable.id, req.params.id), eq(storeProductsTable.storeId, store.id))).limit(1);
     if (!existingProduct) { res.status(404).json({ error: "Product not found" }); return; }
@@ -454,12 +454,16 @@ router.put("/store/products/:id", async (req, res): Promise<void> => {
     await db.update(storeProductsTable).set(updates)
       .where(and(eq(storeProductsTable.id, req.params.id), eq(storeProductsTable.storeId, store.id)));
 
+    const d = parsed.data;
     await Promise.all([
-      parsed.data.images !== undefined
-        ? deleteOrphanedImages(existingProduct.images as string[] | null, parsed.data.images, req.log)
+      d.images !== undefined
+        ? deleteOrphanedImages(existingProduct.images as string[] | null, d.images, req.log)
         : Promise.resolve(),
-      parsed.data.thumbnail !== undefined
-        ? deleteOrphanedFile(existingProduct.thumbnail as string | null, parsed.data.thumbnail, req.log)
+      d.thumbnail !== undefined
+        ? deleteOrphanedFile(existingProduct.thumbnail as string | null, d.thumbnail, req.log)
+        : Promise.resolve(),
+      d.gallery !== undefined
+        ? deleteOrphanedImages(existingProduct.gallery as string[] | null, d.gallery, req.log)
         : Promise.resolve(),
     ]);
 
@@ -480,8 +484,16 @@ router.delete("/store/products/:id", async (req, res): Promise<void> => {
     if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
     const store = await getStoreForTenant(me.tenantId);
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    const [existing] = await db.select({ images: storeProductsTable.images, gallery: storeProductsTable.gallery })
+      .from(storeProductsTable)
+      .where(and(eq(storeProductsTable.id, req.params.id), eq(storeProductsTable.storeId, store.id)))
+      .limit(1);
     await db.delete(storeProductsTable)
       .where(and(eq(storeProductsTable.id, req.params.id), eq(storeProductsTable.storeId, store.id)));
+    if (existing) {
+      await deleteOrphanedImages(existing.images as string[] ?? [], [], req.log);
+      await deleteOrphanedImages(existing.gallery as string[] ?? [], [], req.log);
+    }
     res.status(204).end();
   } catch (err) {
     req.log.error({ err }, "Error deleting store product");

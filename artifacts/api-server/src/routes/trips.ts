@@ -288,15 +288,6 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
       parsed.data.totalCapacity != null || parsed.data.seatLayout !== undefined || parsed.data.layoutId !== undefined;
     const coverImageChanged = parsed.data.coverImage !== undefined;
 
-    let existingTripForCleanup: { coverImage?: string | null } | null = null;
-    if ((capacityOrLayoutChanged || coverImageChanged) && !existingTripForCleanup) {
-      const [fetched] = await db.select().from(tripsTable)
-        .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
-        .limit(1);
-      if (!fetched) { res.status(404).json({ error: "Not found" }); return; }
-      existingTripForCleanup = fetched;
-    }
-
     if (parsed.data.inclusions != null) updates.inclusions = parsed.data.inclusions;
     if (parsed.data.exclusions != null) updates.exclusions = parsed.data.exclusions;
     if (parsed.data.vehiclePlate !== undefined) updates.vehiclePlate = parsed.data.vehiclePlate ?? null;
@@ -315,82 +306,83 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
     if (parsed.data.variableCosts !== undefined) updates.variableCosts = Array.isArray(parsed.data.variableCosts) ? (parsed.data.variableCosts as VariableCostItem[]) : [];
     if (parsed.data.gallery !== undefined) updates.gallery = parsed.data.gallery ?? [];
 
-    if (capacityOrLayoutChanged) {
-      const currentTrip = existingTripForCleanup as typeof existingTripForCleanup & {
-        layoutId?: string | null;
-        totalCapacity: number;
-        seatLayout?: string | null;
-      } | null;
+    let oldCoverImage: string | null | undefined;
+    if (capacityOrLayoutChanged || coverImageChanged) {
+      const [currentTrip] = await db.select().from(tripsTable)
+        .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
+        .limit(1);
       if (!currentTrip) { res.status(404).json({ error: "Not found" }); return; }
+      if (coverImageChanged) oldCoverImage = currentTrip.coverImage;
 
-      const newLayoutId = parsed.data.layoutId !== undefined
-        ? (parsed.data.layoutId ?? null)
-        : (currentTrip.layoutId ?? null);
+      if (capacityOrLayoutChanged) {
+        const newLayoutId = parsed.data.layoutId !== undefined
+          ? (parsed.data.layoutId ?? null)
+          : (currentTrip.layoutId ?? null);
 
-      let newSeatMap: Record<string, { row: number; col: number; status: string; type?: string }> = {};
-      let newCapacity = parsed.data.totalCapacity ?? currentTrip.totalCapacity;
+        let newSeatMap: Record<string, { row: number; col: number; status: string; type?: string }> = {};
+        let newCapacity = parsed.data.totalCapacity ?? currentTrip.totalCapacity;
 
-      if (newLayoutId) {
-        const [layoutRow] = await db.select().from(vehicleLayoutsTable)
-          .where(and(eq(vehicleLayoutsTable.id, newLayoutId), eq(vehicleLayoutsTable.tenantId, me.tenantId)))
-          .limit(1);
-        if (!layoutRow) { res.status(400).json({ error: "Layout não encontrado" }); return; }
-        const cells = (layoutRow.cells ?? []) as LayoutCell[];
-        const generated = generateSeatMapFromLayout(cells, layoutRow.numberingType);
-        newSeatMap = generated as typeof newSeatMap;
-        newCapacity = cells.filter(c => ["seat", "vip", "accessible"].includes(c.type)).length;
-        updates.totalCapacity = newCapacity;
-      } else {
-        const newLayout = parsed.data.seatLayout ?? currentTrip.seatLayout ?? "2x2";
-        const newCols = newLayout === "2x1" ? 3 : 4;
-        const newRows = Math.ceil(newCapacity / newCols);
-        let seatNum = 1;
-        for (let r = 1; r <= newRows; r++) {
-          for (let c = 1; c <= newCols; c++) {
-            if (seatNum <= newCapacity) {
-              newSeatMap[`${seatNum}`] = { row: r, col: c, status: "available" };
-              seatNum++;
+        if (newLayoutId) {
+          const [layoutRow] = await db.select().from(vehicleLayoutsTable)
+            .where(and(eq(vehicleLayoutsTable.id, newLayoutId), eq(vehicleLayoutsTable.tenantId, me.tenantId)))
+            .limit(1);
+          if (!layoutRow) { res.status(400).json({ error: "Layout não encontrado" }); return; }
+          const cells = (layoutRow.cells ?? []) as LayoutCell[];
+          const generated = generateSeatMapFromLayout(cells, layoutRow.numberingType);
+          newSeatMap = generated as typeof newSeatMap;
+          newCapacity = cells.filter(c => ["seat", "vip", "accessible"].includes(c.type)).length;
+          updates.totalCapacity = newCapacity;
+        } else {
+          const newLayout = parsed.data.seatLayout ?? currentTrip.seatLayout ?? "2x2";
+          const newCols = newLayout === "2x1" ? 3 : 4;
+          const newRows = Math.ceil(newCapacity / newCols);
+          let seatNum = 1;
+          for (let r = 1; r <= newRows; r++) {
+            for (let c = 1; c <= newCols; c++) {
+              if (seatNum <= newCapacity) {
+                newSeatMap[`${seatNum}`] = { row: r, col: c, status: "available" };
+                seatNum++;
+              }
             }
           }
         }
-      }
 
-      const activeReservations = await db.select().from(reservationsTable)
-        .where(and(
-          eq(reservationsTable.tripId, req.params.id),
-          eq(reservationsTable.tenantId, me.tenantId),
-          inArray(reservationsTable.status, ["pending", "confirmed"]),
-        ));
+        const activeReservations = await db.select().from(reservationsTable)
+          .where(and(
+            eq(reservationsTable.tripId, req.params.id),
+            eq(reservationsTable.tenantId, me.tenantId),
+            inArray(reservationsTable.status, ["pending", "confirmed"]),
+          ));
 
-      let reservedSeats = 0;
-      let confirmedSeats = 0;
-      for (const r of activeReservations) {
-        for (const seat of r.seats) {
-          if (newSeatMap[seat]) {
-            newSeatMap[seat].status = r.status === "confirmed" ? "confirmed" : "reserved";
-            if (r.status === "confirmed") confirmedSeats++;
-            else reservedSeats++;
+        let reservedSeats = 0;
+        let confirmedSeats = 0;
+        for (const r of activeReservations) {
+          for (const seat of r.seats) {
+            if (newSeatMap[seat]) {
+              newSeatMap[seat].status = r.status === "confirmed" ? "confirmed" : "reserved";
+              if (r.status === "confirmed") confirmedSeats++;
+              else reservedSeats++;
+            }
           }
         }
+        const occupiedTotal = reservedSeats + confirmedSeats;
+        updates.seatMap = newSeatMap;
+        updates.availableSeats = Math.max(0, newCapacity - occupiedTotal);
+        updates.reservedSeats = reservedSeats;
+        updates.confirmedSeats = confirmedSeats;
       }
-      const occupiedTotal = reservedSeats + confirmedSeats;
-      updates.seatMap = newSeatMap;
-      updates.availableSeats = Math.max(0, newCapacity - occupiedTotal);
-      updates.reservedSeats = reservedSeats;
-      updates.confirmedSeats = confirmedSeats;
     }
 
     await db.update(tripsTable).set(updates)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)));
 
-    if (coverImageChanged && existingTripForCleanup) {
-      await deleteOrphanedFile(existingTripForCleanup.coverImage, parsed.data.coverImage, req.log);
-    }
-
     const [trip] = await db.select().from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);
     if (!trip) { res.status(404).json({ error: "Not found" }); return; }
+    if (coverImageChanged) {
+      await deleteOrphanedFile(oldCoverImage, parsed.data.coverImage, req.log);
+    }
     res.json(formatTrip(trip));
   } catch (err) {
     req.log.error({ err }, "Error updating trip");
@@ -403,8 +395,15 @@ router.delete("/trips/:id", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    const [existing] = await db.select({ coverImage: tripsTable.coverImage })
+      .from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
     await db.delete(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)));
+    if (existing?.coverImage) {
+      await deleteOrphanedFile(existing.coverImage, null, req.log);
+    }
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Error deleting trip");
