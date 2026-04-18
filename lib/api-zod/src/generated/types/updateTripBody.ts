@@ -71,5 +71,9 @@ export interface UpdateTripBody {
   fixedCosts?: unknown[];
   variableCosts?: unknown[];
   /** @nullable */
+  freeOrganizers?: number | null;
+  /** @nullable */
+  freeGuides?: number | null;
+  /** @nullable */
   layoutId?: string | null;
 }

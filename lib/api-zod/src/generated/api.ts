@@ -1330,6 +1330,8 @@ export const ListTripsResponse = zod.object({
       itinerary: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
       fixedCosts: zod.array(zod.unknown()).optional(),
       variableCosts: zod.array(zod.unknown()).optional(),
+      freeOrganizers: zod.number().nullish(),
+      freeGuides: zod.number().nullish(),
       layoutId: zod.string().nullish(),
       createdAt: zod.string(),
       updatedAt: zod.string(),
@@ -1376,6 +1378,8 @@ export const CreateTripBody = zod.object({
   itinerary: zod.array(zod.unknown()).optional(),
   fixedCosts: zod.array(zod.unknown()).optional(),
   variableCosts: zod.array(zod.unknown()).optional(),
+  freeOrganizers: zod.number().nullish(),
+  freeGuides: zod.number().nullish(),
   layoutId: zod.string().nullish(),
 });
 
@@ -1435,6 +1439,8 @@ export const GetTripResponse = zod.object({
   itinerary: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
   fixedCosts: zod.array(zod.unknown()).optional(),
   variableCosts: zod.array(zod.unknown()).optional(),
+  freeOrganizers: zod.number().nullish(),
+  freeGuides: zod.number().nullish(),
   layoutId: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
@@ -1482,6 +1488,8 @@ export const UpdateTripBody = zod.object({
   itinerary: zod.array(zod.unknown()).optional(),
   fixedCosts: zod.array(zod.unknown()).optional(),
   variableCosts: zod.array(zod.unknown()).optional(),
+  freeOrganizers: zod.number().nullish(),
+  freeGuides: zod.number().nullish(),
   layoutId: zod.string().nullish(),
 });
 
@@ -1534,6 +1542,8 @@ export const UpdateTripResponse = zod.object({
   itinerary: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
   fixedCosts: zod.array(zod.unknown()).optional(),
   variableCosts: zod.array(zod.unknown()).optional(),
+  freeOrganizers: zod.number().nullish(),
+  freeGuides: zod.number().nullish(),
   layoutId: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),

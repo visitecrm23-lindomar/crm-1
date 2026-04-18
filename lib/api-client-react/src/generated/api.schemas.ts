@@ -359,6 +359,10 @@ export interface Trip {
   fixedCosts?: unknown[];
   variableCosts?: unknown[];
   /** @nullable */
+  freeOrganizers?: number | null;
+  /** @nullable */
+  freeGuides?: number | null;
+  /** @nullable */
   layoutId?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -491,6 +495,10 @@ export interface CreateTripBody {
   fixedCosts?: unknown[];
   variableCosts?: unknown[];
   /** @nullable */
+  freeOrganizers?: number | null;
+  /** @nullable */
+  freeGuides?: number | null;
+  /** @nullable */
   layoutId?: string | null;
 }
 
@@ -558,6 +566,10 @@ export interface UpdateTripBody {
   itinerary?: unknown[];
   fixedCosts?: unknown[];
   variableCosts?: unknown[];
+  /** @nullable */
+  freeOrganizers?: number | null;
+  /** @nullable */
+  freeGuides?: number | null;
   /** @nullable */
   layoutId?: string | null;
 }

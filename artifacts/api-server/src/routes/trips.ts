@@ -120,6 +120,8 @@ function formatTrip(t: typeof tripsTable.$inferSelect) {
     layoutId: t.layoutId ?? null,
     fixedCosts: Array.isArray(t.fixedCosts) ? t.fixedCosts as FixedCostItem[] : [],
     variableCosts: Array.isArray(t.variableCosts) ? t.variableCosts as VariableCostItem[] : [],
+    freeOrganizers: t.freeOrganizers ?? null,
+    freeGuides: t.freeGuides ?? null,
     originCity: t.originCity ?? null,
     originState: t.originState ?? null,
     departureTime: t.departureTime ?? null,
@@ -234,6 +236,8 @@ router.post("/trips", async (req, res): Promise<void> => {
       driverName: parsed.data.driverName ?? null,
       tourGuide: parsed.data.tourGuide ?? null,
       tripOrganizer: parsed.data.tripOrganizer ?? null,
+      freeOrganizers: parsed.data.freeOrganizers ?? null,
+      freeGuides: parsed.data.freeGuides ?? null,
       originCity: parsed.data.originCity ?? null,
       originState: parsed.data.originState ?? null,
       departureTime: parsed.data.departureTime ?? null,
@@ -313,6 +317,8 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
     if (parsed.data.fixedCosts !== undefined) updates.fixedCosts = Array.isArray(parsed.data.fixedCosts) ? (parsed.data.fixedCosts as FixedCostItem[]) : [];
     if (parsed.data.variableCosts !== undefined) updates.variableCosts = Array.isArray(parsed.data.variableCosts) ? (parsed.data.variableCosts as VariableCostItem[]) : [];
     if (parsed.data.gallery !== undefined) updates.gallery = parsed.data.gallery ?? [];
+    if (parsed.data.freeOrganizers !== undefined) updates.freeOrganizers = parsed.data.freeOrganizers ?? null;
+    if (parsed.data.freeGuides !== undefined) updates.freeGuides = parsed.data.freeGuides ?? null;
     if (parsed.data.originCity !== undefined) updates.originCity = parsed.data.originCity ?? null;
     if (parsed.data.originState !== undefined) updates.originState = parsed.data.originState ?? null;
     if (parsed.data.departureTime !== undefined) updates.departureTime = parsed.data.departureTime ?? null;

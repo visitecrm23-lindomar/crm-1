@@ -59,6 +59,8 @@ export const tripsTable = pgTable("trips", {
   driverPhone: text("driver_phone"),
   fixedCosts: json("fixed_costs").$type<FixedCostItem[]>().default([]),
   variableCosts: json("variable_costs").$type<VariableCostItem[]>().default([]),
+  freeOrganizers: integer("free_organizers"),
+  freeGuides: integer("free_guides"),
   cancellationPolicy: text("cancellation_policy"),
   metaTitle: text("meta_title"),
   metaDescription: text("meta_description"),

@@ -4848,6 +4848,10 @@ components:
         variableCosts:
           type: array
           items: {}
+        freeOrganizers:
+          type: ["integer", "null"]
+        freeGuides:
+          type: ["integer", "null"]
         layoutId:
           type: ["string", "null"]
         createdAt:
@@ -5064,6 +5068,10 @@ components:
         variableCosts:
           type: array
           items: {}
+        freeOrganizers:
+          type: ["integer", "null"]
+        freeGuides:
+          type: ["integer", "null"]
         layoutId:
           type: ["string", "null"]
       required:
@@ -5158,6 +5166,10 @@ components:
         variableCosts:
           type: array
           items: {}
+        freeOrganizers:
+          type: ["integer", "null"]
+        freeGuides:
+          type: ["integer", "null"]
         layoutId:
           type: ["string", "null"]
 

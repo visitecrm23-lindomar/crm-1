@@ -1057,6 +1057,8 @@ interface TripFormData {
   fixedCostItems: FixedCostItem[];
   variableCostItems: VariableCostItem[];
   gallery: string[];
+  freeOrganizers: string;
+  freeGuides: string;
 }
 
 const FIXED_COST_CATEGORIES: Record<string, string[]> = {
@@ -1087,6 +1089,7 @@ const EMPTY_FORM: TripFormData = {
   inclusions: "", exclusions: "", coverImage: "",
   vehicleType: "", vehiclePlate: "", driverName: "", tourGuide: "", tripOrganizer: "", status: "draft",
   boardingPoints: [newBP()], itinerary: [newDay(1)], fixedCostItems: [], variableCostItems: [], gallery: [],
+  freeOrganizers: "0", freeGuides: "0",
 };
 const toTripFormData = (trip: Trip): TripFormData => ({
   name: trip.name,
@@ -1122,6 +1125,8 @@ const toTripFormData = (trip: Trip): TripFormData => ({
   fixedCostItems: Array.isArray(trip.fixedCosts) ? (trip.fixedCosts as unknown as FixedCostItem[]) : [],
   variableCostItems: Array.isArray(trip.variableCosts) ? (trip.variableCosts as unknown as VariableCostItem[]) : [],
   gallery: trip.gallery ?? [],
+  freeOrganizers: String(trip.freeOrganizers ?? 0),
+  freeGuides: String(trip.freeGuides ?? 0),
 });
 
 const CELL_COLORS: Record<string, string> = {
@@ -1198,7 +1203,9 @@ export function TripForm({ tripId }: { tripId?: string }) {
   const setVal = (k: keyof TripFormData) => (v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
   const cap = parseInt(form.totalCapacity || "0");
-  const grossRevenue = parseFloat(form.priceAdult || "0") * cap;
+  const freeSeats = Math.min(parseInt(form.freeOrganizers || "0") + parseInt(form.freeGuides || "0"), cap);
+  const paidCap = Math.max(0, cap - freeSeats);
+  const grossRevenue = parseFloat(form.priceAdult || "0") * paidCap;
   const totalFixed = form.fixedCostItems.reduce((s, c) => s + c.value, 0);
   const totalVariablePax = form.variableCostItems.reduce((s, c) => s + c.valuePax, 0);
   const totalVariable = totalVariablePax * cap;
@@ -1237,6 +1244,8 @@ export function TripForm({ tripId }: { tripId?: string }) {
             seatLayout: form.layoutId ? undefined : form.seatLayout,
             layoutId: form.layoutId || null,
             vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined, tourGuide: form.tourGuide || undefined, tripOrganizer: form.tripOrganizer || undefined,
+            freeOrganizers: parseInt(form.freeOrganizers || "0") || null,
+            freeGuides: parseInt(form.freeGuides || "0") || null,
             status: statusToSave,
             itinerary: itineraryToSave.length ? itineraryToSave : undefined,
             boardingPoints: boardingPointsToSave.length ? boardingPointsToSave : undefined,
@@ -1263,6 +1272,8 @@ export function TripForm({ tripId }: { tripId?: string }) {
             seatLayout: form.layoutId ? undefined : form.seatLayout,
             layoutId: form.layoutId || null,
             vehicleType: form.vehicleType || undefined, vehiclePlate: form.vehiclePlate || undefined, driverName: form.driverName || undefined, tourGuide: form.tourGuide || undefined, tripOrganizer: form.tripOrganizer || undefined,
+            freeOrganizers: parseInt(form.freeOrganizers || "0") || null,
+            freeGuides: parseInt(form.freeGuides || "0") || null,
             status: statusToSave,
             itinerary: itineraryToSave.length ? itineraryToSave : undefined,
             boardingPoints: boardingPointsToSave.length ? boardingPointsToSave : undefined,
@@ -1468,6 +1479,41 @@ export function TripForm({ tripId }: { tripId?: string }) {
             </div>
           </div>
 
+          {/* Controle de Gratuidades */}
+          <div className="bg-card border rounded-lg p-6 space-y-4">
+            <div>
+              <h3 className="font-semibold">Controle de Gratuidades</h3>
+              <p className="text-sm text-muted-foreground">Assentos gratuitos não contabilizados na receita bruta</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Responsável da Viagem gratuito</Label>
+                <Input
+                  type="number" min="0" max="2" step="1"
+                  value={form.freeOrganizers}
+                  onChange={e => setForm(prev => ({ ...prev, freeOrganizers: String(Math.min(2, Math.max(0, parseInt(e.target.value) || 0))) }))}
+                />
+                <p className="text-xs text-muted-foreground">Limite: até 2</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Guia de turismo gratuito</Label>
+                <Input
+                  type="number" min="0" max="2" step="1"
+                  value={form.freeGuides}
+                  onChange={e => setForm(prev => ({ ...prev, freeGuides: String(Math.min(2, Math.max(0, parseInt(e.target.value) || 0))) }))}
+                />
+                <p className="text-xs text-muted-foreground">Limite: até 2</p>
+              </div>
+            </div>
+            {freeSeats > 0 && (
+              <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm dark:bg-amber-950/20 dark:border-amber-800">
+                <span className="text-amber-700 dark:text-amber-400 font-medium">
+                  {freeSeats} assento{freeSeats > 1 ? "s" : ""} gratuito{freeSeats > 1 ? "s" : ""} — receita calculada sobre {paidCap} pagante{paidCap !== 1 ? "s" : ""}
+                </span>
+              </div>
+            )}
+          </div>
+
           {/* Custos Fixos */}
           <div className="bg-card border rounded-lg p-6 space-y-4">
             <div>
@@ -1640,8 +1686,8 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 { label: `Total Custos Variáveis (${cap} pax)`, value: formatCurrency(totalVariable), muted: false },
                 { label: "Custo Operacional Total", value: formatCurrency(totalOperational), muted: false },
                 { label: "Custo por Passageiro", value: formatCurrency(costPerPax), muted: false },
-                { label: "Receita Bruta (100% ocupação)", value: formatCurrency(grossRevenue), muted: false },
-                { label: "Receita Bruta (80% ocupação)", value: formatCurrency(grossRevenue * 0.8), muted: true },
+                { label: `Receita Bruta (${paidCap} pagantes, 100%)`, value: formatCurrency(grossRevenue), muted: false },
+                { label: `Receita Bruta (${paidCap} pagantes, 80%)`, value: formatCurrency(grossRevenue * 0.8), muted: true },
               ].map(row => (
                 <div key={row.label} className={`flex justify-between p-3 rounded-lg ${row.muted ? "bg-muted/20" : "bg-muted/40"}`}>
                   <span className="text-muted-foreground">{row.label}</span>

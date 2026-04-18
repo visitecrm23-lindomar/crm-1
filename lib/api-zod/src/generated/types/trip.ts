@@ -64,6 +64,10 @@ export interface Trip {
   fixedCosts?: unknown[];
   variableCosts?: unknown[];
   /** @nullable */
+  freeOrganizers?: number | null;
+  /** @nullable */
+  freeGuides?: number | null;
+  /** @nullable */
   layoutId?: string | null;
   createdAt: string;
   updatedAt: string;
