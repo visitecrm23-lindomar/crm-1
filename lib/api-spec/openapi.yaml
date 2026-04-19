@@ -4448,6 +4448,10 @@ components:
           type: integer
         totalExpenses:
           type: number
+        receivedFromActiveTrips:
+          type: number
+        pendingFromActiveTrips:
+          type: number
       required:
         - totalClients
         - newClientsThisMonth
@@ -4468,6 +4472,8 @@ components:
         - avgTicket
         - activeClientsCount
         - totalExpenses
+        - receivedFromActiveTrips
+        - pendingFromActiveTrips
 
     DashboardCharts:
       type: object
@@ -4548,16 +4554,52 @@ components:
               value:
                 type: number
             required: [label, value]
+        tripCancellationRate:
+          type: number
+        originBreakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              count:
+                type: integer
+            required: [name, count]
+        revenueByMonth:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              value:
+                type: number
+            required: [label, value]
+        expensesByMonth:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              value:
+                type: number
+            required: [label, value]
       required:
         - topDestinations
         - tripsByMonth
         - reservationsByMonth
         - reservationsByStatus
         - cancellationRate
+        - tripCancellationRate
         - avgReservationsPerTrip
         - passengersByMonth
         - topBoardingPoints
         - avgTicketByMonth
+        - originBreakdown
+        - revenueByMonth
+        - expensesByMonth
 
     DashboardFunnelOriginItem:
       type: object
@@ -4572,7 +4614,11 @@ components:
           type: integer
         withPayment:
           type: integer
-      required: [origin, totalLeads, withReservation, withConfirmed, withPayment]
+        avgTicket:
+          type: number
+        conversionPct:
+          type: number
+      required: [origin, totalLeads, withReservation, withConfirmed, withPayment, avgTicket, conversionPct]
 
     DashboardFunnel:
       type: object
@@ -4585,11 +4631,13 @@ components:
           type: integer
         withPayment:
           type: integer
+        conversionRate:
+          type: number
         byOrigin:
           type: array
           items:
             $ref: "#/components/schemas/DashboardFunnelOriginItem"
-      required: [totalLeads, withReservation, withConfirmed, withPayment, byOrigin]
+      required: [totalLeads, withReservation, withConfirmed, withPayment, conversionRate, byOrigin]
 
     ChartDataPoint:
       type: object

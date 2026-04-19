@@ -35,6 +35,8 @@ export interface DashboardSummary {
   avgTicket: number;
   activeClientsCount: number;
   totalExpenses: number;
+  receivedFromActiveTrips: number;
+  pendingFromActiveTrips: number;
 }
 
 export type DashboardChartsTopDestinationsItem = {
@@ -73,6 +75,21 @@ export type DashboardChartsAvgTicketByMonthItem = {
   value: number;
 };
 
+export type DashboardChartsOriginBreakdownItem = {
+  name: string;
+  count: number;
+};
+
+export type DashboardChartsRevenueByMonthItem = {
+  label: string;
+  value: number;
+};
+
+export type DashboardChartsExpensesByMonthItem = {
+  label: string;
+  value: number;
+};
+
 export interface DashboardCharts {
   topDestinations: DashboardChartsTopDestinationsItem[];
   tripsByMonth: DashboardChartsTripsByMonthItem[];
@@ -83,6 +100,10 @@ export interface DashboardCharts {
   passengersByMonth: DashboardChartsPassengersByMonthItem[];
   topBoardingPoints: DashboardChartsTopBoardingPointsItem[];
   avgTicketByMonth: DashboardChartsAvgTicketByMonthItem[];
+  tripCancellationRate: number;
+  originBreakdown: DashboardChartsOriginBreakdownItem[];
+  revenueByMonth: DashboardChartsRevenueByMonthItem[];
+  expensesByMonth: DashboardChartsExpensesByMonthItem[];
 }
 
 export interface DashboardFunnelOriginItem {
@@ -91,6 +112,8 @@ export interface DashboardFunnelOriginItem {
   withReservation: number;
   withConfirmed: number;
   withPayment: number;
+  avgTicket: number;
+  conversionPct: number;
 }
 
 export interface DashboardFunnel {
@@ -98,6 +121,7 @@ export interface DashboardFunnel {
   withReservation: number;
   withConfirmed: number;
   withPayment: number;
+  conversionRate: number;
   byOrigin: DashboardFunnelOriginItem[];
 }
 

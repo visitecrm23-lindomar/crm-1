@@ -12,5 +12,6 @@ export interface DashboardFunnel {
   withReservation: number;
   withConfirmed: number;
   withPayment: number;
+  conversionRate: number;
   byOrigin: DashboardFunnelOriginItem[];
 }

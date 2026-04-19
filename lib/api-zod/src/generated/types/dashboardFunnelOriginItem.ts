@@ -12,4 +12,6 @@ export interface DashboardFunnelOriginItem {
   withReservation: number;
   withConfirmed: number;
   withPayment: number;
+  avgTicket: number;
+  conversionPct: number;
 }

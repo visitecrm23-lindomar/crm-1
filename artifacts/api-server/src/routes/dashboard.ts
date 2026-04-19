@@ -147,6 +147,27 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
     const [totalExpensesRow] = await db.select({ total: sql<number>`sum(cast(amount as numeric))` })
       .from(expensesTable).where(eq(expensesTable.tenantId, tenantId));
 
+    // receivedFromActiveTrips and pendingFromActiveTrips
+    const activeTrips = await db.select({ id: tripsTable.id })
+      .from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, "active")));
+    const activeTripIds = activeTrips.map(t => t.id);
+    let receivedFromActiveTrips = 0, pendingFromActiveTrips = 0;
+    if (activeTripIds.length > 0) {
+      const activeResIds = (await db.select({ id: reservationsTable.id })
+        .from(reservationsTable)
+        .where(and(eq(reservationsTable.tenantId, tenantId), inArray(reservationsTable.tripId, activeTripIds))))
+        .map(r => r.id);
+      if (activeResIds.length > 0) {
+        const activePayments = await db.select({ amount: paymentsTable.amount, type: paymentsTable.type, status: paymentsTable.status })
+          .from(paymentsTable)
+          .where(and(eq(paymentsTable.tenantId, tenantId), inArray(paymentsTable.reservationId, activeResIds)));
+        for (const p of activePayments) {
+          if (p.type === "receivable" && p.status === "paid") receivedFromActiveTrips += Number(p.amount);
+          if (p.type === "receivable" && p.status === "pending") pendingFromActiveTrips += Number(p.amount);
+        }
+      }
+    }
+
     const trips = await db.select({ totalCapacity: tripsTable.totalCapacity, reservedSeats: tripsTable.reservedSeats })
       .from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, "active")));
     const totalCapacity = trips.reduce((a, t) => a + t.totalCapacity, 0);
@@ -183,6 +204,8 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
       activeClientsCount: Number(activeClientsRow?.count ?? 0),
       totalExpenses: Math.round(Number(totalExpensesRow?.total ?? 0) * 100) / 100,
       cancelledReservations: Number(cancelledReservationCount?.count ?? 0),
+      receivedFromActiveTrips: Math.round(receivedFromActiveTrips * 100) / 100,
+      pendingFromActiveTrips: Math.round(pendingFromActiveTrips * 100) / 100,
     });
   } catch (err) {
     req.log.error({ err }, "Error fetching dashboard summary");
@@ -283,7 +306,7 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
     const tenantId = me.tenantId;
     const now = new Date();
 
-    // Top destinations (by reservation count)
+    // Top destinations (by CONFIRMED reservation count, top 10)
     const allTrips = await db.select({ id: tripsTable.id, destination: tripsTable.destination, destinationCity: tripsTable.destinationCity })
       .from(tripsTable).where(eq(tripsTable.tenantId, tenantId));
 
@@ -293,6 +316,7 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
     const tripMap = new Map(allTrips.map(t => [t.id, t]));
     const destCount: Record<string, number> = {};
     for (const r of allReservations) {
+      if (r.status !== "confirmed") continue; // only confirmed reservations
       const trip = tripMap.get(r.tripId);
       if (trip) {
         const key = trip.destinationCity || trip.destination;
@@ -301,11 +325,11 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
     }
     const topDestinations = Object.entries(destCount)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 6)
+      .slice(0, 10)
       .map(([name, count]) => ({ name, count }));
 
     // Monthly trips created (last 12 months)
-    const allTripsAll = await db.select({ createdAt: tripsTable.createdAt })
+    const allTripsAll = await db.select({ createdAt: tripsTable.createdAt, status: tripsTable.status })
       .from(tripsTable).where(eq(tripsTable.tenantId, tenantId));
 
     const tripsByMonth: Array<{ label: string; count: number }> = [];
@@ -336,18 +360,52 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
     }
     const reservationsByStatus = Object.entries(statusCount).map(([status, count]) => ({ status, count }));
 
-    // Cancellation rate
+    // Reservation cancellation rate
     const total = allReservations.length;
     const cancelled = allReservations.filter(r => r.status === "cancelled").length;
     const cancellationRate = total > 0 ? Math.round((cancelled / total) * 1000) / 10 : 0;
 
-    // Avg reservations per active trip
-    const activeTripIds = allTrips.filter(t => allTripsAll.length > 0).map(t => t.id);
+    // Trip cancellation rate (trips cancelled vs total trips)
+    const totalTripsCount = allTripsAll.length;
+    const cancelledTripsCount = allTripsAll.filter(t => t.status === "cancelled").length;
+    const tripCancellationRate = totalTripsCount > 0 ? Math.round((cancelledTripsCount / totalTripsCount) * 1000) / 10 : 0;
+
+    // Avg confirmed reservations per active trip
     const [activeTripsCount] = await db.select({ count: sql<number>`count(*)` })
       .from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, "active")));
     const confirmedCount = allReservations.filter(r => r.status === "confirmed").length;
     const activeCount = Number(activeTripsCount?.count ?? 0);
     const avgReservationsPerTrip = activeCount > 0 ? Math.round((confirmedCount / activeCount) * 10) / 10 : 0;
+
+    // Origin breakdown (client count by acquisition channel)
+    const allClientOrigins = await db.select({ origin: clientsTable.origin })
+      .from(clientsTable).where(eq(clientsTable.tenantId, tenantId));
+    const originCount: Record<string, number> = {};
+    for (const c of allClientOrigins) {
+      const key = c.origin ?? "Outros";
+      originCount[key] = (originCount[key] ?? 0) + 1;
+    }
+    const originBreakdown = Object.entries(originCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([name, count]) => ({ name, count }));
+
+    // Monthly revenue and expenses (last 12 months)
+    const allPaymentsForChart = await db.select({ type: paymentsTable.type, status: paymentsTable.status, amount: paymentsTable.amount, paidAt: paymentsTable.paidAt })
+      .from(paymentsTable).where(eq(paymentsTable.tenantId, tenantId));
+    const revenueByMonth: Array<{ label: string; value: number }> = [];
+    const expensesByMonth: Array<{ label: string; value: number }> = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      const label = d.toLocaleString("pt-BR", { month: "short" });
+      const rev = allPaymentsForChart.filter(p => p.type === "receivable" && p.status === "paid" && p.paidAt && p.paidAt >= d && p.paidAt <= end)
+        .reduce((a, p) => a + Number(p.amount), 0);
+      const exp = allPaymentsForChart.filter(p => p.type === "payable" && p.status === "paid" && p.paidAt && p.paidAt >= d && p.paidAt <= end)
+        .reduce((a, p) => a + Number(p.amount), 0);
+      revenueByMonth.push({ label, value: Math.round(rev) });
+      expensesByMonth.push({ label, value: Math.round(exp) });
+    }
 
     // Passengers checked in per month
     const allPassengers = await db.select({ checkedInAt: passengersTable.checkedInAt, boardingLocationId: passengersTable.boardingLocationId })
@@ -407,10 +465,14 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
       reservationsByMonth,
       reservationsByStatus,
       cancellationRate,
+      tripCancellationRate,
       avgReservationsPerTrip,
       passengersByMonth,
       topBoardingPoints,
       avgTicketByMonth,
+      originBreakdown,
+      revenueByMonth,
+      expensesByMonth,
     });
   } catch (err) {
     req.log.error({ err }, "Error fetching dashboard charts");
@@ -436,13 +498,15 @@ router.get("/dashboard/funnel", async (req, res): Promise<void> => {
     const allReservations = await db.select({ clientId: reservationsTable.clientId, status: reservationsTable.status })
       .from(reservationsTable).where(eq(reservationsTable.tenantId, tenantId));
 
-    const paidClientIds = new Set(
-      (await db.select({ clientId: paymentsTable.clientId })
-        .from(paymentsTable)
-        .where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.status, "paid"), eq(paymentsTable.type, "receivable"))))
-        .map(p => p.clientId)
-        .filter(Boolean) as string[]
-    );
+    const clientPaidPayments = await db.select({ clientId: paymentsTable.clientId, amount: paymentsTable.amount })
+      .from(paymentsTable)
+      .where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.status, "paid"), eq(paymentsTable.type, "receivable")));
+
+    const paidClientIds = new Set(clientPaidPayments.map(p => p.clientId).filter(Boolean) as string[]);
+    const clientPaidAmount: Record<string, number> = {};
+    for (const p of clientPaidPayments) {
+      if (p.clientId) clientPaidAmount[p.clientId] = (clientPaidAmount[p.clientId] ?? 0) + Number(p.amount);
+    }
 
     const clientsWithReservation = new Set(allReservations.map(r => r.clientId));
     const clientsWithConfirmed = new Set(allReservations.filter(r => r.status === "confirmed").map(r => r.clientId));
@@ -451,8 +515,9 @@ router.get("/dashboard/funnel", async (req, res): Promise<void> => {
     const withReservation = allClients.filter(c => clientsWithReservation.has(c.id)).length;
     const withConfirmed = allClients.filter(c => clientsWithConfirmed.has(c.id)).length;
     const withPayment = allClients.filter(c => paidClientIds.has(c.id)).length;
+    const conversionRate = totalLeads > 0 ? Math.round((withPayment / totalLeads) * 1000) / 10 : 0;
 
-    // By origin
+    // By origin with conversion percentages and avg ticket
     const originMap: Record<string, { totalLeads: number; withReservation: number; withConfirmed: number; withPayment: number }> = {};
     for (const c of allClients) {
       const origin = c.origin ?? "Outros";
@@ -466,9 +531,16 @@ router.get("/dashboard/funnel", async (req, res): Promise<void> => {
     const byOrigin = Object.entries(originMap)
       .sort((a, b) => b[1].totalLeads - a[1].totalLeads)
       .slice(0, 8)
-      .map(([origin, data]) => ({ origin, ...data }));
+      .map(([origin, data]) => {
+        const originClients = allClients.filter(c => (c.origin ?? "Outros") === origin);
+        const payersForOrigin = originClients.filter(c => paidClientIds.has(c.id));
+        const totalPaid = payersForOrigin.reduce((a, c) => a + (clientPaidAmount[c.id] ?? 0), 0);
+        const avgTicket = payersForOrigin.length > 0 ? Math.round((totalPaid / payersForOrigin.length) * 100) / 100 : 0;
+        const conversionPct = data.totalLeads > 0 ? Math.round((data.withPayment / data.totalLeads) * 1000) / 10 : 0;
+        return { origin, ...data, avgTicket, conversionPct };
+      });
 
-    res.json({ totalLeads, withReservation, withConfirmed, withPayment, byOrigin });
+    res.json({ totalLeads, withReservation, withConfirmed, withPayment, conversionRate, byOrigin });
   } catch (err) {
     req.log.error({ err }, "Error fetching dashboard funnel");
     res.status(500).json({ error: "Internal server error" });

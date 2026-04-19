@@ -28,4 +28,6 @@ export interface DashboardSummary {
   avgTicket: number;
   activeClientsCount: number;
   totalExpenses: number;
+  receivedFromActiveTrips: number;
+  pendingFromActiveTrips: number;
 }

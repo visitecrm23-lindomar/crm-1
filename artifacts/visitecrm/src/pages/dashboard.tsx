@@ -5,7 +5,7 @@ import {
   useListPayments, useListClients, useGetMe, useListPipelineStages, useListDeals, useListReservations,
   useGetPaymentsSummary,
 } from "@workspace/api-client-react";
-import type { Reservation } from "@workspace/api-client-react";
+import type { Reservation, PaymentListResponse } from "@workspace/api-client-react";
 import { VoucherModal } from "./reservations";
 import { ReservationCardVisual } from "@/components/reservation-card-visual";
 import {
@@ -163,8 +163,8 @@ function AgencyDashboard() {
   const { data: charts, isLoading: loadingCharts } = useGetDashboardCharts();
   const { data: funnel, isLoading: loadingFunnel } = useGetDashboardFunnel();
   const { data: upcomingTrips, isLoading: loadingTrips } = useGetDashboardUpcomingTrips();
-  const { data: allClientsOrigin } = useListClients({ limit: 200, page: 1, sortBy: "createdAt", sortOrder: "desc" });
   const { data: paymentSummary, isLoading: loadingPaySummary } = useGetPaymentsSummary();
+  const { data: pendingPaymentsList, isLoading: loadingPendingPayments } = useListPayments({ status: "pending", limit: 5, type: "receivable" });
   const { data: stages, isLoading: loadingStages } = useListPipelineStages();
   const { data: deals, isLoading: loadingDeals } = useListDeals({ status: "open" });
 
@@ -174,15 +174,10 @@ function AgencyDashboard() {
   const netProfit = totalRevenue - totalExpenses;
   const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
+  // Client origin data comes from charts endpoint (originBreakdown)
   const clientOriginData = useMemo(() => {
-    const all = allClientsOrigin?.data ?? [];
-    const groups: Record<string, number> = {};
-    all.forEach(c => {
-      const origin = c.origin ?? c.addressState ?? "Outros";
-      groups[origin] = (groups[origin] ?? 0) + 1;
-    });
-    return Object.entries(groups).map(([name, value]) => ({ name, value })).slice(0, 8);
-  }, [allClientsOrigin]);
+    return (charts?.originBreakdown ?? []).map(item => ({ name: item.name, value: item.count }));
+  }, [charts]);
 
   // Diagnostic engine
   const diagnostics = useMemo(() => {
@@ -705,13 +700,13 @@ function AgencyDashboard() {
                         <th className="text-right py-2 text-muted-foreground font-medium text-xs">C/ Reserva</th>
                         <th className="text-right py-2 text-muted-foreground font-medium text-xs">Confirmados</th>
                         <th className="text-right py-2 text-muted-foreground font-medium text-xs">Pagantes</th>
+                        <th className="text-right py-2 text-muted-foreground font-medium text-xs">Ticket Médio</th>
                         <th className="text-right py-2 text-muted-foreground font-medium text-xs">Conversão</th>
                       </tr>
                     </thead>
                     <tbody>
                       {funnel.byOrigin.map((row) => {
-                        const conv = row.totalLeads > 0 ? ((row.withPayment / row.totalLeads) * 100).toFixed(1) : "0.0";
-                        const convNum = parseFloat(conv);
+                        const convNum = row.conversionPct ?? 0;
                         return (
                           <tr key={row.origin} className="border-b last:border-0 hover:bg-muted/30">
                             <td className="py-2.5 font-medium">{row.origin}</td>
@@ -719,9 +714,10 @@ function AgencyDashboard() {
                             <td className="py-2.5 text-right text-blue-600">{row.withReservation}</td>
                             <td className="py-2.5 text-right text-purple-600">{row.withConfirmed}</td>
                             <td className="py-2.5 text-right text-green-600 font-semibold">{row.withPayment}</td>
+                            <td className="py-2.5 text-right text-amber-700 font-semibold">{row.avgTicket > 0 ? formatCurrency(row.avgTicket) : "—"}</td>
                             <td className="py-2.5 text-right">
                               <Badge variant={convNum >= 50 ? "default" : convNum >= 25 ? "secondary" : "outline"} className="text-xs">
-                                {conv}%
+                                {convNum.toFixed(1)}%
                               </Badge>
                             </td>
                           </tr>
@@ -780,10 +776,11 @@ function AgencyDashboard() {
 
       {/* ═══ SEÇÃO EXTRA: Visão Rápida ═══ */}
       <section>
-        <SectionTitle icon={CalendarCheck} title="Visão Rápida" description="Próximas viagens e pipeline" />
+        <SectionTitle icon={CalendarCheck} title="Visão Rápida" description="Próximas viagens, pagamentos pendentes e pipeline" />
 
-        <div className="grid gap-4 lg:grid-cols-7">
-          <Card className="lg:col-span-4">
+        <div className="grid gap-4 lg:grid-cols-3">
+          {/* Column 1: Próximas Viagens */}
+          <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Próximas Viagens</CardTitle>
@@ -820,7 +817,52 @@ function AgencyDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="lg:col-span-3">
+          {/* Column 2: Pagamentos Pendentes */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Pagamentos Pendentes</CardTitle>
+                <Link href="/financial"><Button variant="ghost" size="sm">Ver todos <ArrowUpRight className="w-3 h-3 ml-1" /></Button></Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingPendingPayments ? (
+                <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+              ) : !(pendingPaymentsList as PaymentListResponse | undefined)?.data?.length ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Nenhum pagamento pendente.</p>
+              ) : (
+                <div className="space-y-2">
+                  {((pendingPaymentsList as PaymentListResponse | undefined)?.data ?? []).slice(0, 5).map(payment => {
+                    const due = new Date(payment.dueDate);
+                    const daysUntil = differenceInDays(due, new Date());
+                    const isOverdue = daysUntil < 0;
+                    return (
+                      <div key={payment.id} className={`flex items-center justify-between p-2 rounded-lg border ${isOverdue ? "border-red-200 bg-red-50/30 dark:bg-red-950/10" : ""}`}>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">{payment.description ?? "Pagamento"}</p>
+                          <p className={`text-xs ${isOverdue ? "text-red-500 font-medium" : "text-muted-foreground"}`}>
+                            {isOverdue ? `Vencido há ${Math.abs(daysUntil)}d` : `Vence em ${daysUntil}d`}
+                          </p>
+                        </div>
+                        <span className={`text-sm font-bold ml-2 ${isOverdue ? "text-red-600" : "text-blue-600"}`}>
+                          {formatCurrency(payment.amount)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {(summary?.pendingFromActiveTrips ?? 0) > 0 && (
+                    <div className="mt-3 pt-3 border-t flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Total pendente (viagens ativas)</span>
+                      <span className="font-semibold text-blue-600">{formatCurrency(summary?.pendingFromActiveTrips ?? 0)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Column 3: Pipeline */}
+          <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Pipeline — Visão Rápida</CardTitle>
@@ -830,7 +872,7 @@ function AgencyDashboard() {
             <CardContent>
               {(loadingStages || loadingDeals) ? <Skeleton className="h-24 w-full" /> : (
                 <div className="space-y-3">
-                  {(stages ?? []).slice(0, 4).map(s => {
+                  {(stages ?? []).slice(0, 5).map(s => {
                     const stageDeals = (deals ?? []).filter(d => d.stageId === s.id);
                     return (
                       <div key={s.id} className="flex items-center gap-3">

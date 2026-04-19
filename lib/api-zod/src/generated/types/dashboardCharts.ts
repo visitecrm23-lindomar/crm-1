@@ -6,9 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DashboardChartsAvgTicketByMonthItem } from "./dashboardChartsAvgTicketByMonthItem";
+import type { DashboardChartsExpensesByMonthItem } from "./dashboardChartsExpensesByMonthItem";
+import type { DashboardChartsOriginBreakdownItem } from "./dashboardChartsOriginBreakdownItem";
 import type { DashboardChartsPassengersByMonthItem } from "./dashboardChartsPassengersByMonthItem";
 import type { DashboardChartsReservationsByMonthItem } from "./dashboardChartsReservationsByMonthItem";
 import type { DashboardChartsReservationsByStatusItem } from "./dashboardChartsReservationsByStatusItem";
+import type { DashboardChartsRevenueByMonthItem } from "./dashboardChartsRevenueByMonthItem";
 import type { DashboardChartsTopBoardingPointsItem } from "./dashboardChartsTopBoardingPointsItem";
 import type { DashboardChartsTopDestinationsItem } from "./dashboardChartsTopDestinationsItem";
 import type { DashboardChartsTripsByMonthItem } from "./dashboardChartsTripsByMonthItem";
@@ -23,4 +26,8 @@ export interface DashboardCharts {
   passengersByMonth: DashboardChartsPassengersByMonthItem[];
   topBoardingPoints: DashboardChartsTopBoardingPointsItem[];
   avgTicketByMonth: DashboardChartsAvgTicketByMonthItem[];
+  tripCancellationRate: number;
+  originBreakdown: DashboardChartsOriginBreakdownItem[];
+  revenueByMonth: DashboardChartsRevenueByMonthItem[];
+  expensesByMonth: DashboardChartsExpensesByMonthItem[];
 }

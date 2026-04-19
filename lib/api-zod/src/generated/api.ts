@@ -520,6 +520,8 @@ export const GetDashboardSummaryResponse = zod.object({
   avgTicket: zod.number(),
   activeClientsCount: zod.number(),
   totalExpenses: zod.number(),
+  receivedFromActiveTrips: zod.number(),
+  pendingFromActiveTrips: zod.number(),
 });
 
 /**
@@ -624,6 +626,25 @@ export const GetDashboardChartsResponse = zod.object({
       value: zod.number(),
     }),
   ),
+  tripCancellationRate: zod.number(),
+  originBreakdown: zod.array(
+    zod.object({
+      name: zod.string(),
+      count: zod.number(),
+    }),
+  ),
+  revenueByMonth: zod.array(
+    zod.object({
+      label: zod.string(),
+      value: zod.number(),
+    }),
+  ),
+  expensesByMonth: zod.array(
+    zod.object({
+      label: zod.string(),
+      value: zod.number(),
+    }),
+  ),
 });
 
 /**
@@ -634,6 +655,7 @@ export const GetDashboardFunnelResponse = zod.object({
   withReservation: zod.number(),
   withConfirmed: zod.number(),
   withPayment: zod.number(),
+  conversionRate: zod.number(),
   byOrigin: zod.array(
     zod.object({
       origin: zod.string(),
@@ -641,6 +663,8 @@ export const GetDashboardFunnelResponse = zod.object({
       withReservation: zod.number(),
       withConfirmed: zod.number(),
       withPayment: zod.number(),
+      avgTicket: zod.number(),
+      conversionPct: zod.number(),
     }),
   ),
 });
