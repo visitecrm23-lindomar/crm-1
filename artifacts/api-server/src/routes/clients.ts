@@ -228,7 +228,7 @@ router.post("/clients", async (req, res): Promise<void> => {
     res.status(statusCode).json(formatClient(upserted, { isNew, message }));
 
     if (upserted.birthDate) {
-      CalendarSyncService.syncBirthday(me.tenantId, upserted.id).catch(() => {});
+      CalendarSyncService.syncBirthday(upserted.id).catch(() => {});
     }
   } catch (err) {
     req.log.error({ err }, "Error creating client");
@@ -337,7 +337,7 @@ router.patch("/clients/:id", async (req, res): Promise<void> => {
     res.json(formatClient(client));
 
     if (parsed.data.birthDate !== undefined && client.birthDate) {
-      CalendarSyncService.syncBirthday(me.tenantId, client.id).catch(() => {});
+      CalendarSyncService.syncBirthday(client.id).catch(() => {});
     }
   } catch (err) {
     req.log.error({ err }, "Error updating client");
