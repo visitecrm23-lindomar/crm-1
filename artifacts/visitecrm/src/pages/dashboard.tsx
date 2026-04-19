@@ -6,6 +6,7 @@ import {
   useGetPaymentsSummary,
 } from "@workspace/api-client-react";
 import type { Reservation, PaymentListResponse } from "@workspace/api-client-react";
+import { GetDashboardChartsPeriod } from "@workspace/api-client-react";
 import { VoucherModal } from "./reservations";
 import { ReservationCardVisual } from "@/components/reservation-card-visual";
 import {
@@ -158,9 +159,10 @@ function SectionTitle({ icon: Icon, title, description }: { icon: ElementType; t
 }
 
 function AgencyDashboard() {
+  const [chartPeriod, setChartPeriod] = useState<"3m" | "6m" | "12m">("12m");
+
   const { data: summary, isLoading: loadingSummary } = useGetDashboardSummary();
-  const { data: rawChartData, isLoading: loadingChart } = useGetDashboardRevenueChart({ period: "12m" });
-  const { data: charts, isLoading: loadingCharts } = useGetDashboardCharts();
+  const { data: charts, isLoading: loadingCharts } = useGetDashboardCharts({ period: chartPeriod as GetDashboardChartsPeriod });
   const { data: funnel, isLoading: loadingFunnel } = useGetDashboardFunnel();
   const { data: upcomingTrips, isLoading: loadingTrips } = useGetDashboardUpcomingTrips();
   const { data: paymentSummary, isLoading: loadingPaySummary } = useGetPaymentsSummary();
@@ -171,6 +173,13 @@ function AgencyDashboard() {
   const totalExpenses = summary?.totalExpenses ?? 0;
   const netProfit = totalRevenue - totalExpenses;
   const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+
+  // Revenue vs Expenses merged data from charts endpoint
+  const revExpChartData = useMemo(() => {
+    const rev = charts?.revenueByMonth ?? [];
+    const exp = charts?.expensesByMonth ?? [];
+    return rev.map((r, i) => ({ label: r.label, revenue: r.value, expenses: exp[i]?.value ?? 0 }));
+  }, [charts]);
 
   // Client origin data comes from charts endpoint (originBreakdown)
   const clientOriginData = useMemo(() => {
@@ -220,7 +229,18 @@ function AgencyDashboard() {
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground text-sm">Visão analítica completa da sua agência de turismo.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-md border overflow-hidden text-xs">
+            {(["3m", "6m", "12m"] as const).map(p => (
+              <button
+                key={p}
+                onClick={() => setChartPeriod(p)}
+                className={`px-3 py-1.5 font-medium transition-colors ${chartPeriod === p ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+              >
+                {p === "3m" ? "3M" : p === "6m" ? "6M" : "12M"}
+              </button>
+            ))}
+          </div>
           <Link href="/clients"><Button variant="outline" size="sm"><Plus className="w-4 h-4 mr-1" /> Novo Cliente</Button></Link>
           <Link href="/trips"><Button size="sm"><Plus className="w-4 h-4 mr-1" /> Nova Viagem</Button></Link>
         </div>
@@ -363,12 +383,12 @@ function AgencyDashboard() {
           <Card className="lg:col-span-4">
             <CardHeader>
               <CardTitle className="text-base">Receita vs Despesas</CardTitle>
-              <CardDescription>Últimos 12 meses</CardDescription>
+              <CardDescription>Últimos {chartPeriod === "3m" ? "3" : chartPeriod === "6m" ? "6" : "12"} meses</CardDescription>
             </CardHeader>
             <CardContent>
-              {loadingChart ? <Skeleton className="h-[260px] w-full" /> : (
+              {loadingCharts ? <Skeleton className="h-[260px] w-full" /> : (
                 <ResponsiveContainer width="100%" height={260}>
-                  <AreaChart data={rawChartData ?? []} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <AreaChart data={revExpChartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="revenue" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.2} /><stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />

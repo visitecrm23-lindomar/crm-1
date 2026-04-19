@@ -580,6 +580,15 @@ export const GetDashboardRecentActivityResponse = zod.array(
 /**
  * @summary Get dashboard chart data (top destinations, monthly series, funnel metrics)
  */
+export const getDashboardChartsQueryPeriodDefault = `12m`;
+
+export const GetDashboardChartsQueryParams = zod.object({
+  period: zod
+    .enum(["3m", "6m", "12m"])
+    .default(getDashboardChartsQueryPeriodDefault)
+    .describe("Time period for monthly series (default: 12m)"),
+});
+
 export const GetDashboardChartsResponse = zod.object({
   topDestinations: zod.array(
     zod.object({

@@ -300,20 +300,24 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    if (me.role === "cliente") {
+    if (me.role === "cliente" || me.role === "vendedor") {
       res.status(403).json({ error: "Access denied" });
       return;
     }
 
     const tenantId = me.tenantId;
     const now = new Date();
-    const since12m = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+
+    // Period filter support (default 12m)
+    const { period = "12m" } = req.query as Record<string, string>;
+    const monthCount = period === "3m" ? 3 : period === "6m" ? 6 : 12;
+    const since = new Date(now.getFullYear(), now.getMonth() - (monthCount - 1), 1);
 
     // Helper: build YYYY-MM key from a Date
     const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    // Helper: build label array for last 12 months
-    const months12 = Array.from({ length: 12 }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+    // Helper: build label array for selected period
+    const months12 = Array.from({ length: monthCount }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (monthCount - 1 - i), 1);
       return { d, key: monthKey(d), label: d.toLocaleString("pt-BR", { month: "short" }) };
     });
 
@@ -338,7 +342,7 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
       monthStart: sql<string>`date_trunc('month', ${tripsTable.createdAt})::text`,
       count: sql<number>`count(*)::int`,
     }).from(tripsTable)
-      .where(and(eq(tripsTable.tenantId, tenantId), gte(tripsTable.createdAt, since12m)))
+      .where(and(eq(tripsTable.tenantId, tenantId), gte(tripsTable.createdAt, since)))
       .groupBy(sql`date_trunc('month', ${tripsTable.createdAt})`)
       .orderBy(sql`date_trunc('month', ${tripsTable.createdAt})`);
     const tripsByMonthMap = new Map(tripsByMonthRaw.map(r => [r.monthStart.substring(0, 7), Number(r.count)]));
@@ -350,7 +354,7 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
       count: sql<number>`count(*)::int`,
       cancelled: sql<number>`sum(case when ${reservationsTable.status} = 'cancelled' then 1 else 0 end)::int`,
     }).from(reservationsTable)
-      .where(and(eq(reservationsTable.tenantId, tenantId), gte(reservationsTable.createdAt, since12m)))
+      .where(and(eq(reservationsTable.tenantId, tenantId), gte(reservationsTable.createdAt, since)))
       .groupBy(sql`date_trunc('month', ${reservationsTable.createdAt})`)
       .orderBy(sql`date_trunc('month', ${reservationsTable.createdAt})`);
     const resByMonthMap = new Map(resByMonthRaw.map(r => [
@@ -412,7 +416,7 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
       .where(and(
         eq(paymentsTable.tenantId, tenantId),
         sql`${paymentsTable.paidAt} IS NOT NULL`,
-        gte(paymentsTable.paidAt, since12m),
+        gte(paymentsTable.paidAt, since),
       ))
       .groupBy(sql`date_trunc('month', ${paymentsTable.paidAt})`)
       .orderBy(sql`date_trunc('month', ${paymentsTable.paidAt})`);
@@ -432,7 +436,7 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
       .where(and(
         eq(reservationsTable.tenantId, tenantId),
         sql`${passengersTable.checkedInAt} IS NOT NULL`,
-        gte(passengersTable.checkedInAt, since12m),
+        gte(passengersTable.checkedInAt, since),
       ))
       .groupBy(sql`date_trunc('month', ${passengersTable.checkedInAt})`)
       .orderBy(sql`date_trunc('month', ${passengersTable.checkedInAt})`);
@@ -468,7 +472,7 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
       .where(and(
         eq(reservationsTable.tenantId, tenantId),
         eq(reservationsTable.status, "confirmed"),
-        gte(reservationsTable.createdAt, since12m),
+        gte(reservationsTable.createdAt, since),
       ))
       .groupBy(sql`date_trunc('month', ${reservationsTable.createdAt})`)
       .orderBy(sql`date_trunc('month', ${reservationsTable.createdAt})`);

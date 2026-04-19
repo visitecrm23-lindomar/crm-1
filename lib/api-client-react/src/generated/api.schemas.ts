@@ -3068,6 +3068,22 @@ export const GetDashboardRevenueChartPeriod = {
   "12m": "12m",
 } as const;
 
+export type GetDashboardChartsParams = {
+  /**
+   * Time period for monthly series (default: 12m)
+   */
+  period?: GetDashboardChartsPeriod;
+};
+
+export type GetDashboardChartsPeriod =
+  (typeof GetDashboardChartsPeriod)[keyof typeof GetDashboardChartsPeriod];
+
+export const GetDashboardChartsPeriod = {
+  "3m": "3m",
+  "6m": "6m",
+  "12m": "12m",
+} as const;
+
 export type ListClientsParams = {
   /**
    * @nullable

@@ -127,6 +127,8 @@ export * from "./financialSummary";
 export * from "./generateClientReferralCode200";
 export * from "./getBirthdayHistoryParams";
 export * from "./getBirthdayUpcomingParams";
+export * from "./getDashboardChartsParams";
+export * from "./getDashboardChartsPeriod";
 export * from "./getDashboardRevenueChartParams";
 export * from "./getDashboardRevenueChartPeriod";
 export * from "./getPublicReferralInfo200";
