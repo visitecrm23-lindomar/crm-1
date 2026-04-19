@@ -39,6 +39,7 @@ export interface DashboardSummary {
   pendingFromActiveTrips: number;
   totalPayable: number;
   avgReservationsPerTrip: number;
+  totalFaturamento: number;
 }
 
 export type DashboardChartsTopDestinationsItem = {

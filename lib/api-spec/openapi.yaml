@@ -4465,6 +4465,8 @@ components:
           type: number
         avgReservationsPerTrip:
           type: number
+        totalFaturamento:
+          type: number
       required:
         - totalClients
         - newClientsThisMonth
@@ -4489,6 +4491,7 @@ components:
         - pendingFromActiveTrips
         - totalPayable
         - avgReservationsPerTrip
+        - totalFaturamento
 
     DashboardCharts:
       type: object

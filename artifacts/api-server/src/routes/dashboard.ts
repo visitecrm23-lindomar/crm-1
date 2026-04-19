@@ -45,6 +45,7 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
         receivedToday: 0, toReceiveNext3Days: 0, reservationsToday: 0,
         avgTicket: 0, activeClientsCount: 0, totalExpenses: 0, cancelledReservations: 0,
         receivedFromActiveTrips: 0, pendingFromActiveTrips: 0,
+        totalPayable: 0, avgReservationsPerTrip: 0, totalFaturamento: 0,
       });
       return;
     }
@@ -103,6 +104,7 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
         receivedToday, toReceiveNext3Days: 0, reservationsToday, avgTicket,
         activeClientsCount, totalExpenses: 0, cancelledReservations,
         receivedFromActiveTrips: 0, pendingFromActiveTrips: 0,
+        totalPayable: 0, avgReservationsPerTrip: 0, totalFaturamento: 0,
       });
       return;
     }
@@ -133,19 +135,23 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
       .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, "confirmed")));
 
     const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.tenantId, tenantId));
-    let totalRevenue = 0, revenueThisMonth = 0, pendingPaymentsAmt = 0, receivedToday = 0, toReceiveNext3Days = 0, totalPayable = 0;
+    let totalRevenue = 0, revenueThisMonth = 0, pendingPaymentsAmt = 0, receivedToday = 0, toReceiveNext3Days = 0, totalPayable = 0, pendingReceivableAmt = 0;
     for (const p of payments) {
       if (p.type === "receivable" && p.status === "paid") {
         totalRevenue += Number(p.amount);
         if (p.paidAt && p.paidAt >= startOfMonth) revenueThisMonth += Number(p.amount);
         if (p.paidAt && p.paidAt >= startOfToday) receivedToday += Number(p.amount);
       }
-      if (p.type === "receivable" && p.status === "pending" && p.dueDate && p.dueDate >= startOfToday && p.dueDate <= next3Days) {
-        toReceiveNext3Days += Number(p.amount);
+      if (p.type === "receivable" && p.status === "pending") {
+        pendingReceivableAmt += Number(p.amount);
+        if (p.dueDate && p.dueDate >= startOfToday && p.dueDate <= next3Days) {
+          toReceiveNext3Days += Number(p.amount);
+        }
       }
       if (p.type === "payable" && p.status === "pending") totalPayable += Number(p.amount);
       if (p.status === "pending") pendingPaymentsAmt += Number(p.amount);
     }
+    const totalFaturamento = totalRevenue + pendingReceivableAmt;
 
     const [totalExpensesRow] = await db.select({ total: sql<number>`sum(cast(amount as numeric))` })
       .from(expensesTable).where(eq(expensesTable.tenantId, tenantId));
@@ -213,6 +219,7 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
       avgReservationsPerTrip: Number(tripCount?.count ?? 0) > 0
         ? Math.round((Number(reservationCount?.count ?? 0) / Number(tripCount?.count ?? 1)) * 10) / 10
         : 0,
+      totalFaturamento: Math.round(totalFaturamento * 100) / 100,
     });
   } catch (err) {
     req.log.error({ err }, "Error fetching dashboard summary");

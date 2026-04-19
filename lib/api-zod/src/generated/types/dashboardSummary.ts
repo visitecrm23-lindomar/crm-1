@@ -32,4 +32,5 @@ export interface DashboardSummary {
   pendingFromActiveTrips: number;
   totalPayable: number;
   avgReservationsPerTrip: number;
+  totalFaturamento: number;
 }

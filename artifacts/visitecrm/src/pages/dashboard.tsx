@@ -359,7 +359,15 @@ function AgencyDashboard() {
         {/* Group 4: Clients (3 cards) */}
         <div className="grid gap-4 sm:grid-cols-3">
           <KpiCard title="Total Clientes" value={summary?.totalClients ?? 0} sub="Base total de clientes" icon={Users} loading={loadingSummary} color="text-blue-600" />
-          <KpiCard title="Novos (mês)" value={summary?.newClientsThisMonth ?? 0} sub="Clientes novos este mês" icon={UserCheck} loading={loadingSummary} color="text-green-600" highlight={(summary?.newClientsThisMonth ?? 0) > 0 ? "green" : undefined} />
+          <KpiCard
+            title="Faturamento Total"
+            value={formatCurrency(summary?.totalFaturamento ?? 0)}
+            sub={`Recebido: ${formatCurrency(totalRevenue)}`}
+            icon={Briefcase}
+            loading={loadingSummary}
+            color="text-purple-600"
+            highlight={(summary?.totalFaturamento ?? 0) > 0 ? "green" : undefined}
+          />
           <KpiCard title="Clientes Ativos" value={summary?.activeClientsCount ?? 0} sub="Com reserva confirmada" icon={Users} loading={loadingSummary} color="text-indigo-600" />
         </div>
       </section>
@@ -626,36 +634,45 @@ function AgencyDashboard() {
             </CardHeader>
             <CardContent>
               {loadingCharts || loadingSummary ? <Skeleton className="h-[220px] w-full" /> : (
-                <div className="flex flex-col items-center gap-4">
-                  <ResponsiveContainer width="100%" height={160}>
+                <div className="space-y-3">
+                  <div className="flex justify-around text-center">
+                    <div>
+                      <p className={`text-2xl font-bold ${(charts?.tripCancellationRate ?? 0) > 15 ? "text-red-600" : "text-green-600"}`}>
+                        {(charts?.tripCancellationRate ?? 0).toFixed(1)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">Viagens cancel.</p>
+                    </div>
+                    <div className="w-px bg-border" />
+                    <div>
+                      <p className={`text-2xl font-bold ${(charts?.cancellationRate ?? 0) > 15 ? "text-red-600" : "text-green-600"}`}>
+                        {(charts?.cancellationRate ?? 0).toFixed(1)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">Reservas cancel.</p>
+                    </div>
+                  </div>
+                  <ResponsiveContainer width="100%" height={130}>
                     <PieChart>
                       <Pie
                         data={[
-                          { name: "Canceladas", value: summary?.cancelledReservations ?? 0, fill: "#EF4444" },
-                          { name: "Ativas", value: Math.max(0, (summary?.totalReservations ?? 0) - (summary?.cancelledReservations ?? 0)), fill: "#10B981" },
+                          { name: "Reservas Canceladas", value: summary?.cancelledReservations ?? 0 },
+                          { name: "Reservas Ativas", value: Math.max(0, (summary?.totalReservations ?? 0) - (summary?.cancelledReservations ?? 0)) },
                         ]}
                         cx="50%"
                         cy="50%"
-                        innerRadius={50}
-                        outerRadius={75}
+                        innerRadius={35}
+                        outerRadius={55}
                         paddingAngle={2}
                         dataKey="value"
                       >
                         <Cell fill="#EF4444" />
                         <Cell fill="#10B981" />
                       </Pie>
-                      <Tooltip formatter={(v: number, name: string) => [v, name]} />
+                      <Tooltip formatter={(v: unknown, name: string) => [String(v), name]} />
                     </PieChart>
                   </ResponsiveContainer>
-                  <div className="text-center">
-                    <p className={`text-3xl font-bold ${(charts?.cancellationRate ?? 0) > 15 ? "text-red-600" : "text-green-600"}`}>
-                      {(charts?.cancellationRate ?? 0).toFixed(1)}%
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">Taxa de cancelamento de reservas</p>
-                    <div className="flex gap-3 justify-center mt-2">
-                      <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-full bg-red-500"/><span className="text-xs">{summary?.cancelledReservations ?? 0} cancel.</span></div>
-                      <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-full bg-green-500"/><span className="text-xs">{Math.max(0, (summary?.totalReservations ?? 0) - (summary?.cancelledReservations ?? 0))} ativas</span></div>
-                    </div>
+                  <div className="flex gap-3 justify-center">
+                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-full bg-red-500"/><span className="text-xs">{summary?.cancelledReservations ?? 0} cancel.</span></div>
+                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-full bg-green-500"/><span className="text-xs">{Math.max(0, (summary?.totalReservations ?? 0) - (summary?.cancelledReservations ?? 0))} ativas</span></div>
                   </div>
                 </div>
               )}
