@@ -102,6 +102,11 @@ All routes under `/api/`:
 - `GET /api/admin/users` — all platform users
 - `GET /api/admin/audit-logs` — global audit log feed
 - `GET/PUT /api/admin/feature-flags` — feature flags management
+- `GET /api/calendar/connect` — generate Google OAuth URL for Calendar integration
+- `GET /api/calendar/callback` — OAuth callback; stores tokens in DB, redirects to settings
+- `POST /api/calendar/disconnect` — revoke Google token and clear calendar data
+- `GET /api/calendar/status` — return connection status + event count + last sync time
+- `POST /api/calendar/sync` — manual sync (type: "all"|"trip"|"payment"|"birthday")
 
 ## Multi-Tenant Online Store (Tasks #15–17)
 
@@ -178,6 +183,17 @@ if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" 
 ```
 Mutations in `marketing.ts`, `registrations.ts`, and `communication.ts` are guarded. As new modules are added, apply the same pattern consistently.
 
+## Google Calendar Integration (Task #166)
+
+- **OAuth flow**: `GET /api/calendar/connect` → Google consent → `GET /api/calendar/callback` → stores tokens in `users` table
+- **Secrets required**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALENDAR_REDIRECT_URI`
+- **Auto-sync hooks**: fire-and-forget `CalendarSyncService` calls after trip create/update and payment create/update
+- **Sync types**: trips (to departure date), pending payments (to due date), birthdays (annual)
+- **Fan-out**: agencia users get full view; vendedores get only their own clients' events
+- **UI**: Google Calendar card in Configurações → Integrações tab (connect/disconnect/sync now buttons)
+- **DB**: `calendar_events` table tracks synced Google event IDs; `users` table has `google_access_token`, `google_refresh_token`, `google_token_expiry`, `google_calendar_enabled` columns
+- **Token refresh**: automatic refresh via `refreshTokenIfNeeded()` before each sync
+
 ## Deployment Environment Variables
 
 Required for full functionality:
@@ -188,6 +204,11 @@ Required for full functionality:
 
 Optional:
 - `FRONTEND_URL` — explicit frontend origin for CORS (useful in custom/production deployments)
+
+Google Calendar (optional, enables calendar sync):
+- `GOOGLE_CLIENT_ID` — OAuth 2.0 client ID from Google Cloud Console
+- `GOOGLE_CLIENT_SECRET` — OAuth 2.0 client secret
+- `GOOGLE_CALENDAR_REDIRECT_URI` — Must match redirect URI registered in Google Cloud Console
 
 If neither `FRONTEND_URL` nor `REPLIT_DEV_DOMAIN` is set at startup, the API server logs a CORS warning — browser cross-origin calls will be blocked (same-origin requests still work).
 
