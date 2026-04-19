@@ -64,10 +64,10 @@ router.get("/calendar/callback", async (req, res): Promise<void> => {
       googleCalendarEnabled: true,
     }).where(eq(usersTable.id, userId));
 
-    // Respond first, then fire-and-forget initial full sync
+    // Respond first, then fire-and-forget initial sync for this user only
     res.redirect(`${FRONTEND_URL}/configuracoes?gcal=connected&tab=integrations`);
-    CalendarSyncService.syncAll(user.tenantId).catch((err) => {
-      console.error("[calendar/callback] Initial syncAll error:", err);
+    CalendarSyncService.syncAllForUser(userId).catch((err) => {
+      console.error("[calendar/callback] Initial syncAllForUser error:", err);
     });
   } catch (err) {
     console.error("[calendar/callback] Error:", err);
@@ -150,34 +150,31 @@ router.post("/calendar/sync", async (req, res): Promise<void> => {
     const { type, id } = req.body as { type?: string; id?: string };
 
     if (type === "trip" && id) {
-      // Tenant ownership check: verify trip belongs to caller's tenant
       const [trip] = await db.select({ id: tripsTable.id })
         .from(tripsTable)
         .where(and(eq(tripsTable.id, id), eq(tripsTable.tenantId, me.tenantId)))
         .limit(1);
       if (!trip) { res.status(404).json({ error: "Viagem não encontrada" }); return; }
-      await CalendarSyncService.syncTrip(id);
+      await CalendarSyncService.syncTripForUser(id, me.id);
       res.json({ success: true, message: "1 evento sincronizado com sucesso", synced: 1 });
     } else if (type === "payment" && id) {
-      // Tenant ownership check
       const [payment] = await db.select({ id: paymentsTable.id })
         .from(paymentsTable)
         .where(and(eq(paymentsTable.id, id), eq(paymentsTable.tenantId, me.tenantId)))
         .limit(1);
       if (!payment) { res.status(404).json({ error: "Pagamento não encontrado" }); return; }
-      await CalendarSyncService.syncPayment(id);
+      await CalendarSyncService.syncPaymentForUser(id, me.id);
       res.json({ success: true, message: "1 evento sincronizado com sucesso", synced: 1 });
     } else if (type === "birthday" && id) {
-      // Tenant ownership check for client
       const [client] = await db.select({ id: clientsTable.id })
         .from(clientsTable)
         .where(and(eq(clientsTable.id, id), eq(clientsTable.tenantId, me.tenantId)))
         .limit(1);
       if (!client) { res.status(404).json({ error: "Cliente não encontrado" }); return; }
-      await CalendarSyncService.syncBirthday(id);
+      await CalendarSyncService.syncBirthdayForUser(id, me.id);
       res.json({ success: true, message: "1 evento sincronizado com sucesso", synced: 1 });
     } else if (type === "all") {
-      const synced = await CalendarSyncService.syncAll(me.tenantId);
+      const synced = await CalendarSyncService.syncAllForUser(me.id);
       res.json({ success: true, message: `${synced} evento(s) sincronizado(s) com sucesso`, synced });
     } else {
       res.status(400).json({ error: "Tipo de sincronização inválido" });

@@ -78,6 +78,10 @@ async function upsertCalendarEvent(
 }
 
 export class CalendarSyncService {
+  /**
+   * syncTrip — syncs a single trip to all eligible connected users.
+   * Called from background hooks (trips/reservations mutations) so fan-out is appropriate.
+   */
   static async syncTrip(tripId: string): Promise<void> {
     try {
       const [trip] = await db.select().from(tripsTable).where(eq(tripsTable.id, tripId)).limit(1);
@@ -108,7 +112,6 @@ export class CalendarSyncService {
         endDateTime: trip.returnDate ?? addHours(trip.departureDate, 12),
       };
 
-      // Sync for admin of this tenant
       const adminUsers = await db.select({
         id: usersTable.id,
         googleCalendarEnabled: usersTable.googleCalendarEnabled,
@@ -146,7 +149,6 @@ export class CalendarSyncService {
         );
       }
 
-      // Sync for vendedores with clients on this trip
       const sellerIds = [...new Set(reservations.map((r) => r.sellerId).filter(Boolean))] as string[];
       if (sellerIds.length > 0) {
         const sellers = await db.select({
@@ -199,6 +201,80 @@ export class CalendarSyncService {
     }
   }
 
+  /**
+   * syncTripForUser — syncs a single trip to one specific user's calendar.
+   * Used by user-initiated operations (manual sync, post-connect).
+   */
+  static async syncTripForUser(tripId: string, actorUserId: string): Promise<void> {
+    try {
+      const [trip] = await db.select().from(tripsTable).where(eq(tripsTable.id, tripId)).limit(1);
+      if (!trip) return;
+
+      const [actor] = await db.select({ role: usersTable.role })
+        .from(usersTable)
+        .where(and(eq(usersTable.id, actorUserId), eq(usersTable.tenantId, trip.tenantId)))
+        .limit(1);
+      if (!actor) return;
+
+      const svc = await getCalendarService(actorUserId);
+      if (!svc) return;
+
+      const reservations = await db.select({
+        clientId: reservationsTable.clientId,
+        sellerId: reservationsTable.sellerId,
+        totalValue: reservationsTable.totalValue,
+      }).from(reservationsTable)
+        .where(and(eq(reservationsTable.tripId, tripId), eq(reservationsTable.status, "confirmed")));
+
+      let visibleReservations = reservations;
+      if (actor.role === "vendedor") {
+        visibleReservations = reservations.filter((r) => r.sellerId === actorUserId);
+      }
+
+      const clientIds = visibleReservations.map((r) => r.clientId);
+      let clients: { id: string; name: string; email: string }[] = [];
+      if (clientIds.length > 0) {
+        clients = await db.select({ id: clientsTable.id, name: clientsTable.name, email: clientsTable.email })
+          .from(clientsTable)
+          .where(eq(clientsTable.tenantId, trip.tenantId));
+        clients = clients.filter((c) => clientIds.includes(c.id));
+      }
+
+      const totalValue = visibleReservations.reduce((s, r) => s + Number(r.totalValue), 0);
+
+      const description = [
+        `🚌 VIAGEM: ${trip.name}`,
+        ``,
+        `📍 ${trip.originCity ?? ""} → ${trip.destination}`,
+        `📅 Saída: ${fmtDate(trip.departureDate)}`,
+        trip.returnDate ? `🔙 Retorno: ${fmtDate(trip.returnDate)}` : null,
+        ``,
+        `👥 Passageiros: ${visibleReservations.length}`,
+        `💰 Total: ${fmtCurrency(totalValue)}`,
+      ].filter(Boolean).join("\n");
+
+      await upsertCalendarEvent(
+        svc,
+        [
+          eq(calendarEventsTable.tripId, tripId),
+          eq(calendarEventsTable.userId, actorUserId),
+          eq(calendarEventsTable.eventType, "trip"),
+        ],
+        {
+          summary: `🚌 ${trip.name}`,
+          location: trip.originCity ? `${trip.originCity} → ${trip.destination}` : trip.destination,
+          startDateTime: trip.departureDate,
+          endDateTime: trip.returnDate ?? addHours(trip.departureDate, 12),
+          description,
+          attendees: clients.map((c) => c.email).filter(Boolean),
+        },
+        { tenantId: trip.tenantId, userId: actorUserId, tripId, eventType: "trip" }
+      );
+    } catch (err) {
+      console.error("[CalendarSyncService] syncTripForUser error:", err);
+    }
+  }
+
   static async deleteEventsForTrip(tripId: string): Promise<void> {
     try {
       const events = await db.select({
@@ -239,12 +315,15 @@ export class CalendarSyncService {
     }
   }
 
+  /**
+   * syncPayment — syncs a payment to all eligible connected users (fan-out).
+   * Called from background hooks (payment mutations).
+   */
   static async syncPayment(paymentId: string): Promise<void> {
     try {
       const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, paymentId)).limit(1);
       if (!payment || !payment.dueDate) return;
 
-      // If paid or cancelled, remove calendar reminders — they're no longer needed
       if (payment.status === "paid" || payment.status === "cancelled") {
         await CalendarSyncService.deleteEventsForPayment(paymentId);
         return;
@@ -284,7 +363,6 @@ export class CalendarSyncService {
         endDateTime: payment.dueDate,
       };
 
-      // Sync for admins
       const adminUsers = await db.select({ id: usersTable.id })
         .from(usersTable)
         .where(and(
@@ -308,7 +386,6 @@ export class CalendarSyncService {
         );
       }
 
-      // Sync for vendedor if applicable
       if (sellerId) {
         const [seller] = await db.select({ id: usersTable.id, googleCalendarEnabled: usersTable.googleCalendarEnabled, role: usersTable.role })
           .from(usersTable)
@@ -334,6 +411,74 @@ export class CalendarSyncService {
     }
   }
 
+  /**
+   * syncPaymentForUser — syncs a payment to one specific user's calendar.
+   * Used by user-initiated operations (manual sync, post-connect).
+   */
+  static async syncPaymentForUser(paymentId: string, actorUserId: string): Promise<void> {
+    try {
+      const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, paymentId)).limit(1);
+      if (!payment || !payment.dueDate) return;
+
+      if (payment.status === "paid" || payment.status === "cancelled") return;
+
+      const [actor] = await db.select({ role: usersTable.role, tenantId: usersTable.tenantId })
+        .from(usersTable)
+        .where(and(eq(usersTable.id, actorUserId), eq(usersTable.tenantId, payment.tenantId)))
+        .limit(1);
+      if (!actor) return;
+
+      let clientName = "Cliente";
+      let clientEmail: string | null = null;
+      let sellerId: string | null = null;
+
+      if (payment.clientId) {
+        const [client] = await db.select({ name: clientsTable.name, email: clientsTable.email, createdById: clientsTable.createdById })
+          .from(clientsTable).where(eq(clientsTable.id, payment.clientId)).limit(1);
+        if (client) {
+          clientName = client.name;
+          clientEmail = client.email;
+          sellerId = client.createdById;
+        }
+      }
+
+      if (actor.role === "vendedor" && sellerId !== actorUserId) return;
+
+      const svc = await getCalendarService(actorUserId);
+      if (!svc) return;
+
+      await upsertCalendarEvent(
+        svc,
+        [
+          eq(calendarEventsTable.paymentId, paymentId),
+          eq(calendarEventsTable.userId, actorUserId),
+          eq(calendarEventsTable.eventType, "payment"),
+        ],
+        {
+          summary: `💰 Pagamento: ${clientName}`,
+          description: [
+            `💰 PAGAMENTO PENDENTE`,
+            ``,
+            `Cliente: ${clientName}`,
+            `Valor: ${fmtCurrency(payment.amount)}`,
+            `Vencimento: ${format(payment.dueDate, "dd/MM/yyyy", { locale: ptBR })}`,
+            payment.description ? `Descrição: ${payment.description}` : null,
+          ].filter(Boolean).join("\n"),
+          startDateTime: payment.dueDate,
+          endDateTime: payment.dueDate,
+          attendees: clientEmail ? [clientEmail] : [],
+        },
+        { tenantId: payment.tenantId, userId: actorUserId, paymentId, eventType: "payment" }
+      );
+    } catch (err) {
+      console.error("[CalendarSyncService] syncPaymentForUser error:", err);
+    }
+  }
+
+  /**
+   * syncBirthday — syncs a client birthday to all eligible connected users (fan-out).
+   * Called from background hooks (client create/update).
+   */
   static async syncBirthday(clientId: string): Promise<void> {
     try {
       const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, clientId)).limit(1);
@@ -354,7 +499,6 @@ export class CalendarSyncService {
 
       const tenantId = client.tenantId;
 
-      // Sync for admins
       const adminUsers = await db.select({ id: usersTable.id })
         .from(usersTable)
         .where(and(eq(usersTable.tenantId, tenantId), eq(usersTable.googleCalendarEnabled, true), eq(usersTable.role, "agencia")));
@@ -374,7 +518,6 @@ export class CalendarSyncService {
         );
       }
 
-      // Sync for assigned seller
       const sellerId = client.createdById;
       if (sellerId) {
         const [seller] = await db.select({ id: usersTable.id, googleCalendarEnabled: usersTable.googleCalendarEnabled, role: usersTable.role })
@@ -383,7 +526,6 @@ export class CalendarSyncService {
         if (seller?.googleCalendarEnabled && seller.role === "vendedor") {
           const svc = await getCalendarService(seller.id);
           if (svc) {
-            const desc = `Aniversário de ${client.name}\n\nLembre-se de enviar felicitações!`;
             await upsertCalendarEvent(
               svc,
               [
@@ -391,7 +533,7 @@ export class CalendarSyncService {
                 eq(calendarEventsTable.userId, seller.id),
                 eq(calendarEventsTable.eventType, "birthday"),
               ],
-              { ...eventData, description: desc },
+              { ...eventData, description: `Aniversário de ${client.name}\n\nLembre-se de enviar felicitações!` },
               { tenantId, userId: seller.id, clientId, eventType: "birthday" }
             );
           }
@@ -402,10 +544,103 @@ export class CalendarSyncService {
     }
   }
 
+  /**
+   * syncBirthdayForUser — syncs a client birthday to one specific user's calendar.
+   */
+  static async syncBirthdayForUser(clientId: string, actorUserId: string): Promise<void> {
+    try {
+      const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, clientId)).limit(1);
+      if (!client?.birthDate) return;
+
+      const [actor] = await db.select({ role: usersTable.role })
+        .from(usersTable)
+        .where(and(eq(usersTable.id, actorUserId), eq(usersTable.tenantId, client.tenantId)))
+        .limit(1);
+      if (!actor) return;
+
+      if (actor.role === "vendedor" && client.createdById !== actorUserId) return;
+
+      const svc = await getCalendarService(actorUserId);
+      if (!svc) return;
+
+      const birthDate = new Date(client.birthDate);
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      let nextBirthday = new Date(currentYear, birthDate.getMonth(), birthDate.getDate());
+      if (nextBirthday < now) nextBirthday = new Date(currentYear + 1, birthDate.getMonth(), birthDate.getDate());
+
+      await upsertCalendarEvent(
+        svc,
+        [
+          eq(calendarEventsTable.clientId, clientId),
+          eq(calendarEventsTable.userId, actorUserId),
+          eq(calendarEventsTable.eventType, "birthday"),
+        ],
+        {
+          summary: `🎂 Aniversário: ${client.name}`,
+          description: `Aniversário de ${client.name}\n\nEnviar mensagem de felicitações!`,
+          startDateTime: nextBirthday,
+          endDateTime: nextBirthday,
+        },
+        { tenantId: client.tenantId, userId: actorUserId, clientId, eventType: "birthday" }
+      );
+    } catch (err) {
+      console.error("[CalendarSyncService] syncBirthdayForUser error:", err);
+    }
+  }
+
+  /**
+   * syncAllForUser — syncs all relevant data for a single user's calendar.
+   * Used by manual sync and post-OAuth-connect (user-scoped, no fan-out).
+   */
+  static async syncAllForUser(actorUserId: string): Promise<number> {
+    let synced = 0;
+
+    const [actor] = await db.select({ role: usersTable.role, tenantId: usersTable.tenantId })
+      .from(usersTable)
+      .where(eq(usersTable.id, actorUserId))
+      .limit(1);
+    if (!actor) return 0;
+
+    const tenantId = actor.tenantId;
+
+    const trips = await db.select({ id: tripsTable.id })
+      .from(tripsTable)
+      .where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, "published")));
+
+    for (const t of trips) {
+      await CalendarSyncService.syncTripForUser(t.id, actorUserId);
+      synced++;
+    }
+
+    const payments = await db.select({ id: paymentsTable.id })
+      .from(paymentsTable)
+      .where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.status, "pending")));
+
+    for (const p of payments) {
+      await CalendarSyncService.syncPaymentForUser(p.id, actorUserId);
+      synced++;
+    }
+
+    const clients = await db.select({ id: clientsTable.id })
+      .from(clientsTable)
+      .where(eq(clientsTable.tenantId, tenantId));
+
+    for (const c of clients) {
+      await CalendarSyncService.syncBirthdayForUser(c.id, actorUserId);
+      synced++;
+    }
+
+    return synced;
+  }
+
+  /**
+   * syncAll — tenant-wide fan-out sync for all connected users.
+   * @deprecated For user-initiated requests, use syncAllForUser instead.
+   */
   static async syncAll(tenantId: string): Promise<number> {
     let synced = 0;
 
-    // Sync active trips
     const trips = await db.select({ id: tripsTable.id })
       .from(tripsTable)
       .where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, "published")));
@@ -414,7 +649,6 @@ export class CalendarSyncService {
       synced++;
     }
 
-    // Sync pending payments
     const payments = await db.select({ id: paymentsTable.id })
       .from(paymentsTable)
       .where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.status, "pending")));
@@ -423,7 +657,6 @@ export class CalendarSyncService {
       synced++;
     }
 
-    // Sync birthdays
     const clients = await db.select({ id: clientsTable.id })
       .from(clientsTable)
       .where(and(eq(clientsTable.tenantId, tenantId)));
