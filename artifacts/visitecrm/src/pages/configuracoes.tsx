@@ -9,6 +9,10 @@ import {
   useListSystemConfigs,
   useUpsertSystemConfig,
   useGetMe,
+  useGetCalendarStatus,
+  getGetCalendarStatusQueryKey,
+  useDisconnectCalendar,
+  useSyncCalendar,
 } from "@workspace/api-client-react";
 import type {
   UpdateTenantBody,
@@ -656,33 +660,42 @@ function IntegrationsTab() {
 function GoogleCalendarCard() {
   const { toast } = useToast();
   const { data: me } = useGetMe();
-  const [status, setStatus] = useState<{
-    connected: boolean;
-    tokenValid?: boolean;
-    eventsCount?: number;
-    lastSync?: string | null;
-  } | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
+  const queryClient = useQueryClient();
+  const [connecting, setConnecting] = useState(false);
 
   const canConnect = me?.role === "agencia" || me?.role === "vendedor" || me?.role === "superadmin";
 
-  async function fetchStatus() {
-    try {
-      const res = await fetch(`${BASE}/api/calendar/status`, { credentials: "include" });
-      if (res.ok) setStatus(await res.json());
-    } catch {
-      // ignore
-    }
-  }
+  const { data: status } = useGetCalendarStatus({
+    query: { enabled: canConnect },
+  });
+
+  const disconnectMutation = useDisconnectCalendar({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Google Calendar desconectado" });
+        queryClient.invalidateQueries({ queryKey: getGetCalendarStatusQueryKey() });
+      },
+      onError: () => toast({ title: "Erro ao desconectar", variant: "destructive" }),
+    },
+  });
+
+  const syncMutation = useSyncCalendar({
+    mutation: {
+      onSuccess: (data) => {
+        toast({ title: `${data.synced} evento(s) sincronizado(s) com sucesso` });
+        queryClient.invalidateQueries({ queryKey: getGetCalendarStatusQueryKey() });
+      },
+      onError: () => toast({ title: "Erro ao sincronizar", variant: "destructive" }),
+    },
+  });
 
   useEffect(() => {
     if (!canConnect) return;
-    fetchStatus();
     const params = new URLSearchParams(window.location.search);
     const gcal = params.get("gcal");
     if (gcal === "connected") {
       toast({ title: "Google Calendar conectado com sucesso!" });
+      queryClient.invalidateQueries({ queryKey: getGetCalendarStatusQueryKey() });
       const url = new URL(window.location.href);
       url.searchParams.delete("gcal");
       window.history.replaceState({}, "", url.toString());
@@ -700,7 +713,7 @@ function GoogleCalendarCard() {
   }, [canConnect]);
 
   async function handleConnect() {
-    setLoading(true);
+    setConnecting(true);
     try {
       const res = await fetch(`${BASE}/api/calendar/connect`, { credentials: "include" });
       const data = await res.json();
@@ -709,56 +722,15 @@ function GoogleCalendarCard() {
     } catch {
       toast({ title: "Erro ao conectar", variant: "destructive" });
     } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleDisconnect() {
-    setLoading(true);
-    try {
-      const res = await fetch(`${BASE}/api/calendar/disconnect`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (res.ok) {
-        toast({ title: "Google Calendar desconectado" });
-        setStatus({ connected: false });
-      } else {
-        toast({ title: "Erro ao desconectar", variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Erro ao desconectar", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleSync() {
-    setSyncing(true);
-    try {
-      const res = await fetch(`${BASE}/api/calendar/sync`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "all" }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast({ title: `${data.synced} evento(s) sincronizado(s) com sucesso` });
-        fetchStatus();
-      } else {
-        toast({ title: data.error ?? "Erro ao sincronizar", variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Erro ao sincronizar", variant: "destructive" });
-    } finally {
-      setSyncing(false);
+      setConnecting(false);
     }
   }
 
   if (!canConnect) return null;
 
   const connected = status?.connected ?? false;
+  const loading = disconnectMutation.isPending || connecting;
+  const syncing = syncMutation.isPending;
 
   return (
     <Card>
@@ -808,7 +780,7 @@ function GoogleCalendarCard() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={handleSync}
+                onClick={() => syncMutation.mutate({ data: { type: "all" } })}
                 disabled={syncing}
                 className="gap-1.5"
               >
@@ -822,7 +794,7 @@ function GoogleCalendarCard() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={handleDisconnect}
+                onClick={() => disconnectMutation.mutate()}
                 disabled={loading}
                 className="gap-1.5 text-destructive hover:text-destructive"
               >

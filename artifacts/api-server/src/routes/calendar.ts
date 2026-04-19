@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { usersTable, calendarEventsTable } from "@workspace/db";
+import { usersTable, calendarEventsTable, tripsTable, paymentsTable, clientsTable } from "@workspace/db";
 import { eq, and, count, max } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 import { generateAuthUrl, verifyState, exchangeCodeForTokens, revokeToken } from "../lib/google-calendar/calendar-service";
@@ -39,7 +39,7 @@ router.get("/calendar/callback", async (req, res): Promise<void> => {
     return;
   }
 
-  // Verify signed state to prevent CSRF/account-linking attacks
+  // Verify HMAC-signed state to prevent CSRF/account-linking attacks
   const userId = verifyState(state);
   if (!userId) {
     res.redirect(`${FRONTEND_URL}/configuracoes?gcal=error&tab=integrations`);
@@ -64,9 +64,8 @@ router.get("/calendar/callback", async (req, res): Promise<void> => {
       googleCalendarEnabled: true,
     }).where(eq(usersTable.id, userId));
 
+    // Respond first, then fire-and-forget initial full sync
     res.redirect(`${FRONTEND_URL}/configuracoes?gcal=connected&tab=integrations`);
-
-    // Fire-and-forget initial sync after successful connection
     CalendarSyncService.syncAll(user.tenantId).catch((err) => {
       console.error("[calendar/callback] Initial syncAll error:", err);
     });
@@ -112,7 +111,6 @@ router.get("/calendar/status", async (req, res): Promise<void> => {
     const [user] = await db.select({
       googleCalendarEnabled: usersTable.googleCalendarEnabled,
       googleTokenExpiry: usersTable.googleTokenExpiry,
-      googleAccessToken: usersTable.googleAccessToken,
     }).from(usersTable).where(eq(usersTable.id, me.id)).limit(1);
 
     if (!user?.googleCalendarEnabled) {
@@ -151,25 +149,39 @@ router.post("/calendar/sync", async (req, res): Promise<void> => {
 
     const { type, id } = req.body as { type?: string; id?: string };
 
-    let synced = 0;
-
     if (type === "trip" && id) {
+      // Tenant ownership check: verify trip belongs to caller's tenant
+      const [trip] = await db.select({ id: tripsTable.id })
+        .from(tripsTable)
+        .where(and(eq(tripsTable.id, id), eq(tripsTable.tenantId, me.tenantId)))
+        .limit(1);
+      if (!trip) { res.status(404).json({ error: "Viagem não encontrada" }); return; }
       await CalendarSyncService.syncTrip(id);
-      synced = 1;
+      res.json({ success: true, message: "1 evento sincronizado com sucesso", synced: 1 });
     } else if (type === "payment" && id) {
+      // Tenant ownership check
+      const [payment] = await db.select({ id: paymentsTable.id })
+        .from(paymentsTable)
+        .where(and(eq(paymentsTable.id, id), eq(paymentsTable.tenantId, me.tenantId)))
+        .limit(1);
+      if (!payment) { res.status(404).json({ error: "Pagamento não encontrado" }); return; }
       await CalendarSyncService.syncPayment(id);
-      synced = 1;
+      res.json({ success: true, message: "1 evento sincronizado com sucesso", synced: 1 });
     } else if (type === "birthday" && id) {
+      // Tenant ownership check for client
+      const [client] = await db.select({ id: clientsTable.id })
+        .from(clientsTable)
+        .where(and(eq(clientsTable.id, id), eq(clientsTable.tenantId, me.tenantId)))
+        .limit(1);
+      if (!client) { res.status(404).json({ error: "Cliente não encontrado" }); return; }
       await CalendarSyncService.syncBirthday(id);
-      synced = 1;
+      res.json({ success: true, message: "1 evento sincronizado com sucesso", synced: 1 });
     } else if (type === "all") {
-      synced = await CalendarSyncService.syncAll(me.tenantId);
+      const synced = await CalendarSyncService.syncAll(me.tenantId);
+      res.json({ success: true, message: `${synced} evento(s) sincronizado(s) com sucesso`, synced });
     } else {
       res.status(400).json({ error: "Tipo de sincronização inválido" });
-      return;
     }
-
-    res.json({ success: true, message: `${synced} evento(s) sincronizado(s) com sucesso`, synced });
   } catch (err) {
     req.log.error({ err }, "Error syncing Google Calendar");
     res.status(500).json({ error: "Erro ao sincronizar eventos" });

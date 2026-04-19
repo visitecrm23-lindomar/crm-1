@@ -5318,3 +5318,41 @@ export const GetNotificationsResponse = zod.object({
   ),
   total: zod.number(),
 });
+
+/**
+ * @summary Get Google OAuth URL to connect Google Calendar
+ */
+export const GetCalendarConnectUrlResponse = zod.object({
+  url: zod.string(),
+});
+
+/**
+ * @summary Disconnect Google Calendar and revoke tokens
+ */
+export const DisconnectCalendarResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary Get current Google Calendar connection status
+ */
+export const GetCalendarStatusResponse = zod.object({
+  connected: zod.boolean(),
+  tokenValid: zod.boolean().optional(),
+  eventsCount: zod.number(),
+  lastSync: zod.string().nullish(),
+});
+
+/**
+ * @summary Trigger manual calendar sync
+ */
+export const SyncCalendarBody = zod.object({
+  type: zod.enum(["all", "trip", "payment", "birthday"]),
+  id: zod.string().nullish(),
+});
+
+export const SyncCalendarResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string(),
+  synced: zod.number(),
+});

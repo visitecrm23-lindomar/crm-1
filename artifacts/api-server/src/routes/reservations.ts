@@ -8,6 +8,7 @@ import { requireAuth, getTenantUser } from "../lib/tenant";
 import { deriveAgeCategory, getAgeYears } from "../lib/passenger";
 import { CreateReservationBody, UpdateReservationBody, CreatePassengerBody, UpdatePassengerBody } from "@workspace/api-zod";
 import { z } from "zod/v4";
+import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { writeClientActivity } from "../lib/activities";
 import { syncReservationCommission } from "./payments";
 import { sendReservationConfirmationEmail } from "@workspace/email";
@@ -611,6 +612,7 @@ router.post("/reservations", async (req, res): Promise<void> => {
     if (!reservation) { res.status(500).json({ error: "Failed to create reservation" }); return; }
     const formatted = await formatReservation(reservation);
     res.status(201).json(formatted);
+    CalendarSyncService.syncTrip(reservation.tripId).catch(() => {});
     syncReservationCommission(id, me.tenantId)
       .catch((err) => req.log.error({ err }, "Error syncing commission after reservation creation"));
     if (reservation.clientId) {
@@ -853,6 +855,7 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
     }
     const formatted = await formatReservation(reservation);
     res.json(formatted);
+    CalendarSyncService.syncTrip(existing.tripId).catch(() => {});
   } catch (err) {
     req.log.error({ err }, "Error updating reservation");
     res.status(500).json({ error: "Internal server error" });
@@ -881,6 +884,7 @@ router.delete("/reservations/:id", async (req, res): Promise<void> => {
         .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)));
     });
     res.json({ success: true });
+    CalendarSyncService.syncTrip(existing.tripId).catch(() => {});
   } catch (err) {
     req.log.error({ err }, "Error deleting reservation");
     res.status(500).json({ error: "Internal server error" });

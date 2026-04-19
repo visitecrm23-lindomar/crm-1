@@ -3036,6 +3036,40 @@ export interface PlatformSetting {
   updatedAt: string;
 }
 
+export interface CalendarConnectResponse {
+  url: string;
+}
+
+export interface CalendarStatus {
+  connected: boolean;
+  tokenValid?: boolean;
+  eventsCount: number;
+  /** @nullable */
+  lastSync?: string | null;
+}
+
+export type CalendarSyncRequestType =
+  (typeof CalendarSyncRequestType)[keyof typeof CalendarSyncRequestType];
+
+export const CalendarSyncRequestType = {
+  all: "all",
+  trip: "trip",
+  payment: "payment",
+  birthday: "birthday",
+} as const;
+
+export interface CalendarSyncRequest {
+  type: CalendarSyncRequestType;
+  /** @nullable */
+  id?: string | null;
+}
+
+export interface CalendarSyncResponse {
+  success: boolean;
+  message: string;
+  synced: number;
+}
+
 export type ListAdminInvoicesParams = {
   tenantId?: string;
   status?: string;
