@@ -336,7 +336,7 @@ router.patch("/clients/:id", async (req, res): Promise<void> => {
     if (!client) { res.status(404).json({ error: "Not found" }); return; }
     res.json(formatClient(client));
 
-    if (parsed.data.birthDate !== undefined && client.birthDate) {
+    if (parsed.data.birthDate !== undefined) {
       CalendarSyncService.syncBirthday(client.id).catch(() => {});
     }
   } catch (err) {
