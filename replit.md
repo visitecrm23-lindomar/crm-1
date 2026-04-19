@@ -32,7 +32,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 | Route | Page | Features |
 |-------|------|----------|
 | `/` | Landing | Marketing page with sign in/up |
-| `/dashboard` | Dashboard | Stats cards + upcoming trips |
+| `/dashboard` | Dashboard | 17 KPI cards, 10 Recharts charts, conversion funnel (by channel), business diagnostic with recommendations (agency view); seller sales panel; client personal area |
 | `/pipeline` | Pipeline | Kanban drag-and-drop sales pipeline |
 | `/clients` | Clientes | Client list with search + create |
 | `/trips` | Viagens | Trip list with stat cards, card grid, search/status filters, grid/list view toggle |

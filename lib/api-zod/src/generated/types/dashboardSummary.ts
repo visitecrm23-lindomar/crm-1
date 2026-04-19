@@ -16,9 +16,16 @@ export interface DashboardSummary {
   pendingPayments: number;
   totalReservations: number;
   confirmedReservations: number;
+  cancelledReservations: number;
   occupancyRate: number;
   /** @nullable */
   averageNps?: number | null;
   openDeals: number;
   dealsPipelineValue: number;
+  receivedToday: number;
+  toReceiveNext3Days: number;
+  reservationsToday: number;
+  avgTicket: number;
+  activeClientsCount: number;
+  totalExpenses: number;
 }

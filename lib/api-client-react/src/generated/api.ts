@@ -89,6 +89,8 @@ import type {
   CreateTripBody,
   CreateUserBody,
   CreateVehicleBody,
+  DashboardCharts,
+  DashboardFunnel,
   DashboardSummary,
   Deal,
   Destination,
@@ -2529,6 +2531,156 @@ export function useGetDashboardRecentActivity<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetDashboardRecentActivityQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get dashboard chart data (top destinations, monthly series, funnel metrics)
+ */
+export const getGetDashboardChartsUrl = () => {
+  return `/api/dashboard/charts`;
+};
+
+export const getDashboardCharts = async (
+  options?: RequestInit,
+): Promise<DashboardCharts> => {
+  return customFetch<DashboardCharts>(getGetDashboardChartsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetDashboardChartsQueryKey = () => {
+  return [`/api/dashboard/charts`] as const;
+};
+
+export const getGetDashboardChartsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDashboardCharts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardCharts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDashboardChartsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDashboardCharts>>
+  > = ({ signal }) => getDashboardCharts({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardCharts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDashboardChartsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDashboardCharts>>
+>;
+export type GetDashboardChartsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get dashboard chart data (top destinations, monthly series, funnel metrics)
+ */
+
+export function useGetDashboardCharts<
+  TData = Awaited<ReturnType<typeof getDashboardCharts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardCharts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDashboardChartsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get conversion funnel data
+ */
+export const getGetDashboardFunnelUrl = () => {
+  return `/api/dashboard/funnel`;
+};
+
+export const getDashboardFunnel = async (
+  options?: RequestInit,
+): Promise<DashboardFunnel> => {
+  return customFetch<DashboardFunnel>(getGetDashboardFunnelUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetDashboardFunnelQueryKey = () => {
+  return [`/api/dashboard/funnel`] as const;
+};
+
+export const getGetDashboardFunnelQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDashboardFunnel>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardFunnel>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDashboardFunnelQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDashboardFunnel>>
+  > = ({ signal }) => getDashboardFunnel({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardFunnel>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDashboardFunnelQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDashboardFunnel>>
+>;
+export type GetDashboardFunnelQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get conversion funnel data
+ */
+
+export function useGetDashboardFunnel<
+  TData = Awaited<ReturnType<typeof getDashboardFunnel>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardFunnel>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDashboardFunnelQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

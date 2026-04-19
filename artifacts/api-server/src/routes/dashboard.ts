@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { clientsTable, tripsTable, reservationsTable, paymentsTable, dealsTable, npsResponsesTable, usersTable } from "@workspace/db";
-import { eq, and, gte, desc, sql, inArray } from "drizzle-orm";
+import { clientsTable, tripsTable, reservationsTable, paymentsTable, dealsTable, npsResponsesTable, expensesTable, passengersTable } from "@workspace/db";
+import { eq, and, gte, lte, desc, sql, inArray } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 
 const router = Router();
@@ -14,6 +14,8 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
     const tenantId = me.tenantId;
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const next3Days = new Date(startOfToday.getTime() + 3 * 86400000);
 
     if (me.role === "cliente") {
       const [clientRecord] = await db.select({ id: clientsTable.id, totalSpent: clientsTable.totalSpent, outstandingBalance: clientsTable.outstandingBalance, npsScore: clientsTable.npsScore })
@@ -40,6 +42,8 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
         totalReservations, confirmedReservations, occupancyRate: 0,
         averageNps: clientRecord?.npsScore ?? null,
         openDeals: 0, dealsPipelineValue: 0,
+        receivedToday: 0, toReceiveNext3Days: 0, reservationsToday: 0,
+        avgTicket: 0, activeClientsCount: 0, totalExpenses: 0, cancelledReservations: 0,
       });
       return;
     }
@@ -54,7 +58,7 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
         .where(and(eq(clientsTable.tenantId, tenantId), eq(clientsTable.createdById, me.id)));
       const myClientIds = myClients.map(c => c.id);
 
-      let totalRevenue = 0, revenueThisMonth = 0, pendingAmount = 0;
+      let totalRevenue = 0, revenueThisMonth = 0, pendingAmount = 0, receivedToday = 0;
       if (myClientIds.length > 0) {
         const payments = await db.select().from(paymentsTable)
           .where(and(eq(paymentsTable.tenantId, tenantId), inArray(paymentsTable.clientId, myClientIds)));
@@ -62,12 +66,14 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
           if (p.type === "receivable" && p.status === "paid") {
             totalRevenue += Number(p.amount);
             if (p.paidAt && p.paidAt >= startOfMonth) revenueThisMonth += Number(p.amount);
+            if (p.paidAt && p.paidAt >= startOfToday) receivedToday += Number(p.amount);
           }
           if (p.status === "pending") pendingAmount += Number(p.amount);
         }
       }
 
-      let totalReservations = 0, confirmedReservations = 0;
+      let totalReservations = 0, confirmedReservations = 0, cancelledReservations = 0, reservationsToday = 0;
+      let avgTicket = 0, activeClientsCount = 0;
       if (myClientIds.length > 0) {
         const [rc] = await db.select({ count: sql<number>`count(*)` })
           .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), inArray(reservationsTable.clientId, myClientIds)));
@@ -93,10 +99,13 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
         averageNps: null,
         openDeals: Number(dealCount?.count ?? 0),
         dealsPipelineValue: Number(dealValue?.total ?? 0),
+        receivedToday, toReceiveNext3Days: 0, reservationsToday, avgTicket,
+        activeClientsCount, totalExpenses: 0, cancelledReservations,
       });
       return;
     }
 
+    // Admin / owner role
     const [clientCount] = await db.select({ count: sql<number>`count(*)` })
       .from(clientsTable).where(eq(clientsTable.tenantId, tenantId));
     const [newClientCount] = await db.select({ count: sql<number>`count(*)` })
@@ -111,16 +120,32 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
       .from(reservationsTable).where(eq(reservationsTable.tenantId, tenantId));
     const [confirmedReservationCount] = await db.select({ count: sql<number>`count(*)` })
       .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, "confirmed")));
+    const [cancelledReservationCount] = await db.select({ count: sql<number>`count(*)` })
+      .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, "cancelled")));
+    const [todayReservationCount] = await db.select({ count: sql<number>`count(*)` })
+      .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), gte(reservationsTable.createdAt, startOfToday)));
+
+    const [avgTicketRow] = await db.select({ avg: sql<number>`avg(cast(total_value as numeric))` })
+      .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, "confirmed")));
+    const [activeClientsRow] = await db.select({ count: sql<number>`count(distinct client_id)` })
+      .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, "confirmed")));
 
     const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.tenantId, tenantId));
-    let totalRevenue = 0, revenueThisMonth = 0, pendingPayments = 0;
+    let totalRevenue = 0, revenueThisMonth = 0, pendingPaymentsAmt = 0, receivedToday = 0, toReceiveNext3Days = 0;
     for (const p of payments) {
       if (p.type === "receivable" && p.status === "paid") {
         totalRevenue += Number(p.amount);
         if (p.paidAt && p.paidAt >= startOfMonth) revenueThisMonth += Number(p.amount);
+        if (p.paidAt && p.paidAt >= startOfToday) receivedToday += Number(p.amount);
       }
-      if (p.status === "pending") pendingPayments += Number(p.amount);
+      if (p.type === "receivable" && p.status === "pending" && p.dueDate <= next3Days) {
+        toReceiveNext3Days += Number(p.amount);
+      }
+      if (p.status === "pending") pendingPaymentsAmt += Number(p.amount);
     }
+
+    const [totalExpensesRow] = await db.select({ total: sql<number>`sum(cast(amount as numeric))` })
+      .from(expensesTable).where(eq(expensesTable.tenantId, tenantId));
 
     const trips = await db.select({ totalCapacity: tripsTable.totalCapacity, reservedSeats: tripsTable.reservedSeats })
       .from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, "active")));
@@ -144,13 +169,20 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
       activeTrips: Number(activeTripCount?.count ?? 0),
       totalRevenue: Math.round(totalRevenue * 100) / 100,
       revenueThisMonth: Math.round(revenueThisMonth * 100) / 100,
-      pendingPayments: Math.round(pendingPayments * 100) / 100,
+      pendingPayments: Math.round(pendingPaymentsAmt * 100) / 100,
       totalReservations: Number(reservationCount?.count ?? 0),
       confirmedReservations: Number(confirmedReservationCount?.count ?? 0),
       occupancyRate: Math.round(occupancyRate * 10) / 10,
       averageNps: averageNps !== null ? Math.round(averageNps * 10) / 10 : null,
       openDeals: Number(dealCount?.count ?? 0),
       dealsPipelineValue: Number(dealValue?.total ?? 0),
+      receivedToday: Math.round(receivedToday * 100) / 100,
+      toReceiveNext3Days: Math.round(toReceiveNext3Days * 100) / 100,
+      reservationsToday: Number(todayReservationCount?.count ?? 0),
+      avgTicket: Math.round(Number(avgTicketRow?.avg ?? 0) * 100) / 100,
+      activeClientsCount: Number(activeClientsRow?.count ?? 0),
+      totalExpenses: Math.round(Number(totalExpensesRow?.total ?? 0) * 100) / 100,
+      cancelledReservations: Number(cancelledReservationCount?.count ?? 0),
     });
   } catch (err) {
     req.log.error({ err }, "Error fetching dashboard summary");
@@ -196,7 +228,6 @@ router.get("/dashboard/revenue-chart", async (req, res): Promise<void> => {
     }
 
     const payments = await db.select().from(paymentsTable).where(paymentConditions);
-
     const reservations = await db.select().from(reservationsTable).where(reservationConditions);
 
     const numPoints = period === "12m" ? 12 : Math.min(daysBack, 12);
@@ -235,6 +266,211 @@ router.get("/dashboard/revenue-chart", async (req, res): Promise<void> => {
     res.json(points);
   } catch (err) {
     req.log.error({ err }, "Error fetching revenue chart");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/dashboard/charts", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    if (me.role === "cliente") {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+
+    const tenantId = me.tenantId;
+    const now = new Date();
+
+    // Top destinations (by reservation count)
+    const allTrips = await db.select({ id: tripsTable.id, destination: tripsTable.destination, destinationCity: tripsTable.destinationCity })
+      .from(tripsTable).where(eq(tripsTable.tenantId, tenantId));
+
+    const allReservations = await db.select({ tripId: reservationsTable.tripId, status: reservationsTable.status, totalValue: reservationsTable.totalValue, createdAt: reservationsTable.createdAt })
+      .from(reservationsTable).where(eq(reservationsTable.tenantId, tenantId));
+
+    const tripMap = new Map(allTrips.map(t => [t.id, t]));
+    const destCount: Record<string, number> = {};
+    for (const r of allReservations) {
+      const trip = tripMap.get(r.tripId);
+      if (trip) {
+        const key = trip.destinationCity || trip.destination;
+        destCount[key] = (destCount[key] ?? 0) + 1;
+      }
+    }
+    const topDestinations = Object.entries(destCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([name, count]) => ({ name, count }));
+
+    // Monthly trips created (last 12 months)
+    const allTripsAll = await db.select({ createdAt: tripsTable.createdAt })
+      .from(tripsTable).where(eq(tripsTable.tenantId, tenantId));
+
+    const tripsByMonth: Array<{ label: string; count: number }> = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      const label = d.toLocaleString("pt-BR", { month: "short" });
+      const count = allTripsAll.filter(t => t.createdAt >= d && t.createdAt <= end).length;
+      tripsByMonth.push({ label, count });
+    }
+
+    // Monthly reservations (last 12 months)
+    const reservationsByMonth: Array<{ label: string; count: number; cancelled: number }> = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      const label = d.toLocaleString("pt-BR", { month: "short" });
+      const month = allReservations.filter(r => r.createdAt >= d && r.createdAt <= end);
+      const count = month.length;
+      const cancelled = month.filter(r => r.status === "cancelled").length;
+      reservationsByMonth.push({ label, count, cancelled });
+    }
+
+    // Reservations by status
+    const statusCount: Record<string, number> = {};
+    for (const r of allReservations) {
+      statusCount[r.status] = (statusCount[r.status] ?? 0) + 1;
+    }
+    const reservationsByStatus = Object.entries(statusCount).map(([status, count]) => ({ status, count }));
+
+    // Cancellation rate
+    const total = allReservations.length;
+    const cancelled = allReservations.filter(r => r.status === "cancelled").length;
+    const cancellationRate = total > 0 ? Math.round((cancelled / total) * 1000) / 10 : 0;
+
+    // Avg reservations per active trip
+    const activeTripIds = allTrips.filter(t => allTripsAll.length > 0).map(t => t.id);
+    const [activeTripsCount] = await db.select({ count: sql<number>`count(*)` })
+      .from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, "active")));
+    const confirmedCount = allReservations.filter(r => r.status === "confirmed").length;
+    const activeCount = Number(activeTripsCount?.count ?? 0);
+    const avgReservationsPerTrip = activeCount > 0 ? Math.round((confirmedCount / activeCount) * 10) / 10 : 0;
+
+    // Passengers checked in per month
+    const allPassengers = await db.select({ checkedInAt: passengersTable.checkedInAt, boardingLocationId: passengersTable.boardingLocationId })
+      .from(passengersTable)
+      .innerJoin(reservationsTable, eq(passengersTable.reservationId, reservationsTable.id))
+      .where(eq(reservationsTable.tenantId, tenantId));
+
+    const passengersByMonth: Array<{ label: string; count: number }> = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      const label = d.toLocaleString("pt-BR", { month: "short" });
+      const count = allPassengers.filter(p => p.checkedInAt && p.checkedInAt >= d && p.checkedInAt <= end).length;
+      passengersByMonth.push({ label, count });
+    }
+
+    // Top boarding points
+    const boardingCount: Record<string, number> = {};
+    for (const p of allPassengers) {
+      if (p.boardingLocationId) {
+        boardingCount[p.boardingLocationId] = (boardingCount[p.boardingLocationId] ?? 0) + 1;
+      }
+    }
+
+    // Resolve boarding point names from trips
+    const tripsWithBoarding = await db.select({ boardingPoints: tripsTable.boardingPoints })
+      .from(tripsTable).where(eq(tripsTable.tenantId, tenantId));
+    const boardingNameMap: Record<string, string> = {};
+    for (const t of tripsWithBoarding) {
+      for (const bp of (t.boardingPoints ?? [])) {
+        if (bp.id && bp.name) boardingNameMap[bp.id] = bp.name;
+      }
+    }
+
+    const topBoardingPoints = Object.entries(boardingCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([id, count]) => ({ name: boardingNameMap[id] ?? id, count }));
+
+    // Average ticket by month (confirmed reservations)
+    const confirmedReservations = allReservations.filter(r => r.status === "confirmed");
+    const avgTicketByMonth: Array<{ label: string; value: number }> = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      const label = d.toLocaleString("pt-BR", { month: "short" });
+      const month = confirmedReservations.filter(r => r.createdAt >= d && r.createdAt <= end);
+      const value = month.length > 0
+        ? Math.round(month.reduce((a, r) => a + Number(r.totalValue), 0) / month.length)
+        : 0;
+      avgTicketByMonth.push({ label, value });
+    }
+
+    res.json({
+      topDestinations,
+      tripsByMonth,
+      reservationsByMonth,
+      reservationsByStatus,
+      cancellationRate,
+      avgReservationsPerTrip,
+      passengersByMonth,
+      topBoardingPoints,
+      avgTicketByMonth,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error fetching dashboard charts");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/dashboard/funnel", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    if (me.role === "cliente" || me.role === "vendedor") {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+
+    const tenantId = me.tenantId;
+
+    const allClients = await db.select({ id: clientsTable.id, origin: clientsTable.origin })
+      .from(clientsTable).where(eq(clientsTable.tenantId, tenantId));
+
+    const allReservations = await db.select({ clientId: reservationsTable.clientId, status: reservationsTable.status })
+      .from(reservationsTable).where(eq(reservationsTable.tenantId, tenantId));
+
+    const paidClientIds = new Set(
+      (await db.select({ clientId: paymentsTable.clientId })
+        .from(paymentsTable)
+        .where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.status, "paid"), eq(paymentsTable.type, "receivable"))))
+        .map(p => p.clientId)
+        .filter(Boolean) as string[]
+    );
+
+    const clientsWithReservation = new Set(allReservations.map(r => r.clientId));
+    const clientsWithConfirmed = new Set(allReservations.filter(r => r.status === "confirmed").map(r => r.clientId));
+
+    const totalLeads = allClients.length;
+    const withReservation = allClients.filter(c => clientsWithReservation.has(c.id)).length;
+    const withConfirmed = allClients.filter(c => clientsWithConfirmed.has(c.id)).length;
+    const withPayment = allClients.filter(c => paidClientIds.has(c.id)).length;
+
+    // By origin
+    const originMap: Record<string, { totalLeads: number; withReservation: number; withConfirmed: number; withPayment: number }> = {};
+    for (const c of allClients) {
+      const origin = c.origin ?? "Outros";
+      if (!originMap[origin]) originMap[origin] = { totalLeads: 0, withReservation: 0, withConfirmed: 0, withPayment: 0 };
+      originMap[origin].totalLeads++;
+      if (clientsWithReservation.has(c.id)) originMap[origin].withReservation++;
+      if (clientsWithConfirmed.has(c.id)) originMap[origin].withConfirmed++;
+      if (paidClientIds.has(c.id)) originMap[origin].withPayment++;
+    }
+
+    const byOrigin = Object.entries(originMap)
+      .sort((a, b) => b[1].totalLeads - a[1].totalLeads)
+      .slice(0, 8)
+      .map(([origin, data]) => ({ origin, ...data }));
+
+    res.json({ totalLeads, withReservation, withConfirmed, withPayment, byOrigin });
+  } catch (err) {
+    req.log.error({ err }, "Error fetching dashboard funnel");
     res.status(500).json({ error: "Internal server error" });
   }
 });

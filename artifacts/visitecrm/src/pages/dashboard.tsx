@@ -1,13 +1,18 @@
 import { useMemo, useState, useEffect, useRef, type ElementType } from "react";
 import {
   useGetDashboardSummary, useGetDashboardRevenueChart, useGetDashboardUpcomingTrips,
+  useGetDashboardCharts, useGetDashboardFunnel,
   useListPayments, useListClients, useGetMe, useListPipelineStages, useListDeals, useListReservations,
-  useGetPaymentsSummary, useListExpenses,
+  useGetPaymentsSummary,
 } from "@workspace/api-client-react";
 import type { Reservation } from "@workspace/api-client-react";
 import { VoucherModal } from "./reservations";
 import { ReservationCardVisual } from "@/components/reservation-card-visual";
-import { Users, Map, DollarSign, Star, Briefcase, CalendarCheck, AlertTriangle, ArrowUpRight, Plus, Clock, Check, Trash2, TrendingDown, TrendingUp, AlertCircle, Percent } from "lucide-react";
+import {
+  Users, Map, DollarSign, Star, Briefcase, CalendarCheck, AlertTriangle, ArrowUpRight,
+  Plus, Clock, Check, Trash2, TrendingDown, TrendingUp, AlertCircle, Percent,
+  Target, Activity, BarChart2, Lightbulb, ChevronRight, UserCheck, Zap,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Link } from "wouter";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend, PieChart, Pie, Cell
+  ResponsiveContainer, Legend, PieChart, Pie, Cell, LineChart, Line,
 } from "recharts";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -50,7 +55,6 @@ function TasksCard() {
 
   const toggle = (id: string) => setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
   const remove = (id: string) => setTasks(prev => prev.filter(t => t.id !== id));
-
   const pending = tasks.filter(t => !t.done).length;
 
   return (
@@ -103,13 +107,17 @@ function TasksCard() {
   );
 }
 
-const DONUT_COLORS = ["#3B82F6", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#6B7280"];
+const DONUT_COLORS = ["#3B82F6", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#6B7280", "#EC4899", "#14B8A6"];
 
-function KpiCard({ title, value, sub, icon: Icon, loading, color = "text-primary" }: {
-  title: string; value: string | number; sub?: string; icon: ElementType; loading: boolean; color?: string;
+function KpiCard({ title, value, sub, icon: Icon, loading, color = "text-primary", highlight }: {
+  title: string; value: string | number; sub?: string; icon: ElementType; loading: boolean; color?: string; highlight?: "green" | "red" | "yellow";
 }) {
+  const highlightClass = highlight === "green" ? "border-green-200 bg-green-50/50 dark:bg-green-950/20" :
+    highlight === "red" ? "border-red-200 bg-red-50/50 dark:bg-red-950/20" :
+    highlight === "yellow" ? "border-yellow-200 bg-yellow-50/50 dark:bg-yellow-950/20" : "";
+
   return (
-    <Card>
+    <Card className={highlightClass}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
         <Icon className={`h-4 w-4 ${color}`} />
@@ -128,31 +136,43 @@ function KpiCard({ title, value, sub, icon: Icon, loading, color = "text-primary
   );
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  confirmed: "Confirmada",
+  pending: "Pendente",
+  cancelled: "Cancelada",
+  completed: "Concluída",
+};
+
+function SectionTitle({ icon: Icon, title, description }: { icon: ElementType; title: string; description?: string }) {
+  return (
+    <div className="flex items-center gap-3 mb-4">
+      <div className="p-2 rounded-lg bg-primary/10">
+        <Icon className="w-5 h-5 text-primary" />
+      </div>
+      <div>
+        <h2 className="text-lg font-semibold">{title}</h2>
+        {description && <p className="text-sm text-muted-foreground">{description}</p>}
+      </div>
+    </div>
+  );
+}
+
 function AgencyDashboard() {
   const { data: summary, isLoading: loadingSummary } = useGetDashboardSummary();
   const { data: rawChartData, isLoading: loadingChart } = useGetDashboardRevenueChart({ period: "12m" });
-  const chartData = rawChartData?.slice(-6);
+  const { data: charts, isLoading: loadingCharts } = useGetDashboardCharts();
+  const { data: funnel, isLoading: loadingFunnel } = useGetDashboardFunnel();
   const { data: upcomingTrips, isLoading: loadingTrips } = useGetDashboardUpcomingTrips();
   const { data: allClientsOrigin } = useListClients({ limit: 200, page: 1, sortBy: "createdAt", sortOrder: "desc" });
-  const { data: recentClients, isLoading: loadingClients } = useListClients({ limit: 10, page: 1, sortBy: "createdAt", sortOrder: "desc" });
-  const { data: pendingPayments, isLoading: loadingPayments } = useListPayments({ status: "pending", limit: 10 });
+  const { data: paymentSummary, isLoading: loadingPaySummary } = useGetPaymentsSummary();
   const { data: stages, isLoading: loadingStages } = useListPipelineStages();
   const { data: deals, isLoading: loadingDeals } = useListDeals({ status: "open" });
-  const { data: paymentSummary, isLoading: loadingPaySummary } = useGetPaymentsSummary();
-  const { data: allExpensesData, isLoading: loadingExpenses } = useListExpenses({ limit: 500 });
 
   const npsLabel = summary?.averageNps != null ? `${summary.averageNps.toFixed(1)} / 10` : "—";
-
-  const financialKpis = useMemo(() => {
-    const expenses = allExpensesData?.data ?? [];
-    const totalExpenses = expenses.reduce((s, e) => s + parseFloat(String(e.amount)), 0);
-    const pendingExpenses = expenses.filter(e => e.status === "pending").reduce((s, e) => s + parseFloat(String(e.amount)), 0);
-    const overdueExpenses = expenses.filter(e => e.status === "overdue").reduce((s, e) => s + parseFloat(String(e.amount)), 0);
-    const totalRevenue = summary?.totalRevenue ?? 0;
-    const netProfit = totalRevenue - totalExpenses;
-    const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
-    return { totalExpenses, pendingExpenses, overdueExpenses, netProfit, margin };
-  }, [allExpensesData, summary]);
+  const totalRevenue = summary?.totalRevenue ?? 0;
+  const totalExpenses = summary?.totalExpenses ?? 0;
+  const netProfit = totalRevenue - totalExpenses;
+  const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
   const clientOriginData = useMemo(() => {
     const all = allClientsOrigin?.data ?? [];
@@ -161,23 +181,51 @@ function AgencyDashboard() {
       const origin = c.origin ?? c.addressState ?? "Outros";
       groups[origin] = (groups[origin] ?? 0) + 1;
     });
-    return Object.entries(groups).map(([name, value]) => ({ name, value })).slice(0, 6);
+    return Object.entries(groups).map(([name, value]) => ({ name, value })).slice(0, 8);
   }, [allClientsOrigin]);
 
-  const miniPipelineStages = useMemo(() => {
-    if (!stages || !deals) return [];
-    return stages.slice(0, 3).map(s => ({
-      ...s,
-      stageDeals: (deals ?? []).filter(d => d.stageId === s.id),
-    }));
-  }, [stages, deals]);
+  // Diagnostic engine
+  const diagnostics = useMemo(() => {
+    if (!summary || !charts) return [];
+    const tips: Array<{ type: "warning" | "success" | "info"; title: string; desc: string }> = [];
+
+    if ((summary.occupancyRate ?? 0) < 60)
+      tips.push({ type: "warning", title: "Ocupação abaixo do ideal", desc: `Taxa atual de ${summary.occupancyRate?.toFixed(1)}%. Considere campanhas de captação para preencher as vagas restantes.` });
+    else if ((summary.occupancyRate ?? 0) >= 85)
+      tips.push({ type: "success", title: "Excelente ocupação", desc: `Taxa de ${summary.occupancyRate?.toFixed(1)}%! Considere abrir novas viagens para aproveitar a demanda.` });
+
+    if (summary.averageNps != null && summary.averageNps < 7)
+      tips.push({ type: "warning", title: "NPS precisa de atenção", desc: `NPS médio de ${summary.averageNps.toFixed(1)}. Revise a qualidade do serviço e colete feedback detalhado dos clientes.` });
+    else if (summary.averageNps != null && summary.averageNps >= 9)
+      tips.push({ type: "success", title: "Clientes muito satisfeitos", desc: `NPS de ${summary.averageNps.toFixed(1)} — ótimo momento para solicitar indicações e depoimentos.` });
+
+    if (charts.cancellationRate > 15)
+      tips.push({ type: "warning", title: "Taxa de cancelamento elevada", desc: `${charts.cancellationRate.toFixed(1)}% das reservas são canceladas. Revise políticas de cancelamento e comunicação com clientes.` });
+
+    if (margin < 15 && totalRevenue > 0)
+      tips.push({ type: "warning", title: "Margem de lucro baixa", desc: `Margem de ${margin.toFixed(1)}%. Analise as despesas por viagem e negocie melhores tarifas com fornecedores.` });
+    else if (margin >= 30 && totalRevenue > 0)
+      tips.push({ type: "success", title: "Margem saudável", desc: `Margem de ${margin.toFixed(1)}% — continue monitorando custos para manter essa performance.` });
+
+    if ((summary.newClientsThisMonth ?? 0) === 0)
+      tips.push({ type: "info", title: "Nenhum cliente novo este mês", desc: "Invista em campanhas de captação via WhatsApp, Instagram ou indicações de clientes existentes." });
+
+    if (charts.avgReservationsPerTrip < 5 && summary.activeTrips > 0)
+      tips.push({ type: "info", title: "Poucas reservas por viagem", desc: `Média de ${charts.avgReservationsPerTrip.toFixed(1)} reservas/viagem. Avalie otimizar o número de viagens ou intensificar a divulgação.` });
+
+    if (tips.length === 0)
+      tips.push({ type: "success", title: "Operação saudável", desc: "Todos os indicadores estão dentro dos parâmetros ideais. Continue monitorando e buscando oportunidades de crescimento." });
+
+    return tips;
+  }, [summary, charts, margin, totalRevenue]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground text-sm">Visão geral da sua agência de turismo.</p>
+          <p className="text-muted-foreground text-sm">Visão analítica completa da sua agência de turismo.</p>
         </div>
         <div className="flex gap-2">
           <Link href="/clients"><Button variant="outline" size="sm"><Plus className="w-4 h-4 mr-1" /> Novo Cliente</Button></Link>
@@ -185,251 +233,625 @@ function AgencyDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <KpiCard title="Receita Total" value={formatCurrency(summary?.totalRevenue ?? 0)} sub={`${formatCurrency(summary?.revenueThisMonth ?? 0)} este mês`} icon={TrendingUp} loading={loadingSummary} color="text-green-600" />
-        <KpiCard title="Total Despesas" value={formatCurrency(financialKpis.totalExpenses)} sub={`A pagar: ${formatCurrency(financialKpis.pendingExpenses)}`} icon={TrendingDown} loading={loadingExpenses} color="text-red-500" />
-        <KpiCard
-          title="Lucro Líquido"
-          value={formatCurrency(financialKpis.netProfit)}
-          sub={`Margem: ${financialKpis.margin.toFixed(1)}%`}
-          icon={DollarSign}
-          loading={loadingSummary || loadingExpenses}
-          color={financialKpis.netProfit >= 0 ? "text-emerald-600" : "text-red-600"}
-        />
-        <KpiCard title="Margem %" value={loadingSummary || loadingExpenses ? "—" : `${financialKpis.margin.toFixed(1)}%`} sub={financialKpis.netProfit >= 0 ? "Resultado positivo" : "Resultado negativo"} icon={Percent} loading={false} color={financialKpis.netProfit >= 0 ? "text-emerald-600" : "text-red-600"} />
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          title="A Receber"
-          value={formatCurrency(paymentSummary?.totalReceivable ?? 0)}
-          sub={`Vencido: ${formatCurrency(paymentSummary?.overdueReceivable ?? 0)}`}
-          icon={CalendarCheck}
-          loading={loadingPaySummary}
-          color="text-blue-600"
-        />
-        <KpiCard
-          title="A Pagar"
-          value={formatCurrency(financialKpis.pendingExpenses)}
-          sub={financialKpis.overdueExpenses > 0 ? `Vencido: ${formatCurrency(financialKpis.overdueExpenses)}` : "Sem vencimentos"}
-          icon={financialKpis.overdueExpenses > 0 ? AlertCircle : Clock}
-          loading={loadingExpenses}
-          color={financialKpis.overdueExpenses > 0 ? "text-red-600" : "text-yellow-600"}
-        />
-        <KpiCard title="Viagens Ativas" value={summary?.activeTrips ?? 0} sub={`De ${summary?.totalTrips ?? 0} no total`} icon={Map} loading={loadingSummary} color="text-blue-600" />
-        <KpiCard title="NPS Médio" value={npsLabel} sub={`${summary?.confirmedReservations ?? 0} reservas confirmadas`} icon={Star} loading={loadingSummary} color="text-yellow-500" />
-      </div>
-
-      {financialKpis.overdueExpenses > 0 && (
+      {/* Overdue expenses alert */}
+      {(paymentSummary?.overdueReceivable ?? 0) > 0 && (
         <div className="flex items-center gap-3 rounded-lg border border-destructive/50 bg-destructive/5 px-4 py-3">
           <AlertCircle className="w-5 h-5 text-destructive shrink-0" />
           <p className="text-sm font-medium text-destructive">
-            Atenção: você tem <strong>{formatCurrency(financialKpis.overdueExpenses)}</strong> em despesas vencidas.
+            Atenção: <strong>{formatCurrency(paymentSummary!.overdueReceivable)}</strong> em recebimentos vencidos.
           </p>
-          <Link href="/financeiro/expenses" className="ml-auto text-sm font-medium text-destructive underline underline-offset-2">Ver detalhes</Link>
+          <Link href="/financial" className="ml-auto text-sm font-medium text-destructive underline underline-offset-2">Ver detalhes</Link>
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-7">
-        <Card className="lg:col-span-4">
-          <CardHeader>
-            <CardTitle>Receita vs Despesas</CardTitle>
-            <CardDescription>Últimos 12 meses</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loadingChart ? <Skeleton className="h-[260px] w-full" /> : (
-              <ResponsiveContainer width="100%" height={260}>
-                <AreaChart data={chartData ?? []} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="revenue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.2} /><stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="expenses" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#EF4444" stopOpacity={0.2} /><stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(v: number) => formatCurrency(v)} />
-                  <Legend />
-                  <Area type="monotone" dataKey="revenue" name="Receita" stroke="#3B82F6" fill="url(#revenue)" strokeWidth={2} />
-                  <Area type="monotone" dataKey="expenses" name="Despesas" stroke="#EF4444" fill="url(#expenses)" strokeWidth={2} />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
+      {/* ═══ SEÇÃO 1: 17 KPIs ═══ */}
+      <section>
+        <SectionTitle icon={BarChart2} title="Indicadores Financeiros" description="Visão financeira consolidada da agência" />
 
-        <Card className="lg:col-span-3">
-          <CardHeader>
-            <CardTitle>Origem dos Clientes</CardTitle>
-            <CardDescription>Por estado</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loadingClients ? <Skeleton className="h-[200px] w-full" /> : clientOriginData.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">Sem dados de origem.</p>
-            ) : (
-              <div className="flex items-center gap-4">
-                <ResponsiveContainer width="55%" height={200}>
-                  <PieChart>
-                    <Pie data={clientOriginData} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2}>
-                      {clientOriginData.map((_, index) => (
-                        <Cell key={index} fill={DONUT_COLORS[index % DONUT_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
+        {/* Group 1: Financial overview */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4">
+          <KpiCard title="Receita Total" value={formatCurrency(totalRevenue)} sub={`${formatCurrency(summary?.revenueThisMonth ?? 0)} este mês`} icon={TrendingUp} loading={loadingSummary} color="text-green-600" highlight="green" />
+          <KpiCard title="Total Despesas" value={formatCurrency(totalExpenses)} sub={`Líquido: ${formatCurrency(netProfit)}`} icon={TrendingDown} loading={loadingSummary} color="text-red-500" highlight={netProfit < 0 ? "red" : undefined} />
+          <KpiCard
+            title="Lucro Líquido"
+            value={formatCurrency(netProfit)}
+            sub={`Margem: ${margin.toFixed(1)}%`}
+            icon={DollarSign}
+            loading={loadingSummary}
+            color={netProfit >= 0 ? "text-emerald-600" : "text-red-600"}
+            highlight={netProfit >= 0 ? "green" : "red"}
+          />
+          <KpiCard
+            title="Margem de Lucro"
+            value={`${margin.toFixed(1)}%`}
+            sub={netProfit >= 0 ? "Resultado positivo" : "Resultado negativo"}
+            icon={Percent}
+            loading={loadingSummary}
+            color={margin >= 20 ? "text-emerald-600" : margin >= 10 ? "text-yellow-600" : "text-red-600"}
+          />
+        </div>
+
+        {/* Group 2: Cash flow */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4">
+          <KpiCard
+            title="Recebido Hoje"
+            value={formatCurrency(summary?.receivedToday ?? 0)}
+            sub="Pagamentos do dia"
+            icon={Zap}
+            loading={loadingSummary}
+            color="text-green-600"
+            highlight={(summary?.receivedToday ?? 0) > 0 ? "green" : undefined}
+          />
+          <KpiCard
+            title="A Receber (3 dias)"
+            value={formatCurrency(summary?.toReceiveNext3Days ?? 0)}
+            sub="Vencimentos próximos"
+            icon={Clock}
+            loading={loadingSummary}
+            color="text-blue-600"
+          />
+          <KpiCard
+            title="A Receber Total"
+            value={formatCurrency(paymentSummary?.totalReceivable ?? 0)}
+            sub={`Vencido: ${formatCurrency(paymentSummary?.overdueReceivable ?? 0)}`}
+            icon={CalendarCheck}
+            loading={loadingPaySummary}
+            color="text-blue-600"
+            highlight={(paymentSummary?.overdueReceivable ?? 0) > 0 ? "yellow" : undefined}
+          />
+          <KpiCard
+            title="Ticket Médio"
+            value={formatCurrency(summary?.avgTicket ?? 0)}
+            sub="Por reserva confirmada"
+            icon={Target}
+            loading={loadingSummary}
+            color="text-purple-600"
+          />
+        </div>
+
+        {/* Group 3: Operations */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4">
+          <KpiCard title="Viagens Ativas" value={summary?.activeTrips ?? 0} sub={`${summary?.totalTrips ?? 0} no total`} icon={Map} loading={loadingSummary} color="text-blue-600" />
+          <KpiCard
+            title="Taxa de Ocupação"
+            value={`${summary?.occupancyRate ?? 0}%`}
+            sub="Viagens ativas"
+            icon={Activity}
+            loading={loadingSummary}
+            color={(summary?.occupancyRate ?? 0) >= 70 ? "text-green-600" : "text-yellow-600"}
+            highlight={(summary?.occupancyRate ?? 0) >= 80 ? "green" : (summary?.occupancyRate ?? 0) < 50 ? "yellow" : undefined}
+          />
+          <KpiCard title="Reservas Hoje" value={summary?.reservationsToday ?? 0} sub="Novas reservas do dia" icon={CalendarCheck} loading={loadingSummary} color="text-indigo-600" highlight={(summary?.reservationsToday ?? 0) > 0 ? "green" : undefined} />
+          <KpiCard title="NPS Médio" value={npsLabel} sub={`${summary?.confirmedReservations ?? 0} reservas confirmadas`} icon={Star} loading={loadingSummary} color="text-yellow-500" />
+        </div>
+
+        {/* Group 4: Clients */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <KpiCard title="Total Clientes" value={summary?.totalClients ?? 0} sub="Base total de clientes" icon={Users} loading={loadingSummary} color="text-blue-600" />
+          <KpiCard title="Novos (mês)" value={summary?.newClientsThisMonth ?? 0} sub="Clientes novos este mês" icon={UserCheck} loading={loadingSummary} color="text-green-600" highlight={(summary?.newClientsThisMonth ?? 0) > 0 ? "green" : undefined} />
+          <KpiCard title="Clientes Ativos" value={summary?.activeClientsCount ?? 0} sub="Com reserva confirmada" icon={Users} loading={loadingSummary} color="text-indigo-600" />
+          <KpiCard title="Negócios Abertos" value={summary?.openDeals ?? 0} sub={`Pipeline: ${formatCurrency(summary?.dealsPipelineValue ?? 0)}`} icon={Briefcase} loading={loadingSummary} color="text-purple-600" />
+          <KpiCard
+            title="Cancelamentos"
+            value={summary?.cancelledReservations ?? 0}
+            sub={`${summary?.totalReservations ? ((summary.cancelledReservations / summary.totalReservations) * 100).toFixed(1) : 0}% do total`}
+            icon={AlertTriangle}
+            loading={loadingSummary}
+            color="text-red-500"
+            highlight={(summary?.cancelledReservations ?? 0) > 0 ? "yellow" : undefined}
+          />
+        </div>
+      </section>
+
+      {/* ═══ SEÇÃO 2: 10 GRÁFICOS ═══ */}
+      <section>
+        <SectionTitle icon={Activity} title="Gráficos e Análises" description="Dados históricos e comparativos dos últimos 12 meses" />
+
+        {/* Chart 1 & 2: Revenue vs Expenses + Client Origin */}
+        <div className="grid gap-4 lg:grid-cols-7 mb-4">
+          <Card className="lg:col-span-4">
+            <CardHeader>
+              <CardTitle className="text-base">Receita vs Despesas</CardTitle>
+              <CardDescription>Últimos 12 meses</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingChart ? <Skeleton className="h-[260px] w-full" /> : (
+                <ResponsiveContainer width="100%" height={260}>
+                  <AreaChart data={rawChartData ?? []} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="revenue" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.2} /><stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="expenses" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#EF4444" stopOpacity={0.2} /><stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <YAxis tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+                    <Tooltip formatter={(v: number) => formatCurrency(v)} />
+                    <Legend />
+                    <Area type="monotone" dataKey="revenue" name="Receita" stroke="#3B82F6" fill="url(#revenue)" strokeWidth={2} />
+                    <Area type="monotone" dataKey="expenses" name="Despesas" stroke="#EF4444" fill="url(#expenses)" strokeWidth={2} />
+                  </AreaChart>
                 </ResponsiveContainer>
-                <div className="flex-1 space-y-1.5">
-                  {clientOriginData.map((item, i) => (
-                    <div key={item.name} className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: DONUT_COLORS[i % DONUT_COLORS.length] }} />
-                      <span className="text-xs truncate flex-1">{item.name}</span>
-                      <span className="text-xs font-semibold">{item.value}</span>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="lg:col-span-3">
+            <CardHeader>
+              <CardTitle className="text-base">Origem dos Clientes</CardTitle>
+              <CardDescription>Por canal de captação</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {clientOriginData.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Sem dados de origem.</p>
+              ) : (
+                <div className="flex items-center gap-4">
+                  <ResponsiveContainer width="55%" height={200}>
+                    <PieChart>
+                      <Pie data={clientOriginData} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2}>
+                        {clientOriginData.map((_, index) => (
+                          <Cell key={index} fill={DONUT_COLORS[index % DONUT_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="flex-1 space-y-1.5">
+                    {clientOriginData.map((item, i) => (
+                      <div key={item.name} className="flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: DONUT_COLORS[i % DONUT_COLORS.length] }} />
+                        <span className="text-xs truncate flex-1">{item.name}</span>
+                        <span className="text-xs font-semibold">{item.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Chart 3 & 4: Top Destinations + Status pie */}
+        <div className="grid gap-4 lg:grid-cols-7 mb-4">
+          <Card className="lg:col-span-4">
+            <CardHeader>
+              <CardTitle className="text-base">Top Destinos</CardTitle>
+              <CardDescription>Por número de reservas</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingCharts ? <Skeleton className="h-[220px] w-full" /> : !charts?.topDestinations.length ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Sem dados de destinos.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={charts.topDestinations} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 11 }} />
+                    <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={90} />
+                    <Tooltip />
+                    <Bar dataKey="count" name="Reservas" fill="#8B5CF6" radius={[0, 4, 4, 0]}>
+                      {charts.topDestinations.map((_, i) => (
+                        <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="lg:col-span-3">
+            <CardHeader>
+              <CardTitle className="text-base">Status das Reservas</CardTitle>
+              <CardDescription>Distribuição atual</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingCharts ? <Skeleton className="h-[200px] w-full" /> : !charts?.reservationsByStatus.length ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Sem dados.</p>
+              ) : (
+                <div className="flex items-center gap-4">
+                  <ResponsiveContainer width="55%" height={200}>
+                    <PieChart>
+                      <Pie data={charts.reservationsByStatus} dataKey="count" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2}>
+                        {charts.reservationsByStatus.map((_, i) => (
+                          <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(v, n) => [v, STATUS_LABELS[n as string] ?? n]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="flex-1 space-y-2">
+                    {charts.reservationsByStatus.map((item, i) => (
+                      <div key={item.status} className="flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: DONUT_COLORS[i % DONUT_COLORS.length] }} />
+                        <span className="text-xs flex-1">{STATUS_LABELS[item.status] ?? item.status}</span>
+                        <span className="text-xs font-semibold">{item.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Chart 5 & 6: Reservations/Month + Trips/Month */}
+        <div className="grid gap-4 lg:grid-cols-2 mb-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Reservas por Mês</CardTitle>
+              <CardDescription>Total e cancelamentos</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingCharts ? <Skeleton className="h-[220px] w-full" /> : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={charts?.reservationsByMonth ?? []} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="count" name="Total" fill="#3B82F6" radius={[4, 4, 0, 0]} stackId="a" />
+                    <Bar dataKey="cancelled" name="Canceladas" fill="#EF4444" radius={[4, 4, 0, 0]} stackId="b" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Viagens Criadas por Mês</CardTitle>
+              <CardDescription>Histórico de criação</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingCharts ? <Skeleton className="h-[220px] w-full" /> : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={charts?.tripsByMonth ?? []} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="count" name="Viagens" fill="#10B981" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Chart 7 & 8: Passengers/Month + Avg Ticket/Month */}
+        <div className="grid gap-4 lg:grid-cols-2 mb-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Passageiros Embarcados</CardTitle>
+              <CardDescription>Check-ins por mês</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingCharts ? <Skeleton className="h-[220px] w-full" /> : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <AreaChart data={charts?.passengersByMonth ?? []} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="passengers" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.2} /><stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="count" name="Passageiros" stroke="#8B5CF6" fill="url(#passengers)" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Ticket Médio por Mês</CardTitle>
+              <CardDescription>Valor médio das reservas confirmadas</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingCharts ? <Skeleton className="h-[220px] w-full" /> : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={charts?.avgTicketByMonth ?? []} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <YAxis tickFormatter={(v) => `R$${(v / 1000).toFixed(1)}k`} tick={{ fontSize: 11 }} />
+                    <Tooltip formatter={(v: number) => formatCurrency(v)} />
+                    <Line type="monotone" dataKey="value" name="Ticket Médio" stroke="#F59E0B" strokeWidth={2} dot={{ fill: "#F59E0B", r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Chart 9 & 10: Top Boarding Points + Cancellation rate */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Top Pontos de Embarque</CardTitle>
+              <CardDescription>Por número de passageiros</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingCharts ? <Skeleton className="h-[220px] w-full" /> : !charts?.topBoardingPoints.length ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Sem dados de embarque.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={charts.topBoardingPoints} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="count" name="Passageiros" fill="#14B8A6" radius={[4, 4, 0, 0]}>
+                      {charts.topBoardingPoints.map((_, i) => (
+                        <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Cancelamentos por Mês</CardTitle>
+              <CardDescription>Taxa de cancelamento mensal</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingCharts ? <Skeleton className="h-[220px] w-full" /> : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={charts?.reservationsByMonth ?? []} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="cancelled" name="Canceladas" fill="#EF4444" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+              {charts && (
+                <div className="mt-3 flex items-center gap-2 p-2 rounded-lg bg-muted/50">
+                  <span className="text-xs text-muted-foreground">Taxa geral:</span>
+                  <span className={`text-sm font-bold ${charts.cancellationRate > 15 ? "text-red-600" : "text-green-600"}`}>
+                    {charts.cancellationRate.toFixed(1)}%
+                  </span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      {/* ═══ SEÇÃO 3: FUNIL DE CONVERSÃO ═══ */}
+      <section>
+        <SectionTitle icon={Target} title="Funil de Conversão" description="Jornada do lead à compra efetiva" />
+
+        <div className="grid gap-4 lg:grid-cols-7">
+          {/* Funnel visual */}
+          <Card className="lg:col-span-3">
+            <CardHeader>
+              <CardTitle className="text-base">Visão Geral</CardTitle>
+              <CardDescription>Conversão de leads em pagantes</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingFunnel ? <Skeleton className="h-[240px] w-full" /> : funnel ? (
+                <div className="space-y-3">
+                  {[
+                    { label: "Total Leads", value: funnel.totalLeads, color: "#3B82F6", pct: 100 },
+                    { label: "Com Reserva", value: funnel.withReservation, color: "#8B5CF6", pct: funnel.totalLeads > 0 ? (funnel.withReservation / funnel.totalLeads) * 100 : 0 },
+                    { label: "Confirmados", value: funnel.withConfirmed, color: "#10B981", pct: funnel.totalLeads > 0 ? (funnel.withConfirmed / funnel.totalLeads) * 100 : 0 },
+                    { label: "Pagantes", value: funnel.withPayment, color: "#F59E0B", pct: funnel.totalLeads > 0 ? (funnel.withPayment / funnel.totalLeads) * 100 : 0 },
+                  ].map((step, i) => (
+                    <div key={step.label}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: step.color }} />
+                          <span className="text-sm font-medium">{step.label}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold">{step.value}</span>
+                          <Badge variant="outline" className="text-xs">{step.pct.toFixed(1)}%</Badge>
+                        </div>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-3">
+                        <div
+                          className="h-3 rounded-full transition-all"
+                          style={{ width: `${step.pct}%`, backgroundColor: step.color }}
+                        />
+                      </div>
+                      {i < 3 && (
+                        <div className="flex justify-center my-1">
+                          <ChevronRight className="w-4 h-4 text-muted-foreground rotate-90" />
+                        </div>
+                      )}
                     </div>
                   ))}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Pipeline — Visão Rápida</CardTitle>
-            <Link href="/pipeline"><Button variant="ghost" size="sm">Ver completo <ArrowUpRight className="w-3 h-3 ml-1" /></Button></Link>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {(loadingStages || loadingDeals) ? <Skeleton className="h-24 w-full" /> : (
-            <div className="grid grid-cols-3 gap-4">
-              {miniPipelineStages.map(s => (
-                <div key={s.id} className="rounded-lg border bg-muted/30 p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
-                    <span className="text-sm font-medium">{s.name}</span>
-                    <Badge variant="secondary" className="text-xs ml-auto">{s.stageDeals.length}</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground">{formatCurrency(s.stageDeals.reduce((a, d) => a + d.value, 0))}</p>
-                  <div className="mt-2 space-y-1">
-                    {s.stageDeals.slice(0, 2).map(d => (
-                      <div key={d.id} className="text-xs truncate text-muted-foreground bg-card rounded px-2 py-1 border">{d.title}</div>
-                    ))}
-                    {s.stageDeals.length > 2 && <p className="text-xs text-muted-foreground pl-1">+{s.stageDeals.length - 2} mais</p>}
+                  <div className="mt-4 p-3 rounded-lg bg-muted/50">
+                    <p className="text-xs text-muted-foreground">Taxa de conversão geral</p>
+                    <p className="text-2xl font-bold text-primary">
+                      {funnel.totalLeads > 0 ? ((funnel.withPayment / funnel.totalLeads) * 100).toFixed(1) : 0}%
+                    </p>
+                    <p className="text-xs text-muted-foreground">leads → pagantes</p>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-8">Sem dados de funil.</p>
+              )}
+            </CardContent>
+          </Card>
 
-      <div className="grid gap-4 lg:grid-cols-7">
-        <Card className="lg:col-span-4">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Próximas Viagens</CardTitle>
-              <Link href="/trips"><Button variant="ghost" size="sm">Ver todas</Button></Link>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loadingTrips ? (
-              <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
-            ) : !upcomingTrips?.length ? (
-              <p className="text-sm text-muted-foreground text-center py-8">Nenhuma viagem próxima.</p>
-            ) : (
-              <div className="space-y-3">
-                {upcomingTrips.slice(0, 5).map(trip => {
-                  const days = differenceInDays(parseISO(trip.departureDate), new Date());
-                  const occupancy = Math.round(((trip.totalCapacity - trip.availableSeats) / trip.totalCapacity) * 100);
-                  return (
-                    <div key={trip.id} className="flex items-center justify-between p-2 rounded-lg border hover:bg-muted/50">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">{trip.name}</p>
-                        <p className="text-xs text-muted-foreground">{format(parseISO(trip.departureDate), "dd/MM/yyyy", { locale: ptBR })}</p>
-                      </div>
-                      <div className="flex items-center gap-2 ml-2">
-                        <Badge variant={days <= 7 ? "destructive" : days <= 30 ? "default" : "secondary"} className="text-xs">
-                          {days <= 0 ? "Hoje" : `${days}d`}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">{occupancy}%</span>
-                      </div>
-                    </div>
-                  );
-                })}
+          {/* By origin */}
+          <Card className="lg:col-span-4">
+            <CardHeader>
+              <CardTitle className="text-base">Conversão por Canal de Origem</CardTitle>
+              <CardDescription>Comparativo por fonte de captação</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingFunnel ? <Skeleton className="h-[300px] w-full" /> : !funnel?.byOrigin.length ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Sem dados de origem.</p>
+              ) : (
+                <div className="overflow-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2 text-muted-foreground font-medium text-xs">Canal</th>
+                        <th className="text-right py-2 text-muted-foreground font-medium text-xs">Leads</th>
+                        <th className="text-right py-2 text-muted-foreground font-medium text-xs">C/ Reserva</th>
+                        <th className="text-right py-2 text-muted-foreground font-medium text-xs">Confirmados</th>
+                        <th className="text-right py-2 text-muted-foreground font-medium text-xs">Pagantes</th>
+                        <th className="text-right py-2 text-muted-foreground font-medium text-xs">Conversão</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {funnel.byOrigin.map((row) => {
+                        const conv = row.totalLeads > 0 ? ((row.withPayment / row.totalLeads) * 100).toFixed(1) : "0.0";
+                        const convNum = parseFloat(conv);
+                        return (
+                          <tr key={row.origin} className="border-b last:border-0 hover:bg-muted/30">
+                            <td className="py-2.5 font-medium">{row.origin}</td>
+                            <td className="py-2.5 text-right">{row.totalLeads}</td>
+                            <td className="py-2.5 text-right text-blue-600">{row.withReservation}</td>
+                            <td className="py-2.5 text-right text-purple-600">{row.withConfirmed}</td>
+                            <td className="py-2.5 text-right text-green-600 font-semibold">{row.withPayment}</td>
+                            <td className="py-2.5 text-right">
+                              <Badge variant={convNum >= 50 ? "default" : convNum >= 25 ? "secondary" : "outline"} className="text-xs">
+                                {conv}%
+                              </Badge>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      {/* ═══ SEÇÃO 4: DIAGNÓSTICO EMPRESARIAL ═══ */}
+      <section>
+        <SectionTitle icon={Lightbulb} title="Diagnóstico do Negócio" description="Análise automatizada com recomendações estratégicas" />
+
+        <div className="grid gap-3 md:grid-cols-2">
+          {(loadingSummary || loadingCharts) ? (
+            Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 w-full" />)
+          ) : diagnostics.map((tip, i) => (
+            <div
+              key={i}
+              className={`flex gap-4 p-4 rounded-xl border ${
+                tip.type === "warning" ? "border-yellow-200 bg-yellow-50/50 dark:bg-yellow-950/20" :
+                tip.type === "success" ? "border-green-200 bg-green-50/50 dark:bg-green-950/20" :
+                "border-blue-200 bg-blue-50/50 dark:bg-blue-950/20"
+              }`}
+            >
+              <div className={`p-2 rounded-lg h-fit ${
+                tip.type === "warning" ? "bg-yellow-100 dark:bg-yellow-900/50" :
+                tip.type === "success" ? "bg-green-100 dark:bg-green-900/50" :
+                "bg-blue-100 dark:bg-blue-900/50"
+              }`}>
+                {tip.type === "warning" ? <AlertTriangle className="w-5 h-5 text-yellow-600" /> :
+                 tip.type === "success" ? <TrendingUp className="w-5 h-5 text-green-600" /> :
+                 <Lightbulb className="w-5 h-5 text-blue-600" />}
               </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-3">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Clientes Recentes</CardTitle>
-              <Link href="/clients"><Button variant="ghost" size="sm">Ver todos</Button></Link>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loadingClients ? (
-              <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
-            ) : (
-              <div className="space-y-2">
-                {recentClients?.data.slice(0, 10).map(client => (
-                  <div key={client.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
-                        {client.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{client.name}</p>
-                        <p className="text-xs text-muted-foreground">{client.addressCity ?? client.email}</p>
-                      </div>
-                    </div>
-                    <Badge variant="outline" className="text-xs">{client.classification}</Badge>
-                  </div>
-                ))}
+              <div className="flex-1 min-w-0">
+                <p className={`font-semibold text-sm ${
+                  tip.type === "warning" ? "text-yellow-800 dark:text-yellow-200" :
+                  tip.type === "success" ? "text-green-800 dark:text-green-200" :
+                  "text-blue-800 dark:text-blue-200"
+                }`}>{tip.title}</p>
+                <p className={`text-xs mt-0.5 leading-relaxed ${
+                  tip.type === "warning" ? "text-yellow-700 dark:text-yellow-300" :
+                  tip.type === "success" ? "text-green-700 dark:text-green-300" :
+                  "text-blue-700 dark:text-blue-300"
+                }`}>{tip.desc}</p>
               </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Pagamentos Pendentes</CardTitle>
-            <Link href="/financial"><Button variant="ghost" size="sm">Ver todos</Button></Link>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loadingPayments ? (
-            <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
-          ) : !pendingPayments?.data.length ? (
-            <p className="text-sm text-muted-foreground text-center py-6">Sem pagamentos pendentes.</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {pendingPayments.data.slice(0, 10).map(p => {
-                const overdue = new Date(p.dueDate) < new Date();
-                return (
-                  <div key={p.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 border">
-                    <div className="flex items-center gap-2">
-                      {overdue ? <AlertTriangle className="w-4 h-4 text-destructive shrink-0" /> : <Clock className="w-4 h-4 text-muted-foreground shrink-0" />}
-                      <div>
-                        <p className="text-sm font-medium">{p.description ?? p.category}</p>
-                        <p className={`text-xs ${overdue ? "text-destructive" : "text-muted-foreground"}`}>Vence {format(parseISO(p.dueDate), "dd/MM/yyyy", { locale: ptBR })}</p>
-                      </div>
-                    </div>
-                    <span className="font-semibold text-sm">{formatCurrency(p.amount)}</span>
-                  </div>
-                );
-              })}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* ═══ SEÇÃO EXTRA: Visão Rápida ═══ */}
+      <section>
+        <SectionTitle icon={CalendarCheck} title="Visão Rápida" description="Próximas viagens e pipeline" />
+
+        <div className="grid gap-4 lg:grid-cols-7">
+          <Card className="lg:col-span-4">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Próximas Viagens</CardTitle>
+                <Link href="/trips"><Button variant="ghost" size="sm">Ver todas</Button></Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingTrips ? (
+                <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
+              ) : !upcomingTrips?.length ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Nenhuma viagem próxima.</p>
+              ) : (
+                <div className="space-y-3">
+                  {upcomingTrips.slice(0, 5).map(trip => {
+                    const days = differenceInDays(parseISO(trip.departureDate), new Date());
+                    const occupancy = Math.round(((trip.totalCapacity - trip.availableSeats) / trip.totalCapacity) * 100);
+                    return (
+                      <div key={trip.id} className="flex items-center justify-between p-2 rounded-lg border hover:bg-muted/50">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">{trip.name}</p>
+                          <p className="text-xs text-muted-foreground">{format(parseISO(trip.departureDate), "dd/MM/yyyy", { locale: ptBR })}</p>
+                        </div>
+                        <div className="flex items-center gap-2 ml-2">
+                          <span className="text-xs text-muted-foreground">{occupancy}% ocup.</span>
+                          <Badge variant={days <= 7 ? "destructive" : days <= 30 ? "default" : "secondary"} className="text-xs">
+                            {days <= 0 ? "Hoje" : `${days}d`}
+                          </Badge>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="lg:col-span-3">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Pipeline — Visão Rápida</CardTitle>
+                <Link href="/pipeline"><Button variant="ghost" size="sm">Ver completo <ArrowUpRight className="w-3 h-3 ml-1" /></Button></Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {(loadingStages || loadingDeals) ? <Skeleton className="h-24 w-full" /> : (
+                <div className="space-y-3">
+                  {(stages ?? []).slice(0, 4).map(s => {
+                    const stageDeals = (deals ?? []).filter(d => d.stageId === s.id);
+                    return (
+                      <div key={s.id} className="flex items-center gap-3">
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                        <div className="flex-1">
+                          <div className="flex justify-between text-xs mb-0.5">
+                            <span className="font-medium">{s.name}</span>
+                            <span className="font-bold">{stageDeals.length} neg.</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{formatCurrency(stageDeals.reduce((a, d) => a + d.value, 0))}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {!(stages?.length) && <p className="text-sm text-muted-foreground text-center py-4">Sem etapas de pipeline configuradas.</p>}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </section>
     </div>
   );
 }
@@ -460,38 +882,47 @@ function SellerDashboard() {
       name: s.name,
       value: (deals ?? []).filter(d => d.stageId === s.id).length,
       fill: s.color,
-    })).filter(s => s.value > 0);
+    }));
   }, [stages, deals]);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Meu Painel</h1>
-        <p className="text-muted-foreground text-sm">Seus resultados de vendas.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Meu Painel de Vendas</h1>
+          <p className="text-muted-foreground text-sm">Bem-vindo, {me?.name ?? "Vendedor"}!</p>
+        </div>
+        <div className="flex gap-2">
+          <Link href="/clients"><Button variant="outline" size="sm"><Plus className="w-4 h-4 mr-1" /> Nova Lead</Button></Link>
+          <Link href="/pipeline"><Button size="sm"><Plus className="w-4 h-4 mr-1" /> Novo Negócio</Button></Link>
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <KpiCard title="Meus Clientes" value={summary?.totalClients ?? 0} sub="Total na carteira" icon={Users} loading={isLoading} />
-        <KpiCard title="Vendas do Mês" value={formatCurrency(monthRevenue)} sub={`Meta: ${formatCurrency(monthGoal)}`} icon={DollarSign} loading={isLoading} color="text-green-600" />
-        <KpiCard title="Reservas do Mês" value={summary?.confirmedReservations ?? 0} sub="Confirmadas este mês" icon={CalendarCheck} loading={isLoading} color="text-blue-600" />
-        <KpiCard title="Comissões Pendentes" value={formatCurrency(pendingPayments?.data.reduce((a, p) => a + p.amount, 0) ?? 0)} sub={`${pendingPayments?.data.length ?? 0} em aberto`} icon={Briefcase} loading={isLoading} color="text-purple-600" />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard title="Minha Receita Total" value={formatCurrency(summary?.totalRevenue ?? 0)} sub={`${formatCurrency(monthRevenue)} este mês`} icon={DollarSign} loading={isLoading} color="text-green-600" />
+        <KpiCard title="Meus Clientes" value={summary?.totalClients ?? 0} sub={`${summary?.newClientsThisMonth ?? 0} novos este mês`} icon={Users} loading={isLoading} />
+        <KpiCard title="Minhas Reservas" value={summary?.confirmedReservations ?? 0} sub="Confirmadas" icon={CalendarCheck} loading={isLoading} color="text-blue-600" />
+        <KpiCard title="Negócios Abertos" value={summary?.openDeals ?? 0} sub={`Pipeline: ${formatCurrency(summary?.dealsPipelineValue ?? 0)}`} icon={Briefcase} loading={isLoading} color="text-purple-600" />
       </div>
 
       <Card>
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Meta vs Realizado</CardTitle>
-            <span className="text-sm font-semibold text-primary">{goalPercent}%</span>
+            <div>
+              <CardTitle className="text-base">Meta Mensal</CardTitle>
+              <CardDescription>Meta: {formatCurrency(monthGoal)}</CardDescription>
+            </div>
+            <span className="text-2xl font-bold">{goalPercent}%</span>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="w-full bg-muted rounded-full h-3 mb-1">
-            <div className="h-3 rounded-full bg-primary transition-all" style={{ width: `${goalPercent}%` }} />
+          <div className="w-full bg-muted rounded-full h-3">
+            <div
+              className="h-3 rounded-full bg-primary transition-all"
+              style={{ width: `${goalPercent}%` }}
+            />
           </div>
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>Realizado: <span className="font-semibold text-foreground">{formatCurrency(monthRevenue)}</span></span>
-            <span>Meta: <span className="font-semibold text-foreground">{formatCurrency(monthGoal)}</span></span>
-          </div>
+          <p className="text-xs text-muted-foreground mt-2">{formatCurrency(monthRevenue)} de {formatCurrency(monthGoal)}</p>
         </CardContent>
       </Card>
 

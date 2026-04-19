@@ -509,10 +509,17 @@ export const GetDashboardSummaryResponse = zod.object({
   pendingPayments: zod.number(),
   totalReservations: zod.number(),
   confirmedReservations: zod.number(),
+  cancelledReservations: zod.number(),
   occupancyRate: zod.number(),
   averageNps: zod.number().nullish(),
   openDeals: zod.number(),
   dealsPipelineValue: zod.number(),
+  receivedToday: zod.number(),
+  toReceiveNext3Days: zod.number(),
+  reservationsToday: zod.number(),
+  avgTicket: zod.number(),
+  activeClientsCount: zod.number(),
+  totalExpenses: zod.number(),
 });
 
 /**
@@ -567,6 +574,76 @@ export const GetDashboardRecentActivityResponseItem = zod.object({
 export const GetDashboardRecentActivityResponse = zod.array(
   GetDashboardRecentActivityResponseItem,
 );
+
+/**
+ * @summary Get dashboard chart data (top destinations, monthly series, funnel metrics)
+ */
+export const GetDashboardChartsResponse = zod.object({
+  topDestinations: zod.array(
+    zod.object({
+      name: zod.string(),
+      count: zod.number(),
+    }),
+  ),
+  tripsByMonth: zod.array(
+    zod.object({
+      label: zod.string(),
+      count: zod.number(),
+    }),
+  ),
+  reservationsByMonth: zod.array(
+    zod.object({
+      label: zod.string(),
+      count: zod.number(),
+      cancelled: zod.number(),
+    }),
+  ),
+  reservationsByStatus: zod.array(
+    zod.object({
+      status: zod.string(),
+      count: zod.number(),
+    }),
+  ),
+  cancellationRate: zod.number(),
+  avgReservationsPerTrip: zod.number(),
+  passengersByMonth: zod.array(
+    zod.object({
+      label: zod.string(),
+      count: zod.number(),
+    }),
+  ),
+  topBoardingPoints: zod.array(
+    zod.object({
+      name: zod.string(),
+      count: zod.number(),
+    }),
+  ),
+  avgTicketByMonth: zod.array(
+    zod.object({
+      label: zod.string(),
+      value: zod.number(),
+    }),
+  ),
+});
+
+/**
+ * @summary Get conversion funnel data
+ */
+export const GetDashboardFunnelResponse = zod.object({
+  totalLeads: zod.number(),
+  withReservation: zod.number(),
+  withConfirmed: zod.number(),
+  withPayment: zod.number(),
+  byOrigin: zod.array(
+    zod.object({
+      origin: zod.string(),
+      totalLeads: zod.number(),
+      withReservation: zod.number(),
+      withConfirmed: zod.number(),
+      withPayment: zod.number(),
+    }),
+  ),
+});
 
 /**
  * @summary List clients

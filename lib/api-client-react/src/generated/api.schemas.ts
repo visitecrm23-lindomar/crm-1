@@ -23,11 +23,82 @@ export interface DashboardSummary {
   pendingPayments: number;
   totalReservations: number;
   confirmedReservations: number;
+  cancelledReservations: number;
   occupancyRate: number;
   /** @nullable */
   averageNps?: number | null;
   openDeals: number;
   dealsPipelineValue: number;
+  receivedToday: number;
+  toReceiveNext3Days: number;
+  reservationsToday: number;
+  avgTicket: number;
+  activeClientsCount: number;
+  totalExpenses: number;
+}
+
+export type DashboardChartsTopDestinationsItem = {
+  name: string;
+  count: number;
+};
+
+export type DashboardChartsTripsByMonthItem = {
+  label: string;
+  count: number;
+};
+
+export type DashboardChartsReservationsByMonthItem = {
+  label: string;
+  count: number;
+  cancelled: number;
+};
+
+export type DashboardChartsReservationsByStatusItem = {
+  status: string;
+  count: number;
+};
+
+export type DashboardChartsPassengersByMonthItem = {
+  label: string;
+  count: number;
+};
+
+export type DashboardChartsTopBoardingPointsItem = {
+  name: string;
+  count: number;
+};
+
+export type DashboardChartsAvgTicketByMonthItem = {
+  label: string;
+  value: number;
+};
+
+export interface DashboardCharts {
+  topDestinations: DashboardChartsTopDestinationsItem[];
+  tripsByMonth: DashboardChartsTripsByMonthItem[];
+  reservationsByMonth: DashboardChartsReservationsByMonthItem[];
+  reservationsByStatus: DashboardChartsReservationsByStatusItem[];
+  cancellationRate: number;
+  avgReservationsPerTrip: number;
+  passengersByMonth: DashboardChartsPassengersByMonthItem[];
+  topBoardingPoints: DashboardChartsTopBoardingPointsItem[];
+  avgTicketByMonth: DashboardChartsAvgTicketByMonthItem[];
+}
+
+export interface DashboardFunnelOriginItem {
+  origin: string;
+  totalLeads: number;
+  withReservation: number;
+  withConfirmed: number;
+  withPayment: number;
+}
+
+export interface DashboardFunnel {
+  totalLeads: number;
+  withReservation: number;
+  withConfirmed: number;
+  withPayment: number;
+  byOrigin: DashboardFunnelOriginItem[];
 }
 
 export interface ChartDataPoint {
