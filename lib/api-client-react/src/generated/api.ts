@@ -106,6 +106,7 @@ import type {
   GenerateClientReferralCode200,
   GetBirthdayHistoryParams,
   GetBirthdayUpcomingParams,
+  GetCalendarCallbackParams,
   GetDashboardChartsParams,
   GetDashboardRevenueChartParams,
   GetPublicReferralInfo200,
@@ -18544,3 +18545,105 @@ export const useSyncCalendar = <
 > => {
   return useMutation(getSyncCalendarMutationOptions(options));
 };
+
+/**
+ * Receives the authorization code from Google after the user grants access. Verifies the HMAC-signed `state` parameter, exchanges the code for tokens, persists them in the users table, triggers an initial syncAll, and redirects back to the Configurações page with a `?gcal=connected|denied|error` query parameter.
+
+ * @summary Google OAuth2 callback (server-side redirect handler)
+ */
+export const getGetCalendarCallbackUrl = (
+  params: GetCalendarCallbackParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/calendar/callback?${stringifiedParams}`
+    : `/api/calendar/callback`;
+};
+
+export const getCalendarCallback = async (
+  params: GetCalendarCallbackParams,
+  options?: RequestInit,
+): Promise<unknown> => {
+  return customFetch<unknown>(getGetCalendarCallbackUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCalendarCallbackQueryKey = (
+  params?: GetCalendarCallbackParams,
+) => {
+  return [`/api/calendar/callback`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetCalendarCallbackQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCalendarCallback>>,
+  TError = ErrorType<void>,
+>(
+  params: GetCalendarCallbackParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCalendarCallback>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetCalendarCallbackQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getCalendarCallback>>
+  > = ({ signal }) =>
+    getCalendarCallback(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCalendarCallback>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCalendarCallbackQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCalendarCallback>>
+>;
+export type GetCalendarCallbackQueryError = ErrorType<void>;
+
+/**
+ * @summary Google OAuth2 callback (server-side redirect handler)
+ */
+
+export function useGetCalendarCallback<
+  TData = Awaited<ReturnType<typeof getCalendarCallback>>,
+  TError = ErrorType<void>,
+>(
+  params: GetCalendarCallbackParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCalendarCallback>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCalendarCallbackQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}

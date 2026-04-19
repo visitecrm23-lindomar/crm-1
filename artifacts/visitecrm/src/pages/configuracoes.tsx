@@ -13,6 +13,7 @@ import {
   getGetCalendarStatusQueryKey,
   useDisconnectCalendar,
   useSyncCalendar,
+  getCalendarConnectUrl,
 } from "@workspace/api-client-react";
 import type {
   UpdateTenantBody,
@@ -666,7 +667,7 @@ function GoogleCalendarCard() {
   const canConnect = me?.role === "agencia" || me?.role === "vendedor" || me?.role === "superadmin";
 
   const { data: status } = useGetCalendarStatus({
-    query: { enabled: canConnect },
+    query: { enabled: canConnect, queryKey: getGetCalendarStatusQueryKey() },
   });
 
   const disconnectMutation = useDisconnectCalendar({
@@ -715,8 +716,7 @@ function GoogleCalendarCard() {
   async function handleConnect() {
     setConnecting(true);
     try {
-      const res = await fetch(`${BASE}/api/calendar/connect`, { credentials: "include" });
-      const data = await res.json();
+      const data = await getCalendarConnectUrl();
       if (data.url) window.location.href = data.url;
       else toast({ title: "Erro ao iniciar autenticação", variant: "destructive" });
     } catch {

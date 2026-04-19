@@ -3427,3 +3427,18 @@ export type MarkBirthdayConvertedBody = {
 export type MarkBirthdayConverted200 = {
   success: boolean;
 };
+
+export type GetCalendarCallbackParams = {
+  /**
+   * Authorization code from Google
+   */
+  code?: string;
+  /**
+   * HMAC-signed state blob (base64url JSON)
+   */
+  state: string;
+  /**
+   * Present when the user denied access
+   */
+  error?: string;
+};

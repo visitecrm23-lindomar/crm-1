@@ -5356,3 +5356,22 @@ export const SyncCalendarResponse = zod.object({
   message: zod.string(),
   synced: zod.number(),
 });
+
+/**
+ * Receives the authorization code from Google after the user grants access. Verifies the HMAC-signed `state` parameter, exchanges the code for tokens, persists them in the users table, triggers an initial syncAll, and redirects back to the Configurações page with a `?gcal=connected|denied|error` query parameter.
+
+ * @summary Google OAuth2 callback (server-side redirect handler)
+ */
+export const GetCalendarCallbackQueryParams = zod.object({
+  code: zod.coerce
+    .string()
+    .optional()
+    .describe("Authorization code from Google"),
+  state: zod.coerce
+    .string()
+    .describe("HMAC-signed state blob (base64url JSON)"),
+  error: zod.coerce
+    .string()
+    .optional()
+    .describe("Present when the user denied access"),
+});

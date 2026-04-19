@@ -4464,6 +4464,37 @@ paths:
         "404":
           description: Resource not found
 
+  /calendar/callback:
+    get:
+      tags: [calendar]
+      summary: Google OAuth2 callback (server-side redirect handler)
+      description: >
+        Receives the authorization code from Google after the user grants
+        access. Verifies the HMAC-signed `state` parameter, exchanges the
+        code for tokens, persists them in the users table, triggers an
+        initial syncAll, and redirects back to the Configurações page with
+        a `?gcal=connected|denied|error` query parameter.
+      parameters:
+        - in: query
+          name: code
+          schema:
+            type: string
+          description: Authorization code from Google
+        - in: query
+          name: state
+          required: true
+          schema:
+            type: string
+          description: HMAC-signed state blob (base64url JSON)
+        - in: query
+          name: error
+          schema:
+            type: string
+          description: Present when the user denied access
+      responses:
+        "302":
+          description: Redirect to frontend with ?gcal=connected|denied|error
+
 components:
   schemas:
     HealthStatus:
