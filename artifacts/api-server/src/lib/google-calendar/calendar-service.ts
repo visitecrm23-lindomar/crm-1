@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
@@ -6,12 +7,41 @@ import { eq } from "drizzle-orm";
 const GOOGLE_CLIENT_ID = process.env["GOOGLE_CLIENT_ID"] ?? "";
 const GOOGLE_CLIENT_SECRET = process.env["GOOGLE_CLIENT_SECRET"] ?? "";
 const GOOGLE_REDIRECT_URI = process.env["GOOGLE_CALENDAR_REDIRECT_URI"] ?? "";
+const STATE_SECRET = process.env["CLERK_SECRET_KEY"] ?? "visitecrm-gcal-state-secret";
 
 export function createOAuth2Client() {
   return new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI);
 }
 
-export function generateAuthUrl(state: string): string {
+function signState(userId: string, nonce: string): string {
+  const payload = `${userId}:${nonce}`;
+  const sig = createHmac("sha256", STATE_SECRET).update(payload).digest("base64url");
+  return Buffer.from(JSON.stringify({ userId, nonce, sig })).toString("base64url");
+}
+
+export function verifyState(state: string): string | null {
+  try {
+    const decoded = JSON.parse(Buffer.from(state, "base64url").toString("utf8")) as {
+      userId: string;
+      nonce: string;
+      sig: string;
+    };
+    const expected = createHmac("sha256", STATE_SECRET)
+      .update(`${decoded.userId}:${decoded.nonce}`)
+      .digest("base64url");
+    const expectedBuf = Buffer.from(expected, "base64url");
+    const actualBuf = Buffer.from(decoded.sig, "base64url");
+    if (expectedBuf.length !== actualBuf.length) return null;
+    if (!timingSafeEqual(expectedBuf, actualBuf)) return null;
+    return decoded.userId;
+  } catch {
+    return null;
+  }
+}
+
+export function generateAuthUrl(userId: string): string {
+  const nonce = randomBytes(16).toString("base64url");
+  const state = signState(userId, nonce);
   const auth = createOAuth2Client();
   return auth.generateAuthUrl({
     access_type: "offline",
@@ -159,6 +189,25 @@ export class GoogleCalendarService {
     } catch (err) {
       console.error("[GoogleCalendarService] deleteEvent error:", err);
       return false;
+    }
+  }
+
+  async listEvents(timeMin: Date, timeMax: Date): Promise<Array<{ id: string; summary: string }>> {
+    try {
+      const resp = await this.calendar.events.list({
+        calendarId: "primary",
+        timeMin: timeMin.toISOString(),
+        timeMax: timeMax.toISOString(),
+        singleEvents: true,
+        orderBy: "startTime",
+        maxResults: 250,
+      });
+      return (resp.data.items ?? [])
+        .filter((e) => e.id && e.summary)
+        .map((e) => ({ id: e.id!, summary: e.summary! }));
+    } catch (err) {
+      console.error("[GoogleCalendarService] listEvents error:", err);
+      return [];
     }
   }
 }

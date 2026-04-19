@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { usersTable, calendarEventsTable } from "@workspace/db";
 import { eq, and, count, max } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
-import { generateAuthUrl, exchangeCodeForTokens, revokeToken } from "../lib/google-calendar/calendar-service";
+import { generateAuthUrl, verifyState, exchangeCodeForTokens, revokeToken } from "../lib/google-calendar/calendar-service";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 
 const router = Router();
@@ -39,11 +39,18 @@ router.get("/calendar/callback", async (req, res): Promise<void> => {
     return;
   }
 
+  // Verify signed state to prevent CSRF/account-linking attacks
+  const userId = verifyState(state);
+  if (!userId) {
+    res.redirect(`${FRONTEND_URL}/configuracoes?gcal=error&tab=integrations`);
+    return;
+  }
+
   try {
     const tokens = await exchangeCodeForTokens(code);
 
     const [user] = await db.select({ id: usersTable.id, tenantId: usersTable.tenantId })
-      .from(usersTable).where(eq(usersTable.id, state)).limit(1);
+      .from(usersTable).where(eq(usersTable.id, userId)).limit(1);
 
     if (!user) {
       res.redirect(`${FRONTEND_URL}/configuracoes?gcal=error&tab=integrations`);
@@ -55,9 +62,14 @@ router.get("/calendar/callback", async (req, res): Promise<void> => {
       googleRefreshToken: tokens.refresh_token ?? null,
       googleTokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
       googleCalendarEnabled: true,
-    }).where(eq(usersTable.id, state));
+    }).where(eq(usersTable.id, userId));
 
     res.redirect(`${FRONTEND_URL}/configuracoes?gcal=connected&tab=integrations`);
+
+    // Fire-and-forget initial sync after successful connection
+    CalendarSyncService.syncAll(user.tenantId).catch((err) => {
+      console.error("[calendar/callback] Initial syncAll error:", err);
+    });
   } catch (err) {
     console.error("[calendar/callback] Error:", err);
     res.redirect(`${FRONTEND_URL}/configuracoes?gcal=error&tab=integrations`);

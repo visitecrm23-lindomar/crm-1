@@ -199,11 +199,56 @@ export class CalendarSyncService {
     }
   }
 
+  static async deleteEventsForTrip(tripId: string): Promise<void> {
+    try {
+      const events = await db.select({
+        id: calendarEventsTable.id,
+        userId: calendarEventsTable.userId,
+        googleEventId: calendarEventsTable.googleEventId,
+      }).from(calendarEventsTable).where(eq(calendarEventsTable.tripId, tripId));
+
+      for (const ev of events) {
+        if (ev.userId) {
+          const svc = await getCalendarService(ev.userId);
+          if (svc) await svc.deleteEvent(ev.googleEventId);
+        }
+        await db.delete(calendarEventsTable).where(eq(calendarEventsTable.id, ev.id));
+      }
+    } catch (err) {
+      console.error("[CalendarSyncService] deleteEventsForTrip error:", err);
+    }
+  }
+
+  static async deleteEventsForPayment(paymentId: string): Promise<void> {
+    try {
+      const events = await db.select({
+        id: calendarEventsTable.id,
+        userId: calendarEventsTable.userId,
+        googleEventId: calendarEventsTable.googleEventId,
+      }).from(calendarEventsTable).where(eq(calendarEventsTable.paymentId, paymentId));
+
+      for (const ev of events) {
+        if (ev.userId) {
+          const svc = await getCalendarService(ev.userId);
+          if (svc) await svc.deleteEvent(ev.googleEventId);
+        }
+        await db.delete(calendarEventsTable).where(eq(calendarEventsTable.id, ev.id));
+      }
+    } catch (err) {
+      console.error("[CalendarSyncService] deleteEventsForPayment error:", err);
+    }
+  }
+
   static async syncPayment(paymentId: string): Promise<void> {
     try {
       const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, paymentId)).limit(1);
       if (!payment || !payment.dueDate) return;
-      if (payment.status === "paid") return;
+
+      // If paid or cancelled, remove calendar reminders — they're no longer needed
+      if (payment.status === "paid" || payment.status === "cancelled") {
+        await CalendarSyncService.deleteEventsForPayment(paymentId);
+        return;
+      }
 
       let clientName = "Cliente";
       let clientEmail: string | null = null;

@@ -460,6 +460,7 @@ router.delete("/trips/:id", async (req, res): Promise<void> => {
       await deleteOrphanedFile(existing.coverImage, null, req.log);
     }
     res.json({ success: true });
+    CalendarSyncService.deleteEventsForTrip(req.params.id).catch(() => {});
   } catch (err) {
     req.log.error({ err }, "Error deleting trip");
     res.status(500).json({ error: "Internal server error" });
