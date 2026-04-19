@@ -7,6 +7,7 @@ import { requireAuth, getTenantUser } from "../lib/tenant";
 import { CreatePaymentBody, UpdatePaymentBody, CreateExpenseBody, UpdateExpenseBody } from "@workspace/api-zod";
 import { writeClientActivity } from "../lib/activities";
 import { loyaltyAwardPoints } from "../lib/loyalty-helpers";
+import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 
 const router = Router();
 
@@ -503,6 +504,7 @@ router.post("/payments", async (req, res): Promise<void> => {
       await syncReservationCommission(parsed.data.reservationId, me.tenantId);
     }
     res.status(201).json(formatPayment(payment));
+    CalendarSyncService.syncPayment(id).catch(() => {});
     const effectiveClientId = parsed.data.clientId ?? reservationClientId;
     if (effectiveClientId && parsed.data.reservationId && explicitStatus === "paid") {
       const amountFormatted = Number(parsed.data.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -588,6 +590,7 @@ router.patch("/payments/:id", async (req, res): Promise<void> => {
       });
     }
     res.json(formatPayment(payment));
+    CalendarSyncService.syncPayment(req.params.id).catch(() => {});
   } catch (err) {
     req.log.error({ err }, "Error updating payment");
     res.status(500).json({ error: "Internal server error" });

@@ -8,6 +8,7 @@ import { requireAuth, getTenantUser } from "../lib/tenant";
 import { deleteOrphanedFile } from "../lib/uploadthing";
 import { deriveAgeCategory, getAgeYears } from "../lib/passenger";
 import { CreateTripBody, UpdateTripBody } from "@workspace/api-zod";
+import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 
 type SeatMapEntry = { row: number; col: number; status: string; type?: string };
 
@@ -274,6 +275,7 @@ router.post("/trips", async (req, res): Promise<void> => {
       .limit(1);
     if (!trip) { res.status(500).json({ error: "Failed to create trip" }); return; }
     res.status(201).json(formatTrip(trip));
+    CalendarSyncService.syncTrip(id).catch(() => {});
   } catch (err) {
     req.log.error({ err }, "Error creating trip");
     res.status(500).json({ error: "Internal server error" });
@@ -436,6 +438,7 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
       await deleteOrphanedFile(oldCoverImage, parsed.data.coverImage, req.log);
     }
     res.json(formatTrip(trip));
+    CalendarSyncService.syncTrip(req.params.id).catch(() => {});
   } catch (err) {
     req.log.error({ err }, "Error updating trip");
     res.status(500).json({ error: "Internal server error" });

@@ -52,6 +52,10 @@ import {
   Trash2,
   Target,
   Lock,
+  CalendarDays,
+  RefreshCw,
+  Link2,
+  Unlink,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -571,6 +575,7 @@ function IntegrationsTab() {
 
   return (
     <div className="space-y-4">
+      <GoogleCalendarCard />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {INTEGRATIONS.map((integration) => {
           const configured = isConfigured(integration.key);
@@ -644,6 +649,195 @@ function IntegrationsTab() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/* ──────────────────── Google Calendar Card ──────────────────── */
+function GoogleCalendarCard() {
+  const { toast } = useToast();
+  const { data: me } = useGetMe();
+  const [status, setStatus] = useState<{
+    connected: boolean;
+    tokenValid?: boolean;
+    eventsCount?: number;
+    lastSync?: string | null;
+  } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const canConnect = me?.role === "agencia" || me?.role === "vendedor" || me?.role === "superadmin";
+
+  async function fetchStatus() {
+    try {
+      const res = await fetch(`${BASE}/api/calendar/status`, { credentials: "include" });
+      if (res.ok) setStatus(await res.json());
+    } catch {
+      // ignore
+    }
+  }
+
+  useEffect(() => {
+    if (!canConnect) return;
+    fetchStatus();
+    const params = new URLSearchParams(window.location.search);
+    const gcal = params.get("gcal");
+    if (gcal === "connected") {
+      toast({ title: "Google Calendar conectado com sucesso!" });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("gcal");
+      window.history.replaceState({}, "", url.toString());
+    } else if (gcal === "denied") {
+      toast({ title: "Autorização negada pelo Google", variant: "destructive" });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("gcal");
+      window.history.replaceState({}, "", url.toString());
+    } else if (gcal === "error") {
+      toast({ title: "Erro ao conectar com Google Calendar", variant: "destructive" });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("gcal");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [canConnect]);
+
+  async function handleConnect() {
+    setLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/calendar/connect`, { credentials: "include" });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else toast({ title: "Erro ao iniciar autenticação", variant: "destructive" });
+    } catch {
+      toast({ title: "Erro ao conectar", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    setLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/calendar/disconnect`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (res.ok) {
+        toast({ title: "Google Calendar desconectado" });
+        setStatus({ connected: false });
+      } else {
+        toast({ title: "Erro ao desconectar", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Erro ao desconectar", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSync() {
+    setSyncing(true);
+    try {
+      const res = await fetch(`${BASE}/api/calendar/sync`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "all" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast({ title: `${data.synced} evento(s) sincronizado(s) com sucesso` });
+        fetchStatus();
+      } else {
+        toast({ title: data.error ?? "Erro ao sincronizar", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Erro ao sincronizar", variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  if (!canConnect) return null;
+
+  const connected = status?.connected ?? false;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <CalendarDays className="w-4 h-4 text-blue-500" />
+            Google Calendar
+          </CardTitle>
+          {connected ? (
+            <Badge className="text-xs bg-green-50 text-green-700 border border-green-200">
+              <CheckCircle2 className="w-3 h-3 mr-1" />
+              Conectado
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-xs">
+              Não conectado
+            </Badge>
+          )}
+        </div>
+        <CardDescription className="text-xs">
+          Sincronize viagens, pagamentos e aniversários de clientes com sua agenda Google.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {connected && (
+          <div className="text-xs text-muted-foreground space-y-1 bg-muted/40 rounded p-2">
+            <p>
+              <span className="font-medium">Eventos sincronizados:</span> {status?.eventsCount ?? 0}
+            </p>
+            {status?.lastSync && (
+              <p>
+                <span className="font-medium">Última sincronização:</span>{" "}
+                {new Date(status.lastSync).toLocaleString("pt-BR")}
+              </p>
+            )}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {!connected ? (
+            <Button size="sm" onClick={handleConnect} disabled={loading} className="gap-1.5">
+              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
+              Conectar com Google
+            </Button>
+          ) : (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleSync}
+                disabled={syncing}
+                className="gap-1.5"
+              >
+                {syncing ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-3.5 h-3.5" />
+                )}
+                Sincronizar Agora
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleDisconnect}
+                disabled={loading}
+                className="gap-1.5 text-destructive hover:text-destructive"
+              >
+                {loading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Unlink className="w-3.5 h-3.5" />
+                )}
+                Desconectar
+              </Button>
+            </>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
