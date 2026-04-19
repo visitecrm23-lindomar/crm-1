@@ -19,7 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Link } from "wouter";
+import { Link, Redirect } from "wouter";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, PieChart, Pie, Cell, LineChart, Line,
@@ -1489,6 +1489,6 @@ export default function Dashboard() {
   const role = me?.role;
 
   if (role === "cliente") return <ClientDashboard />;
-  if (role === "vendedor") return <SellerDashboard />;
+  if (role === "vendedor") return <Redirect to="/meu-painel" />;
   return <AgencyDashboard />;
 }

@@ -143,7 +143,9 @@ function RoleRedirect() {
       setLocation("/admin");
     } else if (!me.tenantId) {
       setLocation("/onboarding");
-    } else if (me.role === "agencia" || me.role === "vendedor") {
+    } else if (me.role === "vendedor") {
+      setLocation("/meu-painel");
+    } else if (me.role === "agencia") {
       setLocation("/dashboard");
     } else if (me.role === "cliente") {
       if (me.tenant?.slug) {
@@ -298,6 +300,8 @@ function OnboardingRoute() {
     if (me.tenantId) {
       if (me.role === "superadmin") {
         setLocation("/admin");
+      } else if (me.role === "vendedor") {
+        setLocation("/meu-painel");
       } else {
         setLocation("/dashboard");
       }

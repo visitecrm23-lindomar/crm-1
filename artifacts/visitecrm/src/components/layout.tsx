@@ -61,7 +61,8 @@ interface NavItem {
 }
 
 const NAVIGATION: NavItem[] = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Meu Painel", href: "/meu-painel", icon: Gauge, roles: ["vendedor"] },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, hiddenFor: ["vendedor"] },
   { name: "Pipeline", href: "/pipeline", icon: Trello },
   { name: "Clientes", href: "/clients", icon: Users },
   { name: "Viagens", href: "/trips", icon: Map },
@@ -69,7 +70,7 @@ const NAVIGATION: NavItem[] = [
   { name: "Vouchers", href: "/vouchers", icon: QrCode },
   { name: "Financeiro", href: "/financeiro", icon: DollarSign, hiddenFor: ["vendedor"] },
   { name: "Comunicação", href: "/comunicacao", icon: MessageSquare },
-  { name: "Campanhas", href: "/comunicacao/campanhas", icon: Megaphone },
+  { name: "Campanhas", href: "/comunicacao/campanhas", icon: Megaphone, hiddenFor: ["vendedor"] },
   { name: "Automações", href: "/automacoes", icon: Zap, hiddenFor: ["vendedor"] },
   { name: "Marketing", href: "/marketing", icon: Target, hiddenFor: ["vendedor"] },
   { name: "Fidelidade", href: "/fidelidade", icon: Star, hiddenFor: ["vendedor"] },
@@ -98,7 +99,6 @@ const NAVIGATION: NavItem[] = [
       { name: "Avaliações", href: "/loja/avaliacoes", icon: MessageCircle, hiddenFor: ["vendedor"] },
     ],
   },
-  { name: "Meu Painel", href: "/meu-painel", icon: Gauge, roles: ["vendedor"] },
   { name: "Indicações", href: "/indicacoes", icon: Share2, hiddenFor: ["vendedor"] },
   { name: "Downloads", href: "/downloads", icon: Download, hiddenFor: ["vendedor"] },
   { name: "Configurações", href: "/configuracoes", icon: Settings, hiddenFor: ["vendedor"] },
