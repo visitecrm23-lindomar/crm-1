@@ -249,6 +249,33 @@ function AgenciaRoute({ component: Component }: { component: React.ComponentType
   );
 }
 
+function AgenciaOnlyRoute({ component: Component }: { component: React.ComponentType }) {
+  const { data: me, isLoading } = useGetMe();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (isLoading || !me) return;
+    if (!me.tenantId && me.role !== "superadmin") {
+      setLocation("/onboarding");
+    } else if (me.role === "vendedor") {
+      setLocation("/meu-painel");
+    }
+  }, [me, isLoading]);
+
+  return (
+    <>
+      <Show when="signed-in">
+        <Layout>
+          <Component />
+        </Layout>
+      </Show>
+      <Show when="signed-out">
+        <Redirect to="/" />
+      </Show>
+    </>
+  );
+}
+
 function VendedorRoute({ component: Component }: { component: React.ComponentType }) {
   const { data: me, isLoading } = useGetMe();
 
@@ -349,73 +376,73 @@ function Router() {
         component={() => <ProtectedRoute component={Reservations} />}
       />
       <Route path="/financial" component={() => <Redirect to="/financeiro" />} />
-      <Route path="/financeiro" component={() => <ProtectedRoute component={Financial} />} />
+      <Route path="/financeiro" component={() => <AgenciaOnlyRoute component={Financial} />} />
       <Route
         path="/financeiro/commissions"
-        component={() => <ProtectedRoute component={Commissions} />}
+        component={() => <AgenciaOnlyRoute component={Commissions} />}
       />
       <Route
         path="/financeiro/expenses"
-        component={() => <ProtectedRoute component={Expenses} />}
+        component={() => <AgenciaOnlyRoute component={Expenses} />}
       />
       <Route path="/comunicacao" component={() => <ProtectedRoute component={Communication} />} />
       <Route path="/communication" component={() => <Redirect to="/comunicacao" />} />
       <Route
         path="/comunicacao/campanhas"
-        component={() => <ProtectedRoute component={Campaigns} />}
+        component={() => <AgenciaOnlyRoute component={Campaigns} />}
       />
-      <Route path="/automacoes" component={() => <ProtectedRoute component={Automations} />} />
+      <Route path="/automacoes" component={() => <AgenciaOnlyRoute component={Automations} />} />
       <Route path="/automations" component={() => <Redirect to="/automacoes" />} />
-      <Route path="/marketing" component={() => <ProtectedRoute component={Marketing} />} />
-      <Route path="/fidelidade" component={() => <ProtectedRoute component={Loyalty} />} />
-      <Route path="/nps" component={() => <ProtectedRoute component={Nps} />} />
+      <Route path="/marketing" component={() => <AgenciaOnlyRoute component={Marketing} />} />
+      <Route path="/fidelidade" component={() => <AgenciaOnlyRoute component={Loyalty} />} />
+      <Route path="/nps" component={() => <AgenciaOnlyRoute component={Nps} />} />
 
       {/* Registrations hub + sub-pages */}
       <Route path="/registrations" component={() => <Redirect to="/cadastros" />} />
-      <Route path="/cadastros" component={() => <ProtectedRoute component={Registrations} />} />
+      <Route path="/cadastros" component={() => <AgenciaOnlyRoute component={Registrations} />} />
       <Route
         path="/cadastros/fornecedores"
-        component={() => <ProtectedRoute component={Fornecedores} />}
+        component={() => <AgenciaOnlyRoute component={Fornecedores} />}
       />
       <Route
         path="/cadastros/veiculos"
-        component={() => <ProtectedRoute component={Veiculos} />}
+        component={() => <AgenciaOnlyRoute component={Veiculos} />}
       />
       <Route
         path="/cadastros/hospedagens"
-        component={() => <ProtectedRoute component={Hospedagens} />}
+        component={() => <AgenciaOnlyRoute component={Hospedagens} />}
       />
       <Route
         path="/cadastros/destinos"
-        component={() => <ProtectedRoute component={Destinos} />}
+        component={() => <AgenciaOnlyRoute component={Destinos} />}
       />
       <Route
         path="/cadastros/produtos"
-        component={() => <ProtectedRoute component={Produtos} />}
+        component={() => <AgenciaOnlyRoute component={Produtos} />}
       />
       <Route
         path="/cadastros/layouts"
-        component={() => <ProtectedRoute component={Layouts} />}
+        component={() => <AgenciaOnlyRoute component={Layouts} />}
       />
 
       {/* Analytics */}
-      <Route path="/analytics" component={() => <ProtectedRoute component={Analytics} />} />
-      <Route path="/analytics/revenue" component={() => <ProtectedRoute component={Revenue} />} />
+      <Route path="/analytics" component={() => <AgenciaOnlyRoute component={Analytics} />} />
+      <Route path="/analytics/revenue" component={() => <AgenciaOnlyRoute component={Revenue} />} />
       <Route
         path="/analytics/vendedores"
-        component={() => <ProtectedRoute component={Vendedores} />}
+        component={() => <AgenciaOnlyRoute component={Vendedores} />}
       />
 
       {/* New Task 6 pages */}
       <Route path="/vouchers" component={() => <ProtectedRoute component={Vouchers} />} />
-      <Route path="/indicacoes" component={() => <ProtectedRoute component={Indicacoes} />} />
+      <Route path="/indicacoes" component={() => <AgenciaOnlyRoute component={Indicacoes} />} />
       <Route
         path="/configuracoes"
-        component={() => <ProtectedRoute component={Configuracoes} />}
+        component={() => <AgenciaOnlyRoute component={Configuracoes} />}
       />
       <Route
         path="/downloads"
-        component={() => <ProtectedRoute component={Downloads} />}
+        component={() => <AgenciaOnlyRoute component={Downloads} />}
       />
 
       {/* Seller dashboard */}
@@ -439,27 +466,27 @@ function Router() {
       <Route path="/loja" component={() => <Redirect to="/loja/configuracoes" />} />
       <Route
         path="/loja/configuracoes"
-        component={() => <ProtectedRoute component={LojaConfiguracoes} />}
+        component={() => <AgenciaOnlyRoute component={LojaConfiguracoes} />}
       />
       <Route
         path="/loja/produtos"
-        component={() => <ProtectedRoute component={LojaProdutos} />}
+        component={() => <AgenciaOnlyRoute component={LojaProdutos} />}
       />
       <Route
         path="/loja/categorias"
-        component={() => <ProtectedRoute component={LojaCategorias} />}
+        component={() => <AgenciaOnlyRoute component={LojaCategorias} />}
       />
       <Route
         path="/loja/pedidos"
-        component={() => <ProtectedRoute component={LojaPedidos} />}
+        component={() => <AgenciaOnlyRoute component={LojaPedidos} />}
       />
       <Route
         path="/loja/cupons"
-        component={() => <ProtectedRoute component={LojaCupons} />}
+        component={() => <AgenciaOnlyRoute component={LojaCupons} />}
       />
       <Route
         path="/loja/avaliacoes"
-        component={() => <ProtectedRoute component={LojaAvaliacoes} />}
+        component={() => <AgenciaOnlyRoute component={LojaAvaliacoes} />}
       />
 
       {/* Public vitrine — must be after admin routes */}

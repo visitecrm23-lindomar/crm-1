@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Link } from "wouter";
 import {
   useGetMe,
   useListCommissions,
@@ -6,11 +7,17 @@ import {
   useListDeals,
   useListSalesGoals,
   useGetMyCommissionRank,
+  useGetDashboardSummary,
+  useGetDashboardRevenueChart,
+  useListPipelineStages,
+  useListClients,
 } from "@workspace/api-client-react";
 import type { Commission } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -19,7 +26,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { DollarSign, TrendingUp, Award, Target, Gauge, Medal } from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from "recharts";
+import {
+  DollarSign, TrendingUp, Award, Target, Gauge, Medal,
+  CalendarCheck, Briefcase, Users, Plus,
+} from "lucide-react";
 
 function fmtCurrency(v: number | string | null | undefined) {
   if (v == null) return "R$ 0,00";
@@ -34,15 +47,22 @@ function currentMonth() {
 
 export default function MeuPainel() {
   const { data: me } = useGetMe();
+
   const { data: allCommissions = [] } = useListCommissions();
   const { data: reservationsData } = useListReservations({ limit: 200 } as Parameters<typeof useListReservations>[0]);
   const reservations = reservationsData?.data ?? [];
   const { data: allDeals = [] } = useListDeals();
-  const { data: goals = [] } = useListSalesGoals({
-    userId: me?.id,
-    month: currentMonth(),
-  });
+  const { data: goals = [] } = useListSalesGoals({ userId: me?.id, month: currentMonth() });
   const { data: rankData } = useGetMyCommissionRank();
+  const { data: summary, isLoading: loadingSummary } = useGetDashboardSummary();
+  const { data: rawChartData, isLoading: loadingChart } = useGetDashboardRevenueChart({ period: "12m" });
+  const chartData = rawChartData?.slice(-6);
+  const { data: stages } = useListPipelineStages();
+  const { data: openDeals } = useListDeals({ status: "open", ownerId: me?.id ?? undefined });
+  const { data: myLeads, isLoading: loadingLeads } = useListClients({
+    limit: 6, page: 1, classification: "lead", sortBy: "createdAt", sortOrder: "desc",
+    sellerId: me?.id ?? undefined,
+  });
 
   const myCommissions: Commission[] = useMemo(
     () => (me ? allCommissions.filter((c) => c.userId === me.id) : []),
@@ -101,24 +121,48 @@ export default function MeuPainel() {
   const monthlyGoal = activeGoal?.goalAmount ?? me?.monthlyGoal ?? 0;
   const goalPct = monthlyGoal > 0 ? Math.min(100, (monthlyRevenue / monthlyGoal) * 100) : 0;
 
+  const funnelData = useMemo(() => {
+    if (!stages || !openDeals) return [];
+    return stages.map((s) => ({
+      name: s.name,
+      value: openDeals.filter((d) => d.stageId === s.id).length,
+      fill: s.color,
+    }));
+  }, [stages, openDeals]);
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Gauge className="w-6 h-6 text-primary" />
-          Meu Painel
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Seu desempenho de vendas e comissões — {me?.name}
-        </p>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Gauge className="w-6 h-6 text-primary" />
+            Meu Painel
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Bem-vindo, {me?.name ?? "Vendedor"}! — desempenho e comissões
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Link href="/clients">
+            <Button variant="outline" size="sm">
+              <Plus className="w-4 h-4 mr-1" /> Nova Lead
+            </Button>
+          </Link>
+          <Link href="/pipeline">
+            <Button size="sm">
+              <Plus className="w-4 h-4 mr-1" /> Novo Negócio
+            </Button>
+          </Link>
+        </div>
       </div>
 
-      {/* KPI cards */}
+      {/* KPI cards — 5 columns */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <DollarSign className="w-4 h-4" />
+              <DollarSign className="w-4 h-4 text-green-600" />
               Receita Gerada
             </CardTitle>
           </CardHeader>
@@ -127,49 +171,68 @@ export default function MeuPainel() {
             <p className="text-xs text-muted-foreground">{myCommissions.length} venda(s)</p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Award className="w-4 h-4" />
+              <Award className="w-4 h-4 text-emerald-600" />
               Comissão Total
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-green-600">{fmtCurrency(totalCommission)}</p>
             <p className="text-xs text-muted-foreground">
-              {fmtCurrency(paidCommission)} pago ·{" "}
-              {fmtCurrency(myCommissions.filter(c => c.status === "approved").reduce((s, c) => s + parseFloat(c.commissionAmount ?? "0"), 0))} aprovado
+              {fmtCurrency(paidCommission)} pago
             </p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" />
-              Conversão
+              <Users className="w-4 h-4 text-blue-600" />
+              Clientes
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{conversionRate}%</p>
-            <p className="text-xs text-muted-foreground">{wonDeals}/{closedDeals} fechados</p>
+            {loadingSummary ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <>
+                <p className="text-2xl font-bold">{summary?.totalClients ?? 0}</p>
+                <p className="text-xs text-muted-foreground">
+                  {summary?.newClientsThisMonth ?? 0} novos este mês
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Target className="w-4 h-4" />
-              Comissão Pendente
+              <Briefcase className="w-4 h-4 text-purple-600" />
+              Negócios Abertos
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-amber-600">{fmtCurrency(pendingCommission)}</p>
-            <p className="text-xs text-muted-foreground">a receber</p>
+            {loadingSummary ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <>
+                <p className="text-2xl font-bold text-purple-600">{summary?.openDeals ?? 0}</p>
+                <p className="text-xs text-muted-foreground">
+                  {fmtCurrency(summary?.dealsPipelineValue ?? 0)} no pipeline
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Medal className="w-4 h-4" />
+              <Medal className="w-4 h-4 text-yellow-500" />
               Ranking do Mês
             </CardTitle>
           </CardHeader>
@@ -178,7 +241,7 @@ export default function MeuPainel() {
               <>
                 <p className="text-2xl font-bold text-primary">
                   #{rankData.rank}
-                  <span className="text-base text-muted-foreground font-normal"> de {rankData.totalSellers}</span>
+                  <span className="text-base text-muted-foreground font-normal"> / {rankData.totalSellers}</span>
                 </p>
                 <p className="text-xs text-muted-foreground">entre vendedores</p>
               </>
@@ -221,6 +284,14 @@ export default function MeuPainel() {
                   <p className="font-semibold">{fmtCurrency(monthlyGoal)}</p>
                 </div>
               )}
+              <div>
+                <p className="text-xs text-muted-foreground">Conversão</p>
+                <p className="font-semibold">{conversionRate}% ({wonDeals}/{closedDeals})</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Comissão pendente</p>
+                <p className="font-semibold text-amber-600">{fmtCurrency(pendingCommission)}</p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -261,14 +332,164 @@ export default function MeuPainel() {
             </div>
             {monthlyCommissionTotal > 0 && (
               <p className="text-sm text-muted-foreground">
-                Comissão neste mês: <strong className="text-green-600">{fmtCurrency(monthlyCommissionTotal)}</strong>
+                Comissão neste mês:{" "}
+                <strong className="text-green-600">{fmtCurrency(monthlyCommissionTotal)}</strong>
               </p>
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* Recent commissions */}
+      {/* Chart + Funnel */}
+      <div className="grid gap-4 lg:grid-cols-7">
+        <Card className="lg:col-span-4">
+          <CardHeader>
+            <CardTitle>Desempenho de Vendas</CardTitle>
+            <CardDescription>Receita dos últimos 6 meses</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loadingChart ? (
+              <Skeleton className="h-[240px] w-full" />
+            ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={chartData ?? []}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                  <YAxis tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v: number) => fmtCurrency(v)} />
+                  <Bar dataKey="revenue" name="Receita" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-3">
+          <CardHeader>
+            <CardTitle>Meu Funil</CardTitle>
+            <CardDescription>Negócios abertos por etapa</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {funnelData.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">Sem negócios no funil.</p>
+            ) : (
+              <div className="space-y-2">
+                {funnelData.map((stage) => (
+                  <div key={stage.name} className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: stage.fill }} />
+                    <div className="flex-1">
+                      <div className="flex justify-between text-xs mb-0.5">
+                        <span>{stage.name}</span>
+                        <span className="font-semibold">{stage.value}</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-1.5">
+                        <div
+                          className="h-1.5 rounded-full"
+                          style={{
+                            width: `${Math.min(100, (stage.value / Math.max(1, funnelData[0]?.value ?? 1)) * 100)}%`,
+                            backgroundColor: stage.fill,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Leads + Reservas recentes */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Minhas Leads</CardTitle>
+              <Link href="/clients?classification=lead">
+                <Button variant="ghost" size="sm">Ver todas</Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loadingLeads ? (
+              <div className="space-y-2">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-11 w-full" />
+                ))}
+              </div>
+            ) : !myLeads?.data.length ? (
+              <p className="text-sm text-muted-foreground text-center py-6">Nenhuma lead ativa.</p>
+            ) : (
+              <div className="space-y-2">
+                {myLeads.data.map((client) => (
+                  <div
+                    key={client.id}
+                    className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs font-bold shrink-0">
+                        {client.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{client.name}</p>
+                        <p className="text-xs text-muted-foreground">{client.pipelineStage ?? "Lead"}</p>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-xs">Lead</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Minhas Reservas Recentes</CardTitle>
+              <Link href="/reservations">
+                <Button variant="ghost" size="sm">Ver todas</Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {myReservations.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">Nenhuma reserva ainda.</p>
+            ) : (
+              <div className="space-y-2">
+                {myReservations.slice(0, 6).map((r) => {
+                  const comm = myCommissions.find((c) => c.reservationId === r.id);
+                  return (
+                    <div
+                      key={r.id}
+                      className="flex items-center justify-between p-2 rounded-lg border hover:bg-muted/50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">
+                          {r.client.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{r.client.name}</p>
+                          <p className="text-xs text-muted-foreground truncate max-w-[140px]">{r.trip.name}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-green-600">
+                          {comm ? fmtCurrency(comm.commissionAmount) : fmtCurrency(r.totalValue)}
+                        </p>
+                        <Badge variant="secondary" className="text-xs">{r.status}</Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Commissions table */}
       <Card>
         <CardHeader>
           <CardTitle>Minhas Comissões</CardTitle>
@@ -305,7 +526,13 @@ export default function MeuPainel() {
                         variant={c.status === "paid" || c.status === "approved" ? "default" : "secondary"}
                         className={`text-xs ${c.status === "approved" ? "bg-blue-600" : ""}`}
                       >
-                        {c.status === "paid" ? "Pago" : c.status === "approved" ? "Aprovado" : c.status === "pending" ? "Pendente" : c.status}
+                        {c.status === "paid"
+                          ? "Pago"
+                          : c.status === "approved"
+                          ? "Aprovado"
+                          : c.status === "pending"
+                          ? "Pendente"
+                          : c.status}
                       </Badge>
                     </TableCell>
                   </TableRow>
@@ -315,48 +542,6 @@ export default function MeuPainel() {
           </Table>
         </CardContent>
       </Card>
-
-      {/* Recent reservations */}
-      {myReservations.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Minhas Reservas</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Voucher</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Viagem</TableHead>
-                  <TableHead>Valor</TableHead>
-                  <TableHead className="text-green-600">Comissão</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {myReservations.slice(0, 10).map((r) => {
-                  const comm = myCommissions.find((c) => c.reservationId === r.id);
-                  return (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-mono text-xs">{r.voucherCode}</TableCell>
-                    <TableCell>{r.client.name}</TableCell>
-                    <TableCell className="truncate max-w-[180px]">{r.trip.name}</TableCell>
-                    <TableCell>{fmtCurrency(r.totalValue)}</TableCell>
-                    <TableCell className="text-green-600 font-medium">
-                      {comm ? fmtCurrency(comm.commissionAmount) : <span className="text-muted-foreground text-xs">—</span>}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className="text-xs">{r.status}</Badge>
-                    </TableCell>
-                  </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
