@@ -77,15 +77,26 @@ async function upsertCalendarEvent(
   }
 }
 
+/** Trip statuses that should have active calendar events. */
+const ACTIVE_TRIP_STATUSES = ["published"];
+
 export class CalendarSyncService {
   /**
    * syncTrip — syncs a single trip to all eligible connected users.
    * Called from background hooks (trips/reservations mutations) so fan-out is appropriate.
+   * If the trip is not in an active status, removes all existing calendar events for it.
+   * Cleans up stale seller events when a seller no longer has confirmed reservations.
    */
   static async syncTrip(tripId: string): Promise<void> {
     try {
       const [trip] = await db.select().from(tripsTable).where(eq(tripsTable.id, tripId)).limit(1);
       if (!trip) return;
+
+      // Non-active trip → remove all calendar events
+      if (!ACTIVE_TRIP_STATUSES.includes(trip.status)) {
+        await CalendarSyncService.deleteEventsForTrip(tripId);
+        return;
+      }
 
       const reservations = await db.select({
         clientId: reservationsTable.clientId,
@@ -149,8 +160,35 @@ export class CalendarSyncService {
         );
       }
 
-      const sellerIds = [...new Set(reservations.map((r) => r.sellerId).filter(Boolean))] as string[];
-      if (sellerIds.length > 0) {
+      const eligibleSellerIds = [...new Set(reservations.map((r) => r.sellerId).filter(Boolean))] as string[];
+
+      // Delete stale seller events for sellers who no longer have confirmed reservations
+      const existingSellerEvents = await db.select({
+        id: calendarEventsTable.id,
+        userId: calendarEventsTable.userId,
+        googleEventId: calendarEventsTable.googleEventId,
+      }).from(calendarEventsTable)
+        .where(and(
+          eq(calendarEventsTable.tripId, tripId),
+          eq(calendarEventsTable.eventType, "trip"),
+        ));
+
+      for (const ev of existingSellerEvents) {
+        if (!ev.userId) continue;
+        if (!eligibleSellerIds.includes(ev.userId)) {
+          // Check if this is a seller (admins should keep their events)
+          const [userRec] = await db.select({ role: usersTable.role })
+            .from(usersTable).where(eq(usersTable.id, ev.userId)).limit(1);
+          if (userRec?.role === "vendedor") {
+            const svc = await getCalendarService(ev.userId);
+            if (svc) await svc.deleteEvent(ev.googleEventId).catch(() => {});
+            await db.delete(calendarEventsTable).where(eq(calendarEventsTable.id, ev.id));
+          }
+        }
+      }
+
+      // Upsert events for eligible sellers
+      if (eligibleSellerIds.length > 0) {
         const sellers = await db.select({
           id: usersTable.id,
           name: usersTable.name,
@@ -163,7 +201,7 @@ export class CalendarSyncService {
           ));
 
         for (const seller of sellers) {
-          if (!sellerIds.includes(seller.id)) continue;
+          if (!eligibleSellerIds.includes(seller.id)) continue;
           const svc = await getCalendarService(seller.id);
           if (!svc) continue;
 
