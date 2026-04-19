@@ -1050,37 +1050,51 @@ function AgencyDashboard() {
               ) : (
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart
-                    data={funnel.byOrigin.slice(0, 5)}
+                    data={funnel.byOrigin.slice(0, 5).map(r => ({
+                      origin: r.origin,
+                      pagantes: r.withPayment,
+                      confirmados: Math.max(0, r.withConfirmed - r.withPayment),
+                      reservados: Math.max(0, r.withReservation - r.withConfirmed),
+                      naoConvertidos: Math.max(0, r.totalLeads - r.withReservation),
+                      totalLeads: r.totalLeads,
+                      convPct: r.conversionPct ?? 0,
+                      avgTicket: r.avgTicket,
+                    }))}
                     layout="vertical"
                     margin={{ top: 0, right: 8, left: 0, bottom: 0 }}
-                    barSize={6}
-                    barCategoryGap="30%"
+                    barSize={14}
+                    barCategoryGap="25%"
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
                     <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
                     <YAxis dataKey="origin" type="category" tick={{ fontSize: 10 }} width={72} />
                     <Tooltip
-                      content={({ payload, label }) => payload?.length ? (
-                        <div className="bg-background border rounded-lg p-2 text-xs shadow-md">
-                          <p className="font-semibold mb-1">{label}</p>
-                          {payload.map(e => (
-                            <p key={e.name} className="flex justify-between gap-3" style={{ color: e.fill as string }}>
-                              <span>{e.name === "totalLeads" ? "Leads" : e.name === "withReservation" ? "C/ Reserva" : e.name === "withConfirmed" ? "Confirmados" : "Pagantes"}</span>
-                              <span className="font-bold">{String(e.value)}</span>
+                      content={({ payload, label }) => {
+                        if (!payload?.length) return null;
+                        const row = funnel.byOrigin.find(r => r.origin === label);
+                        return (
+                          <div className="bg-background border rounded-lg p-2 text-xs shadow-md">
+                            <p className="font-semibold mb-1">{label}</p>
+                            <p className="flex justify-between gap-3 text-blue-300"><span>Total leads</span><span className="font-bold">{row?.totalLeads ?? 0}</span></p>
+                            <p className="flex justify-between gap-3 text-blue-400"><span>C/ reserva</span><span className="font-bold">{row?.withReservation ?? 0}</span></p>
+                            <p className="flex justify-between gap-3 text-blue-600"><span>Confirmados</span><span className="font-bold">{row?.withConfirmed ?? 0}</span></p>
+                            <p className="flex justify-between gap-3 text-blue-800"><span>Pagantes</span><span className="font-bold">{row?.withPayment ?? 0}</span></p>
+                            <p className="flex justify-between gap-3 mt-1 pt-1 border-t text-muted-foreground">
+                              <span>Conversão</span><span className="font-bold">{(row?.conversionPct ?? 0).toFixed(1)}%</span>
                             </p>
-                          ))}
-                          {payload[0] && (
-                            <p className="mt-1 pt-1 border-t text-muted-foreground">
-                              Ticket médio: {formatCurrency((funnel.byOrigin.find(r => r.origin === label)?.avgTicket ?? 0))}
-                            </p>
-                          )}
-                        </div>
-                      ) : null}
+                            {row && row.avgTicket > 0 && (
+                              <p className="flex justify-between gap-3 text-amber-600">
+                                <span>Ticket médio</span><span className="font-bold">{formatCurrency(row.avgTicket)}</span>
+                              </p>
+                            )}
+                          </div>
+                        );
+                      }}
                     />
-                    <Bar dataKey="totalLeads" name="totalLeads" fill="#BFDBFE" radius={[0, 2, 2, 0]} />
-                    <Bar dataKey="withReservation" name="withReservation" fill="#60A5FA" radius={[0, 2, 2, 0]} />
-                    <Bar dataKey="withConfirmed" name="withConfirmed" fill="#3B82F6" radius={[0, 2, 2, 0]} />
-                    <Bar dataKey="withPayment" name="withPayment" fill="#1D4ED8" radius={[0, 2, 2, 0]} />
+                    <Bar dataKey="naoConvertidos" name="Não convertidos" stackId="f" fill="#DBEAFE" />
+                    <Bar dataKey="reservados" name="C/ reserva" stackId="f" fill="#93C5FD" />
+                    <Bar dataKey="confirmados" name="Confirmados" stackId="f" fill="#3B82F6" />
+                    <Bar dataKey="pagantes" name="Pagantes" stackId="f" fill="#1D4ED8" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}

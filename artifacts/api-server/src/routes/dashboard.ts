@@ -216,8 +216,8 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
       receivedFromActiveTrips: Math.round(receivedFromActiveTrips * 100) / 100,
       pendingFromActiveTrips: Math.round(pendingFromActiveTrips * 100) / 100,
       totalPayable: Math.round(totalPayable * 100) / 100,
-      avgReservationsPerTrip: Number(tripCount?.count ?? 0) > 0
-        ? Math.round((Number(reservationCount?.count ?? 0) / Number(tripCount?.count ?? 1)) * 10) / 10
+      avgReservationsPerTrip: Number(activeTripCount?.count ?? 0) > 0
+        ? Math.round((Number(confirmedReservationCount?.count ?? 0) / Number(activeTripCount?.count ?? 1)) * 10) / 10
         : 0,
       totalFaturamento: Math.round(totalFaturamento * 100) / 100,
     });
