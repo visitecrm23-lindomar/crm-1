@@ -555,7 +555,27 @@ export class CalendarSyncService {
   static async syncBirthday(clientId: string): Promise<void> {
     try {
       const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, clientId)).limit(1);
-      if (!client?.birthDate) return;
+      if (!client) return;
+
+      // birthDate removed → delete all tracked birthday events for this client
+      if (!client.birthDate) {
+        const existingEvents = await db.select({
+          id: calendarEventsTable.id,
+          userId: calendarEventsTable.userId,
+          googleEventId: calendarEventsTable.googleEventId,
+        }).from(calendarEventsTable)
+          .where(and(
+            eq(calendarEventsTable.clientId, clientId),
+            eq(calendarEventsTable.eventType, "birthday"),
+          ));
+        for (const ev of existingEvents) {
+          if (!ev.userId) continue;
+          const svc = await getCalendarService(ev.userId);
+          if (svc) await svc.deleteEvent(ev.googleEventId).catch(() => {});
+          await db.delete(calendarEventsTable).where(eq(calendarEventsTable.id, ev.id));
+        }
+        return;
+      }
 
       const birthDate = new Date(client.birthDate);
       const now = new Date();
@@ -623,7 +643,7 @@ export class CalendarSyncService {
   static async syncBirthdayForUser(clientId: string, actorUserId: string): Promise<void> {
     try {
       const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, clientId)).limit(1);
-      if (!client?.birthDate) return;
+      if (!client) return;
 
       const [actor] = await db.select({ role: usersTable.role })
         .from(usersTable)
@@ -631,10 +651,26 @@ export class CalendarSyncService {
         .limit(1);
       if (!actor) return;
 
-      if (actor.role === "vendedor" && client.createdById !== actorUserId) return;
-
       const svc = await getCalendarService(actorUserId);
       if (!svc) return;
+
+      // birthDate removed → delete user's existing birthday event for this client
+      if (!client.birthDate) {
+        const [existing] = await db.select()
+          .from(calendarEventsTable)
+          .where(and(
+            eq(calendarEventsTable.clientId, clientId),
+            eq(calendarEventsTable.userId, actorUserId),
+            eq(calendarEventsTable.eventType, "birthday"),
+          )).limit(1);
+        if (existing) {
+          await svc.deleteEvent(existing.googleEventId).catch(() => {});
+          await db.delete(calendarEventsTable).where(eq(calendarEventsTable.id, existing.id));
+        }
+        return;
+      }
+
+      if (actor.role === "vendedor" && client.createdById !== actorUserId) return;
 
       const birthDate = new Date(client.birthDate);
       const now = new Date();
