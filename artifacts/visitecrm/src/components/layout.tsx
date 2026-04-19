@@ -60,48 +60,55 @@ interface NavItem {
   children?: NavItem[];
 }
 
-const NAVIGATION: NavItem[] = [
-  { name: "Meu Painel", href: "/meu-painel", icon: Gauge, roles: ["vendedor"] },
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, hiddenFor: ["vendedor"] },
+const AGENCY_NAVIGATION: NavItem[] = [
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Pipeline", href: "/pipeline", icon: Trello },
   { name: "Clientes", href: "/clients", icon: Users },
   { name: "Viagens", href: "/trips", icon: Map },
   { name: "Reservas", href: "/reservations", icon: CalendarCheck },
   { name: "Vouchers", href: "/vouchers", icon: QrCode },
-  { name: "Financeiro", href: "/financeiro", icon: DollarSign, hiddenFor: ["vendedor"] },
+  { name: "Financeiro", href: "/financeiro", icon: DollarSign },
   { name: "Comunicação", href: "/comunicacao", icon: MessageSquare },
-  { name: "Campanhas", href: "/comunicacao/campanhas", icon: Megaphone, hiddenFor: ["vendedor"] },
-  { name: "Automações", href: "/automacoes", icon: Zap, hiddenFor: ["vendedor"] },
-  { name: "Marketing", href: "/marketing", icon: Target, hiddenFor: ["vendedor"] },
-  { name: "Fidelidade", href: "/fidelidade", icon: Star, hiddenFor: ["vendedor"] },
-  { name: "NPS", href: "/nps", icon: TrendingUp, hiddenFor: ["vendedor"] },
-  { name: "Cadastros", href: "/cadastros", icon: BookOpen, hiddenFor: ["vendedor"] },
+  { name: "Campanhas", href: "/comunicacao/campanhas", icon: Megaphone },
+  { name: "Automações", href: "/automacoes", icon: Zap },
+  { name: "Marketing", href: "/marketing", icon: Target },
+  { name: "Fidelidade", href: "/fidelidade", icon: Star },
+  { name: "NPS", href: "/nps", icon: TrendingUp },
+  { name: "Cadastros", href: "/cadastros", icon: BookOpen },
   {
     name: "Analíticos",
     href: "/analytics",
     icon: BarChart2,
-    hiddenFor: ["vendedor"],
     children: [
-      { name: "Vendedores", href: "/analytics/vendedores", icon: UserCheck, hiddenFor: ["vendedor"] },
+      { name: "Vendedores", href: "/analytics/vendedores", icon: UserCheck },
     ],
   },
   {
     name: "Minha Loja",
     href: "/loja",
     icon: ShoppingBag,
-    hiddenFor: ["vendedor"],
     children: [
-      { name: "Configurações", href: "/loja/configuracoes", icon: Settings, hiddenFor: ["vendedor"] },
-      { name: "Produtos", href: "/loja/produtos", icon: Package, hiddenFor: ["vendedor"] },
-      { name: "Categorias", href: "/loja/categorias", icon: FolderOpen, hiddenFor: ["vendedor"] },
-      { name: "Pedidos", href: "/loja/pedidos", icon: ShoppingCart, hiddenFor: ["vendedor"] },
-      { name: "Cupons", href: "/loja/cupons", icon: Tag, hiddenFor: ["vendedor"] },
-      { name: "Avaliações", href: "/loja/avaliacoes", icon: MessageCircle, hiddenFor: ["vendedor"] },
+      { name: "Configurações", href: "/loja/configuracoes", icon: Settings },
+      { name: "Produtos", href: "/loja/produtos", icon: Package },
+      { name: "Categorias", href: "/loja/categorias", icon: FolderOpen },
+      { name: "Pedidos", href: "/loja/pedidos", icon: ShoppingCart },
+      { name: "Cupons", href: "/loja/cupons", icon: Tag },
+      { name: "Avaliações", href: "/loja/avaliacoes", icon: MessageCircle },
     ],
   },
-  { name: "Indicações", href: "/indicacoes", icon: Share2, hiddenFor: ["vendedor"] },
-  { name: "Downloads", href: "/downloads", icon: Download, hiddenFor: ["vendedor"] },
-  { name: "Configurações", href: "/configuracoes", icon: Settings, hiddenFor: ["vendedor"] },
+  { name: "Indicações", href: "/indicacoes", icon: Share2 },
+  { name: "Downloads", href: "/downloads", icon: Download },
+  { name: "Configurações", href: "/configuracoes", icon: Settings },
+];
+
+const VENDOR_NAVIGATION: NavItem[] = [
+  { name: "Meu Painel", href: "/meu-painel", icon: Gauge },
+  { name: "Viagens", href: "/trips", icon: Map },
+  { name: "Reservas", href: "/reservations", icon: CalendarCheck },
+  { name: "Vouchers", href: "/vouchers", icon: QrCode },
+  { name: "Clientes", href: "/clients", icon: Users },
+  { name: "Comunicação", href: "/comunicacao", icon: MessageSquare },
+  { name: "Pipeline", href: "/pipeline", icon: Trello },
 ];
 
 const ROLE_LABELS: Record<string, string> = {
@@ -179,9 +186,11 @@ export default function Layout({ children }: { children: ReactNode }) {
   const userRole: string | undefined = me?.role;
   const tenantInitial = tenantName.charAt(0).toUpperCase();
 
+  const navItems = userRole === "vendedor" ? VENDOR_NAVIGATION : AGENCY_NAVIGATION;
+
   // Find current nav item (including children)
   let currentSection: NavItem | undefined;
-  for (const item of NAVIGATION) {
+  for (const item of navItems) {
     if (location === item.href || (item.href !== "/" && location.startsWith(item.href))) {
       currentSection = item;
       break;
@@ -221,10 +230,7 @@ export default function Layout({ children }: { children: ReactNode }) {
 
         {/* Navigation */}
         <div className="flex-1 overflow-y-auto py-3 px-2 flex flex-col gap-0.5">
-          {NAVIGATION
-            .filter(item => !item.roles || (userRole && item.roles.includes(userRole)))
-            .filter(item => !item.hiddenFor || (userRole && !item.hiddenFor.includes(userRole)))
-            .map((item) => (
+          {navItems.map((item) => (
               <NavLink key={item.name} item={item} location={location} userRole={userRole} />
             ))}
         </div>
