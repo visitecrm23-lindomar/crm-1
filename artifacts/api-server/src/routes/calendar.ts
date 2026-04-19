@@ -57,12 +57,17 @@ router.get("/calendar/callback", async (req, res): Promise<void> => {
       return;
     }
 
-    await db.update(usersTable).set({
+    const updateFields: Record<string, unknown> = {
       googleAccessToken: tokens.access_token ?? null,
-      googleRefreshToken: tokens.refresh_token ?? null,
       googleTokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
       googleCalendarEnabled: true,
-    }).where(eq(usersTable.id, userId));
+    };
+    // Only overwrite refresh_token when Google returns a new one — on reconnect flows
+    // Google omits refresh_token and we must keep the previously stored value.
+    if (tokens.refresh_token) {
+      updateFields.googleRefreshToken = tokens.refresh_token;
+    }
+    await db.update(usersTable).set(updateFields).where(eq(usersTable.id, userId));
 
     // Respond first, then fire-and-forget initial sync for this user only
     res.redirect(`${FRONTEND_URL}/configuracoes?gcal=connected&tab=integrations`);
