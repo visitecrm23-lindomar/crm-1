@@ -257,6 +257,22 @@ export class CalendarSyncService {
       const svc = await getCalendarService(actorUserId);
       if (!svc) return;
 
+      // Non-active trip → remove user's existing event (if any) and stop
+      if (!ACTIVE_TRIP_STATUSES.includes(trip.status)) {
+        const [existing] = await db.select()
+          .from(calendarEventsTable)
+          .where(and(
+            eq(calendarEventsTable.tripId, tripId),
+            eq(calendarEventsTable.userId, actorUserId),
+            eq(calendarEventsTable.eventType, "trip"),
+          )).limit(1);
+        if (existing) {
+          await svc.deleteEvent(existing.googleEventId).catch(() => {});
+          await db.delete(calendarEventsTable).where(eq(calendarEventsTable.id, existing.id));
+        }
+        return;
+      }
+
       const reservations = await db.select({
         clientId: reservationsTable.clientId,
         sellerId: reservationsTable.sellerId,
@@ -267,6 +283,21 @@ export class CalendarSyncService {
       let visibleReservations = reservations;
       if (actor.role === "vendedor") {
         visibleReservations = reservations.filter((r) => r.sellerId === actorUserId);
+        // Seller has no confirmed reservations for this trip → remove any existing event and skip
+        if (visibleReservations.length === 0) {
+          const [existing] = await db.select()
+            .from(calendarEventsTable)
+            .where(and(
+              eq(calendarEventsTable.tripId, tripId),
+              eq(calendarEventsTable.userId, actorUserId),
+              eq(calendarEventsTable.eventType, "trip"),
+            )).limit(1);
+          if (existing) {
+            await svc.deleteEvent(existing.googleEventId).catch(() => {});
+            await db.delete(calendarEventsTable).where(eq(calendarEventsTable.id, existing.id));
+          }
+          return;
+        }
       }
 
       const clientIds = visibleReservations.map((r) => r.clientId);
