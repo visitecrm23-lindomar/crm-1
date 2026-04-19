@@ -7,11 +7,11 @@ import { eq } from "drizzle-orm";
 const GOOGLE_CLIENT_ID = process.env["GOOGLE_CLIENT_ID"] ?? "";
 const GOOGLE_CLIENT_SECRET = process.env["GOOGLE_CLIENT_SECRET"] ?? "";
 const GOOGLE_REDIRECT_URI = process.env["GOOGLE_CALENDAR_REDIRECT_URI"] ?? "";
-const STATE_SECRET = (() => {
+function getStateSecret(): string {
   const s = process.env["CLERK_SECRET_KEY"];
   if (!s) throw new Error("CLERK_SECRET_KEY is required for Google Calendar OAuth state signing");
   return s;
-})();
+}
 
 export function createOAuth2Client() {
   return new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI);
@@ -19,7 +19,7 @@ export function createOAuth2Client() {
 
 function signState(userId: string, nonce: string): string {
   const payload = `${userId}:${nonce}`;
-  const sig = createHmac("sha256", STATE_SECRET).update(payload).digest("base64url");
+  const sig = createHmac("sha256", getStateSecret()).update(payload).digest("base64url");
   return Buffer.from(JSON.stringify({ userId, nonce, sig })).toString("base64url");
 }
 
@@ -30,7 +30,7 @@ export function verifyState(state: string): string | null {
       nonce: string;
       sig: string;
     };
-    const expected = createHmac("sha256", STATE_SECRET)
+    const expected = createHmac("sha256", getStateSecret())
       .update(`${decoded.userId}:${decoded.nonce}`)
       .digest("base64url");
     const expectedBuf = Buffer.from(expected, "base64url");

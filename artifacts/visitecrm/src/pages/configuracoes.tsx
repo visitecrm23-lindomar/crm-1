@@ -33,6 +33,17 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -791,20 +802,41 @@ function GoogleCalendarCard() {
                 )}
                 Sincronizar Agora
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => disconnectMutation.mutate()}
-                disabled={loading}
-                className="gap-1.5 text-destructive hover:text-destructive"
-              >
-                {loading ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Unlink className="w-3.5 h-3.5" />
-                )}
-                Desconectar
-              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={loading}
+                    className="gap-1.5 text-destructive hover:text-destructive"
+                  >
+                    {loading ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Unlink className="w-3.5 h-3.5" />
+                    )}
+                    Desconectar
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Desconectar Google Calendar?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Isso irá revogar o acesso ao seu Google Calendar e remover todos os eventos
+                      sincronizados do sistema. Esta ação não pode ser desfeita.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => disconnectMutation.mutate()}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      Sim, desconectar
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </>
           )}
         </div>

@@ -11,6 +11,7 @@ import {
   UpdateClientPipelineStageBody,
   CreateClientNoteBody,
 } from "@workspace/api-zod";
+import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 
 const router = Router();
 
@@ -225,6 +226,10 @@ router.post("/clients", async (req, res): Promise<void> => {
     const message = isNew ? "Cliente cadastrado com sucesso." : "Cliente já cadastrado — dados atualizados.";
     const statusCode = isNew ? 201 : 200;
     res.status(statusCode).json(formatClient(upserted, { isNew, message }));
+
+    if (upserted.birthDate) {
+      CalendarSyncService.syncBirthday(me.tenantId, upserted.id).catch(() => {});
+    }
   } catch (err) {
     req.log.error({ err }, "Error creating client");
     res.status(500).json({ error: "Internal server error" });
@@ -330,6 +335,10 @@ router.patch("/clients/:id", async (req, res): Promise<void> => {
       .limit(1);
     if (!client) { res.status(404).json({ error: "Not found" }); return; }
     res.json(formatClient(client));
+
+    if (parsed.data.birthDate !== undefined && client.birthDate) {
+      CalendarSyncService.syncBirthday(me.tenantId, client.id).catch(() => {});
+    }
   } catch (err) {
     req.log.error({ err }, "Error updating client");
     res.status(500).json({ error: "Internal server error" });
