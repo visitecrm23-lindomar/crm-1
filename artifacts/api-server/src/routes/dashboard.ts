@@ -44,6 +44,7 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
         openDeals: 0, dealsPipelineValue: 0,
         receivedToday: 0, toReceiveNext3Days: 0, reservationsToday: 0,
         avgTicket: 0, activeClientsCount: 0, totalExpenses: 0, cancelledReservations: 0,
+        receivedFromActiveTrips: 0, pendingFromActiveTrips: 0,
       });
       return;
     }
@@ -101,6 +102,7 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
         dealsPipelineValue: Number(dealValue?.total ?? 0),
         receivedToday, toReceiveNext3Days: 0, reservationsToday, avgTicket,
         activeClientsCount, totalExpenses: 0, cancelledReservations,
+        receivedFromActiveTrips: 0, pendingFromActiveTrips: 0,
       });
       return;
     }
@@ -305,132 +307,148 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
 
     const tenantId = me.tenantId;
     const now = new Date();
+    const since12m = new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
-    // Top destinations (by CONFIRMED reservation count, top 10)
-    const allTrips = await db.select({ id: tripsTable.id, destination: tripsTable.destination, destinationCity: tripsTable.destinationCity })
-      .from(tripsTable).where(eq(tripsTable.tenantId, tenantId));
+    // Helper: build YYYY-MM key from a Date
+    const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    // Helper: build label array for last 12 months
+    const months12 = Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+      return { d, key: monthKey(d), label: d.toLocaleString("pt-BR", { month: "short" }) };
+    });
 
-    const allReservations = await db.select({ tripId: reservationsTable.tripId, status: reservationsTable.status, totalValue: reservationsTable.totalValue, createdAt: reservationsTable.createdAt })
-      .from(reservationsTable).where(eq(reservationsTable.tenantId, tenantId));
+    // 1. TOP DESTINATIONS — SQL JOIN + GROUP BY (confirmed only, top 10)
+    const topDestinationsRaw = await db.select({
+      name: sql<string>`COALESCE(${tripsTable.destinationCity}, ${tripsTable.destination})`,
+      count: sql<number>`count(${reservationsTable.id})::int`,
+    }).from(tripsTable)
+      .innerJoin(reservationsTable, and(
+        eq(reservationsTable.tripId, tripsTable.id),
+        eq(reservationsTable.status, "confirmed"),
+        eq(reservationsTable.tenantId, tenantId),
+      ))
+      .where(eq(tripsTable.tenantId, tenantId))
+      .groupBy(sql`COALESCE(${tripsTable.destinationCity}, ${tripsTable.destination})`)
+      .orderBy(desc(sql`count(${reservationsTable.id})`))
+      .limit(10);
+    const topDestinations = topDestinationsRaw.map(r => ({ name: r.name, count: Number(r.count) }));
 
-    const tripMap = new Map(allTrips.map(t => [t.id, t]));
-    const destCount: Record<string, number> = {};
-    for (const r of allReservations) {
-      if (r.status !== "confirmed") continue; // only confirmed reservations
-      const trip = tripMap.get(r.tripId);
-      if (trip) {
-        const key = trip.destinationCity || trip.destination;
-        destCount[key] = (destCount[key] ?? 0) + 1;
-      }
-    }
-    const topDestinations = Object.entries(destCount)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([name, count]) => ({ name, count }));
+    // 2. TRIPS BY MONTH — SQL GROUP BY
+    const tripsByMonthRaw = await db.select({
+      monthStart: sql<string>`date_trunc('month', ${tripsTable.createdAt})::text`,
+      count: sql<number>`count(*)::int`,
+    }).from(tripsTable)
+      .where(and(eq(tripsTable.tenantId, tenantId), gte(tripsTable.createdAt, since12m)))
+      .groupBy(sql`date_trunc('month', ${tripsTable.createdAt})`)
+      .orderBy(sql`date_trunc('month', ${tripsTable.createdAt})`);
+    const tripsByMonthMap = new Map(tripsByMonthRaw.map(r => [r.monthStart.substring(0, 7), Number(r.count)]));
+    const tripsByMonth = months12.map(({ key, label }) => ({ label, count: tripsByMonthMap.get(key) ?? 0 }));
 
-    // Monthly trips created (last 12 months)
-    const allTripsAll = await db.select({ createdAt: tripsTable.createdAt, status: tripsTable.status })
-      .from(tripsTable).where(eq(tripsTable.tenantId, tenantId));
+    // 3. RESERVATIONS BY MONTH — SQL GROUP BY
+    const resByMonthRaw = await db.select({
+      monthStart: sql<string>`date_trunc('month', ${reservationsTable.createdAt})::text`,
+      count: sql<number>`count(*)::int`,
+      cancelled: sql<number>`sum(case when ${reservationsTable.status} = 'cancelled' then 1 else 0 end)::int`,
+    }).from(reservationsTable)
+      .where(and(eq(reservationsTable.tenantId, tenantId), gte(reservationsTable.createdAt, since12m)))
+      .groupBy(sql`date_trunc('month', ${reservationsTable.createdAt})`)
+      .orderBy(sql`date_trunc('month', ${reservationsTable.createdAt})`);
+    const resByMonthMap = new Map(resByMonthRaw.map(r => [
+      r.monthStart.substring(0, 7), { count: Number(r.count), cancelled: Number(r.cancelled) },
+    ]));
+    const reservationsByMonth = months12.map(({ key, label }) => {
+      const v = resByMonthMap.get(key) ?? { count: 0, cancelled: 0 };
+      return { label, count: v.count, cancelled: v.cancelled };
+    });
 
-    const tripsByMonth: Array<{ label: string; count: number }> = [];
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-      const label = d.toLocaleString("pt-BR", { month: "short" });
-      const count = allTripsAll.filter(t => t.createdAt >= d && t.createdAt <= end).length;
-      tripsByMonth.push({ label, count });
-    }
+    // 4. RESERVATIONS BY STATUS — SQL GROUP BY
+    const resByStatusRaw = await db.select({
+      status: reservationsTable.status,
+      count: sql<number>`count(*)::int`,
+    }).from(reservationsTable)
+      .where(eq(reservationsTable.tenantId, tenantId))
+      .groupBy(reservationsTable.status);
+    const reservationsByStatus = resByStatusRaw.map(r => ({ status: r.status, count: Number(r.count) }));
 
-    // Monthly reservations (last 12 months)
-    const reservationsByMonth: Array<{ label: string; count: number; cancelled: number }> = [];
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-      const label = d.toLocaleString("pt-BR", { month: "short" });
-      const month = allReservations.filter(r => r.createdAt >= d && r.createdAt <= end);
-      const count = month.length;
-      const cancelled = month.filter(r => r.status === "cancelled").length;
-      reservationsByMonth.push({ label, count, cancelled });
-    }
+    // 5. CANCELLATION RATES (computed from SQL aggregates)
+    const totalRes = reservationsByStatus.reduce((a, r) => a + r.count, 0);
+    const cancelledRes = reservationsByStatus.find(r => r.status === "cancelled")?.count ?? 0;
+    const cancellationRate = totalRes > 0 ? Math.round((cancelledRes / totalRes) * 1000) / 10 : 0;
 
-    // Reservations by status
-    const statusCount: Record<string, number> = {};
-    for (const r of allReservations) {
-      statusCount[r.status] = (statusCount[r.status] ?? 0) + 1;
-    }
-    const reservationsByStatus = Object.entries(statusCount).map(([status, count]) => ({ status, count }));
+    const tripsByStatusRaw = await db.select({
+      status: tripsTable.status,
+      count: sql<number>`count(*)::int`,
+    }).from(tripsTable)
+      .where(eq(tripsTable.tenantId, tenantId))
+      .groupBy(tripsTable.status);
+    const totalTripsAll = tripsByStatusRaw.reduce((a, r) => a + Number(r.count), 0);
+    const cancelledTripsCount = Number(tripsByStatusRaw.find(r => r.status === "cancelled")?.count ?? 0);
+    const tripCancellationRate = totalTripsAll > 0 ? Math.round((cancelledTripsCount / totalTripsAll) * 1000) / 10 : 0;
 
-    // Reservation cancellation rate
-    const total = allReservations.length;
-    const cancelled = allReservations.filter(r => r.status === "cancelled").length;
-    const cancellationRate = total > 0 ? Math.round((cancelled / total) * 1000) / 10 : 0;
-
-    // Trip cancellation rate (trips cancelled vs total trips)
-    const totalTripsCount = allTripsAll.length;
-    const cancelledTripsCount = allTripsAll.filter(t => t.status === "cancelled").length;
-    const tripCancellationRate = totalTripsCount > 0 ? Math.round((cancelledTripsCount / totalTripsCount) * 1000) / 10 : 0;
-
-    // Avg confirmed reservations per active trip
-    const [activeTripsCount] = await db.select({ count: sql<number>`count(*)` })
+    // 6. AVG RESERVATIONS PER ACTIVE TRIP
+    const [activeTripsCount] = await db.select({ count: sql<number>`count(*)::int` })
       .from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, "active")));
-    const confirmedCount = allReservations.filter(r => r.status === "confirmed").length;
+    const confirmedResCount = reservationsByStatus.find(r => r.status === "confirmed")?.count ?? 0;
     const activeCount = Number(activeTripsCount?.count ?? 0);
-    const avgReservationsPerTrip = activeCount > 0 ? Math.round((confirmedCount / activeCount) * 10) / 10 : 0;
+    const avgReservationsPerTrip = activeCount > 0 ? Math.round((confirmedResCount / activeCount) * 10) / 10 : 0;
 
-    // Origin breakdown (client count by acquisition channel)
-    const allClientOrigins = await db.select({ origin: clientsTable.origin })
-      .from(clientsTable).where(eq(clientsTable.tenantId, tenantId));
-    const originCount: Record<string, number> = {};
-    for (const c of allClientOrigins) {
-      const key = c.origin ?? "Outros";
-      originCount[key] = (originCount[key] ?? 0) + 1;
-    }
-    const originBreakdown = Object.entries(originCount)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
-      .map(([name, count]) => ({ name, count }));
+    // 7. ORIGIN BREAKDOWN — SQL GROUP BY
+    const originBreakdownRaw = await db.select({
+      name: sql<string>`COALESCE(${clientsTable.origin}, 'Outros')`,
+      count: sql<number>`count(*)::int`,
+    }).from(clientsTable)
+      .where(eq(clientsTable.tenantId, tenantId))
+      .groupBy(sql`COALESCE(${clientsTable.origin}, 'Outros')`)
+      .orderBy(desc(sql`count(*)`))
+      .limit(8);
+    const originBreakdown = originBreakdownRaw.map(r => ({ name: r.name, count: Number(r.count) }));
 
-    // Monthly revenue and expenses (last 12 months)
-    const allPaymentsForChart = await db.select({ type: paymentsTable.type, status: paymentsTable.status, amount: paymentsTable.amount, paidAt: paymentsTable.paidAt })
-      .from(paymentsTable).where(eq(paymentsTable.tenantId, tenantId));
-    const revenueByMonth: Array<{ label: string; value: number }> = [];
-    const expensesByMonth: Array<{ label: string; value: number }> = [];
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-      const label = d.toLocaleString("pt-BR", { month: "short" });
-      const rev = allPaymentsForChart.filter(p => p.type === "receivable" && p.status === "paid" && p.paidAt && p.paidAt >= d && p.paidAt <= end)
-        .reduce((a, p) => a + Number(p.amount), 0);
-      const exp = allPaymentsForChart.filter(p => p.type === "payable" && p.status === "paid" && p.paidAt && p.paidAt >= d && p.paidAt <= end)
-        .reduce((a, p) => a + Number(p.amount), 0);
-      revenueByMonth.push({ label, value: Math.round(rev) });
-      expensesByMonth.push({ label, value: Math.round(exp) });
-    }
+    // 8. REVENUE & EXPENSES BY MONTH — SQL GROUP BY
+    const revenueExpRaw = await db.select({
+      monthStart: sql<string>`date_trunc('month', ${paymentsTable.paidAt})::text`,
+      revenue: sql<string>`sum(case when ${paymentsTable.type} = 'receivable' and ${paymentsTable.status} = 'paid' then cast(${paymentsTable.amount} as numeric) else 0 end)`,
+      expenses: sql<string>`sum(case when ${paymentsTable.type} = 'payable' and ${paymentsTable.status} = 'paid' then cast(${paymentsTable.amount} as numeric) else 0 end)`,
+    }).from(paymentsTable)
+      .where(and(
+        eq(paymentsTable.tenantId, tenantId),
+        sql`${paymentsTable.paidAt} IS NOT NULL`,
+        gte(paymentsTable.paidAt, since12m),
+      ))
+      .groupBy(sql`date_trunc('month', ${paymentsTable.paidAt})`)
+      .orderBy(sql`date_trunc('month', ${paymentsTable.paidAt})`);
+    const revenueExpMap = new Map(revenueExpRaw.map(r => [
+      r.monthStart.substring(0, 7),
+      { revenue: Math.round(Number(r.revenue ?? 0)), expenses: Math.round(Number(r.expenses ?? 0)) },
+    ]));
+    const revenueByMonth = months12.map(({ key, label }) => ({ label, value: revenueExpMap.get(key)?.revenue ?? 0 }));
+    const expensesByMonth = months12.map(({ key, label }) => ({ label, value: revenueExpMap.get(key)?.expenses ?? 0 }));
 
-    // Passengers checked in per month
-    const allPassengers = await db.select({ checkedInAt: passengersTable.checkedInAt, boardingLocationId: passengersTable.boardingLocationId })
-      .from(passengersTable)
+    // 9. PASSENGERS BY MONTH — SQL GROUP BY
+    const passByMonthRaw = await db.select({
+      monthStart: sql<string>`date_trunc('month', ${passengersTable.checkedInAt})::text`,
+      count: sql<number>`count(*)::int`,
+    }).from(passengersTable)
       .innerJoin(reservationsTable, eq(passengersTable.reservationId, reservationsTable.id))
-      .where(eq(reservationsTable.tenantId, tenantId));
+      .where(and(
+        eq(reservationsTable.tenantId, tenantId),
+        sql`${passengersTable.checkedInAt} IS NOT NULL`,
+        gte(passengersTable.checkedInAt, since12m),
+      ))
+      .groupBy(sql`date_trunc('month', ${passengersTable.checkedInAt})`)
+      .orderBy(sql`date_trunc('month', ${passengersTable.checkedInAt})`);
+    const passByMonthMap = new Map(passByMonthRaw.map(r => [r.monthStart.substring(0, 7), Number(r.count)]));
+    const passengersByMonth = months12.map(({ key, label }) => ({ label, count: passByMonthMap.get(key) ?? 0 }));
 
-    const passengersByMonth: Array<{ label: string; count: number }> = [];
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-      const label = d.toLocaleString("pt-BR", { month: "short" });
-      const count = allPassengers.filter(p => p.checkedInAt && p.checkedInAt >= d && p.checkedInAt <= end).length;
-      passengersByMonth.push({ label, count });
-    }
-
-    // Top boarding points
-    const boardingCount: Record<string, number> = {};
-    for (const p of allPassengers) {
-      if (p.boardingLocationId) {
-        boardingCount[p.boardingLocationId] = (boardingCount[p.boardingLocationId] ?? 0) + 1;
-      }
-    }
-
-    // Resolve boarding point names from trips
+    // 10. TOP BOARDING POINTS — SQL GROUP BY + name resolution from JSON
+    const boardingCountRaw = await db.execute(sql`
+      SELECT p.boarding_location_id, count(*)::int as count
+      FROM passengers p
+      JOIN reservations r ON p.reservation_id = r.id
+      WHERE r.tenant_id = ${tenantId} AND p.boarding_location_id IS NOT NULL
+      GROUP BY p.boarding_location_id
+      ORDER BY count DESC
+      LIMIT 10
+    `);
     const tripsWithBoarding = await db.select({ boardingPoints: tripsTable.boardingPoints })
       .from(tripsTable).where(eq(tripsTable.tenantId, tenantId));
     const boardingNameMap: Record<string, string> = {};
@@ -439,25 +457,23 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
         if (bp.id && bp.name) boardingNameMap[bp.id] = bp.name;
       }
     }
+    const topBoardingPoints = (boardingCountRaw.rows as Array<{ boarding_location_id: string; count: number }>)
+      .map(r => ({ name: boardingNameMap[r.boarding_location_id] ?? r.boarding_location_id, count: Number(r.count) }));
 
-    const topBoardingPoints = Object.entries(boardingCount)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 6)
-      .map(([id, count]) => ({ name: boardingNameMap[id] ?? id, count }));
-
-    // Average ticket by month (confirmed reservations)
-    const confirmedReservations = allReservations.filter(r => r.status === "confirmed");
-    const avgTicketByMonth: Array<{ label: string; value: number }> = [];
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-      const label = d.toLocaleString("pt-BR", { month: "short" });
-      const month = confirmedReservations.filter(r => r.createdAt >= d && r.createdAt <= end);
-      const value = month.length > 0
-        ? Math.round(month.reduce((a, r) => a + Number(r.totalValue), 0) / month.length)
-        : 0;
-      avgTicketByMonth.push({ label, value });
-    }
+    // 11. AVG TICKET BY MONTH — SQL GROUP BY
+    const avgTicketRaw = await db.select({
+      monthStart: sql<string>`date_trunc('month', ${reservationsTable.createdAt})::text`,
+      value: sql<string>`avg(cast(${reservationsTable.totalValue} as numeric))`,
+    }).from(reservationsTable)
+      .where(and(
+        eq(reservationsTable.tenantId, tenantId),
+        eq(reservationsTable.status, "confirmed"),
+        gte(reservationsTable.createdAt, since12m),
+      ))
+      .groupBy(sql`date_trunc('month', ${reservationsTable.createdAt})`)
+      .orderBy(sql`date_trunc('month', ${reservationsTable.createdAt})`);
+    const avgTicketMap = new Map(avgTicketRaw.map(r => [r.monthStart.substring(0, 7), Math.round(Number(r.value ?? 0))]));
+    const avgTicketByMonth = months12.map(({ key, label }) => ({ label, value: avgTicketMap.get(key) ?? 0 }));
 
     res.json({
       topDestinations,

@@ -165,8 +165,6 @@ function AgencyDashboard() {
   const { data: upcomingTrips, isLoading: loadingTrips } = useGetDashboardUpcomingTrips();
   const { data: paymentSummary, isLoading: loadingPaySummary } = useGetPaymentsSummary();
   const { data: pendingPaymentsList, isLoading: loadingPendingPayments } = useListPayments({ status: "pending", limit: 5, type: "receivable" });
-  const { data: stages, isLoading: loadingStages } = useListPipelineStages();
-  const { data: deals, isLoading: loadingDeals } = useListDeals({ status: "open" });
 
   const npsLabel = summary?.averageNps != null ? `${summary.averageNps.toFixed(1)} / 10` : "—";
   const totalRevenue = summary?.totalRevenue ?? 0;
@@ -266,8 +264,8 @@ function AgencyDashboard() {
           />
         </div>
 
-        {/* Group 2: Cash flow */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4">
+        {/* Group 2: Cash flow + Active trips receivables */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-4">
           <KpiCard
             title="Recebido Hoje"
             value={formatCurrency(summary?.receivedToday ?? 0)}
@@ -301,6 +299,24 @@ function AgencyDashboard() {
             icon={Target}
             loading={loadingSummary}
             color="text-purple-600"
+          />
+          <KpiCard
+            title="Já Recebido (Viagens Ativas)"
+            value={formatCurrency(summary?.receivedFromActiveTrips ?? 0)}
+            sub="Pagamentos confirmados nas viagens ativas"
+            icon={TrendingUp}
+            loading={loadingSummary}
+            color="text-emerald-600"
+            highlight={(summary?.receivedFromActiveTrips ?? 0) > 0 ? "green" : undefined}
+          />
+          <KpiCard
+            title="Pendentes (Viagens Ativas)"
+            value={formatCurrency(summary?.pendingFromActiveTrips ?? 0)}
+            sub="A receber nas viagens em andamento"
+            icon={AlertCircle}
+            loading={loadingSummary}
+            color="text-amber-600"
+            highlight={(summary?.pendingFromActiveTrips ?? 0) > 0 ? "yellow" : undefined}
           />
         </div>
 
@@ -861,34 +877,56 @@ function AgencyDashboard() {
             </CardContent>
           </Card>
 
-          {/* Column 3: Pipeline */}
+          {/* Column 3: Funil por Canal */}
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Pipeline — Visão Rápida</CardTitle>
-                <Link href="/pipeline"><Button variant="ghost" size="sm">Ver completo <ArrowUpRight className="w-3 h-3 ml-1" /></Button></Link>
+                <CardTitle className="text-base">Funil por Canal</CardTitle>
+                <Link href="/pipeline"><Button variant="ghost" size="sm">Pipeline <ArrowUpRight className="w-3 h-3 ml-1" /></Button></Link>
               </div>
+              <CardDescription className="text-xs">Leads → Reserva → Confirmado → Pagante</CardDescription>
             </CardHeader>
             <CardContent>
-              {(loadingStages || loadingDeals) ? <Skeleton className="h-24 w-full" /> : (
-                <div className="space-y-3">
-                  {(stages ?? []).slice(0, 5).map(s => {
-                    const stageDeals = (deals ?? []).filter(d => d.stageId === s.id);
-                    return (
-                      <div key={s.id} className="flex items-center gap-3">
-                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
-                        <div className="flex-1">
-                          <div className="flex justify-between text-xs mb-0.5">
-                            <span className="font-medium">{s.name}</span>
-                            <span className="font-bold">{stageDeals.length} neg.</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">{formatCurrency(stageDeals.reduce((a, d) => a + d.value, 0))}</p>
+              {loadingFunnel ? (
+                <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>
+              ) : !funnel?.byOrigin?.length ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Sem dados de funil.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart
+                    data={funnel.byOrigin.slice(0, 5)}
+                    layout="vertical"
+                    margin={{ top: 0, right: 8, left: 0, bottom: 0 }}
+                    barSize={6}
+                    barCategoryGap="30%"
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+                    <YAxis dataKey="origin" type="category" tick={{ fontSize: 10 }} width={72} />
+                    <Tooltip
+                      content={({ payload, label }) => payload?.length ? (
+                        <div className="bg-background border rounded-lg p-2 text-xs shadow-md">
+                          <p className="font-semibold mb-1">{label}</p>
+                          {payload.map(e => (
+                            <p key={e.name} className="flex justify-between gap-3" style={{ color: e.fill as string }}>
+                              <span>{e.name === "totalLeads" ? "Leads" : e.name === "withReservation" ? "C/ Reserva" : e.name === "withConfirmed" ? "Confirmados" : "Pagantes"}</span>
+                              <span className="font-bold">{String(e.value)}</span>
+                            </p>
+                          ))}
+                          {payload[0] && (
+                            <p className="mt-1 pt-1 border-t text-muted-foreground">
+                              Ticket médio: {formatCurrency((funnel.byOrigin.find(r => r.origin === label)?.avgTicket ?? 0))}
+                            </p>
+                          )}
                         </div>
-                      </div>
-                    );
-                  })}
-                  {!(stages?.length) && <p className="text-sm text-muted-foreground text-center py-4">Sem etapas de pipeline configuradas.</p>}
-                </div>
+                      ) : null}
+                    />
+                    <Bar dataKey="totalLeads" name="totalLeads" fill="#BFDBFE" radius={[0, 2, 2, 0]} />
+                    <Bar dataKey="withReservation" name="withReservation" fill="#60A5FA" radius={[0, 2, 2, 0]} />
+                    <Bar dataKey="withConfirmed" name="withConfirmed" fill="#3B82F6" radius={[0, 2, 2, 0]} />
+                    <Bar dataKey="withPayment" name="withPayment" fill="#1D4ED8" radius={[0, 2, 2, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               )}
             </CardContent>
           </Card>
