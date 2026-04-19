@@ -5369,7 +5369,10 @@ export const GetCalendarCallbackQueryParams = zod.object({
     .describe("Authorization code from Google"),
   state: zod.coerce
     .string()
-    .describe("HMAC-signed state blob (base64url JSON)"),
+    .optional()
+    .describe(
+      "HMAC-signed state blob (base64url JSON); absent when error is present",
+    ),
   error: zod.coerce
     .string()
     .optional()

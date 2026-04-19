@@ -12,9 +12,9 @@ export type GetCalendarCallbackParams = {
    */
   code?: string;
   /**
-   * HMAC-signed state blob (base64url JSON)
+   * HMAC-signed state blob (base64url JSON); absent when error is present
    */
-  state: string;
+  state?: string;
   /**
    * Present when the user denied access
    */

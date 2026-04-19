@@ -4482,10 +4482,9 @@ paths:
           description: Authorization code from Google
         - in: query
           name: state
-          required: true
           schema:
             type: string
-          description: HMAC-signed state blob (base64url JSON)
+          description: HMAC-signed state blob (base64url JSON); absent when error is present
         - in: query
           name: error
           schema:

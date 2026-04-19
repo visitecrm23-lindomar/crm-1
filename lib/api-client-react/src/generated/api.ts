@@ -18552,7 +18552,7 @@ export const useSyncCalendar = <
  * @summary Google OAuth2 callback (server-side redirect handler)
  */
 export const getGetCalendarCallbackUrl = (
-  params: GetCalendarCallbackParams,
+  params?: GetCalendarCallbackParams,
 ) => {
   const normalizedParams = new URLSearchParams();
 
@@ -18570,7 +18570,7 @@ export const getGetCalendarCallbackUrl = (
 };
 
 export const getCalendarCallback = async (
-  params: GetCalendarCallbackParams,
+  params?: GetCalendarCallbackParams,
   options?: RequestInit,
 ): Promise<unknown> => {
   return customFetch<unknown>(getGetCalendarCallbackUrl(params), {
@@ -18589,7 +18589,7 @@ export const getGetCalendarCallbackQueryOptions = <
   TData = Awaited<ReturnType<typeof getCalendarCallback>>,
   TError = ErrorType<void>,
 >(
-  params: GetCalendarCallbackParams,
+  params?: GetCalendarCallbackParams,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof getCalendarCallback>>,
@@ -18629,7 +18629,7 @@ export function useGetCalendarCallback<
   TData = Awaited<ReturnType<typeof getCalendarCallback>>,
   TError = ErrorType<void>,
 >(
-  params: GetCalendarCallbackParams,
+  params?: GetCalendarCallbackParams,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof getCalendarCallback>>,
