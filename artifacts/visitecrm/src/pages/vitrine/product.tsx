@@ -116,6 +116,7 @@ function Lightbox({
   const [index, setIndex] = useState(initialIndex);
   const [shareCopied, setShareCopied] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
+  const lightboxTouchStartX = useRef<number | null>(null);
 
   useEffect(() => {
     setImgLoaded(false);
@@ -172,10 +173,25 @@ function Lightbox({
     document.body.removeChild(a);
   }
 
+  function handleLightboxTouchStart(e: React.TouchEvent) {
+    lightboxTouchStartX.current = e.touches[0].clientX;
+  }
+
+  function handleLightboxTouchEnd(e: React.TouchEvent) {
+    if (lightboxTouchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - lightboxTouchStartX.current;
+    lightboxTouchStartX.current = null;
+    if (Math.abs(dx) < 30) return;
+    if (dx < 0) setIndex((i) => (i + 1) % images.length);
+    else setIndex((i) => (i - 1 + images.length) % images.length);
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
       onClick={onClose}
+      onTouchStart={handleLightboxTouchStart}
+      onTouchEnd={handleLightboxTouchEnd}
     >
       {/* Top bar */}
       <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 z-10" onClick={(e) => e.stopPropagation()}>
@@ -288,6 +304,7 @@ export default function VitrineProduct({
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [imgIndex, setImgIndex] = useState(0);
+  const heroTouchStartX = useRef<number | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<{ variantName: string; label: string; price: number } | null>(null);
   const [qty, setQty] = useState(1);
   const [activeTab, setActiveTab] = useState<"descricao" | "requisitos" | "destaques">("descricao");
@@ -448,7 +465,18 @@ export default function VitrineProduct({
       </div>
 
       {/* Full-width hero carousel */}
-      <div className="relative rounded-xl overflow-hidden bg-muted h-80 mb-6">
+      <div
+        className="relative rounded-xl overflow-hidden bg-muted h-80 mb-6"
+        onTouchStart={(e) => { heroTouchStartX.current = e.touches[0].clientX; }}
+        onTouchEnd={(e) => {
+          if (heroTouchStartX.current === null || images.length <= 1) return;
+          const dx = e.changedTouches[0].clientX - heroTouchStartX.current;
+          heroTouchStartX.current = null;
+          if (Math.abs(dx) < 30) return;
+          if (dx < 0) setImgIndex((i) => (i + 1) % images.length);
+          else setImgIndex((i) => (i - 1 + images.length) % images.length);
+        }}
+      >
         {images[imgIndex] ? (
           <button
             className="w-full h-full block relative group"

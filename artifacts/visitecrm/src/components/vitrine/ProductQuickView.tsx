@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -60,6 +60,8 @@ export function ProductQuickView({
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImgLoaded, setLightboxImgLoaded] = useState(false);
   const [, navigate] = useLocation();
+  const qvTouchStartX = useRef<number | null>(null);
+  const lbTouchStartX = useRef<number | null>(null);
 
   const images = product.images ?? [];
 
@@ -130,7 +132,18 @@ export function ProductQuickView({
         onEscapeKeyDown={() => { if (!lightboxOpen) onClose(); }}
         onInteractOutside={(e) => { if (lightboxOpen) e.preventDefault(); }}
       >
-        <div className="relative h-72 bg-gradient-to-br from-blue-400 to-blue-600 overflow-hidden shrink-0">
+        <div
+          className="relative h-72 bg-gradient-to-br from-blue-400 to-blue-600 overflow-hidden shrink-0"
+          onTouchStart={(e) => { qvTouchStartX.current = e.touches[0].clientX; }}
+          onTouchEnd={(e) => {
+            if (qvTouchStartX.current === null || images.length <= 1) return;
+            const dx = e.changedTouches[0].clientX - qvTouchStartX.current;
+            qvTouchStartX.current = null;
+            if (Math.abs(dx) < 30) return;
+            if (dx < 0) setImgIndex((i) => (i + 1) % images.length);
+            else setImgIndex((i) => (i - 1 + images.length) % images.length);
+          }}
+        >
           {images.length > 0 ? (
             <>
               <img
@@ -429,6 +442,15 @@ export function ProductQuickView({
       <div
         className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90"
         onClick={() => setLightboxOpen(false)}
+        onTouchStart={(e) => { lbTouchStartX.current = e.touches[0].clientX; }}
+        onTouchEnd={(e) => {
+          if (lbTouchStartX.current === null || images.length <= 1) return;
+          const dx = e.changedTouches[0].clientX - lbTouchStartX.current;
+          lbTouchStartX.current = null;
+          if (Math.abs(dx) < 30) return;
+          if (dx < 0) setImgIndex((i) => (i + 1) % images.length);
+          else setImgIndex((i) => (i - 1 + images.length) % images.length);
+        }}
       >
         <div
           className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 z-10"
