@@ -30,4 +30,6 @@ export interface DashboardSummary {
   totalExpenses: number;
   receivedFromActiveTrips: number;
   pendingFromActiveTrips: number;
+  totalPayable: number;
+  avgReservationsPerTrip: number;
 }

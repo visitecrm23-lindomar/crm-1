@@ -261,10 +261,19 @@ function AgencyDashboard() {
       <section>
         <SectionTitle icon={BarChart2} title="Indicadores Financeiros" description="Visão financeira consolidada da agência" />
 
-        {/* Group 1: Financial overview */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4">
+        {/* Group 1: Financial overview (5 cards) */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-4">
           <KpiCard title="Receita Total" value={formatCurrency(totalRevenue)} sub={`${formatCurrency(summary?.revenueThisMonth ?? 0)} este mês`} icon={TrendingUp} loading={loadingSummary} color="text-green-600" highlight="green" />
           <KpiCard title="Total Despesas" value={formatCurrency(totalExpenses)} sub={`Líquido: ${formatCurrency(netProfit)}`} icon={TrendingDown} loading={loadingSummary} color="text-red-500" highlight={netProfit < 0 ? "red" : undefined} />
+          <KpiCard
+            title="Total A Pagar"
+            value={formatCurrency(summary?.totalPayable ?? 0)}
+            sub="Pagamentos pendentes a pagar"
+            icon={AlertCircle}
+            loading={loadingSummary}
+            color={(summary?.totalPayable ?? 0) > 0 ? "text-red-600" : "text-muted-foreground"}
+            highlight={(summary?.totalPayable ?? 0) > 0 ? "red" : undefined}
+          />
           <KpiCard
             title="Lucro Líquido"
             value={formatCurrency(netProfit)}
@@ -340,37 +349,18 @@ function AgencyDashboard() {
           />
         </div>
 
-        {/* Group 3: Operations */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4">
+        {/* Group 3: Operations (3 cards) */}
+        <div className="grid gap-4 sm:grid-cols-3 mb-4">
           <KpiCard title="Viagens Ativas" value={summary?.activeTrips ?? 0} sub={`${summary?.totalTrips ?? 0} no total`} icon={Map} loading={loadingSummary} color="text-blue-600" />
-          <KpiCard
-            title="Taxa de Ocupação"
-            value={`${summary?.occupancyRate ?? 0}%`}
-            sub="Viagens ativas"
-            icon={Activity}
-            loading={loadingSummary}
-            color={(summary?.occupancyRate ?? 0) >= 70 ? "text-green-600" : "text-yellow-600"}
-            highlight={(summary?.occupancyRate ?? 0) >= 80 ? "green" : (summary?.occupancyRate ?? 0) < 50 ? "yellow" : undefined}
-          />
           <KpiCard title="Reservas Hoje" value={summary?.reservationsToday ?? 0} sub="Novas reservas do dia" icon={CalendarCheck} loading={loadingSummary} color="text-indigo-600" highlight={(summary?.reservationsToday ?? 0) > 0 ? "green" : undefined} />
           <KpiCard title="NPS Médio" value={npsLabel} sub={`${summary?.confirmedReservations ?? 0} reservas confirmadas`} icon={Star} loading={loadingSummary} color="text-yellow-500" />
         </div>
 
-        {/* Group 4: Clients */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {/* Group 4: Clients (3 cards) */}
+        <div className="grid gap-4 sm:grid-cols-3">
           <KpiCard title="Total Clientes" value={summary?.totalClients ?? 0} sub="Base total de clientes" icon={Users} loading={loadingSummary} color="text-blue-600" />
           <KpiCard title="Novos (mês)" value={summary?.newClientsThisMonth ?? 0} sub="Clientes novos este mês" icon={UserCheck} loading={loadingSummary} color="text-green-600" highlight={(summary?.newClientsThisMonth ?? 0) > 0 ? "green" : undefined} />
           <KpiCard title="Clientes Ativos" value={summary?.activeClientsCount ?? 0} sub="Com reserva confirmada" icon={Users} loading={loadingSummary} color="text-indigo-600" />
-          <KpiCard title="Negócios Abertos" value={summary?.openDeals ?? 0} sub={`Pipeline: ${formatCurrency(summary?.dealsPipelineValue ?? 0)}`} icon={Briefcase} loading={loadingSummary} color="text-purple-600" />
-          <KpiCard
-            title="Cancelamentos"
-            value={summary?.cancelledReservations ?? 0}
-            sub={`${summary?.totalReservations ? ((summary.cancelledReservations / summary.totalReservations) * 100).toFixed(1) : 0}% do total`}
-            icon={AlertTriangle}
-            loading={loadingSummary}
-            color="text-red-500"
-            highlight={(summary?.cancelledReservations ?? 0) > 0 ? "yellow" : undefined}
-          />
         </div>
       </section>
 
@@ -427,7 +417,7 @@ function AgencyDashboard() {
                           <Cell key={index} fill={DONUT_COLORS[index % DONUT_COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip />
+                      <Tooltip formatter={(v: unknown, name: string) => [String(v), name]} />
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="flex-1 space-y-1.5">
@@ -461,7 +451,7 @@ function AgencyDashboard() {
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
                     <XAxis type="number" tick={{ fontSize: 11 }} />
                     <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={90} />
-                    <Tooltip />
+                    <Tooltip formatter={(v: unknown, name: string) => [String(v), name]} />
                     <Bar dataKey="count" name="Reservas" fill="#8B5CF6" radius={[0, 4, 4, 0]}>
                       {charts.topDestinations.map((_, i) => (
                         <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
@@ -522,7 +512,7 @@ function AgencyDashboard() {
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                     <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip />
+                    <Tooltip formatter={(v: unknown, name: string) => [String(v), name]} />
                     <Legend />
                     <Bar dataKey="count" name="Total" fill="#3B82F6" radius={[4, 4, 0, 0]} stackId="a" />
                     <Bar dataKey="cancelled" name="Canceladas" fill="#EF4444" radius={[4, 4, 0, 0]} stackId="b" />
@@ -544,7 +534,7 @@ function AgencyDashboard() {
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                     <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                    <Tooltip />
+                    <Tooltip formatter={(v: unknown, name: string) => [String(v), name]} />
                     <Bar dataKey="count" name="Viagens" fill="#10B981" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -572,7 +562,7 @@ function AgencyDashboard() {
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                     <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                    <Tooltip />
+                    <Tooltip formatter={(v: unknown, name: string) => [String(v), name]} />
                     <Area type="monotone" dataKey="count" name="Passageiros" stroke="#8B5CF6" fill="url(#passengers)" strokeWidth={2} />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -601,8 +591,8 @@ function AgencyDashboard() {
           </Card>
         </div>
 
-        {/* Chart 9 & 10: Top Boarding Points + Cancellation rate */}
-        <div className="grid gap-4 lg:grid-cols-2">
+        {/* Chart 9 & 10: Top Boarding Points + Cancellation Donut + Avg Reservations Highlight */}
+        <div className="grid gap-4 lg:grid-cols-3">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Top Pontos de Embarque</CardTitle>
@@ -617,7 +607,7 @@ function AgencyDashboard() {
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                     <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                    <Tooltip />
+                    <Tooltip formatter={(v: number) => [v, "Passageiros"]} />
                     <Bar dataKey="count" name="Passageiros" fill="#14B8A6" radius={[4, 4, 0, 0]}>
                       {charts.topBoardingPoints.map((_, i) => (
                         <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
@@ -631,27 +621,73 @@ function AgencyDashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Cancelamentos por Mês</CardTitle>
-              <CardDescription>Taxa de cancelamento mensal</CardDescription>
+              <CardTitle className="text-base">Taxa de Cancelamento</CardTitle>
+              <CardDescription>Viagens e Reservas</CardDescription>
             </CardHeader>
             <CardContent>
-              {loadingCharts ? <Skeleton className="h-[220px] w-full" /> : (
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={charts?.reservationsByMonth ?? []} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                    <Tooltip />
-                    <Bar dataKey="cancelled" name="Canceladas" fill="#EF4444" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+              {loadingCharts || loadingSummary ? <Skeleton className="h-[220px] w-full" /> : (
+                <div className="flex flex-col items-center gap-4">
+                  <ResponsiveContainer width="100%" height={160}>
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: "Canceladas", value: summary?.cancelledReservations ?? 0, fill: "#EF4444" },
+                          { name: "Ativas", value: Math.max(0, (summary?.totalReservations ?? 0) - (summary?.cancelledReservations ?? 0)), fill: "#10B981" },
+                        ]}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={75}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        <Cell fill="#EF4444" />
+                        <Cell fill="#10B981" />
+                      </Pie>
+                      <Tooltip formatter={(v: number, name: string) => [v, name]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="text-center">
+                    <p className={`text-3xl font-bold ${(charts?.cancellationRate ?? 0) > 15 ? "text-red-600" : "text-green-600"}`}>
+                      {(charts?.cancellationRate ?? 0).toFixed(1)}%
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">Taxa de cancelamento de reservas</p>
+                    <div className="flex gap-3 justify-center mt-2">
+                      <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-full bg-red-500"/><span className="text-xs">{summary?.cancelledReservations ?? 0} cancel.</span></div>
+                      <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-full bg-green-500"/><span className="text-xs">{Math.max(0, (summary?.totalReservations ?? 0) - (summary?.cancelledReservations ?? 0))} ativas</span></div>
+                    </div>
+                  </div>
+                </div>
               )}
-              {charts && (
-                <div className="mt-3 flex items-center gap-2 p-2 rounded-lg bg-muted/50">
-                  <span className="text-xs text-muted-foreground">Taxa geral:</span>
-                  <span className={`text-sm font-bold ${charts.cancellationRate > 15 ? "text-red-600" : "text-green-600"}`}>
-                    {charts.cancellationRate.toFixed(1)}%
-                  </span>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Média de Reservas por Viagem</CardTitle>
+              <CardDescription>Eficiência operacional</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingSummary ? <Skeleton className="h-[220px] w-full" /> : (
+                <div className="flex flex-col items-center justify-center h-[220px] gap-4">
+                  <div className="text-center">
+                    <p className="text-6xl font-bold text-primary">{summary?.avgReservationsPerTrip ?? 0}</p>
+                    <p className="text-sm text-muted-foreground mt-2">reservas / viagem</p>
+                  </div>
+                  <div className="w-full space-y-2 px-2">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Total viagens</span><span className="font-medium text-foreground">{summary?.totalTrips ?? 0}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Total reservas</span><span className="font-medium text-foreground">{summary?.totalReservations ?? 0}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Confirmadas</span><span className="font-medium text-green-600">{summary?.confirmedReservations ?? 0}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Ticket médio</span><span className="font-medium text-foreground">{formatCurrency(summary?.avgTicket ?? 0)}</span>
+                    </div>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -772,41 +808,124 @@ function AgencyDashboard() {
       <section>
         <SectionTitle icon={Lightbulb} title="Diagnóstico do Negócio" description="Análise automatizada com recomendações estratégicas" />
 
-        <div className="grid gap-3 md:grid-cols-2">
-          {(loadingSummary || loadingCharts) ? (
-            Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 w-full" />)
-          ) : diagnostics.map((tip, i) => (
-            <div
-              key={i}
-              className={`flex gap-4 p-4 rounded-xl border ${
-                tip.type === "warning" ? "border-yellow-200 bg-yellow-50/50 dark:bg-yellow-950/20" :
-                tip.type === "success" ? "border-green-200 bg-green-50/50 dark:bg-green-950/20" :
-                "border-blue-200 bg-blue-50/50 dark:bg-blue-950/20"
-              }`}
-            >
-              <div className={`p-2 rounded-lg h-fit ${
-                tip.type === "warning" ? "bg-yellow-100 dark:bg-yellow-900/50" :
-                tip.type === "success" ? "bg-green-100 dark:bg-green-900/50" :
-                "bg-blue-100 dark:bg-blue-900/50"
-              }`}>
-                {tip.type === "warning" ? <AlertTriangle className="w-5 h-5 text-yellow-600" /> :
-                 tip.type === "success" ? <TrendingUp className="w-5 h-5 text-green-600" /> :
-                 <Lightbulb className="w-5 h-5 text-blue-600" />}
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* Card 1: Resumo do Negócio */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/50">
+                  <BarChart2 className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">Resumo do Negócio</CardTitle>
+                  <CardDescription>Situação atual consolidada</CardDescription>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className={`font-semibold text-sm ${
-                  tip.type === "warning" ? "text-yellow-800 dark:text-yellow-200" :
-                  tip.type === "success" ? "text-green-800 dark:text-green-200" :
-                  "text-blue-800 dark:text-blue-200"
-                }`}>{tip.title}</p>
-                <p className={`text-xs mt-0.5 leading-relaxed ${
-                  tip.type === "warning" ? "text-yellow-700 dark:text-yellow-300" :
-                  tip.type === "success" ? "text-green-700 dark:text-green-300" :
-                  "text-blue-700 dark:text-blue-300"
-                }`}>{tip.desc}</p>
+            </CardHeader>
+            <CardContent>
+              {(loadingSummary || loadingCharts) ? <Skeleton className="h-[200px] w-full" /> : (
+                <div className="space-y-3">
+                  {[
+                    {
+                      label: "Receita Total",
+                      value: formatCurrency(totalRevenue),
+                      color: "text-green-600",
+                      sub: `${formatCurrency(summary?.revenueThisMonth ?? 0)} este mês`,
+                    },
+                    {
+                      label: "Total Despesas + A Pagar",
+                      value: formatCurrency(totalExpenses + (summary?.totalPayable ?? 0)),
+                      color: "text-red-500",
+                      sub: `Despesas: ${formatCurrency(totalExpenses)} · A pagar: ${formatCurrency(summary?.totalPayable ?? 0)}`,
+                    },
+                    {
+                      label: "Lucro Líquido",
+                      value: formatCurrency(netProfit),
+                      color: netProfit >= 0 ? "text-emerald-600" : "text-red-600",
+                      sub: `Margem: ${margin.toFixed(1)}%`,
+                    },
+                    {
+                      label: "Taxa de Cancelamento",
+                      value: `${(charts?.cancellationRate ?? 0).toFixed(1)}%`,
+                      color: (charts?.cancellationRate ?? 0) > 15 ? "text-red-600" : "text-green-600",
+                      sub: `${summary?.cancelledReservations ?? 0} reservas canceladas`,
+                    },
+                    {
+                      label: "Clientes Ativos",
+                      value: String(summary?.activeClientsCount ?? 0),
+                      color: "text-indigo-600",
+                      sub: `de ${summary?.totalClients ?? 0} clientes no total`,
+                    },
+                    {
+                      label: "Viagens Ativas",
+                      value: String(summary?.activeTrips ?? 0),
+                      color: "text-blue-600",
+                      sub: `NPS médio: ${npsLabel}`,
+                    },
+                  ].map(item => (
+                    <div key={item.label} className="flex items-center justify-between py-1.5 border-b last:border-0">
+                      <div>
+                        <p className="text-sm font-medium">{item.label}</p>
+                        <p className="text-xs text-muted-foreground">{item.sub}</p>
+                      </div>
+                      <p className={`text-sm font-bold ${item.color}`}>{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Card 2: Estratégia de Crescimento */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/50">
+                  <Lightbulb className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">Estratégia de Crescimento</CardTitle>
+                  <CardDescription>Recomendações baseadas nos dados</CardDescription>
+                </div>
               </div>
-            </div>
-          ))}
+            </CardHeader>
+            <CardContent>
+              {(loadingSummary || loadingCharts) ? <Skeleton className="h-[200px] w-full" /> : (
+                <div className="space-y-3">
+                  {diagnostics.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-8">Nenhuma recomendação disponível. Cadastre mais dados.</p>
+                  ) : diagnostics.map((tip, i) => (
+                    <div
+                      key={i}
+                      className={`flex gap-3 p-3 rounded-lg border ${
+                        tip.type === "warning" ? "border-yellow-200 bg-yellow-50/50 dark:bg-yellow-950/20" :
+                        tip.type === "success" ? "border-green-200 bg-green-50/50 dark:bg-green-950/20" :
+                        "border-blue-200 bg-blue-50/50 dark:bg-blue-950/20"
+                      }`}
+                    >
+                      <div className="mt-0.5 shrink-0">
+                        {tip.type === "warning" ? <AlertTriangle className="w-4 h-4 text-yellow-600" /> :
+                         tip.type === "success" ? <TrendingUp className="w-4 h-4 text-green-600" /> :
+                         <Lightbulb className="w-4 h-4 text-blue-600" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`font-semibold text-xs ${
+                          tip.type === "warning" ? "text-yellow-800 dark:text-yellow-200" :
+                          tip.type === "success" ? "text-green-800 dark:text-green-200" :
+                          "text-blue-800 dark:text-blue-200"
+                        }`}>{tip.title}</p>
+                        <p className={`text-xs mt-0.5 leading-relaxed ${
+                          tip.type === "warning" ? "text-yellow-700 dark:text-yellow-300" :
+                          tip.type === "success" ? "text-green-700 dark:text-green-300" :
+                          "text-blue-700 dark:text-blue-300"
+                        }`}>{tip.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </section>
 

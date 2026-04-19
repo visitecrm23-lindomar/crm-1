@@ -4461,6 +4461,10 @@ components:
           type: number
         pendingFromActiveTrips:
           type: number
+        totalPayable:
+          type: number
+        avgReservationsPerTrip:
+          type: number
       required:
         - totalClients
         - newClientsThisMonth
@@ -4483,6 +4487,8 @@ components:
         - totalExpenses
         - receivedFromActiveTrips
         - pendingFromActiveTrips
+        - totalPayable
+        - avgReservationsPerTrip
 
     DashboardCharts:
       type: object

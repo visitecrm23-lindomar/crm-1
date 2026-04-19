@@ -522,6 +522,8 @@ export const GetDashboardSummaryResponse = zod.object({
   totalExpenses: zod.number(),
   receivedFromActiveTrips: zod.number(),
   pendingFromActiveTrips: zod.number(),
+  totalPayable: zod.number(),
+  avgReservationsPerTrip: zod.number(),
 });
 
 /**
