@@ -45,15 +45,19 @@ async function upsertCalendarEvent(
     .where(and(...filter)).limit(1);
 
   if (existing) {
-    await service.updateEvent(existing.googleEventId, eventData);
-    await db.update(calendarEventsTable).set({
-      title: eventData.summary,
-      description: eventData.description,
-      startDate: eventData.startDateTime,
-      endDate: eventData.endDateTime,
-      location: eventData.location,
-      syncedAt: new Date(),
-    }).where(eq(calendarEventsTable.id, existing.id));
+    const updated = await service.updateEvent(existing.googleEventId, eventData);
+    if (updated) {
+      await db.update(calendarEventsTable).set({
+        title: eventData.summary,
+        description: eventData.description,
+        startDate: eventData.startDateTime,
+        endDate: eventData.endDateTime,
+        location: eventData.location,
+        syncedAt: new Date(),
+      }).where(eq(calendarEventsTable.id, existing.id));
+    } else {
+      console.warn("[upsertCalendarEvent] Google updateEvent failed, skipping DB update for", existing.googleEventId);
+    }
   } else {
     const googleEvent = await service.createEvent(eventData);
     if (!googleEvent) return;

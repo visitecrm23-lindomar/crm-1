@@ -1,10 +1,18 @@
 import { Router } from "express";
+import { z } from "zod";
 import { db } from "@workspace/db";
 import { usersTable, calendarEventsTable, tripsTable, paymentsTable, clientsTable } from "@workspace/db";
 import { eq, and, count, max } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 import { generateAuthUrl, verifyState, exchangeCodeForTokens, revokeToken } from "../lib/google-calendar/calendar-service";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
+
+const syncBodySchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("all") }),
+  z.object({ type: z.literal("trip"), id: z.string().min(1) }),
+  z.object({ type: z.literal("payment"), id: z.string().min(1) }),
+  z.object({ type: z.literal("birthday"), id: z.string().min(1) }),
+]);
 
 const router = Router();
 
@@ -152,37 +160,40 @@ router.post("/calendar/sync", async (req, res): Promise<void> => {
       return;
     }
 
-    const { type, id } = req.body as { type?: string; id?: string };
+    const parsed = syncBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Tipo de sincronização inválido", details: parsed.error.flatten() });
+      return;
+    }
+    const body = parsed.data;
 
-    if (type === "trip" && id) {
+    if (body.type === "trip") {
       const [trip] = await db.select({ id: tripsTable.id })
         .from(tripsTable)
-        .where(and(eq(tripsTable.id, id), eq(tripsTable.tenantId, me.tenantId)))
+        .where(and(eq(tripsTable.id, body.id), eq(tripsTable.tenantId, me.tenantId)))
         .limit(1);
       if (!trip) { res.status(404).json({ error: "Viagem não encontrada" }); return; }
-      await CalendarSyncService.syncTripForUser(id, me.id);
+      await CalendarSyncService.syncTripForUser(body.id, me.id);
       res.json({ success: true, message: "1 evento sincronizado com sucesso", synced: 1 });
-    } else if (type === "payment" && id) {
+    } else if (body.type === "payment") {
       const [payment] = await db.select({ id: paymentsTable.id })
         .from(paymentsTable)
-        .where(and(eq(paymentsTable.id, id), eq(paymentsTable.tenantId, me.tenantId)))
+        .where(and(eq(paymentsTable.id, body.id), eq(paymentsTable.tenantId, me.tenantId)))
         .limit(1);
       if (!payment) { res.status(404).json({ error: "Pagamento não encontrado" }); return; }
-      await CalendarSyncService.syncPaymentForUser(id, me.id);
+      await CalendarSyncService.syncPaymentForUser(body.id, me.id);
       res.json({ success: true, message: "1 evento sincronizado com sucesso", synced: 1 });
-    } else if (type === "birthday" && id) {
+    } else if (body.type === "birthday") {
       const [client] = await db.select({ id: clientsTable.id })
         .from(clientsTable)
-        .where(and(eq(clientsTable.id, id), eq(clientsTable.tenantId, me.tenantId)))
+        .where(and(eq(clientsTable.id, body.id), eq(clientsTable.tenantId, me.tenantId)))
         .limit(1);
       if (!client) { res.status(404).json({ error: "Cliente não encontrado" }); return; }
-      await CalendarSyncService.syncBirthdayForUser(id, me.id);
+      await CalendarSyncService.syncBirthdayForUser(body.id, me.id);
       res.json({ success: true, message: "1 evento sincronizado com sucesso", synced: 1 });
-    } else if (type === "all") {
+    } else {
       const synced = await CalendarSyncService.syncAllForUser(me.id);
       res.json({ success: true, message: `${synced} evento(s) sincronizado(s) com sucesso`, synced });
-    } else {
-      res.status(400).json({ error: "Tipo de sincronização inválido" });
     }
   } catch (err) {
     req.log.error({ err }, "Error syncing Google Calendar");
