@@ -117,32 +117,34 @@ function Lightbox({
   const [shareCopied, setShareCopied] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
   const lightboxTouchStartX = useRef<number | null>(null);
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
     setImgLoaded(false);
   }, [index]);
 
+  // On mount: push a new history entry so Back closes the lightbox
   useEffect(() => {
     const url = new URL(window.location.href);
-    url.searchParams.set("photo", String(index + 1));
-    window.history.replaceState({}, "", url.toString());
-  }, [index]);
+    url.searchParams.set("photo", String(initialIndex + 1));
+    window.history.pushState({ visitecrm_lightbox: true }, "", url.toString());
 
-  useEffect(() => {
-    return () => {
-      const cleanUrl = new URL(window.location.href);
-      cleanUrl.searchParams.delete("photo");
-      window.history.replaceState({}, "", cleanUrl.toString());
-    };
-  }, []);
-
-  useEffect(() => {
-    window.history.pushState({ visitecrm_lightbox: true }, "");
     const handlePop = () => { onClose(); };
     window.addEventListener("popstate", handlePop);
     return () => { window.removeEventListener("popstate", handlePop); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // When the photo changes (not on initial mount), update the URL in-place
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set("photo", String(index + 1));
+    window.history.replaceState({}, "", url.toString());
+  }, [index]);
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
