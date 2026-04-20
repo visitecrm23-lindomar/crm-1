@@ -262,7 +262,7 @@ function AgencyDashboard() {
       {/* ═══ SEÇÃO 1: KPIs em 4 grupos ═══ */}
       <div className="space-y-6">
         {/* FINANCEIRO */}
-        <section className="rounded-xl border border-emerald-100 bg-emerald-50/30 dark:bg-emerald-950/10 dark:border-emerald-900/30 p-4">
+        <section className="rounded-xl border border-emerald-100 bg-gradient-to-br from-emerald-50/60 to-teal-50/30 dark:from-emerald-950/20 dark:to-teal-950/10 dark:border-emerald-900/30 p-4">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-2 h-5 rounded-full bg-emerald-500" />
             <h2 className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Financeiro</h2>
@@ -301,7 +301,7 @@ function AgencyDashboard() {
         </section>
 
         {/* VENDAS */}
-        <section className="rounded-xl border border-blue-100 bg-blue-50/30 dark:bg-blue-950/10 dark:border-blue-900/30 p-4">
+        <section className="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50/60 to-indigo-50/30 dark:from-blue-950/20 dark:to-indigo-950/10 dark:border-blue-900/30 p-4">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-2 h-5 rounded-full bg-blue-500" />
             <h2 className="text-sm font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide">Vendas</h2>
@@ -323,7 +323,7 @@ function AgencyDashboard() {
         </section>
 
         {/* CLIENTES */}
-        <section className="rounded-xl border border-purple-100 bg-purple-50/30 dark:bg-purple-950/10 dark:border-purple-900/30 p-4">
+        <section className="rounded-xl border border-purple-100 bg-gradient-to-br from-purple-50/60 to-violet-50/30 dark:from-purple-950/20 dark:to-violet-950/10 dark:border-purple-900/30 p-4">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-2 h-5 rounded-full bg-purple-500" />
             <h2 className="text-sm font-semibold text-purple-700 dark:text-purple-400 uppercase tracking-wide">Clientes</h2>
@@ -359,7 +359,7 @@ function AgencyDashboard() {
         </section>
 
         {/* OPERACIONAL */}
-        <section className="rounded-xl border border-orange-100 bg-orange-50/30 dark:bg-orange-950/10 dark:border-orange-900/30 p-4">
+        <section className="rounded-xl border border-orange-100 bg-gradient-to-br from-orange-50/60 to-amber-50/30 dark:from-orange-950/20 dark:to-amber-950/10 dark:border-orange-900/30 p-4">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-2 h-5 rounded-full bg-orange-500" />
             <h2 className="text-sm font-semibold text-orange-700 dark:text-orange-400 uppercase tracking-wide">Operacional</h2>

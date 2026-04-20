@@ -38,7 +38,6 @@ export default function HistoricoComparativo() {
   ) ?? { revenue: 0, expenses: 0, profit: 0, reservations: 0 };
 
   const lastMonth = months?.[months.length - 1];
-  const prevMonth = months?.[months.length - 2];
 
   return (
     <div className="space-y-6 pb-10">
