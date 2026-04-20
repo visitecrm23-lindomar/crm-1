@@ -1,65 +1,69 @@
 modules = ["nodejs-24", "postgresql-16"]
 
-[[artifacts]]
-id = "artifacts/api-server"
+  [[artifacts]]
+  id = "artifacts/visitecrm"
 
-[[artifacts]]
-id = "artifacts/mockup-sandbox"
+  [[artifacts]]
+  id = "artifacts/api-server"
 
-[deployment]
-router = "application"
-deploymentTarget = "autoscale"
+  [[artifacts]]
+  id = "artifacts/mockup-sandbox"
 
-[deployment.postBuild]
-args = ["pnpm", "store", "prune"]
-env = { "CI" = "true" }
+  [deployment]
+  router = "application"
+  deploymentTarget = "autoscale"
 
-[workflows]
-runButton = "Project"
+  [deployment.postBuild]
+  args = ["pnpm", "store", "prune"]
+  env = { "CI" = "true" }
 
-[[workflows.workflow]]
-name = "Project"
-mode = "parallel"
-author = "agent"
+  [workflows]
+  runButton = "Project"
 
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Start application"
+  [[workflows.workflow]]
+  name = "Project"
+  mode = "parallel"
+  author = "agent"
 
-[[workflows.workflow]]
-name = "Start application"
-author = "agent"
+  [[workflows.workflow.tasks]]
+  task = "workflow.run"
+  args = "Start application"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter visitecrm run dev"
-waitForPort = 5173
+  [[workflows.workflow]]
+  name = "Start application"
+  author = "agent"
 
-[workflows.workflow.metadata]
-outputType = "webview"
+  [[workflows.workflow.tasks]]
+  task = "shell.exec"
+  args = "pnpm --filter visitecrm run dev"
+  waitForPort = 5173
 
-[agent]
-stack = "PNPM_WORKSPACE"
-expertMode = true
+  [workflows.workflow.metadata]
+  outputType = "webview"
 
-[postMerge]
-path = "scripts/post-merge.sh"
-timeoutMs = 20000
+  [agent]
+  stack = "PNPM_WORKSPACE"
+  expertMode = true
 
-[nix]
-channel = "stable-25_05"
+  [postMerge]
+  path = "scripts/post-merge.sh"
+  timeoutMs = 20000
 
-[userenv]
+  [nix]
+  channel = "stable-25_05"
 
-[userenv.production]
-FRONTEND_URL = "https://visitecrm.com"
-ADDITIONAL_ORIGINS = "https://visite-crm.replit.app"
-CLERK_PROXY_URL = "https://visitecrm.com/api/__clerk"
-VITE_APP_URL = "https://visitecrm.com"
-VITE_CLERK_PROXY_URL = "https://visitecrm.com/api/__clerk"
+  [userenv]
 
-[userenv.shared]
-VITE_UPLOADTHING_URL = "/api/uploadthing"
+  [userenv.production]
+  FRONTEND_URL = "https://visitecrm.com"
+  ADDITIONAL_ORIGINS = "https://visite-crm.replit.app"
+  CLERK_PROXY_URL = "https://visitecrm.com/api/__clerk"
+  VITE_APP_URL = "https://visitecrm.com"
+  VITE_CLERK_PROXY_URL = "https://visitecrm.com/api/__clerk"
 
-[userenv.development]
-CLERK_PROXY_URL = "https://visite-crm.replit.app/api/__clerk"
+  [userenv.shared]
+  VITE_UPLOADTHING_URL = "/api/uploadthing"
+
+  [userenv.development]
+  CLERK_PROXY_URL = "https://visite-crm.replit.app/api/__clerk"
+  
