@@ -30,7 +30,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-    const in3Days = new Date(startOfToday.getTime() + 3 * 86400000);
+    const endOfDay3 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 4); // exclusive upper bound to include all of day+3
     const in7Days = new Date(startOfToday.getTime() + 7 * 86400000);
     const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -70,7 +70,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
         lt(paymentsTable.dueDate, startOfToday),
       )),
 
-      // 3. Contas a pagar nos próximos 3 dias
+      // 3. Contas a pagar nos próximos 3 dias (inclusive all of day 3)
       db.select({
         count: sql<number>`count(*)::int`,
         total: sql<number>`coalesce(sum(cast(${paymentsTable.amount} as numeric)), 0)`,
@@ -79,7 +79,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
         eq(paymentsTable.type, "payable"),
         eq(paymentsTable.status, "pending"),
         gte(paymentsTable.dueDate, startOfToday),
-        lte(paymentsTable.dueDate, in3Days),
+        lt(paymentsTable.dueDate, endOfDay3),
       )),
 
       // 4. Viagens sem reservas saindo em até 24h
@@ -110,13 +110,13 @@ router.get("/alerts", async (req, res): Promise<void> => {
         sql`${tripsTable.reservedSeats}::numeric / nullif(${tripsTable.totalCapacity}, 0) < 0.5`,
       )),
 
-      // 6. Leads sem movimentação há 7+ dias
+      // 6. Leads sem movimentação há 7+ dias (inclusive exactly 7 days)
       db.select({
         count: sql<number>`count(*)::int`,
       }).from(dealsTable).where(and(
         eq(dealsTable.tenantId, tenantId),
         eq(dealsTable.status, "open"),
-        lt(dealsTable.updatedAt, sevenDaysAgo),
+        lte(dealsTable.updatedAt, sevenDaysAgo),
       )),
 
       // 7. Aniversariantes do dia
