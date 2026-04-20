@@ -176,7 +176,7 @@ export default function Downloads() {
   }
 
   function exportReferrals() {
-    const referrals = referralsData ?? [];
+    const referrals = referralsData?.data ?? [];
     if (!referrals.length) { toast({ title: "Sem indicações para exportar" }); return; }
     const headers = ["ID", "Código", "ID do Indicador", "ID do Indicado", "E-mail do Indicado", "Status", "Bônus (R$)", "Bônus Pago", "Convertido em", "Criado em"];
     const rows = referrals.map(r => [

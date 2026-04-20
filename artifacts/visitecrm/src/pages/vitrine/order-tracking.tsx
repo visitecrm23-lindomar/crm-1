@@ -226,11 +226,11 @@ export default function VitrineOrderTracking({
             </CardContent>
           </Card>
 
-          {(order.notes || order.customerNotes) && (
+          {order.customerNotes && (
             <Card>
               <CardContent className="pt-4">
                 <p className="text-sm text-muted-foreground">
-                  <strong>Observações:</strong> {order.notes || order.customerNotes}
+                  <strong>Observações:</strong> {order.customerNotes}
                 </p>
               </CardContent>
             </Card>

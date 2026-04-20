@@ -12,7 +12,7 @@ export const clientsTable = pgTable("clients", {
   email: text("email").notNull(),
   whatsapp: text("whatsapp").notNull(),
   phone: text("phone"),
-  cpf: text("cpf").notNull(),
+  cpf: text("cpf"),
   rg: text("rg"),
   birthDate: timestamp("birth_date", { withTimezone: true }),
   gender: text("gender"),

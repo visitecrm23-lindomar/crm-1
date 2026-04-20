@@ -349,6 +349,7 @@ export const storeReviewsTable = pgTable("store_reviews", {
   images: json("images").$type<string[]>().notNull().default([]),
 
   verifiedPurchase: boolean("verified_purchase").notNull().default(false),
+  isFeatured: boolean("is_featured").notNull().default(false),
 
   status: text("status").notNull().default("pending"),
 

@@ -97,7 +97,7 @@ function ClientHistoryTab({ clientId, isOpen }: { clientId: string; isOpen: bool
   const [showForm, setShowForm] = useState(false);
 
   const { data: activities, isLoading, refetch } = useListClientActivities(clientId, {
-    query: { enabled: isOpen && !!clientId },
+    query: { enabled: isOpen && !!clientId } as any,
   });
 
   const { mutate: createActivity, isPending } = useCreateClientActivity({
@@ -296,7 +296,7 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
 }
 
 function ClientReferralTab({ clientId }: { clientId: string }) {
-  const { data, refetch } = useGetClientReferral(clientId, { query: { enabled: !!clientId } });
+  const { data, refetch } = useGetClientReferral(clientId, { query: { enabled: !!clientId } as any });
   const generate = useGenerateClientReferralCode();
   const { data: me } = useGetMe();
   const { toast } = useToast();
@@ -439,29 +439,29 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
   const id = clientId ?? "";
 
   const { data: client, isLoading: loadingClient } = useGetClient(id, {
-    query: { enabled: open && !!id },
+    query: { enabled: open && !!id } as any,
   });
 
   const { data: reservations } = useListReservations(
     { clientId: id, limit: 20 },
-    { query: { enabled: open && !!id } }
+    { query: { enabled: open && !!id } as any }
   );
 
   const { data: payments } = useListPayments(
     { clientId: id, limit: 20 },
-    { query: { enabled: open && !!id } }
+    { query: { enabled: open && !!id } as any }
   );
 
   const { data: loyaltyInfo } = useGetClientLoyalty(id, {
-    query: { enabled: open && !!id },
+    query: { enabled: open && !!id } as any,
   });
 
   const { data: loyaltyMembers } = useListLoyaltyMembers({
-    query: { enabled: open && !!id },
+    query: { enabled: open && !!id } as any,
   });
 
   const { data: loyaltyTransactions } = useListLoyaltyTransactions({
-    query: { enabled: open && !!id && !!loyaltyInfo?.memberId },
+    query: { enabled: open && !!id && !!loyaltyInfo?.memberId } as any,
   });
 
   const member = useMemo(() => {
