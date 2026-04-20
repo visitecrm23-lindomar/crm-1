@@ -199,21 +199,17 @@ function HomeRedirect() {
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { data: me, isLoading } = useGetMe();
-  const [, setLocation] = useLocation();
-
-  useEffect(() => {
-    if (isLoading || !me) return;
-    if (!me.tenantId && me.role !== "superadmin") {
-      setLocation("/onboarding");
-    }
-  }, [me, isLoading]);
 
   return (
     <>
       <Show when="signed-in">
-        <Layout>
-          <Component />
-        </Layout>
+        {isLoading ? null : !me?.tenantId && me?.role !== "superadmin" ? (
+          <Redirect to="/onboarding" />
+        ) : (
+          <Layout>
+            <Component />
+          </Layout>
+        )}
       </Show>
       <Show when="signed-out">
         <Redirect to="/" />
@@ -224,14 +220,6 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
 function AgenciaRoute({ component: Component }: { component: React.ComponentType }) {
   const { data: me, isLoading } = useGetMe();
-  const [, setLocation] = useLocation();
-
-  useEffect(() => {
-    if (isLoading || !me) return;
-    if (!me.tenantId && me.role !== "superadmin") {
-      setLocation("/onboarding");
-    }
-  }, [me, isLoading]);
 
   return (
     <>
@@ -239,7 +227,9 @@ function AgenciaRoute({ component: Component }: { component: React.ComponentType
         <Redirect to="/" />
       </Show>
       <Show when="signed-in">
-        {isLoading ? null : me?.role === "vendedor" ? (
+        {isLoading ? null : !me?.tenantId && me?.role !== "superadmin" ? (
+          <Redirect to="/onboarding" />
+        ) : me?.role === "vendedor" ? (
           <Redirect to="/trips" />
         ) : (
           <Layout>
@@ -253,23 +243,19 @@ function AgenciaRoute({ component: Component }: { component: React.ComponentType
 
 function AgenciaOnlyRoute({ component: Component }: { component: React.ComponentType }) {
   const { data: me, isLoading } = useGetMe();
-  const [, setLocation] = useLocation();
-
-  useEffect(() => {
-    if (isLoading || !me) return;
-    if (!me.tenantId && me.role !== "superadmin") {
-      setLocation("/onboarding");
-    } else if (me.role === "vendedor") {
-      setLocation("/meu-painel");
-    }
-  }, [me, isLoading]);
 
   return (
     <>
       <Show when="signed-in">
-        <Layout>
-          <Component />
-        </Layout>
+        {isLoading ? null : !me?.tenantId && me?.role !== "superadmin" ? (
+          <Redirect to="/onboarding" />
+        ) : me?.role === "vendedor" ? (
+          <Redirect to="/meu-painel" />
+        ) : (
+          <Layout>
+            <Component />
+          </Layout>
+        )}
       </Show>
       <Show when="signed-out">
         <Redirect to="/" />

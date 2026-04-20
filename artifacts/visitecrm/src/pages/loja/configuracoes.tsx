@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { CoverImageUpload } from "@/components/cover-image-upload";
 import { useToast } from "@/hooks/use-toast";
 import { storeApi, StoreSettings, InitStoreInput } from "@/lib/storeApi";
@@ -44,6 +45,7 @@ function slugify(text: string): string {
 
 function StoreWizard({ onCreated }: { onCreated: (s: StoreSettings) => void }) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState<InitStoreInput & { paymentMethods: string[] }>({
@@ -93,11 +95,21 @@ function StoreWizard({ onCreated }: { onCreated: (s: StoreSettings) => void }) {
       toast({ title: "Loja criada com sucesso!" });
       onCreated(store);
     } catch (err: unknown) {
-      toast({
-        title: "Erro ao criar loja",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "destructive",
-      });
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "User not provisioned") {
+        toast({
+          title: "Cadastro de agência incompleto",
+          description: "Conclua o cadastro da sua agência antes de criar a loja.",
+          variant: "destructive",
+        });
+        setLocation("/onboarding");
+      } else {
+        toast({
+          title: "Erro ao criar loja",
+          description: msg,
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
     }
