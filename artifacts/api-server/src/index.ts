@@ -1,3 +1,37 @@
+// Suppress noisy deprecation warnings emitted by `pg-connection-string@2.x`
+// (used transitively by `pg@8`). These are fixed upstream in pg v9 but until
+// that ships we filter only these specific codes so future warnings from our
+// own code remain visible. Must run before any other module is imported.
+const SUPPRESSED_DEP_CODES = new Set(["DEP0169", "DEP0060"]);
+process.on("warning", (warning: NodeJS.ErrnoException) => {
+  if (warning.name === "DeprecationWarning" && SUPPRESSED_DEP_CODES.has(warning.code ?? "")) {
+    return;
+  }
+});
+// Node only prints warnings via its default listener; once we add any listener
+// of our own it still runs. So additionally short-circuit the default printer
+// by removing it for the suppressed codes via process.emitWarning override.
+const originalEmitWarning = process.emitWarning.bind(process);
+process.emitWarning = ((
+  warning: string | Error,
+  ...rest: unknown[]
+) => {
+  // Signature variants:
+  //   emitWarning(warning, options?)
+  //   emitWarning(warning, type?, code?, ctor?)
+  let code: string | undefined;
+  if (rest.length > 0) {
+    const first = rest[0];
+    if (first && typeof first === "object" && "code" in (first as object)) {
+      code = (first as { code?: string }).code;
+    } else if (typeof first === "string" && typeof rest[1] === "string") {
+      code = rest[1] as string;
+    }
+  }
+  if (code && SUPPRESSED_DEP_CODES.has(code)) return;
+  return originalEmitWarning(warning as string, ...(rest as []));
+}) as typeof process.emitWarning;
+
 import app from "./app";
 import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
