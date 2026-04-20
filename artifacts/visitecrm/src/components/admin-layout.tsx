@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   RefreshCw,
   Package,
+  Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -37,6 +38,7 @@ const NAV_ITEMS = [
   { name: "Métricas", href: "/admin/metrics", icon: BarChart3, exact: false },
   { name: "Usuários", href: "/admin/users", icon: Users, exact: false },
   { name: "Logs de Auditoria", href: "/admin/logs", icon: ScrollText, exact: false },
+  { name: "Manutenção", href: "/admin/maintenance", icon: Wrench, exact: false },
   { name: "Configurações", href: "/admin/settings", icon: Settings, exact: false },
 ];
 

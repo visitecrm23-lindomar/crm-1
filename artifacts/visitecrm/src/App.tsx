@@ -55,6 +55,7 @@ import AdminMetrics from "@/pages/admin/metrics";
 import AdminUsers from "@/pages/admin/users";
 import AdminLogs from "@/pages/admin/logs";
 import AdminSettings from "@/pages/admin/admin-settings";
+import AdminMaintenance from "@/pages/admin/maintenance";
 
 // Store admin pages
 import LojaConfiguracoes from "@/pages/loja/configuracoes";
@@ -463,6 +464,7 @@ function Router() {
       <Route path="/admin/users" component={() => <AdminRoute component={AdminUsers} />} />
       <Route path="/admin/logs" component={() => <AdminRoute component={AdminLogs} />} />
       <Route path="/admin/settings" component={() => <AdminRoute component={AdminSettings} />} />
+      <Route path="/admin/maintenance" component={() => <AdminRoute component={AdminMaintenance} />} />
 
       {/* Store admin pages */}
       <Route path="/loja" component={() => <Redirect to="/loja/configuracoes" />} />
