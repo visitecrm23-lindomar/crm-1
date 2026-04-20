@@ -24,7 +24,7 @@ function GrowthBadge({ value }: { value: number | null | undefined }) {
 }
 
 export default function HistoricoComparativo() {
-  const [view, setView] = useState<"area" | "bar" | "line">("area");
+  const [view, setView] = useState<"area" | "bar" | "line">("bar");
   const { data: months, isLoading } = useGetDashboardComparative();
 
   const totals = months?.reduce(
