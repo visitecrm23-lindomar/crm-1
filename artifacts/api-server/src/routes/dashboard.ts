@@ -785,15 +785,20 @@ router.get("/dashboard/comparative", async (req, res): Promise<void> => {
       const reservations = resMap.get(key) ?? 0;
       const profit = revenue - expenses;
       let revenueGrowth: number | null = null;
+      let expensesGrowth: number | null = null;
+      let profitGrowth: number | null = null;
       let reservationsGrowth: number | null = null;
       if (i > 0) {
         const prevKey = months[i - 1].key;
         const prev = revMap.get(prevKey) ?? { revenue: 0, expenses: 0 };
+        const prevProfit = prev.revenue - prev.expenses;
         const prevRes = resMap.get(prevKey) ?? 0;
         revenueGrowth = prev.revenue > 0 ? Math.round(((revenue - prev.revenue) / prev.revenue) * 1000) / 10 : null;
+        expensesGrowth = prev.expenses > 0 ? Math.round(((expenses - prev.expenses) / prev.expenses) * 1000) / 10 : null;
+        profitGrowth = prevProfit !== 0 ? Math.round(((profit - prevProfit) / Math.abs(prevProfit)) * 1000) / 10 : null;
         reservationsGrowth = prevRes > 0 ? Math.round(((reservations - prevRes) / prevRes) * 1000) / 10 : null;
       }
-      return { month: label, key, revenue: Math.round(revenue), expenses: Math.round(expenses), profit: Math.round(profit), reservations, revenueGrowth, reservationsGrowth };
+      return { month: label, key, revenue: Math.round(revenue), expenses: Math.round(expenses), profit: Math.round(profit), reservations, revenueGrowth, expensesGrowth, profitGrowth, reservationsGrowth };
     });
 
     res.json(result);

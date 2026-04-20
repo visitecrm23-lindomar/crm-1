@@ -64,6 +64,10 @@ export interface DashboardComparativeItem {
   /** @nullable */
   revenueGrowth?: number | null;
   /** @nullable */
+  expensesGrowth?: number | null;
+  /** @nullable */
+  profitGrowth?: number | null;
+  /** @nullable */
   reservationsGrowth?: number | null;
 }
 
