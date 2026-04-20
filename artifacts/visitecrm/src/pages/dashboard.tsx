@@ -317,7 +317,7 @@ function AgencyDashboard() {
               loading={loadingSummary}
               color={(summary?.conversionRate ?? 0) >= 30 ? "text-emerald-600" : "text-blue-600"}
             />
-            <KpiCard title="Leads no Pipeline" value={summary?.pipelineLeads ?? summary?.openDeals ?? 0} sub={`R$ ${formatCurrency(summary?.dealsPipelineValue ?? 0)}`} icon={Briefcase} loading={loadingSummary} color="text-indigo-600" />
+            <KpiCard title="Leads no Pipeline" value={summary?.pipelineLeads ?? summary?.openDeals ?? 0} sub={`Valor: ${formatCurrency(summary?.dealsPipelineValue ?? 0)}`} icon={Briefcase} loading={loadingSummary} color="text-indigo-600" />
             <KpiCard title="Vendas Este Mês" value={summary?.salesThisMonth ?? 0} sub="Reservas confirmadas no mês" icon={Zap} loading={loadingSummary} color="text-emerald-600" highlight={(summary?.salesThisMonth ?? 0) > 0 ? "green" : undefined} />
           </div>
         </section>
@@ -471,13 +471,13 @@ function AgencyDashboard() {
                 <p className="text-sm text-muted-foreground text-center py-8">Sem dados de destinos.</p>
               ) : (
                 <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={charts.topDestinations} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
+                  <BarChart data={charts.topDestinations.slice(0, 5)} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
                     <XAxis type="number" tick={{ fontSize: 11 }} />
                     <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={90} />
                     <Tooltip formatter={(v: unknown, name: string) => [String(v), name]} />
                     <Bar dataKey="count" name="Reservas" fill="#8B5CF6" radius={[0, 4, 4, 0]}>
-                      {charts.topDestinations.map((_, i) => (
+                      {charts.topDestinations.slice(0, 5).map((_, i) => (
                         <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
                       ))}
                     </Bar>

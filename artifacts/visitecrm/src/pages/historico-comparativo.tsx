@@ -165,70 +165,72 @@ export default function HistoricoComparativo() {
         </CardContent>
       </Card>
 
-      {/* Reservations chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Reservas por Mês</CardTitle>
-          <CardDescription>Volume de reservas criadas nos últimos 12 meses</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-[220px] w-full" />
-          ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={months} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Bar dataKey="reservations" name="Reservas" fill="#8B5CF6" radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </CardContent>
-      </Card>
+      {/* Reservations chart + detail table side-by-side on lg+ */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Reservas por Mês</CardTitle>
+            <CardDescription>Volume de reservas criadas nos últimos 12 meses</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-[220px] w-full" />
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={months} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Bar dataKey="reservations" name="Reservas" fill="#8B5CF6" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
 
-      {/* Month by month detail table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Detalhe Mês a Mês</CardTitle>
-          <CardDescription>Comparativo de crescimento em relação ao mês anterior</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-muted-foreground">
-                    <th className="text-left py-2 pr-4 font-medium">Mês</th>
-                    <th className="text-right py-2 px-3 font-medium">Receita</th>
-                    <th className="text-right py-2 px-3 font-medium">Crescimento</th>
-                    <th className="text-right py-2 px-3 font-medium">Despesas</th>
-                    <th className="text-right py-2 px-3 font-medium">Lucro</th>
-                    <th className="text-right py-2 pl-3 font-medium">Reservas</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {(months ?? []).slice().reverse().map((m) => (
-                    <tr key={m.key} className="hover:bg-muted/40">
-                      <td className="py-2.5 pr-4 font-medium capitalize">{m.month}</td>
-                      <td className="py-2.5 px-3 text-right text-blue-700 font-semibold">{formatCurrency(m.revenue)}</td>
-                      <td className="py-2.5 px-3 text-right"><GrowthBadge value={m.revenueGrowth} /></td>
-                      <td className="py-2.5 px-3 text-right text-red-600">{formatCurrency(m.expenses)}</td>
-                      <td className={`py-2.5 px-3 text-right font-semibold ${m.profit >= 0 ? "text-emerald-600" : "text-red-600"}`}>{formatCurrency(m.profit)}</td>
-                      <td className="py-2.5 pl-3 text-right">{m.reservations}</td>
+        {/* Month by month detail table */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Detalhe Mês a Mês</CardTitle>
+            <CardDescription>Comparativo de crescimento em relação ao mês anterior</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-muted-foreground">
+                      <th className="text-left py-2 pr-4 font-medium">Mês</th>
+                      <th className="text-right py-2 px-3 font-medium">Receita</th>
+                      <th className="text-right py-2 px-3 font-medium">Crescimento</th>
+                      <th className="text-right py-2 px-3 font-medium">Despesas</th>
+                      <th className="text-right py-2 px-3 font-medium">Lucro</th>
+                      <th className="text-right py-2 pl-3 font-medium">Reservas</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  </thead>
+                  <tbody className="divide-y">
+                    {(months ?? []).slice().reverse().map((m) => (
+                      <tr key={m.key} className="hover:bg-muted/40">
+                        <td className="py-2.5 pr-4 font-medium capitalize">{m.month}</td>
+                        <td className="py-2.5 px-3 text-right text-blue-700 font-semibold">{formatCurrency(m.revenue)}</td>
+                        <td className="py-2.5 px-3 text-right"><GrowthBadge value={m.revenueGrowth} /></td>
+                        <td className="py-2.5 px-3 text-right text-red-600">{formatCurrency(m.expenses)}</td>
+                        <td className={`py-2.5 px-3 text-right font-semibold ${m.profit >= 0 ? "text-emerald-600" : "text-red-600"}`}>{formatCurrency(m.profit)}</td>
+                        <td className="py-2.5 pl-3 text-right">{m.reservations}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
