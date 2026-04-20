@@ -5,7 +5,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { z } from "zod";
-import { deleteOrphanedImages } from "../lib/uploadthing-cleanup";
+import { deleteOrphanedImages } from "../lib/uploadthing";
 
 const router = Router();
 const ADMIN_ROLES = ["agencia", "superadmin"];

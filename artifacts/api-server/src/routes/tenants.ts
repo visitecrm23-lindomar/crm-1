@@ -4,7 +4,7 @@ import { eq, desc, count } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
-import { deleteOrphanedFile } from "../lib/uploadthing-cleanup";
+import { deleteOrphanedFile } from "../lib/uploadthing";
 
 const router = Router();
 

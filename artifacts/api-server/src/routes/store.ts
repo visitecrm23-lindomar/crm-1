@@ -14,9 +14,10 @@ import {
 } from "@workspace/db";
 import { eq, and, desc, asc, count, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod/v4";
+import { UTApi } from "uploadthing/server";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
-import { deleteOrphanedFile, deleteOrphanedImages } from "../lib/uploadthing-cleanup";
+import { deleteOrphanedFile, deleteOrphanedImages } from "../lib/uploadthing";
 
 const router = Router();
 const ADMIN_ROLES = ["agencia", "superadmin"];

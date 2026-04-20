@@ -1,5 +1,5 @@
 import jsPDF from "jspdf";
-import ExcelJS from "exceljs";
+import * as XLSX from "xlsx";
 
 const fmtMoney = (v: number | string) => {
   const n = typeof v === "string" ? parseFloat(v) : v;
@@ -395,148 +395,97 @@ export function exportFinancialPDF(data: FinancialExportData): void {
   doc.save(filename);
 }
 
-export async function exportFinancialXLSX(data: FinancialExportData): Promise<void> {
-  const wb = new ExcelJS.Workbook();
-  wb.creator = "VisiteCRM";
-  wb.created = new Date();
+export function exportFinancialXLSX(data: FinancialExportData): void {
+  const wb = XLSX.utils.book_new();
 
-  const boldHeader = (ws: ExcelJS.Worksheet) => {
-    ws.getRow(1).font = { bold: true };
-  };
-
-  // ── Resumo ──────────────────────────────────────────────────────────────────
-  const wsResumo = wb.addWorksheet("Resumo");
-  wsResumo.columns = [
-    { header: "Indicador", key: "k", width: 32 },
-    { header: "Valor", key: "v", width: 20 },
-    { header: "", key: "c", width: 20 },
-    { header: "", key: "d", width: 20 },
+  const resumoRows = [
+    ["Relatório Financeiro — VisiteCRM"],
+    [`Gerado em: ${new Date().toLocaleDateString("pt-BR")}`],
+    [],
+    ["RESUMO FINANCEIRO"],
+    ["Indicador", "Valor"],
+    ["Resultado Líquido", Number(data.kpis.netProfit)],
+    ["Receita Bruta (Recebida)", Number(data.kpis.grossRevenue)],
+    ["Despesas Pagas", Number(data.kpis.totalExpensesPaid)],
+    ["Margem (%)", Number(data.kpis.margin.toFixed(2))],
+    ["A Receber", Number(data.kpis.totalReceivable)],
+    ["Recebido no Mês", Number(data.kpis.collectedThisMonth)],
+    ["Despesas Vencidas", Number(data.kpis.overdueExpenses)],
   ];
-  boldHeader(wsResumo);
-  wsResumo.addRows([
-    { k: "Relatório Financeiro — VisiteCRM" },
-    { k: `Gerado em: ${new Date().toLocaleDateString("pt-BR")}` },
-    {},
-    { k: "RESUMO FINANCEIRO" },
-    { k: "Resultado Líquido", v: Number(data.kpis.netProfit) },
-    { k: "Receita Bruta (Recebida)", v: Number(data.kpis.grossRevenue) },
-    { k: "Despesas Pagas", v: Number(data.kpis.totalExpensesPaid) },
-    { k: "Margem (%)", v: Number(data.kpis.margin.toFixed(2)) },
-    { k: "A Receber", v: Number(data.kpis.totalReceivable) },
-    { k: "Recebido no Mês", v: Number(data.kpis.collectedThisMonth) },
-    { k: "Despesas Vencidas", v: Number(data.kpis.overdueExpenses) },
-  ]);
 
   if (data.chartData && data.chartData.length > 0) {
-    wsResumo.addRow({});
-    wsResumo.addRow({ k: "EVOLUÇÃO MENSAL (12 MESES)" });
-    wsResumo.addRow({ k: "Mês", v: "Receita", c: "Despesas", d: "Resultado" });
+    resumoRows.push([]);
+    resumoRows.push(["EVOLUÇÃO MENSAL (12 MESES)"]);
+    resumoRows.push(["Mês", "Receita", "Despesas", "Resultado"]);
     for (const d of data.chartData) {
-      wsResumo.addRow({ k: d.label, v: d.revenue, c: d.expenses, d: d.revenue - d.expenses });
+      resumoRows.push([d.label, d.revenue, d.expenses, d.revenue - d.expenses]);
     }
   }
 
-  // ── Receitas ─────────────────────────────────────────────────────────────────
-  const wsRec = wb.addWorksheet("Receitas");
-  wsRec.columns = [
-    { header: "Descrição", key: "desc", width: 37 },
-    { header: "Cliente", key: "client", width: 24 },
-    { header: "Categoria", key: "cat", width: 18 },
-    { header: "Vencimento", key: "due", width: 14 },
-    { header: "Valor (R$)", key: "amount", width: 16 },
-    { header: "Forma de Pagamento", key: "method", width: 22 },
-    { header: "Status", key: "status", width: 14 },
-  ];
-  boldHeader(wsRec);
-  for (const r of data.receivables) {
-    wsRec.addRow({
-      desc: r.description ?? "",
-      client: r.clientName ?? "",
-      cat: r.category ?? "",
-      due: fmtDate(r.dueDate),
-      amount: Number(r.amount),
-      method: METHOD_LABELS[r.paymentMethod ?? ""] ?? r.paymentMethod ?? "",
-      status: STATUS_LABELS[r.status] ?? r.status,
-    });
-  }
-  wsRec.getColumn("amount").numFmt = '"R$"#,##0.00';
+  const wsResumo = XLSX.utils.aoa_to_sheet(resumoRows);
+  wsResumo["!cols"] = [{ wch: 30 }, { wch: 18 }, { wch: 18 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
 
-  // ── A Pagar ───────────────────────────────────────────────────────────────────
-  const wsPay = wb.addWorksheet("A Pagar");
-  wsPay.columns = [
-    { header: "Descrição", key: "desc", width: 37 },
-    { header: "Categoria", key: "cat", width: 20 },
-    { header: "Vencimento", key: "due", width: 14 },
-    { header: "Valor (R$)", key: "amount", width: 16 },
-    { header: "Status", key: "status", width: 14 },
+  const recRows = [
+    ["Descrição", "Cliente", "Categoria", "Vencimento", "Valor (R$)", "Forma de Pagamento", "Status"],
+    ...data.receivables.map(r => [
+      r.description ?? "",
+      r.clientName ?? "",
+      r.category ?? "",
+      fmtDate(r.dueDate),
+      Number(r.amount),
+      METHOD_LABELS[r.paymentMethod ?? ""] ?? r.paymentMethod ?? "",
+      STATUS_LABELS[r.status] ?? r.status,
+    ]),
   ];
-  boldHeader(wsPay);
-  for (const p of data.payables) {
-    wsPay.addRow({
-      desc: p.description ?? "",
-      cat: p.category ?? "",
-      due: fmtDate(p.dueDate),
-      amount: Number(p.amount),
-      status: STATUS_LABELS[p.status] ?? p.status,
-    });
-  }
-  wsPay.getColumn("amount").numFmt = '"R$"#,##0.00';
+  const wsRec = XLSX.utils.aoa_to_sheet(recRows);
+  wsRec["!cols"] = [{ wch: 35 }, { wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, wsRec, "Receitas");
 
-  // ── Despesas ──────────────────────────────────────────────────────────────────
-  const wsExp = wb.addWorksheet("Despesas");
-  wsExp.columns = [
-    { header: "Descrição", key: "desc", width: 37 },
-    { header: "Categoria", key: "cat", width: 20 },
-    { header: "Fornecedor", key: "supplier", width: 22 },
-    { header: "Vencimento", key: "due", width: 14 },
-    { header: "Valor (R$)", key: "amount", width: 16 },
-    { header: "Status", key: "status", width: 14 },
+  const payRows = [
+    ["Descrição", "Categoria", "Vencimento", "Valor (R$)", "Status"],
+    ...data.payables.map(p => [
+      p.description ?? "",
+      p.category ?? "",
+      fmtDate(p.dueDate),
+      Number(p.amount),
+      STATUS_LABELS[p.status] ?? p.status,
+    ]),
   ];
-  boldHeader(wsExp);
-  for (const e of data.expenses) {
-    wsExp.addRow({
-      desc: e.description,
-      cat: EXPENSE_CATEGORIES[e.category] ?? e.category,
-      supplier: e.supplierName ?? "",
-      due: fmtDate(e.dueDate),
-      amount: Number(e.amount),
-      status: STATUS_LABELS[e.status] ?? e.status,
-    });
-  }
-  wsExp.getColumn("amount").numFmt = '"R$"#,##0.00';
+  const wsPay = XLSX.utils.aoa_to_sheet(payRows);
+  wsPay["!cols"] = [{ wch: 35 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, wsPay, "A Pagar");
 
-  // ── Comissões ─────────────────────────────────────────────────────────────────
-  const wsCom = wb.addWorksheet("Comissões");
-  wsCom.columns = [
-    { header: "Vendedor", key: "seller", width: 27 },
-    { header: "Reserva", key: "res", width: 22 },
-    { header: "Base de Cálculo (R$)", key: "base", width: 24 },
-    { header: "Comissão (R$)", key: "commission", width: 20 },
-    { header: "Status", key: "status", width: 14 },
-    { header: "Pago em", key: "paidAt", width: 16 },
+  const expRows = [
+    ["Descrição", "Categoria", "Fornecedor", "Vencimento", "Valor (R$)", "Status"],
+    ...data.expenses.map(e => [
+      e.description,
+      EXPENSE_CATEGORIES[e.category] ?? e.category,
+      e.supplierName ?? "",
+      fmtDate(e.dueDate),
+      Number(e.amount),
+      STATUS_LABELS[e.status] ?? e.status,
+    ]),
   ];
-  boldHeader(wsCom);
-  for (const c of data.commissions) {
-    wsCom.addRow({
-      seller: c.sellerName ?? "",
-      res: c.reservationId ?? "",
-      base: Number(c.baseAmount ?? 0),
-      commission: Number(c.commissionAmount),
-      status: STATUS_LABELS[c.status] ?? c.status,
-      paidAt: c.paidAt ? fmtDate(c.paidAt) : "",
-    });
-  }
-  wsCom.getColumn("base").numFmt = '"R$"#,##0.00';
-  wsCom.getColumn("commission").numFmt = '"R$"#,##0.00';
+  const wsExp = XLSX.utils.aoa_to_sheet(expRows);
+  wsExp["!cols"] = [{ wch: 35 }, { wch: 18 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, wsExp, "Despesas");
 
-  const buffer = await wb.xlsx.writeBuffer();
-  const blob = new Blob([buffer], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `relatorio-financeiro-${new Date().toISOString().slice(0, 10)}.xlsx`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const comRows = [
+    ["Vendedor", "Reserva", "Base de Cálculo (R$)", "Comissão (R$)", "Status", "Pago em"],
+    ...data.commissions.map(c => [
+      c.sellerName ?? "",
+      c.reservationId ?? "",
+      Number(c.baseAmount ?? 0),
+      Number(c.commissionAmount),
+      STATUS_LABELS[c.status] ?? c.status,
+      c.paidAt ? fmtDate(c.paidAt) : "",
+    ]),
+  ];
+  const wsCom = XLSX.utils.aoa_to_sheet(comRows);
+  wsCom["!cols"] = [{ wch: 25 }, { wch: 20 }, { wch: 22 }, { wch: 18 }, { wch: 12 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, wsCom, "Comissões");
+
+  const filename = `relatorio-financeiro-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  XLSX.writeFile(wb, filename);
 }
