@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef, type ElementType } from "react";
 import {
   useGetDashboardSummary, useGetDashboardUpcomingTrips,
   useGetDashboardCharts, useGetDashboardFunnel,
-  useGetDashboardComparative, useGetDashboardTopCustomers,
+  useGetDashboardTopCustomers,
   useListPayments, useGetMe, useListReservations,
   useGetPaymentsSummary,
 } from "@workspace/api-client-react";
