@@ -28,7 +28,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { getSeatColor, getCellIcon } from "@/components/SeatMapPicker";
 import {
   Plus, Search, MapPin, Calendar, Users, Bus, Edit, Trash2, Eye, ChevronsLeft, ChevronsRight,
-  LayoutGrid, List, ChevronLeft, ChevronRight, ArrowLeft, Check, X, Download, Send, Copy,
+  LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ArrowLeft, Check, X, Download, Send, Copy,
   AlertCircle, DollarSign, ClipboardList, LogIn, RotateCcw, CheckCircle, UserRound, RefreshCw,
   ShoppingBag, Loader2, Clock, Star, CheckCircle2, XCircle, MessageSquare, Pencil, Phone,
   TrendingUp, TrendingDown, Receipt, Banknote, PiggyBank, Wallet,
@@ -2951,6 +2951,7 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
   const [statusFilter, setStatusFilter] = useState("all");
   const [financialReportOpen, setFinancialReportOpen] = useState(false);
   const [client360Id, setClient360Id] = useState<string | null>(null);
+  const [showCosts, setShowCosts] = useState(false);
 
   const { data: allTripsData } = useListTrips({ limit: 100 });
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
@@ -2993,6 +2994,25 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
     const estimatedProfit = amountReceived - (trip?.priceAdult ? trip.priceAdult * 0.6 * confirmed.length : 0);
     return { confirmed: confirmed.length, pending: pending.length, totalRevenue, amountReceived, amountPending, occupancy, estimatedProfit };
   }, [reservations, trip]);
+
+  const costSummary = useMemo(() => {
+    const fixedItems = Array.isArray(trip?.fixedCosts)
+      ? (trip.fixedCosts as unknown as FixedCostItem[])
+      : [];
+    const variableItems = Array.isArray(trip?.variableCosts)
+      ? (trip.variableCosts as unknown as VariableCostItem[])
+      : [];
+    const capacity = trip?.totalCapacity ?? 0;
+    const totalFixed = fixedItems.reduce((s, c) => s + c.value, 0);
+    const totalVariablePax = variableItems.reduce((s, c) => s + c.valuePax, 0);
+    const totalVariable = totalVariablePax * capacity;
+    const totalCost = totalFixed + totalVariable;
+    const costPerPax = capacity > 0 ? totalCost / capacity : 0;
+    const grossRevenue = (trip?.priceAdult ?? 0) * capacity;
+    const marginPct = grossRevenue > 0 ? Math.round(((grossRevenue - totalCost) / grossRevenue) * 100) : null;
+    const hasCosts = fixedItems.length > 0 || variableItems.length > 0;
+    return { fixedItems, variableItems, totalFixed, totalVariable, totalVariablePax, totalCost, costPerPax, marginPct, hasCosts };
+  }, [trip]);
 
   const paymentMethodCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -3080,6 +3100,87 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
           </div>
         ))}
       </div>
+
+      {costSummary.hasCosts && (
+        <div className="bg-card border rounded-xl p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-muted-foreground" />
+              <h3 className="font-semibold">Resumo de Custos</h3>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setShowCosts(v => !v)} className="text-xs text-muted-foreground h-7">
+              {showCosts ? "Ocultar detalhes" : "Ver detalhes"}
+              <ChevronDown className={`w-3.5 h-3.5 ml-1 transition-transform ${showCosts ? "rotate-180" : ""}`} />
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {[
+              { label: "Custos Fixos", value: formatCurrency(costSummary.totalFixed), color: "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800" },
+              { label: `Custos Variáveis (${trip?.totalCapacity ?? 0} pax)`, value: formatCurrency(costSummary.totalVariable), color: "bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800" },
+              { label: "Custo Total", value: formatCurrency(costSummary.totalCost), color: "bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800" },
+              { label: "Custo por Passageiro", value: formatCurrency(costSummary.costPerPax), color: "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800" },
+              ...(costSummary.marginPct !== null ? [{ label: "Margem Estimada", value: `${costSummary.marginPct}%`, color: costSummary.marginPct >= 0 ? "bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800" : "bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800" }] : []),
+            ].map(chip => (
+              <div key={chip.label} className={`flex flex-col px-4 py-2.5 rounded-lg border text-sm ${chip.color}`}>
+                <span className="text-xs opacity-70 mb-0.5">{chip.label}</span>
+                <span className="font-semibold text-base">{chip.value}</span>
+              </div>
+            ))}
+          </div>
+
+          {showCosts && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Custos Fixos</p>
+                {costSummary.fixedItems.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">Nenhum custo fixo cadastrado</p>
+                ) : (
+                  <div className="space-y-1">
+                    {costSummary.fixedItems.map(item => (
+                      <div key={item.id} className="flex items-center justify-between text-sm py-1.5 px-2 rounded bg-muted/30">
+                        <div className="min-w-0">
+                          <span className="text-xs font-medium text-muted-foreground mr-2">{item.category}</span>
+                          <span className="truncate">{item.description}</span>
+                        </div>
+                        <span className="font-medium shrink-0 ml-3">{formatCurrency(item.value)}</span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between text-xs font-semibold pt-1 border-t px-2">
+                      <span>Total Fixo</span>
+                      <span>{formatCurrency(costSummary.totalFixed)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Custos Variáveis</p>
+                {costSummary.variableItems.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">Nenhum custo variável cadastrado</p>
+                ) : (
+                  <div className="space-y-1">
+                    {costSummary.variableItems.map(item => (
+                      <div key={item.id} className="flex items-center justify-between text-sm py-1.5 px-2 rounded bg-muted/30">
+                        <div className="min-w-0">
+                          <span className="text-xs font-medium text-muted-foreground mr-2">{item.category}</span>
+                          <span className="truncate">{item.description}</span>
+                        </div>
+                        <div className="text-right shrink-0 ml-3">
+                          <span className="text-muted-foreground text-xs block">{formatCurrency(item.valuePax)}/pax</span>
+                          <span className="font-medium">{formatCurrency(item.valuePax * (trip?.totalCapacity ?? 0))}</span>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="flex justify-between text-xs font-semibold pt-1 border-t px-2">
+                      <span>Total Variável ({trip?.totalCapacity ?? 0} pax)</span>
+                      <span>{formatCurrency(costSummary.totalVariable)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-card border rounded-xl p-6 space-y-4">
