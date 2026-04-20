@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Trash2, ScanSearch, FileImage, ExternalLink, CheckSquare, Square, History, Clock, Zap } from "lucide-react";
+import { Loader2, Trash2, ScanSearch, FileImage, ExternalLink, CheckSquare, Square, History, Clock } from "lucide-react";
 
 interface OrphanedFile {
   key: string;
@@ -54,37 +54,6 @@ export default function AdminMaintenance() {
   const [deleting, setDeleting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [history, setHistory] = useState<CleanupHistoryEntry[]>([]);
-
-  const [quickCleaning, setQuickCleaning] = useState(false);
-  const [quickConfirmOpen, setQuickConfirmOpen] = useState(false);
-  const [quickResult, setQuickResult] = useState<{ deleted: number; failed: number } | null>(null);
-
-  async function quickCleanup() {
-    setQuickCleaning(true);
-    setQuickConfirmOpen(false);
-    setQuickResult(null);
-    try {
-      const res = await fetch("/api/admin/cleanup-orphaned-uploadthing-files?dryRun=false", {
-        method: "POST",
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Erro na limpeza");
-      const result = { deleted: data.deleted ?? 0, failed: data.failed ?? 0 };
-      setQuickResult(result);
-      toast({
-        title: result.deleted === 0
-          ? "Nenhum arquivo órfão encontrado"
-          : `${result.deleted} arquivo${result.deleted !== 1 ? "s" : ""} deletado${result.deleted !== 1 ? "s" : ""} com sucesso`,
-        description: result.failed > 0 ? `${result.failed} arquivo(s) não puderam ser deletados` : undefined,
-        variant: result.failed > 0 ? "destructive" : "default",
-      });
-    } catch (err) {
-      toast({ title: "Erro na limpeza rápida", description: String(err), variant: "destructive" });
-    } finally {
-      setQuickCleaning(false);
-    }
-  }
 
   async function scan() {
     setScanning(true);
@@ -179,48 +148,6 @@ export default function AdminMaintenance() {
           Limpeza de arquivos órfãos no armazenamento de mídia (UploadThing).
         </p>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Zap className="w-4 h-4 text-primary" />
-            Limpeza Rápida de Arquivos Órfãos
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Detecta e remove automaticamente todos os arquivos de mídia não vinculados a nenhum registro.
-            Útil para liberar espaço sem precisar revisar cada arquivo individualmente.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-3 flex-wrap">
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setQuickConfirmOpen(true)}
-              disabled={quickCleaning}
-            >
-              {quickCleaning ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Trash2 className="w-4 h-4 mr-2" />
-              )}
-              {quickCleaning ? "Limpando..." : "Limpar Arquivos Órfãos"}
-            </Button>
-            {quickResult && !quickCleaning && (
-              quickResult.deleted === 0 ? (
-                <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">
-                  Nenhum arquivo órfão encontrado
-                </Badge>
-              ) : (
-                <Badge variant="secondary" className="text-xs">
-                  {quickResult.deleted} arquivo{quickResult.deleted !== 1 ? "s" : ""} removido{quickResult.deleted !== 1 ? "s" : ""}
-                  {quickResult.failed > 0 && ` · ${quickResult.failed} falha(s)`}
-                </Badge>
-              )
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
@@ -379,27 +306,6 @@ export default function AdminMaintenance() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Deletar {deleteCount} arquivo{deleteCount !== 1 ? "s" : ""}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={quickConfirmOpen} onOpenChange={setQuickConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar limpeza rápida</AlertDialogTitle>
-            <AlertDialogDescription>
-              Todos os arquivos de mídia órfãos serão deletados permanentemente do armazenamento.
-              Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={quickCleanup}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Confirmar limpeza
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
