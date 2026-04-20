@@ -7,6 +7,7 @@ import { CLERK_PROXY_PATH, clerkProxyMiddleware } from "./middlewares/clerkProxy
 import router from "./routes";
 import { logger } from "./lib/logger";
 import path from "path";
+import { fileURLToPath } from "url";
 
 const app: Express = express();
 
@@ -105,10 +106,18 @@ app.use(clerkMiddleware(authorizedParties.length > 0 ? { authorizedParties } : {
 app.use("/api", router);
 
 if (!isDev) {
-  const frontendDist = path.join(process.cwd(), "artifacts/visitecrm/dist/public");
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const frontendDist = path.resolve(__dirname, "../../visitecrm/dist/public");
+  logger.info({ frontendDist }, "Serving frontend static files from");
   app.use(express.static(frontendDist));
   app.get("*", (_req, res) => {
-    res.sendFile(path.join(frontendDist, "index.html"));
+    res.sendFile(path.join(frontendDist, "index.html"), (err) => {
+      if (err) {
+        logger.error({ err, frontendDist }, "Failed to send index.html");
+        res.status(500).send("Frontend not found. Build may be incomplete.");
+      }
+    });
   });
 }
 
