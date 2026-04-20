@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Trash2, ScanSearch, FileImage, ExternalLink, CheckSquare, Square } from "lucide-react";
+import { Loader2, Trash2, ScanSearch, FileImage, ExternalLink, CheckSquare, Square, History, Clock } from "lucide-react";
 
 interface OrphanedFile {
   key: string;
@@ -23,10 +23,25 @@ interface OrphanedFile {
   url: string;
 }
 
+interface CleanupHistoryEntry {
+  executedAt: Date;
+  deletedCount: number;
+  freedBytes: number;
+  failedCount: number;
+  scope: "selected" | "all";
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDateTime(date: Date): string {
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
 }
 
 export default function AdminMaintenance() {
@@ -38,6 +53,7 @@ export default function AdminMaintenance() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [history, setHistory] = useState<CleanupHistoryEntry[]>([]);
 
   async function scan() {
     setScanning(true);
@@ -67,6 +83,9 @@ export default function AdminMaintenance() {
     setDeleting(true);
     setConfirmOpen(false);
     const keys = selected.size > 0 ? Array.from(selected) : undefined;
+    const scope: "selected" | "all" = keys ? "selected" : "all";
+    const targetFiles = keys ? files.filter(f => keys.includes(f.key)) : files;
+    const freedBytesEstimate = targetFiles.reduce((sum, f) => sum + f.size, 0);
     try {
       const res = await fetch("/api/admin/maintenance/orphaned-files", {
         method: "POST",
@@ -80,6 +99,16 @@ export default function AdminMaintenance() {
         title: `${data.deleted} arquivo(s) deletado(s)`,
         description: data.failed > 0 ? `${data.failed} falha(s)` : undefined,
       });
+      setHistory(prev => [
+        {
+          executedAt: new Date(),
+          deletedCount: data.deleted ?? 0,
+          freedBytes: freedBytesEstimate,
+          failedCount: data.failed ?? 0,
+          scope,
+        },
+        ...prev,
+      ]);
       setFiles(prev => prev.filter(f => !(keys ? keys.includes(f.key) : true)));
       setSelected(new Set());
       if (!keys) setScanned(false);
@@ -218,6 +247,47 @@ export default function AdminMaintenance() {
           )}
         </CardContent>
       </Card>
+
+      {history.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <History className="w-4 h-4 text-primary" />
+              Histórico de Limpezas (sessão atual)
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Registro das limpezas executadas nesta sessão.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="border rounded-md divide-y text-sm">
+              {history.map((entry, i) => (
+                <div key={i} className="flex items-center justify-between gap-4 px-3 py-2.5">
+                  <div className="flex items-center gap-2 text-muted-foreground text-xs">
+                    <Clock className="w-3.5 h-3.5 shrink-0" />
+                    <span>{formatDateTime(entry.executedAt)}</span>
+                  </div>
+                  <div className="flex items-center gap-3 flex-wrap justify-end">
+                    <span className="text-xs">
+                      <span className="font-medium text-destructive">{entry.deletedCount}</span>
+                      {" "}arquivo{entry.deletedCount !== 1 ? "s" : ""} deletado{entry.deletedCount !== 1 ? "s" : ""}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      ~{formatBytes(entry.freedBytes)} liberado{entry.freedBytes > 0 ? "s" : ""}
+                    </span>
+                    <span className="text-xs">
+                      Escopo: <span className="font-medium">{entry.scope === "all" ? "Todos" : "Selecionados"}</span>
+                    </span>
+                    {entry.failedCount > 0 && (
+                      <span className="text-xs text-destructive">{entry.failedCount} falha(s)</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
