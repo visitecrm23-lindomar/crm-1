@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useSearch } from "wouter";
 import {
   useListExpenses,
   useCreateExpense,
@@ -80,7 +81,8 @@ function CategoryChart({ data }: { data: Array<{ category: string; total: number
 }
 
 export default function Expenses() {
-  const [statusFilter, setStatusFilter] = useState("");
+  const searchStr = useSearch();
+  const [statusFilter, setStatusFilter] = useState(() => new URLSearchParams(searchStr).get("status") ?? "");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [tripFilter, setTripFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");

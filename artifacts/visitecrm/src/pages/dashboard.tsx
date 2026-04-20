@@ -12,7 +12,7 @@ import { VoucherModal } from "./reservations";
 import { ReservationCardVisual } from "@/components/reservation-card-visual";
 import {
   Users, Map, DollarSign, Star, Briefcase, CalendarCheck, AlertTriangle, ArrowUpRight,
-  Plus, Clock, Check, Trash2, TrendingDown, TrendingUp, AlertCircle, Percent,
+  Plus, Clock, Check, Trash2, TrendingDown, TrendingUp, Percent,
   Target, Activity, BarChart2, Lightbulb, ChevronRight, UserCheck, Zap,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -248,14 +248,31 @@ function AgencyDashboard() {
         </div>
       </div>
 
-      {/* Overdue expenses alert */}
-      {(paymentSummary?.overdueReceivable ?? 0) > 0 && (
-        <div className="flex items-center gap-3 rounded-lg border border-destructive/50 bg-destructive/5 px-4 py-3">
-          <AlertCircle className="w-5 h-5 text-destructive shrink-0" />
-          <p className="text-sm font-medium text-destructive">
-            Atenção: <strong>{formatCurrency(paymentSummary!.overdueReceivable)}</strong> em recebimentos vencidos.
-          </p>
-          <Link href="/financial" className="ml-auto text-sm font-medium text-destructive underline underline-offset-2">Ver detalhes</Link>
+      {/* Overdue alerts */}
+      {((paymentSummary?.overduePayable ?? 0) > 0 || (paymentSummary?.overdueReceivable ?? 0) > 0) && (
+        <div className="space-y-2">
+          {(paymentSummary?.overduePayable ?? 0) > 0 && (
+            <div className="flex items-center gap-3 rounded-lg border border-destructive/50 bg-destructive/5 px-4 py-3">
+              <AlertTriangle className="w-5 h-5 text-destructive shrink-0" />
+              <p className="text-sm font-medium text-destructive flex-1">
+                Você tem <strong>{formatCurrency(paymentSummary!.overduePayable)}</strong> em despesas vencidas.
+              </p>
+              <Link href="/financeiro/expenses?status=overdue">
+                <Button variant="destructive" size="sm" className="shrink-0 h-7 text-xs">Ver detalhes</Button>
+              </Link>
+            </div>
+          )}
+          {(paymentSummary?.overdueReceivable ?? 0) > 0 && (
+            <div className="flex items-center gap-3 rounded-lg border border-destructive/50 bg-destructive/5 px-4 py-3">
+              <AlertTriangle className="w-5 h-5 text-destructive shrink-0" />
+              <p className="text-sm font-medium text-destructive flex-1">
+                Você tem <strong>{formatCurrency(paymentSummary!.overdueReceivable)}</strong> em recebimentos vencidos.
+              </p>
+              <Link href="/financial">
+                <Button variant="destructive" size="sm" className="shrink-0 h-7 text-xs">Ver detalhes</Button>
+              </Link>
+            </div>
+          )}
         </div>
       )}
 
