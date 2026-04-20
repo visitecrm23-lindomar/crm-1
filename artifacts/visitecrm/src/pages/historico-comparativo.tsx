@@ -207,10 +207,11 @@ export default function HistoricoComparativo() {
                     <tr className="border-b text-muted-foreground">
                       <th className="text-left py-2 pr-4 font-medium">Mês</th>
                       <th className="text-right py-2 px-3 font-medium">Receita</th>
-                      <th className="text-right py-2 px-3 font-medium">Crescimento</th>
+                      <th className="text-right py-2 px-3 font-medium">Var. Receita</th>
                       <th className="text-right py-2 px-3 font-medium">Despesas</th>
                       <th className="text-right py-2 px-3 font-medium">Lucro</th>
-                      <th className="text-right py-2 pl-3 font-medium">Reservas</th>
+                      <th className="text-right py-2 px-3 font-medium">Reservas</th>
+                      <th className="text-right py-2 pl-3 font-medium">Var. Reservas</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -221,7 +222,8 @@ export default function HistoricoComparativo() {
                         <td className="py-2.5 px-3 text-right"><GrowthBadge value={m.revenueGrowth} /></td>
                         <td className="py-2.5 px-3 text-right text-red-600">{formatCurrency(m.expenses)}</td>
                         <td className={`py-2.5 px-3 text-right font-semibold ${m.profit >= 0 ? "text-emerald-600" : "text-red-600"}`}>{formatCurrency(m.profit)}</td>
-                        <td className="py-2.5 pl-3 text-right">{m.reservations}</td>
+                        <td className="py-2.5 px-3 text-right">{m.reservations}</td>
+                        <td className="py-2.5 pl-3 text-right"><GrowthBadge value={m.reservationsGrowth} /></td>
                       </tr>
                     ))}
                   </tbody>
