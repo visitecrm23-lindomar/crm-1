@@ -8,8 +8,9 @@ import {
   useGetTripBoardingPanel, useCheckInPassenger, useUndoCheckInPassenger, useSyncTripPassengers,
   useUpdatePassengerBoarding,
   useListLayouts, useGetMe,
+  useListTripCosts, useCreateTripCost, useUpdateTripCost, useDeleteTripCost,
 } from "@workspace/api-client-react";
-import type { Trip, Seat, BoardingPassenger, VehicleLayout, LayoutCell } from "@workspace/api-client-react";
+import type { Trip, Seat, BoardingPassenger, VehicleLayout, LayoutCell, TripCost, TripCostSummary } from "@workspace/api-client-react";
 import { storeApi } from "@/lib/storeApi";
 import { Client360Modal } from "@/components/client360-modal";
 import { useEditor, EditorContent } from "@tiptap/react";
@@ -30,6 +31,7 @@ import {
   LayoutGrid, List, ChevronLeft, ChevronRight, ArrowLeft, Check, X, Download, Send, Copy,
   AlertCircle, DollarSign, ClipboardList, LogIn, RotateCcw, CheckCircle, UserRound, RefreshCw,
   ShoppingBag, Loader2, Clock, Star, CheckCircle2, XCircle, MessageSquare, Pencil, Phone,
+  TrendingUp, TrendingDown, Receipt, Banknote, PiggyBank, Wallet,
 } from "lucide-react";
 import { CoverImageUpload } from "@/components/cover-image-upload";
 import { GalleryUpload } from "@/components/gallery-upload";
@@ -1353,6 +1355,376 @@ function LayoutMiniPreview({ cells, rows, cols }: { cells: { row: number; col: n
   );
 }
 
+const COST_CATEGORIES = ["Transporte", "Hospedagem", "Alimentação", "Guia", "Marketing", "Seguro", "Taxas", "Outros"] as const;
+const COST_STATUS_MAP: Record<string, { label: string; color: string }> = {
+  pending: { label: "Pendente", color: "bg-amber-100 text-amber-700 border-amber-200" },
+  paid:    { label: "Pago",     color: "bg-green-100 text-green-700 border-green-200" },
+  overdue: { label: "Vencido",  color: "bg-red-100 text-red-700 border-red-200" },
+};
+
+const EMPTY_COST_FORM = {
+  category: "",
+  description: "",
+  supplierName: "",
+  amount: "",
+  status: "pending",
+  dueDate: "",
+  notes: "",
+};
+
+function TripCostModal({ tripId, cost, open, onClose, onSaved }: {
+  tripId: string;
+  cost: TripCost | null;
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const createCost = useCreateTripCost();
+  const updateCost = useUpdateTripCost();
+  const [form, setForm] = useState(EMPTY_COST_FORM);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (cost) {
+      setForm({
+        category: cost.category,
+        description: cost.description,
+        supplierName: cost.supplierName ?? "",
+        amount: String(cost.amount),
+        status: cost.status,
+        dueDate: cost.dueDate ? cost.dueDate.substring(0, 10) : "",
+        notes: cost.notes ?? "",
+      });
+    } else {
+      setForm(EMPTY_COST_FORM);
+    }
+  }, [cost, open]);
+
+  const handleSave = async () => {
+    if (!form.category || !form.description || !form.amount) {
+      toast({ title: "Preencha categoria, descrição e valor", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        category: form.category,
+        description: form.description,
+        supplierName: form.supplierName || null,
+        amount: parseFloat(form.amount.replace(",", ".")),
+        status: form.status,
+        dueDate: form.dueDate || null,
+        notes: form.notes || null,
+      };
+      if (cost) {
+        await updateCost.mutateAsync({ tripId, costId: cost.id, data: payload });
+        toast({ title: "Custo atualizado" });
+      } else {
+        await createCost.mutateAsync({ tripId, data: payload });
+        toast({ title: "Custo adicionado" });
+      }
+      onSaved();
+      onClose();
+    } catch {
+      toast({ title: "Erro ao salvar custo", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Receipt className="w-4 h-4 text-primary" />
+            {cost ? "Editar Custo" : "Novo Custo"}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-1">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Categoria *</Label>
+              <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v }))}>
+                <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                <SelectContent>
+                  {COST_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Status</Label>
+              <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pendente</SelectItem>
+                  <SelectItem value="paid">Pago</SelectItem>
+                  <SelectItem value="overdue">Vencido</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Descrição *</Label>
+            <Input placeholder="Ex: Locação do ônibus" value={form.description}
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Valor (R$) *</Label>
+              <Input type="number" step="0.01" min="0" placeholder="0,00" value={form.amount}
+                onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Vencimento</Label>
+              <Input type="date" value={form.dueDate}
+                onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Fornecedor</Label>
+            <Input placeholder="Nome do fornecedor (opcional)" value={form.supplierName}
+              onChange={e => setForm(f => ({ ...f, supplierName: e.target.value }))} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Observações</Label>
+            <Textarea rows={2} placeholder="Anotações adicionais..." value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Salvando...</> : "Salvar"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TripCostsTab({ tripId }: { tripId: string }) {
+  const { toast } = useToast();
+  const { data, isLoading, refetch } = useListTripCosts(tripId, {
+    query: { queryKey: ["trip-costs", tripId], enabled: !!tripId },
+  });
+  const deleteCost = useDeleteTripCost();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingCost, setEditingCost] = useState<TripCost | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+
+  const costs = data?.costs ?? [];
+  const summary = data?.summary;
+
+  const filtered = costs.filter(c => {
+    if (filterCategory !== "all" && c.category !== filterCategory) return false;
+    if (filterStatus !== "all" && c.status !== filterStatus) return false;
+    return true;
+  });
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Remover este custo?")) return;
+    setDeletingId(id);
+    try {
+      await deleteCost.mutateAsync({ tripId, costId: id });
+      toast({ title: "Custo removido" });
+      refetch();
+    } catch {
+      toast({ title: "Erro ao remover custo", variant: "destructive" });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const groupedByCategory = COST_CATEGORIES.reduce((acc, cat) => {
+    acc[cat] = costs.filter(c => c.category === cat).reduce((s, c) => s + c.amount, 0);
+    return acc;
+  }, {} as Record<string, number>);
+
+  return (
+    <div className="space-y-6">
+      {/* Financial Summary Cards */}
+      {summary && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Banknote className="w-4 h-4 text-blue-600" />
+              <span className="text-xs text-blue-600 font-medium">Receita Prevista</span>
+            </div>
+            <p className="text-lg font-bold text-blue-700">{formatCurrency(summary.expectedRevenue)}</p>
+            <p className="text-xs text-blue-500 mt-0.5">{summary.confirmedSeats} passageiros</p>
+          </div>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Receipt className="w-4 h-4 text-red-600" />
+              <span className="text-xs text-red-600 font-medium">Custos Reais</span>
+            </div>
+            <p className="text-lg font-bold text-red-700">{formatCurrency(summary.totalRealCosts)}</p>
+            <p className="text-xs text-red-500 mt-0.5">Pagos: {formatCurrency(summary.totalPaidCosts)}</p>
+          </div>
+          <div className={`border rounded-lg p-4 ${summary.profit >= 0 ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
+            <div className="flex items-center gap-2 mb-1">
+              {summary.profit >= 0
+                ? <TrendingUp className="w-4 h-4 text-green-600" />
+                : <TrendingDown className="w-4 h-4 text-red-600" />}
+              <span className={`text-xs font-medium ${summary.profit >= 0 ? "text-green-600" : "text-red-600"}`}>Lucro Líquido</span>
+            </div>
+            <p className={`text-lg font-bold ${summary.profit >= 0 ? "text-green-700" : "text-red-700"}`}>
+              {formatCurrency(summary.profit)}
+            </p>
+            <p className={`text-xs mt-0.5 ${summary.profit >= 0 ? "text-green-500" : "text-red-500"}`}>
+              Margem: {summary.margin.toFixed(1)}%
+            </p>
+          </div>
+          <div className={`border rounded-lg p-4 ${summary.budgetVariance <= 0 ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"}`}>
+            <div className="flex items-center gap-2 mb-1">
+              <PiggyBank className="w-4 h-4 text-amber-600" />
+              <span className="text-xs text-amber-700 font-medium">Orçado vs Real</span>
+            </div>
+            <p className={`text-lg font-bold ${summary.budgetVariance <= 0 ? "text-green-700" : "text-amber-700"}`}>
+              {summary.budgetVariance <= 0
+                ? `${formatCurrency(Math.abs(summary.budgetVariance))} abaixo`
+                : `${formatCurrency(summary.budgetVariance)} acima`}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">Orçado: {formatCurrency(summary.plannedBudget)}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Pending costs alert */}
+      {summary && summary.totalPendingCosts > 0 && (
+        <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>
+            Há <strong>{formatCurrency(summary.totalPendingCosts)}</strong> em custos pendentes de pagamento.
+          </span>
+        </div>
+      )}
+
+      {/* Cost List */}
+      <div className="bg-card border rounded-lg">
+        <div className="flex items-center justify-between p-4 border-b">
+          <div className="flex items-center gap-3">
+            <h3 className="font-semibold text-sm">Custos da Viagem</h3>
+            <Badge variant="secondary">{costs.length}</Badge>
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={filterCategory} onValueChange={setFilterCategory}>
+              <SelectTrigger className="h-8 text-xs w-36">
+                <SelectValue placeholder="Categoria" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as categorias</SelectItem>
+                {COST_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="h-8 text-xs w-28">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="pending">Pendente</SelectItem>
+                <SelectItem value="paid">Pago</SelectItem>
+                <SelectItem value="overdue">Vencido</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button size="sm" className="h-8 text-xs gap-1" onClick={() => { setEditingCost(null); setModalOpen(true); }}>
+              <Plus className="w-3.5 h-3.5" />
+              Adicionar
+            </Button>
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="p-6 space-y-3">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <Wallet className="w-10 h-10 mx-auto mb-3 opacity-25" />
+            <p className="text-sm">{costs.length === 0 ? "Nenhum custo registrado ainda" : "Nenhum custo com esses filtros"}</p>
+            {costs.length === 0 && (
+              <Button variant="outline" size="sm" className="mt-3 text-xs" onClick={() => { setEditingCost(null); setModalOpen(true); }}>
+                <Plus className="w-3.5 h-3.5 mr-1.5" />
+                Adicionar primeiro custo
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="divide-y">
+            {filtered.map(cost => {
+              const statusInfo = COST_STATUS_MAP[cost.status] ?? COST_STATUS_MAP.pending;
+              return (
+                <div key={cost.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-sm">{cost.description}</span>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">{cost.category}</Badge>
+                      <span className={`inline-flex text-[10px] px-2 py-0.5 rounded-full border font-medium ${statusInfo.color}`}>
+                        {statusInfo.label}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                      {cost.supplierName && <span>{cost.supplierName}</span>}
+                      {cost.dueDate && <span>Vence: {formatDate(cost.dueDate)}</span>}
+                      {cost.paidAt && <span>Pago em: {formatDate(cost.paidAt)}</span>}
+                      {cost.notes && <span className="italic truncate max-w-[200px]">{cost.notes}</span>}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className={`font-bold text-sm ${cost.status === "paid" ? "text-green-700" : cost.status === "overdue" ? "text-red-600" : ""}`}>
+                      {formatCurrency(cost.amount)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
+                      onClick={() => { setEditingCost(cost); setModalOpen(true); }}>
+                      <Pencil className="w-3 h-3" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                      disabled={deletingId === cost.id}
+                      onClick={() => handleDelete(cost.id)}>
+                      {deletingId === cost.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Category summary footer */}
+        {costs.length > 0 && (
+          <div className="border-t p-4">
+            <p className="text-xs font-medium text-muted-foreground mb-2">Resumo por categoria</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {COST_CATEGORIES.filter(cat => groupedByCategory[cat] > 0).map(cat => (
+                <div key={cat} className="text-xs">
+                  <span className="text-muted-foreground">{cat}: </span>
+                  <span className="font-medium">{formatCurrency(groupedByCategory[cat])}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <TripCostModal
+        tripId={tripId}
+        cost={editingCost}
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSaved={() => refetch()}
+      />
+    </div>
+  );
+}
+
 export function TripForm({ tripId }: { tripId?: string }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -1494,6 +1866,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
     { id: "inclusoes", label: "Inclusões / Exclusões" },
     { id: "transporte", label: "Transporte e Hospedagem" },
     { id: "midia", label: "Mídia" },
+    ...(tripId ? [{ id: "custos", label: "Custos" }] : []),
   ];
 
   const canSave = !!form.name && !!form.destination && !!form.destinationCity && !!form.destinationState && !!form.departureDate && !!form.priceAdult;
@@ -2126,6 +2499,12 @@ export function TripForm({ tripId }: { tripId?: string }) {
             </div>
           </div>
         </TabsContent>
+
+        {tripId && (
+          <TabsContent value="custos" className="space-y-4 mt-6">
+            <TripCostsTab tripId={tripId} />
+          </TabsContent>
+        )}
       </Tabs>
 
       <div className="flex items-center justify-between bg-card border rounded-lg p-4">

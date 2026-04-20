@@ -3481,3 +3481,48 @@ export type GetCalendarCallbackParams = {
    */
   error?: string;
 };
+
+export interface TripCost {
+  id: string;
+  tripId: string;
+  category: string;
+  description: string;
+  supplierId: string | null;
+  supplierName: string | null;
+  amount: number;
+  status: string;
+  dueDate: string | null;
+  paidAt: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface TripCostSummary {
+  expectedRevenue: number;
+  totalRealCosts: number;
+  totalPaidCosts: number;
+  totalPendingCosts: number;
+  profit: number;
+  margin: number;
+  plannedBudget: number;
+  budgetVariance: number;
+  confirmedSeats: number;
+}
+
+export interface TripCostsResponse {
+  costs: TripCost[];
+  summary: TripCostSummary;
+}
+
+export interface CreateTripCostBody {
+  category: string;
+  description: string;
+  supplierName?: string | null;
+  amount: number;
+  status?: string;
+  dueDate?: string | null;
+  paidAt?: string | null;
+  notes?: string | null;
+}
+
+export type UpdateTripCostBody = Partial<CreateTripCostBody>;

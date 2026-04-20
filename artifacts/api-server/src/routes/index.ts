@@ -37,6 +37,7 @@ import birthdayRouter from "./birthday";
 import layoutsRouter from "./layouts";
 import salesGoalsRouter from "./sales-goals";
 import calendarRouter from "./calendar";
+import tripCostsRouter from "./trip-costs";
 
 const router: IRouter = Router();
 
@@ -77,6 +78,7 @@ router.use(birthdayRouter);
 router.use(layoutsRouter);
 router.use(salesGoalsRouter);
 router.use(calendarRouter);
+router.use(tripCostsRouter);
 router.use("/uploadthing", uploadthingRouter);
 
 export default router;
