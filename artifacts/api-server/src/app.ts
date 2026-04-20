@@ -6,6 +6,7 @@ import { clerkMiddleware } from "@clerk/express";
 import { CLERK_PROXY_PATH, clerkProxyMiddleware } from "./middlewares/clerkProxyMiddleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import path from "path";
 
 const app: Express = express();
 
@@ -102,5 +103,13 @@ const authorizedParties = [
 app.use(clerkMiddleware(authorizedParties.length > 0 ? { authorizedParties } : {}));
 
 app.use("/api", router);
+
+if (!isDev) {
+  const frontendDist = path.join(process.cwd(), "artifacts/visitecrm/dist/public");
+  app.use(express.static(frontendDist));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(frontendDist, "index.html"));
+  });
+}
 
 export default app;
