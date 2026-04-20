@@ -93,96 +93,73 @@ export default function HistoricoComparativo() {
         ))}
       </div>
 
-      {/* Main chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <BarChart2 className="w-4 h-4 text-muted-foreground" />
-            Receita, Despesas e Lucro por Mês
-          </CardTitle>
-          <CardDescription>Últimos 12 meses — valores em R$</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-[320px] w-full" />
-          ) : !months?.length ? (
-            <p className="text-sm text-muted-foreground text-center py-16">Sem dados disponíveis.</p>
-          ) : view === "area" ? (
-            <ResponsiveContainer width="100%" height={320}>
-              <AreaChart data={months} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="cmpRevenue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="cmpExpenses" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#EF4444" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="cmpProfit" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number, name: string) => [formatCurrency(v), name]} />
-                <Legend />
-                <Area type="monotone" dataKey="revenue" name="Receita" stroke="#3B82F6" fill="url(#cmpRevenue)" strokeWidth={2} />
-                <Area type="monotone" dataKey="expenses" name="Despesas" stroke="#EF4444" fill="url(#cmpExpenses)" strokeWidth={2} />
-                <Area type="monotone" dataKey="profit" name="Lucro" stroke="#10B981" fill="url(#cmpProfit)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : view === "bar" ? (
-            <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={months} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barCategoryGap="25%">
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number, name: string) => [formatCurrency(v), name]} />
-                <Legend />
-                <Bar dataKey="revenue" name="Receita" fill="#3B82F6" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="expenses" name="Despesas" fill="#EF4444" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="profit" name="Lucro" fill="#10B981" radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <ResponsiveContainer width="100%" height={320}>
-              <LineChart data={months} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number, name: string) => [formatCurrency(v), name]} />
-                <Legend />
-                <Line type="monotone" dataKey="revenue" name="Receita" stroke="#3B82F6" strokeWidth={2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="expenses" name="Despesas" stroke="#EF4444" strokeWidth={2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="profit" name="Lucro" stroke="#10B981" strokeWidth={2} dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Reservations chart + detail table side-by-side on lg+ */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      {/* Main chart + detail table side-by-side on xl+ */}
+      <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Reservas por Mês</CardTitle>
-            <CardDescription>Volume de reservas criadas nos últimos 12 meses</CardDescription>
+            <CardTitle className="text-base flex items-center gap-2">
+              <BarChart2 className="w-4 h-4 text-muted-foreground" />
+              Receita, Despesas e Lucro por Mês
+            </CardTitle>
+            <CardDescription>Últimos 12 meses — valores em R$</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <Skeleton className="h-[220px] w-full" />
-            ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={months} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <Skeleton className="h-[280px] w-full" />
+            ) : !months?.length ? (
+              <p className="text-sm text-muted-foreground text-center py-16">Sem dados disponíveis.</p>
+            ) : view === "area" ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <AreaChart data={months} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="cmpRevenue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="cmpExpenses" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#EF4444" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="cmpProfit" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Bar dataKey="reservations" name="Reservas" fill="#8B5CF6" radius={[3, 3, 0, 0]} />
+                  <YAxis tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v: number, name: string) => [formatCurrency(v), name]} />
+                  <Legend />
+                  <Area type="monotone" dataKey="revenue" name="Receita" stroke="#3B82F6" fill="url(#cmpRevenue)" strokeWidth={2} />
+                  <Area type="monotone" dataKey="expenses" name="Despesas" stroke="#EF4444" fill="url(#cmpExpenses)" strokeWidth={2} />
+                  <Area type="monotone" dataKey="profit" name="Lucro" stroke="#10B981" fill="url(#cmpProfit)" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : view === "bar" ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={months} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barCategoryGap="25%">
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                  <YAxis tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v: number, name: string) => [formatCurrency(v), name]} />
+                  <Legend />
+                  <Bar dataKey="revenue" name="Receita" fill="#3B82F6" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="expenses" name="Despesas" fill="#EF4444" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="profit" name="Lucro" fill="#10B981" radius={[3, 3, 0, 0]} />
                 </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={months} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                  <YAxis tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v: number, name: string) => [formatCurrency(v), name]} />
+                  <Legend />
+                  <Line type="monotone" dataKey="revenue" name="Receita" stroke="#3B82F6" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="expenses" name="Despesas" stroke="#EF4444" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="profit" name="Lucro" stroke="#10B981" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
               </ResponsiveContainer>
             )}
           </CardContent>
@@ -206,11 +183,11 @@ export default function HistoricoComparativo() {
                     <tr className="border-b text-muted-foreground">
                       <th className="text-left py-2 pr-4 font-medium">Mês</th>
                       <th className="text-right py-2 px-3 font-medium">Receita</th>
-                      <th className="text-right py-2 px-3 font-medium">Var. Receita</th>
+                      <th className="text-right py-2 px-3 font-medium">Var.</th>
                       <th className="text-right py-2 px-3 font-medium">Despesas</th>
                       <th className="text-right py-2 px-3 font-medium">Lucro</th>
                       <th className="text-right py-2 px-3 font-medium">Reservas</th>
-                      <th className="text-right py-2 pl-3 font-medium">Var. Reservas</th>
+                      <th className="text-right py-2 pl-3 font-medium">Var.</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -232,6 +209,29 @@ export default function HistoricoComparativo() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Reservations chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Reservas por Mês</CardTitle>
+          <CardDescription>Volume de reservas criadas nos últimos 12 meses</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <Skeleton className="h-[180px] w-full" />
+          ) : (
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={months} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="reservations" name="Reservas" fill="#8B5CF6" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
