@@ -5,7 +5,7 @@ import type { LayoutCell, FixedCostItem, VariableCostItem } from "@workspace/db"
 import { eq, and, ilike, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
-import { deleteOrphanedFile } from "../lib/uploadthing";
+import { deleteOrphanedFile } from "../lib/uploadthing-cleanup";
 import { deriveAgeCategory, getAgeYears } from "../lib/passenger";
 import { CreateTripBody, UpdateTripBody } from "@workspace/api-zod";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
