@@ -11,8 +11,6 @@ import { CreateTripBody, UpdateTripBody } from "@workspace/api-zod";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 
 type SeatMapEntry = { row: number; col: number; status: string; type?: string };
-type BoardingPoint = { id: string; name: string; time: string; address: string };
-type ItineraryItem = { id: string; name: string; time: string; address: string };
 
 function generateSeatMapFromLayout(
   cells: LayoutCell[],
@@ -185,16 +183,6 @@ router.post("/trips", async (req, res): Promise<void> => {
     }
     const parsed = CreateTripBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const tripData = parsed.data as typeof parsed.data & {
-      tourGuide?: string | null; tripOrganizer?: string | null;
-      freeOrganizers?: number | null; freeGuides?: number | null;
-      originCity?: string | null; originState?: string | null;
-      departureTime?: string | null; returnTime?: string | null;
-      driver1Cpf?: string | null; driver1Cnh?: string | null; driver1CnhCategory?: string | null; driver1CnhExpiry?: string | null;
-      driver2Name?: string | null; driver2Cpf?: string | null; driver2Cnh?: string | null;
-      driver2CnhCategory?: string | null; driver2CnhExpiry?: string | null;
-      tourGuideCpf?: string | null; tourGuideRegistration?: string | null;
-    };
 
     const id = generateId();
     const slug = parsed.data.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + id.slice(0, 4);
@@ -250,8 +238,8 @@ router.post("/trips", async (req, res): Promise<void> => {
       coverImage: parsed.data.coverImage ?? null,
       seatLayout: layout,
       layoutId: layoutId ?? null,
-      itinerary: (parsed.data.itinerary ?? null) as ItineraryItem[] | null,
-      boardingPoints: (parsed.data.boardingPoints ?? []) as BoardingPoint[],
+      itinerary: parsed.data.itinerary ?? null,
+      boardingPoints: parsed.data.boardingPoints ?? [],
       fixedCosts: Array.isArray(parsed.data.fixedCosts) ? (parsed.data.fixedCosts as FixedCostItem[]) : [],
       variableCosts: Array.isArray(parsed.data.variableCosts) ? (parsed.data.variableCosts as VariableCostItem[]) : [],
       gallery: parsed.data.gallery ?? [],
@@ -259,27 +247,27 @@ router.post("/trips", async (req, res): Promise<void> => {
       vehiclePlate: parsed.data.vehiclePlate ?? null,
       vehicleType: parsed.data.vehicleType ?? null,
       driverName: parsed.data.driverName ?? null,
-      tourGuide: tripData.tourGuide ?? null,
-      tripOrganizer: tripData.tripOrganizer ?? null,
-      freeOrganizers: tripData.freeOrganizers ?? null,
-      freeGuides: tripData.freeGuides ?? null,
-      originCity: tripData.originCity ?? null,
-      originState: tripData.originState ?? null,
-      departureTime: tripData.departureTime ?? null,
-      returnTime: tripData.returnTime ?? null,
+      tourGuide: parsed.data.tourGuide ?? null,
+      tripOrganizer: parsed.data.tripOrganizer ?? null,
+      freeOrganizers: parsed.data.freeOrganizers ?? null,
+      freeGuides: parsed.data.freeGuides ?? null,
+      originCity: parsed.data.originCity ?? null,
+      originState: parsed.data.originState ?? null,
+      departureTime: parsed.data.departureTime ?? null,
+      returnTime: parsed.data.returnTime ?? null,
       createdById: me.id,
       ...(parsed.data.status ? { status: parsed.data.status } : {}),
-      driver1Cpf: tripData.driver1Cpf ?? null,
-      driver1Cnh: tripData.driver1Cnh ?? null,
-      driver1CnhCategory: tripData.driver1CnhCategory ?? null,
-      driver1CnhExpiry: tripData.driver1CnhExpiry ?? null,
-      driver2Name: tripData.driver2Name ?? null,
-      driver2Cpf: tripData.driver2Cpf ?? null,
-      driver2Cnh: tripData.driver2Cnh ?? null,
-      driver2CnhCategory: tripData.driver2CnhCategory ?? null,
-      driver2CnhExpiry: tripData.driver2CnhExpiry ?? null,
-      tourGuideCpf: tripData.tourGuideCpf ?? null,
-      tourGuideRegistration: tripData.tourGuideRegistration ?? null,
+      driver1Cpf: parsed.data.driver1Cpf ?? null,
+      driver1Cnh: parsed.data.driver1Cnh ?? null,
+      driver1CnhCategory: parsed.data.driver1CnhCategory ?? null,
+      driver1CnhExpiry: parsed.data.driver1CnhExpiry ?? null,
+      driver2Name: parsed.data.driver2Name ?? null,
+      driver2Cpf: parsed.data.driver2Cpf ?? null,
+      driver2Cnh: parsed.data.driver2Cnh ?? null,
+      driver2CnhCategory: parsed.data.driver2CnhCategory ?? null,
+      driver2CnhExpiry: parsed.data.driver2CnhExpiry ?? null,
+      tourGuideCpf: parsed.data.tourGuideCpf ?? null,
+      tourGuideRegistration: parsed.data.tourGuideRegistration ?? null,
     });
 
     const [trip] = await db.select().from(tripsTable)
@@ -316,16 +304,6 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
     if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
     const parsed = UpdateTripBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const pd = parsed.data as typeof parsed.data & {
-      tourGuide?: string | null; tripOrganizer?: string | null;
-      freeOrganizers?: number | null; freeGuides?: number | null;
-      originCity?: string | null; originState?: string | null;
-      departureTime?: string | null; returnTime?: string | null;
-      driver1Cpf?: string | null; driver1Cnh?: string | null; driver1CnhCategory?: string | null;
-      driver1CnhExpiry?: string | null; driver2Name?: string | null; driver2Cpf?: string | null;
-      driver2Cnh?: string | null; driver2CnhCategory?: string | null; driver2CnhExpiry?: string | null;
-      tourGuideCpf?: string | null; tourGuideRegistration?: string | null;
-    };
 
     const updates: Partial<typeof tripsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
@@ -352,35 +330,35 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
     if (parsed.data.vehiclePlate !== undefined) updates.vehiclePlate = parsed.data.vehiclePlate ?? null;
     if (parsed.data.vehicleType !== undefined) updates.vehicleType = parsed.data.vehicleType ?? null;
     if (parsed.data.driverName !== undefined) updates.driverName = parsed.data.driverName ?? null;
-    if (pd.tourGuide !== undefined) updates.tourGuide = pd.tourGuide ?? null;
-    if (pd.tripOrganizer !== undefined) updates.tripOrganizer = pd.tripOrganizer ?? null;
-    if (pd.destination !== undefined) updates.destination = pd.destination ?? "";
-    if (pd.destinationCity !== undefined) updates.destinationCity = pd.destinationCity ?? "";
-    if (pd.destinationState !== undefined) updates.destinationState = pd.destinationState ?? "";
-    if (pd.type !== undefined) updates.type = pd.type ?? "";
-    if (pd.category !== undefined) updates.category = pd.category ?? "";
-    if (pd.itinerary !== undefined) updates.itinerary = (pd.itinerary ?? null) as ItineraryItem[] | null;
-    if (pd.boardingPoints !== undefined) updates.boardingPoints = (pd.boardingPoints ?? []) as BoardingPoint[];
-    if (pd.fixedCosts !== undefined) updates.fixedCosts = Array.isArray(pd.fixedCosts) ? (pd.fixedCosts as FixedCostItem[]) : [];
-    if (pd.variableCosts !== undefined) updates.variableCosts = Array.isArray(pd.variableCosts) ? (pd.variableCosts as VariableCostItem[]) : [];
-    if (pd.gallery !== undefined) updates.gallery = pd.gallery ?? [];
-    if (pd.freeOrganizers !== undefined) updates.freeOrganizers = pd.freeOrganizers ?? null;
-    if (pd.freeGuides !== undefined) updates.freeGuides = pd.freeGuides ?? null;
-    if (pd.originCity !== undefined) updates.originCity = pd.originCity ?? null;
-    if (pd.originState !== undefined) updates.originState = pd.originState ?? null;
-    if (pd.departureTime !== undefined) updates.departureTime = pd.departureTime ?? null;
-    if (pd.returnTime !== undefined) updates.returnTime = pd.returnTime ?? null;
-    if (pd.driver1Cpf !== undefined) updates.driver1Cpf = pd.driver1Cpf ?? null;
-    if (pd.driver1Cnh !== undefined) updates.driver1Cnh = pd.driver1Cnh ?? null;
-    if (pd.driver1CnhCategory !== undefined) updates.driver1CnhCategory = pd.driver1CnhCategory ?? null;
-    if (pd.driver1CnhExpiry !== undefined) updates.driver1CnhExpiry = pd.driver1CnhExpiry ?? null;
-    if (pd.driver2Name !== undefined) updates.driver2Name = pd.driver2Name ?? null;
-    if (pd.driver2Cpf !== undefined) updates.driver2Cpf = pd.driver2Cpf ?? null;
-    if (pd.driver2Cnh !== undefined) updates.driver2Cnh = pd.driver2Cnh ?? null;
-    if (pd.driver2CnhCategory !== undefined) updates.driver2CnhCategory = pd.driver2CnhCategory ?? null;
-    if (pd.driver2CnhExpiry !== undefined) updates.driver2CnhExpiry = pd.driver2CnhExpiry ?? null;
-    if (pd.tourGuideCpf !== undefined) updates.tourGuideCpf = pd.tourGuideCpf ?? null;
-    if (pd.tourGuideRegistration !== undefined) updates.tourGuideRegistration = pd.tourGuideRegistration ?? null;
+    if (parsed.data.tourGuide !== undefined) updates.tourGuide = parsed.data.tourGuide ?? null;
+    if (parsed.data.tripOrganizer !== undefined) updates.tripOrganizer = parsed.data.tripOrganizer ?? null;
+    if (parsed.data.destination !== undefined) updates.destination = parsed.data.destination ?? "";
+    if (parsed.data.destinationCity !== undefined) updates.destinationCity = parsed.data.destinationCity ?? "";
+    if (parsed.data.destinationState !== undefined) updates.destinationState = parsed.data.destinationState ?? "";
+    if (parsed.data.type !== undefined) updates.type = parsed.data.type ?? "";
+    if (parsed.data.category !== undefined) updates.category = parsed.data.category ?? "";
+    if (parsed.data.itinerary !== undefined) updates.itinerary = parsed.data.itinerary ?? null;
+    if (parsed.data.boardingPoints !== undefined) updates.boardingPoints = parsed.data.boardingPoints ?? [];
+    if (parsed.data.fixedCosts !== undefined) updates.fixedCosts = Array.isArray(parsed.data.fixedCosts) ? (parsed.data.fixedCosts as FixedCostItem[]) : [];
+    if (parsed.data.variableCosts !== undefined) updates.variableCosts = Array.isArray(parsed.data.variableCosts) ? (parsed.data.variableCosts as VariableCostItem[]) : [];
+    if (parsed.data.gallery !== undefined) updates.gallery = parsed.data.gallery ?? [];
+    if (parsed.data.freeOrganizers !== undefined) updates.freeOrganizers = parsed.data.freeOrganizers ?? null;
+    if (parsed.data.freeGuides !== undefined) updates.freeGuides = parsed.data.freeGuides ?? null;
+    if (parsed.data.originCity !== undefined) updates.originCity = parsed.data.originCity ?? null;
+    if (parsed.data.originState !== undefined) updates.originState = parsed.data.originState ?? null;
+    if (parsed.data.departureTime !== undefined) updates.departureTime = parsed.data.departureTime ?? null;
+    if (parsed.data.returnTime !== undefined) updates.returnTime = parsed.data.returnTime ?? null;
+    if (parsed.data.driver1Cpf !== undefined) updates.driver1Cpf = parsed.data.driver1Cpf ?? null;
+    if (parsed.data.driver1Cnh !== undefined) updates.driver1Cnh = parsed.data.driver1Cnh ?? null;
+    if (parsed.data.driver1CnhCategory !== undefined) updates.driver1CnhCategory = parsed.data.driver1CnhCategory ?? null;
+    if (parsed.data.driver1CnhExpiry !== undefined) updates.driver1CnhExpiry = parsed.data.driver1CnhExpiry ?? null;
+    if (parsed.data.driver2Name !== undefined) updates.driver2Name = parsed.data.driver2Name ?? null;
+    if (parsed.data.driver2Cpf !== undefined) updates.driver2Cpf = parsed.data.driver2Cpf ?? null;
+    if (parsed.data.driver2Cnh !== undefined) updates.driver2Cnh = parsed.data.driver2Cnh ?? null;
+    if (parsed.data.driver2CnhCategory !== undefined) updates.driver2CnhCategory = parsed.data.driver2CnhCategory ?? null;
+    if (parsed.data.driver2CnhExpiry !== undefined) updates.driver2CnhExpiry = parsed.data.driver2CnhExpiry ?? null;
+    if (parsed.data.tourGuideCpf !== undefined) updates.tourGuideCpf = parsed.data.tourGuideCpf ?? null;
+    if (parsed.data.tourGuideRegistration !== undefined) updates.tourGuideRegistration = parsed.data.tourGuideRegistration ?? null;
 
     let oldCoverImage: string | null | undefined;
     if (capacityOrLayoutChanged || coverImageChanged) {

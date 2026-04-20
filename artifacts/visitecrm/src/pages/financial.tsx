@@ -20,7 +20,7 @@ import type { CommissionRule } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -39,7 +39,6 @@ import {
   Paperclip, X as XIcon, FileText, Image, Download, Loader2,
 } from "lucide-react";
 import { exportFinancialPDF, exportFinancialXLSX } from "@/utils/exportFinancial";
-import { MonthlyHistoryTable } from "@/components/monthly-history-table";
 
 const fmt = (v: number | string) => {
   const n = typeof v === "string" ? parseFloat(v) : v;
@@ -626,7 +625,6 @@ export default function Financial() {
               <TabsTrigger value="expenses">Despesas</TabsTrigger>
               <TabsTrigger value="commissions">Comissões</TabsTrigger>
               <TabsTrigger value="rules">Regras</TabsTrigger>
-              <TabsTrigger value="monthly">Histórico Mensal</TabsTrigger>
             </TabsList>
           </div>
           {(tab === "receivable" || tab === "payable" || tab === "expenses") && (
@@ -940,14 +938,6 @@ export default function Financial() {
               </TableBody>
             </Table>
           </div>
-        </TabsContent>
-
-        <TabsContent value="monthly" className="mt-4">
-          <MonthlyHistoryTable
-            data={chartData}
-            subtitle="12 meses"
-            emptyMessage="Sem dados disponíveis para os últimos 12 meses."
-          />
         </TabsContent>
       </Tabs>
 

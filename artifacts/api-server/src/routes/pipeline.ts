@@ -18,7 +18,6 @@ const CreateDealBody = z.object({
   leadEmail: z.string().optional(),
   leadWhatsapp: z.string().optional(),
   tripId: z.string().optional(),
-  reservationId: z.string().optional(),
   expectedCloseDate: z.string().optional(),
   status: z.string().optional(),
 });
