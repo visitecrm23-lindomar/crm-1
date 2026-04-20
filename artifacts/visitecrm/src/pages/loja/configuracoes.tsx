@@ -96,7 +96,7 @@ function StoreWizard({ onCreated }: { onCreated: (s: StoreSettings) => void }) {
       onCreated(store);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg === "User not provisioned") {
+      if (/not provisioned/i.test(msg)) {
         toast({
           title: "Cadastro de agência incompleto",
           description: "Conclua o cadastro da sua agência antes de criar a loja.",
