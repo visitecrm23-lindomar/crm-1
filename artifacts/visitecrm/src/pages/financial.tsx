@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback, useTransition } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import {
   useGetPaymentsSummary,
   useListPayments,
@@ -26,19 +26,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Link } from "wouter";
 import {
   Plus, TrendingUp, TrendingDown, DollarSign, AlertCircle, CheckCircle,
   Pencil, Trash2, ArrowUpRight, ArrowDownRight, BarChart2, ExternalLink,
-  Paperclip, X as XIcon, FileText, Image, Download, Loader2,
+  Paperclip, X as XIcon, FileText, Image,
 } from "lucide-react";
-import { exportFinancialPDF, exportFinancialXLSX } from "@/utils/exportFinancial";
 
 const fmt = (v: number | string) => {
   const n = typeof v === "string" ? parseFloat(v) : v;
@@ -178,7 +171,6 @@ export default function Financial() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [isExporting, startExport] = useTransition();
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
   const [isRuleOpen, setIsRuleOpen] = useState(false);
@@ -211,8 +203,6 @@ export default function Financial() {
     limit: 50,
   });
   const { data: allReceivedPayments } = useListPayments({ type: "receivable", status: "paid", limit: 500 });
-  const { data: allReceivablesData } = useListPayments({ type: "receivable", limit: 500 });
-  const { data: allPayablesData } = useListPayments({ type: "payable", limit: 500 });
   const { data: allExpensesData } = useListExpenses({ limit: 500 });
   const { data: expensesData, isLoading: loadingExpenses, refetch: refetchExpenses } = useListExpenses({ limit: 50 });
   const { data: commissionsData, isLoading: loadingCommissions, refetch: refetchCommissions } = useListCommissions();
@@ -348,88 +338,6 @@ export default function Financial() {
   };
 
   const commissions = Array.isArray(commissionsData) ? commissionsData : [];
-
-  const buildExportData = useCallback(() => {
-    const applyDateFilter = <T extends { dueDate: string }>(items: T[]): T[] => {
-      let result = items;
-      if (dateFrom) result = result.filter(i => i.dueDate >= dateFrom);
-      if (dateTo) result = result.filter(i => i.dueDate <= dateTo);
-      return result;
-    };
-
-    const filteredReceivables = applyDateFilter(allReceivablesData?.data ?? []);
-    const filteredPayables = applyDateFilter(allPayablesData?.data ?? []);
-    const filteredExpenses = applyDateFilter(allExpensesData?.data ?? []);
-
-    const exportRevenue = filteredReceivables.filter(r => r.status === "paid").reduce((s, r) => s + Number(r.amount), 0);
-    const exportExpensesPaid = filteredExpenses.filter(e => e.status === "paid").reduce((s, e) => s + Number(e.amount), 0);
-    const exportOverdueExpenses = filteredExpenses.filter(e => e.status === "overdue").reduce((s, e) => s + Number(e.amount), 0);
-    const exportNetProfit = exportRevenue - exportExpensesPaid;
-    const exportMargin = exportRevenue > 0 ? (exportNetProfit / exportRevenue) * 100 : 0;
-    const exportReceivable = filteredReceivables.filter(r => r.status !== "paid" && r.status !== "cancelled").reduce((s, r) => s + Number(r.amount), 0);
-    const exportPayable = filteredPayables.filter(p => p.status !== "paid" && p.status !== "cancelled").reduce((s, p) => s + Number(p.amount), 0);
-
-    return {
-      receivables: filteredReceivables.map(r => ({
-        description: r.description ?? undefined,
-        clientName: r.clientId ? (clientMap[r.clientId] ?? undefined) : undefined,
-        category: r.category,
-        dueDate: r.dueDate,
-        amount: r.amount,
-        paymentMethod: r.paymentMethod ?? undefined,
-        status: r.status,
-      })),
-      payables: filteredPayables.map(p => ({
-        description: p.description ?? undefined,
-        category: p.category,
-        dueDate: p.dueDate,
-        amount: p.amount,
-        status: p.status,
-      })),
-      expenses: filteredExpenses.map(e => ({
-        description: e.description,
-        category: e.category,
-        supplierName: (e as { supplierName?: string }).supplierName,
-        dueDate: e.dueDate,
-        amount: e.amount,
-        status: e.status,
-      })),
-      commissions: commissions.map(c => ({
-        sellerName: (c as { sellerName?: string }).sellerName,
-        reservationId: c.reservationId ?? undefined,
-        baseAmount: (c as { baseAmount?: number | string }).baseAmount,
-        commissionAmount: c.commissionAmount,
-        status: c.status,
-        paidAt: c.paidAt ?? undefined,
-      })),
-      kpis: {
-        netProfit: exportNetProfit,
-        grossRevenue: exportRevenue,
-        totalExpensesPaid: exportExpensesPaid,
-        totalReceivable: exportReceivable,
-        totalPayable: exportPayable,
-        overdueExpenses: exportOverdueExpenses,
-        collectedThisMonth: summary?.collectedThisMonth ?? 0,
-        margin: exportMargin,
-      },
-      chartData: chartData ?? undefined,
-      dateFrom: dateFrom || undefined,
-      dateTo: dateTo || undefined,
-    };
-  }, [allReceivablesData, allPayablesData, allExpensesData, commissions, summary, chartData,
-      clientMap, dateFrom, dateTo]);
-
-  const handleExportPDF = () => {
-    startExport(() => {
-      exportFinancialPDF(buildExportData());
-    });
-  };
-
-  const handleExportXLSX = () => {
-    startExport(() => {
-      exportFinancialXLSX(buildExportData());
-    });
-  };
   const commissionKpis = useMemo(() => {
     const total = commissions.reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
     const paid = commissions.filter(c => c.status === "paid").reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
@@ -471,28 +379,6 @@ export default function Financial() {
               <ExternalLink className="w-4 h-4 mr-1.5" /> Despesas
             </Button>
           </Link>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" disabled={isExporting}>
-                {isExporting ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Download className="w-4 h-4 mr-2" />
-                )}
-                Exportar
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleExportPDF}>
-                <FileText className="w-4 h-4 mr-2 text-red-500" />
-                Exportar PDF
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleExportXLSX}>
-                <FileText className="w-4 h-4 mr-2 text-green-600" />
-                Exportar Excel (.xlsx)
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
           <Button variant="outline" onClick={() => setIsExpenseOpen(true)}>
             <TrendingDown className="w-4 h-4 mr-2" /> Nova Despesa
           </Button>

@@ -87,7 +87,6 @@
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "qrcode": "^1.5.4",
-    "uploadthing": "^7.7.4",
-    "xlsx": "^0.18.5"
+    "uploadthing": "^7.7.4"
   }
 }
