@@ -20,6 +20,7 @@ import {
   DollarSign, Users, MapPin, BarChart2, TrendingUp, CalendarCheck,
   Target, Award, ArrowUpRight, ExternalLink,
 } from "lucide-react";
+import { MonthlyHistoryTable } from "@/components/monthly-history-table";
 
 const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
 const fmtCompact = (v: number) => {
@@ -301,6 +302,7 @@ export default function Analytics() {
           <TabsTrigger value="trips">Top Viagens</TabsTrigger>
           <TabsTrigger value="sellers">Ranking Vendedores</TabsTrigger>
           <TabsTrigger value="funnel">Funil de Vendas</TabsTrigger>
+          <TabsTrigger value="monthly">Histórico Mensal</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4 space-y-4">
@@ -567,6 +569,10 @@ export default function Analytics() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="monthly" className="mt-4">
+          <MonthlyHistoryTable data={chartData} />
         </TabsContent>
       </Tabs>
     </div>

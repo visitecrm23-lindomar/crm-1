@@ -39,6 +39,7 @@ import {
   Paperclip, X as XIcon, FileText, Image, Download, Loader2,
 } from "lucide-react";
 import { exportFinancialPDF, exportFinancialXLSX } from "@/utils/exportFinancial";
+import { MonthlyHistoryTable } from "@/components/monthly-history-table";
 
 const fmt = (v: number | string) => {
   const n = typeof v === "string" ? parseFloat(v) : v;
@@ -625,7 +626,7 @@ export default function Financial() {
               <TabsTrigger value="expenses">Despesas</TabsTrigger>
               <TabsTrigger value="commissions">Comissões</TabsTrigger>
               <TabsTrigger value="rules">Regras</TabsTrigger>
-              <TabsTrigger value="history">Histórico</TabsTrigger>
+              <TabsTrigger value="monthly">Histórico Mensal</TabsTrigger>
             </TabsList>
           </div>
           {(tab === "receivable" || tab === "payable" || tab === "expenses") && (
@@ -941,97 +942,12 @@ export default function Financial() {
           </div>
         </TabsContent>
 
-        <TabsContent value="history" className="mt-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base font-semibold">Histórico Mensal — Últimos 12 Meses</CardTitle>
-                <Badge variant="outline" className="text-xs">
-                  {chartData ? `${chartData.length} meses` : "—"}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              {!chartData ? (
-                <div className="p-6 space-y-2">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <Skeleton key={i} className="h-10 w-full" />
-                  ))}
-                </div>
-              ) : chartData.length === 0 ? (
-                <div className="py-16 text-center text-muted-foreground text-sm">
-                  Nenhum dado financeiro encontrado para o período.
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      <TableHead className="pl-6 w-28">Mês</TableHead>
-                      <TableHead className="text-right">Receitas</TableHead>
-                      <TableHead className="text-right">Despesas</TableHead>
-                      <TableHead className="text-right">Resultado</TableHead>
-                      <TableHead className="text-right pr-6">Margem</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {chartData.map((row, idx) => {
-                      const net = row.revenue - row.expenses;
-                      const margin = row.revenue > 0 ? (net / row.revenue) * 100 : 0;
-                      const isPositive = net >= 0;
-                      return (
-                        <TableRow key={idx} className="hover:bg-muted/30">
-                          <TableCell className="pl-6 font-medium capitalize">{row.label}</TableCell>
-                          <TableCell className="text-right tabular-nums text-green-700 font-medium">
-                            {fmt(row.revenue)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums text-red-600 font-medium">
-                            {fmt(row.expenses)}
-                          </TableCell>
-                          <TableCell className={`text-right tabular-nums font-semibold ${isPositive ? "text-green-700" : "text-red-600"}`}>
-                            <span className="inline-flex items-center gap-1">
-                              {isPositive ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
-                              {fmt(Math.abs(net))}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right pr-6">
-                            <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${isPositive ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
-                              {row.revenue > 0 ? `${margin >= 0 ? "+" : ""}${margin.toFixed(1)}%` : "—"}
-                            </span>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                  {chartData.length > 1 && (() => {
-                    const totalRevenue = chartData.reduce((s, r) => s + r.revenue, 0);
-                    const totalExpenses = chartData.reduce((s, r) => s + r.expenses, 0);
-                    const totalNet = totalRevenue - totalExpenses;
-                    const totalMargin = totalRevenue > 0 ? (totalNet / totalRevenue) * 100 : 0;
-                    return (
-                      <TableFooter>
-                        <TableRow className="bg-muted/60 font-semibold hover:bg-muted/60">
-                          <TableCell className="pl-6">Total</TableCell>
-                          <TableCell className="text-right tabular-nums text-green-700">{fmt(totalRevenue)}</TableCell>
-                          <TableCell className="text-right tabular-nums text-red-600">{fmt(totalExpenses)}</TableCell>
-                          <TableCell className={`text-right tabular-nums ${totalNet >= 0 ? "text-green-700" : "text-red-600"}`}>
-                            <span className="inline-flex items-center gap-1">
-                              {totalNet >= 0 ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
-                              {fmt(Math.abs(totalNet))}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right pr-6">
-                            <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${totalNet >= 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
-                              {totalRevenue > 0 ? `${totalMargin >= 0 ? "+" : ""}${totalMargin.toFixed(1)}%` : "—"}
-                            </span>
-                          </TableCell>
-                        </TableRow>
-                      </TableFooter>
-                    );
-                  })()}
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+        <TabsContent value="monthly" className="mt-4">
+          <MonthlyHistoryTable
+            data={chartData}
+            subtitle="12 meses"
+            emptyMessage="Sem dados disponíveis para os últimos 12 meses."
+          />
         </TabsContent>
       </Tabs>
 
