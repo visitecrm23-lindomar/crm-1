@@ -1794,6 +1794,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
   const createTrip = useCreateTrip();
   const updateTrip = useUpdateTrip();
   const isPending = createTrip.isPending || updateTrip.isPending;
+  const [isSavingCosts, setIsSavingCosts] = useState(false);
   const [uploadingCount, setUploadingCount] = useState(0);
   const isUploading = uploadingCount > 0;
   const handleUploadingChange = (uploading: boolean) =>
@@ -1913,6 +1914,25 @@ export function TripForm({ tripId }: { tripId?: string }) {
         || (err as { message?: string })?.message
         || "Erro ao salvar viagem";
       toast({ title: msg, variant: "destructive" });
+    }
+  };
+
+  const handleSaveCosts = async () => {
+    if (!tripId) return;
+    setIsSavingCosts(true);
+    try {
+      await updateTrip.mutateAsync({
+        id: tripId,
+        data: {
+          fixedCosts: form.fixedCostItems,
+          variableCosts: form.variableCostItems,
+        },
+      });
+      toast({ title: "Custos salvos com sucesso" });
+    } catch {
+      toast({ title: "Erro ao salvar custos", variant: "destructive" });
+    } finally {
+      setIsSavingCosts(false);
     }
   };
 
@@ -2330,6 +2350,16 @@ export function TripForm({ tripId }: { tripId?: string }) {
               </div>
             </div>
           </div>
+
+          {tripId && (
+            <div className="flex justify-end">
+              <Button onClick={handleSaveCosts} disabled={isSavingCosts || isPending} className="gap-2">
+                {isSavingCosts
+                  ? <><Loader2 className="w-4 h-4 animate-spin" />Salvando Custos...</>
+                  : <><Check className="w-4 h-4" />Salvar Custos</>}
+              </Button>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="pontos" className="space-y-4 mt-6">
