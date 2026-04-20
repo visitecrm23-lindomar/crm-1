@@ -5378,3 +5378,27 @@ export const GetCalendarCallbackQueryParams = zod.object({
     .optional()
     .describe("Present when the user denied access"),
 });
+
+export const DashboardComparativeItemSchema = zod.object({
+  month: zod.string(),
+  key: zod.string(),
+  revenue: zod.number(),
+  expenses: zod.number(),
+  profit: zod.number(),
+  reservations: zod.number(),
+  revenueGrowth: zod.number().nullable().optional(),
+  expensesGrowth: zod.number().nullable().optional(),
+  profitGrowth: zod.number().nullable().optional(),
+  reservationsGrowth: zod.number().nullable().optional(),
+});
+
+export const GetDashboardComparativeResponse = zod.array(DashboardComparativeItemSchema);
+
+export const DashboardTopCustomerSchema = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  totalSpent: zod.number(),
+  reservationCount: zod.number(),
+});
+
+export const GetDashboardTopCustomersResponse = zod.array(DashboardTopCustomerSchema);
