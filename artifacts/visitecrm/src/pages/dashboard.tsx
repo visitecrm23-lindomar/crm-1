@@ -259,167 +259,134 @@ function AgencyDashboard() {
         </div>
       )}
 
-      {/* ═══ SEÇÃO 1: 17 KPIs ═══ */}
-      <section>
-        <SectionTitle icon={BarChart2} title="Indicadores Financeiros" description="Visão financeira consolidada da agência" />
+      {/* ═══ SEÇÃO 1: KPIs em 4 grupos ═══ */}
+      <div className="space-y-6">
+        {/* FINANCEIRO */}
+        <section className="rounded-xl border border-emerald-100 bg-emerald-50/30 dark:bg-emerald-950/10 dark:border-emerald-900/30 p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-2 h-5 rounded-full bg-emerald-500" />
+            <h2 className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Financeiro</h2>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <KpiCard title="Receita Total" value={formatCurrency(totalRevenue)} sub={`${formatCurrency(summary?.revenueThisMonth ?? 0)} este mês`} icon={TrendingUp} loading={loadingSummary} color="text-emerald-600" highlight="green" />
+            <KpiCard title="Despesas" value={formatCurrency(totalExpenses)} sub="Total de despesas registradas" icon={TrendingDown} loading={loadingSummary} color="text-red-500" />
+            <KpiCard
+              title="Lucro Líquido"
+              value={formatCurrency(summary?.profit ?? netProfit)}
+              sub={`Margem: ${(summary?.profitMargin ?? margin).toFixed(1)}%`}
+              icon={DollarSign}
+              loading={loadingSummary}
+              color={(summary?.profit ?? netProfit) >= 0 ? "text-emerald-600" : "text-red-600"}
+              highlight={(summary?.profit ?? netProfit) >= 0 ? "green" : "red"}
+            />
+            <KpiCard
+              title="Margem de Lucro"
+              value={`${(summary?.profitMargin ?? margin).toFixed(1)}%`}
+              sub={(summary?.profit ?? netProfit) >= 0 ? "Resultado positivo" : "Resultado negativo"}
+              icon={Percent}
+              loading={loadingSummary}
+              color={(summary?.profitMargin ?? margin) >= 20 ? "text-emerald-600" : (summary?.profitMargin ?? margin) >= 10 ? "text-yellow-600" : "text-red-600"}
+            />
+            <KpiCard title="Ticket Médio" value={formatCurrency(summary?.avgTicket ?? 0)} sub="Por reserva confirmada" icon={Target} loading={loadingSummary} color="text-purple-600" />
+            <KpiCard
+              title="Contas Vencidas"
+              value={formatCurrency(summary?.overduePayments ?? 0)}
+              sub={`${summary?.overduePaymentsCount ?? 0} cobranças em atraso`}
+              icon={AlertTriangle}
+              loading={loadingSummary}
+              color={(summary?.overduePaymentsCount ?? 0) > 0 ? "text-red-600" : "text-muted-foreground"}
+              highlight={(summary?.overduePaymentsCount ?? 0) > 0 ? "red" : undefined}
+            />
+          </div>
+        </section>
 
-        {/* Group 1: Financial overview (5 cards) */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-4">
-          <KpiCard title="Receita Total" value={formatCurrency(totalRevenue)} sub={`${formatCurrency(summary?.revenueThisMonth ?? 0)} este mês`} icon={TrendingUp} loading={loadingSummary} color="text-green-600" highlight="green" />
-          <KpiCard title="Total Despesas" value={formatCurrency(totalExpenses)} sub={`Líquido: ${formatCurrency(netProfit)}`} icon={TrendingDown} loading={loadingSummary} color="text-red-500" highlight={netProfit < 0 ? "red" : undefined} />
-          <KpiCard
-            title="Total A Pagar"
-            value={formatCurrency(summary?.totalPayable ?? 0)}
-            sub="Pagamentos pendentes a pagar"
-            icon={AlertCircle}
-            loading={loadingSummary}
-            color={(summary?.totalPayable ?? 0) > 0 ? "text-red-600" : "text-muted-foreground"}
-            highlight={(summary?.totalPayable ?? 0) > 0 ? "red" : undefined}
-          />
-          <KpiCard
-            title="Lucro Líquido"
-            value={formatCurrency(netProfit)}
-            sub={`Margem: ${margin.toFixed(1)}%`}
-            icon={DollarSign}
-            loading={loadingSummary}
-            color={netProfit >= 0 ? "text-emerald-600" : "text-red-600"}
-            highlight={netProfit >= 0 ? "green" : "red"}
-          />
-          <KpiCard
-            title="Margem de Lucro"
-            value={`${margin.toFixed(1)}%`}
-            sub={netProfit >= 0 ? "Resultado positivo" : "Resultado negativo"}
-            icon={Percent}
-            loading={loadingSummary}
-            color={margin >= 20 ? "text-emerald-600" : margin >= 10 ? "text-yellow-600" : "text-red-600"}
-          />
-        </div>
+        {/* VENDAS */}
+        <section className="rounded-xl border border-blue-100 bg-blue-50/30 dark:bg-blue-950/10 dark:border-blue-900/30 p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-2 h-5 rounded-full bg-blue-500" />
+            <h2 className="text-sm font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide">Vendas</h2>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <KpiCard title="Total de Reservas" value={summary?.totalReservations ?? 0} sub={`${summary?.cancelledReservations ?? 0} canceladas`} icon={CalendarCheck} loading={loadingSummary} color="text-blue-600" />
+            <KpiCard title="Reservas Confirmadas" value={summary?.confirmedReservations ?? 0} sub="Com pagamento aprovado" icon={Check} loading={loadingSummary} color="text-blue-700" highlight="green" />
+            <KpiCard
+              title="Taxa de Conversão"
+              value={`${(summary?.conversionRate ?? 0).toFixed(1)}%`}
+              sub="Leads → Pagantes"
+              icon={TrendingUp}
+              loading={loadingSummary}
+              color={(summary?.conversionRate ?? 0) >= 30 ? "text-emerald-600" : "text-blue-600"}
+            />
+            <KpiCard title="Leads no Pipeline" value={summary?.pipelineLeads ?? summary?.openDeals ?? 0} sub={`R$ ${formatCurrency(summary?.dealsPipelineValue ?? 0)}`} icon={Briefcase} loading={loadingSummary} color="text-indigo-600" />
+            <KpiCard title="Vendas Este Mês" value={summary?.salesThisMonth ?? 0} sub="Reservas confirmadas no mês" icon={Zap} loading={loadingSummary} color="text-emerald-600" highlight={(summary?.salesThisMonth ?? 0) > 0 ? "green" : undefined} />
+          </div>
+        </section>
 
-        {/* Group 2: Cash flow + Active trips receivables */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-4">
-          <KpiCard
-            title="Recebido Hoje"
-            value={formatCurrency(summary?.receivedToday ?? 0)}
-            sub="Pagamentos do dia"
-            icon={Zap}
-            loading={loadingSummary}
-            color="text-green-600"
-            highlight={(summary?.receivedToday ?? 0) > 0 ? "green" : undefined}
-          />
-          <KpiCard
-            title="A Receber (3 dias)"
-            value={formatCurrency(summary?.toReceiveNext3Days ?? 0)}
-            sub="Vencimentos próximos"
-            icon={Clock}
-            loading={loadingSummary}
-            color="text-blue-600"
-          />
-          <KpiCard
-            title="A Receber Total"
-            value={formatCurrency(paymentSummary?.totalReceivable ?? 0)}
-            sub={`Vencido: ${formatCurrency(paymentSummary?.overdueReceivable ?? 0)}`}
-            icon={CalendarCheck}
-            loading={loadingPaySummary}
-            color="text-blue-600"
-            highlight={(paymentSummary?.overdueReceivable ?? 0) > 0 ? "yellow" : undefined}
-          />
-          <KpiCard
-            title="Ticket Médio"
-            value={formatCurrency(summary?.avgTicket ?? 0)}
-            sub="Por reserva confirmada"
-            icon={Target}
-            loading={loadingSummary}
-            color="text-purple-600"
-          />
-          <KpiCard
-            title="Já Recebido (Viagens Ativas)"
-            value={formatCurrency(summary?.receivedFromActiveTrips ?? 0)}
-            sub="Pagamentos confirmados nas viagens ativas"
-            icon={TrendingUp}
-            loading={loadingSummary}
-            color="text-emerald-600"
-            highlight={(summary?.receivedFromActiveTrips ?? 0) > 0 ? "green" : undefined}
-          />
-          <KpiCard
-            title="Pendentes (Viagens Ativas)"
-            value={formatCurrency(summary?.pendingFromActiveTrips ?? 0)}
-            sub="A receber nas viagens em andamento"
-            icon={AlertCircle}
-            loading={loadingSummary}
-            color="text-amber-600"
-            highlight={(summary?.pendingFromActiveTrips ?? 0) > 0 ? "yellow" : undefined}
-          />
-        </div>
+        {/* CLIENTES */}
+        <section className="rounded-xl border border-purple-100 bg-purple-50/30 dark:bg-purple-950/10 dark:border-purple-900/30 p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-2 h-5 rounded-full bg-purple-500" />
+            <h2 className="text-sm font-semibold text-purple-700 dark:text-purple-400 uppercase tracking-wide">Clientes</h2>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <KpiCard title="Total de Clientes" value={summary?.totalClients ?? 0} sub="Base total cadastrada" icon={Users} loading={loadingSummary} color="text-purple-600" />
+            <KpiCard title="Novos Este Mês" value={summary?.newClientsThisMonth ?? 0} sub="Cadastrados no mês atual" icon={Users} loading={loadingSummary} color="text-purple-500" highlight={(summary?.newClientsThisMonth ?? 0) > 0 ? "green" : undefined} />
+            <KpiCard
+              title="Taxa de Retenção"
+              value={`${(summary?.retentionRate ?? 0).toFixed(1)}%`}
+              sub="Clientes com 2+ compras"
+              icon={UserCheck}
+              loading={loadingSummary}
+              color={(summary?.retentionRate ?? 0) >= 30 ? "text-emerald-600" : (summary?.retentionRate ?? 0) >= 15 ? "text-yellow-600" : "text-muted-foreground"}
+            />
+            <KpiCard
+              title="Pontos de Fidelidade"
+              value={(summary?.loyaltyPointsIssued ?? 0).toLocaleString("pt-BR")}
+              sub="Total emitido aos clientes"
+              icon={Star}
+              loading={loadingSummary}
+              color="text-yellow-600"
+            />
+            <KpiCard
+              title="NPS Médio"
+              value={npsLabel}
+              sub="Satisfação dos clientes"
+              icon={Star}
+              loading={loadingSummary}
+              color={(summary?.avgNps ?? summary?.averageNps ?? 0) >= 9 ? "text-emerald-600" : (summary?.avgNps ?? summary?.averageNps ?? 0) >= 7 ? "text-yellow-600" : "text-muted-foreground"}
+            />
+          </div>
+        </section>
 
-        {/* Group 3: Operations (3 cards) */}
-        <div className="grid gap-4 sm:grid-cols-3 mb-4">
-          <KpiCard title="Viagens Ativas" value={summary?.activeTrips ?? 0} sub={`${summary?.totalTrips ?? 0} no total`} icon={Map} loading={loadingSummary} color="text-blue-600" />
-          <KpiCard title="Reservas Hoje" value={summary?.reservationsToday ?? 0} sub="Novas reservas do dia" icon={CalendarCheck} loading={loadingSummary} color="text-indigo-600" highlight={(summary?.reservationsToday ?? 0) > 0 ? "green" : undefined} />
-          <KpiCard title="NPS Médio" value={npsLabel} sub={`${summary?.confirmedReservations ?? 0} reservas confirmadas`} icon={Star} loading={loadingSummary} color="text-yellow-500" />
-        </div>
-
-        {/* Group 4: Clients (3 cards) */}
-        <div className="grid gap-4 sm:grid-cols-3">
-          <KpiCard title="Total Clientes" value={summary?.totalClients ?? 0} sub="Base total de clientes" icon={Users} loading={loadingSummary} color="text-blue-600" />
-          <KpiCard
-            title="Faturamento Total"
-            value={formatCurrency(summary?.totalFaturamento ?? 0)}
-            sub={`Recebido: ${formatCurrency(totalRevenue)}`}
-            icon={Briefcase}
-            loading={loadingSummary}
-            color="text-purple-600"
-            highlight={(summary?.totalFaturamento ?? 0) > 0 ? "green" : undefined}
-          />
-          <KpiCard title="Clientes Ativos" value={summary?.activeClientsCount ?? 0} sub="Com reserva confirmada" icon={Users} loading={loadingSummary} color="text-indigo-600" />
-        </div>
-
-        {/* Group 5: New KPIs */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mt-4">
-          <KpiCard
-            title="Vendas Este Mês"
-            value={summary?.salesThisMonth ?? 0}
-            sub="Reservas confirmadas no mês"
-            icon={CalendarCheck}
-            loading={loadingSummary}
-            color="text-emerald-600"
-            highlight={(summary?.salesThisMonth ?? 0) > 0 ? "green" : undefined}
-          />
-          <KpiCard
-            title="Reservas Pendentes"
-            value={summary?.pendingReservations ?? 0}
-            sub="Aguardando confirmação"
-            icon={Clock}
-            loading={loadingSummary}
-            color={(summary?.pendingReservations ?? 0) > 0 ? "text-amber-600" : "text-muted-foreground"}
-            highlight={(summary?.pendingReservations ?? 0) > 0 ? "yellow" : undefined}
-          />
-          <KpiCard
-            title="Cobranças Vencidas"
-            value={summary?.overduePaymentsCount ?? 0}
-            sub="Recebimentos em atraso"
-            icon={AlertTriangle}
-            loading={loadingSummary}
-            color={(summary?.overduePaymentsCount ?? 0) > 0 ? "text-red-600" : "text-muted-foreground"}
-            highlight={(summary?.overduePaymentsCount ?? 0) > 0 ? "red" : undefined}
-          />
-          <KpiCard
-            title="Pontos de Fidelidade"
-            value={(summary?.loyaltyPointsIssued ?? 0).toLocaleString("pt-BR")}
-            sub="Total emitido aos clientes"
-            icon={Star}
-            loading={loadingSummary}
-            color="text-yellow-600"
-          />
-          <KpiCard
-            title="Taxa de Retenção"
-            value={`${(summary?.retentionRate ?? 0).toFixed(1)}%`}
-            sub="Clientes com 2+ compras"
-            icon={UserCheck}
-            loading={loadingSummary}
-            color={(summary?.retentionRate ?? 0) >= 30 ? "text-emerald-600" : (summary?.retentionRate ?? 0) >= 15 ? "text-yellow-600" : "text-muted-foreground"}
-          />
-        </div>
-      </section>
+        {/* OPERACIONAL */}
+        <section className="rounded-xl border border-orange-100 bg-orange-50/30 dark:bg-orange-950/10 dark:border-orange-900/30 p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-2 h-5 rounded-full bg-orange-500" />
+            <h2 className="text-sm font-semibold text-orange-700 dark:text-orange-400 uppercase tracking-wide">Operacional</h2>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <KpiCard title="Viagens Ativas" value={summary?.activeTrips ?? 0} sub={`${summary?.totalTrips ?? 0} viagens no total`} icon={Map} loading={loadingSummary} color="text-orange-600" />
+            <KpiCard
+              title="Taxa de Ocupação"
+              value={`${(summary?.occupancyRate ?? 0).toFixed(1)}%`}
+              sub="Vagas preenchidas nas viagens ativas"
+              icon={Activity}
+              loading={loadingSummary}
+              color={(summary?.occupancyRate ?? 0) >= 85 ? "text-emerald-600" : (summary?.occupancyRate ?? 0) >= 60 ? "text-yellow-600" : "text-red-500"}
+            />
+            <KpiCard title="Viagens Este Mês" value={summary?.tripsThisMonth ?? 0} sub="Criadas no mês atual" icon={Map} loading={loadingSummary} color="text-orange-500" highlight={(summary?.tripsThisMonth ?? 0) > 0 ? "green" : undefined} />
+            <KpiCard
+              title="Reservas Pendentes"
+              value={summary?.pendingReservations ?? 0}
+              sub="Aguardando confirmação"
+              icon={Clock}
+              loading={loadingSummary}
+              color={(summary?.pendingReservations ?? 0) > 0 ? "text-amber-600" : "text-muted-foreground"}
+              highlight={(summary?.pendingReservations ?? 0) > 0 ? "yellow" : undefined}
+            />
+          </div>
+        </section>
+      </div>
 
       {/* ═══ SEÇÃO 2: 10 GRÁFICOS ═══ */}
       <section>

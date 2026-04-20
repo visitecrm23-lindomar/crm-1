@@ -43,8 +43,15 @@ export interface DashboardSummary {
   salesThisMonth?: number;
   pendingReservations?: number;
   overduePaymentsCount?: number;
+  overduePayments?: number;
   loyaltyPointsIssued?: number;
   retentionRate?: number;
+  tripsThisMonth?: number;
+  conversionRate?: number;
+  profit?: number;
+  profitMargin?: number;
+  avgNps?: number | null;
+  pipelineLeads?: number;
 }
 
 export interface DashboardComparativeItem {

@@ -197,8 +197,10 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
       .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, "confirmed"), gte(reservationsTable.createdAt, startOfMonth)));
     const [pendingReservationsRow] = await db.select({ count: sql<number>`count(*)` })
       .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, "pending")));
-    const [overduePaymentsRow] = await db.select({ count: sql<number>`count(*)` })
-      .from(paymentsTable).where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.type, "receivable"), eq(paymentsTable.status, "pending"), lt(paymentsTable.dueDate, now)));
+    const [overduePaymentsRow] = await db.select({
+      count: sql<number>`count(*)`,
+      amount: sql<number>`coalesce(sum(cast(${paymentsTable.amount} as numeric)), 0)`,
+    }).from(paymentsTable).where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.type, "receivable"), eq(paymentsTable.status, "pending"), lt(paymentsTable.dueDate, now)));
     const [loyaltyPointsRow] = await db.select({ total: sql<number>`sum(total_points)` })
       .from(loyaltyMembersTable).where(eq(loyaltyMembersTable.tenantId, tenantId));
 
@@ -210,6 +212,21 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
       .having(sql`count(*) >= 2`);
     const totalClientsForRetention = Number(clientCount?.count ?? 0);
     const retentionRate = totalClientsForRetention > 0 ? Math.round((repeatBuyersRaw.length / totalClientsForRetention) * 1000) / 10 : 0;
+
+    // Trips this month
+    const [tripsThisMonthRow] = await db.select({ count: sql<number>`count(*)` })
+      .from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), gte(tripsTable.createdAt, startOfMonth)));
+
+    // Conversion rate: paying clients / total clients
+    const payingClientsRaw = await db.select({ clientId: paymentsTable.clientId })
+      .from(paymentsTable)
+      .where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.type, "receivable"), eq(paymentsTable.status, "paid")));
+    const payingClientCount = new Set(payingClientsRaw.map(p => p.clientId).filter(Boolean)).size;
+    const conversionRate = totalClientsForRetention > 0 ? Math.round((payingClientCount / totalClientsForRetention) * 1000) / 10 : 0;
+
+    // Computed summary values
+    const profit = totalRevenue - Number(totalExpensesRow?.total ?? 0);
+    const profitMargin = totalRevenue > 0 ? Math.round((profit / totalRevenue) * 1000) / 10 : 0;
 
     res.json({
       totalClients: Number(clientCount?.count ?? 0),
@@ -223,8 +240,10 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
       confirmedReservations: Number(confirmedReservationCount?.count ?? 0),
       occupancyRate: Math.round(occupancyRate * 10) / 10,
       averageNps: averageNps !== null ? Math.round(averageNps * 10) / 10 : null,
+      avgNps: averageNps !== null ? Math.round(averageNps * 10) / 10 : null,
       openDeals: Number(dealCount?.count ?? 0),
       dealsPipelineValue: Number(dealValue?.total ?? 0),
+      pipelineLeads: Number(dealCount?.count ?? 0),
       receivedToday: Math.round(receivedToday * 100) / 100,
       toReceiveNext3Days: Math.round(toReceiveNext3Days * 100) / 100,
       reservationsToday: Number(todayReservationCount?.count ?? 0),
@@ -242,8 +261,13 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
       salesThisMonth: Number(salesThisMonthRow?.count ?? 0),
       pendingReservations: Number(pendingReservationsRow?.count ?? 0),
       overduePaymentsCount: Number(overduePaymentsRow?.count ?? 0),
+      overduePayments: Math.round(Number(overduePaymentsRow?.amount ?? 0) * 100) / 100,
       loyaltyPointsIssued: Number(loyaltyPointsRow?.total ?? 0),
       retentionRate,
+      tripsThisMonth: Number(tripsThisMonthRow?.count ?? 0),
+      conversionRate,
+      profit: Math.round(profit * 100) / 100,
+      profitMargin,
     });
   } catch (err) {
     req.log.error({ err }, "Error fetching dashboard summary");

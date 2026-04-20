@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import { ClerkProvider, Show, useClerk, useUser } from "@clerk/react";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
@@ -30,7 +30,7 @@ import Analytics from "@/pages/analytics";
 import Commissions from "@/pages/commissions";
 import Expenses from "@/pages/expenses";
 import Revenue from "@/pages/revenue";
-import HistoricoComparativo from "@/pages/historico-comparativo";
+const HistoricoComparativo = lazy(() => import("@/pages/historico-comparativo"));
 import Settings from "@/pages/settings";
 
 // Task 6 pages
@@ -429,7 +429,7 @@ function Router() {
       {/* Analytics */}
       <Route path="/analytics" component={() => <AgenciaOnlyRoute component={Analytics} />} />
       <Route path="/analytics/revenue" component={() => <AgenciaOnlyRoute component={Revenue} />} />
-      <Route path="/analytics/historico-comparativo" component={() => <AgenciaOnlyRoute component={HistoricoComparativo} />} />
+      <Route path="/analytics/historico-comparativo" component={() => <Suspense fallback={null}><AgenciaOnlyRoute component={HistoricoComparativo} /></Suspense>} />
       <Route
         path="/analytics/vendedores"
         component={() => <AgenciaOnlyRoute component={Vendedores} />}
