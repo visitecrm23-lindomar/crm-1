@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { tripCostsTable, tripsTable, reservationsTable, paymentsTable } from "@workspace/db";
-import { eq, and, sql } from "drizzle-orm";
+import { tripCostsTable, tripsTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 
@@ -42,31 +42,6 @@ router.get("/trips/:id/costs", async (req, res): Promise<void> => {
       .from(tripCostsTable)
       .where(and(eq(tripCostsTable.tripId, req.params.id), eq(tripCostsTable.tenantId, me.tenantId)))
       .orderBy(tripCostsTable.createdAt);
-
-    const confirmedReservations = await db.select({
-      totalRevenue: sql<string>`coalesce(sum(p.amount),0)`,
-    })
-      .from(reservationsTable)
-      .leftJoin(paymentsTable, and(
-        eq(paymentsTable.reservationId, reservationsTable.id),
-        eq(paymentsTable.status, "paid"),
-      ))
-      .where(and(
-        eq(reservationsTable.tripId, req.params.id),
-        eq(reservationsTable.tenantId, me.tenantId),
-        eq(reservationsTable.status, "confirmed"),
-      ));
-
-    const expectedRevenue = await db.select({
-      count: sql<string>`count(*)`,
-      revenue: sql<string>`coalesce(sum(r.price_adult * r.passengers_count),0)`,
-    })
-      .from(reservationsTable as typeof reservationsTable & { price_adult?: unknown })
-      .where(and(
-        eq(reservationsTable.tripId, req.params.id),
-        eq(reservationsTable.tenantId, me.tenantId),
-        eq(reservationsTable.status, "confirmed"),
-      ));
 
     const [tripRow] = await db.select({
       priceAdult: tripsTable.priceAdult,

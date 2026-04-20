@@ -33,6 +33,9 @@ import {
   ShoppingBag, Loader2, Clock, Star, CheckCircle2, XCircle, MessageSquare, Pencil, Phone,
   TrendingUp, TrendingDown, Receipt, Banknote, PiggyBank, Wallet,
 } from "lucide-react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { CoverImageUpload } from "@/components/cover-image-upload";
 import { GalleryUpload } from "@/components/gallery-upload";
 import {
@@ -1362,15 +1365,20 @@ const COST_STATUS_MAP: Record<string, { label: string; color: string }> = {
   overdue: { label: "Vencido",  color: "bg-red-100 text-red-700 border-red-200" },
 };
 
-const EMPTY_COST_FORM = {
-  category: "",
-  description: "",
-  supplierName: "",
-  amount: "",
-  status: "pending",
-  dueDate: "",
-  notes: "",
-};
+const costFormSchema = z.object({
+  category: z.enum(["Transporte", "Hospedagem", "Alimentação", "Guia", "Marketing", "Seguro", "Taxas", "Outros"] as const, {
+    required_error: "Selecione uma categoria",
+    invalid_type_error: "Categoria inválida",
+  }),
+  description: z.string().min(1, "Descrição obrigatória").max(200, "Máximo 200 caracteres"),
+  supplierName: z.string().max(100).optional(),
+  amount: z.number({ invalid_type_error: "Valor inválido" }).positive("Valor deve ser maior que zero"),
+  status: z.enum(["pending", "paid", "overdue"] as const).default("pending"),
+  dueDate: z.string().optional(),
+  notes: z.string().max(500).optional(),
+});
+
+type CostFormValues = z.infer<typeof costFormSchema>;
 
 function TripCostModal({ tripId, cost, open, onClose, onSaved }: {
   tripId: string;
@@ -1382,40 +1390,40 @@ function TripCostModal({ tripId, cost, open, onClose, onSaved }: {
   const { toast } = useToast();
   const createCost = useCreateTripCost();
   const updateCost = useUpdateTripCost();
-  const [form, setForm] = useState(EMPTY_COST_FORM);
-  const [saving, setSaving] = useState(false);
+
+  const { register, handleSubmit, control, reset, formState: { errors, isSubmitting } } = useForm<CostFormValues>({
+    resolver: zodResolver(costFormSchema),
+    defaultValues: { status: "pending", amount: 0 },
+  });
 
   useEffect(() => {
-    if (cost) {
-      setForm({
-        category: cost.category,
-        description: cost.description,
-        supplierName: cost.supplierName ?? "",
-        amount: String(cost.amount),
-        status: cost.status,
-        dueDate: cost.dueDate ? cost.dueDate.substring(0, 10) : "",
-        notes: cost.notes ?? "",
-      });
-    } else {
-      setForm(EMPTY_COST_FORM);
+    if (open) {
+      if (cost) {
+        reset({
+          category: cost.category as CostFormValues["category"],
+          description: cost.description,
+          supplierName: cost.supplierName ?? "",
+          amount: cost.amount,
+          status: cost.status as CostFormValues["status"],
+          dueDate: cost.dueDate ? cost.dueDate.substring(0, 10) : "",
+          notes: cost.notes ?? "",
+        });
+      } else {
+        reset({ category: undefined, description: "", supplierName: "", amount: 0, status: "pending", dueDate: "", notes: "" });
+      }
     }
-  }, [cost, open]);
+  }, [cost, open, reset]);
 
-  const handleSave = async () => {
-    if (!form.category || !form.description || !form.amount) {
-      toast({ title: "Preencha categoria, descrição e valor", variant: "destructive" });
-      return;
-    }
-    setSaving(true);
+  const onSubmit = async (values: CostFormValues) => {
     try {
       const payload = {
-        category: form.category,
-        description: form.description,
-        supplierName: form.supplierName || null,
-        amount: parseFloat(form.amount.replace(",", ".")),
-        status: form.status,
-        dueDate: form.dueDate || null,
-        notes: form.notes || null,
+        category: values.category,
+        description: values.description,
+        supplierName: values.supplierName || null,
+        amount: values.amount,
+        status: values.status,
+        dueDate: values.dueDate || null,
+        notes: values.notes || null,
       };
       if (cost) {
         await updateCost.mutateAsync({ tripId, costId: cost.id, data: payload });
@@ -1428,8 +1436,6 @@ function TripCostModal({ tripId, cost, open, onClose, onSaved }: {
       onClose();
     } catch {
       toast({ title: "Erro ao salvar custo", variant: "destructive" });
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -1442,63 +1448,93 @@ function TripCostModal({ tripId, cost, open, onClose, onSaved }: {
             {cost ? "Editar Custo" : "Novo Custo"}
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-1">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-1">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Categoria *</Label>
-              <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v }))}>
-                <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
-                <SelectContent>
-                  {COST_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Controller
+                name="category"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                    <SelectTrigger className={errors.category ? "border-destructive" : ""}>
+                      <SelectValue placeholder="Selecionar..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COST_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {errors.category && <p className="text-[10px] text-destructive">{errors.category.message}</p>}
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Status</Label>
-              <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending">Pendente</SelectItem>
-                  <SelectItem value="paid">Pago</SelectItem>
-                  <SelectItem value="overdue">Vencido</SelectItem>
-                </SelectContent>
-              </Select>
+              <Controller
+                name="status"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pendente</SelectItem>
+                      <SelectItem value="paid">Pago</SelectItem>
+                      <SelectItem value="overdue">Vencido</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
             </div>
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Descrição *</Label>
-            <Input placeholder="Ex: Locação do ônibus" value={form.description}
-              onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+            <Input
+              placeholder="Ex: Locação do ônibus"
+              className={errors.description ? "border-destructive" : ""}
+              {...register("description")}
+            />
+            {errors.description && <p className="text-[10px] text-destructive">{errors.description.message}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Valor (R$) *</Label>
-              <Input type="number" step="0.01" min="0" placeholder="0,00" value={form.amount}
-                onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
+              <Controller
+                name="amount"
+                control={control}
+                render={({ field }) => (
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0,00"
+                    className={errors.amount ? "border-destructive" : ""}
+                    value={field.value ?? ""}
+                    onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
+                  />
+                )}
+              />
+              {errors.amount && <p className="text-[10px] text-destructive">{errors.amount.message}</p>}
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Vencimento</Label>
-              <Input type="date" value={form.dueDate}
-                onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} />
+              <Input type="date" {...register("dueDate")} />
             </div>
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Fornecedor</Label>
-            <Input placeholder="Nome do fornecedor (opcional)" value={form.supplierName}
-              onChange={e => setForm(f => ({ ...f, supplierName: e.target.value }))} />
+            <Input placeholder="Nome do fornecedor (opcional)" {...register("supplierName")} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Observações</Label>
-            <Textarea rows={2} placeholder="Anotações adicionais..." value={form.notes}
-              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+            <Textarea rows={2} placeholder="Anotações adicionais..." {...register("notes")} />
           </div>
           <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Salvando...</> : "Salvar"}
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>Cancelar</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Salvando...</> : "Salvar"}
             </Button>
           </div>
-        </div>
+        </form>
       </DialogContent>
     </Dialog>
   );
