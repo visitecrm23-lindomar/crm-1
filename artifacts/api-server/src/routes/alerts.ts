@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { paymentsTable, tripsTable, reservationsTable, dealsTable, clientsTable } from "@workspace/db";
-import { eq, and, lt, lte, gte, gt, sql, inArray, isNull, or } from "drizzle-orm";
+import { paymentsTable, tripsTable, dealsTable, clientsTable } from "@workspace/db";
+import { eq, and, lt, lte, gte, gt, sql } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 
 const router = Router();
@@ -189,19 +189,16 @@ router.get("/alerts", async (req, res): Promise<void> => {
       });
     }
 
-    const lowOccupancyTrips = lowOccupancyTripsRows.filter(
-      t => t.totalCapacity > 0 && (t.reservedSeats / t.totalCapacity) < 0.5,
-    );
-    if (lowOccupancyTrips.length > 0) {
-      const names = lowOccupancyTrips.slice(0, 2).map(t => t.name).join(", ");
+    if (lowOccupancyTripsRows.length > 0) {
+      const names = lowOccupancyTripsRows.slice(0, 2).map(t => t.name).join(", ");
       alerts.push({
         id: "trips-low-occupancy-7d",
         type: "warning",
         category: "Viagens",
-        title: `${lowOccupancyTrips.length} viagem(ns) com baixa ocupação (<50%)`,
-        description: lowOccupancyTrips.length <= 2 ? names : `${names} e mais ${lowOccupancyTrips.length - 2}`,
+        title: `${lowOccupancyTripsRows.length} viagem(ns) com baixa ocupação (<50%)`,
+        description: lowOccupancyTripsRows.length <= 2 ? names : `${names} e mais ${lowOccupancyTripsRows.length - 2}`,
         actionHref: "/trips",
-        count: lowOccupancyTrips.length,
+        count: lowOccupancyTripsRows.length,
       });
     }
 
