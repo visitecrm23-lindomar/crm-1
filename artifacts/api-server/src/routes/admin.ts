@@ -615,10 +615,14 @@ router.post("/admin/maintenance/orphaned-files", async (req, res): Promise<void>
       return;
     }
 
-    // Delete: either supplied keys or all orphaned
-    const keysToDelete = suppliedKeys ?? orphaned.map((f) => f.key);
+    // Delete: either supplied keys (intersected with orphaned set for safety) or all orphaned
+    const orphanedKeySet = new Set(orphaned.map((f) => f.key));
+    const keysToDelete = suppliedKeys
+      ? suppliedKeys.filter((k) => orphanedKeySet.has(k))
+      : orphaned.map((f) => f.key);
+    const skippedKeys = suppliedKeys ? suppliedKeys.filter((k) => !orphanedKeySet.has(k)) : [];
     if (keysToDelete.length === 0) {
-      res.json({ dryRun: false, deleted: 0, failed: 0 });
+      res.json({ dryRun: false, deleted: 0, failed: 0, ...(skippedKeys.length ? { skippedKeys } : {}) });
       return;
     }
 
@@ -636,8 +640,14 @@ router.post("/admin/maintenance/orphaned-files", async (req, res): Promise<void>
       }
     }
 
-    req.log.info({ deletedCount, failedCount: failedKeys.length }, "Maintenance orphaned-files cleanup complete");
-    res.json({ dryRun: false, deleted: deletedCount, failed: failedKeys.length, ...(failedKeys.length ? { failedKeys } : {}) });
+    req.log.info({ deletedCount, failedCount: failedKeys.length, skippedCount: skippedKeys.length }, "Maintenance orphaned-files cleanup complete");
+    res.json({
+      dryRun: false,
+      deleted: deletedCount,
+      failed: failedKeys.length,
+      ...(failedKeys.length ? { failedKeys } : {}),
+      ...(skippedKeys.length ? { skippedKeys } : {}),
+    });
   } catch (err) {
     req.log.error({ err }, "Error in maintenance/orphaned-files");
     res.status(500).json({ error: "Internal server error" });
