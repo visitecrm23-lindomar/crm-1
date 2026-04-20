@@ -7,8 +7,8 @@ import { requireAuth } from "../lib/tenant";
 
 const router = Router();
 
-const CATEGORIES = ["Transporte", "Hospedagem", "Alimentação", "Guia", "Marketing", "Seguro", "Taxas", "Outros"] as const;
-const STATUSES = ["pending", "paid", "overdue"] as const;
+const CATEGORIES = new Set(["Transporte", "Hospedagem", "Alimentação", "Guia", "Marketing", "Seguro", "Taxas", "Outros"]);
+const STATUSES = new Set(["pending", "paid", "overdue"]);
 
 function formatCost(c: typeof tripCostsTable.$inferSelect) {
   return {
@@ -104,6 +104,9 @@ router.post("/trips/:id/costs", async (req, res): Promise<void> => {
     if (!category || !description || amount == null) {
       res.status(400).json({ error: "Campos obrigatórios: category, description, amount" }); return;
     }
+    if (!CATEGORIES.has(String(category))) {
+      res.status(400).json({ error: `Categoria inválida. Valores permitidos: ${[...CATEGORIES].join(", ")}` }); return;
+    }
 
     const id = generateId();
     await db.insert(tripCostsTable).values({
@@ -114,7 +117,7 @@ router.post("/trips/:id/costs", async (req, res): Promise<void> => {
       description: String(description),
       supplierName: supplierName ? String(supplierName) : null,
       amount: String(Number(amount)),
-      status: STATUSES.includes(status) ? status : "pending",
+      status: STATUSES.has(status) ? String(status) : "pending",
       dueDate: dueDate ? new Date(dueDate) : null,
       paidAt: paidAt ? new Date(paidAt) : (status === "paid" ? new Date() : null),
       notes: notes ? String(notes) : null,
@@ -148,11 +151,16 @@ router.put("/trips/:id/costs/:costId", async (req, res): Promise<void> => {
 
     const { category, description, supplierName, amount, status, dueDate, paidAt, notes } = req.body;
     const updates: Partial<typeof tripCostsTable.$inferInsert> = {};
-    if (category != null) updates.category = String(category);
+    if (category != null) {
+      if (!CATEGORIES.has(String(category))) {
+        res.status(400).json({ error: `Categoria inválida. Valores permitidos: ${[...CATEGORIES].join(", ")}` }); return;
+      }
+      updates.category = String(category);
+    }
     if (description != null) updates.description = String(description);
     if (supplierName !== undefined) updates.supplierName = supplierName ? String(supplierName) : null;
     if (amount != null) updates.amount = String(Number(amount));
-    if (status != null && STATUSES.includes(status)) updates.status = status;
+    if (status != null && STATUSES.has(String(status))) updates.status = String(status);
     if (dueDate !== undefined) updates.dueDate = dueDate ? new Date(dueDate) : null;
     if (paidAt !== undefined) updates.paidAt = paidAt ? new Date(paidAt) : null;
     else if (status === "paid" && !existing.paidAt) updates.paidAt = new Date();
