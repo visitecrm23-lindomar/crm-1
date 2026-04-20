@@ -48,7 +48,7 @@ const TYPE_CONFIG = {
 };
 
 export function AlertsBell({ userRole }: { userRole?: string }) {
-  const canSeeAlerts = userRole === "agencia" || userRole === "superadmin" || userRole === "vendedor";
+  const canSeeAlerts = userRole === "agencia" || userRole === "vendedor";
 
   const { data } = useQuery<AlertsResponse>({
     queryKey: ["alerts"],
@@ -57,6 +57,8 @@ export function AlertsBell({ userRole }: { userRole?: string }) {
     enabled: canSeeAlerts,
     staleTime: 60_000,
   });
+
+  if (!canSeeAlerts) return null;
 
   const alerts = data?.alerts ?? [];
   const count = data?.count ?? 0;

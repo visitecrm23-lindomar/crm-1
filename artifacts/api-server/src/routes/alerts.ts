@@ -21,7 +21,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    if (!["agencia", "superadmin", "vendedor"].includes(me.role)) {
+    if (!["agencia", "vendedor"].includes(me.role)) {
       res.status(403).json({ error: "Sem permissão" });
       return;
     }
@@ -184,7 +184,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
         category: "Viagens",
         title: `${tripsNoRes} viagem(ns) sem reservas saindo em 24h`,
         description: tripsNoRes <= 2 ? names : `${names} e mais ${tripsNoRes - 2}`,
-        actionHref: "/viagens",
+        actionHref: "/trips",
         count: tripsNoRes,
       });
     }
@@ -200,7 +200,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
         category: "Viagens",
         title: `${lowOccupancyTrips.length} viagem(ns) com baixa ocupação (<50%)`,
         description: lowOccupancyTrips.length <= 2 ? names : `${names} e mais ${lowOccupancyTrips.length - 2}`,
-        actionHref: "/viagens",
+        actionHref: "/trips",
         count: lowOccupancyTrips.length,
       });
     }
@@ -226,7 +226,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
         category: "Clientes",
         title: `${birthdayCount} aniversariante(s) hoje`,
         description: "Aproveite para enviar uma mensagem de parabéns",
-        actionHref: "/clientes",
+        actionHref: "/clients",
         count: birthdayCount,
       });
     }
