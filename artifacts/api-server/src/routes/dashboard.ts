@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { clientsTable, tripsTable, reservationsTable, paymentsTable, dealsTable, npsResponsesTable, expensesTable, passengersTable } from "@workspace/db";
-import { eq, and, gte, lte, desc, sql, inArray } from "drizzle-orm";
+import { clientsTable, tripsTable, reservationsTable, paymentsTable, dealsTable, npsResponsesTable, expensesTable, passengersTable, loyaltyMembersTable } from "@workspace/db";
+import { eq, and, gte, lte, lt, desc, sql, inArray } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 
 const router = Router();
@@ -192,6 +192,25 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
     const [dealValue] = await db.select({ total: sql<number>`sum(cast(value as numeric))` })
       .from(dealsTable).where(and(eq(dealsTable.tenantId, tenantId), eq(dealsTable.status, "open")));
 
+    // New KPIs
+    const [salesThisMonthRow] = await db.select({ count: sql<number>`count(*)` })
+      .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, "confirmed"), gte(reservationsTable.createdAt, startOfMonth)));
+    const [pendingReservationsRow] = await db.select({ count: sql<number>`count(*)` })
+      .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, "pending")));
+    const [overduePaymentsRow] = await db.select({ count: sql<number>`count(*)` })
+      .from(paymentsTable).where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.type, "receivable"), eq(paymentsTable.status, "pending"), lt(paymentsTable.dueDate, now)));
+    const [loyaltyPointsRow] = await db.select({ total: sql<number>`sum(total_points)` })
+      .from(loyaltyMembersTable).where(eq(loyaltyMembersTable.tenantId, tenantId));
+
+    // Retention rate: clients with 2+ confirmed reservations / total clients
+    const repeatBuyersRaw = await db.select({ clientId: reservationsTable.clientId, count: sql<number>`count(*)` })
+      .from(reservationsTable)
+      .where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, "confirmed")))
+      .groupBy(reservationsTable.clientId)
+      .having(sql`count(*) >= 2`);
+    const totalClientsForRetention = Number(clientCount?.count ?? 0);
+    const retentionRate = totalClientsForRetention > 0 ? Math.round((repeatBuyersRaw.length / totalClientsForRetention) * 1000) / 10 : 0;
+
     res.json({
       totalClients: Number(clientCount?.count ?? 0),
       newClientsThisMonth: Number(newClientCount?.count ?? 0),
@@ -220,6 +239,11 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
         ? Math.round((Number(confirmedReservationCount?.count ?? 0) / Number(activeTripCount?.count ?? 1)) * 10) / 10
         : 0,
       totalFaturamento: Math.round(totalFaturamento * 100) / 100,
+      salesThisMonth: Number(salesThisMonthRow?.count ?? 0),
+      pendingReservations: Number(pendingReservationsRow?.count ?? 0),
+      overduePaymentsCount: Number(overduePaymentsRow?.count ?? 0),
+      loyaltyPointsIssued: Number(loyaltyPointsRow?.total ?? 0),
+      retentionRate,
     });
   } catch (err) {
     req.log.error({ err }, "Error fetching dashboard summary");
@@ -690,6 +714,117 @@ router.get("/dashboard/recent-activity", async (req, res): Promise<void> => {
     res.json(activities);
   } catch (err) {
     req.log.error({ err }, "Error fetching recent activity");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/dashboard/comparative", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role === "cliente" || me.role === "vendedor") {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+
+    const tenantId = me.tenantId;
+    const now = new Date();
+    const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+    const months = Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+      return { d, key: monthKey(d), label: d.toLocaleString("pt-BR", { month: "short", year: "2-digit" }) };
+    });
+
+    const since = months[0].d;
+
+    const revenueExpRaw = await db.select({
+      monthStart: sql<string>`date_trunc('month', ${paymentsTable.paidAt})::text`,
+      revenue: sql<string>`sum(case when ${paymentsTable.type} = 'receivable' and ${paymentsTable.status} = 'paid' then cast(${paymentsTable.amount} as numeric) else 0 end)`,
+      expenses: sql<string>`sum(case when ${paymentsTable.type} = 'payable' and ${paymentsTable.status} = 'paid' then cast(${paymentsTable.amount} as numeric) else 0 end)`,
+    }).from(paymentsTable)
+      .where(and(eq(paymentsTable.tenantId, tenantId), sql`${paymentsTable.paidAt} IS NOT NULL`, gte(paymentsTable.paidAt, since)))
+      .groupBy(sql`date_trunc('month', ${paymentsTable.paidAt})`);
+
+    const resByMonthRaw = await db.select({
+      monthStart: sql<string>`date_trunc('month', ${reservationsTable.createdAt})::text`,
+      count: sql<number>`count(*)::int`,
+    }).from(reservationsTable)
+      .where(and(eq(reservationsTable.tenantId, tenantId), gte(reservationsTable.createdAt, since)))
+      .groupBy(sql`date_trunc('month', ${reservationsTable.createdAt})`);
+
+    const revMap = new Map(revenueExpRaw.map(r => [r.monthStart.substring(0, 7), { revenue: Number(r.revenue ?? 0), expenses: Number(r.expenses ?? 0) }]));
+    const resMap = new Map(resByMonthRaw.map(r => [r.monthStart.substring(0, 7), Number(r.count)]));
+
+    const result = months.map(({ key, label }, i) => {
+      const { revenue = 0, expenses = 0 } = revMap.get(key) ?? {};
+      const reservations = resMap.get(key) ?? 0;
+      const profit = revenue - expenses;
+      let revenueGrowth: number | null = null;
+      let reservationsGrowth: number | null = null;
+      if (i > 0) {
+        const prevKey = months[i - 1].key;
+        const prev = revMap.get(prevKey) ?? { revenue: 0, expenses: 0 };
+        const prevRes = resMap.get(prevKey) ?? 0;
+        revenueGrowth = prev.revenue > 0 ? Math.round(((revenue - prev.revenue) / prev.revenue) * 1000) / 10 : null;
+        reservationsGrowth = prevRes > 0 ? Math.round(((reservations - prevRes) / prevRes) * 1000) / 10 : null;
+      }
+      return { month: label, key, revenue: Math.round(revenue), expenses: Math.round(expenses), profit: Math.round(profit), reservations, revenueGrowth, reservationsGrowth };
+    });
+
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Error fetching dashboard comparative");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/dashboard/top-customers", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role === "cliente" || me.role === "vendedor") {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+
+    const tenantId = me.tenantId;
+
+    const topClients = await db.select({
+      id: clientsTable.id,
+      name: clientsTable.name,
+      email: clientsTable.email,
+      totalSpent: clientsTable.totalSpent,
+      photoUrl: clientsTable.photoUrl,
+    }).from(clientsTable)
+      .where(eq(clientsTable.tenantId, tenantId))
+      .orderBy(desc(sql`cast(${clientsTable.totalSpent} as numeric)`))
+      .limit(5);
+
+    const clientIds = topClients.map(c => c.id);
+    let reservationCounts: Record<string, number> = {};
+    if (clientIds.length > 0) {
+      const counts = await db.select({
+        clientId: reservationsTable.clientId,
+        count: sql<number>`count(*)::int`,
+      }).from(reservationsTable)
+        .where(and(eq(reservationsTable.tenantId, tenantId), inArray(reservationsTable.clientId, clientIds)))
+        .groupBy(reservationsTable.clientId);
+      reservationCounts = Object.fromEntries(counts.map(c => [c.clientId, Number(c.count)]));
+    }
+
+    const result = topClients.map(c => ({
+      id: c.id,
+      name: c.name,
+      email: c.email,
+      photoUrl: c.photoUrl,
+      totalSpent: Number(c.totalSpent ?? 0),
+      reservationCount: reservationCounts[c.id] ?? 0,
+    }));
+
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Error fetching top customers");
     res.status(500).json({ error: "Internal server error" });
   }
 });

@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect, useRef, type ElementType } from "react";
 import {
   useGetDashboardSummary, useGetDashboardUpcomingTrips,
   useGetDashboardCharts, useGetDashboardFunnel,
+  useGetDashboardComparative, useGetDashboardTopCustomers,
   useListPayments, useGetMe, useListReservations,
   useGetPaymentsSummary,
 } from "@workspace/api-client-react";
@@ -167,6 +168,7 @@ function AgencyDashboard() {
   const { data: upcomingTrips, isLoading: loadingTrips } = useGetDashboardUpcomingTrips();
   const { data: paymentSummary, isLoading: loadingPaySummary } = useGetPaymentsSummary();
   const { data: pendingPaymentsList, isLoading: loadingPendingPayments } = useListPayments({ status: "pending", limit: 5, type: "receivable" });
+  const { data: topCustomers, isLoading: loadingTopCustomers } = useGetDashboardTopCustomers();
 
   const npsLabel = summary?.averageNps != null ? `${summary.averageNps.toFixed(1)} / 10` : "—";
   const totalRevenue = summary?.totalRevenue ?? 0;
@@ -369,6 +371,53 @@ function AgencyDashboard() {
             highlight={(summary?.totalFaturamento ?? 0) > 0 ? "green" : undefined}
           />
           <KpiCard title="Clientes Ativos" value={summary?.activeClientsCount ?? 0} sub="Com reserva confirmada" icon={Users} loading={loadingSummary} color="text-indigo-600" />
+        </div>
+
+        {/* Group 5: New KPIs */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mt-4">
+          <KpiCard
+            title="Vendas Este Mês"
+            value={summary?.salesThisMonth ?? 0}
+            sub="Reservas confirmadas no mês"
+            icon={CalendarCheck}
+            loading={loadingSummary}
+            color="text-emerald-600"
+            highlight={(summary?.salesThisMonth ?? 0) > 0 ? "green" : undefined}
+          />
+          <KpiCard
+            title="Reservas Pendentes"
+            value={summary?.pendingReservations ?? 0}
+            sub="Aguardando confirmação"
+            icon={Clock}
+            loading={loadingSummary}
+            color={(summary?.pendingReservations ?? 0) > 0 ? "text-amber-600" : "text-muted-foreground"}
+            highlight={(summary?.pendingReservations ?? 0) > 0 ? "yellow" : undefined}
+          />
+          <KpiCard
+            title="Cobranças Vencidas"
+            value={summary?.overduePaymentsCount ?? 0}
+            sub="Recebimentos em atraso"
+            icon={AlertTriangle}
+            loading={loadingSummary}
+            color={(summary?.overduePaymentsCount ?? 0) > 0 ? "text-red-600" : "text-muted-foreground"}
+            highlight={(summary?.overduePaymentsCount ?? 0) > 0 ? "red" : undefined}
+          />
+          <KpiCard
+            title="Pontos de Fidelidade"
+            value={(summary?.loyaltyPointsIssued ?? 0).toLocaleString("pt-BR")}
+            sub="Total emitido aos clientes"
+            icon={Star}
+            loading={loadingSummary}
+            color="text-yellow-600"
+          />
+          <KpiCard
+            title="Taxa de Retenção"
+            value={`${(summary?.retentionRate ?? 0).toFixed(1)}%`}
+            sub="Clientes com 2+ compras"
+            icon={UserCheck}
+            loading={loadingSummary}
+            color={(summary?.retentionRate ?? 0) >= 30 ? "text-emerald-600" : (summary?.retentionRate ?? 0) >= 15 ? "text-yellow-600" : "text-muted-foreground"}
+          />
         </div>
       </section>
 
@@ -1101,6 +1150,65 @@ function AgencyDashboard() {
             </CardContent>
           </Card>
         </div>
+      </section>
+
+      {/* ═══ SEÇÃO 4: TOP CLIENTES ═══ */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <SectionTitle icon={UserCheck} title="Top 5 Clientes" description="Clientes com maior volume de compras" />
+          <Link href="/analytics/historico-comparativo">
+            <Button variant="outline" size="sm" className="text-xs">
+              <BarChart2 className="w-3.5 h-3.5 mr-1.5" />
+              Histórico Comparativo
+              <ChevronRight className="w-3.5 h-3.5 ml-1" />
+            </Button>
+          </Link>
+        </div>
+        <Card>
+          <CardContent className="p-0">
+            {loadingTopCustomers ? (
+              <div className="space-y-0 divide-y">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-4 px-5 py-4">
+                    <Skeleton className="h-10 w-10 rounded-full" />
+                    <div className="flex-1 space-y-1.5"><Skeleton className="h-4 w-36" /><Skeleton className="h-3 w-24" /></div>
+                    <Skeleton className="h-5 w-24" />
+                  </div>
+                ))}
+              </div>
+            ) : !topCustomers?.length ? (
+              <p className="text-sm text-muted-foreground text-center py-10">Nenhum cliente encontrado.</p>
+            ) : (
+              <div className="divide-y">
+                {topCustomers.map((c, i) => (
+                  <div key={c.id} className="flex items-center gap-4 px-5 py-4 hover:bg-muted/40 transition-colors">
+                    <span className="text-lg font-bold text-muted-foreground w-5 shrink-0">{i + 1}</span>
+                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
+                      {c.photoUrl ? (
+                        <img src={c.photoUrl} alt={c.name} className="h-10 w-10 object-cover rounded-full" />
+                      ) : (
+                        <span className="text-sm font-semibold text-primary">{c.name.charAt(0).toUpperCase()}</span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{c.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{c.email}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-emerald-600">{formatCurrency(c.totalSpent)}</p>
+                      <p className="text-xs text-muted-foreground">{c.reservationCount} reservas</p>
+                    </div>
+                    <Link href={`/clients/${c.id}`}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </section>
     </div>
   );

@@ -94,8 +94,10 @@ import type {
   CreateUserBody,
   CreateVehicleBody,
   DashboardCharts,
+  DashboardComparativeItem,
   DashboardFunnel,
   DashboardSummary,
+  DashboardTopCustomer,
   Deal,
   Destination,
   Document,
@@ -2714,6 +2716,80 @@ export function useGetDashboardFunnel<
     queryKey: QueryKey;
   };
 
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get dashboard comparative data (12 months)
+ */
+export const getDashboardComparativeUrl = () => `/api/dashboard/comparative`;
+
+export const getDashboardComparative = async (options?: RequestInit): Promise<DashboardComparativeItem[]> => {
+  return customFetch<DashboardComparativeItem[]>(getDashboardComparativeUrl(), { ...options, method: "GET" });
+};
+
+export const getGetDashboardComparativeQueryKey = () => [`/api/dashboard/comparative`] as const;
+
+export const getGetDashboardComparativeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDashboardComparative>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getDashboardComparative>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetDashboardComparativeQueryKey();
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDashboardComparative>>> = ({ signal }) =>
+    getDashboardComparative({ signal, ...requestOptions });
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<Awaited<ReturnType<typeof getDashboardComparative>>, TError, TData> & { queryKey: QueryKey };
+};
+
+export function useGetDashboardComparative<
+  TData = Awaited<ReturnType<typeof getDashboardComparative>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getDashboardComparative>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDashboardComparativeQueryOptions(options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get top customers
+ */
+export const getDashboardTopCustomersUrl = () => `/api/dashboard/top-customers`;
+
+export const getDashboardTopCustomers = async (options?: RequestInit): Promise<DashboardTopCustomer[]> => {
+  return customFetch<DashboardTopCustomer[]>(getDashboardTopCustomersUrl(), { ...options, method: "GET" });
+};
+
+export const getGetDashboardTopCustomersQueryKey = () => [`/api/dashboard/top-customers`] as const;
+
+export const getGetDashboardTopCustomersQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDashboardTopCustomers>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getDashboardTopCustomers>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetDashboardTopCustomersQueryKey();
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDashboardTopCustomers>>> = ({ signal }) =>
+    getDashboardTopCustomers({ signal, ...requestOptions });
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<Awaited<ReturnType<typeof getDashboardTopCustomers>>, TError, TData> & { queryKey: QueryKey };
+};
+
+export function useGetDashboardTopCustomers<
+  TData = Awaited<ReturnType<typeof getDashboardTopCustomers>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getDashboardTopCustomers>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDashboardTopCustomersQueryOptions(options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
   return { ...query, queryKey: queryOptions.queryKey };
 }
 

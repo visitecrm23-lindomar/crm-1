@@ -30,6 +30,7 @@ import Analytics from "@/pages/analytics";
 import Commissions from "@/pages/commissions";
 import Expenses from "@/pages/expenses";
 import Revenue from "@/pages/revenue";
+import HistoricoComparativo from "@/pages/historico-comparativo";
 import Settings from "@/pages/settings";
 
 // Task 6 pages
@@ -428,6 +429,7 @@ function Router() {
       {/* Analytics */}
       <Route path="/analytics" component={() => <AgenciaOnlyRoute component={Analytics} />} />
       <Route path="/analytics/revenue" component={() => <AgenciaOnlyRoute component={Revenue} />} />
+      <Route path="/analytics/historico-comparativo" component={() => <AgenciaOnlyRoute component={HistoricoComparativo} />} />
       <Route
         path="/analytics/vendedores"
         component={() => <AgenciaOnlyRoute component={Vendedores} />}

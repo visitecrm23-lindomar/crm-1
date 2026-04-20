@@ -40,6 +40,34 @@ export interface DashboardSummary {
   totalPayable: number;
   avgReservationsPerTrip: number;
   totalFaturamento: number;
+  salesThisMonth?: number;
+  pendingReservations?: number;
+  overduePaymentsCount?: number;
+  loyaltyPointsIssued?: number;
+  retentionRate?: number;
+}
+
+export interface DashboardComparativeItem {
+  month: string;
+  key: string;
+  revenue: number;
+  expenses: number;
+  profit: number;
+  reservations: number;
+  /** @nullable */
+  revenueGrowth?: number | null;
+  /** @nullable */
+  reservationsGrowth?: number | null;
+}
+
+export interface DashboardTopCustomer {
+  id: string;
+  name: string;
+  email: string;
+  /** @nullable */
+  photoUrl?: string | null;
+  totalSpent: number;
+  reservationCount: number;
 }
 
 export type DashboardChartsTopDestinationsItem = {
