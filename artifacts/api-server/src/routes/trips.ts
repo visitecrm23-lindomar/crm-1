@@ -11,6 +11,8 @@ import { CreateTripBody, UpdateTripBody } from "@workspace/api-zod";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 
 type SeatMapEntry = { row: number; col: number; status: string; type?: string };
+type BoardingPoint = { id: string; name: string; time: string; address: string };
+type ItineraryItem = { id: string; name: string; time: string; address: string };
 
 function generateSeatMapFromLayout(
   cells: LayoutCell[],
@@ -248,8 +250,8 @@ router.post("/trips", async (req, res): Promise<void> => {
       coverImage: parsed.data.coverImage ?? null,
       seatLayout: layout,
       layoutId: layoutId ?? null,
-      itinerary: (parsed.data.itinerary ?? null) as any,
-      boardingPoints: (parsed.data.boardingPoints ?? []) as any,
+      itinerary: (parsed.data.itinerary ?? null) as ItineraryItem[] | null,
+      boardingPoints: (parsed.data.boardingPoints ?? []) as BoardingPoint[],
       fixedCosts: Array.isArray(parsed.data.fixedCosts) ? (parsed.data.fixedCosts as FixedCostItem[]) : [],
       variableCosts: Array.isArray(parsed.data.variableCosts) ? (parsed.data.variableCosts as VariableCostItem[]) : [],
       gallery: parsed.data.gallery ?? [],
@@ -357,8 +359,8 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
     if (pd.destinationState !== undefined) updates.destinationState = pd.destinationState ?? "";
     if (pd.type !== undefined) updates.type = pd.type ?? "";
     if (pd.category !== undefined) updates.category = pd.category ?? "";
-    if (pd.itinerary !== undefined) updates.itinerary = (pd.itinerary ?? null) as any;
-    if (pd.boardingPoints !== undefined) updates.boardingPoints = (pd.boardingPoints ?? []) as any;
+    if (pd.itinerary !== undefined) updates.itinerary = (pd.itinerary ?? null) as ItineraryItem[] | null;
+    if (pd.boardingPoints !== undefined) updates.boardingPoints = (pd.boardingPoints ?? []) as BoardingPoint[];
     if (pd.fixedCosts !== undefined) updates.fixedCosts = Array.isArray(pd.fixedCosts) ? (pd.fixedCosts as FixedCostItem[]) : [];
     if (pd.variableCosts !== undefined) updates.variableCosts = Array.isArray(pd.variableCosts) ? (pd.variableCosts as VariableCostItem[]) : [];
     if (pd.gallery !== undefined) updates.gallery = pd.gallery ?? [];
