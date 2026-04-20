@@ -111,7 +111,7 @@ if (!isDev) {
   const frontendDist = path.resolve(__dirname, "../../visitecrm/dist/public");
   logger.info({ frontendDist }, "Serving frontend static files from");
   app.use(express.static(frontendDist));
-  app.get("*", (_req, res) => {
+  app.get(/.*/, (_req, res) => {
     res.sendFile(path.join(frontendDist, "index.html"), (err) => {
       if (err) {
         logger.error({ err, frontendDist }, "Failed to send index.html");
