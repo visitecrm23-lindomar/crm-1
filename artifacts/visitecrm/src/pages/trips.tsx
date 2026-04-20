@@ -1068,6 +1068,28 @@ function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boole
                     <span>Destaque na loja</span>
                   </div>
                 )}
+                {(trip.originCity || trip.originState) && (
+                  <div className="flex items-center gap-1 col-span-2">
+                    <MapPin className="w-3 h-3 shrink-0 text-blue-500" />
+                    <span>Saída de {[trip.originCity, trip.originState].filter(Boolean).join(", ")}</span>
+                  </div>
+                )}
+                {trip.departureTime && (
+                  <div className="flex items-center gap-1">
+                    <Clock className="w-3 h-3 shrink-0" />
+                    <span>Partida: {trip.departureTime}{trip.returnTime ? ` · Volta: ${trip.returnTime}` : ""}</span>
+                  </div>
+                )}
+                {((Number(trip.freeOrganizers) || 0) + (Number(trip.freeGuides) || 0) > 0) && (
+                  <div className="flex items-center gap-1 text-emerald-600">
+                    <UserRound className="w-3 h-3 shrink-0" />
+                    <span>
+                      {Number(trip.freeOrganizers) > 0 ? `${trip.freeOrganizers} org.` : ""}
+                      {Number(trip.freeOrganizers) > 0 && Number(trip.freeGuides) > 0 ? " · " : ""}
+                      {Number(trip.freeGuides) > 0 ? `${trip.freeGuides} guia(s) grátis` : ""}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {(trip.inclusions?.length > 0 || trip.exclusions?.length > 0) && (

@@ -343,6 +343,10 @@ export interface StoreProduct {
   departureDate?: string | null;
   inclusions?: string[] | null;
   tripType?: string | null;
+  originCity?: string | null;
+  originState?: string | null;
+  departureTime?: string | null;
+  returnTime?: string | null;
   type: string;
   name: string;
   slug: string;

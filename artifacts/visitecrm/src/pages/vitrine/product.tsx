@@ -137,14 +137,22 @@ function Lightbox({
   }, []);
 
   useEffect(() => {
+    window.history.pushState({ visitecrm_lightbox: true }, "");
+    const handlePop = () => { onClose(); };
+    window.addEventListener("popstate", handlePop);
+    return () => { window.removeEventListener("popstate", handlePop); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") window.history.back();
       if (e.key === "ArrowLeft") setIndex((i) => (i - 1 + images.length) % images.length);
       if (e.key === "ArrowRight") setIndex((i) => (i + 1) % images.length);
     }
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
-  }, [images.length, onClose]);
+  }, [images.length]);
 
   function handleSharePhoto(e: React.MouseEvent) {
     e.stopPropagation();
@@ -189,7 +197,7 @@ function Lightbox({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
-      onClick={onClose}
+      onClick={() => window.history.back()}
       onTouchStart={handleLightboxTouchStart}
       onTouchEnd={handleLightboxTouchEnd}
     >
@@ -226,7 +234,7 @@ function Lightbox({
           </button>
           <button
             className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
-            onClick={onClose}
+            onClick={() => window.history.back()}
             aria-label="Fechar"
           >
             <X className="w-5 h-5" />
@@ -608,6 +616,18 @@ export default function VitrineProduct({
                       : (product.departureDate ?? product.startDate) as string
                   ).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
                 </p>
+                {product.departureTime && (
+                  <p className="text-[10px] text-blue-600 font-medium">{product.departureTime}</p>
+                )}
+              </div>
+            </div>
+          )}
+          {(product.originCity || product.originState) && (
+            <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl">
+              <MapPin className="w-5 h-5 text-blue-600 shrink-0" />
+              <div>
+                <p className="text-[11px] text-muted-foreground">Origem</p>
+                <p className="text-xs font-semibold">{[product.originCity, product.originState].filter(Boolean).join(", ")}</p>
               </div>
             </div>
           )}

@@ -37,7 +37,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Search, Hotel, Star } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Hotel, Star, Images, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { GalleryUpload } from "@/components/gallery-upload";
 
 const ACCOMMODATION_TYPES = ["Hotel", "Pousada", "Resort", "Hostel", "Chácara", "Chalé", "Outro"];
@@ -73,6 +73,7 @@ export default function Hospedagens() {
   const [amenities, setAmenities] = useState<string[]>([]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [galleryUrls, setGalleryUrls] = useState<string[]>([]);
+  const [galleryLightbox, setGalleryLightbox] = useState<{ name: string; urls: string[]; index: number } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
   const filtered = accommodations.filter(
@@ -245,6 +246,22 @@ export default function Hospedagens() {
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
+                      {((a.gallery?.length ?? 0) > 0 || a.coverImage) && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={`Ver fotos (${(a.gallery?.length ?? 0) + (a.coverImage ? 1 : 0)})`}
+                          onClick={() => {
+                            const urls = [
+                              ...(a.coverImage ? [a.coverImage] : []),
+                              ...(a.gallery ?? []),
+                            ];
+                            setGalleryLightbox({ name: a.name, urls, index: 0 });
+                          }}
+                        >
+                          <Images className="w-4 h-4" />
+                        </Button>
+                      )}
                       <Button variant="ghost" size="icon" onClick={() => openEdit(a)}>
                         <Pencil className="w-4 h-4" />
                       </Button>
@@ -462,6 +479,51 @@ export default function Hospedagens() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {galleryLightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+          onClick={() => setGalleryLightbox(null)}
+        >
+          <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 z-10" onClick={(e) => e.stopPropagation()}>
+            <p className="text-white/60 text-sm font-medium truncate max-w-xs">{galleryLightbox.name}</p>
+            <div className="flex items-center gap-3">
+              <span className="text-white/60 text-sm">{galleryLightbox.index + 1} / {galleryLightbox.urls.length}</span>
+              <button
+                className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+                onClick={() => setGalleryLightbox(null)}
+                aria-label="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+          {galleryLightbox.urls.length > 1 && (
+            <>
+              <button
+                className="absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors z-10"
+                onClick={(e) => { e.stopPropagation(); setGalleryLightbox((lb) => lb ? { ...lb, index: (lb.index - 1 + lb.urls.length) % lb.urls.length } : null); }}
+                aria-label="Anterior"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+              <button
+                className="absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors z-10"
+                onClick={(e) => { e.stopPropagation(); setGalleryLightbox((lb) => lb ? { ...lb, index: (lb.index + 1) % lb.urls.length } : null); }}
+                aria-label="Próxima"
+              >
+                <ChevronRight className="w-6 h-6" />
+              </button>
+            </>
+          )}
+          <img
+            src={galleryLightbox.urls[galleryLightbox.index]}
+            alt={`${galleryLightbox.name} — foto ${galleryLightbox.index + 1}`}
+            className="max-w-[90vw] max-h-[80vh] object-contain rounded-lg shadow-2xl mt-12"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

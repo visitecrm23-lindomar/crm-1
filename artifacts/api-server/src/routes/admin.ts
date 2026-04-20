@@ -4,7 +4,8 @@ import { eq, desc, asc, count, sql, and, gte, lte, ne } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
-import { utapi, extractVerifiedUploadThingKey } from "../lib/uploadthing";
+import { utapi } from "../lib/uploadthing";
+import { collectReferencedUploadThingKeys } from "../lib/collectReferencedUploadThingKeys";
 
 const router = Router();
 
@@ -510,74 +511,7 @@ router.post("/admin/cleanup-orphaned-uploadthing-files", async (req, res): Promi
     const verbose = req.query["verbose"] === "true";
 
     // 1. Collect all UploadThing file keys currently referenced anywhere in the DB.
-    //    Every table that may hold an UploadThing-hosted URL is included so that
-    //    no still-referenced file is ever mistakenly deleted.
-    //    Note: extractVerifiedUploadThingKey() returns null for non-UploadThing
-    //    URLs (Clerk avatars, Hurb CDN links, etc.), so those are harmlessly skipped.
-    const [
-      tenants, stores, storeCategories, storeProducts, storeOrderItems, storeReviews,
-      trips, productCategories, productImages,
-      vehicles, accommodations, destinations,
-      clients, users, hurbProducts,
-    ] = await Promise.all([
-      db.select({ logoUrl: tenantsTable.logoUrl }).from(tenantsTable),
-      db.select({ logo: storesTable.logo, logoDark: storesTable.logoDark, favicon: storesTable.favicon, bannerHome: storesTable.bannerHome, bannerMobile: storesTable.bannerMobile }).from(storesTable),
-      db.select({ image: storeCategoriesTable.image }).from(storeCategoriesTable),
-      db.select({ images: storeProductsTable.images, thumbnail: storeProductsTable.thumbnail, gallery: storeProductsTable.gallery }).from(storeProductsTable),
-      db.select({ productImage: storeOrderItemsTable.productImage }).from(storeOrderItemsTable),
-      db.select({ images: storeReviewsTable.images }).from(storeReviewsTable),
-      db.select({ coverImage: tripsTable.coverImage, gallery: tripsTable.gallery }).from(tripsTable),
-      db.select({ imageUrl: productCategoriesTable.imageUrl }).from(productCategoriesTable),
-      db.select({ url: productImagesTable.url }).from(productImagesTable),
-      db.select({ photoUrl: vehiclesTable.photoUrl }).from(vehiclesTable),
-      db.select({ coverImage: accommodationsTable.coverImage, gallery: accommodationsTable.gallery }).from(accommodationsTable),
-      db.select({ coverImage: destinationsTable.coverImage, gallery: destinationsTable.gallery }).from(destinationsTable),
-      db.select({ photoUrl: clientsTable.photoUrl }).from(clientsTable),
-      db.select({ avatarUrl: usersTable.avatarUrl }).from(usersTable),
-      db.select({ images: hurbProductsTable.images, thumbnail: hurbProductsTable.thumbnail }).from(hurbProductsTable),
-    ]);
-
-    const referencedKeys = new Set<string>();
-
-    function addKey(url: string | null | undefined) {
-      if (!url) return;
-      const key = extractVerifiedUploadThingKey(url);
-      if (key) referencedKeys.add(key);
-    }
-
-    for (const r of tenants) addKey(r.logoUrl);
-    for (const r of stores) { addKey(r.logo); addKey(r.logoDark); addKey(r.favicon); addKey(r.bannerHome); addKey(r.bannerMobile); }
-    for (const r of storeCategories) addKey(r.image);
-    for (const r of storeProducts) {
-      addKey(r.thumbnail);
-      for (const url of r.images ?? []) addKey(url);
-      for (const url of r.gallery ?? []) addKey(url);
-    }
-    for (const r of storeOrderItems) addKey(r.productImage);
-    for (const r of storeReviews) {
-      for (const url of r.images ?? []) addKey(url);
-    }
-    for (const r of trips) {
-      addKey(r.coverImage);
-      for (const url of r.gallery ?? []) addKey(url);
-    }
-    for (const r of productCategories) addKey(r.imageUrl);
-    for (const r of productImages) addKey(r.url);
-    for (const r of vehicles) addKey(r.photoUrl);
-    for (const r of accommodations) {
-      addKey(r.coverImage);
-      for (const url of r.gallery ?? []) addKey(url);
-    }
-    for (const r of destinations) {
-      addKey(r.coverImage);
-      for (const url of r.gallery ?? []) addKey(url);
-    }
-    for (const r of clients) addKey(r.photoUrl);
-    for (const r of users) addKey(r.avatarUrl);
-    for (const r of hurbProducts) {
-      addKey(r.thumbnail);
-      for (const url of r.images ?? []) addKey(url);
-    }
+    const referencedKeys = await collectReferencedUploadThingKeys();
 
     // 2. List all files in UploadThing (paginate with offset)
     const PAGE_SIZE = 500;
@@ -647,51 +581,8 @@ router.post("/admin/maintenance/orphaned-files", async (req, res): Promise<void>
     const dryRun: boolean = req.body.dryRun !== false;
     const suppliedKeys: string[] | undefined = Array.isArray(req.body.keys) ? req.body.keys : undefined;
 
-    // Collect all DB-referenced UploadThing keys (same logic as cleanup endpoint)
-    const [
-      tenants, stores, storeCategories, storeProducts, storeOrderItems, storeReviews,
-      trips, productCategories, productImages,
-      vehicles, accommodations, destinations,
-      clients, users, hurbProducts,
-    ] = await Promise.all([
-      db.select({ logoUrl: tenantsTable.logoUrl }).from(tenantsTable),
-      db.select({ logo: storesTable.logo, logoDark: storesTable.logoDark, favicon: storesTable.favicon, bannerHome: storesTable.bannerHome, bannerMobile: storesTable.bannerMobile }).from(storesTable),
-      db.select({ image: storeCategoriesTable.image }).from(storeCategoriesTable),
-      db.select({ images: storeProductsTable.images, thumbnail: storeProductsTable.thumbnail, gallery: storeProductsTable.gallery }).from(storeProductsTable),
-      db.select({ productImage: storeOrderItemsTable.productImage }).from(storeOrderItemsTable),
-      db.select({ images: storeReviewsTable.images }).from(storeReviewsTable),
-      db.select({ coverImage: tripsTable.coverImage, gallery: tripsTable.gallery }).from(tripsTable),
-      db.select({ imageUrl: productCategoriesTable.imageUrl }).from(productCategoriesTable),
-      db.select({ url: productImagesTable.url }).from(productImagesTable),
-      db.select({ photoUrl: vehiclesTable.photoUrl }).from(vehiclesTable),
-      db.select({ coverImage: accommodationsTable.coverImage, gallery: accommodationsTable.gallery }).from(accommodationsTable),
-      db.select({ coverImage: destinationsTable.coverImage, gallery: destinationsTable.gallery }).from(destinationsTable),
-      db.select({ photoUrl: clientsTable.photoUrl }).from(clientsTable),
-      db.select({ avatarUrl: usersTable.avatarUrl }).from(usersTable),
-      db.select({ images: hurbProductsTable.images, thumbnail: hurbProductsTable.thumbnail }).from(hurbProductsTable),
-    ]);
-
-    const referencedKeys = new Set<string>();
-    function addKey(url: string | null | undefined) {
-      if (!url) return;
-      const key = extractVerifiedUploadThingKey(url);
-      if (key) referencedKeys.add(key);
-    }
-    for (const r of tenants) addKey(r.logoUrl);
-    for (const r of stores) { addKey(r.logo); addKey(r.logoDark); addKey(r.favicon); addKey(r.bannerHome); addKey(r.bannerMobile); }
-    for (const r of storeCategories) addKey(r.image);
-    for (const r of storeProducts) { addKey(r.thumbnail); for (const url of r.images ?? []) addKey(url); for (const url of r.gallery ?? []) addKey(url); }
-    for (const r of storeOrderItems) addKey(r.productImage);
-    for (const r of storeReviews) { for (const url of r.images ?? []) addKey(url); }
-    for (const r of trips) { addKey(r.coverImage); for (const url of r.gallery ?? []) addKey(url); }
-    for (const r of productCategories) addKey(r.imageUrl);
-    for (const r of productImages) addKey(r.url);
-    for (const r of vehicles) addKey(r.photoUrl);
-    for (const r of accommodations) { addKey(r.coverImage); for (const url of r.gallery ?? []) addKey(url); }
-    for (const r of destinations) { addKey(r.coverImage); for (const url of r.gallery ?? []) addKey(url); }
-    for (const r of clients) addKey(r.photoUrl);
-    for (const r of users) addKey(r.avatarUrl);
-    for (const r of hurbProducts) { addKey(r.thumbnail); for (const url of r.images ?? []) addKey(url); }
+    // Collect all DB-referenced UploadThing keys
+    const referencedKeys = await collectReferencedUploadThingKeys();
 
     // List all files in UploadThing with details (paginate)
     const PAGE_SIZE = 500;

@@ -439,8 +439,13 @@ router.delete("/accommodations/:id", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    const [existing] = await db.select().from(accommodationsTable)
+      .where(and(eq(accommodationsTable.id, req.params.id), eq(accommodationsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!existing) { res.status(404).json({ error: "Not found" }); return; }
     await db.delete(accommodationsTable)
       .where(and(eq(accommodationsTable.id, req.params.id), eq(accommodationsTable.tenantId, me.tenantId)));
+    await deleteOrphanedImages(existing.gallery ?? [], [], req.log);
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Error deleting accommodation");
