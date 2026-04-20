@@ -5397,6 +5397,8 @@ export const GetDashboardComparativeResponse = zod.array(DashboardComparativeIte
 export const DashboardTopCustomerSchema = zod.object({
   id: zod.string(),
   name: zod.string(),
+  email: zod.string().nullable().optional(),
+  photoUrl: zod.string().nullable().optional(),
   totalSpent: zod.number(),
   reservationCount: zod.number(),
 });
