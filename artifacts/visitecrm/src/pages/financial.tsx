@@ -428,7 +428,7 @@ export default function Financial() {
 
   const handleExportXLSX = () => {
     startExport(() => {
-      exportFinancialXLSX(buildExportData());
+      exportFinancialXLSX(buildExportData()).catch(console.error);
     });
   };
   const commissionKpis = useMemo(() => {
