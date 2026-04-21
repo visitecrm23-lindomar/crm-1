@@ -270,11 +270,18 @@ function ProductCard({
           {product.name}
         </h3>
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mb-1">
-          {product.destination && (
+          {product.originCity ? (
+            <span className="flex items-center gap-1">
+              <MapPin className="w-3 h-3 text-blue-500" />
+              <span className="text-blue-600 font-medium">{product.originCity}</span>
+              <span>→</span>
+              <span>{product.destination}</span>
+            </span>
+          ) : product.destination ? (
             <span className="flex items-center gap-1">
               <MapPin className="w-3 h-3" /> {product.destination}
             </span>
-          )}
+          ) : null}
           {product.durationDays && (
             <span className="flex items-center gap-1">
               <Clock className="w-3 h-3" /> {product.durationDays}d
@@ -287,6 +294,15 @@ function ProductCard({
                 day: "2-digit",
                 month: "short",
               })}
+              {product.departureTime && (
+                <span className="font-medium">
+                  às {product.departureTime}
+                  {product.returnTime && `–${product.returnTime}`}
+                </span>
+              )}
+              {!product.departureTime && product.returnTime && (
+                <span className="font-medium">volta às {product.returnTime}</span>
+              )}
             </span>
           )}
         </div>

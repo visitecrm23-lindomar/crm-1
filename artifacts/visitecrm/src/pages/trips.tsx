@@ -779,9 +779,10 @@ export function TripList() {
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{trip.name}</p>
                 <p className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
+                  {trip.originCity && <><span className="text-blue-600 font-medium">{trip.originCity}</span><span>→</span></>}
                   <span>{trip.destinationCity}, {trip.destinationState}</span>
                   <span>·</span>
-                  <span>{formatDate(trip.departureDate)}</span>
+                  <span>{formatDate(trip.departureDate)}{trip.departureTime ? ` às ${trip.departureTime}` : ""}</span>
                   <TripCountdown date={trip.departureDate} />
                 </p>
               </div>
@@ -1188,11 +1189,22 @@ function TripCard({ trip, isVendedor, onDelete, onDuplicate, onBoarding, navigat
       <div className="p-4 space-y-3">
         <div>
           <h3 className="font-semibold truncate">{trip.name}</h3>
-          <p className="text-sm text-muted-foreground flex items-center gap-1"><MapPin className="w-3 h-3" />{trip.destinationCity}, {trip.destinationState}</p>
+          {trip.originCity ? (
+            <p className="text-sm text-muted-foreground flex items-center gap-1">
+              <MapPin className="w-3 h-3" />
+              <span>De: </span>
+              <span className="font-medium text-blue-600">{trip.originCity}{trip.originState ? ` (${trip.originState})` : ""}</span>
+              <span>→</span>
+              <span>{trip.destinationCity}, {trip.destinationState}</span>
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground flex items-center gap-1"><MapPin className="w-3 h-3" />{trip.destinationCity}, {trip.destinationState}</p>
+          )}
         </div>
         <div className="flex items-center gap-1 text-sm text-muted-foreground">
-          <Calendar className="w-3 h-3" /><span>{formatDate(trip.departureDate)}</span>
-          {trip.returnDate && <><span>—</span><span>{formatDate(trip.returnDate)}</span></>}
+          <Calendar className="w-3 h-3" />
+          <span>{formatDate(trip.departureDate)}{trip.departureTime ? ` às ${trip.departureTime}` : ""}</span>
+          {trip.returnDate && <><span>—</span><span>{formatDate(trip.returnDate)}{trip.returnTime ? ` às ${trip.returnTime}` : ""}</span></>}
         </div>
         <TripCountdown date={trip.departureDate} />
         <OccupancyBar reserved={trip.reservedSeats} confirmed={trip.confirmedSeats} total={trip.totalCapacity} />
@@ -2449,6 +2461,32 @@ export function TripForm({ tripId }: { tripId?: string }) {
         </TabsContent>
 
         <TabsContent value="transporte" className="space-y-4 mt-6">
+          {(form.originCity || form.originState || form.departureTime || form.returnTime) && (
+            <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-2">Origem e Horários</h3>
+              <div className="flex flex-wrap gap-4 text-sm text-blue-700 dark:text-blue-300">
+                {(form.originCity || form.originState) && (
+                  <div className="flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4" />
+                    <span>Saída de <strong>{[form.originCity, form.originState].filter(Boolean).join(", ")}</strong></span>
+                  </div>
+                )}
+                {form.departureTime && (
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-4 h-4" />
+                    <span>Saída: <strong>{form.departureTime}</strong></span>
+                  </div>
+                )}
+                {form.returnTime && (
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-4 h-4" />
+                    <span>Retorno: <strong>{form.returnTime}</strong></span>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-blue-500 dark:text-blue-400 mt-2">Esses campos podem ser editados na aba "Básico".</p>
+            </div>
+          )}
           <div className="bg-card border rounded-lg p-6 space-y-4">
             <h3 className="font-semibold">Veículo</h3>
             <div className="grid grid-cols-2 gap-4">
@@ -3083,7 +3121,18 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
         <Button variant="ghost" size="icon" onClick={() => navigate("/trips")}><ArrowLeft className="w-4 h-4" /></Button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold tracking-tight">Visão Geral de Passageiros</h1>
-          <p className="text-muted-foreground text-sm">{trip?.name} · {trip ? formatDate(trip.departureDate) : ""}</p>
+          <p className="text-muted-foreground text-sm">
+            {trip?.name}
+            {trip && (
+              <>
+                {" · "}
+                {formatDate(trip.departureDate)}{trip.departureTime ? ` às ${trip.departureTime}` : ""}
+                {trip.returnDate && (
+                  <> — {formatDate(trip.returnDate)}{trip.returnTime ? ` às ${trip.returnTime}` : ""}</>
+                )}
+              </>
+            )}
+          </p>
         </div>
         <div className="flex gap-2 flex-wrap items-center">
           <Select value={tripId} onValueChange={v => setTripId(v)}>
@@ -3106,6 +3155,19 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-sm text-muted-foreground">Status da viagem:</span>
           <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${STATUS_MAP[trip.status]?.color ?? "bg-gray-100 text-gray-600"}`}>{STATUS_MAP[trip.status]?.label ?? trip.status}</span>
+          {(trip.originCity || trip.originState) && (
+            <span className="text-sm text-muted-foreground flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5 text-blue-500" />
+              <span>Saída de <strong className="text-blue-600">{[trip.originCity, trip.originState].filter(Boolean).join(", ")}</strong></span>
+            </span>
+          )}
+          {(trip.departureTime || trip.returnTime) && (
+            <span className="text-sm text-muted-foreground">
+              {trip.departureTime && <>Partida: <strong>{trip.departureTime}</strong></>}
+              {trip.departureTime && trip.returnTime && <> · </>}
+              {trip.returnTime && <>Volta: <strong>{trip.returnTime}</strong></>}
+            </span>
+          )}
           {trip.driverName && <span className="text-sm text-muted-foreground">Motorista: <strong>{trip.driverName}</strong></span>}
           {trip.tourGuide && <span className="text-sm text-muted-foreground">Guia Turístico: <strong>{trip.tourGuide}</strong></span>}
           {trip.tripOrganizer && <span className="text-sm text-muted-foreground">Responsável: <strong>{trip.tripOrganizer}</strong></span>}
