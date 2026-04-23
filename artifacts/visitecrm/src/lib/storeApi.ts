@@ -545,6 +545,10 @@ export interface ProductInput {
   status?: string;
   isFeatured?: boolean;
   order?: number;
+  originCity?: string;
+  originState?: string;
+  departureTime?: string;
+  returnTime?: string;
 }
 
 export interface CouponInput {

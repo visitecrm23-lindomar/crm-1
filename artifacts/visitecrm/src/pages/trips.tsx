@@ -41,8 +41,9 @@ import { GalleryUpload } from "@/components/gallery-upload";
 import {
   format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay,
   addMonths, subMonths, isSameDay, isToday, startOfWeek, addDays,
-  addWeeks, subWeeks, differenceInCalendarDays, differenceInHours, differenceInMinutes,
+  addWeeks, subWeeks, differenceInHours, differenceInMinutes,
 } from "date-fns";
+import { calculateTripDuration } from "@/lib/tripDuration";
 import { ptBR } from "date-fns/locale";
 
 function TiptapEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -870,10 +871,15 @@ function buildTripProductPayload(trip: Trip) {
   let durationDays: number | undefined;
   let durationNights: number | undefined;
   if (trip.departureDate && trip.returnDate) {
-    const nights = differenceInCalendarDays(parseISO(trip.returnDate), parseISO(trip.departureDate));
-    if (nights > 0) {
-      durationDays = nights + 1;
-      durationNights = nights;
+    const dur = calculateTripDuration(
+      trip.departureDate,
+      trip.returnDate,
+      trip.departureTime ?? null,
+      trip.returnTime ?? null,
+    );
+    if (dur && dur.totalMinutes > 0) {
+      durationDays = dur.days > 0 ? dur.days : undefined;
+      durationNights = dur.days > 0 ? dur.days - 1 : undefined;
     }
   }
 
@@ -909,6 +915,10 @@ function buildTripProductPayload(trip: Trip) {
     hasDates: true,
     startDate: trip.departureDate,
     endDate: trip.returnDate ?? undefined,
+    originCity: trip.originCity || undefined,
+    originState: trip.originState || undefined,
+    departureTime: trip.departureTime || undefined,
+    returnTime: trip.returnTime || undefined,
     durationDays,
     durationNights,
     includes: trip.inclusions?.length > 0 ? trip.inclusions : undefined,

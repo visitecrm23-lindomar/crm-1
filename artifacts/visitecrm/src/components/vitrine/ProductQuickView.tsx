@@ -4,6 +4,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { PublicStore, StoreProduct } from "@/lib/storeApi";
+import { calculateTripDuration } from "@/lib/tripDuration";
 import {
   X,
   Bus,
@@ -248,20 +249,23 @@ export function ProductQuickView({
                   </div>
                 </div>
               )}
-              {product.durationDays && (
-                <div className="flex items-center gap-2 p-2.5 bg-purple-50 rounded-lg">
-                  <Clock className="w-4 h-4 text-purple-600 shrink-0" />
-                  <div>
-                    <p className="text-[10px] text-muted-foreground">Duração</p>
-                    <p className="text-xs font-semibold">
-                      {product.durationDays}d
-                      {product.durationNights
-                        ? ` / ${product.durationNights}n`
-                        : ""}
-                    </p>
+              {(() => {
+                const dur = calculateTripDuration(
+                  product.departureDate ?? product.startDate,
+                  product.endDate,
+                  product.departureTime,
+                  product.returnTime,
+                ) ?? (product.durationDays ? { formatted: `${product.durationDays} dia${product.durationDays > 1 ? "s" : ""}` } : null);
+                return dur ? (
+                  <div className="flex items-center gap-2 p-2.5 bg-purple-50 rounded-lg">
+                    <Clock className="w-4 h-4 text-purple-600 shrink-0" />
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">Duração</p>
+                      <p className="text-xs font-semibold">{dur.formatted}</p>
+                    </div>
                   </div>
-                </div>
-              )}
+                ) : null;
+              })()}
               {availableSeats !== null && availableSeats >= 0 && (
                 <div className="flex items-center gap-2 p-2.5 bg-green-50 rounded-lg">
                   <Users className="w-4 h-4 text-green-600 shrink-0" />

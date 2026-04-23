@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { publicStoreApi, PublicStore, StoreProduct, StoreReview } from "@/lib/storeApi";
+import { calculateTripDuration } from "@/lib/tripDuration";
 import { useCart } from "@/contexts/CartContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -644,18 +645,23 @@ export default function VitrineProduct({
               </div>
             </div>
           )}
-          {product.durationDays && (
-            <div className="flex items-center gap-2 p-3 bg-purple-50 rounded-xl">
-              <Clock className="w-5 h-5 text-purple-600 shrink-0" />
-              <div>
-                <p className="text-[11px] text-muted-foreground">Duração</p>
-                <p className="text-xs font-semibold">
-                  {product.durationDays} dia{product.durationDays > 1 ? "s" : ""}
-                  {product.durationNights ? ` / ${product.durationNights}n` : ""}
-                </p>
+          {(() => {
+            const dur = calculateTripDuration(
+              product.departureDate ?? product.startDate,
+              product.endDate,
+              product.departureTime,
+              product.returnTime,
+            ) ?? (product.durationDays ? { formatted: `${product.durationDays} dia${product.durationDays > 1 ? "s" : ""}` } : null);
+            return dur ? (
+              <div className="flex items-center gap-2 p-3 bg-purple-50 rounded-xl">
+                <Clock className="w-5 h-5 text-purple-600 shrink-0" />
+                <div>
+                  <p className="text-[11px] text-muted-foreground">Duração</p>
+                  <p className="text-xs font-semibold">{dur.formatted}</p>
+                </div>
               </div>
-            </div>
-          )}
+            ) : null;
+          })()}
           {product.trackInventory && product.stockQuantity != null && (
             <div className={`flex items-center gap-2 p-3 rounded-xl ${product.stockQuantity <= 0 ? "bg-red-50" : product.stockQuantity <= 10 ? "bg-orange-50" : "bg-green-50"}`}>
               <span className={`text-lg shrink-0 ${product.stockQuantity <= 0 ? "text-red-600" : product.stockQuantity <= 10 ? "text-orange-600" : "text-green-600"}`}>👥</span>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { publicStoreApi, PublicStore, StoreProduct, CouponValidation } from "@/lib/storeApi";
+import { calculateTripDuration } from "@/lib/tripDuration";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -214,12 +215,20 @@ function ProductCard({ product, store }: { product: StoreProduct; store: PublicS
               {fmtDate(startDate)}
             </p>
           )}
-          {product.durationDays && (
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              {product.durationDays}d{product.durationNights ? ` / ${product.durationNights}n` : ""}
-            </p>
-          )}
+          {(() => {
+            const dur = calculateTripDuration(
+              product.departureDate ?? product.startDate,
+              product.endDate,
+              product.departureTime,
+              product.returnTime,
+            ) ?? (product.durationDays ? { formattedShort: `${product.durationDays}d` } : null);
+            return dur ? (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {dur.formattedShort}
+              </p>
+            ) : null;
+          })()}
         </div>
         <p className="text-base font-bold mt-1" style={{ color: store.primaryColor }}>
           R$ {parseFloat(product.salePrice ?? product.price).toFixed(2)}
@@ -408,11 +417,19 @@ function Voucher({
               <Calendar className="w-3.5 h-3.5 shrink-0" /> {fmtDate(startDate)}
             </p>
           )}
-          {product.durationDays && (
-            <p className="text-sm text-muted-foreground flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5 shrink-0" /> {product.durationDays}d{product.durationNights ? ` / ${product.durationNights}n` : ""}
-            </p>
-          )}
+          {(() => {
+            const dur = calculateTripDuration(
+              product.departureDate ?? product.startDate,
+              product.endDate,
+              product.departureTime,
+              product.returnTime,
+            ) ?? (product.durationDays ? { formatted: `${product.durationDays} dia${product.durationDays > 1 ? "s" : ""}` } : null);
+            return dur ? (
+              <p className="text-sm text-muted-foreground flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5 shrink-0" /> {dur.formatted}
+              </p>
+            ) : null;
+          })()}
         </div>
       </div>
 
@@ -833,15 +850,20 @@ export default function ReservationWizard({
                     <p className="font-semibold">{fmtDateLong(startDate)}</p>
                   </div>
                 )}
-                {product.durationDays && (
-                  <div>
-                    <p className="text-muted-foreground text-xs">Duração</p>
-                    <p className="font-semibold">
-                      {product.durationDays} {product.durationDays === 1 ? "dia" : "dias"}
-                      {product.durationNights ? ` / ${product.durationNights} noites` : ""}
-                    </p>
-                  </div>
-                )}
+                {(() => {
+                  const dur = calculateTripDuration(
+                    product.departureDate ?? product.startDate,
+                    product.endDate,
+                    product.departureTime,
+                    product.returnTime,
+                  ) ?? (product.durationDays ? { formatted: `${product.durationDays} ${product.durationDays === 1 ? "dia" : "dias"}` } : null);
+                  return dur ? (
+                    <div>
+                      <p className="text-muted-foreground text-xs">Duração</p>
+                      <p className="font-semibold">{dur.formatted}</p>
+                    </div>
+                  ) : null;
+                })()}
                 <div>
                   <p className="text-muted-foreground text-xs">Passageiros</p>
                   <p className="font-semibold">{qty} passageiro{qty !== 1 ? "s" : ""}</p>

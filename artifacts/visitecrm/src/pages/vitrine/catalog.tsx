@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation, useSearch } from "wouter";
 import { publicStoreApi, PublicStore, StoreProduct, StoreCategory } from "@/lib/storeApi";
+import { calculateTripDuration } from "@/lib/tripDuration";
 import { useCart } from "@/contexts/CartContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -282,11 +283,19 @@ function ProductCard({
               <MapPin className="w-3 h-3" /> {product.destination}
             </span>
           ) : null}
-          {product.durationDays && (
-            <span className="flex items-center gap-1">
-              <Clock className="w-3 h-3" /> {product.durationDays}d
-            </span>
-          )}
+          {(() => {
+            const dur = calculateTripDuration(
+              product.departureDate ?? product.startDate,
+              product.endDate,
+              product.departureTime,
+              product.returnTime,
+            ) ?? (product.durationDays ? { formattedShort: `${product.durationDays}d` } : null);
+            return dur ? (
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" /> {dur.formattedShort}
+              </span>
+            ) : null;
+          })()}
           {displayDate && (
             <span className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />{" "}
