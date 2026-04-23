@@ -56,7 +56,7 @@ expertMode = true
 
   [userenv.production]
   FRONTEND_URL = "https://visitecrm.com"
-  ADDITIONAL_ORIGINS = "https://visite-crm.replit.app"
+  ADDITIONAL_ORIGINS = "https://visitecrm.com"
   CLERK_PROXY_URL = "https://visitecrm.com/api/__clerk"
   VITE_APP_URL = "https://visitecrm.com"
   VITE_CLERK_PROXY_URL = "https://visitecrm.com/api/__clerk"
