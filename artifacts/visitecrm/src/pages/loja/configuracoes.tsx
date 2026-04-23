@@ -43,6 +43,8 @@ function slugify(text: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "");
+
 function StoreWizard({ onCreated }: { onCreated: (s: StoreSettings) => void }) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -55,6 +57,21 @@ function StoreWizard({ onCreated }: { onCreated: (s: StoreSettings) => void }) {
     contactWhatsapp: "",
     paymentMethods: [],
   });
+
+  useEffect(() => {
+    fetch(`${BASE_URL}/api/users/me`, { credentials: "include" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.tenant?.name || data?.tenant?.slug) {
+          setForm((prev) => ({
+            ...prev,
+            name: prev.name || data.tenant.name || "",
+            slug: prev.slug || data.tenant.slug || "",
+          }));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   function set(field: string, value: unknown) {
     if (field === "name") {

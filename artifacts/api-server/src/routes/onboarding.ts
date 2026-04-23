@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, tenantsTable, usersTable, plansTable } from "@workspace/db";
-import { eq, asc, and } from "drizzle-orm";
+import { db, tenantsTable, usersTable, plansTable, storesTable } from "@workspace/db";
+import { eq, asc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { getAuth } from "@clerk/express";
@@ -94,10 +94,33 @@ router.post("/onboarding/agency", async (req, res): Promise<void> => {
           status: "trial",
           trialEndsAt,
           limits: { users: 10, clients: 1000, trips: 50 },
+          settings: { onboardingCompleted: true },
         });
         await tx.update(usersTable)
           .set({ tenantId, role: "agencia" })
           .where(eq(usersTable.clerkId, auth.clerkId));
+
+        const [existingStore] = await tx
+          .select({ id: storesTable.id })
+          .from(storesTable)
+          .where(eq(storesTable.tenantId, tenantId))
+          .limit(1);
+
+        if (!existingStore) {
+          await tx.insert(storesTable).values({
+            id: generateId(),
+            tenantId,
+            name,
+            slug,
+            email: user.email,
+            phone: phone ?? null,
+            whatsapp: phone ?? null,
+            notificationEmail: user.email,
+            paymentMethods: ["pix", "credit_card", "boleto", "cash"],
+            isActive: true,
+          });
+        }
+
         return tx.select().from(tenantsTable).where(eq(tenantsTable.id, tenantId)).limit(1);
       });
     } catch (txErr) {
