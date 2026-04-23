@@ -70,8 +70,11 @@ router.post("/onboarding/agency", async (req, res): Promise<void> => {
 
     const { name, cnpj, phone, slug, planId } = parsed.data;
 
-    const [existingSlug] = await db.select({ id: tenantsTable.id }).from(tenantsTable).where(eq(tenantsTable.slug, slug)).limit(1);
-    if (existingSlug) {
+    const [[existingTenantSlug], [existingStoreSlug]] = await Promise.all([
+      db.select({ id: tenantsTable.id }).from(tenantsTable).where(eq(tenantsTable.slug, slug)).limit(1),
+      db.select({ id: storesTable.id }).from(storesTable).where(eq(storesTable.slug, slug)).limit(1),
+    ]);
+    if (existingTenantSlug || existingStoreSlug) {
       res.status(409).json({ error: "Esse slug já está em uso. Escolha outro." });
       return;
     }
@@ -124,6 +127,11 @@ router.post("/onboarding/agency", async (req, res): Promise<void> => {
         return tx.select().from(tenantsTable).where(eq(tenantsTable.id, tenantId)).limit(1);
       });
     } catch (txErr) {
+      const dbErr = txErr as { code?: string };
+      if (dbErr?.code === "23505") {
+        res.status(409).json({ error: "Esse slug já está em uso. Escolha outro." });
+        return;
+      }
       req.log.error({ txErr }, "Onboarding transaction failed");
       res.status(500).json({ error: "Erro ao criar agência. Tente novamente." });
       return;
@@ -155,8 +163,11 @@ router.get("/onboarding/check-slug", async (req, res): Promise<void> => {
       res.status(400).json({ error: "slug query param required" });
       return;
     }
-    const [existing] = await db.select({ id: tenantsTable.id }).from(tenantsTable).where(eq(tenantsTable.slug, slug)).limit(1);
-    res.json({ available: !existing });
+    const [[existingTenant], [existingStore]] = await Promise.all([
+      db.select({ id: tenantsTable.id }).from(tenantsTable).where(eq(tenantsTable.slug, slug)).limit(1),
+      db.select({ id: storesTable.id }).from(storesTable).where(eq(storesTable.slug, slug)).limit(1),
+    ]);
+    res.json({ available: !existingTenant && !existingStore });
   } catch (err) {
     req.log.error({ err }, "Error checking slug");
     res.status(500).json({ error: "Internal server error" });
