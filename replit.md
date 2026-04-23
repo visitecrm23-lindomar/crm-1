@@ -2,11 +2,11 @@
 
 ## Overview
 
-VisiteCRM is a comprehensive SaaS CRM platform designed for Brazilian tourism agencies specializing in group excursions. Its primary purpose is to streamline operations for these agencies by offering multi-tenancy, robust role-based access, and extensive features for managing trips, seats, and reservations. The platform also includes financial tracking, a Kanban sales pipeline, communication tools, automation capabilities, loyalty programs, NPS (Net Promoter Score) measurement, and advanced analytics. VisiteCRM aims to be the leading operational backbone for Brazilian tourism agencies, enhancing efficiency, customer engagement, and business growth in a specialized market segment.
+VisiteCRM is a comprehensive SaaS CRM platform designed for Brazilian tourism agencies specializing in group excursions. Its primary purpose is to streamline operations for these agencies by offering multi-tenancy, robust role-based access, and extensive features for managing trips, seats, and reservations. The platform also includes financial tracking, a Kanban sales pipeline, communication tools, automation capabilities, loyalty programs, a referral system, NPS (Net Promoter Score) measurement, and advanced analytics. VisiteCRM aims to be the leading operational backbone for Brazilian tourism agencies, enhancing efficiency, customer engagement, and business growth in a specialized market segment.
 
 ## User Preferences
 
-I want iterative development. I prefer detailed explanations for complex features and architectural decisions. Ask before making major changes to the database schema or core architectural patterns. Do not make changes to files related to `artifacts/mockup-sandbox`.
+I want iterative development. I prefer planned reporting for complex features and architectural decisions. Consult before making major changes to the database schema or core architectural patterns. Do not make changes to files related to `artifacts/mockup-sandbox`.
 
 ## System Architecture
 
