@@ -642,6 +642,9 @@ export default function VitrineProduct({
                     product.endDate.length <= 10 ? product.endDate + "T12:00:00" : product.endDate
                   ).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
                 </p>
+                {product.returnTime && (
+                  <p className="text-[10px] text-blue-600 font-medium">{product.returnTime}</p>
+                )}
               </div>
             </div>
           )}

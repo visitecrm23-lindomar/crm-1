@@ -238,7 +238,7 @@ export function ProductQuickView({
             )}
           </div>
 
-          {(startDate || product.durationDays || availableSeats !== null) && (
+          {(startDate || product.endDate || product.durationDays || availableSeats !== null) && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {startDate && (
                 <div className="flex items-center gap-2 p-2.5 bg-blue-50 rounded-lg">
@@ -246,6 +246,21 @@ export function ProductQuickView({
                   <div className="min-w-0">
                     <p className="text-[10px] text-muted-foreground">Saída</p>
                     <p className="text-xs font-semibold truncate">{fmtDate(startDate)}</p>
+                    {product.departureTime && (
+                      <p className="text-[10px] text-blue-600 font-medium">{product.departureTime}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+              {product.endDate && (
+                <div className="flex items-center gap-2 p-2.5 bg-blue-50 rounded-lg">
+                  <Calendar className="w-4 h-4 text-blue-600 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-muted-foreground">Volta</p>
+                    <p className="text-xs font-semibold truncate">{fmtDate(product.endDate)}</p>
+                    {product.returnTime && (
+                      <p className="text-[10px] text-blue-600 font-medium">{product.returnTime}</p>
+                    )}
                   </div>
                 </div>
               )}
