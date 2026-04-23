@@ -878,8 +878,8 @@ function buildTripProductPayload(trip: Trip) {
       trip.returnTime ?? null,
     );
     if (dur && dur.totalMinutes > 0) {
-      durationDays = dur.days > 0 ? dur.days : undefined;
-      durationNights = dur.days > 0 ? dur.days - 1 : undefined;
+      durationDays = dur.days;
+      durationNights = dur.days > 0 ? dur.days - 1 : 0;
     }
   }
 
