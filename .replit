@@ -65,5 +65,5 @@ expertMode = true
   VITE_UPLOADTHING_URL = "/api/uploadthing"
 
   [userenv.development]
-  CLERK_PROXY_URL = "https://visite-crm.replit.app/api/__clerk"
+  CLERK_PROXY_URL = "https://visitecrm.com/api/__clerk"
   
