@@ -400,19 +400,13 @@ async function runMigrations() {
 
     await client.query(`
       DO $$
-      DECLARE
-        null_count bigint;
-        already_not_null boolean;
       BEGIN
-        SELECT is_nullable = 'NO' INTO already_not_null
-          FROM information_schema.columns
-          WHERE table_name = 'clients' AND column_name = 'cpf';
-        IF already_not_null IS TRUE THEN
-          RETURN;
-        END IF;
-        SELECT COUNT(*) INTO null_count FROM clients WHERE cpf IS NULL;
-        IF null_count = 0 THEN
-          ALTER TABLE clients ALTER COLUMN cpf SET NOT NULL;
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'clients' AND column_name = 'cpf'
+            AND is_nullable = 'NO'
+        ) THEN
+          ALTER TABLE clients ALTER COLUMN cpf DROP NOT NULL;
         END IF;
       END $$;
     `);
