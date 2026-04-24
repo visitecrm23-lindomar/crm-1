@@ -1867,7 +1867,7 @@ export default function ReservationWizard({
                 <Info className="w-4 h-4 mt-0.5 shrink-0" />
                 <span>
                   Selecione <strong>{qty}</strong> assento{qty !== 1 ? "s" : ""} para sua viagem.{" "}
-                  Os assentos em cinza já estão ocupados.
+                  Os assentos em VERMELHO já estão ocupados.
                 </span>
               </div>
 
