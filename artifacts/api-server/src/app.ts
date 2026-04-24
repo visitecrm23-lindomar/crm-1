@@ -86,7 +86,13 @@ app.use(cors({
   },
 }));
 app.use(cookieParser());
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req: express.Request & { rawBody?: Buffer }, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 
 const clerkProxyUrl = process.env["CLERK_PROXY_URL"];

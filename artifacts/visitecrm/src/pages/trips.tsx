@@ -13,6 +13,7 @@ import {
 import type { Trip, Seat, BoardingPassenger, VehicleLayout, LayoutCell, TripCost, TripCostSummary } from "@workspace/api-client-react";
 import { storeApi } from "@/lib/storeApi";
 import { Client360Modal } from "@/components/client360-modal";
+import { PlanLimitWall, usePlanLimitError } from "@/components/plan-limit-wall";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Button } from "@/components/ui/button";
@@ -1810,6 +1811,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
   const { toast } = useToast();
   const [tab, setTab] = useState("basico");
   const [form, setForm] = useState<TripFormData>(EMPTY_FORM);
+  const [tripLimitError, setTripLimitError] = useState<{ resource: string; current?: number; limit?: number } | null>(null);
 
   const { data: existingTrip } = useGetTrip(tripId ?? "", { query: { enabled: !!tripId, queryKey: ["/api/trips", tripId] } });
   const { data: layouts = [] } = useListLayouts({ query: { queryKey: ["layouts"] } });
@@ -1932,7 +1934,13 @@ export function TripForm({ tripId }: { tripId?: string }) {
       }
       navigate("/trips");
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
+      const responseData = (err as { response?: { data?: Record<string, unknown> } })?.response?.data ?? {};
+      const limitInfo = usePlanLimitError(responseData);
+      if (limitInfo.isLimitError) {
+        setTripLimitError({ resource: limitInfo.resource ?? "trips", current: limitInfo.current, limit: limitInfo.limit });
+        return;
+      }
+      const msg = (responseData["error"] as string)
         || (err as { message?: string })?.message
         || "Erro ao salvar viagem";
       toast({ title: msg, variant: "destructive" });
@@ -1970,6 +1978,22 @@ export function TripForm({ tripId }: { tripId?: string }) {
   ];
 
   const canSave = !!form.name && !!form.destination && !!form.destinationCity && !!form.destinationState && !!form.departureDate && !!form.priceAdult;
+
+  if (tripLimitError) {
+    return (
+      <div className="space-y-4 max-w-4xl">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/trips")}><ArrowLeft className="w-4 h-4" /></Button>
+          <h1 className="text-2xl font-bold tracking-tight">Nova Viagem</h1>
+        </div>
+        <PlanLimitWall
+          resource={tripLimitError.resource as "clients" | "users" | "trips"}
+          current={tripLimitError.current}
+          limit={tripLimitError.limit}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-4xl">

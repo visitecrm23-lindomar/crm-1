@@ -32,6 +32,7 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { SeatMapPicker } from "@/components/SeatMapPicker";
+import { PlanLimitWall, usePlanLimitError } from "@/components/plan-limit-wall";
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -380,6 +381,7 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
   const [form, setForm] = useState<ClientFormData>(EMPTY_CLIENT);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [hasSeatMap, setHasSeatMap] = useState<boolean | null>(null);
+  const [limitError, setLimitError] = useState<{ resource: string; current?: number; limit?: number } | null>(null);
   const { toast } = useToast();
   const { data: stages } = useListPipelineStages();
   const { data: tripsData } = useListTrips({ limit: 100 });
@@ -532,7 +534,13 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
       onSave(false, savedId);
       onClose();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
+      const responseData = (err as { response?: { data?: Record<string, unknown> } })?.response?.data ?? {};
+      const limitInfo = usePlanLimitError(responseData);
+      if (limitInfo.isLimitError) {
+        setLimitError({ resource: limitInfo.resource ?? "clients", current: limitInfo.current, limit: limitInfo.limit });
+        return;
+      }
+      const msg = (responseData["error"] as string)
         || (err as { message?: string })?.message
         || "Erro ao salvar cliente";
       toast({ title: msg, variant: "destructive" });
@@ -545,6 +553,14 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
         <DialogHeader>
           <DialogTitle>{isEditing ? `Editar: ${editClient?.name}` : "Novo Cliente"}</DialogTitle>
         </DialogHeader>
+
+        {limitError && (
+          <PlanLimitWall
+            resource={limitError.resource as "clients" | "users" | "trips"}
+            current={limitError.current}
+            limit={limitError.limit}
+          />
+        )}
 
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="grid w-full grid-cols-6 text-xs">
@@ -1007,7 +1023,7 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
 
         <div className="flex justify-end gap-2 pt-4 border-t mt-2">
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={handleSubmit} disabled={isPending || !form.name || !form.whatsapp}>
+          <Button onClick={handleSubmit} disabled={isPending || !!limitError || !form.name || !form.whatsapp}>
             {isPending ? "Salvando..." : isEditing ? "Salvar Alterações" : "Criar Cliente"}
           </Button>
         </div>
