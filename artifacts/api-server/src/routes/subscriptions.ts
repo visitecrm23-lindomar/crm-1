@@ -1,28 +1,12 @@
 import { Router } from "express";
 import { db, tenantsTable, plansTable, invoicesTable, subscriptionsTable, usersTable, clientsTable, tripsTable } from "@workspace/db";
-import { eq, and, count, desc } from "drizzle-orm";
+import { eq, and, or, count, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { generatePixEMV, generatePixQrCodeUrl } from "../lib/pix";
 
 const router = Router();
-
-router.get("/plans/list", async (req, res): Promise<void> => {
-  try {
-    const me = await requireAuth(req, res);
-    if (!me) return;
-    const plans = await db
-      .select()
-      .from(plansTable)
-      .where(eq(plansTable.isActive, true))
-      .orderBy(plansTable.sortOrder);
-    res.json(plans);
-  } catch (err) {
-    req.log.error({ err }, "Error listing plans");
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
 
 router.get("/subscriptions/current", async (req, res): Promise<void> => {
   try {
@@ -96,9 +80,10 @@ router.get("/subscriptions/current", async (req, res): Promise<void> => {
 });
 
 const UpgradeBody = z.object({
-  planId: z.string().min(1),
+  planId: z.string().optional(),
+  planSlug: z.string().optional(),
   billingCycle: z.enum(["monthly", "annual"]).default("monthly"),
-});
+}).refine(d => d.planId || d.planSlug, { message: "planId or planSlug is required" });
 
 router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
   try {
@@ -112,10 +97,14 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
     const parsed = UpgradeBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
+    const planConditions = [
+      ...(parsed.data.planId ? [eq(plansTable.id, parsed.data.planId)] : []),
+      ...(parsed.data.planSlug ? [eq(plansTable.slug, parsed.data.planSlug)] : []),
+    ];
     const [newPlan] = await db
       .select()
       .from(plansTable)
-      .where(eq(plansTable.id, parsed.data.planId))
+      .where(planConditions.length === 1 ? planConditions[0] : or(...planConditions))
       .limit(1);
     if (!newPlan) { res.status(404).json({ error: "Plano não encontrado" }); return; }
 

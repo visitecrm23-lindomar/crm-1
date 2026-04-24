@@ -51,6 +51,22 @@ router.post("/plans", async (req, res): Promise<void> => {
   }
 });
 
+router.get("/plans/list", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const plans = await db
+      .select()
+      .from(plansTable)
+      .where(eq(plansTable.isActive, true))
+      .orderBy(plansTable.sortOrder);
+    res.json(plans);
+  } catch (err) {
+    req.log.error({ err }, "Error listing public plans");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/plans/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
