@@ -352,6 +352,41 @@ function generateDefaultCells(rows: number, cols: number, existing: LayoutCell[]
   return cells;
 }
 
+function deriveFloorDimensions(cells: LayoutCell[], floors: number): Record<number, { rows: number; cols: number }> {
+  const dims: Record<number, { rows: number; cols: number }> = {};
+  for (let f = 1; f <= floors; f++) {
+    const floorCells = cells.filter(c => (c.floor ?? 1) === f);
+    if (floorCells.length > 0) {
+      dims[f] = {
+        rows: Math.max(...floorCells.map(c => c.row)),
+        cols: Math.max(...floorCells.map(c => c.col)),
+      };
+    } else {
+      dims[f] = { rows: 12, cols: 4 };
+    }
+  }
+  return dims;
+}
+
+function generateFloorCells(
+  floorDimensions: Record<number, { rows: number; cols: number }>,
+  existing: LayoutCell[] = [],
+): LayoutCell[] {
+  const existingMap = new Map(existing.map(c => [`${c.floor ?? 1}-${c.row}-${c.col}`, c]));
+  const cells: LayoutCell[] = [];
+  const floors = Object.keys(floorDimensions).map(Number).sort();
+  for (const f of floors) {
+    const { rows, cols } = floorDimensions[f];
+    for (let r = 1; r <= rows; r++) {
+      for (let c = 1; c <= cols; c++) {
+        const key = `${f}-${r}-${c}`;
+        cells.push(existingMap.get(key) ?? { row: r, col: c, floor: f, type: "seat" });
+      }
+    }
+  }
+  return cells;
+}
+
 function GridCell({
   cell,
   selected,
@@ -429,19 +464,21 @@ function TabbedTemplatePreview({
   compact?: boolean;
 }) {
   const [activeFloor, setActiveFloor] = useState(floors > 1 ? 2 : 1);
-  const cellSize = compact ? Math.min(14, Math.floor(100 / cols)) : Math.min(22, Math.floor(160 / cols));
-  const aisleAfterCol = Math.ceil(cols / 2);
-  const maxRows = compact ? Math.min(rows, 10) : rows;
 
   const renderGrid = (floorNum: number) => {
     const floorCells = cells.filter(c => (c.floor ?? 1) === floorNum);
+    const floorMaxCol = floorCells.length > 0 ? Math.max(...floorCells.map(c => c.col)) : cols;
+    const floorMaxRow = floorCells.length > 0 ? Math.max(...floorCells.map(c => c.row)) : rows;
+    const floorAisle = Math.ceil(floorMaxCol / 2);
+    const floorCellSize = compact ? Math.min(14, Math.floor(100 / floorMaxCol)) : Math.min(22, Math.floor(160 / floorMaxCol));
+    const displayRows = compact ? Math.min(floorMaxRow, 10) : floorMaxRow;
     return (
       <div className="space-y-0.5 inline-block w-full">
-        {Array.from({ length: maxRows }).map((_, rIdx) => {
+        {Array.from({ length: displayRows }).map((_, rIdx) => {
           const row = rIdx + 1;
           const rowCells = floorCells.filter(c => c.row === row).sort((a, b) => a.col - b.col);
-          const leftCells = rowCells.filter(c => c.col <= aisleAfterCol);
-          const rightCells = rowCells.filter(c => c.col > aisleAfterCol);
+          const leftCells = rowCells.filter(c => c.col <= floorAisle);
+          const rightCells = rowCells.filter(c => c.col > floorAisle);
           return (
             <div key={row} className="flex items-center gap-1 justify-center">
               <div className="flex gap-0.5">
@@ -450,7 +487,7 @@ function TabbedTemplatePreview({
                   return (
                     <div
                       key={`${cell.row}-${cell.col}`}
-                      style={{ width: cellSize, height: cellSize }}
+                      style={{ width: floorCellSize, height: floorCellSize }}
                       className={`rounded-sm border ${info.bg} ${info.border}`}
                       title={info.label}
                     />
@@ -464,7 +501,7 @@ function TabbedTemplatePreview({
                   return (
                     <div
                       key={`${cell.row}-${cell.col}`}
-                      style={{ width: cellSize, height: cellSize }}
+                      style={{ width: floorCellSize, height: floorCellSize }}
                       className={`rounded-sm border ${info.bg} ${info.border}`}
                       title={info.label}
                     />
@@ -474,9 +511,9 @@ function TabbedTemplatePreview({
             </div>
           );
         })}
-        {rows > maxRows && (
+        {floorMaxRow > displayRows && (
           <p className="text-center text-[9px] text-muted-foreground mt-1">
-            +{rows - maxRows} fileiras...
+            +{floorMaxRow - displayRows} fileiras...
           </p>
         )}
       </div>
@@ -640,6 +677,7 @@ interface EditorState {
   floors: number;
   numberingType: string;
   cells: LayoutCell[];
+  floorDimensions: Record<number, { rows: number; cols: number }>;
 }
 
 function LayoutEditorModal({
@@ -656,8 +694,10 @@ function LayoutEditorModal({
   saving: boolean;
 }) {
   const isEdit = !!initialData?.cells?.length;
-  const [form, setForm] = useState<EditorState>(() =>
-    initialData ?? {
+  const [form, setForm] = useState<EditorState>(() => {
+    if (initialData) return initialData;
+    const defaultFloorDims = { 1: { rows: 12, cols: 4 } };
+    return {
       name: "",
       description: "",
       vehicleType: "Ônibus",
@@ -665,9 +705,10 @@ function LayoutEditorModal({
       cols: 4,
       floors: 1,
       numberingType: "sequential",
-      cells: generateDefaultCells(12, 4, [], 1),
-    }
-  );
+      cells: generateFloorCells(defaultFloorDims),
+      floorDimensions: defaultFloorDims,
+    };
+  });
   const [selectedType, setSelectedType] = useState<CellType>("seat");
   const [editingFloor, setEditingFloor] = useState(1);
   const [filterBusType, setFilterBusType] = useState("all");
@@ -675,23 +716,46 @@ function LayoutEditorModal({
   const setField = <K extends keyof EditorState>(k: K) => (v: EditorState[K]) =>
     setForm(f => ({ ...f, [k]: v }));
 
-  const adjustDimension = (dim: "rows" | "cols" | "floors", delta: number) => {
+  const adjustGlobalFloors = (delta: number) => {
     setForm(f => {
-      const maxVal = dim === "floors" ? 3 : 20;
-      const newVal = Math.max(1, Math.min(maxVal, f[dim] + delta));
-      const updated = { ...f, [dim]: newVal };
-      updated.cells = generateDefaultCells(
-        dim === "rows" ? newVal : f.rows,
-        dim === "cols" ? newVal : f.cols,
-        f.cells,
-        dim === "floors" ? newVal : f.floors,
-      );
-      if (dim === "floors" && editingFloor > newVal) setEditingFloor(newVal);
-      return updated;
+      const newFloors = Math.max(1, Math.min(3, f.floors + delta));
+      const newFloorDims = { ...f.floorDimensions };
+      if (newFloors > f.floors) {
+        for (let fl = f.floors + 1; fl <= newFloors; fl++) {
+          if (!newFloorDims[fl]) newFloorDims[fl] = { rows: f.floorDimensions[1]?.rows ?? 12, cols: f.floorDimensions[1]?.cols ?? 4 };
+        }
+      } else {
+        for (let fl = newFloors + 1; fl <= f.floors; fl++) {
+          delete newFloorDims[fl];
+        }
+        if (editingFloor > newFloors) setEditingFloor(newFloors);
+      }
+      const newCells = generateFloorCells(newFloorDims, f.cells);
+      const maxRows = Math.max(...Object.values(newFloorDims).map(d => d.rows));
+      const maxCols = Math.max(...Object.values(newFloorDims).map(d => d.cols));
+      return { ...f, floors: newFloors, rows: maxRows, cols: maxCols, floorDimensions: newFloorDims, cells: newCells };
+    });
+  };
+
+  const adjustFloorDimension = (floor: number, dim: "rows" | "cols", delta: number) => {
+    setForm(f => {
+      const current = f.floorDimensions[floor] ?? { rows: 12, cols: 4 };
+      const newVal = Math.max(1, Math.min(20, current[dim] + delta));
+      const newFloorDims = { ...f.floorDimensions, [floor]: { ...current, [dim]: newVal } };
+      const otherFloorCells = f.cells.filter(c => (c.floor ?? 1) !== floor);
+      const thisFloorCells = generateFloorCells({ [floor]: newFloorDims[floor] }, f.cells.filter(c => (c.floor ?? 1) === floor));
+      const newCells = [...otherFloorCells, ...thisFloorCells];
+      const maxRows = Math.max(...Object.values(newFloorDims).map(d => d.rows));
+      const maxCols = Math.max(...Object.values(newFloorDims).map(d => d.cols));
+      return { ...f, rows: maxRows, cols: maxCols, floorDimensions: newFloorDims, cells: newCells };
     });
   };
 
   const applyTemplate = (tpl: LayoutTemplate) => {
+    const templateFloorDims: Record<number, { rows: number; cols: number }> = {};
+    for (let f = 1; f <= tpl.floors; f++) {
+      templateFloorDims[f] = { rows: tpl.rows, cols: tpl.cols };
+    }
     setForm(f => ({
       ...f,
       rows: tpl.rows,
@@ -700,6 +764,7 @@ function LayoutEditorModal({
       numberingType: tpl.numberingType,
       vehicleType: tpl.vehicleType,
       cells: tpl.generate(tpl.rows, tpl.cols),
+      floorDimensions: templateFloorDims,
       name: f.name || tpl.name,
     }));
     setEditingFloor(1);
@@ -714,8 +779,9 @@ function LayoutEditorModal({
     }));
   }, [selectedType]);
 
-  const aisleAfterCol = Math.ceil(form.cols / 2);
-  const cellSize = Math.min(42, Math.floor(320 / form.cols));
+  const activeFloorDims = form.floorDimensions[editingFloor] ?? { rows: form.rows, cols: form.cols };
+  const aisleAfterCol = Math.ceil(activeFloorDims.cols / 2);
+  const cellSize = Math.min(42, Math.floor(320 / activeFloorDims.cols));
   const activeFloorCells = form.cells.filter(c => (c.floor ?? 1) === editingFloor);
 
   return (
@@ -781,20 +847,73 @@ function LayoutEditorModal({
             {/* Dimensions */}
             <div className="border rounded-lg p-3 space-y-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dimensões</p>
-              {(["rows", "cols", "floors"] as const).map(dim => (
-                <div key={dim} className="flex items-center justify-between gap-2">
-                  <span className="text-sm">{dim === "rows" ? "Fileiras" : dim === "cols" ? "Colunas" : "Andares"}</span>
-                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjustDimension(dim, -1)}>
-                      <MinusCircle className="h-4 w-4" />
-                    </Button>
-                    <span className="w-6 text-center font-semibold text-sm">{form[dim]}</span>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjustDimension(dim, +1)}>
-                      <PlusCircle className="h-4 w-4" />
-                    </Button>
-                  </div>
+
+              {/* Floors — always a shared control */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm">Andares</span>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjustGlobalFloors(-1)}>
+                    <MinusCircle className="h-4 w-4" />
+                  </Button>
+                  <span className="w-6 text-center font-semibold text-sm">{form.floors}</span>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjustGlobalFloors(+1)}>
+                    <PlusCircle className="h-4 w-4" />
+                  </Button>
                 </div>
-              ))}
+              </div>
+
+              {form.floors === 1 ? (
+                /* Single floor: rows + cols in the same panel */
+                (["rows", "cols"] as const).map(dim => (
+                  <div key={dim} className="flex items-center justify-between gap-2">
+                    <span className="text-sm">{dim === "rows" ? "Fileiras" : "Colunas"}</span>
+                    <div className="flex items-center gap-2">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjustFloorDimension(1, dim, -1)}>
+                        <MinusCircle className="h-4 w-4" />
+                      </Button>
+                      <span className="w-6 text-center font-semibold text-sm">
+                        {form.floorDimensions[1]?.[dim] ?? (dim === "rows" ? form.rows : form.cols)}
+                      </span>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjustFloorDimension(1, dim, +1)}>
+                        <PlusCircle className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                /* Multi-floor: one sub-panel per floor (highest first) */
+                Array.from({ length: form.floors }, (_, i) => form.floors - i).map(floorNum => {
+                  const fd = form.floorDimensions[floorNum] ?? { rows: 12, cols: 4 };
+                  const isEditing = editingFloor === floorNum;
+                  return (
+                    <div
+                      key={floorNum}
+                      className={`border rounded-md p-2.5 space-y-2 cursor-pointer transition-colors ${isEditing ? "border-primary bg-primary/5" : "border-slate-200 hover:border-slate-400"}`}
+                      onClick={() => setEditingFloor(floorNum)}
+                    >
+                      <p className="text-xs font-semibold flex items-center gap-1.5">
+                        {floorNum === 2 ? "⬆️" : "⬇️"}
+                        {floorNum}º Andar
+                        {isEditing && <span className="ml-auto text-[10px] text-primary font-normal">editando</span>}
+                      </p>
+                      {(["rows", "cols"] as const).map(dim => (
+                        <div key={dim} className="flex items-center justify-between gap-2" onClick={e => e.stopPropagation()}>
+                          <span className="text-xs text-muted-foreground">{dim === "rows" ? "Fileiras" : "Colunas"}</span>
+                          <div className="flex items-center gap-1.5">
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setEditingFloor(floorNum); adjustFloorDimension(floorNum, dim, -1); }}>
+                              <MinusCircle className="h-3.5 w-3.5" />
+                            </Button>
+                            <span className="w-5 text-center font-semibold text-xs">{fd[dim]}</span>
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setEditingFloor(floorNum); adjustFloorDimension(floorNum, dim, +1); }}>
+                              <PlusCircle className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })
+              )}
             </div>
 
             {/* Templates */}
@@ -898,7 +1017,7 @@ function LayoutEditorModal({
               </div>
 
               <div className="space-y-1 inline-block min-w-full">
-                {Array.from({ length: form.rows }).map((_, rIdx) => {
+                {Array.from({ length: activeFloorDims.rows }).map((_, rIdx) => {
                   const row = rIdx + 1;
                   const rowCells = activeFloorCells.filter(c => c.row === row).sort((a, b) => a.col - b.col);
                   const leftCells = rowCells.filter(c => c.col <= aisleAfterCol);
@@ -975,10 +1094,12 @@ function LayoutCard({
     if (previewFloor > floors) setPreviewFloor(1);
   }, [floors, previewFloor]);
 
-  const aisleAfterCol = Math.ceil(layout.cols / 2);
-  const cellSize = Math.min(18, Math.floor(140 / layout.cols));
-  const maxRows = Math.min(layout.rows, 12);
   const activeFloorCells = cells.filter(c => (c.floor ?? 1) === previewFloor);
+  const floorMaxCol = activeFloorCells.length > 0 ? Math.max(...activeFloorCells.map(c => c.col)) : layout.cols;
+  const floorMaxRow = activeFloorCells.length > 0 ? Math.max(...activeFloorCells.map(c => c.row)) : layout.rows;
+  const aisleAfterCol = Math.ceil(floorMaxCol / 2);
+  const cellSize = Math.min(18, Math.floor(140 / floorMaxCol));
+  const maxRows = Math.min(floorMaxRow, 12);
 
   return (
     <div className="border rounded-xl p-4 space-y-3 hover:shadow-md transition-shadow bg-white">
@@ -1065,9 +1186,9 @@ function LayoutCard({
               </div>
             );
           })}
-          {layout.rows > maxRows && (
+          {floorMaxRow > maxRows && (
             <p className="text-center text-[10px] text-muted-foreground mt-1">
-              +{layout.rows - maxRows} fileiras...
+              +{floorMaxRow - maxRows} fileiras...
             </p>
           )}
         </div>
@@ -1177,15 +1298,19 @@ export default function LayoutsPage() {
   const editorInitialData: EditorState | null = useMemo(() => {
     if (!editorOpen) return null;
     if (!editingLayout) return null;
+    const cells = editingLayout.cells as LayoutCell[];
+    const floors = editingLayout.floors ?? 1;
+    const floorDimensions = deriveFloorDimensions(cells, floors);
     return {
       name: editingLayout.name ?? "",
       description: (editingLayout as VehicleLayout & { description?: string }).description ?? "",
       vehicleType: editingLayout.vehicleType ?? "Ônibus",
       rows: editingLayout.rows,
       cols: editingLayout.cols,
-      floors: editingLayout.floors,
+      floors,
       numberingType: editingLayout.numberingType,
-      cells: editingLayout.cells as LayoutCell[],
+      cells,
+      floorDimensions,
     };
   }, [editorOpen, editingLayout]);
 
