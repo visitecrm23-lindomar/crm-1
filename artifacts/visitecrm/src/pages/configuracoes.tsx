@@ -16,10 +16,13 @@ import {
   getCalendarConnectUrl,
   useGetCurrentSubscription,
   useUpgradeSubscription,
+  useCreateStripeCheckout,
   getCurrentSubscriptionQueryKey,
   type PlanPublic,
   type SubscriptionInvoice,
 } from "@workspace/api-client-react";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import type {
   UpdateTenantBody,
   SystemConfig,
@@ -408,9 +411,10 @@ function formatCurrencyBRL(value: string | number | null | undefined): string {
 interface PixModalProps {
   invoice: SubscriptionInvoice;
   onClose: () => void;
+  onPayWithCard?: () => void;
 }
 
-function PixModal({ invoice, onClose }: PixModalProps) {
+function PixModal({ invoice, onClose, onPayWithCard }: PixModalProps) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
 
@@ -479,8 +483,98 @@ function PixModal({ invoice, onClose }: PixModalProps) {
             <p>• Em caso de dúvidas, entre em contato com nosso suporte.</p>
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          {onPayWithCard && (
+            <Button variant="outline" onClick={onPayWithCard} className="gap-2">
+              <CreditCard className="w-4 h-4" />
+              Pagar com Cartão
+            </Button>
+          )}
           <Button variant="outline" onClick={onClose}>Fechar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+const stripePromise = loadStripe(import.meta.env["VITE_STRIPE_PUBLIC_KEY"] ?? "");
+
+interface CardPaymentFormProps {
+  onSuccess: () => void;
+  onError: (msg: string) => void;
+}
+
+function CardPaymentForm({ onSuccess, onError }: CardPaymentFormProps) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [loading, setLoading] = useState(false);
+
+  async function handlePay() {
+    if (!stripe || !elements) return;
+    setLoading(true);
+    const { error } = await stripe.confirmPayment({
+      elements,
+      confirmParams: { return_url: window.location.href },
+      redirect: "if_required",
+    });
+    setLoading(false);
+    if (error) {
+      onError(error.message ?? "Erro ao processar pagamento");
+    } else {
+      onSuccess();
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <PaymentElement />
+      <Button onClick={handlePay} disabled={loading || !stripe} className="w-full">
+        {loading ? "Processando..." : "Confirmar Pagamento"}
+      </Button>
+    </div>
+  );
+}
+
+interface CardPaymentModalProps {
+  invoice: SubscriptionInvoice;
+  clientSecret: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function CardPaymentModal({ invoice, clientSecret, onClose, onSuccess }: CardPaymentModalProps) {
+  const { toast } = useToast();
+
+  function handleSuccess() {
+    toast({ title: "Pagamento confirmado!", description: "Seu plano será ativado em instantes." });
+    onSuccess();
+    onClose();
+  }
+
+  function handleError(msg: string) {
+    toast({ title: msg, variant: "destructive" });
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-primary" />
+            Pagamento com Cartão
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="text-center">
+            <p className="text-2xl font-bold text-primary">{formatCurrencyBRL(invoice.amount)}</p>
+            <p className="text-sm text-muted-foreground mt-1">{invoice.description}</p>
+          </div>
+          <Elements stripe={stripePromise} options={{ clientSecret }}>
+            <CardPaymentForm onSuccess={handleSuccess} onError={handleError} />
+          </Elements>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -492,7 +586,10 @@ function PlanTab() {
   const queryClient = useQueryClient();
   const { data: subData, isLoading } = useGetCurrentSubscription();
   const upgrade = useUpgradeSubscription();
+  const stripeCheckout = useCreateStripeCheckout();
   const [showPixModal, setShowPixModal] = useState(false);
+  const [showCardModal, setShowCardModal] = useState(false);
+  const [cardClientSecret, setCardClientSecret] = useState<string | null>(null);
   const [pendingInvoice, setPendingInvoice] = useState<SubscriptionInvoice | null>(null);
   const [selectedCycle, setSelectedCycle] = useState<"monthly" | "annual">("monthly");
 
@@ -514,6 +611,18 @@ function PlanTab() {
       }
     } catch {
       toast({ title: "Erro ao fazer upgrade", variant: "destructive" });
+    }
+  }
+
+  async function handlePayWithCard(invoice: SubscriptionInvoice) {
+    try {
+      const result = await stripeCheckout.mutateAsync({ id: invoice.id });
+      setPendingInvoice(invoice);
+      setCardClientSecret(result.clientSecret);
+      setShowPixModal(false);
+      setShowCardModal(true);
+    } catch {
+      toast({ title: "Erro ao iniciar pagamento com cartão", variant: "destructive" });
     }
   }
 
@@ -672,7 +781,20 @@ function PlanTab() {
       </div>
 
       {showPixModal && pendingInvoice && (
-        <PixModal invoice={pendingInvoice} onClose={() => setShowPixModal(false)} />
+        <PixModal
+          invoice={pendingInvoice}
+          onClose={() => setShowPixModal(false)}
+          onPayWithCard={() => handlePayWithCard(pendingInvoice)}
+        />
+      )}
+
+      {showCardModal && pendingInvoice && cardClientSecret && (
+        <CardPaymentModal
+          invoice={pendingInvoice}
+          clientSecret={cardClientSecret}
+          onClose={() => { setShowCardModal(false); setCardClientSecret(null); }}
+          onSuccess={() => queryClient.invalidateQueries({ queryKey: getCurrentSubscriptionQueryKey() })}
+        />
       )}
     </div>
   );

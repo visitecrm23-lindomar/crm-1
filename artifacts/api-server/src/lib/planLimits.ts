@@ -1,5 +1,5 @@
 import { db, tenantsTable, plansTable, usersTable, clientsTable, tripsTable } from "@workspace/db";
-import { eq, count } from "drizzle-orm";
+import { eq, or, count } from "drizzle-orm";
 import type { Request, Response } from "express";
 
 type ResourceType = "users" | "clients" | "trips";
@@ -18,7 +18,7 @@ export async function checkPlanLimit(
     const [plan] = await db
       .select()
       .from(plansTable)
-      .where(eq(plansTable.slug, planId))
+      .where(or(eq(plansTable.slug, planId), eq(plansTable.id, planId)))
       .limit(1);
 
     let maxAllowed: number;

@@ -1934,7 +1934,9 @@ export function TripForm({ tripId }: { tripId?: string }) {
       }
       navigate("/trips");
     } catch (err: unknown) {
-      const responseData = (err as { response?: { data?: Record<string, unknown> } })?.response?.data ?? {};
+      const responseData = (err as { data?: Record<string, unknown> })?.data
+        ?? (err as { response?: { data?: Record<string, unknown> } })?.response?.data
+        ?? {};
       const limitInfo = usePlanLimitError(responseData);
       if (limitInfo.isLimitError) {
         setTripLimitError({ resource: limitInfo.resource ?? "trips", current: limitInfo.current, limit: limitInfo.limit });

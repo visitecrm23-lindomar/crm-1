@@ -234,6 +234,16 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
 
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
 
+    await db.insert(subscriptionsTable).values({
+      id: generateId(),
+      tenantId: me.tenantId,
+      planId: newPlan.id,
+      status: "pending_payment",
+      billingCycle: parsed.data.billingCycle,
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
+    });
+
     res.json({ upgraded: false, pendingInvoice: true, plan: newPlan, invoice });
   } catch (err) {
     req.log.error({ err }, "Error upgrading subscription");
@@ -275,6 +285,7 @@ router.post("/invoices/:id/pix", async (req, res): Promise<void> => {
       pixQrCodeUrl,
       pixExpiresAt,
       paymentMethod: "pix",
+      status: "processing",
     }).where(eq(invoicesTable.id, req.params.id));
 
     const [updated] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);

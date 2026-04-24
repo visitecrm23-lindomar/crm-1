@@ -171,3 +171,23 @@ export const useListPublicPlans = <
     ...options,
   });
 };
+
+export interface StripeCheckoutResponse {
+  clientSecret: string;
+  paymentIntentId: string;
+}
+
+export const useCreateStripeCheckout = <
+  TError = unknown,
+  TContext = unknown,
+>(
+  options?: UseMutationOptions<StripeCheckoutResponse, TError, { id: string }, TContext>
+): UseMutationResult<StripeCheckoutResponse, TError, { id: string }, TContext> => {
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) =>
+      customFetch<StripeCheckoutResponse>(`/api/invoices/${id}/stripe/checkout`, {
+        method: "POST",
+      }),
+    ...options,
+  });
+};
