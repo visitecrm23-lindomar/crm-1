@@ -603,7 +603,20 @@ function PlanTab() {
     try {
       const result = await upgrade.mutateAsync({ planId: plan.id, billingCycle: selectedCycle });
       await queryClient.invalidateQueries({ queryKey: getCurrentSubscriptionQueryKey() });
-      if (result.upgraded) {
+      const r = result as unknown as { upgraded: boolean; trial?: boolean; trialEndsAt?: string; invoice?: typeof result.invoice };
+      if (r.upgraded && result.invoice) {
+        setPendingInvoice(result.invoice);
+        if (r.trial) {
+          toast({
+            title: `Trial do ${plan.name} ativado!`,
+            description: r.trialEndsAt
+              ? `Seu trial vai até ${new Date(r.trialEndsAt).toLocaleDateString("pt-BR")}. Uma cobrança será gerada ao final.`
+              : "Seu trial foi ativado com sucesso.",
+          });
+        } else {
+          setShowPixModal(true);
+        }
+      } else if (result.upgraded) {
         toast({ title: `Plano ${plan.name} ativado!`, description: "Seu plano foi alterado com sucesso." });
       } else if (result.invoice) {
         setPendingInvoice(result.invoice);
@@ -779,6 +792,45 @@ function PlanTab() {
           );
         })}
       </div>
+
+      {subData?.invoices && subData.invoices.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold mb-3">Faturas Anteriores</h3>
+          <div className="rounded-md border divide-y text-sm">
+            {subData.invoices.map((inv) => {
+              const statusLabels: Record<string, string> = {
+                pending: "Pendente", pending_payment: "Aguardando Pgto.", processing: "Processando PIX",
+                paid: "Pago", failed: "Falhou", overdue: "Vencido", canceled: "Cancelado",
+              };
+              const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+                paid: "default", failed: "destructive", overdue: "destructive", canceled: "outline",
+              };
+              return (
+                <div key={inv.id} className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-mono text-xs text-muted-foreground">{inv.invoiceNumber ?? inv.id.slice(0, 8)}</p>
+                    <p className="font-medium">{formatCurrencyBRL(inv.amount)}</p>
+                    {inv.dueDate && (
+                      <p className="text-xs text-muted-foreground">
+                        Vence: {new Date(inv.dueDate).toLocaleDateString("pt-BR")}
+                      </p>
+                    )}
+                  </div>
+                  <Badge variant={statusVariants[inv.status] ?? "secondary"} className="text-xs">
+                    {statusLabels[inv.status] ?? inv.status}
+                  </Badge>
+                  {(inv.status === "pending" || inv.status === "pending_payment") && (
+                    <Button size="sm" variant="outline" className="h-7 text-xs"
+                      onClick={() => { setPendingInvoice(inv); setShowPixModal(true); }}>
+                      Pagar
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {showPixModal && pendingInvoice && (
         <PixModal

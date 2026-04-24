@@ -40,12 +40,16 @@ const STATUS_LABELS: Record<string, string> = {
   active: "Ativo",
   trial: "Trial",
   suspended: "Suspenso",
+  pending_payment: "Pgto. Pendente",
+  overdue: "Em atraso",
 };
 
 const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   active: "default",
   trial: "secondary",
   suspended: "destructive",
+  pending_payment: "outline",
+  overdue: "destructive",
 };
 
 const PLAN_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -214,6 +218,11 @@ export default function AdminTenants() {
                           <Badge variant={PLAN_VARIANTS[tenant.planId] ?? "outline"}>
                             {planNameMap[tenant.planId] ?? PLAN_LABELS[tenant.planId] ?? tenant.planId}
                           </Badge>
+                          {(tenant as unknown as { pendingPlanId?: string }).pendingPlanId && (
+                            <div className="text-xs text-amber-600 mt-0.5">
+                              → {PLAN_LABELS[(tenant as unknown as { pendingPlanId?: string }).pendingPlanId!] ?? (tenant as unknown as { pendingPlanId?: string }).pendingPlanId}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <Badge variant={STATUS_VARIANTS[tenant.status] ?? "outline"}>
