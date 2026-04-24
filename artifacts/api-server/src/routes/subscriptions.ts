@@ -176,7 +176,31 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
           trialEnd,
         });
 
-        res.json({ upgraded: true, trial: true, trialDays, trialEndsAt: trialEnd, plan: newPlan, invoice: null });
+        let trialInvoice = null;
+        const trialPrice = parsed.data.billingCycle === "annual"
+          ? Number(newPlan.annualPrice)
+          : Number(newPlan.monthlyPrice);
+        if (trialPrice > 0) {
+          const trialInvoiceId = generateId();
+          const trialInvoiceNumber = `INV-${now.getFullYear()}-${trialInvoiceId.slice(0, 8).toUpperCase()}`;
+          const [inv] = await db.insert(invoicesTable).values({
+            id: trialInvoiceId,
+            tenantId: me.tenantId,
+            planId: newPlan.id,
+            invoiceNumber: trialInvoiceNumber,
+            amount: String(trialPrice),
+            totalAmount: String(trialPrice),
+            currency: "BRL",
+            status: "pending",
+            paymentMethod: "pix",
+            dueDate: trialEnd,
+            description: `${newPlan.name} — ${parsed.data.billingCycle === "annual" ? "anual" : "mensal"} (vence após trial)`,
+          }).returning();
+          trialInvoice = inv;
+        }
+
+        void persistUsageSnapshot(me.tenantId);
+        res.json({ upgraded: true, trial: true, trialDays, trialEndsAt: trialEnd, plan: newPlan, invoice: trialInvoice ?? null });
         return;
       }
     }

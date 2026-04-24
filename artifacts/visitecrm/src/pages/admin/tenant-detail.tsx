@@ -8,6 +8,8 @@ import {
   useActivateTenant,
   useListAdminAuditLogs,
   useListPlans,
+  useListAdminInvoices,
+  useConfirmInvoicePayment,
   type TenantDetails,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,6 +59,87 @@ type Tab = "info" | "users" | "metrics" | "logs";
 function formatDate(dateStr: string | null | undefined) {
   if (!dateStr) return "—";
   return new Date(dateStr).toLocaleString("pt-BR");
+}
+
+const STATUS_INVOICE_LABELS: Record<string, string> = {
+  pending: "Pendente",
+  pending_payment: "Aguardando Pgto.",
+  processing: "Processando",
+  paid: "Pago",
+  failed: "Falhou",
+  overdue: "Vencido",
+  canceled: "Cancelado",
+};
+
+function BillingSection({ tenant }: { tenant: TenantDetails }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: invoicesData, isLoading } = useListAdminInvoices({ tenantId: tenant.id });
+  const confirmPayment = useConfirmInvoicePayment();
+  const invoices = (invoicesData as unknown as Array<{ id: string; invoiceNumber: string | null; amount: string; status: string; dueDate: string | null; paidAt: string | null; paymentMethod: string | null }>) ?? [];
+
+  async function handleConfirm(id: string) {
+    try {
+      await confirmPayment.mutateAsync({ id });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/invoices"] });
+      toast({ title: "Pagamento confirmado" });
+    } catch {
+      toast({ title: "Erro ao confirmar pagamento", variant: "destructive" });
+    }
+  }
+
+  return (
+    <Card className="mt-2">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-semibold">Faturamento e Assinatura</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <p className="text-muted-foreground text-xs">Plano Atual</p>
+            <p className="font-medium">{tenant.planId}</p>
+          </div>
+          {(tenant as unknown as { pendingPlanId?: string }).pendingPlanId && (
+            <div>
+              <p className="text-muted-foreground text-xs">Plano Solicitado</p>
+              <p className="font-medium text-amber-700">{(tenant as unknown as { pendingPlanId?: string }).pendingPlanId}</p>
+            </div>
+          )}
+          <div>
+            <p className="text-muted-foreground text-xs">Status</p>
+            <p className="font-medium">{tenant.status}</p>
+          </div>
+        </div>
+        {isLoading ? (
+          <p className="text-xs text-muted-foreground">Carregando faturas...</p>
+        ) : invoices.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Nenhuma fatura encontrada.</p>
+        ) : (
+          <div className="rounded border divide-y text-sm">
+            {invoices.map((inv) => (
+              <div key={inv.id} className="flex items-center gap-3 px-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <p className="font-mono text-xs">{inv.invoiceNumber ?? inv.id.slice(0, 8)}</p>
+                  <p className="text-muted-foreground text-xs">
+                    R$ {Number(inv.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    {inv.dueDate ? ` · vence ${new Date(inv.dueDate).toLocaleDateString("pt-BR")}` : ""}
+                  </p>
+                </div>
+                <Badge variant={inv.status === "paid" ? "default" : inv.status === "failed" || inv.status === "overdue" ? "destructive" : "secondary"} className="text-xs shrink-0">
+                  {STATUS_INVOICE_LABELS[inv.status] ?? inv.status}
+                </Badge>
+                {(inv.status === "pending_payment" || inv.status === "processing") && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={() => handleConfirm(inv.id)} disabled={confirmPayment.isPending}>
+                    Confirmar PIX
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 interface InfoTabProps {
@@ -256,6 +339,8 @@ function InfoTab({ tenant }: InfoTabProps) {
       <Button onClick={handleSave} disabled={updateTenant.isPending}>
         {updateTenant.isPending ? "Salvando..." : "Salvar Alterações"}
       </Button>
+
+      <BillingSection tenant={tenant} />
 
       {showConfirm === "suspend" && (
         <Dialog open onOpenChange={() => setShowConfirm(null)}>

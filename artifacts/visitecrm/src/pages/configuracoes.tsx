@@ -1379,6 +1379,7 @@ function TeamTab() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole] = useState<"vendedor">("vendedor");
   const [inviting, setInviting] = useState(false);
+  const [limitError, setLimitError] = useState<string | null>(null);
 
   async function loadTeam() {
     setLoading(true);
@@ -1418,7 +1419,12 @@ function TeamTab() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast({ title: data.error ?? "Erro ao convidar", variant: "destructive" });
+        if (data.error === "limit_exceeded") {
+          setLimitError(data.message ?? "Limite de usuários atingido. Faça upgrade para adicionar mais membros.");
+          setInviteOpen(false);
+        } else {
+          toast({ title: data.error ?? "Erro ao convidar", variant: "destructive" });
+        }
         return;
       }
       toast({
@@ -1465,6 +1471,18 @@ function TeamTab() {
 
   return (
     <div className="space-y-4">
+      {limitError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
+          <span className="text-amber-600 mt-0.5">⚠️</span>
+          <div className="flex-1">
+            <p className="font-medium text-amber-900 text-sm">Limite de usuários atingido</p>
+            <p className="text-amber-700 text-sm mt-0.5">{limitError}</p>
+            <Button size="sm" variant="outline" className="mt-2 border-amber-400 text-amber-800 hover:bg-amber-100" onClick={() => window.location.href = "/configuracoes?tab=plan"}>
+              Ver planos
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">
@@ -1472,7 +1490,7 @@ function TeamTab() {
           </p>
         </div>
         {isManager && (
-          <Button onClick={() => setInviteOpen(true)}>
+          <Button onClick={() => { setLimitError(null); setInviteOpen(true); }}>
             <UserPlus className="w-4 h-4 mr-2" />
             Convidar Vendedor
           </Button>
