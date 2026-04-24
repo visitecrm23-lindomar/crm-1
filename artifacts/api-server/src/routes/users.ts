@@ -131,6 +131,11 @@ router.post("/users/me/sync", async (req, res): Promise<void> => {
       const linkedTenantId = pendingInvite?.tenantId ?? null;
       const assignedRole = pendingInvite?.role ?? "agencia";
 
+      if (linkedTenantId) {
+        const allowed = await checkPlanLimit(linkedTenantId, "users", req, res);
+        if (!allowed) return;
+      }
+
       await db.insert(usersTable).values({
         id: userId, clerkId, tenantId: linkedTenantId, name, email: canonicalEmail,
         avatarUrl: avatarUrl ?? null, role: assignedRole,

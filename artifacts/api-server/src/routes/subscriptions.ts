@@ -6,6 +6,7 @@ import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { generatePixEMV, generatePixQrCodeUrl } from "../lib/pix";
 import { persistUsageSnapshot } from "../lib/planLimits";
+import { generateInvoiceNumber } from "../lib/invoiceNumber";
 
 const router = Router();
 
@@ -182,7 +183,7 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
           : Number(newPlan.monthlyPrice);
         if (trialPrice > 0) {
           const trialInvoiceId = generateId();
-          const trialInvoiceNumber = `INV-${now.getFullYear()}-${trialInvoiceId.slice(0, 8).toUpperCase()}`;
+          const trialInvoiceNumber = await generateInvoiceNumber(me.tenantId, now.getFullYear());
           const [inv] = await db.insert(invoicesTable).values({
             id: trialInvoiceId,
             tenantId: me.tenantId,
@@ -217,7 +218,7 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
     const dueDate = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
     const invoiceId = generateId();
-    const invoiceNumber = `INV-${now.getFullYear()}-${String(invoiceId).slice(0, 8).toUpperCase()}`;
+    const invoiceNumber = await generateInvoiceNumber(me.tenantId, now.getFullYear());
 
     const pixKey = process.env["PIX_KEY"];
     const pixName = process.env["PIX_NAME"] ?? "VisiteCRM";
@@ -347,6 +348,7 @@ router.post("/admin/invoices/:id/confirm-payment", async (req, res): Promise<voi
       if (plan) {
         await db.update(tenantsTable).set({
           planId: plan.slug,
+          pendingPlanId: null,
           status: "active",
         }).where(eq(tenantsTable.id, invoice.tenantId));
 

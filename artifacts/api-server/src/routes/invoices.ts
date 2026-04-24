@@ -15,7 +15,7 @@ async function activateInvoicePlan(invoiceId: string, tenantId: string): Promise
   if (invoice.planId) {
     const [plan] = await db.select().from(plansTable).where(eq(plansTable.id, invoice.planId)).limit(1);
     if (plan) {
-      await db.update(tenantsTable).set({ planId: plan.slug, status: "active", updatedAt: new Date() })
+      await db.update(tenantsTable).set({ planId: plan.slug, pendingPlanId: null, status: "active", updatedAt: new Date() })
         .where(eq(tenantsTable.id, tenantId));
 
       const [existingSub] = await db.select().from(subscriptionsTable)
