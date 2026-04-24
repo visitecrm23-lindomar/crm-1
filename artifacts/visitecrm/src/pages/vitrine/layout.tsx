@@ -1,210 +1,17 @@
 import { ReactNode, useState, useRef, useEffect } from "react";
-import { Link, useLocation } from "wouter";
-import { useCart } from "@/contexts/CartContext";
-import { publicStoreApi, PublicStore, CouponValidation } from "@/lib/storeApi";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useLocation } from "wouter";
+import { PublicStore } from "@/lib/storeApi";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import {
-  ShoppingCart,
   X,
-  Minus,
-  Plus,
-  Trash2,
   Phone,
   Mail,
   Instagram,
   Facebook,
   Youtube,
   MapPin,
-  Tag,
-  CheckCircle,
-  Loader2,
   Menu,
   Search,
 } from "lucide-react";
-
-function CartDrawer({ slug, store }: { slug: string; store: PublicStore }) {
-  const { items, isOpen, closeCart, updateQuantity, removeItem, total, clearCart } = useCart();
-  const [, navigate] = useLocation();
-  const [couponCode, setCouponCode] = useState("");
-  const [couponResult, setCouponResult] = useState<CouponValidation | null>(null);
-  const [validating, setValidating] = useState(false);
-
-  const discount = couponResult?.valid ? Number(couponResult.discountAmount ?? 0) : 0;
-  const finalTotal = Math.max(0, total - discount);
-
-  async function validateCoupon() {
-    if (!couponCode) return;
-    setValidating(true);
-    try {
-      const res = await publicStoreApi.validateCoupon(slug, couponCode, total);
-      setCouponResult(res);
-    } catch {
-      setCouponResult({ valid: false, error: "Cupom inválido" });
-    } finally {
-      setValidating(false);
-    }
-  }
-
-  function removeCoupon() {
-    setCouponResult(null);
-    setCouponCode("");
-  }
-
-  function goCheckout() {
-    closeCart();
-    navigate(`/loja/${slug}/checkout`);
-  }
-
-  return (
-    <Sheet open={isOpen} onOpenChange={(o) => !o && closeCart()}>
-      <SheetContent side="right" className="w-full sm:max-w-md flex flex-col">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <ShoppingCart className="w-5 h-5" />
-            Seu Carrinho ({items.length} {items.length === 1 ? "item" : "itens"})
-          </SheetTitle>
-        </SheetHeader>
-        {items.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
-            <ShoppingCart className="w-16 h-16 mb-4 opacity-20" />
-            <p>Seu carrinho está vazio</p>
-            <Button variant="outline" className="mt-4" onClick={closeCart}>
-              Continuar Comprando
-            </Button>
-          </div>
-        ) : (
-          <>
-            <div className="flex-1 overflow-y-auto space-y-3 py-4">
-              {items.map((item) => {
-                const key = `${item.productId}::${item.variantLabel ?? ""}`;
-                return (
-                  <div key={key} className="flex gap-3 p-3 rounded-lg border">
-                    {item.image && (
-                      <img
-                        src={item.image}
-                        alt={item.productName}
-                        className="w-16 h-16 object-cover rounded"
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm line-clamp-2">{item.productName}</p>
-                      {item.variantLabel && (
-                        <p className="text-xs text-muted-foreground">{item.variantLabel}</p>
-                      )}
-                      <p className="text-sm font-semibold mt-1">
-                        R$ {(item.unitPrice * item.quantity).toFixed(2)}
-                      </p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <button
-                          onClick={() =>
-                            updateQuantity(item.productId, item.variantLabel, item.quantity - 1)
-                          }
-                          className="w-6 h-6 rounded border flex items-center justify-center hover:bg-muted"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="text-sm font-medium w-6 text-center">{item.quantity}</span>
-                        <button
-                          onClick={() =>
-                            updateQuantity(item.productId, item.variantLabel, item.quantity + 1)
-                          }
-                          className="w-6 h-6 rounded border flex items-center justify-center hover:bg-muted"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() => removeItem(item.productId, item.variantLabel)}
-                          className="ml-auto p-1 text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="border-t pt-4 space-y-3">
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                  <Tag className="w-3 h-3" /> Cupom de Desconto
-                </p>
-                {couponResult?.valid ? (
-                  <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
-                    <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
-                    <div className="flex-1">
-                      <p className="text-xs font-bold text-green-700 font-mono">{couponResult.code}</p>
-                      <p className="text-xs text-green-600">
-                        -R$ {(couponResult.discountAmount ?? 0).toFixed(2)}
-                      </p>
-                    </div>
-                    <button onClick={removeCoupon} className="text-green-600 hover:text-green-800">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <Input
-                      value={couponCode}
-                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                      placeholder="CUPOM"
-                      className="font-mono uppercase h-8 text-sm"
-                    />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={validateCoupon}
-                      disabled={!couponCode || validating}
-                      className="h-8 px-3"
-                    >
-                      {validating ? <Loader2 className="w-3 h-3 animate-spin" /> : "Aplicar"}
-                    </Button>
-                  </div>
-                )}
-                {couponResult && !couponResult.valid && (
-                  <p className="text-xs text-red-500">{couponResult.error}</p>
-                )}
-              </div>
-
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>Subtotal</span>
-                <span>R$ {total.toFixed(2)}</span>
-              </div>
-              {discount > 0 && (
-                <div className="flex justify-between text-sm text-green-600">
-                  <span>Desconto</span>
-                  <span>-R$ {discount.toFixed(2)}</span>
-                </div>
-              )}
-              <div className="flex justify-between font-bold text-lg">
-                <span>Total</span>
-                <span>R$ {finalTotal.toFixed(2)}</span>
-              </div>
-              <Button
-                className="w-full"
-                style={{ backgroundColor: store.primaryColor }}
-                onClick={goCheckout}
-              >
-                Finalizar Pedido
-              </Button>
-              <Button variant="outline" className="w-full text-sm" onClick={clearCart}>
-                Limpar Carrinho
-              </Button>
-            </div>
-          </>
-        )}
-      </SheetContent>
-    </Sheet>
-  );
-}
 
 export default function VitrineLayout({
   children,
@@ -215,7 +22,6 @@ export default function VitrineLayout({
   slug: string;
   store: PublicStore;
 }) {
-  const { itemCount, openCart } = useCart();
   const [, navigate] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -299,22 +105,6 @@ export default function VitrineLayout({
               aria-label="Buscar"
             >
               <Search className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={openCart}
-              className="relative flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg transition-colors"
-            >
-              <ShoppingCart className="w-5 h-5" />
-              <span className="hidden sm:block text-sm font-medium">Carrinho</span>
-              {itemCount > 0 && (
-                <span
-                  className="absolute -top-2 -right-2 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                  style={{ backgroundColor: store.accentColor }}
-                >
-                  {itemCount}
-                </span>
-              )}
             </button>
 
             <button
@@ -490,7 +280,6 @@ export default function VitrineLayout({
         </div>
       </footer>
 
-      <CartDrawer slug={slug} store={store} />
     </div>
   );
 }

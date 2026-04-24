@@ -2,11 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { publicStoreApi, PublicStore, StoreProduct, StoreReview } from "@/lib/storeApi";
 import { calculateTripDuration } from "@/lib/tripDuration";
-import { useCart } from "@/contexts/CartContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  ShoppingCart,
   MapPin,
   Calendar,
   Clock,
@@ -308,14 +306,12 @@ export default function VitrineProduct({
   store: PublicStore;
 }) {
   const [, navigate] = useLocation();
-  const { addItem, openCart } = useCart();
   const [product, setProduct] = useState<(StoreProduct & { reviews: StoreReview[] }) | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [imgIndex, setImgIndex] = useState(0);
   const heroTouchStartX = useRef<number | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<{ variantName: string; label: string; price: number } | null>(null);
-  const [qty, setQty] = useState(1);
   const [activeTab, setActiveTab] = useState<"descricao" | "requisitos" | "destaques">("descricao");
   const [related, setRelated] = useState<StoreProduct[]>([]);
   const [lightboxImages, setLightboxImages] = useState<string[]>([]);
@@ -390,18 +386,6 @@ export default function VitrineProduct({
   const features = product.features ?? [];
   const requirements = product.requirements ?? [];
   const variants = product.variants ?? [];
-
-  function handleAddToCart() {
-    addItem({
-      productId: product!.id,
-      productName: product!.name,
-      unitPrice: effectivePrice,
-      quantity: qty,
-      image: images[0],
-      variantLabel: selectedVariant?.label,
-    });
-    openCart();
-  }
 
   function handleReserveNow() {
     navigate(`/loja/${slug}/reservar/${productSlug}`);
@@ -719,24 +703,6 @@ export default function VitrineProduct({
         <span className="text-sm text-muted-foreground self-end mb-1">/ pessoa</span>
       </div>
 
-      {/* In-page cart controls */}
-      <div className="flex items-center gap-3 mb-3">
-        <div className="flex items-center border rounded-lg">
-          <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="px-3 py-2 hover:bg-muted">−</button>
-          <span className="px-4 py-2 font-medium">{qty}</span>
-          <button onClick={() => setQty((q) => q + 1)} className="px-3 py-2 hover:bg-muted">+</button>
-        </div>
-        <Button
-          className="flex-1 h-11 text-white font-semibold"
-          style={{ backgroundColor: store.primaryColor }}
-          onClick={handleAddToCart}
-          disabled={product.trackInventory && product.stockQuantity != null && product.stockQuantity <= 0}
-        >
-          <ShoppingCart className="w-5 h-5 mr-2" />
-          Adicionar ao Carrinho
-        </Button>
-      </div>
-
       {store.contactWhatsapp && (
         <Button
           variant="outline"
@@ -951,15 +917,6 @@ export default function VitrineProduct({
             </div>
           </div>
           <div className="flex gap-2">
-            <Button
-              className="h-11 px-4 text-white font-semibold"
-              style={{ backgroundColor: store.primaryColor }}
-              onClick={handleAddToCart}
-              disabled={product.trackInventory && product.stockQuantity != null && product.stockQuantity <= 0}
-            >
-              <ShoppingCart className="w-5 h-5" />
-              <span className="hidden sm:inline ml-2">Carrinho</span>
-            </Button>
             <Button
               variant="outline"
               className="h-11 px-4 font-medium flex items-center gap-2"
