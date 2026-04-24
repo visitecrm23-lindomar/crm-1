@@ -705,7 +705,7 @@ function GoogleCalendarCard() {
     if (!canConnect) return;
     const params = new URLSearchParams(window.location.search);
     const gcal = params.get("gcal");
-    if (gcal === "connected") {
+    if (gcal === "success") {
       toast({ title: "Google Calendar conectado com sucesso!" });
       queryClient.invalidateQueries({ queryKey: getGetCalendarStatusQueryKey() });
       const url = new URL(window.location.href);

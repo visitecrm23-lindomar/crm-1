@@ -78,7 +78,7 @@ router.get("/calendar/callback", async (req, res): Promise<void> => {
     await db.update(usersTable).set(updateFields).where(eq(usersTable.id, userId));
 
     // Respond first, then fire-and-forget initial sync for this user only
-    res.redirect(`${FRONTEND_URL}/configuracoes?gcal=connected&tab=integrations`);
+    res.redirect(`${FRONTEND_URL}/configuracoes?gcal=success&tab=integrations`);
     CalendarSyncService.syncAllForUser(userId).catch((err) => {
       console.error("[calendar/callback] Initial syncAllForUser error:", err);
     });
