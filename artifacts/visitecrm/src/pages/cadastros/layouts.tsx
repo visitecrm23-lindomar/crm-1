@@ -188,7 +188,7 @@ const TEMPLATES: LayoutTemplate[] = [
     rows: 12,
     cols: 4,
     floors: 2,
-    numberingType: "by_row",
+    numberingType: "by_row_upper_first",
     vehicleType: "Ônibus",
     busType: "DOUBLE_DECKER",
     generate: (rows, cols) => {
@@ -280,7 +280,7 @@ const TEMPLATES: LayoutTemplate[] = [
     rows: 12,
     cols: 4,
     floors: 2,
-    numberingType: "sequential",
+    numberingType: "sequential_upper_first",
     vehicleType: "Ônibus",
     busType: "DOUBLE_DECKER",
     generate: (_rows, _cols) => {
@@ -310,7 +310,7 @@ const TEMPLATES: LayoutTemplate[] = [
     rows: 12,
     cols: 4,
     floors: 2,
-    numberingType: "sequential",
+    numberingType: "sequential_upper_first",
     vehicleType: "Ônibus",
     busType: "DOUBLE_DECKER",
     generate: (_rows, _cols) => {
@@ -737,7 +737,15 @@ function LayoutEditorModal({
       const newCells = generateFloorCells(newFloorDims, f.cells);
       const maxRows = Math.max(...Object.values(newFloorDims).map(d => d.rows));
       const maxCols = Math.max(...Object.values(newFloorDims).map(d => d.cols));
-      return { ...f, floors: newFloors, rows: maxRows, cols: maxCols, floorDimensions: newFloorDims, cells: newCells };
+      let newNumberingType = f.numberingType;
+      if (newFloors > 1 && f.floors === 1) {
+        if (f.numberingType === "sequential") newNumberingType = "sequential_upper_first";
+        else if (f.numberingType === "by_row") newNumberingType = "by_row_upper_first";
+      } else if (newFloors === 1 && f.floors > 1) {
+        if (f.numberingType === "sequential_upper_first") newNumberingType = "sequential";
+        else if (f.numberingType === "by_row_upper_first") newNumberingType = "by_row";
+      }
+      return { ...f, floors: newFloors, rows: maxRows, cols: maxCols, floorDimensions: newFloorDims, cells: newCells, numberingType: newNumberingType };
     });
   };
 
@@ -832,8 +840,19 @@ function LayoutEditorModal({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="sequential">Sequencial (1, 2, 3…)</SelectItem>
-                    <SelectItem value="by_row">Por fileira (1A, 1B, 2A…)</SelectItem>
+                    {form.floors > 1 ? (
+                      <>
+                        <SelectItem value="sequential_upper_first">Sequencial — Superior primeiro (1, 2, 3…)</SelectItem>
+                        <SelectItem value="sequential">Sequencial — Inferior primeiro (1, 2, 3…)</SelectItem>
+                        <SelectItem value="by_row_upper_first">Por fileira — Superior primeiro (1A, 1B…)</SelectItem>
+                        <SelectItem value="by_row">Por fileira — Inferior primeiro (1A, 1B…)</SelectItem>
+                      </>
+                    ) : (
+                      <>
+                        <SelectItem value="sequential">Sequencial (1, 2, 3…)</SelectItem>
+                        <SelectItem value="by_row">Por fileira (1A, 1B, 2A…)</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -1200,9 +1219,12 @@ function LayoutCard({
 
       <div className="flex flex-wrap gap-1">
         {floors > 1 && <Badge variant="outline" className="text-[10px] px-1.5 bg-purple-50 text-purple-700 border-purple-300">🏢 {floors} andares</Badge>}
-        {layout.numberingType === "by_row"
+        {layout.numberingType?.includes("by_row")
           ? <Badge variant="outline" className="text-[10px] px-1.5">Numeração por fileira</Badge>
           : <Badge variant="outline" className="text-[10px] px-1.5">Numeração sequencial</Badge>}
+        {layout.numberingType?.endsWith("_upper_first") && (
+          <Badge variant="outline" className="text-[10px] px-1.5 bg-purple-50 text-purple-700 border-purple-300">Superior primeiro</Badge>
+        )}
         <Badge variant="outline" className="text-[10px] px-1.5">💺 {layout.seatCount} assentos</Badge>
       </div>
     </div>

@@ -24,11 +24,15 @@ function generateSeatMapFromLayout(
 ): Record<string, SeatMapEntry> {
   const seatMap: Record<string, SeatMapEntry> = {};
   const seatTypes = ["seat", "vip", "accessible"] as const;
+
+  const upperFirst = numberingType.endsWith("_upper_first");
+  const baseType = upperFirst ? numberingType.replace("_upper_first", "") : numberingType;
+
   const seatCells = cells
     .filter(c => seatTypes.includes(c.type as (typeof seatTypes)[number]))
     .sort((a, b) => {
       const fa = a.floor ?? 1, fb = b.floor ?? 1;
-      if (fa !== fb) return fa - fb;
+      if (fa !== fb) return upperFirst ? fb - fa : fa - fb;
       if (a.row !== b.row) return a.row - b.row;
       return a.col - b.col;
     });
@@ -39,7 +43,7 @@ function generateSeatMapFromLayout(
   const maxFloor = Math.max(...cells.map(c => c.floor ?? 1), 1);
   const isMultiFloor = maxFloor > 1;
 
-  if (numberingType === "by_row") {
+  if (baseType === "by_row") {
     // Group by (floor, row) to avoid label collisions across floors
     const floorRowGroups = new Map<string, LayoutCell[]>();
     for (const cell of seatCells) {
@@ -51,7 +55,8 @@ function generateSeatMapFromLayout(
     for (const [groupKey, groupCells] of [...floorRowGroups.entries()].sort(([a], [b]) => {
       const [fa, ra] = a.split("-").map(Number);
       const [fb, rb] = b.split("-").map(Number);
-      return fa !== fb ? fa - fb : ra - rb;
+      if (fa !== fb) return upperFirst ? fb - fa : fa - fb;
+      return ra - rb;
     })) {
       const [floor, row] = groupKey.split("-").map(Number);
       groupCells.sort((a, b) => a.col - b.col);
