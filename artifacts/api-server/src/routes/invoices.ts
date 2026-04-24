@@ -1,9 +1,42 @@
 import { Router } from "express";
-import { db, invoicesTable, tenantsTable } from "@workspace/db";
+import { db, invoicesTable, tenantsTable, plansTable, subscriptionsTable } from "@workspace/db";
 import { eq, desc, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+
+async function activateInvoicePlan(invoiceId: string, tenantId: string): Promise<void> {
+  const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
+  if (!invoice || invoice.status === "paid") return;
+
+  await db.update(invoicesTable).set({ status: "paid", paidAt: new Date() })
+    .where(eq(invoicesTable.id, invoiceId));
+
+  if (invoice.planId) {
+    const [plan] = await db.select().from(plansTable).where(eq(plansTable.id, invoice.planId)).limit(1);
+    if (plan) {
+      await db.update(tenantsTable).set({ planId: plan.slug, status: "active", updatedAt: new Date() })
+        .where(eq(tenantsTable.id, tenantId));
+
+      const [existingSub] = await db.select().from(subscriptionsTable)
+        .where(eq(subscriptionsTable.tenantId, tenantId))
+        .orderBy(desc(subscriptionsTable.createdAt))
+        .limit(1);
+
+      const periodEnd = invoice.billingPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      if (existingSub) {
+        await db.update(subscriptionsTable)
+          .set({ planId: plan.id, status: "active", currentPeriodEnd: periodEnd })
+          .where(eq(subscriptionsTable.id, existingSub.id));
+      } else {
+        await db.insert(subscriptionsTable).values({
+          id: generateId(), tenantId, planId: plan.id, status: "active",
+          billingCycle: "monthly", currentPeriodStart: new Date(), currentPeriodEnd: periodEnd,
+        });
+      }
+    }
+  }
+}
 
 const router = Router();
 
@@ -129,7 +162,17 @@ router.patch("/admin/invoices/:id", async (req, res): Promise<void> => {
       update.paidAt = new Date();
     }
 
-    await db.update(invoicesTable).set(update).where(eq(invoicesTable.id, req.params.id));
+    if (parsed.data.status === "paid") {
+      const [inv] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
+      if (inv && inv.tenantId) {
+        await activateInvoicePlan(req.params.id, inv.tenantId);
+      } else {
+        await db.update(invoicesTable).set(update).where(eq(invoicesTable.id, req.params.id));
+      }
+    } else {
+      await db.update(invoicesTable).set(update).where(eq(invoicesTable.id, req.params.id));
+    }
+
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
     if (!invoice) { res.status(404).json({ error: "Not found" }); return; }
     res.json(invoice);

@@ -223,6 +223,10 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
 
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
 
+    await db.update(tenantsTable)
+      .set({ status: "pending_payment", updatedAt: now })
+      .where(eq(tenantsTable.id, me.tenantId));
+
     await db.insert(subscriptionsTable).values({
       id: generateId(),
       tenantId: me.tenantId,
