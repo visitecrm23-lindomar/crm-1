@@ -203,6 +203,9 @@ function ProductCard({
                 month: "2-digit",
                 year: "numeric",
               })}
+              {product.departureTime && (
+                <span className="font-medium">às {product.departureTime}</span>
+              )}
             </span>
           )}
         </div>
