@@ -299,7 +299,7 @@ function ProductCard({
           {displayDate && (
             <span className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />{" "}
-              {new Date(displayDate.length <= 10 ? displayDate + "T12:00:00" : displayDate).toLocaleDateString("pt-BR", {
+              {new Date(displayDate.slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR", {
                 day: "2-digit",
                 month: "short",
               })}

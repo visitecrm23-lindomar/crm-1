@@ -116,7 +116,7 @@ const PAYMENT_LABELS: Record<string, string> = Object.fromEntries(
 
 function fmtDate(d?: string | null) {
   if (!d) return null;
-  const clean = d.length <= 10 ? d + "T12:00:00" : d;
+  const clean = d.slice(0, 10) + "T12:00:00";
   return new Date(clean).toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "short",
@@ -126,7 +126,7 @@ function fmtDate(d?: string | null) {
 
 function fmtDateLong(d?: string | null) {
   if (!d) return null;
-  const clean = d.length <= 10 ? d + "T12:00:00" : d;
+  const clean = d.slice(0, 10) + "T12:00:00";
   return new Date(clean).toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "long",

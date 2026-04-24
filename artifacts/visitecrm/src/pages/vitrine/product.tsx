@@ -596,9 +596,7 @@ export default function VitrineProduct({
                 <p className="text-[11px] text-muted-foreground">Saída</p>
                 <p className="text-xs font-semibold">
                   {new Date(
-                    ((product.departureDate ?? product.startDate) as string).length <= 10
-                      ? ((product.departureDate ?? product.startDate) as string) + "T12:00:00"
-                      : (product.departureDate ?? product.startDate) as string
+                    ((product.departureDate ?? product.startDate) as string).slice(0, 10) + "T12:00:00"
                   ).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
                 </p>
                 {product.departureTime && (
@@ -623,7 +621,7 @@ export default function VitrineProduct({
                 <p className="text-[11px] text-muted-foreground">Volta</p>
                 <p className="text-xs font-semibold">
                   {new Date(
-                    product.endDate.length <= 10 ? product.endDate + "T12:00:00" : product.endDate
+                    product.endDate.slice(0, 10) + "T12:00:00"
                   ).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
                 </p>
                 {product.returnTime && (
@@ -876,7 +874,7 @@ export default function VitrineProduct({
                     {rDate && (
                       <p className="text-xs text-muted-foreground flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
-                        {new Date(rDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+                        {new Date(rDate.slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
                       </p>
                     )}
                     <p className="text-sm font-bold mt-auto" style={{ color: store.primaryColor }}>

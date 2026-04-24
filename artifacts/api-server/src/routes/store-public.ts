@@ -234,7 +234,13 @@ router.get("/public/store/:slug/products", async (req, res): Promise<void> => {
             .leftJoin(tripsTable, eq(storeProductsTable.tripId, tripsTable.id))
             .where(whereClause).orderBy(orderBy),
     ]);
-    res.json({ data: products, total: Number(countResult[0]?.count ?? 0), page, limit: limit ?? products.length });
+    const processedProducts = products.map(p => ({
+      ...p,
+      departureDate: p.departureDate
+        ? (p.departureDate as unknown as Date).toISOString().slice(0, 10)
+        : null,
+    }));
+    res.json({ data: processedProducts, total: Number(countResult[0]?.count ?? 0), page, limit: limit ?? processedProducts.length });
   } catch (err) {
     req.log.error({ err }, "Error listing public store products");
     res.status(500).json({ error: "Internal server error" });
@@ -321,7 +327,13 @@ router.get("/public/store/:slug/products/:productSlug", async (req, res): Promis
         eq(storeReviewsTable.status, "approved"),
       ))
       .orderBy(desc(storeReviewsTable.createdAt));
-    res.json({ ...row, reviews });
+    res.json({
+      ...row,
+      departureDate: row.departureDate
+        ? (row.departureDate as unknown as Date).toISOString().slice(0, 10)
+        : null,
+      reviews,
+    });
   } catch (err) {
     req.log.error({ err }, "Error getting public store product");
     res.status(500).json({ error: "Internal server error" });
