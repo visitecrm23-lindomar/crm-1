@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -46,7 +47,19 @@ import {
   Bus,
   MinusCircle,
   PlusCircle,
+  Eye,
+  Filter,
+  ArrowUp,
+  ArrowDown,
+  Check,
+  Layers,
 } from "lucide-react";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs";
 import { useQueryClient } from "@tanstack/react-query";
 
 type CellType = LayoutCell["type"];
@@ -80,6 +93,7 @@ interface LayoutTemplate {
   floors: number;
   numberingType: string;
   vehicleType: string;
+  busType: "DOUBLE_DECKER" | "CONVENTIONAL" | "EXECUTIVE" | "SEMI_LEITO" | "LEITO";
   generate: (rows: number, cols: number) => LayoutCell[];
 }
 
@@ -108,6 +122,7 @@ const TEMPLATES: LayoutTemplate[] = [
     floors: 1,
     numberingType: "sequential",
     vehicleType: "Ônibus",
+    busType: "CONVENTIONAL",
     generate: (rows, cols) => {
       const cells: LayoutCell[] = [];
       for (let r = 1; r <= rows; r++) {
@@ -127,6 +142,7 @@ const TEMPLATES: LayoutTemplate[] = [
     floors: 1,
     numberingType: "sequential",
     vehicleType: "Micro-ônibus",
+    busType: "CONVENTIONAL",
     generate: (rows, cols) => makeGridCells(rows, cols, [3]),
   },
   {
@@ -136,6 +152,7 @@ const TEMPLATES: LayoutTemplate[] = [
     floors: 1,
     numberingType: "sequential",
     vehicleType: "Van",
+    busType: "CONVENTIONAL",
     generate: (rows, cols) => {
       const cells: LayoutCell[] = [];
       for (let r = 1; r <= rows; r++) {
@@ -153,6 +170,7 @@ const TEMPLATES: LayoutTemplate[] = [
     floors: 1,
     numberingType: "sequential",
     vehicleType: "Ônibus",
+    busType: "LEITO",
     generate: (rows, cols) => {
       const cells: LayoutCell[] = [];
       for (let r = 1; r <= rows; r++) {
@@ -172,6 +190,7 @@ const TEMPLATES: LayoutTemplate[] = [
     floors: 2,
     numberingType: "by_row",
     vehicleType: "Ônibus",
+    busType: "DOUBLE_DECKER",
     generate: (rows, cols) => {
       const cells: LayoutCell[] = [];
       for (let floor = 1; floor <= 2; floor++) {
@@ -197,6 +216,7 @@ const TEMPLATES: LayoutTemplate[] = [
     floors: 1,
     numberingType: "sequential",
     vehicleType: "Ônibus",
+    busType: "CONVENTIONAL",
     generate: (rows, cols) => {
       const cells: LayoutCell[] = [];
       let seatNum = 1;
@@ -218,6 +238,7 @@ const TEMPLATES: LayoutTemplate[] = [
     floors: 1,
     numberingType: "sequential",
     vehicleType: "Ônibus",
+    busType: "EXECUTIVE",
     generate: (rows, cols) => {
       const cells: LayoutCell[] = [];
       let seatNum = 1;
@@ -242,6 +263,7 @@ const TEMPLATES: LayoutTemplate[] = [
     floors: 1,
     numberingType: "sequential",
     vehicleType: "Ônibus",
+    busType: "SEMI_LEITO",
     generate: (rows, cols) => {
       const cells: LayoutCell[] = [];
       let seatNum = 1;
@@ -260,6 +282,7 @@ const TEMPLATES: LayoutTemplate[] = [
     floors: 2,
     numberingType: "sequential",
     vehicleType: "Ônibus",
+    busType: "DOUBLE_DECKER",
     generate: (_rows, _cols) => {
       const cells: LayoutCell[] = [];
       let seatNum = 1;
@@ -289,6 +312,7 @@ const TEMPLATES: LayoutTemplate[] = [
     floors: 2,
     numberingType: "sequential",
     vehicleType: "Ônibus",
+    busType: "DOUBLE_DECKER",
     generate: (_rows, _cols) => {
       const cells: LayoutCell[] = [];
       let seatNum = 1;
@@ -383,6 +407,230 @@ function LayoutStats({ cells }: { cells: LayoutCell[] }) {
   );
 }
 
+const BUS_TYPE_META: Record<string, { label: string; badgeCls: string }> = {
+  DOUBLE_DECKER: { label: "Double Decker", badgeCls: "bg-purple-100 text-purple-700 border-purple-300" },
+  CONVENTIONAL:  { label: "Convencional",  badgeCls: "bg-blue-100 text-blue-700 border-blue-300" },
+  EXECUTIVE:     { label: "Executivo",     badgeCls: "bg-rose-100 text-rose-700 border-rose-300" },
+  SEMI_LEITO:    { label: "Semi-Leito",    badgeCls: "bg-green-100 text-green-700 border-green-300" },
+  LEITO:         { label: "Leito",         badgeCls: "bg-orange-100 text-orange-700 border-orange-300" },
+};
+
+function TabbedTemplatePreview({
+  cells,
+  rows,
+  cols,
+  floors,
+  compact = true,
+}: {
+  cells: LayoutCell[];
+  rows: number;
+  cols: number;
+  floors: number;
+  compact?: boolean;
+}) {
+  const [activeFloor, setActiveFloor] = useState(floors > 1 ? 2 : 1);
+  const cellSize = compact ? Math.min(14, Math.floor(100 / cols)) : Math.min(22, Math.floor(160 / cols));
+  const aisleAfterCol = Math.ceil(cols / 2);
+  const maxRows = compact ? Math.min(rows, 10) : rows;
+
+  const renderGrid = (floorNum: number) => {
+    const floorCells = cells.filter(c => (c.floor ?? 1) === floorNum);
+    return (
+      <div className="space-y-0.5 inline-block w-full">
+        {Array.from({ length: maxRows }).map((_, rIdx) => {
+          const row = rIdx + 1;
+          const rowCells = floorCells.filter(c => c.row === row).sort((a, b) => a.col - b.col);
+          const leftCells = rowCells.filter(c => c.col <= aisleAfterCol);
+          const rightCells = rowCells.filter(c => c.col > aisleAfterCol);
+          return (
+            <div key={row} className="flex items-center gap-1 justify-center">
+              <div className="flex gap-0.5">
+                {leftCells.map(cell => {
+                  const info = cellTypeMap[cell.type] ?? cellTypeMap["seat"];
+                  return (
+                    <div
+                      key={`${cell.row}-${cell.col}`}
+                      style={{ width: cellSize, height: cellSize }}
+                      className={`rounded-sm border ${info.bg} ${info.border}`}
+                      title={info.label}
+                    />
+                  );
+                })}
+              </div>
+              <div className="w-1 border-l border-dashed border-slate-300 self-stretch" />
+              <div className="flex gap-0.5">
+                {rightCells.map(cell => {
+                  const info = cellTypeMap[cell.type] ?? cellTypeMap["seat"];
+                  return (
+                    <div
+                      key={`${cell.row}-${cell.col}`}
+                      style={{ width: cellSize, height: cellSize }}
+                      className={`rounded-sm border ${info.bg} ${info.border}`}
+                      title={info.label}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+        {rows > maxRows && (
+          <p className="text-center text-[9px] text-muted-foreground mt-1">
+            +{rows - maxRows} fileiras...
+          </p>
+        )}
+      </div>
+    );
+  };
+
+  if (floors === 1) {
+    return (
+      <div className="bg-slate-50 rounded-md p-2 overflow-hidden">
+        <div className="bg-slate-600 text-white text-center py-0.5 rounded text-[9px] font-semibold mb-1.5">FRENTE</div>
+        {renderGrid(1)}
+      </div>
+    );
+  }
+
+  return (
+    <Tabs value={String(activeFloor)} onValueChange={v => setActiveFloor(Number(v))}>
+      <TabsList className="w-full h-8 mb-2">
+        <TabsTrigger value="2" className="flex-1 text-[10px] gap-1">
+          <ArrowUp className="h-3 w-3" /> Piso Superior
+        </TabsTrigger>
+        <TabsTrigger value="1" className="flex-1 text-[10px] gap-1">
+          <ArrowDown className="h-3 w-3" /> Piso Inferior
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="2" className="mt-0">
+        <div className="bg-slate-50 rounded-md p-2 overflow-hidden">
+          <div className="bg-slate-600 text-white text-center py-0.5 rounded text-[9px] font-semibold mb-1.5">FRENTE — PISO SUPERIOR</div>
+          {renderGrid(2)}
+        </div>
+      </TabsContent>
+      <TabsContent value="1" className="mt-0">
+        <div className="bg-slate-50 rounded-md p-2 overflow-hidden">
+          <div className="bg-slate-600 text-white text-center py-0.5 rounded text-[9px] font-semibold mb-1.5">FRENTE — PISO INFERIOR</div>
+          {renderGrid(1)}
+        </div>
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+function TemplateCardTabbed({
+  tpl,
+  onSelect,
+}: {
+  tpl: LayoutTemplate;
+  onSelect: (tpl: LayoutTemplate) => void;
+}) {
+  const [showFull, setShowFull] = useState(false);
+  const cells = useMemo(() => tpl.generate(tpl.rows, tpl.cols), [tpl]);
+  const seatCount = useMemo(
+    () => cells.filter(c => c.type === "seat" || c.type === "vip" || c.type === "accessible").length,
+    [cells],
+  );
+  const floorCounts = useMemo(() => {
+    const upper = cells.filter(c => (c.floor ?? 1) === 2 && (c.type === "seat" || c.type === "vip" || c.type === "accessible")).length;
+    const lower = cells.filter(c => (c.floor ?? 1) === 1 && (c.type === "seat" || c.type === "vip" || c.type === "accessible")).length;
+    return { upper, lower };
+  }, [cells]);
+
+  const meta = BUS_TYPE_META[tpl.busType] ?? BUS_TYPE_META.CONVENTIONAL;
+
+  return (
+    <>
+      <div className="border rounded-lg p-3 space-y-2.5 bg-white hover:shadow-md hover:border-blue-300 transition-all">
+        <div className="flex items-start justify-between gap-1.5">
+          <p className="text-xs font-semibold text-gray-900 leading-tight">{tpl.name}</p>
+          <Badge variant="outline" className={`shrink-0 text-[9px] px-1.5 border ${meta.badgeCls}`}>
+            {meta.label}
+          </Badge>
+        </div>
+
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1"><span>💺</span> {seatCount}</span>
+          {tpl.floors > 1 && (
+            <span className="flex items-center gap-1"><Layers className="h-3 w-3 text-purple-500" /> Sup {floorCounts.upper} · Inf {floorCounts.lower}</span>
+          )}
+        </div>
+
+        <TabbedTemplatePreview
+          cells={cells}
+          rows={tpl.rows}
+          cols={tpl.cols}
+          floors={tpl.floors}
+          compact={true}
+        />
+
+        <div className="flex gap-1.5 pt-0.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1 text-[11px] h-7"
+            onClick={() => setShowFull(true)}
+          >
+            <Eye className="h-3 w-3 mr-1" />
+            Ver Completo
+          </Button>
+          <Button
+            size="sm"
+            className="flex-1 text-[11px] h-7 bg-blue-600 hover:bg-blue-700"
+            onClick={() => onSelect(tpl)}
+          >
+            <Check className="h-3 w-3 mr-1" />
+            Selecionar
+          </Button>
+        </div>
+      </div>
+
+      <Dialog open={showFull} onOpenChange={setShowFull}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Bus className="h-4 w-4 text-blue-600" />
+              {tpl.name}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Visualização completa do layout de assentos
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex gap-3 flex-wrap text-xs text-muted-foreground mt-1">
+            <span>💺 {seatCount} assentos</span>
+            {tpl.floors > 1 && <span>🏢 Superior: {floorCounts.upper} · Inferior: {floorCounts.lower}</span>}
+            <Badge variant="outline" className={`text-[10px] px-1.5 border ${meta.badgeCls}`}>{meta.label}</Badge>
+          </div>
+
+          <TabbedTemplatePreview
+            cells={cells}
+            rows={tpl.rows}
+            cols={tpl.cols}
+            floors={tpl.floors}
+            compact={false}
+          />
+
+          <div className="flex gap-2 mt-2 pt-2 border-t text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-blue-100 border border-blue-400 inline-block" /> Assento</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-amber-100 border border-amber-400 inline-block" /> VIP</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-cyan-100 border border-cyan-400 inline-block" /> Banheiro</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-purple-100 border border-purple-400 inline-block" /> Escada</span>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowFull(false)}>Fechar</Button>
+            <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => { setShowFull(false); onSelect(tpl); }}>
+              <Check className="h-3 w-3 mr-1.5" />
+              Selecionar Template
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 interface EditorState {
   name: string;
   description: string;
@@ -422,6 +670,7 @@ function LayoutEditorModal({
   );
   const [selectedType, setSelectedType] = useState<CellType>("seat");
   const [editingFloor, setEditingFloor] = useState(1);
+  const [filterBusType, setFilterBusType] = useState("all");
 
   const setField = <K extends keyof EditorState>(k: K) => (v: EditorState[K]) =>
     setForm(f => ({ ...f, [k]: v }));
@@ -551,20 +800,42 @@ function LayoutEditorModal({
             {/* Templates */}
             <div className="border rounded-lg p-3 space-y-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Templates rápidos</p>
-              <div className="grid grid-cols-1 gap-1.5">
-                {TEMPLATES.map(tpl => (
-                  <Button
-                    key={tpl.name}
-                    variant="outline"
-                    size="sm"
-                    className="justify-start text-xs h-8"
-                    onClick={() => applyTemplate(tpl)}
-                  >
-                    <Bus className="h-3 w-3 mr-1.5 shrink-0" />
-                    {tpl.name}
-                  </Button>
-                ))}
+              <div className="flex items-center gap-1.5">
+                <Filter className="h-3 w-3 text-muted-foreground shrink-0" />
+                <Select value={filterBusType} onValueChange={setFilterBusType}>
+                  <SelectTrigger className="h-7 text-xs flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os tipos</SelectItem>
+                    <SelectItem value="DOUBLE_DECKER">Double Decker</SelectItem>
+                    <SelectItem value="CONVENTIONAL">Convencional</SelectItem>
+                    <SelectItem value="EXECUTIVE">Executivo</SelectItem>
+                    <SelectItem value="SEMI_LEITO">Semi-Leito</SelectItem>
+                    <SelectItem value="LEITO">Leito</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+              {(() => {
+                const filtered = filterBusType === "all" ? TEMPLATES : TEMPLATES.filter(t => t.busType === filterBusType);
+                return (
+                  <>
+                    <p className="text-[10px] text-muted-foreground">{filtered.length} template{filtered.length !== 1 ? "s" : ""} disponível{filtered.length !== 1 ? "is" : ""}</p>
+                    <div className="max-h-[420px] overflow-y-auto space-y-2 pr-0.5">
+                      {filtered.map(tpl => (
+                        <TemplateCardTabbed
+                          key={tpl.name}
+                          tpl={tpl}
+                          onSelect={(t) => { applyTemplate(t); }}
+                        />
+                      ))}
+                      {filtered.length === 0 && (
+                        <p className="text-xs text-center text-muted-foreground py-4">Nenhum template encontrado</p>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
 
             {/* Stats */}
@@ -697,9 +968,12 @@ function LayoutCard({
   onDelete: () => void;
 }) {
   const cells = layout.cells as LayoutCell[];
+  const floors = layout.floors ?? 1;
+  const [previewFloor, setPreviewFloor] = useState(floors > 1 ? 2 : 1);
   const aisleAfterCol = Math.ceil(layout.cols / 2);
   const cellSize = Math.min(18, Math.floor(140 / layout.cols));
   const maxRows = Math.min(layout.rows, 12);
+  const activeFloorCells = cells.filter(c => (c.floor ?? 1) === previewFloor);
 
   return (
     <div className="border rounded-xl p-4 space-y-3 hover:shadow-md transition-shadow bg-white">
@@ -725,11 +999,29 @@ function LayoutCard({
 
       {/* Mini preview */}
       <div className="bg-slate-50 rounded-lg p-2 overflow-hidden">
+        {floors > 1 && (
+          <div className="flex gap-1 mb-1.5">
+            <button
+              type="button"
+              onClick={() => setPreviewFloor(2)}
+              className={`flex-1 flex items-center justify-center gap-0.5 py-0.5 rounded text-[9px] font-semibold border transition-all ${previewFloor === 2 ? "bg-slate-700 text-white border-slate-700" : "bg-white text-slate-600 border-slate-300 hover:border-slate-500"}`}
+            >
+              <ArrowUp className="h-2.5 w-2.5" /> Superior
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreviewFloor(1)}
+              className={`flex-1 flex items-center justify-center gap-0.5 py-0.5 rounded text-[9px] font-semibold border transition-all ${previewFloor === 1 ? "bg-slate-700 text-white border-slate-700" : "bg-white text-slate-600 border-slate-300 hover:border-slate-500"}`}
+            >
+              <ArrowDown className="h-2.5 w-2.5" /> Inferior
+            </button>
+          </div>
+        )}
         <div className="bg-slate-600 text-white text-center py-0.5 rounded text-[10px] mb-1.5">FRENTE</div>
         <div className="space-y-0.5 inline-block w-full">
           {Array.from({ length: maxRows }).map((_, rIdx) => {
             const row = rIdx + 1;
-            const rowCells = cells.filter(c => c.row === row).sort((a, b) => a.col - b.col);
+            const rowCells = activeFloorCells.filter(c => c.row === row).sort((a, b) => a.col - b.col);
             const leftCells = rowCells.filter(c => c.col <= aisleAfterCol);
             const rightCells = rowCells.filter(c => c.col > aisleAfterCol);
             return (
@@ -777,6 +1069,7 @@ function LayoutCard({
       </div>
 
       <div className="flex flex-wrap gap-1">
+        {floors > 1 && <Badge variant="outline" className="text-[10px] px-1.5 bg-purple-50 text-purple-700 border-purple-300">🏢 {floors} andares</Badge>}
         {layout.numberingType === "by_row"
           ? <Badge variant="outline" className="text-[10px] px-1.5">Numeração por fileira</Badge>
           : <Badge variant="outline" className="text-[10px] px-1.5">Numeração sequencial</Badge>}
