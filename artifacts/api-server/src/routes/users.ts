@@ -177,7 +177,10 @@ router.post("/users/me/sync", async (req, res): Promise<void> => {
         const reconcileInvite = await resolveInviteForUser(clerkId, canonicalEmail, inviteIdFromMeta, req.log);
         if (reconcileInvite) {
           updateSet.tenantId = reconcileInvite.tenantId;
-          updateSet.role = reconcileInvite.role;
+          // Never downgrade a superadmin via invite reconciliation
+          if (updateSet.role !== "superadmin") {
+            updateSet.role = reconcileInvite.role;
+          }
           await db.update(invitesTable)
             .set({ accepted: true, acceptedAt: new Date() })
             .where(eq(invitesTable.id, reconcileInvite.id));

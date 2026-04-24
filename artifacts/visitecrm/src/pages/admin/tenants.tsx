@@ -237,9 +237,9 @@ export default function AdminTenants() {
                           <Badge variant={PLAN_VARIANTS[tenant.planId] ?? "outline"}>
                             {planNameMap[tenant.planId] ?? PLAN_LABELS[tenant.planId] ?? tenant.planId}
                           </Badge>
-                          {(tenant as unknown as { pendingPlanId?: string }).pendingPlanId && (
+                          {tenant.pendingPlanId && (
                             <div className="text-xs text-amber-600 mt-0.5">
-                              → {PLAN_LABELS[(tenant as unknown as { pendingPlanId?: string }).pendingPlanId!] ?? (tenant as unknown as { pendingPlanId?: string }).pendingPlanId}
+                              → {PLAN_LABELS[tenant.pendingPlanId] ?? tenant.pendingPlanId}
                             </div>
                           )}
                         </td>
