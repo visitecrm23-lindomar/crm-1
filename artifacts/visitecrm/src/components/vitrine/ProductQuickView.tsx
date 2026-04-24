@@ -306,15 +306,19 @@ export function ProductQuickView({
           )}
 
           {product.shortDescription && (
-            <p className="text-sm text-muted-foreground">{product.shortDescription}</p>
+            <div
+              className="text-sm text-muted-foreground prose prose-sm max-w-none"
+              dangerouslySetInnerHTML={{ __html: product.shortDescription }}
+            />
           )}
 
           {product.description && (
             <div>
               <h3 className="text-sm font-semibold mb-1.5">Sobre a Viagem</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap line-clamp-6">
-                {product.description}
-              </p>
+              <div
+                className="text-sm text-muted-foreground leading-relaxed prose prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ __html: product.description }}
+              />
             </div>
           )}
 
