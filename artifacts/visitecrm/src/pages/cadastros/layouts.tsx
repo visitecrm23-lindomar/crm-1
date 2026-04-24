@@ -189,6 +189,129 @@ const TEMPLATES: LayoutTemplate[] = [
       return cells;
     },
   },
+  // ─── Novos templates ──────────────────────────────────────────────────────
+  {
+    name: "Convencional 50 (2x2)",
+    rows: 13,
+    cols: 4,
+    floors: 1,
+    numberingType: "sequential",
+    vehicleType: "Ônibus",
+    generate: (rows, cols) => {
+      const cells: LayoutCell[] = [];
+      let seatNum = 1;
+      for (let r = 1; r <= rows; r++) {
+        for (let c = 1; c <= cols; c++) {
+          const isLastRow = r === rows;
+          const type: CellType = (isLastRow && (c === 1 || c === 2)) ? "wc" : "seat";
+          const label = type === "seat" ? String(seatNum++) : undefined;
+          cells.push({ row: r, col: c, floor: 1, type, ...(label ? { label } : {}) });
+        }
+      }
+      return cells;
+    },
+  },
+  {
+    name: "Executivo 46 (2x2 VIP)",
+    rows: 12,
+    cols: 4,
+    floors: 1,
+    numberingType: "sequential",
+    vehicleType: "Ônibus",
+    generate: (rows, cols) => {
+      const cells: LayoutCell[] = [];
+      let seatNum = 1;
+      for (let r = 1; r <= rows; r++) {
+        for (let c = 1; c <= cols; c++) {
+          const isLastRow = r === rows;
+          const isFirstRow = r === 1;
+          const type: CellType = (isLastRow && (c === 1 || c === 2)) ? "wc"
+            : isFirstRow ? "vip"
+            : "seat";
+          const label = (type === "seat" || type === "vip") ? String(seatNum++) : undefined;
+          cells.push({ row: r, col: c, floor: 1, type, ...(label ? { label } : {}) });
+        }
+      }
+      return cells;
+    },
+  },
+  {
+    name: "Semi-Leito 44 (2x2)",
+    rows: 11,
+    cols: 4,
+    floors: 1,
+    numberingType: "sequential",
+    vehicleType: "Ônibus",
+    generate: (rows, cols) => {
+      const cells: LayoutCell[] = [];
+      let seatNum = 1;
+      for (let r = 1; r <= rows; r++) {
+        for (let c = 1; c <= cols; c++) {
+          cells.push({ row: r, col: c, floor: 1, type: "seat", label: String(seatNum++) });
+        }
+      }
+      return cells;
+    },
+  },
+  {
+    name: "DD Semi-Leito 56 (Sup 46 + Inf 10)",
+    rows: 12,
+    cols: 4,
+    floors: 2,
+    numberingType: "sequential",
+    vehicleType: "Ônibus",
+    generate: (_rows, _cols) => {
+      const cells: LayoutCell[] = [];
+      let seatNum = 1;
+      for (let r = 1; r <= 12; r++) {
+        for (let c = 1; c <= 4; c++) {
+          const isStairs = r === 4 && (c === 3 || c === 4);
+          const type: CellType = isStairs ? "stairs" : "seat";
+          const label = type === "seat" ? String(seatNum++) : undefined;
+          cells.push({ row: r, col: c, floor: 2, type, ...(label ? { label } : {}) });
+        }
+      }
+      for (let r = 1; r <= 4; r++) {
+        for (let c = 1; c <= 4; c++) {
+          const isWc = r === 4 && (c === 1 || c === 2);
+          const type: CellType = isWc ? "wc" : "seat";
+          const label = type === "seat" ? String(seatNum++) : undefined;
+          cells.push({ row: r, col: c, floor: 1, type, ...(label ? { label } : {}) });
+        }
+      }
+      return cells;
+    },
+  },
+  {
+    name: "DD Executivo 51 (Sup 46 + Inf 5)",
+    rows: 12,
+    cols: 4,
+    floors: 2,
+    numberingType: "sequential",
+    vehicleType: "Ônibus",
+    generate: (_rows, _cols) => {
+      const cells: LayoutCell[] = [];
+      let seatNum = 1;
+      for (let r = 1; r <= 12; r++) {
+        for (let c = 1; c <= 4; c++) {
+          const isStairs = r === 4 && (c === 3 || c === 4);
+          const isVip = r === 1;
+          const type: CellType = isStairs ? "stairs" : isVip ? "vip" : "seat";
+          const label = (type === "seat" || type === "vip") ? String(seatNum++) : undefined;
+          cells.push({ row: r, col: c, floor: 2, type, ...(label ? { label } : {}) });
+        }
+      }
+      for (let r = 1; r <= 3; r++) {
+        for (let c = 1; c <= 3; c++) {
+          const isWc = r === 3 && c === 3;
+          const type: CellType = isWc ? "wc" : "seat";
+          const label = type === "seat" ? String(seatNum++) : undefined;
+          cells.push({ row: r, col: c, floor: 1, type, ...(label ? { label } : {}) });
+        }
+      }
+      return cells;
+    },
+  },
 ];
 
 function generateDefaultCells(rows: number, cols: number, existing: LayoutCell[] = [], floors = 1): LayoutCell[] {

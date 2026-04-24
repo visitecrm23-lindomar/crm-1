@@ -239,6 +239,207 @@ function ProductCard({ product, store }: { product: StoreProduct; store: PublicS
   );
 }
 
+type PublicSeatEntry = {
+  number: string;
+  row: number;
+  col: number;
+  floor: number;
+  type: string;
+  status: string;
+};
+
+const CLICKABLE_SEAT_TYPES = ["seat", "vip", "accessible"];
+const NON_SEAT_TYPES_PUB = ["wc", "stairs", "fridge", "blocked", "empty"];
+
+function getCellIconPub(type: string, label?: string): string {
+  switch (type) {
+    case "wc": return "🚽";
+    case "stairs": return "🪜";
+    case "fridge": return "🧊";
+    case "blocked": return "✕";
+    case "vip": return label ?? "★";
+    default: return label ?? "";
+  }
+}
+
+function PublicLayoutSeatPicker({
+  seats,
+  totalSeats,
+  layout,
+  floors,
+  qty,
+  selected,
+  onToggle,
+  accentColor,
+}: {
+  seats: PublicSeatEntry[];
+  totalSeats: number;
+  layout: string;
+  floors: number;
+  qty: number;
+  selected: string[];
+  onToggle: (n: string) => void;
+  accentColor?: string;
+}) {
+  const accent = accentColor || "#f97316";
+  const isMultiFloor = floors > 1;
+  const [activeFloor, setActiveFloor] = useState<number>(isMultiFloor ? 2 : 1);
+
+  const availableCount = seats.filter(
+    s => CLICKABLE_SEAT_TYPES.includes(s.type) && s.status === "available"
+  ).length;
+
+  const floorCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    for (let f = 1; f <= floors; f++) {
+      counts[f] = seats.filter(
+        s => s.floor === f && CLICKABLE_SEAT_TYPES.includes(s.type) && s.status === "available"
+      ).length;
+    }
+    return counts;
+  }, [seats, floors]);
+
+  const activeSeats = useMemo(
+    () => [...seats.filter(s => s.floor === activeFloor)].sort((a, b) =>
+      a.row !== b.row ? a.row - b.row : a.col - b.col
+    ),
+    [seats, activeFloor]
+  );
+
+  const maxRow = Math.max(...activeSeats.map(s => s.row), 0);
+  const maxCol = Math.max(...activeSeats.map(s => s.col), 4);
+  const aisleAfterCol = Math.ceil(maxCol / 2);
+
+  function SeatCell({ seat }: { seat: PublicSeatEntry }) {
+    const isNonSeat = NON_SEAT_TYPES_PUB.includes(seat.type);
+    const isOccupied = !isNonSeat && seat.status !== "available";
+    const isSelected = selected.includes(seat.number);
+    const canSelect = !isNonSeat && !isOccupied && (isSelected || selected.length < qty);
+    const isClickable = CLICKABLE_SEAT_TYPES.includes(seat.type) && !isOccupied;
+
+    let cls = "relative w-10 h-10 rounded-lg border-2 flex items-center justify-center text-xs font-bold transition-all select-none ";
+    let style: React.CSSProperties = {};
+
+    if (isNonSeat) {
+      if (seat.type === "wc") cls += "border-cyan-200 bg-cyan-50 text-cyan-600 cursor-not-allowed";
+      else if (seat.type === "stairs") cls += "border-purple-200 bg-purple-50 text-purple-600 cursor-not-allowed";
+      else cls += "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed";
+    } else if (isSelected) {
+      cls += "border-transparent text-white cursor-pointer";
+      style = { backgroundColor: accent, borderColor: accent };
+    } else if (isOccupied) {
+      cls += "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed";
+    } else if (canSelect) {
+      if (seat.type === "vip") cls += "border-yellow-400 bg-yellow-50 text-yellow-800 hover:bg-yellow-100 cursor-pointer";
+      else cls += "border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50 cursor-pointer";
+    } else {
+      cls += "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed";
+    }
+
+    const icon = isSelected ? "✓" : getCellIconPub(seat.type, seat.number);
+
+    if (isNonSeat) {
+      return <div className={cls} style={style} title={seat.type}>{icon}</div>;
+    }
+    return (
+      <button
+        type="button"
+        className={cls}
+        style={style}
+        onClick={() => isClickable && canSelect && onToggle(seat.number)}
+        disabled={!isClickable || (!canSelect && !isSelected)}
+        title={isOccupied ? `Assento ${seat.number} — Ocupado` : `Assento ${seat.number}`}
+      >
+        {icon}
+        {isSelected && (
+          <span className="absolute top-0.5 right-0.5">
+            <Check className="w-2.5 h-2.5 text-white" />
+          </span>
+        )}
+      </button>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2 text-xs text-muted-foreground">
+        <span className="font-medium text-foreground/70">
+          {isMultiFloor ? "Double Decker" : `Layout: ${layout === "2x1" ? "2x1 Premium" : "2x2 Padrão"}`}
+        </span>
+        <span>
+          <strong className="text-foreground">{availableCount}</strong> disponíveis &middot; {totalSeats} total
+        </span>
+      </div>
+
+      {isMultiFloor && (
+        <div className="flex gap-2 mb-3">
+          {[2, 1].map(f => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setActiveFloor(f)}
+              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                activeFloor === f
+                  ? "text-white border-transparent"
+                  : "bg-muted/50 text-muted-foreground border-gray-200 hover:border-gray-400"
+              }`}
+              style={activeFloor === f ? { backgroundColor: accent } : {}}
+            >
+              {f === 2 ? "🏢 Piso Superior" : "🚌 Piso Inferior"}
+              <span className="ml-1 opacity-75">({floorCounts[f] ?? 0} disp.)</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center gap-4 text-xs text-muted-foreground mb-3 flex-wrap">
+        <span className="flex items-center gap-1.5">
+          <span className="w-4 h-4 rounded border-2 border-gray-300 bg-white inline-block" />
+          Disponível
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-4 h-4 rounded border-2 border-gray-200 bg-gray-100 inline-block" />
+          Ocupado
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-4 h-4 rounded inline-block" style={{ backgroundColor: accent }} />
+          Selecionado
+        </span>
+      </div>
+
+      <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+        <div className="bg-gray-800 text-white text-xs font-bold py-2.5 text-center tracking-[0.15em]">
+          {isMultiFloor ? (activeFloor === 2 ? "🏢 PISO SUPERIOR — FRENTE" : "🚌 PISO INFERIOR — FRENTE") : "FRENTE DO ÔNIBUS"}
+        </div>
+        <div className="bg-gray-50 p-3 space-y-1.5">
+          {Array.from({ length: maxRow }, (_, rowIdx) => {
+            const rowNum = rowIdx + 1;
+            const rowSeats = activeSeats.filter(s => s.row === rowNum);
+            const leftSeats = rowSeats.filter(s => s.col <= aisleAfterCol);
+            const rightSeats = rowSeats.filter(s => s.col > aisleAfterCol);
+            return (
+              <div key={rowNum} className="flex items-center justify-center gap-1">
+                <div className="flex gap-1">
+                  {leftSeats.map(s => <SeatCell key={s.number} seat={s} />)}
+                </div>
+                <div className="w-6 flex items-center justify-center text-gray-300 text-sm font-light select-none">|</div>
+                <div className="flex gap-1">
+                  {rightSeats.map(s => <SeatCell key={s.number} seat={s} />)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground text-center mt-3">
+        Selecione exatamente {qty} assento{qty !== 1 ? "s" : ""} para continuar
+        {" "}({selected.length}/{qty} selecionado{qty !== 1 ? "s" : ""})
+      </p>
+    </div>
+  );
+}
+
 function SeatGrid({
   totalCapacity,
   occupiedSeats,
@@ -366,7 +567,7 @@ function Voucher({
   product: StoreProduct;
   store: PublicStore;
   customerName: string;
-  seats: number[];
+  seats: (number | string)[];
   paymentMethod: string;
 }) {
   const startDate = product.departureDate ?? product.startDate;
@@ -569,6 +770,16 @@ export default function ReservationWizard({
   const [couponResult, setCouponResult] = useState<CouponValidation | null>(null);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
   const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
+  const [layoutSeats, setLayoutSeats] = useState<string[]>([]);
+  const [layoutSeatMap, setLayoutSeatMap] = useState<{
+    tripId: string;
+    layout: string;
+    floors: number;
+    totalSeats: number;
+    cols: number;
+    seats: PublicSeatEntry[];
+  } | null>(null);
+  const [loadingLayoutMap, setLoadingLayoutMap] = useState(false);
 
   const [referralCode, setReferralCode] = useState(() => localStorage.getItem("referral_code") ?? "");
   const [referralApplied, setReferralApplied] = useState(false);
@@ -582,6 +793,16 @@ export default function ReservationWizard({
       .catch(() => setNotFound(true))
       .finally(() => setLoadingProduct(false));
   }, [slug, productSlug]);
+
+  useEffect(() => {
+    if (!product?.tripId) { setLayoutSeatMap(null); return; }
+    setLoadingLayoutMap(true);
+    publicStoreApi
+      .getTripSeatMap(slug, product.tripId)
+      .then((data) => setLayoutSeatMap(data))
+      .catch(() => setLayoutSeatMap(null))
+      .finally(() => setLoadingLayoutMap(false));
+  }, [slug, product?.tripId]);
 
   // Auto-apply referral code from localStorage
   useEffect(() => {
@@ -611,6 +832,8 @@ export default function ReservationWizard({
 
   const showSeatGrid =
     product?.totalCapacity != null && product.totalCapacity > 0 && product.totalCapacity <= 60;
+
+  const effectiveSeats: string[] = layoutSeatMap ? layoutSeats : selectedSeats.map(String);
 
   const maxSeats = (() => {
     if (product?.availableSeats != null) return product.availableSeats;
@@ -695,6 +918,7 @@ export default function ReservationWizard({
   }
 
   function canProceedFromAssento() {
+    if (layoutSeatMap) return layoutSeats.length === qty;
     if (showSeatGrid) return selectedSeats.length === qty;
     return true;
   }
@@ -708,8 +932,8 @@ export default function ReservationWizard({
     setSubmitting(true);
     try {
       const seatNotes =
-        selectedSeats.length > 0
-          ? `Assentos selecionados: ${selectedSeats.join(", ")}.`
+        effectiveSeats.length > 0
+          ? `Assentos selecionados: ${effectiveSeats.join(", ")}.`
           : showSeatGrid
           ? ""
           : `${qty} vaga(s) reservada(s).`;
@@ -742,7 +966,7 @@ export default function ReservationWizard({
         referralCookieId: referralApplied ? (localStorage.getItem("referral_server_cookie_id") ?? undefined) : undefined,
         paymentMethod: form.paymentMethod,
         notes: extraNotes || undefined,
-        seats: selectedSeats.length > 0 ? selectedSeats.map(String) : undefined,
+        seats: effectiveSeats.length > 0 ? effectiveSeats : undefined,
       });
       setCompletedOrder({
         orderNumber: order.orderNumber,
@@ -868,11 +1092,11 @@ export default function ReservationWizard({
                   <p className="text-muted-foreground text-xs">Passageiros</p>
                   <p className="font-semibold">{qty} passageiro{qty !== 1 ? "s" : ""}</p>
                 </div>
-                {selectedSeats.length > 0 && (
+                {effectiveSeats.length > 0 && (
                   <div>
                     <p className="text-muted-foreground text-xs mb-1">Assentos</p>
                     <div className="flex flex-wrap gap-1.5">
-                      {selectedSeats.map((s) => (
+                      {effectiveSeats.map((s) => (
                         <span
                           key={s}
                           className="px-2.5 py-1 rounded-full text-white text-xs font-semibold"
@@ -981,7 +1205,7 @@ export default function ReservationWizard({
             product={product}
             store={store}
             customerName={form.customerName}
-            seats={selectedSeats}
+            seats={effectiveSeats}
             paymentMethod={form.paymentMethod}
           />
 
@@ -1176,6 +1400,7 @@ export default function ReservationWizard({
                 onChange={(e) => {
                   setQty(Number(e.target.value));
                   setSelectedSeats([]);
+                  setLayoutSeats([]);
                 }}
                 disabled={isSoldOut}
                 className="w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-white"
@@ -1271,7 +1496,7 @@ export default function ReservationWizard({
               </div>
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => { setQty((q) => Math.max(1, q - 1)); setSelectedSeats([]); }}
+                  onClick={() => { setQty((q) => Math.max(1, q - 1)); setSelectedSeats([]); setLayoutSeats([]); }}
                   className="w-8 h-8 rounded-full border flex items-center justify-center text-lg font-bold hover:bg-muted transition-colors"
                   disabled={qty <= 1}
                 >
@@ -1279,7 +1504,7 @@ export default function ReservationWizard({
                 </button>
                 <span className="w-8 text-center font-bold text-lg">{qty}</span>
                 <button
-                  onClick={() => { setQty((q) => Math.min(maxSeats, q + 1)); setSelectedSeats([]); }}
+                  onClick={() => { setQty((q) => Math.min(maxSeats, q + 1)); setSelectedSeats([]); setLayoutSeats([]); }}
                   className="w-8 h-8 rounded-full border flex items-center justify-center text-lg font-bold hover:bg-muted transition-colors"
                   disabled={qty >= maxSeats}
                 >
@@ -1445,22 +1670,43 @@ export default function ReservationWizard({
                 </span>
               </div>
 
-              <SeatGrid
-                totalCapacity={product.totalCapacity}
-                occupiedSeats={occupiedSeats}
-                qty={qty}
-                selected={selectedSeats}
-                onToggle={toggleSeat}
-                accentColor={store?.accentColor || store?.primaryColor}
-              />
+              {layoutSeatMap ? (
+                loadingLayoutMap ? (
+                  <div className="flex items-center justify-center py-8 text-muted-foreground text-sm gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Carregando mapa de assentos…
+                  </div>
+                ) : (
+                  <PublicLayoutSeatPicker
+                    seats={layoutSeatMap.seats}
+                    totalSeats={layoutSeatMap.totalSeats}
+                    layout={layoutSeatMap.layout}
+                    floors={layoutSeatMap.floors}
+                    qty={qty}
+                    selected={layoutSeats}
+                    onToggle={(n) => setLayoutSeats((prev) =>
+                      prev.includes(n) ? prev.filter(s => s !== n) : prev.length < qty ? [...prev, n] : prev
+                    )}
+                    accentColor={store?.accentColor || store?.primaryColor}
+                  />
+                )
+              ) : (
+                <SeatGrid
+                  totalCapacity={product.totalCapacity}
+                  occupiedSeats={occupiedSeats}
+                  qty={qty}
+                  selected={selectedSeats}
+                  onToggle={toggleSeat}
+                  accentColor={store?.accentColor || store?.primaryColor}
+                />
+              )}
 
               <div className="border rounded-xl p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground mb-2">Assentos Selecionados</p>
                     <div className="flex flex-wrap gap-1.5">
-                      {selectedSeats.length > 0 ? (
-                        selectedSeats.map((s) => (
+                      {effectiveSeats.length > 0 ? (
+                        effectiveSeats.map((s) => (
                           <span
                             key={s}
                             className="px-2.5 py-1 rounded-full text-white text-xs font-semibold"
@@ -1480,7 +1726,7 @@ export default function ReservationWizard({
                       className="text-2xl font-bold"
                       style={{ color: store.accentColor || store.primaryColor }}
                     >
-                      {selectedSeats.length} / {qty}
+                      {effectiveSeats.length} / {qty}
                     </p>
                   </div>
                 </div>
@@ -1660,11 +1906,11 @@ export default function ReservationWizard({
                   <span className="text-muted-foreground">Passageiros</span>
                   <span className="font-medium">{qty}</span>
                 </div>
-                {selectedSeats.length > 0 && (
+                {effectiveSeats.length > 0 && (
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Assentos</p>
                     <div className="flex flex-wrap gap-1">
-                      {selectedSeats.map((s) => (
+                      {effectiveSeats.map((s) => (
                         <span
                           key={s}
                           className="px-1.5 py-0.5 rounded text-white text-xs font-semibold"

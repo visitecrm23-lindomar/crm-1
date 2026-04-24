@@ -16,7 +16,7 @@ import { ptBR } from "date-fns/locale";
 import { z } from "zod";
 import PDFDocument from "pdfkit";
 
-type SeatMapEntry = { row: number; col: number; status: string; type?: string };
+type SeatMapEntry = { row: number; col: number; floor?: number; status: string; type?: string };
 
 function generateSeatMapFromLayout(
   cells: LayoutCell[],
@@ -74,13 +74,13 @@ function generateSeatMapFromLayout(
     const k = keyOf(cell);
     if (seatTypes.includes(cell.type as (typeof seatTypes)[number])) {
       const label = cell.label || seatLabels.get(k) || String(cells.indexOf(cell) + 1);
-      seatMap[label] = { row: cell.row, col: cell.col, status: "available", type: cell.type };
+      seatMap[label] = { row: cell.row, col: cell.col, floor: cell.floor ?? 1, status: "available", type: cell.type };
     } else {
       nonSeatCounters[cell.type] = (nonSeatCounters[cell.type] ?? 0) + 1;
       const n = nonSeatCounters[cell.type];
       const prefix = typePrefix[cell.type] ?? cell.type.toUpperCase();
       const label = `${prefix}${n > 1 ? n : ""}`;
-      seatMap[label] = { row: cell.row, col: cell.col, status: cell.type, type: cell.type };
+      seatMap[label] = { row: cell.row, col: cell.col, floor: cell.floor ?? 1, status: cell.type, type: cell.type };
     }
   }
 
@@ -502,11 +502,12 @@ router.get("/trips/:id/seat-map", async (req, res): Promise<void> => {
       }
     }
 
-    const seatMap = trip.seatMap as Record<string, { row: number; col: number; status: string; type?: string }>;
+    const seatMap = trip.seatMap as Record<string, { row: number; col: number; floor?: number; status: string; type?: string }>;
     const seats = Object.entries(seatMap).map(([num, data]) => ({
       number: num,
       row: data.row,
       col: data.col,
+      floor: data.floor ?? 1,
       type: data.type ?? "seat",
       status: occupiedSeats[num]
         ? occupiedSeats[num].seatStatus
@@ -516,9 +517,11 @@ router.get("/trips/:id/seat-map", async (req, res): Promise<void> => {
     }));
 
     const maxCol = Math.max(...seats.map(s => s.col), 4);
+    const maxFloor = Math.max(...seats.map(s => s.floor ?? 1), 1);
     res.json({
       tripId: trip.id,
       layout: trip.seatLayout ?? "2x2",
+      floors: maxFloor,
       totalSeats: trip.totalCapacity,
       cols: maxCol,
       seats,

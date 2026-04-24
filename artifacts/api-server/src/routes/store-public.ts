@@ -328,6 +328,67 @@ router.get("/public/store/:slug/products/:productSlug", async (req, res): Promis
   }
 });
 
+router.get("/public/store/:slug/trips/:tripId/seat-map", async (req, res): Promise<void> => {
+  try {
+    const store = await getActiveStore(req.params.slug);
+    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+
+    const [trip] = await db.select({
+      id: tripsTable.id,
+      seatMap: tripsTable.seatMap,
+      seatLayout: tripsTable.seatLayout,
+      totalCapacity: tripsTable.totalCapacity,
+      tenantId: tripsTable.tenantId,
+    }).from(tripsTable)
+      .where(and(
+        eq(tripsTable.id, req.params.tripId),
+        eq(tripsTable.tenantId, store.tenantId),
+      )).limit(1);
+
+    if (!trip) { res.status(404).json({ error: "Trip not found" }); return; }
+
+    const ACTIVE_STATUSES = ["pending", "confirmed"] as const;
+    const reservations = await db.select({ seats: reservationsTable.seats, status: reservationsTable.status })
+      .from(reservationsTable)
+      .where(and(
+        eq(reservationsTable.tripId, trip.id),
+        eq(reservationsTable.tenantId, store.tenantId),
+        inArray(reservationsTable.status, [...ACTIVE_STATUSES]),
+      ));
+
+    const occupiedSeats: Record<string, string> = {};
+    for (const r of reservations) {
+      const seatStatus = r.status === "confirmed" ? "confirmed" : "reserved";
+      for (const seat of r.seats) occupiedSeats[seat] = seatStatus;
+    }
+
+    const seatMap = trip.seatMap as Record<string, { row: number; col: number; floor?: number; status: string; type?: string }>;
+    const seats = Object.entries(seatMap).map(([num, data]) => ({
+      number: num,
+      row: data.row,
+      col: data.col,
+      floor: data.floor ?? 1,
+      type: data.type ?? "seat",
+      status: occupiedSeats[num]
+        ?? (data.type && !["seat", "vip", "accessible"].includes(data.type) ? data.type : "available"),
+    }));
+
+    const maxCol = Math.max(...seats.map(s => s.col), 4);
+    const maxFloor = Math.max(...seats.map(s => s.floor ?? 1), 1);
+    res.json({
+      tripId: trip.id,
+      layout: trip.seatLayout ?? "2x2",
+      floors: maxFloor,
+      totalSeats: trip.totalCapacity,
+      cols: maxCol,
+      seats,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error fetching public seat map");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 const CreateOrderBody = z.object({
   customerName: z.string().min(1),
   customerEmail: z.string().email(),

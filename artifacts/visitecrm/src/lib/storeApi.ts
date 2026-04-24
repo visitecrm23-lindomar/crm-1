@@ -201,6 +201,22 @@ export const publicStoreApi = {
       `/public/store/${slug}/reviews`,
       data
     ),
+  getTripSeatMap: (slug: string, tripId: string) =>
+    publicReq<{
+      tripId: string;
+      layout: string;
+      floors: number;
+      totalSeats: number;
+      cols: number;
+      seats: Array<{
+        number: string;
+        row: number;
+        col: number;
+        floor: number;
+        type: string;
+        status: string;
+      }>;
+    }>("GET", `/public/store/${slug}/trips/${tripId}/seat-map`),
   validateReferral: (slug: string, code: string) =>
     publicReq<ReferralValidation>("POST", `/public/store/${slug}/referral/validate`, { code }),
   getReferralInfo: (slug: string, code: string) =>
