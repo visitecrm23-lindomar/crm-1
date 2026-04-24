@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import {
   useListLayouts,
   useCreateLayout,
@@ -970,6 +970,11 @@ function LayoutCard({
   const cells = layout.cells as LayoutCell[];
   const floors = layout.floors ?? 1;
   const [previewFloor, setPreviewFloor] = useState(floors > 1 ? 2 : 1);
+
+  useEffect(() => {
+    if (previewFloor > floors) setPreviewFloor(1);
+  }, [floors, previewFloor]);
+
   const aisleAfterCol = Math.ceil(layout.cols / 2);
   const cellSize = Math.min(18, Math.floor(140 / layout.cols));
   const maxRows = Math.min(layout.rows, 12);
