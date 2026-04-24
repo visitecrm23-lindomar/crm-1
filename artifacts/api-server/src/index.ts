@@ -514,15 +514,28 @@ async function runMigrations() {
       END $$;
     `);
 
-    // Idempotent seed: ensure Starter/Pro/Enterprise plans exist in the DB.
-    // ON CONFLICT (slug) DO NOTHING — safe to run on every startup.
+    // Idempotent seed: ensure Starter/Pro/Enterprise plans exist in the DB with correct limits.
+    // ON CONFLICT (slug) DO UPDATE — re-applies correct values on every startup to prevent drift.
     await client.query(`
       INSERT INTO plans (id, name, slug, description, monthly_price, annual_price, max_users, max_clients, max_trips, features, is_active, is_featured, sort_order, trial_days, payment_required)
       VALUES
-        ('plan_starter',   'Starter',    'starter',    'Para agências iniciantes',     0,   0,    3,  500,   20,  '["Até 3 usuários","500 clientes","20 viagens"]',                                         true,  false, 1, 0,  false),
-        ('plan_pro',       'Pro',        'pro',        'Para agências em crescimento', 97,  970,  10, 2000,  100, '["Até 10 usuários","2000 clientes","100 viagens","Suporte prioritário"]',              true,  true,  2, 14, true),
-        ('plan_enterprise','Enterprise', 'enterprise', 'Para grandes operadoras',     397, 3970, 50, 10000, 500, '["Usuários ilimitados","10000 clientes","500 viagens","Suporte dedicado"]', true,  false, 3, 14, true)
-      ON CONFLICT (slug) DO NOTHING;
+        ('plan_starter',   'Starter',    'starter',    'Para agências iniciantes',     0,   0,    3,   500,  20,  '["Até 3 usuários","500 clientes","20 viagens"]',                                       true,  false, 1, 0,  false),
+        ('plan_pro',       'Pro',        'pro',        'Para agências em crescimento', 97,  970,  10,  500, 100, '["Até 10 usuários","500 clientes","100 viagens","Suporte prioritário"]',                true,  true,  2, 14, true),
+        ('plan_enterprise','Enterprise', 'enterprise', 'Para grandes operadoras',     397, 3970, 50, 5000, 500, '["Usuários ilimitados","5000 clientes","500 viagens","Suporte dedicado"]',              true,  false, 3, 14, true)
+      ON CONFLICT (slug) DO UPDATE SET
+        name = EXCLUDED.name,
+        description = EXCLUDED.description,
+        monthly_price = EXCLUDED.monthly_price,
+        annual_price = EXCLUDED.annual_price,
+        max_users = EXCLUDED.max_users,
+        max_clients = EXCLUDED.max_clients,
+        max_trips = EXCLUDED.max_trips,
+        features = EXCLUDED.features,
+        is_active = EXCLUDED.is_active,
+        is_featured = EXCLUDED.is_featured,
+        sort_order = EXCLUDED.sort_order,
+        trial_days = EXCLUDED.trial_days,
+        payment_required = EXCLUDED.payment_required;
     `);
 
     logger.info("Startup migrations complete");
