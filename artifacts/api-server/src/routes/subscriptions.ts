@@ -5,6 +5,7 @@ import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { generatePixEMV, generatePixQrCodeUrl } from "../lib/pix";
+import { persistUsageSnapshot } from "../lib/planLimits";
 
 const router = Router();
 
@@ -235,8 +236,10 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
 
     await db.update(tenantsTable)
-      .set({ status: "pending_payment", updatedAt: now })
+      .set({ status: "pending_payment", pendingPlanId: newPlan.slug, updatedAt: now })
       .where(eq(tenantsTable.id, me.tenantId));
+
+    void persistUsageSnapshot(me.tenantId);
 
     await db.insert(subscriptionsTable).values({
       id: generateId(),
@@ -437,6 +440,7 @@ async function activateInvoicePlan(
     if (plan) {
       await db.update(tenantsTable).set({
         planId: plan.slug,
+        pendingPlanId: null,
         status: "active",
         updatedAt: new Date(),
       }).where(eq(tenantsTable.id, tenantId));

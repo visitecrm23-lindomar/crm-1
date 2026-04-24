@@ -437,8 +437,10 @@ function Router() {
       {/* Seller dashboard */}
       <Route path="/meu-painel" component={() => <VendedorRoute component={MeuPainel} />} />
 
-      {/* Legacy redirect */}
+      {/* Legacy redirects */}
       <Route path="/settings" component={() => <Redirect to="/configuracoes" />} />
+      <Route path="/billing" component={() => <Redirect to="/configuracoes?tab=plan" />} />
+      <Route path="/settings/billing" component={() => <Redirect to="/configuracoes?tab=plan" />} />
 
       {/* Super Admin */}
       <Route path="/admin" component={() => <AdminRoute component={AdminDashboard} />} />

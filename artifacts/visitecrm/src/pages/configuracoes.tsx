@@ -1674,7 +1674,7 @@ export default function Configuracoes() {
         <p className="text-sm text-muted-foreground">Gerencie as configurações da sua agência</p>
       </div>
 
-      <Tabs defaultValue="agency">
+      <Tabs defaultValue={new URLSearchParams(window.location.search).get("tab") ?? "agency"}>
         <TabsList className="flex flex-wrap gap-1 h-auto">
           <TabsTrigger value="agency" className="flex items-center gap-1.5">
             <Building2 className="w-3.5 h-3.5" />

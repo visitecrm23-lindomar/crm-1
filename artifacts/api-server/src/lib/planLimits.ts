@@ -3,7 +3,7 @@ import { eq, or, count, and, desc } from "drizzle-orm";
 import type { Request, Response } from "express";
 import { randomUUID } from "crypto";
 
-async function persistUsageSnapshot(tenantId: string): Promise<void> {
+export async function persistUsageSnapshot(tenantId: string): Promise<void> {
   try {
     const [[userRow], [clientRow], [tripRow]] = await Promise.all([
       db.select({ cnt: count() }).from(usersTable).where(eq(usersTable.tenantId, tenantId)),

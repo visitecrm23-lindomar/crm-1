@@ -18,6 +18,7 @@ export const tenantsTable = pgTable("tenants", {
   primaryColor: text("primary_color").default("#3B82F6"),
   secondaryColor: text("secondary_color").default("#10B981"),
   planId: text("plan_id").notNull().default("starter"),
+  pendingPlanId: text("pending_plan_id"),
   status: text("status").notNull().default("trial"),
   suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   suspensionReason: text("suspension_reason"),
