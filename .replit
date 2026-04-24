@@ -63,6 +63,7 @@ expertMode = true
 
   [userenv.shared]
   VITE_UPLOADTHING_URL = "/api/uploadthing"
+SUPERADMIN_CLERK_ID = "user_3BxZQjJcO6wyIcaiDIe678ikmnba"
 
   [userenv.development]
   CLERK_PROXY_URL = "https://visite-crm.replit.app/api/__clerk"
