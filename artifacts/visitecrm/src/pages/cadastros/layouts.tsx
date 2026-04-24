@@ -738,10 +738,10 @@ function LayoutEditorModal({
       const maxRows = Math.max(...Object.values(newFloorDims).map(d => d.rows));
       const maxCols = Math.max(...Object.values(newFloorDims).map(d => d.cols));
       let newNumberingType = f.numberingType;
-      if (newFloors > 1 && f.floors === 1) {
+      if (newFloors > 1) {
         if (f.numberingType === "sequential") newNumberingType = "sequential_upper_first";
         else if (f.numberingType === "by_row") newNumberingType = "by_row_upper_first";
-      } else if (newFloors === 1 && f.floors > 1) {
+      } else if (newFloors === 1) {
         if (f.numberingType === "sequential_upper_first") newNumberingType = "sequential";
         else if (f.numberingType === "by_row_upper_first") newNumberingType = "by_row";
       }
