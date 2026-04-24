@@ -257,7 +257,7 @@ function getCellIconPub(type: string, label?: string): string {
     case "stairs": return "🪜";
     case "fridge": return "🧊";
     case "blocked": return "✕";
-    case "vip": return label ?? "★";
+    case "vip": return "⭐";
     default: return label ?? "";
   }
 }
@@ -1670,25 +1670,23 @@ export default function ReservationWizard({
                 </span>
               </div>
 
-              {layoutSeatMap ? (
-                loadingLayoutMap ? (
-                  <div className="flex items-center justify-center py-8 text-muted-foreground text-sm gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Carregando mapa de assentos…
-                  </div>
-                ) : (
-                  <PublicLayoutSeatPicker
-                    seats={layoutSeatMap.seats}
-                    totalSeats={layoutSeatMap.totalSeats}
-                    layout={layoutSeatMap.layout}
-                    floors={layoutSeatMap.floors}
-                    qty={qty}
-                    selected={layoutSeats}
-                    onToggle={(n) => setLayoutSeats((prev) =>
-                      prev.includes(n) ? prev.filter(s => s !== n) : prev.length < qty ? [...prev, n] : prev
-                    )}
-                    accentColor={store?.accentColor || store?.primaryColor}
-                  />
-                )
+              {loadingLayoutMap ? (
+                <div className="flex items-center justify-center py-8 text-muted-foreground text-sm gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Carregando mapa de assentos…
+                </div>
+              ) : layoutSeatMap ? (
+                <PublicLayoutSeatPicker
+                  seats={layoutSeatMap.seats}
+                  totalSeats={layoutSeatMap.totalSeats}
+                  layout={layoutSeatMap.layout}
+                  floors={layoutSeatMap.floors}
+                  qty={qty}
+                  selected={layoutSeats}
+                  onToggle={(n) => setLayoutSeats((prev) =>
+                    prev.includes(n) ? prev.filter(s => s !== n) : prev.length < qty ? [...prev, n] : prev
+                  )}
+                  accentColor={store?.accentColor || store?.primaryColor}
+                />
               ) : (
                 <SeatGrid
                   totalCapacity={product.totalCapacity}
