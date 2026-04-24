@@ -6,7 +6,18 @@ import { eq } from "drizzle-orm";
 
 const GOOGLE_CLIENT_ID = process.env["GOOGLE_CLIENT_ID"] ?? "";
 const GOOGLE_CLIENT_SECRET = process.env["GOOGLE_CLIENT_SECRET"] ?? "";
-const GOOGLE_REDIRECT_URI = process.env["GOOGLE_CALENDAR_REDIRECT_URI"] ?? "";
+
+function getRedirectUri(): string {
+  if (process.env["GOOGLE_CALENDAR_REDIRECT_URI"]) {
+    return process.env["GOOGLE_CALENDAR_REDIRECT_URI"];
+  }
+  const domain = process.env["REPLIT_DEV_DOMAIN"];
+  if (domain) {
+    return `https://${domain}/api/calendar/callback`;
+  }
+  return "http://localhost:8080/api/calendar/callback";
+}
+
 function getStateSecret(): string {
   const s = process.env["CLERK_SECRET_KEY"];
   if (!s) throw new Error("CLERK_SECRET_KEY is required for Google Calendar OAuth state signing");
@@ -14,7 +25,7 @@ function getStateSecret(): string {
 }
 
 export function createOAuth2Client() {
-  return new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI);
+  return new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, getRedirectUri());
 }
 
 function signState(userId: string, nonce: string): string {
