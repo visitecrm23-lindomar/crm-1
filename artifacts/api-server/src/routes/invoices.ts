@@ -36,16 +36,22 @@ router.get("/admin/invoices", async (req, res): Promise<void> => {
       id: invoicesTable.id,
       tenantId: invoicesTable.tenantId,
       planId: invoicesTable.planId,
+      invoiceNumber: invoicesTable.invoiceNumber,
       amount: invoicesTable.amount,
       currency: invoicesTable.currency,
       status: invoicesTable.status,
+      paymentMethod: invoicesTable.paymentMethod,
       dueDate: invoicesTable.dueDate,
       paidAt: invoicesTable.paidAt,
       description: invoicesTable.description,
       notes: invoicesTable.notes,
+      pixCode: invoicesTable.pixCode,
+      pixQrCodeUrl: invoicesTable.pixQrCodeUrl,
+      pixExpiresAt: invoicesTable.pixExpiresAt,
       createdAt: invoicesTable.createdAt,
       updatedAt: invoicesTable.updatedAt,
       tenantName: tenantsTable.name,
+      tenantEmail: tenantsTable.email,
     })
       .from(invoicesTable)
       .leftJoin(tenantsTable, eq(invoicesTable.tenantId, tenantsTable.id))

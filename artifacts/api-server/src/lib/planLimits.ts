@@ -58,6 +58,7 @@ export async function checkPlanLimit(
     return true;
   } catch (err) {
     req.log?.error({ err }, "Error checking plan limit");
-    return true;
+    res.status(500).json({ error: "Erro ao verificar limite do plano. Tente novamente." });
+    return false;
   }
 }

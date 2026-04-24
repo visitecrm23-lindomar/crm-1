@@ -4,6 +4,7 @@ import { usersTable, tenantsTable, invitesTable } from "@workspace/db";
 import { eq, and, gt } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { checkPlanLimit } from "../lib/planLimits";
 import {
   SyncMeBody,
   CreateUserBody,
@@ -207,6 +208,10 @@ router.post("/users", async (req, res): Promise<void> => {
     if (!["agencia", "superadmin"].includes(me.role)) {
       res.status(403).json({ error: "Apenas administradores podem criar usuarios" });
       return;
+    }
+    if (me.tenantId && me.role !== "superadmin") {
+      const allowed = await checkPlanLimit(me.tenantId, "users", req, res);
+      if (!allowed) return;
     }
     const parsed = CreateUserBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
