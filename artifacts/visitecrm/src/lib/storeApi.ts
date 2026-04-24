@@ -107,6 +107,9 @@ export const storeApi = {
     reply?: string
   ) =>
     req<StoreReview>("PUT", `/store/reviews/${id}/status`, { status, reply }),
+
+  sendManifest: (tripId: string, data: { channel: "email" | "whatsapp"; to: string }) =>
+    req<{ success: boolean; channel: string; whatsappUrl?: string }>("POST", `/trips/${tripId}/manifest/send`, data),
 };
 
 async function publicReq<T>(

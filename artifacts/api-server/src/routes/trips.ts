@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable } from "@workspace/db";
+import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable, auditLogsTable } from "@workspace/db";
 import { checkPlanLimit } from "../lib/planLimits";
 import type { LayoutCell, FixedCostItem, VariableCostItem } from "@workspace/db";
 import { eq, and, ilike, sql, desc, inArray } from "drizzle-orm";
@@ -10,6 +10,11 @@ import { deleteOrphanedFile } from "../lib/uploadthing";
 import { deriveAgeCategory, getAgeYears } from "../lib/passenger";
 import { CreateTripBody, UpdateTripBody } from "@workspace/api-zod";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
+import { sendManifestEmail } from "@workspace/email";
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { z } from "zod";
+import PDFDocument from "pdfkit";
 
 type SeatMapEntry = { row: number; col: number; status: string; type?: string };
 
@@ -846,6 +851,563 @@ router.patch("/trips/:tripId/passengers/:passengerId", async (req, res): Promise
   } catch (err) {
     req.log.error({ err }, "Error updating passenger");
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+function escapeHtmlServer(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function formatCpfServer(cpf: string | null | undefined): string {
+  if (!cpf) return "—";
+  const digits = cpf.replace(/\D/g, "");
+  if (digits.length === 11) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+  return cpf;
+}
+
+type ManifestPassenger = {
+  name: string;
+  cpf: string | null;
+  birthDate: string | null;
+  ageCategory: string;
+  seatNumber: string | null;
+  boardingLocationId: string | null;
+  documentType: string | null;
+  specialNeeds: string | null;
+  observations: string | null;
+};
+
+type ManifestPanel = {
+  tripName: string;
+  departureDate: string;
+  tenantName: string;
+  tenantCnpj: string | null;
+  manifestNumber: string | null;
+  vehiclePlate: string | null;
+  vehicleType: string | null;
+  driverName: string | null;
+  driver1Cpf: string | null;
+  driver1Cnh: string | null;
+  driver1CnhCategory: string | null;
+  driver1CnhExpiry: string | null;
+  driver2Name: string | null;
+  driver2Cpf: string | null;
+  driver2Cnh: string | null;
+  driver2CnhCategory: string | null;
+  driver2CnhExpiry: string | null;
+  tourGuide: string | null;
+  tourGuideCpf: string | null;
+  tourGuideRegistration: string | null;
+  boardingPoints: Array<{ id: string; name: string; time?: string }>;
+  passengers: ManifestPassenger[];
+  destinationCity?: string;
+  destinationState?: string;
+};
+
+const AGE_CATEGORY_LABELS_SERVER: Record<string, string> = {
+  adult: "Adulto",
+  child: "Criança",
+  senior: "Idoso",
+  baby: "Gratuidade",
+  pcd: "PCD",
+};
+
+function generateManifestHtml(p: ManifestPanel): string {
+  const e = escapeHtmlServer;
+  const tripName = e(p.tripName);
+  const destination = p.destinationCity && p.destinationState ? e(`${p.destinationCity}/${p.destinationState}`) : "";
+  const depDate = p.departureDate ? format(parseISO(p.departureDate), "dd/MM/yyyy", { locale: ptBR }) : "";
+  const depTimeRaw = p.departureDate ? format(parseISO(p.departureDate), "HH:mm") : "";
+  const depTime = depTimeRaw && depTimeRaw !== "00:00" ? e(depTimeRaw) : "";
+  const emitidoEm = e(new Date().toLocaleString("pt-BR"));
+  const organizador = e(p.tenantName ?? "");
+  const cnpj = e(p.tenantCnpj ?? "");
+  const manifestNumber = e(p.manifestNumber ?? "");
+  const vehiclePlate = e(p.vehiclePlate ?? "");
+  const vehicleType = e(p.vehicleType ?? "");
+  const driverName = e(p.driverName ?? "");
+  const driver1Cpf = e(p.driver1Cpf ?? "");
+  const driver1Cnh = e(p.driver1Cnh ?? "");
+  const driver1CnhCat = e(p.driver1CnhCategory ?? "");
+  const driver1CnhExp = e(p.driver1CnhExpiry ?? "");
+  const driver2Name = e(p.driver2Name ?? "");
+  const driver2Cpf = e(p.driver2Cpf ?? "");
+  const driver2Cnh = e(p.driver2Cnh ?? "");
+  const driver2CnhCat = e(p.driver2CnhCategory ?? "");
+  const driver2CnhExp = e(p.driver2CnhExpiry ?? "");
+  const tourGuide = e(p.tourGuide ?? "");
+  const tourGuideCpf = e(p.tourGuideCpf ?? "");
+  const tourGuideReg = e(p.tourGuideRegistration ?? "");
+
+  const bpMap = new Map(p.boardingPoints.map(bp => [bp.id, bp.name]));
+  const getBpName = (id: string | null | undefined) => (id ? bpMap.get(id) ?? id : "—");
+
+  const anttBucket: Record<string, string> = { adult: "adulto", child: "crianca", senior: "idoso", baby: "gratuidade", pcd: "pcd" };
+  const catOrder = ["adulto", "crianca", "idoso", "pcd", "gratuidade"];
+  const catLabel: Record<string, string> = { adulto: "Adultos", crianca: "Crianças", idoso: "Idosos", pcd: "PCDs", gratuidade: "Gratuidades" };
+  const categoryCounts: Record<string, number> = {};
+  for (const pass of p.passengers) {
+    const bucket = anttBucket[pass.ageCategory] ?? "adulto";
+    categoryCounts[bucket] = (categoryCounts[bucket] ?? 0) + 1;
+  }
+
+  const rows = p.passengers.map((pass, i) => {
+    const nome = e(pass.name);
+    const cpfStr = e(formatCpfServer(pass.cpf));
+    const nasc = pass.birthDate ? e(new Date(pass.birthDate).toLocaleDateString("pt-BR")) : "—";
+    const cat = e(AGE_CATEGORY_LABELS_SERVER[pass.ageCategory] ?? pass.ageCategory);
+    const poltrona = e(pass.seatNumber ?? "—");
+    const embarque = e(getBpName(pass.boardingLocationId));
+    const obsLines = [pass.documentType, pass.specialNeeds, pass.observations].filter(Boolean).map(s => e(s!));
+    const obs = obsLines.length > 0 ? obsLines.join(" | ") : "";
+    return `<tr>
+      <td class="num">${String(i + 1).padStart(2, "0")}</td>
+      <td>${nome}</td>
+      <td>${cpfStr}</td>
+      <td>${nasc}</td>
+      <td>${cat}</td>
+      <td class="seat">${poltrona}</td>
+      <td>${embarque}</td>
+      <td class="obs-cell">${obs}</td>
+    </tr>`;
+  }).join("");
+
+  const totalsRow = catOrder
+    .filter(c => categoryCounts[c])
+    .map(c => `<span><strong>${catLabel[c] ?? c}:</strong> ${categoryCounts[c]}</span>`)
+    .join("&nbsp;&nbsp;|&nbsp;&nbsp;");
+
+  const crewRows = [
+    driverName || driver1Cpf || driver1Cnh
+      ? `<tr><td>Motorista 1</td><td>${driverName || "—"}</td><td>CNH ${driver1Cnh || "—"}${driver1CnhCat ? ` — Cat. ${driver1CnhCat}` : ""}${driver1CnhExp ? ` — Val. ${driver1CnhExp}` : ""}</td><td>CPF: ${driver1Cpf || "—"}</td></tr>`
+      : "",
+    driver2Name || driver2Cpf || driver2Cnh
+      ? `<tr><td>Motorista 2</td><td>${driver2Name || "—"}</td><td>CNH ${driver2Cnh || "—"}${driver2CnhCat ? ` — Cat. ${driver2CnhCat}` : ""}${driver2CnhExp ? ` — Val. ${driver2CnhExp}` : ""}</td><td>CPF: ${driver2Cpf || "—"}</td></tr>`
+      : "",
+    tourGuide || tourGuideCpf || tourGuideReg
+      ? `<tr><td>Guia de Turismo</td><td>${tourGuide || "—"}</td><td>CADASTUR: ${tourGuideReg || "—"}</td><td>CPF: ${tourGuideCpf || "—"}</td></tr>`
+      : "",
+  ].filter(Boolean).join("");
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<title>Manifesto ANTT — ${tripName}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; font-size: 10.5px; margin: 12mm 14mm; color: #000; }
+  .header { border: 2px solid #1a1a1a; padding: 8px 10px; margin-bottom: 6px; }
+  .header-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .title { font-size: 14px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+  .subtitle { font-size: 9px; color: #555; }
+  .manifest-no { font-size: 13px; font-weight: bold; font-family: monospace; color: #1a3a6e; }
+  .section { border: 1px solid #ccc; padding: 5px 8px; margin-bottom: 5px; font-size: 10.5px; }
+  .section-title { font-size: 9px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; color: #555; margin-bottom: 4px; }
+  .meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 16px; }
+  .meta-item label { font-weight: bold; margin-right: 4px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #1a1a1a; color: #fff; text-align: left; padding: 4px 5px; font-size: 9.5px; }
+  td { padding: 3px 5px; border-bottom: 1px solid #e8e8e8; font-size: 10px; vertical-align: top; }
+  tr:nth-child(even) td { background: #f8f8f8; }
+  .num { width: 22px; text-align: center; }
+  .seat { width: 50px; text-align: center; }
+  .obs-cell { font-size: 9px; color: #555; max-width: 120px; }
+  .crew-table td { border-bottom: 1px solid #e8e8e8; }
+  .crew-table td:first-child { font-weight: bold; width: 110px; }
+  .totals { margin-top: 6px; padding: 4px 8px; background: #f0f0f0; border: 1px solid #ccc; font-size: 10.5px; }
+  .footer { margin-top: 14px; border-top: 1px solid #ccc; padding-top: 8px; display: flex; justify-content: space-between; font-size: 9px; color: #555; }
+  .sig-block { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .sig-line { border-top: 1px solid #000; padding-top: 3px; font-size: 9px; text-align: center; color: #555; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-top">
+    <div>
+      <div class="title">Manifesto de Passageiros — ANTT</div>
+      <div class="subtitle">Resolução ANTT nº 4.777/2015 — Transporte rodoviário de passageiros em excursão</div>
+    </div>
+    ${manifestNumber ? `<div class="manifest-no">${manifestNumber}</div>` : ""}
+  </div>
+</div>
+<div class="section">
+  <div class="section-title">Dados da Excursão</div>
+  <div class="meta-grid">
+    <div class="meta-item"><label>Excursão:</label>${tripName}</div>
+    ${destination ? `<div class="meta-item"><label>Destino:</label>${destination}</div>` : ""}
+    <div class="meta-item"><label>Saída:</label>${depDate}${depTime ? ` às ${depTime}` : ""}</div>
+    ${organizador ? `<div class="meta-item"><label>Organizador:</label>${organizador}</div>` : ""}
+    ${cnpj ? `<div class="meta-item"><label>CNPJ:</label>${cnpj}</div>` : ""}
+    <div class="meta-item"><label>Total Passageiros:</label>${p.passengers.length}</div>
+    <div class="meta-item"><label>Emitido em:</label>${emitidoEm}</div>
+  </div>
+</div>
+<div class="section">
+  <div class="section-title">Veículo</div>
+  <div class="meta-grid">
+    ${vehicleType ? `<div class="meta-item"><label>Tipo:</label>${vehicleType}</div>` : ""}
+    ${vehiclePlate ? `<div class="meta-item"><label>Placa:</label>${vehiclePlate}</div>` : ""}
+  </div>
+</div>
+${crewRows ? `<div class="section">
+  <div class="section-title">Tripulação</div>
+  <table class="crew-table"><tbody>${crewRows}</tbody></table>
+</div>` : ""}
+<table>
+  <thead>
+    <tr>
+      <th class="num">Nº</th>
+      <th>Nome Completo</th>
+      <th>CPF</th>
+      <th>Data Nasc.</th>
+      <th>Categoria</th>
+      <th class="seat">Assento</th>
+      <th>Embarque</th>
+      <th>Obs.</th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>
+<div class="totals">
+  <strong>Totais por categoria:</strong>&nbsp;&nbsp;${totalsRow || `Total: ${p.passengers.length}`}
+</div>
+<div class="sig-block">
+  <div class="sig-line">Assinatura do Responsável pela Excursão</div>
+  <div class="sig-line">Assinatura do Motorista</div>
+</div>
+<div class="footer">
+  <span>Nº Manifesto: <strong>${manifestNumber || "—"}</strong> &nbsp;|&nbsp; VisiteCRM — Gestão de Agências de Turismo</span>
+  <span>Emitido em ${emitidoEm}</span>
+</div>
+</body>
+</html>`;
+}
+
+function generateManifestPdf(p: ManifestPanel): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 36, size: "A4" });
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    const bpMap = new Map(p.boardingPoints.map(bp => [bp.id, bp.name]));
+    const getBpName = (id: string | null | undefined) => (id ? bpMap.get(id) ?? id : "—");
+    const depDate = p.departureDate ? format(parseISO(p.departureDate), "dd/MM/yyyy", { locale: ptBR }) : "";
+    const depTimeRaw = p.departureDate ? format(parseISO(p.departureDate), "HH:mm") : "";
+    const depTime = depTimeRaw && depTimeRaw !== "00:00" ? ` às ${depTimeRaw}` : "";
+    const emitidoEm = new Date().toLocaleString("pt-BR");
+    const pageWidth = 595 - 72;
+
+    doc.rect(36, 36, pageWidth, 48).stroke();
+    doc.font("Helvetica-Bold").fontSize(12).text("MANIFESTO DE PASSAGEIROS — ANTT", 40, 44, { width: pageWidth - 8, align: "center" });
+    doc.font("Helvetica").fontSize(7).text("Resolução ANTT nº 4.777/2015 — Transporte rodoviário de passageiros em excursão", 40, 62, { width: pageWidth - 8, align: "center" });
+    if (p.manifestNumber) {
+      doc.font("Helvetica-Bold").fontSize(10).fillColor("#1a3a6e").text(p.manifestNumber, pageWidth - 60, 52, { width: 90 });
+      doc.fillColor("black");
+    }
+
+    let y = 90;
+    const labelVal = (label: string, value: string, xOff = 0, yOff = y) => {
+      doc.font("Helvetica-Bold").fontSize(8).text(label, 40 + xOff, yOff, { continued: true });
+      doc.font("Helvetica").fontSize(8).text(" " + value);
+    };
+
+    doc.rect(36, y, pageWidth, 44).stroke();
+    doc.font("Helvetica-Bold").fontSize(7).fillColor("#555").text("DADOS DA EXCURSÃO", 40, y + 3);
+    doc.fillColor("black");
+    y += 12;
+    const colW = pageWidth / 3;
+    labelVal("Excursão:", p.tripName.slice(0, 40), 0, y);
+    if (p.destinationCity) labelVal("Destino:", `${p.destinationCity}/${p.destinationState ?? ""}`, colW, y);
+    labelVal("Saída:", depDate + depTime, colW * 2, y);
+    y += 12;
+    if (p.tenantName) labelVal("Organizador:", p.tenantName, 0, y);
+    if (p.tenantCnpj) labelVal("CNPJ:", p.tenantCnpj, colW, y);
+    labelVal("Total Passageiros:", String(p.passengers.length), colW * 2, y);
+    y += 12;
+    labelVal("Emitido em:", emitidoEm, 0, y);
+    y += 20;
+
+    if (p.vehiclePlate || p.vehicleType) {
+      doc.rect(36, y, pageWidth, 28).stroke();
+      doc.font("Helvetica-Bold").fontSize(7).fillColor("#555").text("VEÍCULO", 40, y + 3);
+      doc.fillColor("black");
+      y += 12;
+      if (p.vehicleType) labelVal("Tipo:", p.vehicleType, 0, y);
+      if (p.vehiclePlate) labelVal("Placa:", p.vehiclePlate, colW, y);
+      y += 20;
+    }
+
+    const hasDriver1 = !!(p.driverName || p.driver1Cpf || p.driver1Cnh);
+    const hasDriver2 = !!(p.driver2Name || p.driver2Cpf || p.driver2Cnh);
+    const hasGuide = !!(p.tourGuide || p.tourGuideCpf || p.tourGuideRegistration);
+    if (hasDriver1 || hasDriver2 || hasGuide) {
+      const crewRows = [
+        hasDriver1 ? ["Motorista 1", p.driverName ?? "—", `CNH: ${p.driver1Cnh ?? "—"}${p.driver1CnhCategory ? " Cat." + p.driver1CnhCategory : ""}`, `CPF: ${p.driver1Cpf ?? "—"}`] : null,
+        hasDriver2 ? ["Motorista 2", p.driver2Name ?? "—", `CNH: ${p.driver2Cnh ?? "—"}${p.driver2CnhCategory ? " Cat." + p.driver2CnhCategory : ""}`, `CPF: ${p.driver2Cpf ?? "—"}`] : null,
+        hasGuide ? ["Guia de Turismo", p.tourGuide ?? "—", `CADASTUR: ${p.tourGuideRegistration ?? "—"}`, `CPF: ${p.tourGuideCpf ?? "—"}`] : null,
+      ].filter((r): r is string[] => r !== null);
+      const crewH = 14 + crewRows.length * 14;
+      doc.rect(36, y, pageWidth, crewH).stroke();
+      doc.font("Helvetica-Bold").fontSize(7).fillColor("#555").text("TRIPULAÇÃO", 40, y + 3);
+      doc.fillColor("black");
+      y += 14;
+      for (const row of crewRows) {
+        const cw = pageWidth / 4;
+        doc.font("Helvetica-Bold").fontSize(7.5).text(row[0], 40, y, { width: cw - 4 });
+        doc.font("Helvetica").fontSize(7.5).text(row[1], 40 + cw, y, { width: cw - 4 });
+        doc.text(row[2], 40 + cw * 2, y, { width: cw - 4 });
+        doc.text(row[3], 40 + cw * 3, y, { width: cw - 4 });
+        y += 14;
+      }
+      y += 6;
+    }
+
+    const colDefs = [
+      { label: "Nº", w: 20 },
+      { label: "Nome Completo", w: 120 },
+      { label: "CPF", w: 72 },
+      { label: "Nasc.", w: 48 },
+      { label: "Cat.", w: 48 },
+      { label: "Assento", w: 40 },
+      { label: "Embarque", w: 80 },
+      { label: "Obs.", w: 95 },
+    ];
+    const totalColW = colDefs.reduce((s, c) => s + c.w, 0);
+    const scale = pageWidth / totalColW;
+    const cols = colDefs.map(c => ({ ...c, w: c.w * scale }));
+
+    doc.rect(36, y, pageWidth, 14).fillAndStroke("#1a1a1a", "#1a1a1a");
+    let xOff = 40;
+    for (const col of cols) {
+      doc.font("Helvetica-Bold").fontSize(7.5).fillColor("white").text(col.label, xOff, y + 3, { width: col.w - 2, lineBreak: false });
+      xOff += col.w;
+    }
+    doc.fillColor("black");
+    y += 14;
+
+    const AGE_LABELS: Record<string, string> = { adult: "Adulto", child: "Criança", senior: "Idoso", baby: "Gratuidade", pcd: "PCD" };
+    for (let i = 0; i < p.passengers.length; i++) {
+      const pass = p.passengers[i];
+      if (i % 2 === 0) doc.rect(36, y, pageWidth, 13).fillAndStroke("#f8f8f8", "white");
+      doc.rect(36, y, pageWidth, 13).stroke();
+      xOff = 40;
+      const rowData = [
+        String(i + 1).padStart(2, "0"),
+        pass.name.slice(0, 25),
+        formatCpfServer(pass.cpf),
+        pass.birthDate ? new Date(pass.birthDate).toLocaleDateString("pt-BR") : "—",
+        AGE_LABELS[pass.ageCategory] ?? pass.ageCategory,
+        pass.seatNumber ?? "—",
+        getBpName(pass.boardingLocationId),
+        [pass.documentType, pass.specialNeeds, pass.observations].filter(Boolean).join(" | ").slice(0, 20),
+      ];
+      for (let ci = 0; ci < cols.length; ci++) {
+        doc.font("Helvetica").fontSize(7).fillColor("black").text(rowData[ci], xOff, y + 3, { width: cols[ci].w - 2, lineBreak: false });
+        xOff += cols[ci].w;
+      }
+      y += 13;
+      if (y > 760) {
+        doc.addPage();
+        y = 40;
+      }
+    }
+
+    const anttBucket: Record<string, string> = { adult: "adulto", child: "criança", senior: "idoso", baby: "gratuidade", pcd: "pcd" };
+    const catCount: Record<string, number> = {};
+    for (const pass of p.passengers) {
+      const bucket = anttBucket[pass.ageCategory] ?? "adulto";
+      catCount[bucket] = (catCount[bucket] ?? 0) + 1;
+    }
+    const totalsText = Object.entries(catCount).map(([k, v]) => `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`).join("  |  ");
+    y += 4;
+    doc.rect(36, y, pageWidth, 14).fill("#f0f0f0").stroke();
+    doc.font("Helvetica-Bold").fontSize(7.5).fillColor("black").text("Totais por categoria: ", 40, y + 3, { continued: true });
+    doc.font("Helvetica").text(totalsText || `Total: ${p.passengers.length}`);
+    y += 20;
+
+    if (y + 40 > 800) { doc.addPage(); y = 40; }
+    const sigW = (pageWidth - 20) / 2;
+    doc.moveTo(40, y + 20).lineTo(40 + sigW, y + 20).stroke();
+    doc.font("Helvetica").fontSize(7.5).fillColor("#555").text("Assinatura do Responsável pela Excursão", 40, y + 22, { width: sigW, align: "center" });
+    doc.moveTo(40 + sigW + 20, y + 20).lineTo(40 + pageWidth, y + 20).stroke();
+    doc.text("Assinatura do Motorista", 40 + sigW + 20, y + 22, { width: sigW, align: "center" });
+    y += 40;
+
+    doc.moveTo(36, y).lineTo(36 + pageWidth, y).stroke();
+    doc.fontSize(7).fillColor("#555").text(`Nº Manifesto: ${p.manifestNumber ?? "—"} | VisiteCRM — Gestão de Agências de Turismo`, 40, y + 4, { width: pageWidth / 2 });
+    doc.text(`Emitido em ${emitidoEm}`, 40 + pageWidth / 2, y + 4, { width: pageWidth / 2, align: "right" });
+
+    doc.end();
+  });
+}
+
+const SendManifestBody = z.discriminatedUnion("channel", [
+  z.object({ channel: z.literal("email"), to: z.string().email("Endereço de e-mail inválido") }),
+  z.object({ channel: z.literal("whatsapp"), to: z.string().min(8, "Número de WhatsApp muito curto").max(20, "Número de WhatsApp muito longo").regex(/^[\d\s\(\)\-\+]+$/, "Número de WhatsApp inválido") }),
+]);
+
+router.post("/trips/:id/manifest/send", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const parsed = SendManifestBody.safeParse(req.body);
+    if (!parsed.success) {
+      const firstIssue = parsed.error.issues[0];
+      res.status(400).json({ error: firstIssue?.message ?? "Dados inválidos" });
+      return;
+    }
+    const { channel, to } = parsed.data;
+
+    const [trip] = await db.select().from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!trip) { res.status(404).json({ error: "Excursão não encontrada" }); return; }
+
+    const reservations = await db.select().from(reservationsTable)
+      .where(and(
+        eq(reservationsTable.tripId, trip.id),
+        eq(reservationsTable.tenantId, me.tenantId),
+        sql`${reservationsTable.status} NOT IN ('cancelled', 'refunded')`,
+      ));
+
+    const reservationIds = reservations.map(r => r.id);
+
+    const [passengers, [tenant]] = await Promise.all([
+      reservationIds.length > 0
+        ? db.select().from(passengersTable).where(inArray(passengersTable.reservationId, reservationIds))
+        : Promise.resolve([]),
+      db.select({ name: tenantsTable.name, cnpj: tenantsTable.cnpj }).from(tenantsTable).where(eq(tenantsTable.id, me.tenantId)).limit(1),
+    ]);
+
+    const reservationMap = new Map(reservations.map(r => [r.id, r]));
+
+    const manifestPassengers: ManifestPassenger[] = passengers.map(p => {
+      const reservation = reservationMap.get(p.reservationId);
+      const effectiveBoardingLocationId = p.boardingLocationId ?? reservation?.boardingLocationId ?? null;
+      return {
+        name: p.name,
+        cpf: p.cpf ?? null,
+        birthDate: p.birthDate?.toISOString() ?? null,
+        ageCategory: p.ageCategory,
+        seatNumber: p.seatNumber ?? null,
+        boardingLocationId: effectiveBoardingLocationId,
+        documentType: p.documentType ?? null,
+        specialNeeds: p.specialNeeds ?? null,
+        observations: p.observations ?? null,
+      };
+    });
+
+    const panel: ManifestPanel = {
+      tripName: trip.name,
+      departureDate: trip.departureDate.toISOString(),
+      tenantName: tenant?.name ?? "",
+      tenantCnpj: tenant?.cnpj ?? null,
+      manifestNumber: trip.manifestNumber ?? null,
+      vehiclePlate: trip.vehiclePlate ?? null,
+      vehicleType: trip.vehicleType ?? null,
+      driverName: trip.driverName ?? null,
+      driver1Cpf: trip.driver1Cpf ?? null,
+      driver1Cnh: trip.driver1Cnh ?? null,
+      driver1CnhCategory: trip.driver1CnhCategory ?? null,
+      driver1CnhExpiry: trip.driver1CnhExpiry ?? null,
+      driver2Name: trip.driver2Name ?? null,
+      driver2Cpf: trip.driver2Cpf ?? null,
+      driver2Cnh: trip.driver2Cnh ?? null,
+      driver2CnhCategory: trip.driver2CnhCategory ?? null,
+      driver2CnhExpiry: trip.driver2CnhExpiry ?? null,
+      tourGuide: trip.tourGuide ?? null,
+      tourGuideCpf: trip.tourGuideCpf ?? null,
+      tourGuideRegistration: trip.tourGuideRegistration ?? null,
+      boardingPoints: (trip.boardingPoints ?? []) as Array<{ id: string; name: string; time?: string }>,
+      passengers: manifestPassengers,
+      destinationCity: trip.destinationCity,
+      destinationState: trip.destinationState,
+    };
+
+    const auditMeta: Record<string, string> = { channel, to: channel === "whatsapp" ? to : to.replace(/(.{2}).+(@.+)/, "$1***$2") };
+
+    if (channel === "email") {
+      const [html, pdfBuffer] = await Promise.all([
+        Promise.resolve(generateManifestHtml(panel)),
+        generateManifestPdf(panel),
+      ]);
+      const result = await sendManifestEmail({
+        to,
+        tripName: trip.name,
+        manifestNumber: trip.manifestNumber ?? null,
+        agencyName: tenant?.name ?? "VisiteCRM",
+        htmlContent: html,
+        pdfAttachment: pdfBuffer,
+      });
+
+      if (!result.success) {
+        req.log.error({ error: result.error }, "Failed to send manifest email");
+        res.status(500).json({ error: result.error ?? "Falha ao enviar e-mail" });
+        return;
+      }
+
+      await db.insert(auditLogsTable).values({
+        id: generateId(),
+        tenantId: me.tenantId,
+        userId: me.userId,
+        action: "manifest_sent",
+        entityType: "trip",
+        entityId: trip.id,
+        after: auditMeta,
+        ipAddress: req.ip ?? null,
+        userAgent: req.headers["user-agent"] ?? null,
+      });
+
+      res.json({ success: true, channel: "email" });
+    } else {
+      const depDate = trip.departureDate ? format(trip.departureDate, "dd/MM/yyyy", { locale: ptBR }) : "";
+      const proto = req.headers["x-forwarded-proto"] ?? "https";
+      const host = req.headers["x-forwarded-host"] ?? req.get("host") ?? "";
+      const manifestLink = `${proto}://${host}/trips/${trip.id}/passengers`;
+
+      const messageParts = [
+        `📋 *Manifesto ANTT — ${trip.name}*`,
+        trip.manifestNumber ? `Nº Manifesto: ${trip.manifestNumber}` : null,
+        panel.destinationCity ? `Destino: ${panel.destinationCity}${panel.destinationState ? `/${panel.destinationState}` : ""}` : null,
+        depDate ? `Saída: ${depDate}` : null,
+        `Total de passageiros: ${manifestPassengers.length}`,
+        ``,
+        `🔗 Acesso ao manifesto: ${manifestLink}`,
+        ``,
+        `_Emitido via VisiteCRM_`,
+      ].filter((l): l is string => l !== null).join("\n");
+
+      const digits = to.replace(/\D/g, "");
+      const phone = digits.startsWith("55") ? digits : `55${digits}`;
+      const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(messageParts)}`;
+
+      await db.insert(auditLogsTable).values({
+        id: generateId(),
+        tenantId: me.tenantId,
+        userId: me.userId,
+        action: "manifest_sent",
+        entityType: "trip",
+        entityId: trip.id,
+        after: auditMeta,
+        ipAddress: req.ip ?? null,
+        userAgent: req.headers["user-agent"] ?? null,
+      });
+
+      res.json({ success: true, channel: "whatsapp", whatsappUrl });
+    }
+  } catch (err) {
+    req.log.error({ err }, "Error sending manifest");
+    res.status(500).json({ error: "Erro interno ao processar envio do manifesto" });
   }
 });
 

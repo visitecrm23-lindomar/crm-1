@@ -32,7 +32,7 @@ import {
   LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ArrowLeft, Check, X, Download, Send, Copy,
   AlertCircle, DollarSign, ClipboardList, LogIn, RotateCcw, CheckCircle, UserRound, RefreshCw,
   ShoppingBag, Loader2, Clock, Star, CheckCircle2, XCircle, MessageSquare, Pencil, Phone,
-  TrendingUp, TrendingDown, Receipt, Banknote, PiggyBank, Wallet,
+  TrendingUp, TrendingDown, Receipt, Banknote, PiggyBank, Wallet, Share2, Mail, MessageCircle,
 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -3650,6 +3650,43 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const [updatingLocationId, setUpdatingLocationId] = useState<string | null>(null);
   const [editingPassenger, setEditingPassenger] = useState<BoardingPassenger | null>(null);
 
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareEmail, setShareEmail] = useState("");
+  const [sharePhone, setSharePhone] = useState("");
+  const [shareLoading, setShareLoading] = useState(false);
+
+  const handleShareEmail = async () => {
+    if (!shareEmail.trim()) return;
+    setShareLoading(true);
+    try {
+      await storeApi.sendManifest(tripId, { channel: "email", to: shareEmail.trim() });
+      toast({ title: "Manifesto enviado por e-mail", description: `Enviado para ${shareEmail.trim()}` });
+      setShareEmail("");
+      setShareOpen(false);
+    } catch (err) {
+      toast({ title: "Erro ao enviar e-mail", description: err instanceof Error ? err.message : "Tente novamente.", variant: "destructive" });
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const handleShareWhatsApp = async () => {
+    if (!sharePhone.trim()) return;
+    setShareLoading(true);
+    try {
+      const result = await storeApi.sendManifest(tripId, { channel: "whatsapp", to: sharePhone.trim() });
+      if (result.whatsappUrl) {
+        window.open(result.whatsappUrl, "_blank");
+      }
+      setSharePhone("");
+      setShareOpen(false);
+    } catch (err) {
+      toast({ title: "Erro ao gerar link WhatsApp", description: err instanceof Error ? err.message : "Tente novamente.", variant: "destructive" });
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
   const allPassengers = panel?.passengers ?? [];
   const boardingPoints: BoardingPoint[] = panel?.boardingPoints ?? [];
 
@@ -3983,6 +4020,7 @@ ${crewRows ? `<div class="section">
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={handleCsvExport} disabled={isLoading || allPassengers.length === 0}><Download className="w-4 h-4 mr-2" />CSV</Button>
           <Button variant="outline" size="sm" onClick={handlePdfPrint} disabled={isLoading || allPassengers.length === 0}><Download className="w-4 h-4 mr-2" />Imprimir / PDF</Button>
+          <Button variant="outline" size="sm" onClick={() => setShareOpen(true)} disabled={isLoading || allPassengers.length === 0}><Share2 className="w-4 h-4 mr-2" />Compartilhar</Button>
           <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing}><RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? "animate-spin" : ""}`} />{isSyncing ? "Sincronizando..." : "Sincronizar"}</Button>
         </div>
       </div>
@@ -4168,6 +4206,57 @@ ${crewRows ? `<div class="section">
         onClose={() => setEditingPassenger(null)}
         onSaved={() => refetch()}
       />
+
+      <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Share2 className="w-4 h-4" />Compartilhar Manifesto ANTT</DialogTitle>
+          </DialogHeader>
+          <Tabs defaultValue="email">
+            <TabsList className="w-full">
+              <TabsTrigger value="email" className="flex-1 gap-2"><Mail className="w-4 h-4" />E-mail</TabsTrigger>
+              <TabsTrigger value="whatsapp" className="flex-1 gap-2"><MessageCircle className="w-4 h-4" />WhatsApp</TabsTrigger>
+            </TabsList>
+            <TabsContent value="email" className="space-y-4 pt-2">
+              <p className="text-sm text-muted-foreground">O manifesto completo será enviado para o e-mail informado.</p>
+              <div className="space-y-2">
+                <Label htmlFor="share-email">Endereço de e-mail</Label>
+                <Input
+                  id="share-email"
+                  type="email"
+                  placeholder="motorista@exemplo.com"
+                  value={shareEmail}
+                  onChange={e => setShareEmail(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") handleShareEmail(); }}
+                />
+              </div>
+              <Button className="w-full" onClick={handleShareEmail} disabled={shareLoading || !shareEmail.trim()}>
+                {shareLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Mail className="w-4 h-4 mr-2" />}
+                Enviar por E-mail
+              </Button>
+            </TabsContent>
+            <TabsContent value="whatsapp" className="space-y-4 pt-2">
+              <p className="text-sm text-muted-foreground">Será gerado um link para envio pelo WhatsApp com os dados da excursão.</p>
+              <div className="space-y-2">
+                <Label htmlFor="share-phone">Número do WhatsApp</Label>
+                <Input
+                  id="share-phone"
+                  type="tel"
+                  placeholder="(11) 99999-9999"
+                  value={sharePhone}
+                  onChange={e => setSharePhone(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") handleShareWhatsApp(); }}
+                />
+                <p className="text-xs text-muted-foreground">Informe o DDD + número. O código do país (55) será adicionado automaticamente.</p>
+              </div>
+              <Button className="w-full" onClick={handleShareWhatsApp} disabled={shareLoading || !sharePhone.trim()}>
+                {shareLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <MessageCircle className="w-4 h-4 mr-2" />}
+                Abrir no WhatsApp
+              </Button>
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
