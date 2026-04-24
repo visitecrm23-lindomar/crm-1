@@ -224,7 +224,7 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
 
     await db.update(tenantsTable)
-      .set({ status: "pending_payment", updatedAt: now })
+      .set({ status: "pending_payment", planId: newPlan.slug, updatedAt: now })
       .where(eq(tenantsTable.id, me.tenantId));
 
     await db.insert(subscriptionsTable).values({
@@ -462,7 +462,7 @@ async function activateInvoicePlan(
 
 async function failInvoice(invoiceId: string): Promise<void> {
   await db.update(invoicesTable).set({
-    status: "overdue",
+    status: "failed",
     notes: "Pagamento falhou via Stripe",
   }).where(eq(invoicesTable.id, invoiceId));
 }
