@@ -15,6 +15,15 @@ function getRedirectUri(): string {
   if (domain) {
     return `https://${domain}/api/calendar/callback`;
   }
+  const frontendUrl = process.env["FRONTEND_URL"];
+  if (frontendUrl) {
+    try {
+      const { origin } = new URL(frontendUrl);
+      return `${origin}/api/calendar/callback`;
+    } catch {
+      // ignore invalid URL, fall through
+    }
+  }
   return "http://localhost:8080/api/calendar/callback";
 }
 
