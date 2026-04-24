@@ -352,7 +352,11 @@ function generateDefaultCells(rows: number, cols: number, existing: LayoutCell[]
   return cells;
 }
 
-function deriveFloorDimensions(cells: LayoutCell[], floors: number): Record<number, { rows: number; cols: number }> {
+function deriveFloorDimensions(
+  cells: LayoutCell[],
+  floors: number,
+  fallback: { rows: number; cols: number } = { rows: 12, cols: 4 },
+): Record<number, { rows: number; cols: number }> {
   const dims: Record<number, { rows: number; cols: number }> = {};
   for (let f = 1; f <= floors; f++) {
     const floorCells = cells.filter(c => (c.floor ?? 1) === f);
@@ -362,7 +366,7 @@ function deriveFloorDimensions(cells: LayoutCell[], floors: number): Record<numb
         cols: Math.max(...floorCells.map(c => c.col)),
       };
     } else {
-      dims[f] = { rows: 12, cols: 4 };
+      dims[f] = { rows: fallback.rows, cols: fallback.cols };
     }
   }
   return dims;
@@ -1242,6 +1246,9 @@ export default function LayoutsPage() {
   const handleSave = async (form: EditorState) => {
     if (!form.name.trim()) return;
     setSaving(true);
+    const floorDimValues = Object.values(form.floorDimensions);
+    const persistRows = floorDimValues.length > 0 ? Math.max(...floorDimValues.map(d => d.rows)) : form.rows;
+    const persistCols = floorDimValues.length > 0 ? Math.max(...floorDimValues.map(d => d.cols)) : form.cols;
     try {
       if (editingLayout?.id) {
         await updateLayout.mutateAsync({
@@ -1250,8 +1257,8 @@ export default function LayoutsPage() {
             name: form.name,
             description: form.description || null,
             vehicleType: form.vehicleType || null,
-            rows: form.rows,
-            cols: form.cols,
+            rows: persistRows,
+            cols: persistCols,
             floors: form.floors,
             numberingType: form.numberingType,
             cells: form.cells,
@@ -1264,8 +1271,8 @@ export default function LayoutsPage() {
             name: form.name,
             description: form.description || null,
             vehicleType: form.vehicleType || null,
-            rows: form.rows,
-            cols: form.cols,
+            rows: persistRows,
+            cols: persistCols,
             floors: form.floors,
             numberingType: form.numberingType,
             cells: form.cells,
@@ -1300,7 +1307,10 @@ export default function LayoutsPage() {
     if (!editingLayout) return null;
     const cells = editingLayout.cells as LayoutCell[];
     const floors = editingLayout.floors ?? 1;
-    const floorDimensions = deriveFloorDimensions(cells, floors);
+    const floorDimensions = deriveFloorDimensions(cells, floors, {
+      rows: editingLayout.rows,
+      cols: editingLayout.cols,
+    });
     return {
       name: editingLayout.name ?? "",
       description: (editingLayout as VehicleLayout & { description?: string }).description ?? "",
