@@ -99,10 +99,14 @@ const authorizedParties = [
   ...additionalOrigins,
 ].filter(Boolean) as string[];
 
-app.use(clerkMiddleware({
-  ...(authorizedParties.length > 0 ? { authorizedParties } : {}),
-  publicRoutes: ["/api/calendar/callback"],
-}));
+const clerkAuth = clerkMiddleware(authorizedParties.length > 0 ? { authorizedParties } : {});
+
+app.use((req, res, next) => {
+  if (req.path === "/api/calendar/callback") {
+    return next();
+  }
+  return clerkAuth(req, res, next);
+});
 
 app.use("/api", router);
 
