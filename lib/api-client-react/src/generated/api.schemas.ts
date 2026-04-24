@@ -2803,9 +2803,13 @@ export interface InvoiceWithTenant {
   tenantId: string;
   /** @nullable */
   planId?: string | null;
+  /** @nullable */
+  invoiceNumber?: string | null;
   amount: string;
   currency: string;
   status: string;
+  /** @nullable */
+  paymentMethod?: string | null;
   /** @nullable */
   dueDate?: string | null;
   /** @nullable */
@@ -2814,10 +2818,18 @@ export interface InvoiceWithTenant {
   description?: string | null;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  pixCode?: string | null;
+  /** @nullable */
+  pixQrCodeUrl?: string | null;
+  /** @nullable */
+  pixExpiresAt?: string | null;
   createdAt: string;
   updatedAt: string;
   /** @nullable */
   tenantName?: string | null;
+  /** @nullable */
+  tenantEmail?: string | null;
 }
 
 export interface CreateInvoiceBody {

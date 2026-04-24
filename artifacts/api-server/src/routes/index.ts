@@ -40,6 +40,7 @@ import calendarRouter from "./calendar";
 import tripCostsRouter from "./trip-costs";
 import alertsRouter from "./alerts";
 import reportsRouter from "./reports";
+import subscriptionsRouter from "./subscriptions";
 
 const router: IRouter = Router();
 
@@ -83,6 +84,7 @@ router.use(calendarRouter);
 router.use(tripCostsRouter);
 router.use(alertsRouter);
 router.use(reportsRouter);
+router.use(subscriptionsRouter);
 router.use("/uploadthing", uploadthingRouter);
 
 export default router;

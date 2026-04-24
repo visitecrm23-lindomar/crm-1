@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable } from "@workspace/db";
+import { checkPlanLimit } from "../lib/planLimits";
 import type { LayoutCell, FixedCostItem, VariableCostItem } from "@workspace/db";
 import { eq, and, ilike, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
@@ -180,6 +181,10 @@ router.post("/trips", async (req, res): Promise<void> => {
     if (!["agencia", "superadmin"].includes(me.role)) {
       res.status(403).json({ error: "Apenas administradores podem criar viagens" });
       return;
+    }
+    if (me.tenantId) {
+      const allowed = await checkPlanLimit(me.tenantId, "trips", req, res);
+      if (!allowed) return;
     }
     const parsed = CreateTripBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }

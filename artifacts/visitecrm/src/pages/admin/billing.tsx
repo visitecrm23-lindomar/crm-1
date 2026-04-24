@@ -4,6 +4,7 @@ import {
   useCreateAdminInvoice,
   useUpdateAdminInvoice,
   useListTenants,
+  useConfirmInvoicePayment,
   type InvoiceWithTenant,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,7 +27,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, DollarSign, Clock, CheckCircle2, AlertCircle, Check } from "lucide-react";
+import { Plus, DollarSign, Clock, CheckCircle2, AlertCircle, QrCode } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListAdminInvoicesQueryKey } from "@workspace/api-client-react";
 
@@ -141,14 +142,82 @@ function CreateInvoiceModal({ onClose }: CreateInvoiceModalProps) {
   );
 }
 
+interface PixViewModalProps {
+  invoice: InvoiceWithTenant;
+  onClose: () => void;
+  onConfirm: () => void;
+  isConfirming: boolean;
+}
+
+function PixViewModal({ invoice, onClose, onConfirm, isConfirming }: PixViewModalProps) {
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
+
+  function copyCode() {
+    if (invoice.pixCode) {
+      navigator.clipboard.writeText(invoice.pixCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast({ title: "Código PIX copiado!" });
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <QrCode className="w-5 h-5" />
+            PIX — {invoice.tenantName ?? invoice.tenantId}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="text-center">
+            <p className="text-2xl font-bold">{formatCurrency(invoice.amount)}</p>
+            <p className="text-sm text-muted-foreground mt-1">{invoice.description}</p>
+          </div>
+          {invoice.pixQrCodeUrl && (
+            <div className="flex justify-center">
+              <img src={invoice.pixQrCodeUrl} alt="QR Code PIX" className="w-48 h-48 rounded-lg border" />
+            </div>
+          )}
+          {invoice.pixCode && (
+            <div className="flex gap-2">
+              <Input value={invoice.pixCode} readOnly className="font-mono text-xs" />
+              <Button variant="outline" size="sm" onClick={copyCode}>
+                {copied ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : "Copiar"}
+              </Button>
+            </div>
+          )}
+          {invoice.pixExpiresAt && (
+            <p className="text-xs text-center text-muted-foreground">
+              Expira: {new Date(invoice.pixExpiresAt).toLocaleString("pt-BR")}
+            </p>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Fechar</Button>
+          {invoice.status !== "paid" && (
+            <Button onClick={onConfirm} disabled={isConfirming} className="bg-green-600 hover:bg-green-700 text-white">
+              {isConfirming ? "Confirmando..." : "Confirmar Pagamento"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function AdminBilling() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [tenantFilter, setTenantFilter] = useState("all");
   const [showCreate, setShowCreate] = useState(false);
+  const [pixInvoice, setPixInvoice] = useState<InvoiceWithTenant | null>(null);
   const { data: tenants = [] } = useListTenants();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const updateInvoice = useUpdateAdminInvoice();
+  const confirmPayment = useConfirmInvoicePayment();
 
   const params: Record<string, string> = {};
   if (statusFilter !== "all") params.status = statusFilter;
@@ -170,6 +239,17 @@ export default function AdminBilling() {
       toast({ title: "Fatura marcada como paga" });
     } catch {
       toast({ title: "Erro ao atualizar fatura", variant: "destructive" });
+    }
+  }
+
+  async function handleConfirmPayment(invoiceId: string) {
+    try {
+      await confirmPayment.mutateAsync({ id: invoiceId });
+      await queryClient.invalidateQueries({ queryKey: getListAdminInvoicesQueryKey() });
+      toast({ title: "Pagamento confirmado! Plano ativado." });
+      setPixInvoice(null);
+    } catch {
+      toast({ title: "Erro ao confirmar pagamento", variant: "destructive" });
     }
   }
 
@@ -308,18 +388,31 @@ export default function AdminBilling() {
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {invoice.status !== "paid" && invoice.status !== "cancelled" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 gap-1 text-xs text-green-600 hover:text-green-700"
-                            onClick={() => handleMarkPaid(invoice.id)}
-                            disabled={updateInvoice.isPending}
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            Pago
-                          </Button>
-                        )}
+                        <div className="flex items-center justify-end gap-1">
+                          {invoice.pixCode && invoice.status !== "paid" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 gap-1 text-xs text-blue-600 hover:text-blue-700"
+                              onClick={() => setPixInvoice(invoice)}
+                            >
+                              <QrCode className="w-3.5 h-3.5" />
+                              PIX
+                            </Button>
+                          )}
+                          {invoice.status !== "paid" && invoice.status !== "cancelled" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 gap-1 text-xs text-green-600 hover:text-green-700"
+                              onClick={() => handleMarkPaid(invoice.id)}
+                              disabled={updateInvoice.isPending}
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              Pago
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -331,6 +424,14 @@ export default function AdminBilling() {
       </Card>
 
       {showCreate && <CreateInvoiceModal onClose={() => setShowCreate(false)} />}
+      {pixInvoice && (
+        <PixViewModal
+          invoice={pixInvoice}
+          onClose={() => setPixInvoice(null)}
+          onConfirm={() => handleConfirmPayment(pixInvoice.id)}
+          isConfirming={confirmPayment.isPending}
+        />
+      )}
     </div>
   );
 }

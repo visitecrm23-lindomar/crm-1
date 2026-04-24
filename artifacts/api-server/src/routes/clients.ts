@@ -5,6 +5,7 @@ import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
 import { generateId, generateReferralCode } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { validateCPF, cleanCPF } from "../lib/cpf";
+import { checkPlanLimit } from "../lib/planLimits";
 import {
   CreateClientBody,
   UpdateClientBody,
@@ -167,6 +168,10 @@ router.post("/clients", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (me.tenantId) {
+      const allowed = await checkPlanLimit(me.tenantId, "clients", req, res);
+      if (!allowed) return;
+    }
     const parsed = CreateClientBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 

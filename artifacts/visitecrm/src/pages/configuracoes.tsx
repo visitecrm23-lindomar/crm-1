@@ -14,6 +14,11 @@ import {
   useDisconnectCalendar,
   useSyncCalendar,
   getCalendarConnectUrl,
+  useGetCurrentSubscription,
+  useUpgradeSubscription,
+  getCurrentSubscriptionQueryKey,
+  type PlanPublic,
+  type SubscriptionInvoice,
 } from "@workspace/api-client-react";
 import type {
   UpdateTenantBody,
@@ -393,106 +398,282 @@ function AgencyProfileTab() {
 }
 
 /* ──────────────────── Plan & Billing Tab ──────────────────── */
+function formatCurrencyBRL(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return "Grátis";
+  const num = Number(value);
+  if (num === 0) return "Grátis";
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(num);
+}
+
+interface PixModalProps {
+  invoice: SubscriptionInvoice;
+  onClose: () => void;
+}
+
+function PixModal({ invoice, onClose }: PixModalProps) {
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
+
+  function copyCode() {
+    if (invoice.pixCode) {
+      navigator.clipboard.writeText(invoice.pixCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast({ title: "Código PIX copiado!" });
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-primary" />
+            Pagamento via PIX
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="text-center">
+            <p className="text-2xl font-bold text-primary">
+              {formatCurrencyBRL(invoice.amount)}
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">{invoice.description}</p>
+          </div>
+
+          {invoice.pixQrCodeUrl && (
+            <div className="flex justify-center">
+              <img
+                src={invoice.pixQrCodeUrl}
+                alt="QR Code PIX"
+                className="w-48 h-48 rounded-lg border"
+              />
+            </div>
+          )}
+
+          {invoice.pixCode && (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground text-center">
+                Ou copie o código PIX abaixo
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  value={invoice.pixCode}
+                  readOnly
+                  className="font-mono text-xs"
+                />
+                <Button variant="outline" size="sm" onClick={copyCode}>
+                  {copied ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : "Copiar"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {invoice.pixExpiresAt && (
+            <p className="text-xs text-center text-muted-foreground">
+              Válido até: {new Date(invoice.pixExpiresAt).toLocaleString("pt-BR")}
+            </p>
+          )}
+
+          <div className="bg-muted/50 rounded-lg p-3 text-xs text-muted-foreground space-y-1">
+            <p>• Após o pagamento, seu plano será ativado em até 1 hora.</p>
+            <p>• Em caso de dúvidas, entre em contato com nosso suporte.</p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Fechar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function PlanTab() {
   const { toast } = useToast();
-  const { data: me } = useGetMe();
-  const tenant = me?.tenant;
+  const queryClient = useQueryClient();
+  const { data: subData, isLoading } = useGetCurrentSubscription();
+  const upgrade = useUpgradeSubscription();
+  const [showPixModal, setShowPixModal] = useState(false);
+  const [pendingInvoice, setPendingInvoice] = useState<SubscriptionInvoice | null>(null);
+  const [selectedCycle, setSelectedCycle] = useState<"monthly" | "annual">("monthly");
 
-  const plans = [
-    { id: "starter", name: "Starter", price: "R$ 197/mês", clients: 500, trips: 20, users: 3 },
-    { id: "pro", name: "Pro", price: "R$ 397/mês", clients: 2000, trips: 100, users: 10 },
-    {
-      id: "enterprise",
-      name: "Enterprise",
-      price: "Sob consulta",
-      clients: -1,
-      trips: -1,
-      users: -1,
-    },
-  ];
+  const currentPlan = subData?.plan;
+  const plans = subData?.plans ?? [];
+  const usage = subData?.usage;
 
-  const currentPlan = plans.find((p) => p.id === tenant?.planId) ?? plans[0];
+  const pendingFromList = subData?.invoices?.find(inv => inv.status === "pending" && inv.pixCode);
 
-  function handleUpgrade(planName: string) {
-    toast({
-      title: `Upgrade para ${planName}`,
-      description: "Entre em contato com nosso suporte para fazer o upgrade do seu plano.",
-    });
+  async function handleUpgrade(plan: PlanPublic) {
+    try {
+      const result = await upgrade.mutateAsync({ planId: plan.id, billingCycle: selectedCycle });
+      await queryClient.invalidateQueries({ queryKey: getCurrentSubscriptionQueryKey() });
+      if (result.upgraded) {
+        toast({ title: `Plano ${plan.name} ativado!`, description: "Seu plano foi alterado com sucesso." });
+      } else if (result.invoice) {
+        setPendingInvoice(result.invoice);
+        setShowPixModal(true);
+      }
+    } catch {
+      toast({ title: "Erro ao fazer upgrade", variant: "destructive" });
+    }
   }
+
+  if (isLoading) {
+    return <div className="animate-pulse text-muted-foreground py-8 text-center">Carregando plano...</div>;
+  }
+
+  const usageItems = usage
+    ? [
+        { label: "Clientes", used: usage.clients, max: usage.maxClients },
+        { label: "Viagens", used: usage.trips, max: usage.maxTrips },
+        { label: "Usuários", used: usage.users, max: usage.maxUsers },
+      ]
+    : [];
 
   return (
     <div className="space-y-6">
       <Card className="border-primary/40 bg-primary/5">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Badge>{currentPlan.name}</Badge>
+            <Badge>{currentPlan?.name ?? subData?.tenant?.planId ?? "Starter"}</Badge>
             Plano atual
           </CardTitle>
           <CardDescription>
-            Você está no plano {currentPlan.name} — {currentPlan.price}
+            {currentPlan
+              ? `Você está no plano ${currentPlan.name} — ${Number(currentPlan.monthlyPrice) === 0 ? "Grátis" : `${formatCurrencyBRL(currentPlan.monthlyPrice)}/mês`}`
+              : "Carregando informações do plano..."}
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              { label: "Clientes", limit: currentPlan.clients, used: 0 },
-              { label: "Viagens", limit: currentPlan.trips, used: 0 },
-              { label: "Usuários", limit: currentPlan.users, used: 0 },
-            ].map((item) => (
-              <div key={item.label}>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span>{item.label}</span>
-                  <span className="text-muted-foreground">
-                    {item.limit === -1 ? "Ilimitado" : `${item.used}/${item.limit}`}
-                  </span>
-                </div>
-                <div className="h-2 bg-muted rounded-full">
-                  <div
-                    className="h-2 bg-primary rounded-full"
-                    style={{
-                      width: item.limit === -1 ? "20%" : `${(item.used / item.limit) * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
+        {usageItems.length > 0 && (
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4">
+              {usageItems.map((item) => {
+                const pct = Math.min((item.used / item.max) * 100, 100);
+                const isNearLimit = pct >= 80;
+                return (
+                  <div key={item.label}>
+                    <div className="flex items-center justify-between text-sm mb-1">
+                      <span>{item.label}</span>
+                      <span className={`text-muted-foreground ${isNearLimit ? "text-amber-600 font-medium" : ""}`}>
+                        {item.used}/{item.max}
+                      </span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full">
+                      <div
+                        className={`h-2 rounded-full transition-all ${isNearLimit ? "bg-amber-500" : "bg-primary"}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        )}
       </Card>
 
-      <div className="grid grid-cols-3 gap-4">
-        {plans.map((plan) => (
-          <Card
-            key={plan.id}
-            className={
-              plan.id === currentPlan.id ? "border-primary ring-1 ring-primary" : ""
-            }
+      {pendingFromList && !showPixModal && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="flex items-center justify-between py-4">
+            <div>
+              <p className="font-medium text-amber-800">Pagamento pendente</p>
+              <p className="text-sm text-amber-700">{pendingFromList.description} — {formatCurrencyBRL(pendingFromList.amount)}</p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-amber-400 text-amber-800"
+              onClick={() => { setPendingInvoice(pendingFromList); setShowPixModal(true); }}
+            >
+              Ver PIX
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="flex items-center gap-3 justify-end">
+        <span className="text-sm text-muted-foreground">Ciclo de faturamento:</span>
+        <div className="flex border rounded-lg overflow-hidden">
+          <button
+            className={`px-3 py-1.5 text-sm ${selectedCycle === "monthly" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+            onClick={() => setSelectedCycle("monthly")}
           >
-            <CardHeader>
-              <CardTitle className="text-base">{plan.name}</CardTitle>
-              <CardDescription className="text-lg font-bold text-foreground">
-                {plan.price}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-1 text-sm text-muted-foreground">
-              <p>{plan.clients === -1 ? "Clientes ilimitados" : `Até ${plan.clients} clientes`}</p>
-              <p>{plan.trips === -1 ? "Viagens ilimitadas" : `Até ${plan.trips} viagens`}</p>
-              <p>{plan.users === -1 ? "Usuários ilimitados" : `Até ${plan.users} usuários`}</p>
-            </CardContent>
-            {plan.id !== currentPlan.id && (
-              <div className="px-6 pb-4">
-                <Button
-                  className="w-full"
-                  variant="outline"
-                  onClick={() => handleUpgrade(plan.name)}
-                >
-                  Fazer upgrade
-                </Button>
-              </div>
-            )}
-          </Card>
-        ))}
+            Mensal
+          </button>
+          <button
+            className={`px-3 py-1.5 text-sm ${selectedCycle === "annual" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+            onClick={() => setSelectedCycle("annual")}
+          >
+            Anual <span className="text-xs opacity-75">(-17%)</span>
+          </button>
+        </div>
       </div>
+
+      <div className={`grid gap-4 ${plans.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+        {(plans.length > 0 ? plans : [
+          { id: "starter", name: "Starter", slug: "starter", monthlyPrice: "0", annualPrice: "0", maxUsers: 3, maxClients: 500, maxTrips: 20, features: [], isActive: true, isFeatured: false, sortOrder: 1, trialDays: 0, createdAt: "", updatedAt: "", description: null },
+        ] as PlanPublic[]).map((plan) => {
+          const isCurrentPlan = plan.slug === subData?.tenant?.planId || plan.id === subData?.tenant?.planId;
+          const price = selectedCycle === "annual" ? Number(plan.annualPrice) : Number(plan.monthlyPrice);
+          const monthlyEquiv = selectedCycle === "annual" && Number(plan.annualPrice) > 0
+            ? (Number(plan.annualPrice) / 12).toFixed(0)
+            : null;
+          return (
+            <Card
+              key={plan.id}
+              className={isCurrentPlan ? "border-primary ring-1 ring-primary" : ""}
+            >
+              {plan.isFeatured && (
+                <div className="text-center py-1 bg-primary text-primary-foreground text-xs font-medium rounded-t-lg -mt-px mx-px">
+                  Mais popular
+                </div>
+              )}
+              <CardHeader>
+                <CardTitle className="text-base">{plan.name}</CardTitle>
+                <CardDescription className="text-lg font-bold text-foreground">
+                  {price === 0
+                    ? "Grátis"
+                    : selectedCycle === "annual"
+                      ? <>{formatCurrencyBRL(plan.annualPrice)}/ano {monthlyEquiv && <span className="text-xs font-normal text-muted-foreground">(≈ R$ {monthlyEquiv}/mês)</span>}</>
+                      : `${formatCurrencyBRL(plan.monthlyPrice)}/mês`
+                  }
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-1 text-sm text-muted-foreground">
+                <p>Até {plan.maxClients.toLocaleString("pt-BR")} clientes</p>
+                <p>Até {plan.maxTrips.toLocaleString("pt-BR")} viagens</p>
+                <p>Até {plan.maxUsers} usuários</p>
+                {plan.trialDays > 0 && (
+                  <p className="text-primary font-medium">{plan.trialDays} dias grátis</p>
+                )}
+              </CardContent>
+              {!isCurrentPlan && (
+                <div className="px-6 pb-4">
+                  <Button
+                    className="w-full"
+                    variant={plan.isFeatured ? "default" : "outline"}
+                    onClick={() => handleUpgrade(plan)}
+                    disabled={upgrade.isPending}
+                  >
+                    {upgrade.isPending ? "Processando..." : price === 0 ? "Mudar para Starter" : "Fazer upgrade"}
+                  </Button>
+                </div>
+              )}
+              {isCurrentPlan && (
+                <div className="px-6 pb-4">
+                  <div className="flex items-center justify-center gap-1 text-sm text-primary font-medium">
+                    <CheckCircle2 className="w-4 h-4" />
+                    Plano atual
+                  </div>
+                </div>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+
+      {showPixModal && pendingInvoice && (
+        <PixModal invoice={pendingInvoice} onClose={() => setShowPixModal(false)} />
+      )}
     </div>
   );
 }
