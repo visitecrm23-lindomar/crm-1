@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Loader2,
   CheckCircle,
@@ -36,6 +38,9 @@ import {
   Phone,
   Mail,
   Info,
+  ArrowUp,
+  ArrowDown,
+  DollarSign,
 } from "lucide-react";
 
 type Step = "dados" | "revisao" | "assento" | "pagamento" | "confirmado";
@@ -271,6 +276,7 @@ function PublicLayoutSeatPicker({
   selected,
   onToggle,
   accentColor,
+  pricePerPerson,
 }: {
   seats: PublicSeatEntry[];
   totalSeats: number;
@@ -280,14 +286,20 @@ function PublicLayoutSeatPicker({
   selected: string[];
   onToggle: (n: string) => void;
   accentColor?: string;
+  pricePerPerson?: number;
 }) {
-  const accent = accentColor || "#f97316";
   const isMultiFloor = floors > 1;
   const [activeFloor, setActiveFloor] = useState<number>(isMultiFloor ? 2 : 1);
 
-  const availableCount = seats.filter(
-    s => CLICKABLE_SEAT_TYPES.includes(s.type) && s.status === "available"
-  ).length;
+  const clickableSeats = useMemo(
+    () => seats.filter(s => CLICKABLE_SEAT_TYPES.includes(s.type)),
+    [seats]
+  );
+  const occupiedCount = clickableSeats.filter(s => s.status !== "available").length;
+  const availableCount = clickableSeats.length - occupiedCount;
+  const occupancyPct = clickableSeats.length > 0
+    ? Math.round((occupiedCount / clickableSeats.length) * 100)
+    : 0;
 
   const floorCounts = useMemo(() => {
     const counts: Record<number, number> = {};
@@ -310,131 +322,320 @@ function PublicLayoutSeatPicker({
   const maxCol = Math.max(...activeSeats.map(s => s.col), 4);
   const aisleAfterCol = Math.ceil(maxCol / 2);
 
+  const selectedSeatObjects = useMemo(
+    () => seats.filter(s => selected.includes(s.number)),
+    [seats, selected]
+  );
+
+  function formatPrice(price: number) {
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(price);
+  }
+
   function SeatCell({ seat }: { seat: PublicSeatEntry }) {
     const isNonSeat = NON_SEAT_TYPES_PUB.includes(seat.type);
     const isOccupied = !isNonSeat && seat.status !== "available";
     const isSelected = selected.includes(seat.number);
     const canSelect = !isNonSeat && !isOccupied && (isSelected || selected.length < qty);
     const isClickable = CLICKABLE_SEAT_TYPES.includes(seat.type) && !isOccupied;
-
-    let cls = "relative w-10 h-10 rounded-lg border-2 flex items-center justify-center text-xs font-bold transition-all select-none ";
-    let style: React.CSSProperties = {};
+    const isVip = seat.type === "vip";
 
     if (isNonSeat) {
-      if (seat.type === "wc") cls += "border-cyan-200 bg-cyan-50 text-cyan-600 cursor-not-allowed";
-      else if (seat.type === "stairs") cls += "border-purple-200 bg-purple-50 text-purple-600 cursor-not-allowed";
-      else cls += "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed";
-    } else if (isSelected) {
-      cls += "border-transparent text-white cursor-pointer";
-      style = { backgroundColor: accent, borderColor: accent };
+      let nonSeatCls = "w-11 h-11 rounded-xl border-2 flex flex-col items-center justify-center text-xs font-medium select-none ";
+      if (seat.type === "wc") nonSeatCls += "border-cyan-200 bg-cyan-50 text-cyan-600";
+      else if (seat.type === "stairs") nonSeatCls += "border-purple-200 bg-purple-50 text-purple-600";
+      else nonSeatCls += "border-gray-200 bg-gray-100 text-gray-400";
+      return (
+        <div className={nonSeatCls} title={seat.type}>
+          <span className="text-sm">{getCellIconPub(seat.type, seat.number)}</span>
+        </div>
+      );
+    }
+
+    let btnCls = "w-11 h-11 rounded-xl border-2 flex flex-col items-center justify-center transition-all duration-200 select-none ";
+    if (isSelected) {
+      btnCls += "bg-gradient-to-br from-green-400 to-green-600 text-white border-green-700 shadow-lg scale-105 ring-2 ring-green-300 ring-offset-1 cursor-pointer";
     } else if (isOccupied) {
-      cls += "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed";
+      btnCls += "bg-gradient-to-br from-red-300 to-red-400 text-white border-red-500 cursor-not-allowed opacity-75";
     } else if (canSelect) {
-      if (seat.type === "vip") cls += "border-yellow-400 bg-yellow-50 text-yellow-800 hover:bg-yellow-100 cursor-pointer";
-      else cls += "border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50 cursor-pointer";
+      if (isVip) {
+        btnCls += "bg-gradient-to-br from-yellow-300 to-yellow-400 text-yellow-900 border-yellow-500 hover:from-yellow-400 hover:to-yellow-500 hover:scale-105 hover:shadow-md cursor-pointer";
+      } else {
+        btnCls += "bg-gradient-to-br from-blue-400 to-blue-500 text-white border-blue-600 hover:from-blue-500 hover:to-blue-600 hover:scale-105 hover:shadow-md cursor-pointer";
+      }
     } else {
-      cls += "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed";
+      btnCls += "bg-gradient-to-br from-gray-200 to-gray-300 text-gray-500 border-gray-400 cursor-not-allowed opacity-60";
     }
 
-    const icon = isSelected ? "✓" : getCellIconPub(seat.type, seat.number);
+    const seatPrice = pricePerPerson != null ? pricePerPerson * (isVip ? 1.1 : 1) : null;
 
-    if (isNonSeat) {
-      return <div className={cls} style={style} title={seat.type}>{icon}</div>;
-    }
     return (
-      <button
-        type="button"
-        className={cls}
-        style={style}
-        onClick={() => isClickable && canSelect && onToggle(seat.number)}
-        disabled={!isClickable || (!canSelect && !isSelected)}
-        title={isOccupied ? `Assento ${seat.number} — Ocupado` : `Assento ${seat.number}`}
-      >
-        {icon}
-        {isSelected && (
-          <span className="absolute top-0.5 right-0.5">
-            <Check className="w-2.5 h-2.5 text-white" />
+      <div className="relative group">
+        <button
+          type="button"
+          className={btnCls}
+          onClick={() => isClickable && canSelect && onToggle(seat.number)}
+          disabled={!isClickable || (!canSelect && !isSelected)}
+          title={isOccupied ? `Assento ${seat.number} — Ocupado` : `Assento ${seat.number}`}
+        >
+          <Armchair className="w-4 h-4 mb-0.5 shrink-0" />
+          <span className="text-[10px] font-bold leading-none">
+            {isSelected ? "✓" : isOccupied ? "✗" : seat.number}
+          </span>
+          {!isOccupied && !isSelected && (
+            <span className="absolute inset-0 rounded-xl bg-gradient-to-tr from-white/0 via-white/20 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+          )}
+        </button>
+
+        {isVip && !isOccupied && (
+          <span className="absolute -top-1.5 -right-1.5 z-10 bg-yellow-500 text-yellow-900 text-[9px] font-bold px-1 py-0.5 rounded-full shadow-sm border border-yellow-600 leading-none">
+            VIP
           </span>
         )}
-      </button>
+
+        {seatPrice != null && !isOccupied && (
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+            <div className="bg-gray-900 text-white text-[10px] font-semibold px-2 py-1 rounded-lg shadow-xl whitespace-nowrap">
+              {formatPrice(seatPrice)}
+              {isVip && <span className="ml-1 text-yellow-300">(+10%)</span>}
+            </div>
+            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900 -mt-px" />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function FloorGrid({ floorNum }: { floorNum: number }) {
+    const isUpper = floorNum === 2;
+    const floorSeats = seats
+      .filter(s => s.floor === floorNum)
+      .sort((a, b) => a.row !== b.row ? a.row - b.row : a.col - b.col);
+    const fMaxRow = Math.max(...floorSeats.map(s => s.row), 0);
+    const fMaxCol = Math.max(...floorSeats.map(s => s.col), 4);
+    const fAisle = Math.ceil(fMaxCol / 2);
+
+    return (
+      <div className="space-y-3">
+        <div className={`flex items-center justify-between p-4 rounded-2xl text-white shadow-sm ${isUpper ? "bg-gradient-to-r from-blue-600 to-blue-700" : "bg-gradient-to-r from-purple-600 to-purple-700"}`}>
+          <div className="flex items-center gap-3">
+            {isUpper ? <ArrowUp className="w-5 h-5" /> : <ArrowDown className="w-5 h-5" />}
+            <div>
+              <p className="font-bold text-sm">{isUpper ? "Piso Superior" : "Piso Inferior"}</p>
+              <p className="text-xs text-white/80">{floorCounts[floorNum] ?? 0} assentos disponíveis</p>
+            </div>
+          </div>
+          <span className="text-xs font-semibold bg-white/20 px-3 py-1 rounded-full border border-white/30">
+            {floorSeats.filter(s => CLICKABLE_SEAT_TYPES.includes(s.type)).length} lugares
+          </span>
+        </div>
+
+        <div className="border-2 border-gray-200 rounded-2xl overflow-hidden shadow-inner">
+          <div className="bg-gray-800 text-white text-xs font-bold py-2.5 text-center tracking-[0.15em]">
+            {isUpper ? "🏢 PISO SUPERIOR — FRENTE" : "🚌 PISO INFERIOR — FRENTE"}
+          </div>
+          <div className="bg-gradient-to-b from-gray-50 to-white p-3 space-y-1.5">
+            {Array.from({ length: fMaxRow }, (_, rowIdx) => {
+              const rowNum = rowIdx + 1;
+              const rowSeats = floorSeats.filter(s => s.row === rowNum);
+              const leftSeats = rowSeats.filter(s => s.col <= fAisle);
+              const rightSeats = rowSeats.filter(s => s.col > fAisle);
+              return (
+                <div key={rowNum} className="flex items-center justify-center gap-1">
+                  <div className="flex gap-1">
+                    {leftSeats.map(s => <SeatCell key={s.number} seat={s} />)}
+                  </div>
+                  <div className="w-6 flex items-center justify-center text-gray-300 text-sm font-light select-none">|</div>
+                  <div className="flex gap-1">
+                    {rightSeats.map(s => <SeatCell key={s.number} seat={s} />)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     );
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-2 text-xs text-muted-foreground">
-        <span className="font-medium text-foreground/70">
-          {isMultiFloor ? "Double Decker" : `Layout: ${layout === "2x1" ? "2x1 Premium" : "2x2 Padrão"}`}
-        </span>
-        <span>
-          <strong className="text-foreground">{availableCount}</strong> disponíveis &middot; {totalSeats} total
-        </span>
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-xl p-3 bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-sm">
+          <p className="text-[11px] text-blue-100 mb-0.5">Total</p>
+          <p className="text-2xl font-bold">{clickableSeats.length}</p>
+        </div>
+        <div className="rounded-xl p-3 bg-gradient-to-br from-green-500 to-green-600 text-white shadow-sm">
+          <p className="text-[11px] text-green-100 mb-0.5">Disponíveis</p>
+          <p className="text-2xl font-bold">{availableCount}</p>
+        </div>
+        <div className="rounded-xl p-3 bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-sm">
+          <p className="text-[11px] text-orange-100 mb-0.5">Ocupação</p>
+          <p className="text-2xl font-bold">{occupancyPct}%</p>
+        </div>
       </div>
 
-      {isMultiFloor && (
-        <div className="flex gap-2 mb-3">
-          {[2, 1].map(f => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => setActiveFloor(f)}
-              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                activeFloor === f
-                  ? "text-white border-transparent"
-                  : "bg-muted/50 text-muted-foreground border-gray-200 hover:border-gray-400"
-              }`}
-              style={activeFloor === f ? { backgroundColor: accent } : {}}
-            >
-              {f === 2 ? "🏢 Piso Superior" : "🚌 Piso Inferior"}
-              <span className="ml-1 opacity-75">({floorCounts[f] ?? 0} disp.)</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="flex items-center gap-4 text-xs text-muted-foreground mb-3 flex-wrap">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground px-1">
         <span className="flex items-center gap-1.5">
-          <span className="w-4 h-4 rounded border-2 border-gray-300 bg-white inline-block" />
+          <span className="w-5 h-5 rounded-lg bg-gradient-to-br from-blue-400 to-blue-500 inline-block shadow-sm" />
           Disponível
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-4 h-4 rounded border-2 border-gray-200 bg-gray-100 inline-block" />
+          <span className="w-5 h-5 rounded-lg bg-gradient-to-br from-green-400 to-green-600 inline-block shadow-sm" />
+          Selecionado
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-5 h-5 rounded-lg bg-gradient-to-br from-red-300 to-red-400 inline-block shadow-sm" />
           Ocupado
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-4 h-4 rounded inline-block" style={{ backgroundColor: accent }} />
-          Selecionado
+          <span className="w-5 h-5 rounded-lg bg-gradient-to-br from-yellow-300 to-yellow-400 inline-block shadow-sm" />
+          VIP (+10%)
         </span>
       </div>
 
-      <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-        <div className="bg-gray-800 text-white text-xs font-bold py-2.5 text-center tracking-[0.15em]">
-          {isMultiFloor ? (activeFloor === 2 ? "🏢 PISO SUPERIOR — FRENTE" : "🚌 PISO INFERIOR — FRENTE") : "FRENTE DO ÔNIBUS"}
+      {isMultiFloor ? (
+        <Tabs value={String(activeFloor)} onValueChange={(v) => setActiveFloor(Number(v))}>
+          <TabsList className="grid w-full grid-cols-2 h-12 bg-gray-100 p-1 rounded-2xl shadow-sm">
+            <TabsTrigger
+              value="2"
+              className="flex items-center gap-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-blue-600 rounded-xl transition-all"
+            >
+              <ArrowUp className="w-4 h-4" />
+              Piso Superior
+              <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">
+                {floorCounts[2] ?? 0}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="1"
+              className="flex items-center gap-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-purple-600 rounded-xl transition-all"
+            >
+              <ArrowDown className="w-4 h-4" />
+              Piso Inferior
+              <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-bold">
+                {floorCounts[1] ?? 0}
+              </span>
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="2" className="mt-4">
+            <FloorGrid floorNum={2} />
+          </TabsContent>
+          <TabsContent value="1" className="mt-4">
+            <FloorGrid floorNum={1} />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <div className="border-2 border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+          <div className="bg-gray-800 text-white text-xs font-bold py-2.5 text-center tracking-[0.15em]">
+            FRENTE DO ÔNIBUS
+          </div>
+          <div className="bg-gray-50 p-3 space-y-1.5">
+            {Array.from({ length: maxRow }, (_, rowIdx) => {
+              const rowNum = rowIdx + 1;
+              const rowSeats = activeSeats.filter(s => s.row === rowNum);
+              const leftSeats = rowSeats.filter(s => s.col <= aisleAfterCol);
+              const rightSeats = rowSeats.filter(s => s.col > aisleAfterCol);
+              return (
+                <div key={rowNum} className="flex items-center justify-center gap-1">
+                  <div className="flex gap-1">
+                    {leftSeats.map(s => <SeatCell key={s.number} seat={s} />)}
+                  </div>
+                  <div className="w-6 flex items-center justify-center text-gray-300 text-sm font-light select-none">|</div>
+                  <div className="flex gap-1">
+                    {rightSeats.map(s => <SeatCell key={s.number} seat={s} />)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
-        <div className="bg-gray-50 p-3 space-y-1.5">
-          {Array.from({ length: maxRow }, (_, rowIdx) => {
-            const rowNum = rowIdx + 1;
-            const rowSeats = activeSeats.filter(s => s.row === rowNum);
-            const leftSeats = rowSeats.filter(s => s.col <= aisleAfterCol);
-            const rightSeats = rowSeats.filter(s => s.col > aisleAfterCol);
-            return (
-              <div key={rowNum} className="flex items-center justify-center gap-1">
-                <div className="flex gap-1">
-                  {leftSeats.map(s => <SeatCell key={s.number} seat={s} />)}
-                </div>
-                <div className="w-6 flex items-center justify-center text-gray-300 text-sm font-light select-none">|</div>
-                <div className="flex gap-1">
-                  {rightSeats.map(s => <SeatCell key={s.number} seat={s} />)}
-                </div>
+      )}
+
+      <AnimatePresence>
+        {selected.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.25 }}
+            className="rounded-2xl border-2 border-green-300 bg-gradient-to-br from-green-50 to-emerald-50 p-4 shadow-sm"
+          >
+            <p className="font-bold text-green-800 flex items-center gap-2 mb-3 text-sm">
+              <Check className="w-4 h-4 text-green-600" />
+              Assentos Selecionados
+            </p>
+            <div className="space-y-2">
+              {selectedSeatObjects.map((seat, idx) => {
+                const isVip = seat.type === "vip";
+                const price = pricePerPerson != null ? pricePerPerson * (isVip ? 1.1 : 1) : null;
+                return (
+                  <motion.div
+                    key={seat.number}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className="flex items-center justify-between p-3 bg-white rounded-xl border border-green-200 shadow-sm"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
+                        {seat.number}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm text-gray-900">Assento {seat.number}</p>
+                        <p className="text-xs text-gray-500 flex items-center gap-1">
+                          {floors > 1
+                            ? seat.floor === 2
+                              ? <><ArrowUp className="w-3 h-3" /> Piso Superior</>
+                              : <><ArrowDown className="w-3 h-3" /> Piso Inferior</>
+                            : null}
+                          {isVip && <span className="ml-1 text-yellow-600 font-semibold">• VIP</span>}
+                        </p>
+                      </div>
+                    </div>
+                    {price != null && (
+                      <p className="font-bold text-green-600 text-sm">{formatPrice(price)}</p>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </div>
+            {pricePerPerson != null && selectedSeatObjects.length > 0 && (
+              <div className="mt-3 pt-3 border-t-2 border-green-200 flex items-center justify-between">
+                <span className="font-bold text-gray-900 flex items-center gap-1.5">
+                  <DollarSign className="w-4 h-4 text-green-600" />
+                  Total
+                </span>
+                <span className="text-xl font-bold text-green-600">
+                  {formatPrice(
+                    selectedSeatObjects.reduce(
+                      (sum, s) => sum + pricePerPerson * (s.type === "vip" ? 1.1 : 1),
+                      0
+                    )
+                  )}
+                </span>
               </div>
-            );
-          })}
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="rounded-xl border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-4">
+        <div className="flex items-start gap-3">
+          <Info className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+          <div className="text-sm text-blue-900">
+            <p className="font-bold mb-1.5">💡 Dicas para escolher seu assento:</p>
+            <ul className="space-y-1 text-xs text-blue-800">
+              <li>• Assentos VIP oferecem mais espaço e conforto (+10%)</li>
+              <li>• Piso inferior geralmente tem menos movimento</li>
+              <li>• Assentos próximos à entrada facilitam o embarque</li>
+              <li>• Selecione exatamente {qty} assento{qty !== 1 ? "s" : ""} para continuar</li>
+            </ul>
+          </div>
         </div>
       </div>
 
-      <p className="text-xs text-muted-foreground text-center mt-3">
-        Selecione exatamente {qty} assento{qty !== 1 ? "s" : ""} para continuar
-        {" "}({selected.length}/{qty} selecionado{qty !== 1 ? "s" : ""})
+      <p className="text-xs text-muted-foreground text-center">
+        {selected.length}/{qty} assento{qty !== 1 ? "s" : ""} selecionado{qty !== 1 ? "s" : ""}
       </p>
     </div>
   );
@@ -1686,6 +1887,7 @@ export default function ReservationWizard({
                     prev.includes(n) ? prev.filter(s => s !== n) : prev.length < qty ? [...prev, n] : prev
                   )}
                   accentColor={store?.accentColor || store?.primaryColor}
+                  pricePerPerson={unitPrice}
                 />
               ) : (
                 <SeatGrid
