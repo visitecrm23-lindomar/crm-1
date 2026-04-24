@@ -114,7 +114,7 @@ function formatCurrency(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 function formatDate(d: string) {
-  try { return format(parseISO(d), "dd/MM/yyyy", { locale: ptBR }); }
+  try { return format(new Date(d.slice(0, 10) + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR }); }
   catch { return d; }
 }
 
@@ -1060,8 +1060,8 @@ function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boole
                 <div className="flex items-center gap-1">
                   <Calendar className="w-3 h-3 shrink-0" />
                   <span>
-                    {new Date(trip.departureDate).toLocaleDateString("pt-BR")}
-                    {trip.returnDate && ` → ${new Date(trip.returnDate).toLocaleDateString("pt-BR")}`}
+                    {new Date(trip.departureDate.slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR")}
+                    {trip.returnDate && ` → ${new Date(trip.returnDate.slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR")}`}
                   </span>
                 </div>
                 {durationLabel && (

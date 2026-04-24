@@ -200,7 +200,8 @@ function ProductCard({
               <Calendar className="w-3 h-3" />
               {new Date(displayDate.slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR", {
                 day: "2-digit",
-                month: "short",
+                month: "2-digit",
+                year: "numeric",
               })}
             </span>
           )}
