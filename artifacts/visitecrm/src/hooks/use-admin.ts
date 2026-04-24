@@ -108,6 +108,21 @@ export interface ChurnMetric {
   churnRate: number;
 }
 
+export interface AdminTenant {
+  id: string;
+  name: string;
+  slug: string;
+  email: string;
+  planId: string;
+  pendingPlanId: string | null;
+  status: string;
+  trialEndsAt: string | null;
+  suspendedAt: string | null;
+  userCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TenantDetails {
   id: string;
   name: string;
@@ -310,6 +325,32 @@ export function useActivateTenant() {
     mutationFn: (id: string) => adminFetch(`/api/admin/tenants/${id}/activate`, { method: "POST" }),
     onSuccess: (_data, id) => {
       qc.invalidateQueries({ queryKey: ["admin", "tenants", id] });
+      qc.invalidateQueries({ queryKey: ["admin-stats"] });
+    },
+  });
+}
+
+// ─── ADMIN TENANTS LIST ───────────────────────────────────────────────────────
+
+export function useAdminTenants() {
+  return useQuery<AdminTenant[]>({
+    queryKey: ["admin", "tenants"],
+    queryFn: () => adminFetch("/api/admin/tenants"),
+  });
+}
+
+export function getAdminTenantsQueryKey() {
+  return ["admin", "tenants"] as const;
+}
+
+// ─── SUPERADMIN SYNC ──────────────────────────────────────────────────────────
+
+export function useSyncSuperadmin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => adminFetch("/api/admin/sync-superadmin", { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "tenants"] });
       qc.invalidateQueries({ queryKey: ["admin-stats"] });
     },
   });

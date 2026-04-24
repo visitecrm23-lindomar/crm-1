@@ -129,7 +129,8 @@ router.post("/users/me/sync", async (req, res): Promise<void> => {
       }
 
       const linkedTenantId = pendingInvite?.tenantId ?? null;
-      const assignedRole = pendingInvite?.role ?? "agencia";
+      const superadminClerkId = process.env.SUPERADMIN_CLERK_ID;
+      const assignedRole = (superadminClerkId && clerkId === superadminClerkId) ? "superadmin" : (pendingInvite?.role ?? "agencia");
 
       if (linkedTenantId) {
         const allowed = await checkPlanLimit(linkedTenantId, "users", req, res);
@@ -165,6 +166,12 @@ router.post("/users/me/sync", async (req, res): Promise<void> => {
         avatarUrl: avatarUrl ?? null,
         lastLoginAt: new Date(),
       };
+
+      const superadminClerkIdForUpdate = process.env.SUPERADMIN_CLERK_ID;
+      if (superadminClerkIdForUpdate && clerkId === superadminClerkIdForUpdate && existing.role !== "superadmin") {
+        updateSet.role = "superadmin";
+        req.log.info({ clerkId, userId: existing.id }, "Auto-promoted user to superadmin via SUPERADMIN_CLERK_ID");
+      }
 
       if (!existing.tenantId && !clerkFetchFailed) {
         const reconcileInvite = await resolveInviteForUser(clerkId, canonicalEmail, inviteIdFromMeta, req.log);

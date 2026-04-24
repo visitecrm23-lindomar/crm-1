@@ -20,19 +20,26 @@ export async function requireAuth(req: Request, res: Response): Promise<AuthedUs
     return null;
   }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, userId)).limit(1);
-  if (!user?.tenantId) {
+  if (!user) {
     res.status(401).json({ error: "User not provisioned" });
     return null;
   }
-  return user as AuthedUser;
+  // Superadmins may not have a tenantId (they manage the platform globally)
+  if (!user.tenantId && user.role !== "superadmin") {
+    res.status(401).json({ error: "User not provisioned" });
+    return null;
+  }
+  // Return superadmin with empty string tenantId so routes using me.tenantId gracefully return empty results
+  return { ...user, tenantId: user.tenantId ?? "" } as AuthedUser;
 }
 
 export async function getTenantUser(req: Request): Promise<AuthedUser | null> {
   const { userId } = getAuth(req);
   if (!userId) return null;
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, userId)).limit(1);
-  if (!user?.tenantId) return null;
-  return user as AuthedUser;
+  if (!user) return null;
+  if (!user.tenantId && user.role !== "superadmin") return null;
+  return { ...user, tenantId: user.tenantId ?? "" } as AuthedUser;
 }
 
 export function requireRole(allowedRoles: string[]) {

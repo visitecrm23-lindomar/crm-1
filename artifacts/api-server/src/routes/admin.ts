@@ -4,6 +4,7 @@ import { eq, desc, asc, count, sql, and, gte, lte, ne } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { getAuth } from "@clerk/express";
 import { utapi } from "../lib/uploadthing";
 import { collectReferencedUploadThingKeys } from "../lib/collectReferencedUploadThingKeys";
 
@@ -420,6 +421,68 @@ router.get("/admin/audit-logs", async (req, res): Promise<void> => {
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "Error listing audit logs");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── ADMIN TENANTS LIST ───────────────────────────────────────────────────────
+
+router.get("/admin/tenants", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!requireSuperAdmin(me.role, res)) return;
+
+    const tenants = await db.select().from(tenantsTable).orderBy(desc(tenantsTable.createdAt));
+
+    const userCounts = await db
+      .select({ tenantId: usersTable.tenantId, userCount: count(usersTable.id) })
+      .from(usersTable)
+      .groupBy(usersTable.tenantId);
+
+    const countMap: Record<string, number> = {};
+    for (const row of userCounts) {
+      if (row.tenantId) countMap[row.tenantId] = row.userCount;
+    }
+
+    res.json(tenants.map((t) => ({ ...t, userCount: countMap[t.id] ?? 0 })));
+  } catch (err) {
+    req.log.error({ err }, "Error listing admin tenants");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── SUPERADMIN SYNC ──────────────────────────────────────────────────────────
+// Bootstrap: set role="superadmin" for the calling user if their Clerk ID matches
+// the SUPERADMIN_CLERK_ID environment variable. Safe to call multiple times.
+
+router.post("/admin/sync-superadmin", async (req, res): Promise<void> => {
+  try {
+    const { userId: clerkId } = getAuth(req);
+    if (!clerkId) { res.status(401).json({ error: "Not authenticated" }); return; }
+
+    const superadminClerkId = process.env.SUPERADMIN_CLERK_ID;
+    if (!superadminClerkId) {
+      res.status(503).json({ error: "SUPERADMIN_CLERK_ID not configured" }); return;
+    }
+    if (clerkId !== superadminClerkId) {
+      res.status(403).json({ error: "Clerk ID does not match SUPERADMIN_CLERK_ID" }); return;
+    }
+
+    const [existing] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId)).limit(1);
+    if (!existing) {
+      res.status(404).json({ error: "User not found — sign in first to create your profile, then call this endpoint" }); return;
+    }
+
+    if (existing.role === "superadmin") {
+      res.json({ ok: true, already: true, userId: existing.id, role: "superadmin" }); return;
+    }
+
+    await db.update(usersTable).set({ role: "superadmin" }).where(eq(usersTable.clerkId, clerkId));
+    req.log.info({ clerkId, userId: existing.id }, "Promoted user to superadmin via sync-superadmin");
+    res.json({ ok: true, already: false, userId: existing.id, role: "superadmin" });
+  } catch (err) {
+    req.log.error({ err }, "Error syncing superadmin");
     res.status(500).json({ error: "Internal server error" });
   }
 });

@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import {
-  useListTenants,
   useUpdateTenant,
   useListPlans,
-  type TenantWithCount,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAdminTenants, getAdminTenantsQueryKey, useSyncSuperadmin, type AdminTenant } from "@/hooks/use-admin";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,9 +23,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Pencil, Users, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { Pencil, Users, ChevronLeft, ChevronRight, ExternalLink, ShieldCheck } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { getListTenantsQueryKey } from "@workspace/api-client-react";
 
 const PAGE_SIZE = 15;
 
@@ -67,7 +65,7 @@ function formatDate(dateStr: string) {
 }
 
 interface EditModalProps {
-  tenant: TenantWithCount | null;
+  tenant: AdminTenant | null;
   onClose: () => void;
 }
 
@@ -86,7 +84,7 @@ function EditTenantModal({ tenant, onClose }: EditModalProps) {
     if (!tenant) return;
     try {
       await updateTenant.mutateAsync({ id: tenant.id, data: { planId, status } });
-      await queryClient.invalidateQueries({ queryKey: getListTenantsQueryKey() });
+      await queryClient.invalidateQueries({ queryKey: getAdminTenantsQueryKey() });
       toast({ title: "Tenant atualizado com sucesso" });
       onClose();
     } catch {
@@ -159,11 +157,26 @@ function EditTenantModal({ tenant, onClose }: EditModalProps) {
 }
 
 export default function AdminTenants() {
-  const { data: tenants = [], isLoading } = useListTenants();
+  const { data: tenants = [], isLoading } = useAdminTenants();
   const { data: plans = [] } = useListPlans();
+  const syncSuperadmin = useSyncSuperadmin();
+  const { toast } = useToast();
   const [page, setPage] = useState(1);
-  const [editingTenant, setEditingTenant] = useState<TenantWithCount | null>(null);
+  const [editingTenant, setEditingTenant] = useState<AdminTenant | null>(null);
   const [, navigate] = useLocation();
+
+  async function handleSyncSuperadmin() {
+    try {
+      const result = await syncSuperadmin.mutateAsync() as { already?: boolean };
+      toast({
+        title: result?.already ? "Já é superadmin" : "Papel superadmin sincronizado!",
+        description: result?.already ? "Seu papel já estava correto." : "Seu papel foi atualizado para superadmin. Faça login novamente para aplicar.",
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro desconhecido";
+      toast({ title: "Erro ao sincronizar papel", description: msg, variant: "destructive" });
+    }
+  }
 
   const planNameMap: Record<string, string> = {};
   for (const p of plans) {
@@ -176,11 +189,17 @@ export default function AdminTenants() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Tenants</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          {tenants.length} agência{tenants.length !== 1 ? "s" : ""} cadastrada{tenants.length !== 1 ? "s" : ""}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Tenants</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            {tenants.length} agência{tenants.length !== 1 ? "s" : ""} cadastrada{tenants.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleSyncSuperadmin} disabled={syncSuperadmin.isPending} title="Sincronizar papel superadmin">
+          <ShieldCheck className="w-4 h-4 mr-2" />
+          {syncSuperadmin.isPending ? "Sincronizando..." : "Sync Superadmin"}
+        </Button>
       </div>
 
       <Card>
