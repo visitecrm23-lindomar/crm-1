@@ -115,8 +115,15 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
 
     if (isDowngradeToFree) {
       await db.update(tenantsTable)
-        .set({ planId: newPlan.slug, updatedAt: new Date() })
+        .set({ planId: newPlan.slug, status: "active", updatedAt: new Date() })
         .where(eq(tenantsTable.id, me.tenantId));
+
+      await db.update(subscriptionsTable)
+        .set({ status: "canceled", canceledAt: new Date() })
+        .where(and(
+          eq(subscriptionsTable.tenantId, me.tenantId),
+          eq(subscriptionsTable.status, "active"),
+        ));
 
       await db.insert(subscriptionsTable).values({
         id: generateId(),
@@ -125,7 +132,7 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
         status: "active",
         billingCycle: parsed.data.billingCycle,
         currentPeriodStart: new Date(),
-        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
       });
 
       res.json({ upgraded: true, plan: newPlan, invoice: null });
@@ -224,7 +231,7 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
 
     await db.update(tenantsTable)
-      .set({ status: "pending_payment", planId: newPlan.slug, updatedAt: now })
+      .set({ status: "pending_payment", updatedAt: now })
       .where(eq(tenantsTable.id, me.tenantId));
 
     await db.insert(subscriptionsTable).values({
