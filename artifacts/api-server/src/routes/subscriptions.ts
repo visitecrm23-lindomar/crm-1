@@ -142,16 +142,20 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
     const trialDays = newPlan.trialDays ?? 0;
 
     if (trialDays > 0) {
-      const previousPaidSub = await db
+      const priorTrialOrPaid = await db
         .select()
         .from(subscriptionsTable)
         .where(and(
           eq(subscriptionsTable.tenantId, me.tenantId),
-          eq(subscriptionsTable.status, "active")
+          or(
+            eq(subscriptionsTable.status, "active"),
+            eq(subscriptionsTable.status, "trial"),
+            eq(subscriptionsTable.status, "canceled"),
+          )
         ))
         .limit(1);
 
-      if (previousPaidSub.length === 0) {
+      if (priorTrialOrPaid.length === 0) {
         const now = new Date();
         const trialEnd = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
 

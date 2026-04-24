@@ -1,6 +1,44 @@
-import { db, tenantsTable, plansTable, usersTable, clientsTable, tripsTable } from "@workspace/db";
-import { eq, or, count } from "drizzle-orm";
+import { db, tenantsTable, plansTable, usersTable, clientsTable, tripsTable, subscriptionsTable, usageTrackingTable } from "@workspace/db";
+import { eq, or, count, and, desc } from "drizzle-orm";
 import type { Request, Response } from "express";
+import { randomUUID } from "crypto";
+
+async function persistUsageSnapshot(tenantId: string): Promise<void> {
+  try {
+    const [[userRow], [clientRow], [tripRow]] = await Promise.all([
+      db.select({ cnt: count() }).from(usersTable).where(eq(usersTable.tenantId, tenantId)),
+      db.select({ cnt: count() }).from(clientsTable).where(eq(clientsTable.tenantId, tenantId)),
+      db.select({ cnt: count() }).from(tripsTable).where(eq(tripsTable.tenantId, tenantId)),
+    ]);
+
+    const [activeSub] = await db
+      .select()
+      .from(subscriptionsTable)
+      .where(and(
+        eq(subscriptionsTable.tenantId, tenantId),
+        or(eq(subscriptionsTable.status, "active"), eq(subscriptionsTable.status, "trial")),
+      ))
+      .orderBy(desc(subscriptionsTable.createdAt))
+      .limit(1);
+
+    const now = new Date();
+    const periodStart = activeSub?.currentPeriodStart ?? new Date(now.getFullYear(), now.getMonth(), 1);
+    const periodEnd = activeSub?.currentPeriodEnd ?? new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    await db.insert(usageTrackingTable).values({
+      id: randomUUID(),
+      tenantId,
+      subscriptionId: activeSub?.id ?? null,
+      periodStart,
+      periodEnd,
+      usersCount: userRow?.cnt ?? 0,
+      clientsCount: clientRow?.cnt ?? 0,
+      tripsCount: tripRow?.cnt ?? 0,
+    });
+  } catch {
+    // non-blocking — usage recording failures must not break the request
+  }
+}
 
 type ResourceType = "users" | "clients" | "trips";
 
@@ -55,6 +93,7 @@ export async function checkPlanLimit(
       return false;
     }
 
+    void persistUsageSnapshot(tenantId);
     return true;
   } catch (err) {
     req.log?.error({ err }, "Error checking plan limit");

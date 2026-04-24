@@ -17,6 +17,7 @@ export const plansTable = pgTable("plans", {
   isFeatured: boolean("is_featured").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
   trialDays: integer("trial_days").notNull().default(0),
+  paymentRequired: boolean("payment_required").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -44,6 +45,11 @@ export const invoicesTable = pgTable("invoices", {
   pixQrCodeUrl: text("pix_qr_code_url"),
   pixExpiresAt: timestamp("pix_expires_at", { withTimezone: true }),
   stripePaymentIntentId: text("stripe_payment_intent_id"),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeInvoiceId: text("stripe_invoice_id"),
+  paymentId: text("payment_id"),
+  taxAmount: numeric("tax_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  totalAmount: numeric("total_amount", { precision: 10, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -103,3 +109,19 @@ export const platformSettingsTable = pgTable("platform_settings", {
 export const insertPlatformSettingSchema = createInsertSchema(platformSettingsTable).omit({ updatedAt: true });
 export type InsertPlatformSetting = z.infer<typeof insertPlatformSettingSchema>;
 export type PlatformSetting = typeof platformSettingsTable.$inferSelect;
+
+export const usageTrackingTable = pgTable("usage_tracking", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  subscriptionId: text("subscription_id"),
+  periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
+  periodEnd: timestamp("period_end", { withTimezone: true }).notNull(),
+  usersCount: integer("users_count").notNull().default(0),
+  clientsCount: integer("clients_count").notNull().default(0),
+  tripsCount: integer("trips_count").notNull().default(0),
+  recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertUsageTrackingSchema = createInsertSchema(usageTrackingTable).omit({ recordedAt: true });
+export type InsertUsageTracking = z.infer<typeof insertUsageTrackingSchema>;
+export type UsageTracking = typeof usageTrackingTable.$inferSelect;
