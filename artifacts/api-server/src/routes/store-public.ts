@@ -213,6 +213,7 @@ router.get("/public/store/:slug/products", async (req, res): Promise<void> => {
       availableSeats: tripsTable.availableSeats,
       totalCapacity: tripsTable.totalCapacity,
       departureDate: tripsTable.departureDate,
+      returnDate: tripsTable.returnDate,
       inclusions: tripsTable.inclusions,
       tripType: tripsTable.type,
       originCity: tripsTable.originCity,
@@ -238,6 +239,9 @@ router.get("/public/store/:slug/products", async (req, res): Promise<void> => {
       ...p,
       departureDate: p.departureDate
         ? (p.departureDate as unknown as Date).toISOString().slice(0, 10)
+        : null,
+      returnDate: p.returnDate
+        ? (p.returnDate as unknown as Date).toISOString().slice(0, 10)
         : null,
     }));
     res.json({ data: processedProducts, total: Number(countResult[0]?.count ?? 0), page, limit: limit ?? processedProducts.length });
@@ -303,6 +307,7 @@ router.get("/public/store/:slug/products/:productSlug", async (req, res): Promis
       availableSeats: tripsTable.availableSeats,
       totalCapacity: tripsTable.totalCapacity,
       departureDate: tripsTable.departureDate,
+      returnDate: tripsTable.returnDate,
       inclusions: tripsTable.inclusions,
       tripType: tripsTable.type,
       originCity: tripsTable.originCity,
@@ -331,6 +336,9 @@ router.get("/public/store/:slug/products/:productSlug", async (req, res): Promis
       ...row,
       departureDate: row.departureDate
         ? (row.departureDate as unknown as Date).toISOString().slice(0, 10)
+        : null,
+      returnDate: row.returnDate
+        ? (row.returnDate as unknown as Date).toISOString().slice(0, 10)
         : null,
       reviews,
     });

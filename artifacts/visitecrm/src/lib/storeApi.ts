@@ -360,6 +360,7 @@ export interface StoreProduct {
   availableSeats?: number | null;
   totalCapacity?: number | null;
   departureDate?: string | null;
+  returnDate?: string | null;
   inclusions?: string[] | null;
   tripType?: string | null;
   originCity?: string | null;

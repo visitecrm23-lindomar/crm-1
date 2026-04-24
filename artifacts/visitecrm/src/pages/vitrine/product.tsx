@@ -587,7 +587,7 @@ export default function VitrineProduct({
       </div>
 
       {/* Info grid */}
-      {(product.startDate || product.departureDate || product.durationDays || product.endDate || (product.trackInventory && product.stockQuantity != null)) && (
+      {(product.startDate || product.departureDate || product.durationDays || product.endDate || product.returnDate || (product.trackInventory && product.stockQuantity != null)) && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           {(product.departureDate ?? product.startDate) && (
             <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl">
@@ -597,11 +597,9 @@ export default function VitrineProduct({
                 <p className="text-xs font-semibold">
                   {new Date(
                     ((product.departureDate ?? product.startDate) as string).slice(0, 10) + "T12:00:00"
-                  ).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
+                  ).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                  {product.departureTime && ` às ${product.departureTime}`}
                 </p>
-                {product.departureTime && (
-                  <p className="text-[10px] text-blue-600 font-medium">{product.departureTime}</p>
-                )}
               </div>
             </div>
           )}
@@ -614,26 +612,24 @@ export default function VitrineProduct({
               </div>
             </div>
           )}
-          {product.endDate && (
+          {(product.returnDate ?? product.endDate) && (
             <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl">
               <Calendar className="w-5 h-5 text-blue-600 shrink-0" />
               <div>
-                <p className="text-[11px] text-muted-foreground">Volta</p>
+                <p className="text-[11px] text-muted-foreground">Retorno</p>
                 <p className="text-xs font-semibold">
                   {new Date(
-                    product.endDate.slice(0, 10) + "T12:00:00"
-                  ).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
+                    (product.returnDate ?? product.endDate)!.slice(0, 10) + "T12:00:00"
+                  ).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                  {product.returnTime && ` às ${product.returnTime}`}
                 </p>
-                {product.returnTime && (
-                  <p className="text-[10px] text-blue-600 font-medium">{product.returnTime}</p>
-                )}
               </div>
             </div>
           )}
           {(() => {
             const dur = calculateTripDuration(
               product.departureDate ?? product.startDate,
-              product.endDate,
+              product.returnDate ?? product.endDate,
               product.departureTime,
               product.returnTime,
             ) ?? (product.durationDays ? { formatted: `${product.durationDays} dia${product.durationDays > 1 ? "s" : ""}` } : null);
