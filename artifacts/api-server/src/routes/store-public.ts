@@ -414,6 +414,7 @@ const CreateOrderBody = z.object({
   customerEmail: z.string().email(),
   customerPhone: z.string().optional(),
   customerCpf: z.string().optional(),
+  customerBirthdate: z.string().optional(),
   customerAddress: z.record(z.string(), z.unknown()).optional(),
   items: z.array(z.object({
     productId: z.string(),
@@ -683,23 +684,54 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
         .limit(1);
       if (adminUser) {
         reservationCreatedById = adminUser.id;
+        // Parse birthdate from YYYY-MM-DD string to Date (local noon to avoid UTC-3 shift)
+        const parsedBirthDate = data.customerBirthdate
+          ? new Date(data.customerBirthdate.slice(0, 10) + "T12:00:00")
+          : null;
+
         // Find existing client by email, or create a new one
-        const [existingClient] = await db.select({ id: clientsTable.id })
+        const [existingClient] = await db.select({ id: clientsTable.id, cpf: clientsTable.cpf, birthDate: clientsTable.birthDate })
           .from(clientsTable)
           .where(and(eq(clientsTable.tenantId, store.tenantId), eq(clientsTable.email, data.customerEmail)))
           .limit(1);
         if (existingClient) {
           reservationClientId = existingClient.id;
+          // Backfill CPF and birthDate if the client doesn't have them yet
+          const updateFields: Record<string, unknown> = {};
+          if (!existingClient.cpf && data.customerCpf) updateFields.cpf = data.customerCpf;
+          if (!existingClient.birthDate && parsedBirthDate) updateFields.birthDate = parsedBirthDate;
+          if (Object.keys(updateFields).length > 0) {
+            try {
+              await db.update(clientsTable).set(updateFields).where(eq(clientsTable.id, existingClient.id));
+            } catch {
+              // CPF unique constraint violation — another client already holds it; skip silently
+            }
+          }
         } else {
           const newClientId = generateId();
-          await db.insert(clientsTable).values({
-            id: newClientId,
-            tenantId: store.tenantId,
-            name: data.customerName,
-            email: data.customerEmail,
-            whatsapp: data.customerPhone ?? "",
-            createdById: adminUser.id,
-          });
+          try {
+            await db.insert(clientsTable).values({
+              id: newClientId,
+              tenantId: store.tenantId,
+              name: data.customerName,
+              email: data.customerEmail,
+              whatsapp: data.customerPhone ?? "",
+              createdById: adminUser.id,
+              ...(data.customerCpf ? { cpf: data.customerCpf } : {}),
+              ...(parsedBirthDate ? { birthDate: parsedBirthDate } : {}),
+            });
+          } catch {
+            // CPF unique constraint violation — insert without CPF
+            await db.insert(clientsTable).values({
+              id: newClientId,
+              tenantId: store.tenantId,
+              name: data.customerName,
+              email: data.customerEmail,
+              whatsapp: data.customerPhone ?? "",
+              createdById: adminUser.id,
+              ...(parsedBirthDate ? { birthDate: parsedBirthDate } : {}),
+            });
+          }
           reservationClientId = newClientId;
         }
         // Look up the "Vitrine" pipeline stage (isDefaultWeb=true, fallback: name='Vitrine')
@@ -844,6 +876,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
             const resTypeCode = tripTypeToCode(tripTypeRaw);
             const resSeq = await nextReservationSequence(store.tenantId, resYearMonth, resTypeCode, tx);
             const reservationNumber = buildReservationNumber(tenantResPrefix, resTypeCode, resYearMonth, resSeq);
+            const reservationNotes = (data.customerNotes || data.notes) ?? undefined;
             await tx.insert(reservationsTable).values({
               id: reservationId,
               tenantId: store.tenantId,
@@ -861,6 +894,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
               createdById: reservationCreatedById,
               discountReferralCode: appliedReferralCode ?? undefined,
               discountReferralAmount: appliedReferralCode ? discountAmount.toFixed(2) : undefined,
+              ...(reservationNotes ? { notes: reservationNotes } : {}),
             });
             // Decrement trip available_seats and increment reserved_seats
             await tx.update(tripsTable).set({

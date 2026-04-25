@@ -1153,6 +1153,7 @@ export default function ReservationWizard({
         customerEmail: form.customerEmail,
         customerPhone: form.customerPhone || undefined,
         customerCpf: form.customerCpf || undefined,
+        customerBirthdate: form.customerBirthdate || undefined,
         items: [
           {
             productId: product.id,

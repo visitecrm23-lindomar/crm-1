@@ -593,6 +593,7 @@ export interface CreateOrderInput {
   customerEmail: string;
   customerPhone?: string;
   customerCpf?: string;
+  customerBirthdate?: string;
   items: Array<{
     productId: string;
     productName: string;
