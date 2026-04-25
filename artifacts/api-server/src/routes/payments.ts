@@ -8,6 +8,7 @@ import { CreatePaymentBody, UpdatePaymentBody, CreateExpenseBody, UpdateExpenseB
 import { writeClientActivity } from "../lib/activities";
 import { loyaltyAwardPoints } from "../lib/loyalty-helpers";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
+import { ADMIN_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
 
 const router = Router();
 
@@ -465,7 +466,7 @@ router.post("/payments", async (req, res): Promise<void> => {
     const id = generateId();
     const installments = parsed.data.installments ?? 1;
     const receiptUrl = typeof req.body.receiptUrl === "string" ? req.body.receiptUrl : null;
-    const canSetPaymentStatus = ["agencia", "superadmin", "vendedor"].includes(me.role);
+    const canSetPaymentStatus = ALL_STAFF_ROLES.includes(me.role);
     const explicitStatus = canSetPaymentStatus ? (parsed.data.status ?? undefined) : undefined;
     const explicitPaidAt = canSetPaymentStatus && parsed.data.paidAt ? new Date(parsed.data.paidAt) : undefined;
 
@@ -561,7 +562,7 @@ router.patch("/payments/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
     const parsed = UpdatePaymentBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const updates: Partial<typeof paymentsTable.$inferInsert> = {};
@@ -662,7 +663,7 @@ router.patch("/expenses/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
     const parsed = UpdateExpenseBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const updates: Partial<typeof expensesTable.$inferInsert> = {};
@@ -687,7 +688,7 @@ router.delete("/expenses/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
     await db.delete(expensesTable)
       .where(and(eq(expensesTable.id, req.params.id), eq(expensesTable.tenantId, me.tenantId)));
     res.json({ success: true });

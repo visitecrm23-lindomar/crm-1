@@ -5,9 +5,10 @@ import { z } from "zod/v4";
 import { requireAuth } from "../lib/tenant";
 import { generateId } from "../lib/id";
 import { processBirthdayForClient, getBirthdaySettings } from "../lib/birthday";
+import { ADMIN_ROLES } from '../lib/tenant';
 
 const router = Router();
-const ADMIN_ROLES = ["agencia", "superadmin"];
+const ADMIN_ROLES = ADMIN_ROLES;
 
 router.get("/birthday/today", async (req, res): Promise<void> => {
   try {

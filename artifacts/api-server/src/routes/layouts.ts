@@ -6,6 +6,7 @@ import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import type { LayoutCell } from "@workspace/db";
 import { CreateLayoutBody, UpdateLayoutBody } from "@workspace/api-zod";
+import { ADMIN_ROLES } from '../lib/tenant';
 
 const router = Router();
 
@@ -52,7 +53,7 @@ router.post("/layouts", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) {
+    if (!ADMIN_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
@@ -111,7 +112,7 @@ router.put("/layouts/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) {
+    if (!ADMIN_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
@@ -157,7 +158,7 @@ router.delete("/layouts/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) {
+    if (!ADMIN_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }

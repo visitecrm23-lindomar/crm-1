@@ -18,9 +18,10 @@ import { UTApi } from "uploadthing/server";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { deleteOrphanedFile, deleteOrphanedImages } from "../lib/uploadthing";
+import { ADMIN_ROLES } from '../lib/tenant';
 
 const router = Router();
-const ADMIN_ROLES = ["agencia", "superadmin"];
+const ADMIN_ROLES = ADMIN_ROLES;
 
 const StoreSettingsBody = z.object({
   name: z.string().min(1).nullish(),

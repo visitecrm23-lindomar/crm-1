@@ -5,6 +5,7 @@ import { eq, and, asc, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { z } from "zod";
+import { ADMIN_ROLES } from '../lib/tenant';
 
 const router = Router();
 
@@ -338,7 +339,7 @@ router.post("/pipelines", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) {
+    if (!ADMIN_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
@@ -358,7 +359,7 @@ router.patch("/pipelines/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) {
+    if (!ADMIN_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }

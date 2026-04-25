@@ -108,6 +108,9 @@ importers:
       '@workspace/email':
         specifier: workspace:*
         version: link:../../lib/email
+      '@workspace/permissions':
+        specifier: workspace:*
+        version: link:../../lib/permissions
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -530,6 +533,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/permissions':
+        specifier: workspace:*
+        version: link:../../lib/permissions
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1
@@ -670,6 +676,8 @@ importers:
       '@types/react-dom':
         specifier: 'catalog:'
         version: 19.2.3(@types/react@19.2.14)
+
+  lib/permissions: {}
 
   scripts:
     dependencies:

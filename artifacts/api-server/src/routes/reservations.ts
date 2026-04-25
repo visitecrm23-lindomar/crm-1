@@ -12,6 +12,7 @@ import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { writeClientActivity } from "../lib/activities";
 import { syncReservationCommission } from "./payments";
 import { sendReservationConfirmationEmail } from "@workspace/email";
+import { ADMIN_ROLES } from '../lib/tenant';
 
 const router = Router();
 
@@ -866,7 +867,7 @@ router.delete("/reservations/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
     const existing = await requireReservationAccess(me, req.params.id, res);
     if (!existing) return;
 
@@ -895,7 +896,7 @@ router.post("/reservations/:id/check-in", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
     const existing = await requireReservationAccess(me, req.params.id, res);
     if (!existing) return;
     await db.update(reservationsTable).set({
@@ -1015,7 +1016,7 @@ router.post("/reservations/:reservationId/passengers/:id/check-in", async (req, 
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
     const reservation = await requireReservationAccess(me, req.params.reservationId, res);
     if (!reservation) return;
     await db.update(passengersTable)
@@ -1036,7 +1037,7 @@ router.delete("/reservations/:reservationId/passengers/:id/check-in", async (req
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
     const reservation = await requireReservationAccess(me, req.params.reservationId, res);
     if (!reservation) return;
     await db.update(passengersTable)

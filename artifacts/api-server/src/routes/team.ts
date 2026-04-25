@@ -5,6 +5,7 @@ import { eq, and, gt } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { ADMIN_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
 
 const router = Router();
 
@@ -12,7 +13,7 @@ router.get("/team/members", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin", "vendedor"].includes(me.role)) {
+    if (!ALL_STAFF_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Acesso negado" });
       return;
     }
@@ -37,7 +38,7 @@ router.get("/team/invites", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) {
+    if (!ADMIN_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Apenas gestores podem ver convites pendentes" });
       return;
     }
@@ -59,7 +60,7 @@ router.get("/team/invites", async (req, res): Promise<void> => {
 
 const InviteBody = z.object({
   email: z.string().email("E-mail inválido"),
-  role: z.enum(["vendedor"]).optional().default("vendedor"),
+  role: z.enum(["vendedor", "gerente", "suporte"]).optional().default("vendedor"),
 });
 
 router.post("/team/invite", async (req, res): Promise<void> => {
@@ -67,7 +68,7 @@ router.post("/team/invite", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    if (!["agencia", "superadmin"].includes(me.role)) {
+    if (!ADMIN_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Apenas gestores podem convidar membros" });
       return;
     }
@@ -175,7 +176,7 @@ router.delete("/team/invites/:id", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    if (!["agencia", "superadmin"].includes(me.role)) {
+    if (!ADMIN_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Apenas gestores podem cancelar convites" });
       return;
     }
@@ -209,7 +210,7 @@ router.delete("/team/members/:id", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    if (!["agencia", "superadmin"].includes(me.role)) {
+    if (!ADMIN_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Apenas gestores podem remover membros" });
       return;
     }

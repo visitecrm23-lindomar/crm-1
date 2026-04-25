@@ -6,6 +6,7 @@ import { eq, and, count, max } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 import { generateAuthUrl, verifyState, exchangeCodeForTokens, revokeToken } from "../lib/google-calendar/calendar-service";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
+import { ALL_STAFF_ROLES } from '../lib/tenant';
 
 const syncBodySchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("all") }),
@@ -22,7 +23,7 @@ router.get("/calendar/connect", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin", "vendedor"].includes(me.role)) {
+    if (!ALL_STAFF_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Apenas agências e vendedores podem conectar o Google Calendar" });
       return;
     }
@@ -155,7 +156,7 @@ router.post("/calendar/sync", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin", "vendedor"].includes(me.role)) {
+    if (!ALL_STAFF_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Acesso negado" });
       return;
     }

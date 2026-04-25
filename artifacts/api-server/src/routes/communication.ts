@@ -5,9 +5,10 @@ import { eq, and, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { z } from "zod";
+import { ADMIN_ROLES } from '../lib/tenant';
 
 const router = Router();
-const ADMIN_ROLES = ["agencia", "superadmin"];
+const ADMIN_ROLES = ADMIN_ROLES;
 
 const CreateMessageBody = z.object({
   toClientId: z.string().optional(),

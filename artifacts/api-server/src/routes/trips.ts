@@ -15,6 +15,7 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { z } from "zod";
 import PDFDocument from "pdfkit";
+import { ADMIN_ROLES } from '../lib/tenant';
 
 type SeatMapEntry = { row: number; col: number; floor?: number; status: string; type?: string };
 
@@ -188,7 +189,7 @@ router.post("/trips", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) {
+    if (!ADMIN_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Apenas administradores podem criar viagens" });
       return;
     }
@@ -316,7 +317,7 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
     const parsed = UpdateTripBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -464,7 +465,7 @@ router.delete("/trips/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
     const [existing] = await db.select({ coverImage: tripsTable.coverImage })
       .from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
@@ -541,7 +542,7 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
 
     const [trip] = await db.select().from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
@@ -709,7 +710,7 @@ router.post("/trips/:id/sync-passengers", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
 
     const [trip] = await db.select({ id: tripsTable.id })
       .from(tripsTable)
@@ -778,7 +779,7 @@ router.patch("/trips/:tripId/passengers/:passengerId", async (req, res): Promise
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
 
     const { tripId, passengerId } = req.params;
     const { boardingLocationId, disembarkLocationId, passengerPhone, observations, specialNeeds, documentType } = req.body as {
@@ -1266,7 +1267,7 @@ router.post("/trips/:id/manifest/send", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
 
     const parsed = SendManifestBody.safeParse(req.body);
     if (!parsed.success) {

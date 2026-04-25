@@ -3,6 +3,12 @@ import { usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
 import type { Request, Response } from "express";
+import { ROLES, ADMIN_ROLES, MANAGEMENT_ROLES, ALL_STAFF_ROLES } from "@workspace/permissions";
+
+export type { Role } from "@workspace/permissions";
+export { ROLES, ADMIN_ROLES, MANAGEMENT_ROLES, ALL_STAFF_ROLES };
+
+export const AGENCY_STAFF_ROLES = [ROLES.AGENCY_ADMIN, ROLES.AGENCY_MANAGER, ROLES.SALES, ROLES.SUPPORT];
 
 export type AuthedUser = {
   id: string;
@@ -25,7 +31,7 @@ export async function requireAuth(req: Request, res: Response): Promise<AuthedUs
     return null;
   }
   // Superadmins may not have a tenantId (they manage the platform globally)
-  if (!user.tenantId && user.role !== "superadmin") {
+  if (!user.tenantId && user.role !== ROLES.SUPER_ADMIN) {
     res.status(401).json({ error: "User not provisioned" });
     return null;
   }
@@ -38,7 +44,7 @@ export async function getTenantUser(req: Request): Promise<AuthedUser | null> {
   if (!userId) return null;
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, userId)).limit(1);
   if (!user) return null;
-  if (!user.tenantId && user.role !== "superadmin") return null;
+  if (!user.tenantId && user.role !== ROLES.SUPER_ADMIN) return null;
   return { ...user, tenantId: user.tenantId ?? "" } as AuthedUser;
 }
 

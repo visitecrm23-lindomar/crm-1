@@ -13,6 +13,7 @@ import {
   CreateClientNoteBody,
 } from "@workspace/api-zod";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
+import { ADMIN_ROLES } from '../lib/tenant';
 
 const router = Router();
 
@@ -354,7 +355,7 @@ router.delete("/clients/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
     await db.delete(clientsTable)
       .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)));
     res.json({ success: true });

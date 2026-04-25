@@ -4,6 +4,7 @@ import { tripCostsTable, tripsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { ADMIN_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
 
 const router = Router();
 
@@ -90,7 +91,7 @@ router.post("/trips/:id/costs", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin", "vendedor"].includes(me.role)) {
+    if (!ALL_STAFF_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Sem permissão" }); return;
     }
 
@@ -135,7 +136,7 @@ router.put("/trips/:id/costs/:costId", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin", "vendedor"].includes(me.role)) {
+    if (!ALL_STAFF_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Sem permissão" }); return;
     }
 
@@ -181,7 +182,7 @@ router.delete("/trips/:id/costs/:costId", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) {
+    if (!ADMIN_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Sem permissão" }); return;
     }
 

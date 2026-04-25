@@ -147,7 +147,7 @@ function RoleRedirect() {
       setLocation("/onboarding");
     } else if (me.role === "vendedor") {
       setLocation("/meu-painel");
-    } else if (me.role === "agencia") {
+    } else if (me.role === "agencia" || me.role === "gerente" || me.role === "suporte") {
       setLocation("/dashboard");
     } else if (me.role === "cliente") {
       if (me.tenant?.slug) {

@@ -1390,14 +1390,18 @@ function CustomizationTab() {
 /* ──────────────────── Team Tab ──────────────────── */
 const roleLabels: Record<string, string> = {
   agencia: "Gestor",
+  gerente: "Gerente",
   vendedor: "Vendedor",
+  suporte: "Suporte",
   superadmin: "Super Admin",
   cliente: "Cliente",
 };
 
 const roleColors: Record<string, string> = {
   agencia: "bg-blue-100 text-blue-800",
+  gerente: "bg-teal-100 text-teal-800",
   vendedor: "bg-green-100 text-green-800",
+  suporte: "bg-orange-100 text-orange-800",
   superadmin: "bg-purple-100 text-purple-800",
   cliente: "bg-gray-100 text-gray-800",
 };
@@ -1429,7 +1433,7 @@ function TeamTab() {
   const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole] = useState<"vendedor">("vendedor");
+  const [inviteRole, setInviteRole] = useState<"vendedor" | "gerente" | "suporte">("vendedor");
   const [inviting, setInviting] = useState(false);
   const [limitError, setLimitError] = useState<string | null>(null);
 
@@ -1544,7 +1548,7 @@ function TeamTab() {
         {isManager && (
           <Button onClick={() => { setLimitError(null); setInviteOpen(true); }}>
             <UserPlus className="w-4 h-4 mr-2" />
-            Convidar Vendedor
+            Convidar Membro
           </Button>
         )}
       </div>
@@ -1562,7 +1566,7 @@ function TeamTab() {
               <p className="text-sm text-muted-foreground">Nenhum membro na equipe ainda.</p>
               {isManager && (
                 <Button variant="outline" className="mt-3" onClick={() => setInviteOpen(true)}>
-                  Convidar primeiro vendedor
+                  Convidar primeiro membro
                 </Button>
               )}
             </div>
@@ -1653,7 +1657,7 @@ function TeamTab() {
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Convidar Vendedor</DialogTitle>
+            <DialogTitle>Convidar Membro</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
@@ -1662,12 +1666,24 @@ function TeamTab() {
                 type="email"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="vendedor@agencia.com"
+                placeholder="membro@agencia.com"
                 onKeyDown={(e) => e.key === "Enter" && handleInvite()}
               />
             </div>
+            <div className="space-y-1.5">
+              <Label>Função</Label>
+              <select
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value as typeof inviteRole)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              >
+                <option value="vendedor">Vendedor — visualiza viagens e cria reservas</option>
+                <option value="gerente">Gerente — gerencia viagens, reservas e clientes</option>
+                <option value="suporte">Suporte — visualiza viagens e atende clientes</option>
+              </select>
+            </div>
             <p className="text-xs text-muted-foreground">
-              O convidado será convidado como <strong>Vendedor</strong> e deverá criar uma conta no VisiteCRM com este e-mail para ter acesso automático à sua agência.
+              O convidado deverá criar uma conta no VisiteCRM com este e-mail para ter acesso automático à sua agência.
             </p>
           </div>
           <DialogFooter>

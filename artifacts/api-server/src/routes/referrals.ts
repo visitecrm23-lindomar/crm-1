@@ -4,9 +4,10 @@ import { eq, and, desc, sql, count, ilike, or } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { ADMIN_ROLES } from '../lib/tenant';
 
 const router = Router();
-const ADMIN_ROLES = ["agencia", "superadmin"];
+const ADMIN_ROLES = ADMIN_ROLES;
 
 const CreateReferralBody = z.object({
   referrerId: z.string(),

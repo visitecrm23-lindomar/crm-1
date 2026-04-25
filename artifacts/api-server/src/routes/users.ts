@@ -13,6 +13,7 @@ import {
   SyncMeResponse,
 } from "@workspace/api-zod";
 import { getAuth, clerkClient } from "@clerk/express";
+import { ADMIN_ROLES } from '../lib/tenant';
 
 const router = Router();
 
@@ -220,7 +221,7 @@ router.post("/users", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!["agencia", "superadmin"].includes(me.role)) {
+    if (!ADMIN_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Apenas administradores podem criar usuarios" });
       return;
     }
@@ -262,7 +263,7 @@ router.patch("/users/:id", async (req, res): Promise<void> => {
     const updates: Partial<typeof usersTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.role != null || parsed.data.isActive != null) {
-      const adminRoles = ["agencia", "superadmin"];
+      const adminRoles = ADMIN_ROLES;
       if (!adminRoles.includes(me.role)) {
         res.status(403).json({ error: "Forbidden: apenas administradores podem alterar funcao ou status" });
         return;
@@ -273,7 +274,7 @@ router.patch("/users/:id", async (req, res): Promise<void> => {
     // Commission config — admin only
     const hasCommissionFields = parsed.data.commissionType != null || parsed.data.commissionRate != null || parsed.data.commissionFixed != null || "monthlyGoal" in parsed.data;
     if (hasCommissionFields) {
-      const adminRoles = ["agencia", "superadmin"];
+      const adminRoles = ADMIN_ROLES;
       if (!adminRoles.includes(me.role)) {
         res.status(403).json({ error: "Forbidden: apenas administradores podem alterar configuração de comissão" });
         return;

@@ -5,10 +5,11 @@ import { eq, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { ADMIN_ROLES } from '../lib/tenant';
 
 const router = Router();
 
-const ADMIN_ROLES = ["agencia", "superadmin"] as const;
+const ADMIN_ROLES = ADMIN_ROLES as const;
 
 const anyJsonValue = z.union([
   z.string(),

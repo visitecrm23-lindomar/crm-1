@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { paymentsTable, tripsTable, dealsTable, clientsTable } from "@workspace/db";
 import { eq, and, lt, lte, gte, gt, sql } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
+import { AGENCY_STAFF_ROLES } from '../lib/tenant';
 
 const router = Router();
 
@@ -21,7 +22,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    if (!["agencia", "vendedor"].includes(me.role)) {
+    if (!AGENCY_STAFF_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Sem permissão" });
       return;
     }
