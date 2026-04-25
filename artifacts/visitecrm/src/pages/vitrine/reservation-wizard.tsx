@@ -958,7 +958,7 @@ export default function ReservationWizard({
     customerCpf: "",
     customerBirthdate: "",
     notes: "",
-    paymentMethod: store.paymentMethods[0] ?? "pix",
+    paymentMethod: (store.paymentMethods ?? [])[0] ?? "pix",
     couponCode: "",
     cardNumber: "",
     cardName: "",
@@ -1972,7 +1972,7 @@ export default function ReservationWizard({
             </h2>
 
             <div className="space-y-3">
-              {(store.paymentMethods.length > 0 ? store.paymentMethods : ["pix"]).map((methodId) => {
+              {((store.paymentMethods ?? []).length > 0 ? (store.paymentMethods ?? []) : ["pix"]).map((methodId) => {
                 const config = PAYMENT_METHODS_CONFIG.find((m) => m.id === methodId);
                 if (!config) return null;
                 const { Icon } = config;

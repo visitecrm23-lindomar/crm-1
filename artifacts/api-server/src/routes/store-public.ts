@@ -126,7 +126,7 @@ router.get("/public/store/:slug", async (req, res): Promise<void> => {
       maxInstallments: store.maxInstallments,
       installmentFee: store.installmentFee,
       minOrderValue: store.minOrderValue,
-      paymentMethods: store.paymentMethods,
+      paymentMethods: Array.isArray(store.paymentMethods) ? store.paymentMethods : [],
       pixEnabled: store.pixEnabled,
       boletoEnabled: store.boletoEnabled,
       stripeEnabled: store.stripeEnabled,

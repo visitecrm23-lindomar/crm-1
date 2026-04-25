@@ -142,6 +142,7 @@ export const publicStoreApi = {
       socialInstagram: (raw.socialInstagram ?? raw.instagramUrl) as string | null,
       socialFacebook: (raw.socialFacebook ?? raw.facebookUrl) as string | null,
       socialYoutube: (raw.socialYoutube ?? raw.youtubeUrl) as string | null,
+      paymentMethods: Array.isArray(raw.paymentMethods) ? raw.paymentMethods as string[] : [],
     } as PublicStore;
   },
   getCategories: (slug: string) =>

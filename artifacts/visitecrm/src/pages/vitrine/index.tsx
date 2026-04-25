@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Component, ReactNode } from "react";
 import { useParams, Switch, Route, Redirect, useLocation } from "wouter";
 import { publicStoreApi, PublicStore } from "@/lib/storeApi";
 import { CartProvider } from "@/contexts/CartContext";
@@ -10,7 +10,37 @@ import VitrineCheckout from "./checkout";
 import VitrineOrderTracking from "./order-tracking";
 import ReservationWizard from "./reservation-wizard";
 import ReferralLanding from "./referral-landing";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
+
+interface WizardErrorBoundaryState { hasError: boolean }
+
+class WizardErrorBoundary extends Component<{ children: ReactNode }, WizardErrorBoundaryState> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4 gap-4">
+          <AlertCircle className="w-12 h-12 text-destructive" />
+          <h2 className="text-xl font-semibold">Algo deu errado</h2>
+          <p className="text-muted-foreground max-w-sm">
+            Ocorreu um erro ao carregar esta página. Por favor, tente novamente.
+          </p>
+          <button
+            onClick={() => { this.setState({ hasError: false }); window.location.reload(); }}
+            className="px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const REFERRAL_CODE_KEY = "referral_code";
 const REFERRAL_CODE_EXPIRY_KEY = "referral_code_expiry";
@@ -164,15 +194,19 @@ function StoreRouter({ slug }: { slug: string }) {
         </Route>
         <Route path={`/loja/${slug}/reservar/:productSlug`}>
           {(params: Record<string, string>) => (
-            <ReservationWizard
-              slug={slug}
-              productSlug={params.productSlug}
-              store={store}
-            />
+            <WizardErrorBoundary>
+              <ReservationWizard
+                slug={slug}
+                productSlug={params.productSlug}
+                store={store}
+              />
+            </WizardErrorBoundary>
           )}
         </Route>
         <Route path={`/loja/${slug}/checkout`}>
-          <VitrineCheckout slug={slug} store={store} />
+          <WizardErrorBoundary>
+            <VitrineCheckout slug={slug} store={store} />
+          </WizardErrorBoundary>
         </Route>
         <Route path={`/loja/${slug}/pedido/:orderNumber`}>
           {(params: Record<string, string>) => (

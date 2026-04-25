@@ -265,7 +265,7 @@ export default function VitrineCheckout({
       customerPhone: "",
       customerCpf: "",
       notes: "",
-      paymentMethod: store.paymentMethods[0] ?? "pix",
+      paymentMethod: (store.paymentMethods ?? [])[0] ?? "pix",
       couponCode: "",
       referralCode: savedCode,
       cardNumber: "",
@@ -716,7 +716,7 @@ export default function VitrineCheckout({
 
           {step === "pagamento" && (
             <>
-              {store.paymentMethods.length > 0 && (
+              {(store.paymentMethods ?? []).length > 0 && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base flex items-center gap-2">
@@ -725,7 +725,7 @@ export default function VitrineCheckout({
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-2">
-                      {store.paymentMethods.map((m) => (
+                      {(store.paymentMethods ?? []).map((m) => (
                         <button
                           key={m}
                           onClick={() => set("paymentMethod", m)}
