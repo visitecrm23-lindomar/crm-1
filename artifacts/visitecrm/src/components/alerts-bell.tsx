@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { useLocation } from "wouter";
 import { Bell, AlertTriangle, Info, XCircle, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +49,8 @@ const TYPE_CONFIG = {
 };
 
 export function AlertsBell({ userRole }: { userRole?: string }) {
+  const [open, setOpen] = useState(false);
+  const [, navigate] = useLocation();
   const canSeeAlerts = userRole === "agencia" || userRole === "vendedor";
 
   const { data } = useQuery<AlertsResponse>({
@@ -67,7 +70,7 @@ export function AlertsBell({ userRole }: { userRole?: string }) {
   const badgeCount = count;
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="h-8 w-8 relative" title="Alertas Inteligentes">
           <Bell className="w-4 h-4" />
@@ -108,19 +111,24 @@ export function AlertsBell({ userRole }: { userRole?: string }) {
               const cfg = TYPE_CONFIG[alert.type];
               const Icon = cfg.Icon;
               return (
-                <Link key={alert.id} href={alert.actionHref}>
-                  <div className="flex items-start gap-3 px-4 py-3 hover:bg-muted/50 cursor-pointer transition-colors">
-                    <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${cfg.className}`} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-medium leading-snug">{alert.title}</p>
-                        <span className="text-[10px] text-muted-foreground shrink-0">{alert.category}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground leading-snug mt-0.5">{alert.description}</p>
+                <button
+                  key={alert.id}
+                  className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-muted/50 cursor-pointer transition-colors"
+                  onClick={() => {
+                    setOpen(false);
+                    navigate(alert.actionHref);
+                  }}
+                >
+                  <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${cfg.className}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium leading-snug">{alert.title}</p>
+                      <span className="text-[10px] text-muted-foreground shrink-0">{alert.category}</span>
                     </div>
-                    <span className={`text-xs font-medium shrink-0 ${cfg.labelClass}`}>Ver →</span>
+                    <p className="text-xs text-muted-foreground leading-snug mt-0.5">{alert.description}</p>
                   </div>
-                </Link>
+                  <span className={`text-xs font-medium shrink-0 ${cfg.labelClass}`}>Ver →</span>
+                </button>
               );
             })
           )}

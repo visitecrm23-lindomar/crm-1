@@ -142,7 +142,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
         category: "Financeiro",
         title: `${receivableTodayCount} conta(s) a receber vence(m) hoje`,
         description: `Total: ${fmt(receivableTodayTotal)}`,
-        actionHref: "/financeiro",
+        actionHref: "/financeiro?tab=receivable",
         count: receivableTodayCount,
       });
     }
@@ -156,7 +156,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
         category: "Financeiro",
         title: `${overdueCount} conta(s) a receber vencida(s)`,
         description: `Total em aberto: ${fmt(overdueTotal)}`,
-        actionHref: "/financeiro",
+        actionHref: "/financeiro?tab=receivable",
         count: overdueCount,
       });
     }
@@ -170,7 +170,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
         category: "Financeiro",
         title: `${payableCount} conta(s) a pagar nos próximos 3 dias`,
         description: `Total: ${fmt(payableTotal)}`,
-        actionHref: "/financeiro",
+        actionHref: "/financeiro?tab=payable",
         count: payableCount,
       });
     }
@@ -223,7 +223,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
         category: "Clientes",
         title: `${birthdayCount} aniversariante(s) hoje`,
         description: "Aproveite para enviar uma mensagem de parabéns",
-        actionHref: "/clients",
+        actionHref: "/clients?filter=birthday",
         count: birthdayCount,
       });
     }

@@ -26,7 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import {
   Plus, TrendingUp, TrendingDown, DollarSign, AlertCircle, CheckCircle,
   Pencil, Trash2, ArrowUpRight, ArrowDownRight, BarChart2, ExternalLink,
@@ -165,8 +165,17 @@ function PaymentMethodChart({ payments }: { payments: Array<{ paymentMethod?: st
   );
 }
 
+const VALID_TABS = ["receivable", "payable", "expenses", "commissions", "rules"];
+
 export default function Financial() {
-  const [tab, setTab] = useState("receivable");
+  const searchStr = useSearch();
+  const initialTab = useMemo(() => {
+    const params = new URLSearchParams(searchStr);
+    const t = params.get("tab");
+    return VALID_TABS.includes(t ?? "") ? t! : "receivable";
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [tab, setTab] = useState(initialTab);
   const [statusFilter, setStatusFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import {
   useListClients, useCreateClient, useUpdateClient,
   useListPipelineStages, useListTrips, useListUsers,
@@ -1065,6 +1065,7 @@ function SortableHeader({ label, field, currentSort, currentOrder, onSort }: Sor
 
 export default function Clients() {
   const [, navigate] = useLocation();
+  const searchStr = useSearch();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -1082,6 +1083,10 @@ export default function Clients() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [editClient, setEditClient] = useState<Client | null>(null);
   const [viewClientId, setViewClientId] = useState<string | null>(null);
+  const [birthdayFilter, setBirthdayFilter] = useState(() => {
+    const params = new URLSearchParams(searchStr);
+    return params.get("filter") === "birthday";
+  });
   const { toast } = useToast();
   const LIMIT = 12;
 
@@ -1116,6 +1121,21 @@ export default function Clients() {
       leads: all.filter(c => c.classification === "lead" || c.status === "lead").length,
       totalRevenue: all.reduce((acc, c) => acc + c.totalSpent, 0),
     };
+  }, [allClients]);
+
+  const birthdayClients = useMemo(() => {
+    const today = new Date();
+    const todayMonth = today.getMonth() + 1;
+    const todayDay = today.getDate();
+    return (allClients?.data ?? []).filter(c => {
+      if (!c.birthDate) return false;
+      try {
+        const d = parseISO(c.birthDate);
+        return d.getMonth() + 1 === todayMonth && d.getDate() === todayDay;
+      } catch {
+        return false;
+      }
+    });
   }, [allClients]);
 
   const handleSort = useCallback((field: SortField) => {
@@ -1184,6 +1204,28 @@ export default function Clients() {
           </Card>
         ))}
       </div>
+
+      {birthdayFilter && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-pink-50 border border-pink-200 rounded-lg text-pink-800">
+          <span className="text-lg">🎂</span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold">
+              {birthdayClients.length === 0
+                ? "Nenhum aniversariante hoje"
+                : `${birthdayClients.length} aniversariante${birthdayClients.length > 1 ? "s" : ""} hoje`}
+            </p>
+            <p className="text-xs text-pink-600">Aproveite para enviar uma mensagem de parabéns!</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-pink-700 hover:text-pink-900 hover:bg-pink-100"
+            onClick={() => { setBirthdayFilter(false); navigate("/clients"); }}
+          >
+            <X className="w-4 h-4 mr-1" /> Limpar filtro
+          </Button>
+        </div>
+      )}
 
       <Card>
         <CardHeader className="pb-3 space-y-3">
@@ -1269,6 +1311,58 @@ export default function Clients() {
                 Array.from({ length: 6 }).map((_, i) => (
                   <TableRow key={i}>{Array.from({ length: 10 }).map((__, j) => <TableCell key={j}><Skeleton className="h-8 w-full" /></TableCell>)}</TableRow>
                 ))
+              ) : birthdayFilter ? (
+                birthdayClients.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
+                      Nenhum aniversariante hoje.
+                    </TableCell>
+                  </TableRow>
+                ) : birthdayClients.map(client => {
+                  const status = STATUS_LABELS[client.status];
+                  return (
+                    <TableRow key={client.id} className="hover:bg-pink-50/40">
+                      <TableCell>
+                        <button className="flex items-center gap-3 text-left" onClick={() => setViewClientId(client.id)}>
+                          <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center text-pink-600 font-bold text-sm shrink-0">
+                            {client.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm">{client.name} 🎂</p>
+                            <p className="text-xs text-muted-foreground">{client.email}</p>
+                          </div>
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-sm">{client.whatsapp}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{[client.addressCity, client.addressState].filter(Boolean).join(", ") || "—"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{client.origin || "—"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {client.birthDate ? format(parseISO(client.birthDate), "dd/MM", { locale: ptBR }) : "—"}
+                      </TableCell>
+                      <TableCell>
+                        {client.classification && (
+                          <Badge variant="outline" className="text-[10px]">{CLASSIFICATION_LABELS[client.classification] ?? client.classification}</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {status && <Badge variant="outline" className={`text-[10px] ${status.color}`}>{status.label}</Badge>}
+                      </TableCell>
+                      <TableCell className="text-sm font-medium">{formatCurrency(client.totalSpent)}</TableCell>
+                      <TableCell className="text-sm">{formatCurrency(client.outstandingBalance)}</TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="w-4 h-4" /></Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setViewClientId(client.id)}>Ver Perfil 360°</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setEditClient(client); setIsCreateOpen(true); }}>Editar</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               ) : (clientsData?.data ?? []).length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
@@ -1345,7 +1439,7 @@ export default function Clients() {
         </CardContent>
       </Card>
 
-      {totalPages > 1 && (
+      {!birthdayFilter && totalPages > 1 && (
         <div className="flex items-center justify-between px-2">
           <p className="text-sm text-muted-foreground">
             Mostrando {((page - 1) * LIMIT) + 1}–{Math.min(page * LIMIT, clientsData?.total ?? 0)} de {clientsData?.total ?? 0} clientes
