@@ -2,6 +2,7 @@ import { Resend } from 'resend';
 import * as React from 'react';
 import { ReservationConfirmationEmail, type ReservationConfirmationEmailProps } from './templates/reservation-confirmation';
 import { BirthdayEmail, type BirthdayEmailProps } from './templates/birthday';
+import { WelcomeCredentialsEmail, type WelcomeCredentialsEmailProps } from './templates/welcome-credentials';
 
 export interface SendManifestEmailOptions {
   to: string;
@@ -149,6 +150,35 @@ export async function sendBirthdayEmail(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[email] Unexpected error sending birthday email:', message);
+    return { success: false, error: message };
+  }
+}
+
+export async function sendWelcomeCredentialsEmail(
+  props: WelcomeCredentialsEmailProps
+): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const { data, error } = await resend.emails.send({
+      from: `${props.agencyName} <reservas@visitecrm.com.br>`,
+      to: [props.clientEmail],
+      subject: `Bem-vindo(a)! Acesse sua Área do Cliente — ${props.agencyName}`,
+      react: React.createElement(WelcomeCredentialsEmail, props),
+    });
+
+    if (error) {
+      console.error('[email] Failed to send welcome credentials email:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Unexpected error sending welcome credentials email:', message);
     return { success: false, error: message };
   }
 }

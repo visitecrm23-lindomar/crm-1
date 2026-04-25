@@ -12,6 +12,7 @@ import {
   tripsTable,
   clientsTable,
   usersTable,
+  emailLogsTable,
   referralsTable,
   referralTrackingTable,
   referralSettingsTable,
@@ -20,12 +21,36 @@ import {
 } from "@workspace/db";
 import { eq, and, desc, asc, ilike, or, sql, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
-import { generateId, generateVoucherCode } from "../lib/id";
+import { generateId, generateVoucherCode, generateReferralCode } from "../lib/id";
 import { getTenantReservationPrefix, tripTypeToCode, getYearMonth, nextReservationSequence, buildReservationNumber } from "../lib/reservation-number";
 import { randomBytes } from "crypto";
+import { clerkClient } from "@clerk/express";
+import { sendWelcomeCredentialsEmail } from "@workspace/email";
 
 function generateCookieId(): string {
   return randomBytes(16).toString("hex");
+}
+
+function generateTemporaryPassword(): string {
+  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const lower = "abcdefghjkmnpqrstuvwxyz";
+  const digits = "23456789";
+  const special = "@#$!";
+  const all = upper + lower + digits + special;
+  const bytes = randomBytes(16);
+  let pwd = upper[bytes[0] % upper.length]
+    + lower[bytes[1] % lower.length]
+    + digits[bytes[2] % digits.length]
+    + special[bytes[3] % special.length];
+  for (let i = 4; i < 12; i++) {
+    pwd += all[bytes[i] % all.length];
+  }
+  const arr = pwd.split("");
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = bytes[i] % (i + 1);
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr.join("");
 }
 
 function detectDeviceType(ua: string): string {
@@ -1028,6 +1053,88 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
       .where(eq(storeOrdersTable.id, orderId)).limit(1);
     const items = await db.select().from(storeOrderItemsTable)
       .where(eq(storeOrderItemsTable.orderId, orderId));
+
+    // Fire-and-forget: create Clerk user + local user + send welcome email after vitrine booking
+    if (reservationClientId) {
+      const ffEmail = data.customerEmail;
+      const ffName = data.customerName;
+      const ffTenantId = store.tenantId;
+      const ffAgencyName = store.name;
+      const ffAgencyLogo = store.logo ?? undefined;
+      const ffStoreBase = store.customDomain
+        ? `https://${store.customDomain}`
+        : `https://${store.slug}.visitecrm.com.br`;
+      const ffLoginUrl = `${ffStoreBase}/sign-in`;
+
+      ;(async () => {
+        try {
+          const [existingUser] = await db.select({ id: usersTable.id })
+            .from(usersTable)
+            .where(and(eq(usersTable.email, ffEmail), eq(usersTable.tenantId, ffTenantId)))
+            .limit(1);
+          if (existingUser) return;
+
+          const temporaryPassword = generateTemporaryPassword();
+          let newClerkId: string | null = null;
+
+          try {
+            const nameParts = ffName.trim().split(" ");
+            const firstName = nameParts[0];
+            const lastName = nameParts.slice(1).join(" ") || undefined;
+            const clerkUser = await clerkClient.users.createUser({
+              emailAddress: [ffEmail],
+              password: temporaryPassword,
+              firstName,
+              ...(lastName ? { lastName } : {}),
+            });
+            newClerkId = clerkUser.id;
+          } catch (clerkErr: unknown) {
+            const errors = (clerkErr as { errors?: Array<{ code: string }> })?.errors ?? [];
+            const isDuplicate = errors.some((e) => e.code === "form_identifier_exists");
+            if (!isDuplicate) {
+              console.error("[store-public] Clerk user creation error:", clerkErr);
+            }
+          }
+
+          if (!newClerkId) return;
+
+          const referralBase = generateReferralCode(ffName);
+          const referralSuffix = randomBytes(2).toString("hex").toUpperCase();
+          const referralCode = `${referralBase}${referralSuffix}`;
+          await db.insert(usersTable).values({
+            id: generateId(),
+            clerkId: newClerkId,
+            tenantId: ffTenantId,
+            name: ffName,
+            email: ffEmail,
+            role: "cliente",
+            isActive: true,
+            referralCode,
+          });
+
+          const emailResult = await sendWelcomeCredentialsEmail({
+            clientName: ffName,
+            clientEmail: ffEmail,
+            temporaryPassword,
+            loginUrl: ffLoginUrl,
+            agencyName: ffAgencyName,
+            agencyLogo: ffAgencyLogo,
+          });
+
+          await db.insert(emailLogsTable).values({
+            id: generateId(),
+            tenantId: ffTenantId,
+            recipient: ffEmail,
+            subject: `Bem-vindo(a)! Acesse sua Área do Cliente — ${ffAgencyName}`,
+            status: emailResult.success ? "sent" : "failed",
+            messageId: emailResult.messageId ?? null,
+            errorMessage: emailResult.error ?? null,
+          });
+        } catch (err) {
+          console.error("[store-public] Error creating client account after booking:", err);
+        }
+      })();
+    }
 
     res.status(201).json({ ...order, items });
   } catch (err) {
