@@ -1087,6 +1087,11 @@ export default function Clients() {
     const params = new URLSearchParams(searchStr);
     return params.get("filter") === "birthday";
   });
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchStr);
+    setBirthdayFilter(params.get("filter") === "birthday");
+  }, [searchStr]);
   const { toast } = useToast();
   const LIMIT = 12;
 

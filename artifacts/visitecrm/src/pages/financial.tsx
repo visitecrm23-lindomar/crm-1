@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import {
   useGetPaymentsSummary,
   useListPayments,
@@ -176,6 +176,14 @@ export default function Financial() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [tab, setTab] = useState(initialTab);
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchStr);
+    const t = params.get("tab");
+    if (t && VALID_TABS.includes(t)) {
+      setTab(t);
+    }
+  }, [searchStr]);
   const [statusFilter, setStatusFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
