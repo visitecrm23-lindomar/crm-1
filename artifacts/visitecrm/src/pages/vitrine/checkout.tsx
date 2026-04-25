@@ -476,6 +476,10 @@ export default function VitrineCheckout({
     </Card>
   );
 
+  const effectivePaymentMethods = (store.paymentMethods ?? []).length > 0
+    ? (store.paymentMethods ?? [])
+    : ["pix"];
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <button
@@ -716,8 +720,7 @@ export default function VitrineCheckout({
 
           {step === "pagamento" && (
             <>
-              {(store.paymentMethods ?? []).length > 0 && (
-                <Card>
+              <Card>
                   <CardHeader>
                     <CardTitle className="text-base flex items-center gap-2">
                       <CreditCard className="w-4 h-4" /> Forma de Pagamento
@@ -725,7 +728,7 @@ export default function VitrineCheckout({
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-2">
-                      {(store.paymentMethods ?? []).map((m) => (
+                      {effectivePaymentMethods.map((m) => (
                         <button
                           key={m}
                           onClick={() => set("paymentMethod", m)}
@@ -774,7 +777,6 @@ export default function VitrineCheckout({
                     </div>
                   </CardContent>
                 </Card>
-              )}
 
               <Button
                 className="w-full h-11 text-white font-bold"
