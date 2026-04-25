@@ -1,6 +1,7 @@
 import { ReactNode, useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { PublicStore } from "@/lib/storeApi";
+import { useUser } from "@clerk/react";
 import {
   X,
   Phone,
@@ -11,6 +12,7 @@ import {
   MapPin,
   Menu,
   Search,
+  UserCircle,
 } from "lucide-react";
 
 export default function VitrineLayout({
@@ -23,6 +25,7 @@ export default function VitrineLayout({
   store: PublicStore;
 }) {
   const [, navigate] = useLocation();
+  const { isSignedIn } = useUser();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -96,6 +99,13 @@ export default function VitrineLayout({
                 WhatsApp
               </a>
             )}
+            <a
+              href={isSignedIn ? `/dashboard` : `/sign-in`}
+              className="flex items-center gap-1.5 text-white/90 hover:text-white text-sm font-medium transition-colors bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg"
+            >
+              <UserCircle className="w-4 h-4" />
+              {isSignedIn ? "Meu Perfil" : "Entrar"}
+            </a>
           </nav>
 
           <div className="flex items-center gap-2">
@@ -181,6 +191,14 @@ export default function VitrineLayout({
                 WhatsApp
               </a>
             )}
+            <a
+              href={isSignedIn ? `/dashboard` : `/sign-in`}
+              className="flex items-center gap-2 text-white/90 hover:text-white text-sm font-medium py-1"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              <UserCircle className="w-4 h-4" />
+              {isSignedIn ? "Meu Perfil" : "Entrar"}
+            </a>
           </div>
         )}
       </header>

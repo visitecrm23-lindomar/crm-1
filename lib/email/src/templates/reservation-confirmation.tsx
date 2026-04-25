@@ -15,6 +15,12 @@ import {
   Link,
 } from '@react-email/components'
 
+export interface ReservationCredentials {
+  email: string
+  tempPassword: string
+  loginUrl: string
+}
+
 export interface ReservationConfirmationEmailProps {
   reservationNumber: string
   voucherCode: string
@@ -41,6 +47,7 @@ export interface ReservationConfirmationEmailProps {
   voucherUrl: string
   consultUrl: string
   whatsappUrl: string
+  credentials?: ReservationCredentials
 }
 
 export function ReservationConfirmationEmail({
@@ -69,6 +76,7 @@ export function ReservationConfirmationEmail({
   voucherUrl,
   consultUrl,
   whatsappUrl,
+  credentials,
 }: ReservationConfirmationEmailProps) {
   return (
     <Html>
@@ -281,6 +289,40 @@ export function ReservationConfirmationEmail({
               <li>Em caso de dúvidas, entre em contato conosco</li>
             </ul>
           </Section>
+
+          {/* CREDENTIALS — only shown when a new account was created */}
+          {credentials && (
+            <>
+              <Hr style={divider} />
+              <Section style={credentialsSection}>
+                <Heading style={credentialsSectionTitle}>🔑 Acesse sua Área do Cliente</Heading>
+                <Text style={credentialsIntro}>
+                  Criamos uma conta gratuita para você acompanhar sua reserva a qualquer momento.
+                  Use as credenciais abaixo para fazer o primeiro acesso:
+                </Text>
+                <div style={credentialsBox}>
+                  <table style={infoTable}>
+                    <tbody>
+                      <tr>
+                        <td style={infoLabel}>Login (e-mail):</td>
+                        <td style={infoValue}>{credentials.email}</td>
+                      </tr>
+                      <tr>
+                        <td style={infoLabel}>Senha temporária:</td>
+                        <td style={credentialsPassword}>{credentials.tempPassword}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <Button style={credentialsButton} href={credentials.loginUrl}>
+                  Acessar Minha Área do Cliente
+                </Button>
+                <Text style={credentialsNote}>
+                  Por segurança, recomendamos alterar sua senha no primeiro acesso.
+                </Text>
+              </Section>
+            </>
+          )}
 
           {/* HELP */}
           <Section style={helpSection}>
@@ -757,4 +799,59 @@ const footerDisclaimer: React.CSSProperties = {
   color: '#6b7280',
   fontSize: '11px',
   margin: '0',
+}
+
+const credentialsSection: React.CSSProperties = {
+  padding: '32px 24px',
+  backgroundColor: '#f0f9ff',
+}
+
+const credentialsSectionTitle: React.CSSProperties = {
+  fontSize: '20px',
+  fontWeight: 'bold',
+  color: '#0369a1',
+  margin: '0 0 12px',
+}
+
+const credentialsIntro: React.CSSProperties = {
+  fontSize: '14px',
+  color: '#475569',
+  margin: '0 0 20px',
+  lineHeight: '1.6',
+}
+
+const credentialsBox: React.CSSProperties = {
+  backgroundColor: '#ffffff',
+  border: '2px solid #0ea5e9',
+  borderRadius: '8px',
+  padding: '16px',
+  marginBottom: '20px',
+}
+
+const credentialsPassword: React.CSSProperties = {
+  fontSize: '14px',
+  color: '#0369a1',
+  fontWeight: 'bold',
+  fontFamily: 'monospace',
+  letterSpacing: '1px',
+  padding: '8px 0',
+}
+
+const credentialsButton: React.CSSProperties = {
+  backgroundColor: '#0ea5e9',
+  color: '#ffffff',
+  padding: '12px 24px',
+  borderRadius: '8px',
+  textDecoration: 'none',
+  fontWeight: '600',
+  fontSize: '14px',
+  display: 'inline-block',
+  textAlign: 'center',
+}
+
+const credentialsNote: React.CSSProperties = {
+  fontSize: '12px',
+  color: '#94a3b8',
+  margin: '16px 0 0',
+  textAlign: 'center',
 }

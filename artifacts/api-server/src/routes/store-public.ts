@@ -25,7 +25,7 @@ import { generateId, generateVoucherCode, generateReferralCode } from "../lib/id
 import { getTenantReservationPrefix, tripTypeToCode, getYearMonth, nextReservationSequence, buildReservationNumber } from "../lib/reservation-number";
 import { randomBytes } from "crypto";
 import { clerkClient } from "@clerk/express";
-import { sendWelcomeCredentialsEmail } from "@workspace/email";
+import { sendReservationConfirmationEmail } from "@workspace/email";
 
 function generateCookieId(): string {
   return randomBytes(16).toString("hex");
@@ -1054,84 +1054,152 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
     const items = await db.select().from(storeOrderItemsTable)
       .where(eq(storeOrderItemsTable.orderId, orderId));
 
-    // Fire-and-forget: create Clerk user + local user + send welcome email after vitrine booking
-    if (reservationClientId) {
+    // Fire-and-forget: create Clerk user + local user (if new) + send reservation confirmation email
+    if (reservationClientId && tripLinkedProducts.size > 0) {
       const ffEmail = data.customerEmail;
       const ffName = data.customerName;
       const ffTenantId = store.tenantId;
       const ffAgencyName = store.name;
-      const ffAgencyLogo = store.logo ?? undefined;
+      const ffAgencyLogo = store.logo ?? "";
+      const ffAgencyPhone = store.contactWhatsapp ?? store.contactPhone ?? "";
+      const ffAgencyEmail = store.contactEmail ?? "";
       const ffStoreBase = store.customDomain
         ? `https://${store.customDomain}`
         : `https://${store.slug}.visitecrm.com.br`;
       const ffLoginUrl = `${ffStoreBase}/sign-in`;
+      const ffConsultUrl = `${ffStoreBase}/consultar-pedido`;
+      const ffOrderNumber = orderNumber;
 
       ;(async () => {
         try {
+          // Step 1: Check if user already has a portal account; create one if not
+          let credentials: { email: string; tempPassword: string; loginUrl: string } | undefined;
+
           const [existingUser] = await db.select({ id: usersTable.id })
             .from(usersTable)
             .where(and(eq(usersTable.email, ffEmail), eq(usersTable.tenantId, ffTenantId)))
             .limit(1);
-          if (existingUser) return;
 
-          const temporaryPassword = generateTemporaryPassword();
-          let newClerkId: string | null = null;
+          if (!existingUser) {
+            const temporaryPassword = generateTemporaryPassword();
+            let newClerkId: string | null = null;
 
-          try {
-            const nameParts = ffName.trim().split(" ");
-            const firstName = nameParts[0];
-            const lastName = nameParts.slice(1).join(" ") || undefined;
-            const clerkUser = await clerkClient.users.createUser({
-              emailAddress: [ffEmail],
-              password: temporaryPassword,
-              firstName,
-              ...(lastName ? { lastName } : {}),
-            });
-            newClerkId = clerkUser.id;
-          } catch (clerkErr: unknown) {
-            const errors = (clerkErr as { errors?: Array<{ code: string }> })?.errors ?? [];
-            const isDuplicate = errors.some((e) => e.code === "form_identifier_exists");
-            if (!isDuplicate) {
-              console.error("[store-public] Clerk user creation error:", clerkErr);
+            try {
+              const nameParts = ffName.trim().split(" ");
+              const firstName = nameParts[0];
+              const lastName = nameParts.slice(1).join(" ") || undefined;
+              const clerkUser = await clerkClient.users.createUser({
+                emailAddress: [ffEmail],
+                password: temporaryPassword,
+                firstName,
+                ...(lastName ? { lastName } : {}),
+              });
+              newClerkId = clerkUser.id;
+            } catch (clerkErr: unknown) {
+              const errors = (clerkErr as { errors?: Array<{ code: string }> })?.errors ?? [];
+              const isDuplicate = errors.some((e) => e.code === "form_identifier_exists");
+              if (!isDuplicate) {
+                console.error("[store-public] Clerk user creation error:", clerkErr);
+              }
+            }
+
+            if (newClerkId) {
+              const referralBase = generateReferralCode(ffName);
+              const referralSuffix = randomBytes(2).toString("hex").toUpperCase();
+              const referralCode = `${referralBase}${referralSuffix}`;
+              await db.insert(usersTable).values({
+                id: generateId(),
+                clerkId: newClerkId,
+                tenantId: ffTenantId,
+                name: ffName,
+                email: ffEmail,
+                role: "cliente",
+                isActive: true,
+                referralCode,
+              });
+              credentials = { email: ffEmail, tempPassword: temporaryPassword, loginUrl: ffLoginUrl };
             }
           }
 
-          if (!newClerkId) return;
+          // Step 2: Fetch the first reservation linked to this order (with trip data)
+          const [reservation] = await db
+            .select({
+              reservationNumber: reservationsTable.reservationNumber,
+              voucherCode: reservationsTable.voucherCode,
+              seats: reservationsTable.seats,
+              totalValue: reservationsTable.totalValue,
+              tripName: tripsTable.name,
+              tripDestination: tripsTable.destination,
+              tripDepartureDate: tripsTable.departureDate,
+              tripReturnDate: tripsTable.returnDate,
+            })
+            .from(reservationsTable)
+            .innerJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
+            .where(eq(reservationsTable.storeOrderId, ffOrderNumber))
+            .limit(1);
 
-          const referralBase = generateReferralCode(ffName);
-          const referralSuffix = randomBytes(2).toString("hex").toUpperCase();
-          const referralCode = `${referralBase}${referralSuffix}`;
-          await db.insert(usersTable).values({
-            id: generateId(),
-            clerkId: newClerkId,
-            tenantId: ffTenantId,
-            name: ffName,
-            email: ffEmail,
-            role: "cliente",
-            isActive: true,
-            referralCode,
-          });
+          if (!reservation) return;
 
-          const emailResult = await sendWelcomeCredentialsEmail({
+          const depDate = reservation.tripDepartureDate as unknown as Date | null;
+          const retDate = reservation.tripReturnDate as unknown as Date | null;
+
+          const departureDateStr = depDate
+            ? depDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+            : "A confirmar";
+
+          let duration = "A confirmar";
+          if (depDate && retDate) {
+            const diffDays = Math.round((retDate.getTime() - depDate.getTime()) / (1000 * 60 * 60 * 24));
+            const nights = diffDays > 0 ? diffDays : 0;
+            const days = nights + 1;
+            duration = `${days} dia${days !== 1 ? "s" : ""}${nights > 0 ? ` / ${nights} noite${nights !== 1 ? "s" : ""}` : ""}`;
+          }
+
+          const totalAmount = Number(reservation.totalValue ?? 0);
+          const whatsappNumber = ffAgencyPhone.replace(/\D/g, "");
+          const whatsappUrl = whatsappNumber ? `https://wa.me/${whatsappNumber}` : ffStoreBase;
+          const voucherUrl = `${ffConsultUrl}?code=${reservation.voucherCode ?? ""}`;
+
+          // Step 3: Send combined reservation confirmation email (with credentials if new account)
+          const emailResult = await sendReservationConfirmationEmail({
+            reservationNumber: reservation.reservationNumber ?? ffOrderNumber,
+            voucherCode: reservation.voucherCode ?? "",
             clientName: ffName,
+            clientCpf: data.customerCpf ?? "",
             clientEmail: ffEmail,
-            temporaryPassword,
-            loginUrl: ffLoginUrl,
+            clientPhone: data.customerPhone ?? "",
+            tripTitle: reservation.tripName,
+            destination: reservation.tripDestination,
+            departureDate: departureDateStr,
+            duration,
+            seats: reservation.seats ?? [],
+            totalAmount,
+            amountPaid: 0,
+            amountPending: totalAmount,
+            paymentMethod: data.paymentMethod ?? "pix",
+            paymentStatus: "pending",
             agencyName: ffAgencyName,
             agencyLogo: ffAgencyLogo,
+            agencyPhone: ffAgencyPhone,
+            agencyEmail: ffAgencyEmail,
+            agencyWebsite: ffStoreBase,
+            voucherUrl,
+            consultUrl: ffConsultUrl,
+            whatsappUrl,
+            ...(credentials ? { credentials } : {}),
           });
 
           await db.insert(emailLogsTable).values({
             id: generateId(),
             tenantId: ffTenantId,
             recipient: ffEmail,
-            subject: `Bem-vindo(a)! Acesse sua Área do Cliente — ${ffAgencyName}`,
+            subject: `Reserva Confirmada — ${reservation.reservationNumber ?? ffOrderNumber}`,
             status: emailResult.success ? "sent" : "failed",
             messageId: emailResult.messageId ?? null,
             errorMessage: emailResult.error ?? null,
           });
         } catch (err) {
-          console.error("[store-public] Error creating client account after booking:", err);
+          console.error("[store-public] Error sending post-booking email:", err);
         }
       })();
     }
