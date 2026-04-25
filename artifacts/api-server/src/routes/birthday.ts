@@ -8,7 +8,6 @@ import { processBirthdayForClient, getBirthdaySettings } from "../lib/birthday";
 import { ADMIN_ROLES } from '../lib/tenant';
 
 const router = Router();
-const ADMIN_ROLES = ADMIN_ROLES;
 
 router.get("/birthday/today", async (req, res): Promise<void> => {
   try {

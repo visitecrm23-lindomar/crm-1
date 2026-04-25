@@ -7,7 +7,6 @@ import { requireAuth } from "../lib/tenant";
 import { ADMIN_ROLES } from '../lib/tenant';
 
 const router = Router();
-const ADMIN_ROLES = ADMIN_ROLES;
 
 const CreateCategoryBody = z.object({
   name: z.string().min(1),

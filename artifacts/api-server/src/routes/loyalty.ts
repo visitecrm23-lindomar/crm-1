@@ -8,7 +8,6 @@ import { loyaltyAwardPoints, calculateTier } from "../lib/loyalty-helpers";
 import { ADMIN_ROLES } from '../lib/tenant';
 
 const router = Router();
-const ADMIN_ROLES = ADMIN_ROLES;
 
 const CreateProgramBody = z.object({
   name: z.string().min(1),

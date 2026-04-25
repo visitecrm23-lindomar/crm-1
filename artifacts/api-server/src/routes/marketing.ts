@@ -8,7 +8,6 @@ import { z } from "zod";
 import { ADMIN_ROLES } from '../lib/tenant';
 
 const router = Router();
-const ADMIN_ROLES = ADMIN_ROLES;
 
 const CreateCampaignBody = z.object({
   name: z.string(),

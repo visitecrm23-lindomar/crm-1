@@ -9,7 +9,6 @@ import { ADMIN_ROLES } from '../lib/tenant';
 
 const router = Router();
 
-const ADMIN_ROLES = ADMIN_ROLES as const;
 
 const anyJsonValue = z.union([
   z.string(),

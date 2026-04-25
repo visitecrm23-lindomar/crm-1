@@ -21,7 +21,6 @@ import { deleteOrphanedFile, deleteOrphanedImages } from "../lib/uploadthing";
 import { ADMIN_ROLES } from '../lib/tenant';
 
 const router = Router();
-const ADMIN_ROLES = ADMIN_ROLES;
 
 const StoreSettingsBody = z.object({
   name: z.string().min(1).nullish(),
