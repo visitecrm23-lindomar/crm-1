@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   useListMessages,
   useSendMessage,
@@ -47,9 +47,25 @@ import {
   Clock,
   XCircle,
   WholeWord,
+  RefreshCcw,
+  Mail,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 import type { MessageTemplate, Message } from "@workspace/api-client-react";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+interface EmailLog {
+  id: string;
+  toEmail: string;
+  subject: string | null;
+  type: string;
+  status: string;
+  error: string | null;
+  sentAt: string | null;
+  createdAt: string;
+}
 
 const CHANNELS = [
   { value: "whatsapp", label: "WhatsApp" },
@@ -86,6 +102,7 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function Communication() {
+  const { toast } = useToast();
   const [tab, setTab] = useState("conversations");
   const [isSendOpen, setIsSendOpen] = useState(false);
   const [isTemplateOpen, setIsTemplateOpen] = useState(false);
@@ -100,6 +117,48 @@ export default function Communication() {
   const [selectedConversationClientId, setSelectedConversationClientId] = useState<string | null>(null);
   const [inboxChannel, setInboxChannel] = useState("whatsapp");
   const [inboxMessage, setInboxMessage] = useState("");
+
+  const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
+  const [loadingEmailLogs, setLoadingEmailLogs] = useState(false);
+  const [resendingId, setResendingId] = useState<string | null>(null);
+
+  const fetchEmailLogs = useCallback(async () => {
+    setLoadingEmailLogs(true);
+    try {
+      const res = await fetch(`${BASE}/api/email-logs`, { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setEmailLogs(data ?? []);
+      }
+    } finally {
+      setLoadingEmailLogs(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === "email-logs") {
+      fetchEmailLogs();
+    }
+  }, [tab, fetchEmailLogs]);
+
+  const handleResend = async (id: string) => {
+    setResendingId(id);
+    try {
+      const res = await fetch(`${BASE}/api/email-logs/${id}/resend`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (res.ok) {
+        toast({ title: "E-mail reenfileirado para reenvio." });
+        fetchEmailLogs();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        toast({ title: "Erro ao reenviar", description: body.error ?? "Tente novamente.", variant: "destructive" });
+      }
+    } finally {
+      setResendingId(null);
+    }
+  };
 
   const { data: messages, isLoading: loadingMessages, refetch: refetchMessages } =
     useListMessages({ limit: 50 });
@@ -436,6 +495,9 @@ export default function Communication() {
           <TabsTrigger value="conversations">Conversas</TabsTrigger>
           <TabsTrigger value="messages">Mensagens Enviadas</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
+          <TabsTrigger value="email-logs" className="flex items-center gap-1">
+            <Mail className="w-3.5 h-3.5" /> Log de E-mails
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="conversations" className="mt-4">
@@ -715,6 +777,94 @@ export default function Communication() {
                 </Card>
               ))}
             </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="email-logs" className="mt-4">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-muted-foreground">
+              Histórico de e-mails transacionais enviados pelo sistema.
+            </p>
+            <Button variant="outline" size="sm" onClick={fetchEmailLogs} disabled={loadingEmailLogs}>
+              <RefreshCcw className={`w-4 h-4 mr-2 ${loadingEmailLogs ? "animate-spin" : ""}`} />
+              Atualizar
+            </Button>
+          </div>
+          {loadingEmailLogs ? (
+            <div className="space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : emailLogs.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <Mail className="w-12 h-12 mx-auto mb-4 opacity-30" />
+              <p>Nenhum log de e-mail encontrado.</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Destinatário</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Assunto</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {emailLogs.map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                      {new Date(log.createdAt).toLocaleString("pt-BR")}
+                    </TableCell>
+                    <TableCell className="text-sm">{log.toEmail}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs capitalize">
+                        {log.type.replace(/_/g, " ")}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm max-w-[200px] truncate">
+                      {log.subject ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={
+                          log.status === "sent"
+                            ? "bg-green-50 text-green-700 border-green-200"
+                            : log.status === "failed"
+                            ? "bg-red-50 text-red-700 border-red-200"
+                            : log.status === "queued"
+                            ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+                            : "bg-gray-50 text-gray-700 border-gray-200"
+                        }
+                      >
+                        {log.status === "sent" && <Check className="w-3 h-3 mr-1" />}
+                        {log.status === "failed" && <XCircle className="w-3 h-3 mr-1" />}
+                        {log.status === "queued" && <Clock className="w-3 h-3 mr-1" />}
+                        {log.status === "sent" ? "Enviado" : log.status === "failed" ? "Falhou" : log.status === "queued" ? "Na fila" : log.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {log.status === "failed" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleResend(log.id)}
+                          disabled={resendingId === log.id}
+                          title={log.error ?? undefined}
+                        >
+                          <RefreshCcw className={`w-3.5 h-3.5 mr-1 ${resendingId === log.id ? "animate-spin" : ""}`} />
+                          Reenviar
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </TabsContent>
       </Tabs>

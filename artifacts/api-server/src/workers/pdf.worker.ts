@@ -1,18 +1,13 @@
 import { Worker } from "bullmq";
 import { getRedisConnection } from "../lib/redis";
 import { logger } from "../lib/logger";
+import { db, auditLogsTable } from "@workspace/db";
+import { generateId } from "../lib/id";
+import { sendManifestEmail } from "@workspace/email";
 import type { PdfJobData } from "../queues/index";
 
 let _worker: Worker<PdfJobData> | null = null;
 
-/**
- * PDF Worker — processes async PDF generation jobs.
- *
- * Currently supports:
- *   - "manifest": Generate and email the ANTT manifest PDF for a trip.
- *     (Full implementation delegated to the manifest generation route;
- *      this worker handles async scheduling and retry logic.)
- */
 export function startPdfWorker(): Worker<PdfJobData> | null {
   const conn = getRedisConnection();
   if (!conn) {
@@ -23,16 +18,41 @@ export function startPdfWorker(): Worker<PdfJobData> | null {
   _worker = new Worker<PdfJobData>(
     "pdfs",
     async (job) => {
-      logger.info({ jobId: job.id, type: job.data.type, tripId: job.data.tripId }, "[pdf-worker] Processing job");
+      const { type, tenantId, tripId, tripName, manifestNumber, agencyName, recipientEmail, htmlContent, pdfBase64, userId, ipAddress, userAgent } = job.data;
 
-      if (job.data.type === "manifest") {
-        // Manifest generation is currently handled synchronously in the manifests route.
-        // When async manifest generation is enabled, implement the logic here:
-        // 1. Generate the ANTT manifest PDF for job.data.tripId
-        // 2. Email it to job.data.recipientEmail via sendManifestEmail()
-        logger.info({ tripId: job.data.tripId, recipient: job.data.recipientEmail }, "[pdf-worker] Manifest job received (sync path still active)");
+      logger.info({ jobId: job.id, type, tripId }, "[pdf-worker] Processing job");
+
+      if (type === "manifest") {
+        const pdfBuffer = Buffer.from(pdfBase64, "base64");
+
+        const result = await sendManifestEmail({
+          to: recipientEmail,
+          tripName,
+          manifestNumber: manifestNumber ?? null,
+          agencyName,
+          htmlContent,
+          pdfAttachment: pdfBuffer,
+        });
+
+        if (!result.success) {
+          throw new Error(result.error ?? "sendManifestEmail failed");
+        }
+
+        await db.insert(auditLogsTable).values({
+          id: generateId(),
+          tenantId,
+          userId,
+          action: "manifest_sent",
+          entityType: "trip",
+          entityId: tripId,
+          after: { channel: "email", to: recipientEmail.replace(/(.{2}).+(@.+)/, "$1***$2") },
+          ipAddress: ipAddress ?? null,
+          userAgent: userAgent ?? null,
+        });
+
+        logger.info({ tripId, recipient: recipientEmail.replace(/(.{2}).+(@.+)/, "$1***$2") }, "[pdf-worker] Manifest email sent");
       } else {
-        logger.warn({ type: job.data.type }, "[pdf-worker] Unknown PDF job type");
+        logger.warn({ type }, "[pdf-worker] Unknown PDF job type");
       }
     },
     { connection: conn, concurrency: 2 },

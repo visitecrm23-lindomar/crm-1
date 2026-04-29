@@ -357,7 +357,8 @@ router.post("/email-logs/:id/resend", async (req, res): Promise<void> => {
     }
     const result = await resendEmailLog(req.params.id, me.tenantId);
     if (!result.ok) {
-      res.status(404).json({ error: result.error ?? "Not found" });
+      const status = result.error === "Only failed emails can be resent" ? 422 : 404;
+      res.status(status).json({ error: result.error ?? "Not found" });
       return;
     }
     res.json({ ok: true });

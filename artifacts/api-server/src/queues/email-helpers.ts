@@ -174,6 +174,7 @@ export async function resendEmailLog(
 
   if (!log) return { ok: false, error: "Email log not found" };
   if (log.tenantId !== tenantId) return { ok: false, error: "Not found" };
+  if (log.status !== "failed") return { ok: false, error: "Only failed emails can be resent" };
 
   // Rebuild props from the original reservation (if available)
   let props: ReservationConfirmationEmailProps | null = null;

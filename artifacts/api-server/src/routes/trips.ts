@@ -11,6 +11,7 @@ import { deriveAgeCategory, getAgeYears } from "../lib/passenger";
 import { CreateTripBody, UpdateTripBody } from "@workspace/api-zod";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { sendManifestEmail } from "@workspace/email";
+import { getPdfQueue } from "../queues/index";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { z } from "zod";
@@ -1350,6 +1351,27 @@ router.post("/trips/:id/manifest/send", async (req, res): Promise<void> => {
         Promise.resolve(generateManifestHtml(panel)),
         generateManifestPdf(panel),
       ]);
+
+      const pdfQueue = getPdfQueue();
+      if (pdfQueue) {
+        await pdfQueue.add("manifest", {
+          type: "manifest",
+          tenantId: me.tenantId,
+          tripId: trip.id,
+          tripName: trip.name,
+          manifestNumber: trip.manifestNumber ?? null,
+          agencyName: tenant?.name ?? "VisiteCRM",
+          recipientEmail: to,
+          htmlContent: html,
+          pdfBase64: pdfBuffer.toString("base64"),
+          userId: me.userId,
+          ipAddress: req.ip ?? null,
+          userAgent: req.headers["user-agent"] ?? null,
+        });
+        res.status(202).json({ success: true, channel: "email", queued: true });
+        return;
+      }
+
       const result = await sendManifestEmail({
         to,
         tripName: trip.name,
