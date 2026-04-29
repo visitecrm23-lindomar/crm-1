@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { publicStoreApi, PublicStore, StoreProduct, CouponValidation } from "@/lib/storeApi";
+import { useSeatStream } from "@/hooks/useSeatStream";
 import { calculateTripDuration } from "@/lib/tripDuration";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -982,6 +983,32 @@ export default function ReservationWizard({
   } | null>(null);
   const [loadingLayoutMap, setLoadingLayoutMap] = useState(false);
 
+  const { occupiedSeats: streamOccupied } = useSeatStream({
+    tripId: product?.tripId,
+    slug,
+    isPublic: true,
+    enabled: step === "assento" && !!product?.tripId,
+  });
+
+  const liveLayoutSeatMap = useMemo(() => {
+    if (!layoutSeatMap) return null;
+    if (Object.keys(streamOccupied).length === 0) return layoutSeatMap;
+    return {
+      ...layoutSeatMap,
+      seats: layoutSeatMap.seats.map(seat =>
+        streamOccupied[seat.number]
+          ? { ...seat, status: streamOccupied[seat.number] }
+          : seat
+      ),
+    };
+  }, [layoutSeatMap, streamOccupied]);
+
+  useEffect(() => {
+    if (Object.keys(streamOccupied).length === 0) return;
+    setLayoutSeats(prev => prev.filter(s => !streamOccupied[s]));
+    setSelectedSeats(prev => prev.filter(n => !streamOccupied[String(n)]));
+  }, [streamOccupied]);
+
   const [referralCode, setReferralCode] = useState(() => localStorage.getItem("referral_code") ?? "");
   const [referralApplied, setReferralApplied] = useState(false);
   const [referralDiscountPct, setReferralDiscountPct] = useState(5);
@@ -1045,6 +1072,9 @@ export default function ReservationWizard({
   const isSoldOut = maxSeats === 0;
 
   const occupiedSeats: number[] = (() => {
+    if (Object.keys(streamOccupied).length > 0) {
+      return Object.keys(streamOccupied).map(Number).filter(n => !isNaN(n));
+    }
     if (!product?.totalCapacity) return [];
     const taken = product.totalCapacity - (product.availableSeats ?? product.totalCapacity);
     return Array.from({ length: Math.max(0, taken) }, (_, i) => i + 1);
@@ -1876,12 +1906,12 @@ export default function ReservationWizard({
                 <div className="flex items-center justify-center py-8 text-muted-foreground text-sm gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" /> Carregando mapa de assentos…
                 </div>
-              ) : layoutSeatMap ? (
+              ) : liveLayoutSeatMap ? (
                 <PublicLayoutSeatPicker
-                  seats={layoutSeatMap.seats}
-                  totalSeats={layoutSeatMap.totalSeats}
-                  layout={layoutSeatMap.layout}
-                  floors={layoutSeatMap.floors}
+                  seats={liveLayoutSeatMap.seats}
+                  totalSeats={liveLayoutSeatMap.totalSeats}
+                  layout={liveLayoutSeatMap.layout}
+                  floors={liveLayoutSeatMap.floors}
                   qty={qty}
                   selected={layoutSeats}
                   onToggle={(n) => setLayoutSeats((prev) =>

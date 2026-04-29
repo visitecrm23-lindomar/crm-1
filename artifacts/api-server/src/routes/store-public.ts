@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
+import { addSeatClient, removeSeatClient, emitSeatUpdate } from "../lib/seat-sse";
 import {
   storesTable,
   storeProductsTable,
@@ -71,6 +72,22 @@ function detectOS(ua: string): string {
   if (/mac/i.test(ua)) return "MacOS";
   if (/linux/i.test(ua)) return "Linux";
   return "Unknown";
+}
+
+async function broadcastSeatUpdate(tripId: string, tenantId: string): Promise<void> {
+  const reservations = await db.select({ seats: reservationsTable.seats, status: reservationsTable.status })
+    .from(reservationsTable)
+    .where(and(
+      eq(reservationsTable.tripId, tripId),
+      eq(reservationsTable.tenantId, tenantId),
+      inArray(reservationsTable.status, ["pending", "confirmed"]),
+    ));
+  const occupiedMap: Record<string, string> = {};
+  for (const r of reservations) {
+    const s = r.status === "confirmed" ? "confirmed" : "reserved";
+    for (const seat of r.seats) occupiedMap[seat] = s;
+  }
+  emitSeatUpdate({ tripId, seats: Object.entries(occupiedMap).map(([number, status]) => ({ number, status })) });
 }
 
 const router = Router();
@@ -431,6 +448,25 @@ router.get("/public/store/:slug/trips/:tripId/seat-map", async (req, res): Promi
     req.log.error({ err }, "Error fetching public seat map");
     res.status(500).json({ error: "Internal server error" });
   }
+});
+
+router.get("/public/store/:slug/trips/:tripId/seats/stream", async (req, res): Promise<void> => {
+  const store = await getActiveStore(req.params.slug).catch(() => null);
+  if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+  const tripId = req.params.tripId;
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+  addSeatClient(tripId, res);
+  const ping = setInterval(() => {
+    try { res.write(": ping\n\n"); } catch { clearInterval(ping); }
+  }, 30000);
+  req.on("close", () => {
+    clearInterval(ping);
+    removeSeatClient(tripId, res);
+  });
 });
 
 const CreateOrderBody = z.object({
@@ -1201,6 +1237,11 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
     }
 
     res.status(201).json({ ...order, items });
+
+    // Emit real-time seat update to all SSE listeners for each trip in this order
+    for (const [tripId] of tripLinkedProducts) {
+      broadcastSeatUpdate(tripId, store.tenantId).catch(() => {});
+    }
   } catch (err) {
     req.log.error({ err }, "Error creating store order");
     res.status(500).json({ error: "Internal server error" });

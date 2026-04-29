@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
+import { addSeatClient, removeSeatClient } from "../lib/seat-sse";
 import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable, auditLogsTable } from "@workspace/db";
 import { checkPlanLimit } from "../lib/planLimits";
 import type { LayoutCell, FixedCostItem, VariableCostItem } from "@workspace/db";
@@ -537,6 +538,25 @@ router.get("/trips/:id/seat-map", async (req, res): Promise<void> => {
     req.log.error({ err }, "Error fetching seat map");
     res.status(500).json({ error: "Internal server error" });
   }
+});
+
+router.get("/trips/:id/seats/stream", async (req, res): Promise<void> => {
+  const me = await requireAuth(req, res);
+  if (!me) return;
+  const tripId = req.params.id;
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+  addSeatClient(tripId, res);
+  const ping = setInterval(() => {
+    try { res.write(": ping\n\n"); } catch { clearInterval(ping); }
+  }, 30000);
+  req.on("close", () => {
+    clearInterval(ping);
+    removeSeatClient(tripId, res);
+  });
 });
 
 router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {

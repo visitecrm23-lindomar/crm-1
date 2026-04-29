@@ -64,6 +64,21 @@ The platform includes a multi-tenant e-commerce solution with both an admin pane
 - **Resend endpoint**: `POST /api/email-logs/:id/resend` — creates a new `email_logs` row per resend attempt and enqueues a fresh delivery job. Restricted to `MANAGEMENT_ROLES`. Only logs with `status=failed` can be resent (422 otherwise).
 - **Reminder retry semantics**: Reminder workers iterate all eligible recipients in one batch job. Individual send failures are logged per recipient but the job does not throw, so BullMQ does not retry the whole batch (which would risk double-sending to recipients already reached). This is an intentional reliability tradeoff. See `src/workers/reminder.worker.ts` for details.
 
+### Real-Time Seat Availability (SSE)
+- **Module**: `artifacts/api-server/src/lib/seat-sse.ts` — in-memory registry of `tripId → Set<Response>`, exports `addSeatClient`, `removeSeatClient`, `emitSeatUpdate`.
+- **Public SSE endpoint**: `GET /api/public/store/:slug/trips/:tripId/seats/stream` — no auth, for Vitrine wizard customers. Validates store exists before upgrading to SSE.
+- **Admin SSE endpoint**: `GET /api/trips/:tripId/seats/stream` — requires Clerk auth, for admin seat map views.
+- **Emit triggers**: `broadcastSeatUpdate(tripId, tenantId)` is called (fire-and-forget) after any seat-changing operation:
+  - `POST /api/reservations` (admin reservation creation)
+  - `PATCH /api/reservations/:id` (any status/seat change, including cancellation)
+  - `DELETE /api/reservations/:id`
+  - `POST /api/public/store/:slug/orders` (Vitrine checkout, for all trip-linked products)
+- **Frontend hook**: `artifacts/visitecrm/src/hooks/useSeatStream.ts` — `useSeatStream({ tripId, slug, isPublic, enabled })` returns `{ occupiedSeats: Record<string, string>, connected: boolean }`.
+- **Wizard integration**: `reservation-wizard.tsx` uses `useSeatStream` on step `"assento"`. SSE updates patch `liveLayoutSeatMap.seats` for the `PublicLayoutSeatPicker` and drive `occupiedSeats` for the fallback `SeatGrid`. Automatically deselects any seat that becomes occupied via SSE.
+- **Keep-alive**: 30-second comment pings (`": ping\n\n"`) prevent proxy timeouts.
+- **Cleanup**: `req.on("close", ...)` removes clients and clears intervals.
+- **Scope limitation**: Single-instance only (no Redis pub/sub). Multi-instance support is out of scope.
+
 ## External Dependencies
 
 - **Clerk**: For user authentication and authorization.

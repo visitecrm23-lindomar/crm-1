@@ -13,6 +13,23 @@ import { writeClientActivity } from "../lib/activities";
 import { syncReservationCommission } from "./payments";
 import { enqueueReservationConfirmationEmail } from "../queues/email-helpers";
 import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
+import { emitSeatUpdate } from "../lib/seat-sse";
+
+async function broadcastSeatUpdate(tripId: string, tenantId: string): Promise<void> {
+  const reservations = await db.select({ seats: reservationsTable.seats, status: reservationsTable.status })
+    .from(reservationsTable)
+    .where(and(
+      eq(reservationsTable.tripId, tripId),
+      eq(reservationsTable.tenantId, tenantId),
+      inArray(reservationsTable.status, ["pending", "confirmed"]),
+    ));
+  const occupiedMap: Record<string, string> = {};
+  for (const r of reservations) {
+    const s = r.status === "confirmed" ? "confirmed" : "reserved";
+    for (const seat of r.seats) occupiedMap[seat] = s;
+  }
+  emitSeatUpdate({ tripId, seats: Object.entries(occupiedMap).map(([number, status]) => ({ number, status })) });
+}
 
 const router = Router();
 
@@ -613,6 +630,7 @@ router.post("/reservations", async (req, res): Promise<void> => {
     if (!reservation) { res.status(500).json({ error: "Failed to create reservation" }); return; }
     const formatted = await formatReservation(reservation);
     res.status(201).json(formatted);
+    broadcastSeatUpdate(reservation.tripId, me.tenantId).catch(() => {});
     CalendarSyncService.syncTrip(reservation.tripId).catch(() => {});
     syncReservationCommission(id, me.tenantId)
       .catch((err) => req.log.error({ err }, "Error syncing commission after reservation creation"));
@@ -850,6 +868,7 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
     }
     const formatted = await formatReservation(reservation);
     res.json(formatted);
+    broadcastSeatUpdate(existing.tripId, me.tenantId).catch(() => {});
     CalendarSyncService.syncTrip(existing.tripId).catch(() => {});
   } catch (err) {
     req.log.error({ err }, "Error updating reservation");
@@ -879,6 +898,7 @@ router.delete("/reservations/:id", async (req, res): Promise<void> => {
         .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)));
     });
     res.json({ success: true });
+    broadcastSeatUpdate(existing.tripId, me.tenantId).catch(() => {});
     CalendarSyncService.syncTrip(existing.tripId).catch(() => {});
   } catch (err) {
     req.log.error({ err }, "Error deleting reservation");
