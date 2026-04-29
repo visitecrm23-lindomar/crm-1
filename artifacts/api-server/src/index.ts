@@ -571,7 +571,7 @@ runMigrations()
           { name: "boarding_reminder", data: { type: "boarding_reminder" } },
         ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule boarding reminder"));
 
-        // D-3 payment reminder: daily at 08:00 BRT
+        // D-3 payment reminder: daily at 08:00 BRT (UTC-3 → 11:00 UTC)
         await reminderQueue.upsertJobScheduler(
           "payment-reminder-daily",
           { pattern: "0 11 * * *" },

@@ -201,6 +201,8 @@ export async function resendEmailLog(
     props,
   });
 
+  // A new email_log row is created per resend attempt so the full send history
+  // is preserved and each attempt is independently traceable.
   logger.info({ emailLogId, reservationId: log.reservationId }, "[email-queue] Resend enqueued");
   return { ok: true };
 }
