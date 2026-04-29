@@ -14,19 +14,30 @@ interface UseSeatStreamOptions {
   enabled?: boolean;
 }
 
-export function useSeatStream({ tripId, slug, isPublic = true, enabled = true }: UseSeatStreamOptions) {
+interface UseSeatStreamResult {
+  occupiedSeats: Record<string, string>;
+  connected: boolean;
+  eventCount: number;
+}
+
+export function useSeatStream({ tripId, slug, isPublic = true, enabled = true }: UseSeatStreamOptions): UseSeatStreamResult {
   const [occupiedSeats, setOccupiedSeats] = useState<Record<string, string>>({});
   const [connected, setConnected] = useState(false);
+  const [eventCount, setEventCount] = useState(0);
   const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
-    if (!tripId || !enabled) return;
+    if (!tripId || !enabled) {
+      setOccupiedSeats({});
+      setConnected(false);
+      return;
+    }
 
     const url = isPublic && slug
       ? `${BASE}/api/public/store/${encodeURIComponent(slug)}/trips/${encodeURIComponent(tripId)}/seats/stream`
       : `${BASE}/api/trips/${encodeURIComponent(tripId)}/seats/stream`;
 
-    const es = new EventSource(url, { withCredentials: !isPublic });
+    const es = new EventSource(url, { withCredentials: true });
     esRef.current = es;
 
     es.onopen = () => setConnected(true);
@@ -38,6 +49,7 @@ export function useSeatStream({ tripId, slug, isPublic = true, enabled = true }:
         const map: Record<string, string> = {};
         for (const seat of payload.seats) map[seat.number] = seat.status;
         setOccupiedSeats(map);
+        setEventCount(c => c + 1);
       } catch {
         // ignore malformed events
       }
@@ -45,7 +57,8 @@ export function useSeatStream({ tripId, slug, isPublic = true, enabled = true }:
 
     es.onerror = () => {
       setConnected(false);
-      es.close();
+      // Do NOT call es.close() here — allow EventSource native auto-reconnect.
+      // The browser will automatically retry the connection with exponential backoff.
     };
 
     return () => {
@@ -55,5 +68,5 @@ export function useSeatStream({ tripId, slug, isPublic = true, enabled = true }:
     };
   }, [tripId, slug, isPublic, enabled]);
 
-  return { occupiedSeats, connected };
+  return { occupiedSeats, connected, eventCount };
 }

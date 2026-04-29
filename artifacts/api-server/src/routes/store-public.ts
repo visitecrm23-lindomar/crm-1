@@ -453,7 +453,17 @@ router.get("/public/store/:slug/trips/:tripId/seat-map", async (req, res): Promi
 router.get("/public/store/:slug/trips/:tripId/seats/stream", async (req, res): Promise<void> => {
   const store = await getActiveStore(req.params.slug).catch(() => null);
   if (!store) { res.status(404).json({ error: "Store not found" }); return; }
-  const tripId = req.params.tripId;
+
+  const [trip] = await db.select({ id: tripsTable.id })
+    .from(tripsTable)
+    .where(and(
+      eq(tripsTable.id, req.params.tripId),
+      eq(tripsTable.tenantId, store.tenantId),
+    ))
+    .limit(1);
+  if (!trip) { res.status(404).json({ error: "Trip not found" }); return; }
+
+  const tripId = trip.id;
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");

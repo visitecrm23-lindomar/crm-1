@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation, useRoute } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSeatStream } from "@/hooks/useSeatStream";
 import {
   useListTrips, useCreateTrip, useGetTrip, useUpdateTrip, useDeleteTrip,
   useGetTripSeatMap, getGetTripSeatMapQueryKey, useGetDashboardUpcomingTrips, useListReservations, useListClients, useCreateReservation, useUpdateReservation, useCreateClient,
@@ -2702,9 +2703,22 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
 
   const { data: allTripsData } = useListTrips({ limit: 100 });
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
+  const queryClient = useQueryClient();
   const { data: seatMap, dataUpdatedAt } = useGetTripSeatMap(tripId, {
-    query: { queryKey: getGetTripSeatMapQueryKey(tripId), refetchInterval: 5000 },
+    query: { queryKey: getGetTripSeatMapQueryKey(tripId), refetchInterval: 30000 },
   });
+
+  const { eventCount: seatEventCount } = useSeatStream({
+    tripId,
+    isPublic: false,
+    enabled: !!tripId,
+  });
+
+  useEffect(() => {
+    if (seatEventCount === 0) return;
+    queryClient.invalidateQueries({ queryKey: getGetTripSeatMapQueryKey(tripId) });
+  }, [seatEventCount, tripId, queryClient]);
+
   const [nowTick, setNowTick] = useState(0);
   useEffect(() => {
     const id = window.setInterval(() => setNowTick((v) => v + 1), 60000);

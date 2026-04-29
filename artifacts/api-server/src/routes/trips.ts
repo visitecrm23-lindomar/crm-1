@@ -543,7 +543,14 @@ router.get("/trips/:id/seat-map", async (req, res): Promise<void> => {
 router.get("/trips/:id/seats/stream", async (req, res): Promise<void> => {
   const me = await requireAuth(req, res);
   if (!me) return;
-  const tripId = req.params.id;
+
+  const [trip] = await db.select({ id: tripsTable.id })
+    .from(tripsTable)
+    .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
+    .limit(1);
+  if (!trip) { res.status(404).json({ error: "Not found" }); return; }
+
+  const tripId = trip.id;
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
