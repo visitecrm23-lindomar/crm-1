@@ -58,12 +58,11 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 interface EmailLog {
   id: string;
-  toEmail: string;
-  subject: string | null;
-  type: string;
+  recipient: string;
+  subject: string;
   status: string;
-  error: string | null;
-  sentAt: string | null;
+  errorMessage: string | null;
+  reservationId: string | null;
   createdAt: string;
 }
 
@@ -819,14 +818,14 @@ export default function Communication() {
                     <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                       {new Date(log.createdAt).toLocaleString("pt-BR")}
                     </TableCell>
-                    <TableCell className="text-sm">{log.toEmail}</TableCell>
+                    <TableCell className="text-sm">{log.recipient}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-xs capitalize">
-                        {log.type.replace(/_/g, " ")}
+                      <Badge variant="outline" className="text-xs">
+                        {log.reservationId ? "Confirmação" : "Transacional"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm max-w-[200px] truncate">
-                      {log.subject ?? "—"}
+                      {log.subject || "—"}
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -854,7 +853,7 @@ export default function Communication() {
                           variant="outline"
                           onClick={() => handleResend(log.id)}
                           disabled={resendingId === log.id}
-                          title={log.error ?? undefined}
+                          title={log.errorMessage ?? undefined}
                         >
                           <RefreshCcw className={`w-3.5 h-3.5 mr-1 ${resendingId === log.id ? "animate-spin" : ""}`} />
                           Reenviar
