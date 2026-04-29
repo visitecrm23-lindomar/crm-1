@@ -983,7 +983,7 @@ export default function ReservationWizard({
   } | null>(null);
   const [loadingLayoutMap, setLoadingLayoutMap] = useState(false);
 
-  const { occupiedSeats: streamOccupied } = useSeatStream({
+  const { occupiedSeats: streamOccupied, eventCount: sseEventCount } = useSeatStream({
     tripId: product?.tripId,
     slug,
     isPublic: true,
@@ -992,22 +992,28 @@ export default function ReservationWizard({
 
   const liveLayoutSeatMap = useMemo(() => {
     if (!layoutSeatMap) return null;
-    if (Object.keys(streamOccupied).length === 0) return layoutSeatMap;
+    if (sseEventCount === 0) return layoutSeatMap;
+    // SSE is authoritative: recompute all seat statuses from base layout + current SSE snapshot.
+    // Seats absent from streamOccupied are reset to "available" (for bookable seat types).
     return {
       ...layoutSeatMap,
-      seats: layoutSeatMap.seats.map(seat =>
-        streamOccupied[seat.number]
-          ? { ...seat, status: streamOccupied[seat.number] }
-          : seat
-      ),
+      seats: layoutSeatMap.seats.map(seat => {
+        if (streamOccupied[seat.number]) {
+          return { ...seat, status: streamOccupied[seat.number] };
+        }
+        if (SEAT_TYPES.includes(seat.type)) {
+          return { ...seat, status: "available" };
+        }
+        return seat;
+      }),
     };
-  }, [layoutSeatMap, streamOccupied]);
+  }, [layoutSeatMap, streamOccupied, sseEventCount]);
 
   useEffect(() => {
-    if (Object.keys(streamOccupied).length === 0) return;
+    if (sseEventCount === 0) return;
     setLayoutSeats(prev => prev.filter(s => !streamOccupied[s]));
     setSelectedSeats(prev => prev.filter(n => !streamOccupied[String(n)]));
-  }, [streamOccupied]);
+  }, [streamOccupied, sseEventCount]);
 
   const [referralCode, setReferralCode] = useState(() => localStorage.getItem("referral_code") ?? "");
   const [referralApplied, setReferralApplied] = useState(false);
