@@ -564,17 +564,22 @@ runMigrations()
       // Register repeatable reminder jobs (idempotent — BullMQ de-dups by key)
       const reminderQueue = getReminderQueue();
       if (reminderQueue) {
-        // D-1 boarding reminder: daily at 08:00 BRT (UTC-3 → 11:00 UTC)
+        // Reminders run at 08:00 daily in the America/Sao_Paulo timezone (BRT/BRST).
+        // BullMQ repeat.tz is used to make this explicit and environment-independent.
+        const REMINDER_TZ = process.env["REMINDER_TZ"] ?? "America/Sao_Paulo";
+        const REMINDER_CRON = process.env["REMINDER_CRON"] ?? "0 8 * * *";
+
+        // D-1 boarding reminder
         await reminderQueue.upsertJobScheduler(
           "boarding-reminder-daily",
-          { pattern: "0 11 * * *" },
+          { pattern: REMINDER_CRON, tz: REMINDER_TZ },
           { name: "boarding_reminder", data: { type: "boarding_reminder" } },
         ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule boarding reminder"));
 
-        // D-3 payment reminder: daily at 08:00 BRT (UTC-3 → 11:00 UTC)
+        // D-3 payment reminder
         await reminderQueue.upsertJobScheduler(
           "payment-reminder-daily",
-          { pattern: "0 11 * * *" },
+          { pattern: REMINDER_CRON, tz: REMINDER_TZ },
           { name: "payment_reminder", data: { type: "payment_reminder" } },
         ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule payment reminder"));
 
