@@ -59,9 +59,10 @@ The platform includes a multi-tenant e-commerce solution with both an admin pane
 - **Workers** (started in `src/index.ts` on server boot if Redis is available):
   - `src/workers/email.worker.ts` — processes `reservation-confirmation` jobs, updates `email_logs` status.
   - `src/workers/reminder.worker.ts` — processes `boarding_reminder` (D-1) and `payment_reminder` (D-3) daily jobs.
-- **Repeatable jobs**: registered via `Queue.upsertJobScheduler` at 08:00 BRT daily.
-- **Email helper**: `src/queues/email-helpers.ts` — `enqueueReservationConfirmationEmail` transparently queues or sends directly.
+- **Repeatable jobs**: registered via `Queue.upsertJobScheduler` at 08:00 BRT daily (configurable via `REMINDER_CRON` + `REMINDER_TZ` env vars).
+- **Email helper**: `src/queues/email-helpers.ts` — `enqueueReservationConfirmationEmail` transparently queues or sends directly. If `queue.add()` itself fails (e.g. Redis unhealthy), the `email_logs` row is set to `failed` immediately — there is no sync fallback when `REDIS_URL` is configured.
 - **Resend endpoint**: `POST /api/email-logs/:id/resend` — creates a new `email_logs` row per resend attempt and enqueues a fresh delivery job. Restricted to `MANAGEMENT_ROLES`. Only logs with `status=failed` can be resent (422 otherwise).
+- **Reminder retry semantics**: Reminder workers iterate all eligible recipients in one batch job. Individual send failures are logged per recipient but the job does not throw, so BullMQ does not retry the whole batch (which would risk double-sending to recipients already reached). This is an intentional reliability tradeoff. See `src/workers/reminder.worker.ts` for details.
 
 ## External Dependencies
 
