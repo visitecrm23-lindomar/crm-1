@@ -3,6 +3,10 @@ import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
 import cron from "node-cron";
 import { runBirthdayCron } from "./lib/birthday";
+import { getRedisConnection } from "./lib/redis";
+import { getReminderQueue, closeQueues } from "./queues/index";
+import { startEmailWorker, stopEmailWorker } from "./workers/email.worker";
+import { startReminderWorker, stopReminderWorker } from "./workers/reminder.worker";
 
 const rawPort = process.env["PORT"];
 
@@ -542,18 +546,56 @@ async function runMigrations() {
 
 runMigrations()
   .catch((err) => logger.error({ err }, "runMigrations threw unexpectedly"))
-  .then(() => {
+  .then(async () => {
+    // ── Birthday cron (node-cron, runs in-process, no Redis required) ──
     cron.schedule("0 0 * * *", () => {
       logger.info("[birthday] Daily cron triggered");
       runBirthdayCron().catch((err) => logger.error({ err }, "[birthday] Cron failed"));
     }, { timezone: "America/Sao_Paulo" });
+
+    // ── BullMQ: start workers if Redis is available ──
+    const redisConn = getRedisConnection();
+    if (redisConn) {
+      startEmailWorker();
+      startReminderWorker();
+
+      // Register repeatable reminder jobs (idempotent — BullMQ de-dups by key)
+      const reminderQueue = getReminderQueue();
+      if (reminderQueue) {
+        // D-1 boarding reminder: daily at 08:00 BRT (UTC-3 → 11:00 UTC)
+        await reminderQueue.upsertJobScheduler(
+          "boarding-reminder-daily",
+          { pattern: "0 11 * * *" },
+          { name: "boarding_reminder", data: { type: "boarding_reminder" } },
+        ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule boarding reminder"));
+
+        // D-3 payment reminder: daily at 08:00 BRT
+        await reminderQueue.upsertJobScheduler(
+          "payment-reminder-daily",
+          { pattern: "0 11 * * *" },
+          { name: "payment_reminder", data: { type: "payment_reminder" } },
+        ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule payment reminder"));
+
+        logger.info("[reminders] Repeatable reminder jobs registered");
+      }
+    } else {
+      logger.warn("[queue] REDIS_URL not set — BullMQ workers not started, emails sent synchronously");
+    }
+
+    // ── Graceful shutdown ──
+    const shutdown = async (signal: string) => {
+      logger.info({ signal }, "Shutdown signal received");
+      await Promise.all([stopEmailWorker(), stopReminderWorker(), closeQueues()]);
+      process.exit(0);
+    };
+    process.on("SIGTERM", () => void shutdown("SIGTERM"));
+    process.on("SIGINT", () => void shutdown("SIGINT"));
 
     app.listen(port, (err) => {
       if (err) {
         logger.error({ err }, "Error listening on port");
         process.exit(1);
       }
-
       logger.info({ port }, "Server listening");
     });
   });

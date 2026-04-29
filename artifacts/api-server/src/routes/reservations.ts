@@ -11,7 +11,7 @@ import { z } from "zod/v4";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { writeClientActivity } from "../lib/activities";
 import { syncReservationCommission } from "./payments";
-import { sendReservationConfirmationEmail } from "@workspace/email";
+import { enqueueReservationConfirmationEmail } from "../queues/email-helpers";
 import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 
 const router = Router();
@@ -623,7 +623,7 @@ router.post("/reservations", async (req, res): Promise<void> => {
       writeClientActivity(reservation.clientId, "reservation_created", `Reserva ${voucherCode} criada — ${totalFormatted}`, me.id, { voucherCode, totalValue: Number(reservation.totalValue) })
         .catch((err) => req.log.error({ err }, "Error writing reservation creation activity"));
     }
-    // Fire-and-forget: confirmation email (never blocks reservation creation)
+    // Fire-and-forget: enqueue confirmation email (never blocks reservation creation)
     ;(async () => {
       try {
         const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, me.tenantId)).limit(1);
@@ -635,7 +635,6 @@ router.post("/reservations", async (req, res): Promise<void> => {
         const balanceVal = Number(reservation.balance);
         const paymentStatus: "paid" | "partial" | "pending" =
           paidVal >= totalVal ? "paid" : paidVal > 0 ? "partial" : "pending";
-        // Fetch trip for returnDate (duration computation)
         const [tripRecord] = await db.select().from(tripsTable).where(eq(tripsTable.id, reservation.tripId)).limit(1);
         const dDate = formatted.trip.departureDate ? new Date(formatted.trip.departureDate) : null;
         const departureDate = dDate
@@ -651,50 +650,45 @@ router.post("/reservations", async (req, res): Promise<void> => {
         const agencyWebsite = tenant.website ?? `https://${tenant.slug}.visitecrm.com.br`;
         const whatsappNum = agencyPhone.replace(/\D/g, "");
         const whatsappUrl = whatsappNum ? `https://wa.me/${whatsappNum}` : "";
-        // Public client-facing URLs (tenant subdomain or agency website)
         const publicBase = agencyWebsite.replace(/\/$/, "");
         const voucherUrl = `${publicBase}/reserva/${reservation.voucherCode}`;
         const consultUrl = `${publicBase}/reservas`;
-        const emailResult = await sendReservationConfirmationEmail({
-          reservationNumber: reservation.reservationNumber ?? reservation.voucherCode,
-          voucherCode: reservation.voucherCode,
-          clientName: client?.name ?? "",
-          clientCpf: client?.cpf ?? "",
-          clientEmail,
-          clientPhone: client?.whatsapp ?? "",
-          tripTitle: formatted.trip.name,
-          destination: formatted.trip.destination,
-          departureDate,
-          duration,
-          seats: (reservation.seats ?? []) as string[],
-          totalAmount: totalVal,
-          amountPaid: paidVal,
-          amountPending: balanceVal,
-          paymentMethod: reservation.paymentMethod ?? "pix",
-          paymentStatus,
-          agencyName: tenant.name,
-          agencyLogo: tenant.logoUrl ?? "",
-          agencyPhone,
-          agencyPhoneVoice: tenant.phone ?? "",
-          agencyEmail: tenant.email,
-          agencyWebsite,
-          voucherUrl,
-          consultUrl,
-          whatsappUrl,
-        });
-        await db.insert(emailLogsTable).values({
-          id: generateId(),
+        const subject = `Reserva Confirmada — ${reservation.reservationNumber ?? reservation.voucherCode}`;
+        await enqueueReservationConfirmationEmail({
           tenantId: me.tenantId,
           reservationId: reservation.id,
-          recipient: clientEmail,
-          subject: `Reserva Confirmada — ${reservation.reservationNumber ?? reservation.voucherCode}`,
-          status: emailResult.success ? "sent" : "failed",
-          messageId: emailResult.messageId ?? null,
-          errorMessage: emailResult.error ?? null,
+          subject,
+          props: {
+            reservationNumber: reservation.reservationNumber ?? reservation.voucherCode,
+            voucherCode: reservation.voucherCode,
+            clientName: client?.name ?? "",
+            clientCpf: client?.cpf ?? "",
+            clientEmail,
+            clientPhone: client?.whatsapp ?? "",
+            tripTitle: formatted.trip.name,
+            destination: formatted.trip.destination,
+            departureDate,
+            duration,
+            seats: (reservation.seats ?? []) as string[],
+            totalAmount: totalVal,
+            amountPaid: paidVal,
+            amountPending: balanceVal,
+            paymentMethod: reservation.paymentMethod ?? "pix",
+            paymentStatus,
+            agencyName: tenant.name,
+            agencyLogo: tenant.logoUrl ?? "",
+            agencyPhone,
+            agencyPhoneVoice: tenant.phone ?? "",
+            agencyEmail: tenant.email,
+            agencyWebsite,
+            voucherUrl,
+            consultUrl,
+            whatsappUrl,
+          },
         });
-        req.log.info({ reservationId: reservation.id, success: emailResult.success }, "Reservation confirmation email processed");
+        req.log.info({ reservationId: reservation.id }, "Reservation confirmation email enqueued");
       } catch (err) {
-        req.log.error({ err }, "Error sending reservation confirmation email");
+        req.log.error({ err }, "Error enqueuing reservation confirmation email");
       }
     })();
   } catch (err) {

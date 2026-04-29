@@ -52,9 +52,21 @@ The platform includes a multi-tenant e-commerce solution with both an admin pane
 - **Admin Panel (`/loja/*`)**: For store settings, product/category/coupon CRUD, order management, and review moderation.
 - **Public Vitrine (`/loja/:slug/*`)**: An unauthenticated storefront for customers to browse products, view details, checkout, and track orders.
 
+### Async Job Queue (BullMQ)
+- **Package**: `bullmq` v5 + `ioredis` in `@workspace/api-server`
+- **Connection**: `src/lib/redis.ts` — reads `REDIS_URL` env var; gracefully disabled when absent (falls back to synchronous email).
+- **Queue definitions**: `src/queues/index.ts` — `emails` queue (3 retries, exponential backoff) and `reminders` queue.
+- **Workers** (started in `src/index.ts` on server boot if Redis is available):
+  - `src/workers/email.worker.ts` — processes `reservation-confirmation` jobs, updates `email_logs` status.
+  - `src/workers/reminder.worker.ts` — processes `boarding_reminder` (D-1) and `payment_reminder` (D-3) daily jobs.
+- **Repeatable jobs**: registered via `Queue.upsertJobScheduler` at 08:00 BRT daily.
+- **Email helper**: `src/queues/email-helpers.ts` — `enqueueReservationConfirmationEmail` transparently queues or sends directly.
+- **Resend endpoint**: `POST /api/email-logs/:id/resend` — resets log status to "queued" for retry (admin only).
+
 ## External Dependencies
 
 - **Clerk**: For user authentication and authorization.
 - **PostgreSQL**: Primary database.
 - **Google Calendar API**: For event synchronization and management.
 - **Replit DB**: For database hosting in the Replit environment.
+- **Redis (optional)**: Required for BullMQ async job queues. Set `REDIS_URL` env var (Upstash-compatible). When absent, emails are sent synchronously.

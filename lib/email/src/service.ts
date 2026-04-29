@@ -154,6 +154,40 @@ export async function sendBirthdayEmail(
   }
 }
 
+export interface SendReminderEmailOptions {
+  to: string;
+  subject: string;
+  html: string;
+  fromName: string;
+}
+
+export async function sendReminderHtmlEmail(opts: SendReminderEmailOptions): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const { data, error } = await resend.emails.send({
+      from: `${opts.fromName} <reservas@visitecrm.com.br>`,
+      to: [opts.to],
+      subject: opts.subject,
+      html: opts.html,
+    });
+
+    if (error) {
+      console.error('[email] Failed to send reminder email:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Unexpected error sending reminder email:', message);
+    return { success: false, error: message };
+  }
+}
+
 export async function sendWelcomeCredentialsEmail(
   props: WelcomeCredentialsEmailProps
 ): Promise<SendEmailResult> {

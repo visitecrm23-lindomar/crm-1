@@ -1,11 +1,12 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { messagesTable, messageTemplatesTable, automationsTable, clientsTable } from "@workspace/db";
+import { messagesTable, messageTemplatesTable, automationsTable, clientsTable, emailLogsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { z } from "zod";
 import { ADMIN_ROLES } from '../lib/tenant';
+import { resendEmailLog } from "../queues/email-helpers";
 
 const router = Router();
 
@@ -323,6 +324,45 @@ router.get("/clients-for-messaging", async (req, res): Promise<void> => {
     res.json(clients.map(c => ({ id: c.id, name: c.name, email: c.email, whatsapp: c.whatsapp })));
   } catch (err) {
     req.log.error({ err }, "Error listing clients for messaging");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── Email Logs ──────────────────────────────────────────────────────────────
+
+router.get("/email-logs", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const logs = await db
+      .select()
+      .from(emailLogsTable)
+      .where(eq(emailLogsTable.tenantId, me.tenantId))
+      .orderBy(desc(emailLogsTable.createdAt))
+      .limit(200);
+    res.json(logs);
+  } catch (err) {
+    req.log.error({ err }, "Error listing email logs");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/email-logs/:id/resend", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    const result = await resendEmailLog(req.params.id, me.tenantId);
+    if (!result.ok) {
+      res.status(404).json({ error: result.error ?? "Not found" });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Error resending email");
     res.status(500).json({ error: "Internal server error" });
   }
 });

@@ -12,7 +12,6 @@ import {
   tripsTable,
   clientsTable,
   usersTable,
-  emailLogsTable,
   referralsTable,
   referralTrackingTable,
   referralSettingsTable,
@@ -25,7 +24,7 @@ import { generateId, generateVoucherCode, generateReferralCode } from "../lib/id
 import { getTenantReservationPrefix, tripTypeToCode, getYearMonth, nextReservationSequence, buildReservationNumber } from "../lib/reservation-number";
 import { randomBytes } from "crypto";
 import { clerkClient } from "@clerk/express";
-import { sendReservationConfirmationEmail } from "@workspace/email";
+import { enqueueReservationConfirmationEmail } from "../queues/email-helpers";
 
 function generateCookieId(): string {
   return randomBytes(16).toString("hex");
@@ -1124,6 +1123,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
           // Step 2: Fetch the first reservation linked to this order (with trip data)
           const [reservation] = await db
             .select({
+              reservationId: reservationsTable.id,
               reservationNumber: reservationsTable.reservationNumber,
               voucherCode: reservationsTable.voucherCode,
               seats: reservationsTable.seats,
@@ -1160,43 +1160,39 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
           const whatsappUrl = whatsappNumber ? `https://wa.me/${whatsappNumber}` : ffStoreBase;
           const voucherUrl = `${ffConsultUrl}?code=${reservation.voucherCode ?? ""}`;
 
-          // Step 3: Send combined reservation confirmation email (with credentials if new account)
-          const emailResult = await sendReservationConfirmationEmail({
-            reservationNumber: reservation.reservationNumber ?? ffOrderNumber,
-            voucherCode: reservation.voucherCode ?? "",
-            clientName: ffName,
-            clientCpf: data.customerCpf ?? "",
-            clientEmail: ffEmail,
-            clientPhone: data.customerPhone ?? "",
-            tripTitle: reservation.tripName,
-            destination: reservation.tripDestination,
-            departureDate: departureDateStr,
-            duration,
-            seats: reservation.seats ?? [],
-            totalAmount,
-            amountPaid: 0,
-            amountPending: totalAmount,
-            paymentMethod: data.paymentMethod ?? "pix",
-            paymentStatus: "pending",
-            agencyName: ffAgencyName,
-            agencyLogo: ffAgencyLogo,
-            agencyPhone: ffAgencyPhone,
-            agencyEmail: ffAgencyEmail,
-            agencyWebsite: ffStoreBase,
-            voucherUrl,
-            consultUrl: ffConsultUrl,
-            whatsappUrl,
-            ...(credentials ? { credentials } : {}),
-          });
-
-          await db.insert(emailLogsTable).values({
-            id: generateId(),
+          // Step 3: Enqueue combined reservation confirmation email (with credentials if new account)
+          const subject = `Reserva Confirmada — ${reservation.reservationNumber ?? ffOrderNumber}`;
+          await enqueueReservationConfirmationEmail({
             tenantId: ffTenantId,
-            recipient: ffEmail,
-            subject: `Reserva Confirmada — ${reservation.reservationNumber ?? ffOrderNumber}`,
-            status: emailResult.success ? "sent" : "failed",
-            messageId: emailResult.messageId ?? null,
-            errorMessage: emailResult.error ?? null,
+            reservationId: reservation.reservationId,
+            subject,
+            props: {
+              reservationNumber: reservation.reservationNumber ?? ffOrderNumber,
+              voucherCode: reservation.voucherCode ?? "",
+              clientName: ffName,
+              clientCpf: data.customerCpf ?? "",
+              clientEmail: ffEmail,
+              clientPhone: data.customerPhone ?? "",
+              tripTitle: reservation.tripName,
+              destination: reservation.tripDestination,
+              departureDate: departureDateStr,
+              duration,
+              seats: reservation.seats ?? [],
+              totalAmount,
+              amountPaid: 0,
+              amountPending: totalAmount,
+              paymentMethod: data.paymentMethod ?? "pix",
+              paymentStatus: "pending",
+              agencyName: ffAgencyName,
+              agencyLogo: ffAgencyLogo,
+              agencyPhone: ffAgencyPhone,
+              agencyEmail: ffAgencyEmail,
+              agencyWebsite: ffStoreBase,
+              voucherUrl,
+              consultUrl: ffConsultUrl,
+              whatsappUrl,
+              ...(credentials ? { credentials } : {}),
+            },
           });
         } catch (err) {
           console.error("[store-public] Error sending post-booking email:", err);
