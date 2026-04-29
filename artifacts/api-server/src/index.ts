@@ -7,6 +7,7 @@ import { getRedisConnection } from "./lib/redis";
 import { getReminderQueue, closeQueues } from "./queues/index";
 import { startEmailWorker, stopEmailWorker } from "./workers/email.worker";
 import { startReminderWorker, stopReminderWorker } from "./workers/reminder.worker";
+import { startPdfWorker, stopPdfWorker } from "./workers/pdf.worker";
 
 const rawPort = process.env["PORT"];
 
@@ -558,6 +559,7 @@ runMigrations()
     if (redisConn) {
       startEmailWorker();
       startReminderWorker();
+      startPdfWorker();
 
       // Register repeatable reminder jobs (idempotent — BullMQ de-dups by key)
       const reminderQueue = getReminderQueue();
@@ -585,7 +587,7 @@ runMigrations()
     // ── Graceful shutdown ──
     const shutdown = async (signal: string) => {
       logger.info({ signal }, "Shutdown signal received");
-      await Promise.all([stopEmailWorker(), stopReminderWorker(), closeQueues()]);
+      await Promise.all([stopEmailWorker(), stopReminderWorker(), stopPdfWorker(), closeQueues()]);
       process.exit(0);
     };
     process.on("SIGTERM", () => void shutdown("SIGTERM"));

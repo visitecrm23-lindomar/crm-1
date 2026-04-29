@@ -5,7 +5,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { z } from "zod";
-import { ADMIN_ROLES } from '../lib/tenant';
+import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 import { resendEmailLog } from "../queues/email-helpers";
 
 const router = Router();
@@ -351,7 +351,7 @@ router.post("/email-logs/:id/resend", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) {
+    if (!MANAGEMENT_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
