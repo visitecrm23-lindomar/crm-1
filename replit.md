@@ -61,7 +61,7 @@ The platform includes a multi-tenant e-commerce solution with both an admin pane
   - `src/workers/reminder.worker.ts` — processes `boarding_reminder` (D-1) and `payment_reminder` (D-3) daily jobs.
 - **Repeatable jobs**: registered via `Queue.upsertJobScheduler` at 08:00 BRT daily.
 - **Email helper**: `src/queues/email-helpers.ts` — `enqueueReservationConfirmationEmail` transparently queues or sends directly.
-- **Resend endpoint**: `POST /api/email-logs/:id/resend` — resets log status to "queued" for retry (admin only).
+- **Resend endpoint**: `POST /api/email-logs/:id/resend` — creates a new `email_logs` row per resend attempt and enqueues a fresh delivery job. Restricted to `MANAGEMENT_ROLES`. Only logs with `status=failed` can be resent (422 otherwise).
 
 ## External Dependencies
 

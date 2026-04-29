@@ -50,6 +50,9 @@ async function processBoardingReminders(): Promise<void> {
 
   logger.info({ count: rows.length }, "[reminder:boarding] Found reservations for D-1 reminder");
 
+  let sent = 0;
+  let failed = 0;
+
   for (const row of rows) {
     if (!row.clientEmail) continue;
 
@@ -98,16 +101,25 @@ async function processBoardingReminders(): Promise<void> {
       fromName: row.agencyName,
     });
     if (boardingResult.success) {
+      sent++;
       logger.info(
         { reservationId: row.reservationId, email: row.clientEmail },
         "[reminder:boarding] Sent D-1 boarding reminder",
       );
     } else {
+      failed++;
       logger.error(
-        { error: boardingResult.error, reservationId: row.reservationId },
+        { error: boardingResult.error, reservationId: row.reservationId, email: row.clientEmail },
         "[reminder:boarding] Failed to send D-1 reminder",
       );
     }
+  }
+
+  logger.info({ total: rows.length, sent, failed }, "[reminder:boarding] D-1 run complete");
+  if (failed > 0) {
+    // Do NOT throw here to avoid BullMQ retrying the whole batch and re-sending to recipients
+    // that already received their reminder. Individual failures are logged above for investigation.
+    logger.warn({ failed }, "[reminder:boarding] Some D-1 reminders failed — check logs above for details");
   }
 }
 
@@ -163,6 +175,9 @@ async function processPaymentReminders(): Promise<void> {
     );
 
   logger.info({ count: rows.length }, "[reminder:payment] Found payments for D-3 due-date reminder");
+
+  let sent = 0;
+  let failed = 0;
 
   for (const row of rows) {
     if (!row.clientEmail) continue;
@@ -233,16 +248,25 @@ async function processPaymentReminders(): Promise<void> {
       fromName: row.agencyName,
     });
     if (paymentResult.success) {
+      sent++;
       logger.info(
         { reservationId: row.reservationId, email: row.clientEmail },
         "[reminder:payment] Sent D-3 payment reminder",
       );
     } else {
+      failed++;
       logger.error(
-        { error: paymentResult.error, reservationId: row.reservationId },
+        { error: paymentResult.error, reservationId: row.reservationId, email: row.clientEmail },
         "[reminder:payment] Failed to send D-3 reminder",
       );
     }
+  }
+
+  logger.info({ total: rows.length, sent, failed }, "[reminder:payment] D-3 run complete");
+  if (failed > 0) {
+    // Do NOT throw here to avoid BullMQ retrying the whole batch and re-sending to recipients
+    // that already received their reminder. Individual failures are logged above for investigation.
+    logger.warn({ failed }, "[reminder:payment] Some D-3 reminders failed — check logs above for details");
   }
 }
 
