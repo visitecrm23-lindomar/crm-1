@@ -35,14 +35,21 @@ export async function enqueueReservationConfirmationEmail(opts: EnqueueEmailOpts
       status: "queued",
     });
 
-    await queue.add("reservation-confirmation", {
-      ...props,
-      emailLogId,
-      tenantId,
-      reservationId,
-    });
-
-    logger.info({ emailLogId, reservationId }, "[email-queue] Email job enqueued");
+    try {
+      await queue.add("reservation-confirmation", {
+        ...props,
+        emailLogId,
+        tenantId,
+        reservationId,
+      });
+      logger.info({ emailLogId, reservationId }, "[email-queue] Email job enqueued");
+    } catch (enqueueErr) {
+      logger.error({ emailLogId, err: enqueueErr }, "[email-queue] Failed to enqueue — marking log as failed");
+      await db
+        .update(emailLogsTable)
+        .set({ status: "failed", errorMessage: "Queue enqueue failed" })
+        .where(eq(emailLogsTable.id, emailLogId));
+    }
   } else {
     // No Redis — send directly and log the outcome immediately
     const result = await sendReservationConfirmationEmail(props);
