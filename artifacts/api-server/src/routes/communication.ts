@@ -334,6 +334,10 @@ router.get("/email-logs", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (!MANAGEMENT_ROLES.includes(me.role)) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
     const logs = await db
       .select()
       .from(emailLogsTable)
