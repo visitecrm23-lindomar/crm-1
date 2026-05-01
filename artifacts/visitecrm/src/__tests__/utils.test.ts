@@ -70,22 +70,26 @@ describe("getCountdownLabel", () => {
   });
 
   it("returns hours label for a date a few hours away", () => {
-    const hours3 = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
+    // 3h30m: floor(3.5) = 3 → "3 horas"; well clear of the 4h boundary
+    const hours3 = new Date(Date.now() + 3 * 60 * 60 * 1000 + 30 * 60 * 1000).toISOString();
     expect(getCountdownLabel(hours3)).toBe("3 horas");
   });
 
   it("returns Amanhã for a date exactly 1 day away", () => {
-    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    // 24h30m: floor hours=24, floor days=1 → "Amanhã"; buffer against any elapsed ms
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000 + 30 * 60 * 1000).toISOString();
     expect(getCountdownLabel(tomorrow)).toBe("Amanhã");
   });
 
   it("returns dias label for 5 days away", () => {
-    const days5 = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
+    // 5d12h: floor hours=132, floor days=5 → "5 dias"; mid-bucket so clock drift is irrelevant
+    const days5 = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000 + 12 * 60 * 60 * 1000).toISOString();
     expect(getCountdownLabel(days5)).toBe("5 dias");
   });
 
   it("returns semanas label for 3 weeks away", () => {
-    const weeks3 = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString();
+    // 21d12h: floor days=21, round(21/7)=3 → "3 semanas"
+    const weeks3 = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000 + 12 * 60 * 60 * 1000).toISOString();
     expect(getCountdownLabel(weeks3)).toBe("3 semanas");
   });
 

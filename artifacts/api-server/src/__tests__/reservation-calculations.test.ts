@@ -1,43 +1,5 @@
 import { describe, it, expect } from "vitest";
-
-function applyDiscounts(
-  baseValue: number,
-  couponAmount: number,
-  loyaltyAmount: number,
-  referralAmount: number,
-): {
-  appliedCoupon: number;
-  appliedLoyalty: number;
-  appliedReferral: number;
-  discountTotal: number;
-  finalTotal: number;
-} {
-  let remaining = baseValue;
-
-  const appliedCoupon = Math.round(Math.min(couponAmount, remaining) * 100) / 100;
-  remaining = Math.round((remaining - appliedCoupon) * 100) / 100;
-
-  const appliedLoyalty = Math.round(Math.min(loyaltyAmount, remaining) * 100) / 100;
-  remaining = Math.round((remaining - appliedLoyalty) * 100) / 100;
-
-  const appliedReferral = Math.round(Math.min(referralAmount, remaining) * 100) / 100;
-
-  const discountTotal = Math.round((appliedCoupon + appliedLoyalty + appliedReferral) * 100) / 100;
-  const finalTotal = Math.max(0, Math.round((baseValue - discountTotal) * 100) / 100);
-
-  return { appliedCoupon, appliedLoyalty, appliedReferral, discountTotal, finalTotal };
-}
-
-function computeBalance(totalValue: number, paidValue: number): number {
-  return Math.round((totalValue - paidValue) * 100) / 100;
-}
-
-function validateOrderEmail(emailQuery: unknown): string {
-  if (typeof emailQuery === "string" && emailQuery.trim().length > 0) {
-    return emailQuery.trim().toLowerCase();
-  }
-  return "";
-}
+import { applyDiscounts, computeBalance, normalizeOrderEmail } from "../lib/pricing.js";
 
 describe("applyDiscounts — reservation price calculation", () => {
   it("returns full base value when no discounts are applied", () => {
@@ -111,28 +73,28 @@ describe("computeBalance — payment balance", () => {
   });
 });
 
-describe("validateOrderEmail — store order lookup email validation", () => {
+describe("normalizeOrderEmail — store order lookup email validation", () => {
   it("returns normalized email for a valid email string", () => {
-    expect(validateOrderEmail("  User@Example.com  ")).toBe("user@example.com");
+    expect(normalizeOrderEmail("  User@Example.com  ")).toBe("user@example.com");
   });
 
   it("returns empty string for undefined (query param not provided)", () => {
-    expect(validateOrderEmail(undefined)).toBe("");
+    expect(normalizeOrderEmail(undefined)).toBe("");
   });
 
   it("returns empty string for an empty string", () => {
-    expect(validateOrderEmail("")).toBe("");
+    expect(normalizeOrderEmail("")).toBe("");
   });
 
   it("returns empty string for a whitespace-only string", () => {
-    expect(validateOrderEmail("   ")).toBe("");
+    expect(normalizeOrderEmail("   ")).toBe("");
   });
 
   it("returns empty string for a number (non-string type)", () => {
-    expect(validateOrderEmail(123)).toBe("");
+    expect(normalizeOrderEmail(123)).toBe("");
   });
 
   it("returns empty string for an array (multiple query params)", () => {
-    expect(validateOrderEmail(["a@b.com", "c@d.com"])).toBe("");
+    expect(normalizeOrderEmail(["a@b.com", "c@d.com"])).toBe("");
   });
 });

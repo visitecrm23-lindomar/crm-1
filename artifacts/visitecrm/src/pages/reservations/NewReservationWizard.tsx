@@ -14,6 +14,7 @@ import { XCircle } from "lucide-react";
 import { PAYMENT_LABELS } from "./constants";
 import { WizardStep1 } from "./WizardStep1";
 import { WizardStep2 } from "./WizardStep2";
+import { computeReservationTotal } from "@/lib/reservationPricing";
 
 function WizardStepIndicator({ step }: { step: number }) {
   const steps = ["Seleção", "Pagamento", "Confirmação"];
@@ -105,7 +106,7 @@ export function NewReservationWizard({ open, onClose, onSuccess, initialTripId, 
   }, [selectedSeats, manualSeats]);
 
   useEffect(() => {
-    if (selectedTripFull) setTotalValue((selectedTripFull.priceAdult ?? 0) * effectiveSeats.length);
+    if (selectedTripFull) setTotalValue(computeReservationTotal(selectedTripFull.priceAdult ?? 0, effectiveSeats));
   }, [selectedTripFull, effectiveSeats.length]);
 
   useEffect(() => {

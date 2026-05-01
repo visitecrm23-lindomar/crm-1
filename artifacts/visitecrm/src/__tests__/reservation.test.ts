@@ -3,52 +3,101 @@ import { describe, it, expect, vi } from "vitest";
 vi.mock("@workspace/api-client-react", () => ({}));
 
 import { CreateReservationBody, CreateTripBody } from "@workspace/api-zod";
+import {
+  computeReservationTotal,
+  computeDetailedTotal,
+  applyDiscount,
+} from "../lib/reservationPricing.js";
 
-function computeTotalValue(priceAdult: number, seats: string[]): number {
-  return priceAdult * seats.length;
-}
-
-function computeFinalValue(totalValue: number, totalDiscount: number): number {
-  return Math.max(0, Math.round((totalValue - totalDiscount) * 100) / 100);
-}
-
-describe("computeTotalValue — reservation price from seats", () => {
+describe("computeReservationTotal — adult price × seat count", () => {
   it("returns 0 when there are no seats", () => {
-    expect(computeTotalValue(150, [])).toBe(0);
+    expect(computeReservationTotal(150, [])).toBe(0);
   });
 
   it("returns price per seat for a single seat", () => {
-    expect(computeTotalValue(150, ["1A"])).toBe(150);
+    expect(computeReservationTotal(150, ["1A"])).toBe(150);
   });
 
   it("multiplies price by number of seats", () => {
-    expect(computeTotalValue(150, ["1A", "2B", "3C"])).toBe(450);
+    expect(computeReservationTotal(150, ["1A", "2B", "3C"])).toBe(450);
   });
 
   it("handles fractional prices correctly", () => {
-    expect(computeTotalValue(99.9, ["1A", "2B"])).toBeCloseTo(199.8, 5);
+    expect(computeReservationTotal(99.9, ["1A", "2B"])).toBeCloseTo(199.8, 5);
   });
 
   it("handles zero price per seat", () => {
-    expect(computeTotalValue(0, ["1A", "2B"])).toBe(0);
+    expect(computeReservationTotal(0, ["1A", "2B"])).toBe(0);
   });
 });
 
-describe("computeFinalValue — after discount applied", () => {
+describe("computeDetailedTotal — adult/child/senior pricing", () => {
+  it("calculates adult-only total", () => {
+    expect(
+      computeDetailedTotal({ priceAdult: 200, adultSeats: ["1A", "2B"] }),
+    ).toBe(400);
+  });
+
+  it("calculates adult + child total with separate prices", () => {
+    expect(
+      computeDetailedTotal({
+        priceAdult: 200,
+        adultSeats: ["1A", "2B"],
+        priceChild: 100,
+        childSeats: ["3C"],
+      }),
+    ).toBe(500);
+  });
+
+  it("calculates adult + senior total with separate prices", () => {
+    expect(
+      computeDetailedTotal({
+        priceAdult: 200,
+        adultSeats: ["1A"],
+        priceSenior: 150,
+        seniorSeats: ["2B", "3C"],
+      }),
+    ).toBe(500);
+  });
+
+  it("falls back to adult price for children when priceChild is null", () => {
+    expect(
+      computeDetailedTotal({
+        priceAdult: 200,
+        adultSeats: ["1A"],
+        priceChild: null,
+        childSeats: ["2B"],
+      }),
+    ).toBe(400);
+  });
+
+  it("returns 0 when all seat lists are empty", () => {
+    expect(
+      computeDetailedTotal({
+        priceAdult: 200,
+        adultSeats: [],
+        priceChild: 100,
+        childSeats: [],
+      }),
+    ).toBe(0);
+  });
+});
+
+describe("applyDiscount — final value after discount", () => {
   it("returns full totalValue when discount is zero", () => {
-    expect(computeFinalValue(1000, 0)).toBe(1000);
+    expect(applyDiscount(1000, 0)).toBe(1000);
   });
 
   it("returns zero when discount equals total value", () => {
-    expect(computeFinalValue(500, 500)).toBe(0);
+    expect(applyDiscount(500, 500)).toBe(0);
   });
 
   it("clamps negative results to zero (discount exceeds total)", () => {
-    expect(computeFinalValue(100, 200)).toBe(0);
+    expect(applyDiscount(100, 200)).toBe(0);
   });
 
   it("correctly reduces the value by a partial discount", () => {
-    expect(computeFinalValue(800, 150)).toBe(650);
+    expect(applyDiscount(800, 150)).toBe(650);
   });
 });
 

@@ -15,6 +15,7 @@ import { enqueueReservationConfirmationEmail } from "../queues/email-helpers";
 import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 import { broadcastSeatUpdate } from "../lib/realtime";
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
+import { applyDiscounts, computeBalance } from "../lib/pricing";
 
 
 const router = Router();
@@ -432,23 +433,18 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
       serverReferralBonusValue = Number(refSettings?.bonusValue ?? "10");
     }
 
-    // Apply discounts in priority order against running remaining balance
-    // Priority: coupon → loyalty → referral
-    let remaining = baseValue;
-    const appliedCouponAmount = Math.round(Math.min(serverCouponAmount, remaining) * 100) / 100;
-    remaining = Math.round((remaining - appliedCouponAmount) * 100) / 100;
+    // Apply discounts in priority order: coupon → loyalty → referral
+    const {
+      appliedCoupon: appliedCouponAmount,
+      appliedLoyalty: appliedLoyaltyAmount,
+      appliedReferral: appliedReferralAmount,
+      discountTotal: serverDiscountTotal,
+      finalTotal: serverFinalTotal,
+    } = applyDiscounts(baseValue, serverCouponAmount, serverLoyaltyAmount, serverReferralAmount);
 
-    const appliedLoyaltyAmount = Math.round(Math.min(serverLoyaltyAmount, remaining) * 100) / 100;
     const effectiveLoyaltyPoints = serverRealPerPoint > 0
       ? Math.min(serverLoyaltyPoints, Math.ceil(appliedLoyaltyAmount / serverRealPerPoint))
       : 0;
-    remaining = Math.round((remaining - appliedLoyaltyAmount) * 100) / 100;
-
-    const appliedReferralAmount = Math.round(Math.min(serverReferralAmount, remaining) * 100) / 100;
-    remaining = Math.round((remaining - appliedReferralAmount) * 100) / 100;
-
-    const serverDiscountTotal = Math.round((appliedCouponAmount + appliedLoyaltyAmount + appliedReferralAmount) * 100) / 100;
-    const serverFinalTotal = Math.max(0, Math.round((baseValue - serverDiscountTotal) * 100) / 100);
 
     const id = generateId();
     const voucherCode = generateVoucherCode();
@@ -500,7 +496,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
         hasInsurance: parsed.data.hasInsurance ?? false,
         totalValue: String(serverFinalTotal),
         paidValue: String(parsed.data.paidValue ?? 0),
-        balance: String(Math.max(0, serverFinalTotal - (parsed.data.paidValue ?? 0))),
+        balance: String(computeBalance(serverFinalTotal, parsed.data.paidValue ?? 0)),
         paymentMethod: parsed.data.paymentMethod ?? null,
         installments: parsed.data.installments ?? 1,
         commissionPercentage: parsed.data.commissionPercentage ? String(parsed.data.commissionPercentage) : null,
@@ -756,9 +752,8 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
     if (parsed.data.totalValue != null) {
       const newTotal = String(parsed.data.totalValue);
       const paidValue = Number(existing.paidValue);
-      const newBalance = Math.max(0, parsed.data.totalValue - paidValue);
       updates.totalValue = newTotal;
-      updates.balance = String(newBalance);
+      updates.balance = String(computeBalance(parsed.data.totalValue, paidValue));
     }
     if (parsed.data.commissionAmount !== undefined) updates.commissionAmount = parsed.data.commissionAmount != null ? String(parsed.data.commissionAmount) : null;
     if (parsed.data.sellerId !== undefined) updates.sellerId = parsed.data.sellerId ?? null;

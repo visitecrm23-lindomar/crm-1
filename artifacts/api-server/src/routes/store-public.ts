@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { addSeatClient, removeSeatClient, emitSeatUpdate } from "../lib/seat-sse";
 import { broadcastSeatUpdate } from "../lib/realtime";
 import { AppError, NotFoundError, ValidationError } from "../lib/errors";
+import { normalizeOrderEmail } from "../lib/pricing";
 import {
   storesTable,
   storeProductsTable,
@@ -1241,7 +1242,7 @@ router.get("/public/store/:slug/orders/:orderNumber", async (req, res, next: Nex
     const store = await getActiveStore(req.params.slug);
     if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
 
-    const customerEmail = typeof req.query.email === "string" ? req.query.email.trim().toLowerCase() : "";
+    const customerEmail = normalizeOrderEmail(req.query.email);
     if (!customerEmail) {
       next(new ValidationError("Email is required to look up an order", "VALIDATION_ERROR"));
       return;
