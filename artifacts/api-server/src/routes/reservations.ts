@@ -15,7 +15,7 @@ import { enqueueReservationConfirmationEmail } from "../queues/email-helpers";
 import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 import { broadcastSeatUpdate } from "../lib/realtime";
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
-import { applyDiscounts, computeBalance } from "../lib/pricing";
+import { applyDiscounts, computeBalance, computeEffectiveLoyaltyPoints } from "../lib/pricing";
 
 
 const router = Router();
@@ -442,9 +442,11 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
       finalTotal: serverFinalTotal,
     } = applyDiscounts(baseValue, serverCouponAmount, serverLoyaltyAmount, serverReferralAmount);
 
-    const effectiveLoyaltyPoints = serverRealPerPoint > 0
-      ? Math.min(serverLoyaltyPoints, Math.ceil(appliedLoyaltyAmount / serverRealPerPoint))
-      : 0;
+    const effectiveLoyaltyPoints = computeEffectiveLoyaltyPoints(
+      serverLoyaltyPoints,
+      appliedLoyaltyAmount,
+      serverRealPerPoint,
+    );
 
     const id = generateId();
     const voucherCode = generateVoucherCode();

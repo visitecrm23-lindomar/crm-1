@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyDiscounts, computeBalance } from "../lib/pricing.js";
+import { applyDiscounts, computeBalance, computeEffectiveLoyaltyPoints } from "../lib/pricing.js";
 
 describe("applyDiscounts — multi-step discount pipeline", () => {
   it("returns full base value and zero discount when no discounts are applied", () => {
@@ -94,5 +94,46 @@ describe("computeBalance — balance after partial payment", () => {
 
   it("rounds the balance to 2 decimal places", () => {
     expect(computeBalance(100.005, 0)).toBe(100.01);
+  });
+});
+
+describe("computeEffectiveLoyaltyPoints — points actually consumed", () => {
+  it("returns 0 when realPerPoint is zero (avoids divide-by-zero)", () => {
+    expect(computeEffectiveLoyaltyPoints(500, 50, 0)).toBe(0);
+  });
+
+  it("returns 0 when realPerPoint is negative", () => {
+    expect(computeEffectiveLoyaltyPoints(500, 50, -1)).toBe(0);
+  });
+
+  it("returns exact point count when points map exactly to applied amount", () => {
+    // 100 points * 0.5 per point = 50.00 applied — exact match
+    expect(computeEffectiveLoyaltyPoints(100, 50, 0.5)).toBe(100);
+  });
+
+  it("caps points when applied discount is less than what all points are worth", () => {
+    // customer tried to redeem 200 points worth 100.00, but only 60.00 was applied
+    // ceil(60 / 0.5) = 120 points should be consumed, not 200
+    expect(computeEffectiveLoyaltyPoints(200, 60, 0.5)).toBe(120);
+  });
+
+  it("uses ceil so customers are never charged fewer points than the discount they received", () => {
+    // 75.10 applied / 0.5 per point = 150.2 → ceil = 151 points consumed
+    expect(computeEffectiveLoyaltyPoints(300, 75.10, 0.5)).toBe(151);
+  });
+
+  it("returns full points when applied amount covers all of them (no cap needed)", () => {
+    // 50 points * 1.00 per point = 50.00, applied is 50.00 → no cap
+    expect(computeEffectiveLoyaltyPoints(50, 50, 1)).toBe(50);
+  });
+
+  it("returns 0 when no discount was actually applied", () => {
+    // loyalty was requested but the full base was already discounted by coupon
+    expect(computeEffectiveLoyaltyPoints(200, 0, 0.5)).toBe(0);
+  });
+
+  it("handles very small per-point values without overflow", () => {
+    // 1000 points at 0.01 each = 10.00; 8.00 applied → ceil(8/0.01) = 800
+    expect(computeEffectiveLoyaltyPoints(1000, 8, 0.01)).toBe(800);
   });
 });
