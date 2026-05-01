@@ -303,7 +303,7 @@ router.get("/trips/:id", async (req, res, next: NextFunction): Promise<void> => 
     const [trip] = await db.select().from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!trip) { next(new NotFoundError("Trip", "TRIP_NOT_FOUND")); return; }
+    if (!trip) { next(new NotFoundError("Trip not found", "TRIP_NOT_FOUND")); return; }
     res.json(formatTrip(trip));
   } catch (err) {
     next(err);
@@ -378,7 +378,7 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
       const [currentTrip] = await db.select().from(tripsTable)
         .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
         .limit(1);
-      if (!currentTrip) { next(new NotFoundError("Trip", "TRIP_NOT_FOUND")); return; }
+      if (!currentTrip) { next(new NotFoundError("Trip not found", "TRIP_NOT_FOUND")); return; }
       if (coverImageChanged) oldCoverImage = currentTrip.coverImage;
 
       if (capacityOrLayoutChanged) {
@@ -446,7 +446,7 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
     const [trip] = await db.select().from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!trip) { next(new NotFoundError("Trip", "TRIP_NOT_FOUND")); return; }
+    if (!trip) { next(new NotFoundError("Trip not found", "TRIP_NOT_FOUND")); return; }
     if (coverImageChanged) {
       await deleteOrphanedFile(oldCoverImage, parsed.data.coverImage, req.log);
     }
@@ -485,7 +485,7 @@ router.get("/trips/:id/seat-map", async (req, res, next: NextFunction): Promise<
     const [trip] = await db.select().from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!trip) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
+    if (!trip) { next(new NotFoundError("Trip not found", "NOT_FOUND")); return; }
 
     const ACTIVE_STATUSES = ["pending", "confirmed"] as const;
     const reservations = await db.select().from(reservationsTable)
@@ -540,7 +540,7 @@ router.get("/trips/:id/seats/stream", async (req, res, next: NextFunction): Prom
     .from(tripsTable)
     .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
     .limit(1);
-  if (!trip) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
+  if (!trip) { next(new NotFoundError("Trip not found", "NOT_FOUND")); return; }
 
   const tripId = trip.id;
   res.setHeader("Content-Type", "text/event-stream");

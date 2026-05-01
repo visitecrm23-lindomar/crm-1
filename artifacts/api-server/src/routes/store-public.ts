@@ -1439,7 +1439,7 @@ router.get("/public/store/:slug/referral/info", async (req, res, next: NextFunct
       .where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
 
     if (settings && !settings.isActive) {
-      next(new NotFoundError("Referral program is inactive", "NOT_FOUND"));
+      next(new AppError("Referral program is inactive", 400, "REFERRAL_PROGRAM_INACTIVE"));
       return;
     }
 

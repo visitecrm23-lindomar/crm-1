@@ -22,17 +22,17 @@ export type AuthedUser = {
 export async function requireAuth(req: Request, res: Response): Promise<AuthedUser | null> {
   const { userId } = getAuth(req);
   if (!userId) {
-    res.status(401).json({ error: "Not authenticated" });
+    res.status(401).json({ error: "Not authenticated", code: "UNAUTHORIZED", message: "Not authenticated", requestId: req.id ?? "unknown" });
     return null;
   }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, userId)).limit(1);
   if (!user) {
-    res.status(401).json({ error: "User not provisioned" });
+    res.status(401).json({ error: "User not provisioned", code: "USER_NOT_PROVISIONED", message: "User not provisioned", requestId: req.id ?? "unknown" });
     return null;
   }
   // Superadmins may not have a tenantId (they manage the platform globally)
   if (!user.tenantId && user.role !== ROLES.SUPER_ADMIN) {
-    res.status(401).json({ error: "User not provisioned" });
+    res.status(401).json({ error: "User not provisioned", code: "USER_NOT_PROVISIONED", message: "User not provisioned", requestId: req.id ?? "unknown" });
     return null;
   }
   // Return superadmin with empty string tenantId so routes using me.tenantId gracefully return empty results
@@ -56,7 +56,7 @@ export function requireRole(allowedRoles: string[]) {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!allowedRoles.includes(me.role)) {
-      res.status(403).json({ error: "Forbidden: insufficient role" });
+      res.status(403).json({ error: "Forbidden: insufficient role", code: "FORBIDDEN_ROLE", message: "Forbidden: insufficient role", requestId: (req as import("express").Request & { id?: string }).id ?? "unknown" });
       return;
     }
     next();

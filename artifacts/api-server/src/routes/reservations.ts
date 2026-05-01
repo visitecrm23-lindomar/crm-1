@@ -830,7 +830,7 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
       return updated;
     });
 
-    if (!reservation) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
+    if (!reservation) { next(new NotFoundError("Reservation not found", "NOT_FOUND")); return; }
     if (parsed.data.totalValue != null && existing.clientId) {
       syncClientDeal(existing.clientId, me.tenantId, existing.tripId, parsed.data.totalValue, me.id)
         .catch((err) => req.log.error({ err }, "Error syncing deal after reservation update"));
@@ -894,7 +894,7 @@ router.post("/reservations/:id/check-in", async (req, res, next: NextFunction): 
     const [reservation] = await db.select().from(reservationsTable)
       .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!reservation) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
+    if (!reservation) { next(new NotFoundError("Reservation not found", "NOT_FOUND")); return; }
     const formatted = await formatReservation(reservation);
     res.json(formatted);
     if (existing.clientId) {
@@ -970,7 +970,7 @@ router.patch("/reservations/:reservationId/passengers/:id", async (req, res, nex
     const [passenger] = await db.select().from(passengersTable)
       .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)))
       .limit(1);
-    if (!passenger) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
+    if (!passenger) { next(new NotFoundError("Reservation not found", "NOT_FOUND")); return; }
     res.json(formatPassenger(passenger));
   } catch (err) {
     next(err);
@@ -1003,7 +1003,7 @@ router.post("/reservations/:reservationId/passengers/:id/check-in", async (req, 
     const [passenger] = await db.select().from(passengersTable)
       .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)))
       .limit(1);
-    if (!passenger) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
+    if (!passenger) { next(new NotFoundError("Reservation not found", "NOT_FOUND")); return; }
     res.json(formatPassenger(passenger));
   } catch (err) {
     next(err);
@@ -1022,7 +1022,7 @@ router.delete("/reservations/:reservationId/passengers/:id/check-in", async (req
     const [passenger] = await db.select().from(passengersTable)
       .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)))
       .limit(1);
-    if (!passenger) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
+    if (!passenger) { next(new NotFoundError("Reservation not found", "NOT_FOUND")); return; }
     res.json(formatPassenger(passenger));
   } catch (err) {
     next(err);

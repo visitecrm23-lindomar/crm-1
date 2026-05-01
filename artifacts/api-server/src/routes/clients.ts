@@ -333,7 +333,7 @@ router.patch("/clients/:id", async (req, res, next: NextFunction): Promise<void>
     const [client] = await db.select().from(clientsTable)
       .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!client) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
+    if (!client) { next(new NotFoundError("Client not found", "NOT_FOUND")); return; }
     res.json(formatClient(client));
 
     if (parsed.data.birthDate !== undefined) {
@@ -371,7 +371,7 @@ router.patch("/clients/:id/pipeline-stage", async (req, res, next: NextFunction)
     const [client] = await db.select().from(clientsTable)
       .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!client) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
+    if (!client) { next(new NotFoundError("Client not found", "NOT_FOUND")); return; }
     res.json(formatClient(client));
   } catch (err) {
     next(err);
