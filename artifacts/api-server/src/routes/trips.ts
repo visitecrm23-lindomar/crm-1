@@ -18,7 +18,7 @@ import { ptBR } from "date-fns/locale";
 import { z } from "zod";
 import PDFDocument from "pdfkit";
 import { ADMIN_ROLES } from '../lib/tenant';
-import { AppError, NotFoundError, ForbiddenError } from "../lib/errors";
+import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 
 type SeatMapEntry = { row: number; col: number; floor?: number; status: string; type?: string };
 
@@ -197,7 +197,7 @@ router.post("/trips", async (req, res, next: NextFunction): Promise<void> => {
       if (!allowed) return;
     }
     const parsed = CreateTripBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
 
     const id = generateId();
     const slug = parsed.data.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + id.slice(0, 4);
@@ -211,7 +211,7 @@ router.post("/trips", async (req, res, next: NextFunction): Promise<void> => {
       const [layoutRow] = await db.select().from(vehicleLayoutsTable)
         .where(and(eq(vehicleLayoutsTable.id, layoutId), eq(vehicleLayoutsTable.tenantId, me.tenantId)))
         .limit(1);
-      if (!layoutRow) { res.status(400).json({ error: "Layout não encontrado" }); return; }
+      if (!layoutRow) { next(new ValidationError("Layout não encontrado", "VALIDATION_ERROR")); return; }
       const cells = (layoutRow.cells ?? []) as LayoutCell[];
       seatMap = generateSeatMapFromLayout(cells, layoutRow.numberingType);
       const seatCount = cells.filter(c => ["seat", "vip", "accessible"].includes(c.type)).length;
@@ -316,7 +316,7 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = UpdateTripBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
 
     const updates: Partial<typeof tripsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
@@ -393,7 +393,7 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
           const [layoutRow] = await db.select().from(vehicleLayoutsTable)
             .where(and(eq(vehicleLayoutsTable.id, newLayoutId), eq(vehicleLayoutsTable.tenantId, me.tenantId)))
             .limit(1);
-          if (!layoutRow) { res.status(400).json({ error: "Layout não encontrado" }); return; }
+          if (!layoutRow) { next(new ValidationError("Layout não encontrado", "VALIDATION_ERROR")); return; }
           const cells = (layoutRow.cells ?? []) as LayoutCell[];
           const generated = generateSeatMapFromLayout(cells, layoutRow.numberingType);
           newSeatMap = generated as typeof newSeatMap;
@@ -485,7 +485,7 @@ router.get("/trips/:id/seat-map", async (req, res, next: NextFunction): Promise<
     const [trip] = await db.select().from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!trip) { res.status(404).json({ error: "Not found" }); return; }
+    if (!trip) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
 
     const ACTIVE_STATUSES = ["pending", "confirmed"] as const;
     const reservations = await db.select().from(reservationsTable)
@@ -540,7 +540,7 @@ router.get("/trips/:id/seats/stream", async (req, res, next: NextFunction): Prom
     .from(tripsTable)
     .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
     .limit(1);
-  if (!trip) { res.status(404).json({ error: "Not found" }); return; }
+  if (!trip) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
 
   const tripId = trip.id;
   res.setHeader("Content-Type", "text/event-stream");
@@ -567,7 +567,7 @@ router.get("/trips/:id/boarding-panel", async (req, res, next: NextFunction): Pr
     const [trip] = await db.select().from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!trip) { res.status(404).json({ error: "Trip not found" }); return; }
+    if (!trip) { next(new NotFoundError("Trip not found", "NOT_FOUND")); return; }
 
     if (!trip.manifestNumber) {
       const year = trip.departureDate.getFullYear();
@@ -735,7 +735,7 @@ router.post("/trips/:id/sync-passengers", async (req, res, next: NextFunction): 
       .from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!trip) { res.status(404).json({ error: "Trip not found" }); return; }
+    if (!trip) { next(new NotFoundError("Trip not found", "NOT_FOUND")); return; }
 
     const reservations = await db.select().from(reservationsTable)
       .where(and(
@@ -813,31 +813,30 @@ router.patch("/trips/:tripId/passengers/:passengerId", async (req, res, next: Ne
       .from(tripsTable)
       .where(and(eq(tripsTable.id, tripId), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!trip) { res.status(404).json({ error: "Trip not found" }); return; }
+    if (!trip) { next(new NotFoundError("Trip not found", "NOT_FOUND")); return; }
 
     const [passenger] = await db.select({ id: passengersTable.id, reservationId: passengersTable.reservationId })
       .from(passengersTable)
       .where(eq(passengersTable.id, passengerId))
       .limit(1);
-    if (!passenger) { res.status(404).json({ error: "Passenger not found" }); return; }
+    if (!passenger) { next(new NotFoundError("Passenger not found", "NOT_FOUND")); return; }
 
     const [reservation] = await db.select({ tripId: reservationsTable.tripId })
       .from(reservationsTable)
       .where(and(eq(reservationsTable.id, passenger.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!reservation || reservation.tripId !== trip.id) { res.status(404).json({ error: "Passenger not found" }); return; }
+    if (!reservation || reservation.tripId !== trip.id) { next(new NotFoundError("Passenger not found", "NOT_FOUND")); return; }
 
     if (boardingLocationId === undefined && disembarkLocationId === undefined &&
         passengerPhone === undefined && observations === undefined &&
         specialNeeds === undefined && documentType === undefined) {
-      res.status(422).json({ error: "At least one field must be provided" });
+      next(new AppError("At least one field must be provided", 422, "VALIDATION_ERROR"));
       return;
     }
 
     const VALID_DOCUMENT_TYPES = ["RG", "CNH", "PASSAPORTE", "Certidão de Nascimento"];
     if (documentType !== undefined && documentType !== null && !VALID_DOCUMENT_TYPES.includes(documentType)) {
-      res.status(422).json({ error: `Invalid documentType. Must be one of: ${VALID_DOCUMENT_TYPES.join(", ")}` });
-      return;
+      next(new AppError(`Invalid documentType. Must be one of: ${VALID_DOCUMENT_TYPES.join(", ")}`, 422, "VALIDATION_ERROR")); return;
     }
 
     const boardingPointIds = new Set(
@@ -845,11 +844,11 @@ router.patch("/trips/:tripId/passengers/:passengerId", async (req, res, next: Ne
     );
 
     if (boardingLocationId !== undefined && boardingLocationId !== null && !boardingPointIds.has(boardingLocationId)) {
-      res.status(422).json({ error: "Invalid boardingLocationId: not in trip boarding points" });
+      next(new AppError("Invalid boardingLocationId: not in trip boarding points", 422, "VALIDATION_ERROR"));
       return;
     }
     if (disembarkLocationId !== undefined && disembarkLocationId !== null && !boardingPointIds.has(disembarkLocationId)) {
-      res.status(422).json({ error: "Invalid disembarkLocationId: not in trip boarding points" });
+      next(new AppError("Invalid disembarkLocationId: not in trip boarding points", 422, "VALIDATION_ERROR"));
       return;
     }
 
@@ -1289,15 +1288,14 @@ router.post("/trips/:id/manifest/send", async (req, res, next: NextFunction): Pr
     const parsed = SendManifestBody.safeParse(req.body);
     if (!parsed.success) {
       const firstIssue = parsed.error.issues[0];
-      res.status(400).json({ error: firstIssue?.message ?? "Dados inválidos" });
-      return;
+      next(new ValidationError(firstIssue?.message ?? "Dados inválidos", "VALIDATION_ERROR")); return;
     }
     const { channel, to } = parsed.data;
 
     const [trip] = await db.select().from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!trip) { res.status(404).json({ error: "Excursão não encontrada" }); return; }
+    if (!trip) { next(new NotFoundError("Excursão não encontrada", "NOT_FOUND")); return; }
 
     const reservations = await db.select().from(reservationsTable)
       .where(and(

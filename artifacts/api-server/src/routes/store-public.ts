@@ -2,7 +2,7 @@ import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { addSeatClient, removeSeatClient, emitSeatUpdate } from "../lib/seat-sse";
 import { broadcastSeatUpdate } from "../lib/realtime";
-import { AppError } from "../lib/errors";
+import { AppError, NotFoundError, ValidationError } from "../lib/errors";
 import {
   storesTable,
   storeProductsTable,
@@ -91,7 +91,7 @@ async function getActiveStore(slug: string) {
 router.get("/public/store/:slug", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const publicData = {
       id: store.id,
       name: store.name,
@@ -154,7 +154,7 @@ router.get("/public/store/:slug", async (req, res, next: NextFunction): Promise<
 router.get("/public/store/:slug/categories", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const categories = await db.select().from(storeCategoriesTable)
       .where(and(
         eq(storeCategoriesTable.storeId, store.id),
@@ -170,9 +170,9 @@ router.get("/public/store/:slug/categories", async (req, res, next: NextFunction
 router.get("/public/store/:slug/products", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     if (store.maintenanceMode) {
-      res.status(503).json({ error: "Store is under maintenance", message: store.maintenanceMessage });
+      next(new AppError("Store is under maintenance", 503, "STORE_MAINTENANCE", { maintenanceMessage: store.maintenanceMessage }));
       return;
     }
     const {
@@ -279,7 +279,7 @@ router.get("/public/store/:slug/products", async (req, res, next: NextFunction):
 router.get("/public/store/:slug/products/:productSlug", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const [row] = await db.select({
       id: storeProductsTable.id,
       type: storeProductsTable.type,
@@ -347,7 +347,7 @@ router.get("/public/store/:slug/products/:productSlug", async (req, res, next: N
         eq(storeProductsTable.slug, req.params.productSlug),
         eq(storeProductsTable.status, "active"),
       )).limit(1);
-    if (!row) { res.status(404).json({ error: "Product not found" }); return; }
+    if (!row) { next(new NotFoundError("Product not found", "NOT_FOUND")); return; }
     await db.update(storeProductsTable)
       .set({ viewsCount: row.viewsCount + 1 })
       .where(eq(storeProductsTable.id, row.id));
@@ -375,7 +375,7 @@ router.get("/public/store/:slug/products/:productSlug", async (req, res, next: N
 router.get("/public/store/:slug/trips/:tripId/seat-map", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
 
     const [trip] = await db.select({
       id: tripsTable.id,
@@ -389,7 +389,7 @@ router.get("/public/store/:slug/trips/:tripId/seat-map", async (req, res, next: 
         eq(tripsTable.tenantId, store.tenantId),
       )).limit(1);
 
-    if (!trip) { res.status(404).json({ error: "Trip not found" }); return; }
+    if (!trip) { next(new NotFoundError("Trip not found", "NOT_FOUND")); return; }
 
     const ACTIVE_STATUSES = ["pending", "confirmed"] as const;
     const reservations = await db.select({ seats: reservationsTable.seats, status: reservationsTable.status })
@@ -434,7 +434,7 @@ router.get("/public/store/:slug/trips/:tripId/seat-map", async (req, res, next: 
 
 router.get("/public/store/:slug/trips/:tripId/seats/stream", async (req, res, next: NextFunction): Promise<void> => {
   const store = await getActiveStore(req.params.slug).catch(() => null);
-  if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+  if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
 
   const [trip] = await db.select({ id: tripsTable.id })
     .from(tripsTable)
@@ -443,7 +443,7 @@ router.get("/public/store/:slug/trips/:tripId/seats/stream", async (req, res, ne
       eq(tripsTable.tenantId, store.tenantId),
     ))
     .limit(1);
-  if (!trip) { res.status(404).json({ error: "Trip not found" }); return; }
+  if (!trip) { next(new NotFoundError("Trip not found", "NOT_FOUND")); return; }
 
   const tripId = trip.id;
   res.setHeader("Content-Type", "text/event-stream");
@@ -492,13 +492,13 @@ const CreateOrderBody = z.object({
 router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     if (store.maintenanceMode) {
-      res.status(503).json({ error: "Store is under maintenance" });
+      next(new AppError("Store is under maintenance", 503, "SERVICE_UNAVAILABLE"));
       return;
     }
     const parsed = CreateOrderBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const data = parsed.data;
 
     // Phase 1: Aggregate quantities per product, validate products, preliminary stock check
@@ -538,7 +538,7 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
             eq(storeProductsTable.status, "active"),
           )).limit(1);
         if (!product) {
-          res.status(400).json({ error: `Product ${item.productId} not found or unavailable` });
+          next(new ValidationError(`Product ${item.productId} not found or unavailable`, "VALIDATION_ERROR"));
           return;
         }
         // Preliminary stock check using AGGREGATED quantity across all lines (fast early rejection)
@@ -546,10 +546,7 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
           const totalRequested = quantityByProductId.get(product.id) ?? item.quantity;
           const available = product.stockQuantity ?? 0;
           if (available < totalRequested) {
-            res.status(400).json({
-              error: `Estoque insuficiente para "${product.name}". Disponível: ${available}`,
-            });
-            return;
+            next(new ValidationError(`Estoque insuficiente para "${product.name}". Disponível: ${available}`, "INSUFFICIENT_STOCK")); return;
           }
         }
         fetchedProducts.set(product.id, product);
@@ -602,14 +599,10 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
         .where(and(eq(tripsTable.id, tripId), eq(tripsTable.tenantId, store.tenantId)))
         .limit(1);
       if (!trip) {
-        res.status(400).json({ error: `Viagem vinculada ao produto "${product.name}" não encontrada` });
-        return;
+        next(new ValidationError(`Viagem vinculada ao produto "${product.name}" não encontrada`, "TRIP_NOT_FOUND")); return;
       }
       if (trip.availableSeats < totalQty) {
-        res.status(400).json({
-          error: `Sem vagas suficientes para "${product.name}". Disponível: ${trip.availableSeats} vaga(s)`,
-        });
-        return;
+        next(new ValidationError(`Sem vagas suficientes para "${product.name}". Disponível: ${trip.availableSeats} vaga(s)`, "INSUFFICIENT_SEATS")); return;
       }
     }
 
@@ -1054,24 +1047,15 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     } catch (txErr: unknown) {
       if (txErr instanceof Error && txErr.message === "insufficient_stock") {
         const e = txErr as Error & { productName?: string; available?: number };
-        res.status(400).json({
-          error: `Estoque insuficiente para "${e.productName}". Disponível: ${e.available ?? 0}`,
-        });
-        return;
+        next(new ValidationError(`Estoque insuficiente para "${e.productName}". Disponível: ${e.available ?? 0}`, "INSUFFICIENT_STOCK")); return;
       }
       if (txErr instanceof Error && txErr.message === "no_seats") {
         const e = txErr as Error & { productName?: string; available?: number };
-        res.status(400).json({
-          error: `Sem vagas suficientes para "${e.productName ?? ""}". Disponível: ${e.available ?? 0} vaga(s)`,
-        });
-        return;
+        next(new ValidationError(`Sem vagas suficientes para "${e.productName ?? ""}". Disponível: ${e.available ?? 0} vaga(s)`, "INSUFFICIENT_SEATS")); return;
       }
       if (txErr instanceof Error && txErr.message === "trip_not_found") {
         const e = txErr as Error & { productName?: string };
-        res.status(400).json({
-          error: `Viagem vinculada ao produto "${e.productName ?? ""}" não encontrada`,
-        });
-        return;
+        next(new ValidationError(`Viagem vinculada ao produto "${e.productName ?? ""}" não encontrada`, "TRIP_NOT_FOUND")); return;
       }
       throw txErr;
     }
@@ -1255,11 +1239,11 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
 router.get("/public/store/:slug/orders/:orderNumber", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
 
     const customerEmail = typeof req.query.email === "string" ? req.query.email.trim().toLowerCase() : "";
     if (!customerEmail) {
-      res.status(400).json({ error: "Email is required to look up an order" });
+      next(new ValidationError("Email is required to look up an order", "VALIDATION_ERROR"));
       return;
     }
 
@@ -1295,11 +1279,11 @@ router.get("/public/store/:slug/orders/:orderNumber", async (req, res, next: Nex
         eq(storeOrdersTable.storeId, store.id),
         eq(storeOrdersTable.orderNumber, req.params.orderNumber),
       )).limit(1);
-    if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+    if (!order) { next(new NotFoundError("Order not found", "NOT_FOUND")); return; }
 
     // Verify ownership: the provided email must match the order's customer email
     if (order.customerEmail.trim().toLowerCase() !== customerEmail) {
-      res.status(404).json({ error: "Order not found" });
+      next(new NotFoundError("Order not found", "NOT_FOUND"));
       return;
     }
     const rawItems = await db.select({
@@ -1335,12 +1319,12 @@ router.get("/public/store/:slug/orders/:orderNumber", async (req, res, next: Nex
 router.post("/public/store/:slug/referral/validate", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const parsed = z.object({
       code: z.string().min(1),
       customerEmail: z.string().optional(),
     }).safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const code = parsed.data.code.toUpperCase();
 
     // Look up by client's permanent referral code
@@ -1357,8 +1341,7 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
       )).limit(1);
 
     if (!referrer) {
-      res.status(400).json({ valid: false, error: "Código de indicação inválido" });
-      return;
+      next(new ValidationError("Código de indicação inválido", "REFERRAL_CODE_INVALID", { valid: false })); return;
     }
 
     // Get discount % from referral settings
@@ -1373,8 +1356,7 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
       .where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
 
     if (settings && !settings.isEnabled) {
-      res.status(400).json({ valid: false, error: "Programa de indicação inativo" });
-      return;
+      next(new ValidationError("Programa de indicação inativo", "REFERRAL_PROGRAM_INACTIVE", { valid: false })); return;
     }
 
     // Enforce expiration based on when the code was generated (not account age)
@@ -1383,16 +1365,14 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
       const cutoff = new Date(referrer.referralCodeGeneratedAt);
       cutoff.setDate(cutoff.getDate() + expirationDays);
       if (new Date() > cutoff) {
-        res.status(400).json({ valid: false, error: "Código de indicação expirado" });
-        return;
+        next(new ValidationError("Código de indicação expirado", "REFERRAL_CODE_EXPIRED", { valid: false })); return;
       }
     }
 
     // Self-referral check when customer email is provided
     if (!settings?.allowSelfReferral && parsed.data.customerEmail && referrer.email) {
       if (referrer.email.toLowerCase() === parsed.data.customerEmail.toLowerCase()) {
-        res.status(400).json({ valid: false, error: "Você não pode usar seu próprio código de indicação" });
-        return;
+        next(new ValidationError("Você não pode usar seu próprio código de indicação", "REFERRAL_SELF_USE", { valid: false })); return;
       }
     }
 
@@ -1406,8 +1386,7 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
           eq(storeOrdersTable.status, "completed"),
         )).limit(1);
       if (priorOrder) {
-        res.status(400).json({ valid: false, error: "Código de indicação válido apenas para novos clientes" });
-        return;
+        next(new ValidationError("Código de indicação válido apenas para novos clientes", "REFERRAL_EXISTING_CUSTOMER", { valid: false })); return;
       }
     }
 
@@ -1432,9 +1411,9 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
 router.get("/public/store/:slug/referral/info", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const code = (req.query.code as string | undefined)?.toUpperCase();
-    if (!code) { res.status(400).json({ error: "code is required" }); return; }
+    if (!code) { next(new ValidationError("code is required", "VALIDATION_ERROR")); return; }
 
     // Look up by client's permanent referral code
     const [referrer] = await db.select({
@@ -1447,7 +1426,7 @@ router.get("/public/store/:slug/referral/info", async (req, res, next: NextFunct
       )).limit(1);
 
     if (!referrer) {
-      res.status(404).json({ error: "Referral not found" });
+      next(new NotFoundError("Referral not found", "NOT_FOUND"));
       return;
     }
 
@@ -1460,7 +1439,7 @@ router.get("/public/store/:slug/referral/info", async (req, res, next: NextFunct
       .where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
 
     if (settings && !settings.isActive) {
-      res.status(404).json({ error: "Referral program is inactive" });
+      next(new NotFoundError("Referral program is inactive", "NOT_FOUND"));
       return;
     }
 
@@ -1482,7 +1461,7 @@ router.get("/public/store/:slug/referral/info", async (req, res, next: NextFunct
 router.post("/public/store/:slug/referral/track", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const parsed = z.object({
       code: z.string().min(1),
       serverCookieId: z.string().optional(),
@@ -1493,7 +1472,7 @@ router.post("/public/store/:slug/referral/track", async (req, res, next: NextFun
       utmContent: z.string().optional(),
       utmTerm: z.string().optional(),
     }).safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const code = parsed.data.code.toUpperCase();
     const userAgent = req.headers["user-agent"] ?? "";
     const ipAddress = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
@@ -1569,14 +1548,14 @@ router.post("/public/store/:slug/referral/track", async (req, res, next: NextFun
 router.post("/public/store/:slug/coupons/validate", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const parsed = z.object({
       code: z.string().min(1),
       cartTotal: z.number().nonnegative().optional(),
       orderTotal: z.number().nonnegative().optional(),
       items: z.array(z.object({ productId: z.string(), quantity: z.number().int() })).optional(),
     }).safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const { code } = parsed.data;
     const cartTotal = parsed.data.cartTotal ?? parsed.data.orderTotal ?? 0;
     const [coupon] = await db.select().from(storeCouponsTable)
@@ -1586,28 +1565,20 @@ router.post("/public/store/:slug/coupons/validate", async (req, res, next: NextF
         eq(storeCouponsTable.isActive, true),
       )).limit(1);
     if (!coupon) {
-      res.status(400).json({ valid: false, error: "Cupom inválido" });
-      return;
+      next(new ValidationError("Cupom inválido", "COUPON_INVALID", { valid: false })); return;
     }
     const now = new Date();
     if (coupon.startsAt > now) {
-      res.status(400).json({ valid: false, error: "Cupom ainda não está vigente" });
-      return;
+      next(new ValidationError("Cupom ainda não está vigente", "COUPON_NOT_STARTED", { valid: false })); return;
     }
     if (coupon.expiresAt < now) {
-      res.status(400).json({ valid: false, error: "Cupom expirado" });
-      return;
+      next(new ValidationError("Cupom expirado", "COUPON_EXPIRED", { valid: false })); return;
     }
     if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit) {
-      res.status(400).json({ valid: false, error: "Cupom esgotado" });
-      return;
+      next(new ValidationError("Cupom esgotado", "COUPON_EXHAUSTED", { valid: false })); return;
     }
     if (coupon.minPurchaseAmount && cartTotal < parseFloat(coupon.minPurchaseAmount)) {
-      res.status(400).json({
-        valid: false,
-        error: `Valor mínimo para este cupom: R$ ${parseFloat(coupon.minPurchaseAmount).toFixed(2)}`,
-      });
-      return;
+      next(new ValidationError(`Valor mínimo para este cupom: R$ ${parseFloat(coupon.minPurchaseAmount).toFixed(2)}`, "COUPON_MIN_PURCHASE", { valid: false })); return;
     }
     let discountAmount = 0;
     if (coupon.type === "percentage") {
@@ -1637,7 +1608,7 @@ router.get("/public/store/:slug/reviews", async (req, res, next: NextFunction): 
     const { slug } = req.params;
     const { limit: limitStr, featured } = req.query;
     const store = await db.query.storesTable.findFirst({ where: eq(storesTable.slug, slug as string) });
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const limit = limitStr ? Math.min(Number(limitStr), 50) : 20;
     const conditions = [
       eq(storeReviewsTable.storeId, store.id),

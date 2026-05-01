@@ -1,5 +1,5 @@
 import { Router, type NextFunction } from "express";
-import { AppError } from "../lib/errors";
+import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { db } from "@workspace/db";
 import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable } from "@workspace/db";
 import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
@@ -109,8 +109,8 @@ router.get("/clients", async (req, res, next: NextFunction): Promise<void> => {
     if (city) conditions.push(ilike(clientsTable.addressCity, `%${city}%`) as ReturnType<typeof eq>);
     if (origin) conditions.push(ilike(clientsTable.origin, `%${origin}%`) as ReturnType<typeof eq>);
     const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-    if (dateFrom && !ISO_DATE.test(dateFrom)) { res.status(400).json({ error: "dateFrom must be a valid ISO date (YYYY-MM-DD)" }); return; }
-    if (dateTo && !ISO_DATE.test(dateTo)) { res.status(400).json({ error: "dateTo must be a valid ISO date (YYYY-MM-DD)" }); return; }
+    if (dateFrom && !ISO_DATE.test(dateFrom)) { next(new ValidationError("dateFrom must be a valid ISO date (YYYY-MM-DD)", "VALIDATION_ERROR")); return; }
+    if (dateTo && !ISO_DATE.test(dateTo)) { next(new ValidationError("dateTo must be a valid ISO date (YYYY-MM-DD)", "VALIDATION_ERROR")); return; }
     if (dateFrom) conditions.push(sql`${clientsTable.createdAt} >= ${new Date(dateFrom)}` as ReturnType<typeof eq>);
     if (dateTo) conditions.push(sql`${clientsTable.createdAt} <= ${new Date(dateTo)}` as ReturnType<typeof eq>);
     if (me.role !== "vendedor" && sellerId) conditions.push(eq(clientsTable.createdById, sellerId));
@@ -174,14 +174,13 @@ router.post("/clients", async (req, res, next: NextFunction): Promise<void> => {
       if (!allowed) return;
     }
     const parsed = CreateClientBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
 
     let cleanedCpf: string;
     try {
       cleanedCpf = validateCPF(parsed.data.cpf);
     } catch (err) {
-      res.status(400).json({ error: err instanceof Error ? err.message : "CPF inválido" });
-      return;
+      next(new ValidationError(err instanceof Error ? err.message : "CPF inválido", "CPF_INVALID")); return;
     }
 
     const sharedFields = {
@@ -250,7 +249,7 @@ async function requireClientAccess(
   if (me.role === "cliente") conditions.push(eq(clientsTable.userId, me.id));
   else if (me.role === "vendedor") conditions.push(eq(clientsTable.createdById, me.id));
   const [client] = await db.select().from(clientsTable).where(and(...conditions)).limit(1);
-  if (!client) { res.status(404).json({ error: "Not found" }); return null; }
+  if (!client) { next(new NotFoundError("Not found", "NOT_FOUND")); return null; }
   return client;
 }
 
@@ -270,12 +269,12 @@ router.patch("/clients/:id", async (req, res, next: NextFunction): Promise<void>
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role === "cliente") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const existing = await requireClientAccess(me, req.params.id, res);
     if (!existing) return;
 
     const parsed = UpdateClientBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
 
     const updates: Partial<typeof clientsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
@@ -283,7 +282,7 @@ router.patch("/clients/:id", async (req, res, next: NextFunction): Promise<void>
     if (parsed.data.whatsapp != null) updates.whatsapp = parsed.data.whatsapp;
     if (parsed.data.phone !== undefined) updates.phone = parsed.data.phone ?? null;
     if (parsed.data.cpf != null) {
-      try { updates.cpf = validateCPF(parsed.data.cpf); } catch { res.status(400).json({ error: "CPF inválido" }); return; }
+      try { updates.cpf = validateCPF(parsed.data.cpf); } catch { next(new ValidationError("CPF inválido", "VALIDATION_ERROR")); return; }
     }
     if (parsed.data.rg !== undefined) updates.rg = parsed.data.rg ?? null;
     if (parsed.data.birthDate !== undefined) updates.birthDate = parsed.data.birthDate ? new Date(parsed.data.birthDate) : null;
@@ -337,7 +336,7 @@ router.patch("/clients/:id", async (req, res, next: NextFunction): Promise<void>
     const [client] = await db.select().from(clientsTable)
       .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!client) { res.status(404).json({ error: "Not found" }); return; }
+    if (!client) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(formatClient(client));
 
     if (parsed.data.birthDate !== undefined) {
@@ -352,7 +351,7 @@ router.delete("/clients/:id", async (req, res, next: NextFunction): Promise<void
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     await db.delete(clientsTable)
       .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)));
     res.json({ success: true });
@@ -365,18 +364,18 @@ router.patch("/clients/:id/pipeline-stage", async (req, res, next: NextFunction)
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role === "cliente") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const existing = await requireClientAccess(me, req.params.id, res);
     if (!existing) return;
 
     const parsed = UpdateClientPipelineStageBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     await db.update(clientsTable).set({ pipelineStage: parsed.data.stage })
       .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)));
     const [client] = await db.select().from(clientsTable)
       .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!client) { res.status(404).json({ error: "Not found" }); return; }
+    if (!client) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(formatClient(client));
   } catch (err) {
     next(err);
@@ -411,11 +410,10 @@ router.post("/clients/:clientId/activities", async (req, res, next: NextFunction
     const client = await requireClientAccess(me, req.params.clientId, res);
     if (!client) return;
     const { type, content, metadata } = req.body as { type?: string; content?: string; metadata?: Record<string, unknown> | null };
-    if (!type || !content) { res.status(400).json({ error: "type and content are required" }); return; }
+    if (!type || !content) { next(new ValidationError("type and content are required", "VALIDATION_ERROR")); return; }
     const MANUAL_ACTIVITY_TYPES = ["note", "call", "whatsapp", "email", "meeting"];
     if (!MANUAL_ACTIVITY_TYPES.includes(type)) {
-      res.status(400).json({ error: `Invalid activity type. Must be one of: ${MANUAL_ACTIVITY_TYPES.join(", ")}` });
-      return;
+      next(new ValidationError(`Invalid activity type. Must be one of: ${MANUAL_ACTIVITY_TYPES.join(", ")}`, "VALIDATION_ERROR")); return;
     }
     const id = generateId();
     await db.insert(notesTable).values({
@@ -469,7 +467,7 @@ router.post("/clients/:clientId/notes", async (req, res, next: NextFunction): Pr
     const client = await requireClientAccess(me, req.params.clientId, res);
     if (!client) return;
     const parsed = CreateClientNoteBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(notesTable).values({
       id,

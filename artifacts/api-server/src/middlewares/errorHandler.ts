@@ -28,11 +28,17 @@ export function errorHandler(
   const userId = req.userId ?? "unknown";
 
   if (err instanceof AppError && err.isOperational) {
+    req.log?.warn(
+      { requestId: rid, tenantId, userId, code: err.code, statusCode: err.statusCode },
+      err.message,
+    );
+
     res.status(err.statusCode).json({
       error: err.message,
       code: err.code,
       message: err.message,
       requestId: rid,
+      ...err.extra,
     });
     return;
   }

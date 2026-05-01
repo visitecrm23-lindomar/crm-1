@@ -2,13 +2,20 @@ export class AppError extends Error {
   readonly statusCode: number;
   readonly code: string;
   readonly isOperational: boolean;
+  readonly extra?: Record<string, unknown>;
 
-  constructor(message: string, statusCode = 500, code = "INTERNAL_ERROR") {
+  constructor(
+    message: string,
+    statusCode = 500,
+    code = "INTERNAL_ERROR",
+    extra?: Record<string, unknown>,
+  ) {
     super(message);
     this.name = "AppError";
     this.statusCode = statusCode;
     this.code = code;
     this.isOperational = true;
+    this.extra = extra;
     Error.captureStackTrace(this, this.constructor);
   }
 }
@@ -35,8 +42,8 @@ export class ForbiddenError extends AppError {
 }
 
 export class ValidationError extends AppError {
-  constructor(message: string, code = "VALIDATION_ERROR") {
-    super(message, 400, code);
+  constructor(message: string, code = "VALIDATION_ERROR", extra?: Record<string, unknown>) {
+    super(message, 400, code, extra);
     this.name = "ValidationError";
   }
 }

@@ -14,7 +14,7 @@ import { syncReservationCommission } from "./payments";
 import { enqueueReservationConfirmationEmail } from "../queues/email-helpers";
 import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 import { broadcastSeatUpdate } from "../lib/realtime";
-import { AppError, NotFoundError, ConflictError } from "../lib/errors";
+import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 
 
 const router = Router();
@@ -135,7 +135,7 @@ router.post("/reservations/validate-coupon", async (req, res, next: NextFunction
     const me = await requireAuth(req, res);
     if (!me) return;
     const parsed = ValidateCouponBodySchema.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
 
     const { code, subtotal } = parsed.data;
     const now = new Date();
@@ -236,8 +236,8 @@ router.get("/reservations", async (req, res, next: NextFunction): Promise<void> 
     const offset = (pageNum - 1) * limitNum;
 
     const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-    if (dateFrom && !ISO_DATE.test(dateFrom)) { res.status(400).json({ error: "dateFrom must be a valid ISO date (YYYY-MM-DD)" }); return; }
-    if (dateTo && !ISO_DATE.test(dateTo)) { res.status(400).json({ error: "dateTo must be a valid ISO date (YYYY-MM-DD)" }); return; }
+    if (dateFrom && !ISO_DATE.test(dateFrom)) { next(new ValidationError("dateFrom must be a valid ISO date (YYYY-MM-DD)", "VALIDATION_ERROR")); return; }
+    if (dateTo && !ISO_DATE.test(dateTo)) { next(new ValidationError("dateTo must be a valid ISO date (YYYY-MM-DD)", "VALIDATION_ERROR")); return; }
 
     const conditions: ReturnType<typeof eq>[] = [eq(reservationsTable.tenantId, me.tenantId)];
     if (tripId) conditions.push(eq(reservationsTable.tripId, tripId));
@@ -323,12 +323,12 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
     const me = await requireAuth(req, res);
     if (!me) return;
     const parsed = CreateReservationBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
 
     const [client] = await db.select().from(clientsTable)
       .where(and(eq(clientsTable.id, parsed.data.clientId), eq(clientsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!client) { res.status(400).json({ error: "Client not found or not in tenant" }); return; }
+    if (!client) { next(new ValidationError("Client not found or not in tenant", "VALIDATION_ERROR")); return; }
 
     const baseValue = parsed.data.totalValue;
     const now = new Date();
@@ -351,7 +351,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
       if (!coupon || coupon.startsAt > now || coupon.expiresAt < now ||
           (coupon.usageLimit != null && coupon.usageCount >= coupon.usageLimit) ||
           (coupon.minPurchaseAmount != null && baseValue < Number(coupon.minPurchaseAmount))) {
-        res.status(400).json({ error: "Cupom inválido ou expirado" }); return;
+        next(new ValidationError("Cupom inválido ou expirado", "VALIDATION_ERROR")); return;
       }
       serverCouponId = coupon.id;
       serverCouponCode = coupon.code;
@@ -374,19 +374,19 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
         .where(and(eq(loyaltyMembersTable.tenantId, me.tenantId), eq(loyaltyMembersTable.clientId, parsed.data.clientId)))
         .limit(1);
       if (!member) {
-        res.status(400).json({ error: "Cliente não é membro do programa de fidelidade" }); return;
+        next(new ValidationError("Cliente não é membro do programa de fidelidade", "VALIDATION_ERROR")); return;
       }
       const [program] = await db.select().from(loyaltyProgramsTable).where(eq(loyaltyProgramsTable.id, member.programId)).limit(1);
       if (!program) {
-        res.status(400).json({ error: "Programa de fidelidade não encontrado" }); return;
+        next(new ValidationError("Programa de fidelidade não encontrado", "VALIDATION_ERROR")); return;
       }
       const requestedPoints = parsed.data.discountLoyaltyPoints;
       const minRedeemPoints = program.minRedeemPoints ?? 1;
       if (requestedPoints < minRedeemPoints) {
-        res.status(400).json({ error: `Mínimo de ${minRedeemPoints} pontos para resgate` }); return;
+        next(new ValidationError(`Mínimo de ${minRedeemPoints} pontos para resgate`, "VALIDATION_ERROR")); return;
       }
       if ((member.availablePoints ?? 0) < requestedPoints) {
-        res.status(400).json({ error: "Pontos de fidelidade insuficientes" }); return;
+        next(new ValidationError("Pontos de fidelidade insuficientes", "VALIDATION_ERROR")); return;
       }
       serverLoyaltyMemberId = member.id;
       serverLoyaltyPoints = requestedPoints;
@@ -410,7 +410,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
           eq(clientsTable.referralCode, upperCode),
         )).limit(1);
       if (!referrer) {
-        res.status(400).json({ error: "Código de indicação inválido" }); return;
+        next(new ValidationError("Código de indicação inválido", "VALIDATION_ERROR")); return;
       }
       // Get discount/bonus from referral settings
       const [refSettings] = await db.select({
@@ -421,7 +421,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
       }).from(referralSettingsTable)
         .where(eq(referralSettingsTable.tenantId, me.tenantId)).limit(1);
       if (refSettings && refSettings.isActive === false) {
-        res.status(400).json({ error: "Programa de indicação inativo" }); return;
+        next(new ValidationError("Programa de indicação inativo", "VALIDATION_ERROR")); return;
       }
       serverReferralCode = upperCode;
       serverReferralReferrerId = referrer.id;
@@ -705,18 +705,18 @@ async function requireReservationAccess(
   const [reservation] = await db.select().from(reservationsTable)
     .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, me.tenantId)))
     .limit(1);
-  if (!reservation) { res.status(404).json({ error: "Not found" }); return null; }
+  if (!reservation) { next(new NotFoundError("Not found", "NOT_FOUND")); return null; }
   if (me.role === "cliente") {
     const [clientRecord] = await db.select({ id: clientsTable.id }).from(clientsTable)
       .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.userId, me.id))).limit(1);
     if (!clientRecord || reservation.clientId !== clientRecord.id) {
-      res.status(404).json({ error: "Not found" }); return null;
+      next(new NotFoundError("Not found", "NOT_FOUND")); return null;
     }
   } else if (me.role === "vendedor") {
     const [clientRecord] = await db.select({ createdById: clientsTable.createdById }).from(clientsTable)
       .where(and(eq(clientsTable.id, reservation.clientId), eq(clientsTable.tenantId, me.tenantId))).limit(1);
     if (!clientRecord || clientRecord.createdById !== me.id) {
-      res.status(404).json({ error: "Not found" }); return null;
+      next(new NotFoundError("Not found", "NOT_FOUND")); return null;
     }
   }
   return reservation;
@@ -742,12 +742,12 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role === "cliente") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const existing = await requireReservationAccess(me, req.params.id, res);
     if (!existing) return;
 
     const parsed = UpdateReservationBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
 
     const updates: Partial<typeof reservationsTable.$inferInsert> = {};
     if (parsed.data.status != null) updates.status = parsed.data.status;
@@ -833,7 +833,7 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
       return updated;
     });
 
-    if (!reservation) { res.status(404).json({ error: "Not found" }); return; }
+    if (!reservation) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     if (parsed.data.totalValue != null && existing.clientId) {
       syncClientDeal(existing.clientId, me.tenantId, existing.tripId, parsed.data.totalValue, me.id)
         .catch((err) => req.log.error({ err }, "Error syncing deal after reservation update"));
@@ -860,7 +860,7 @@ router.delete("/reservations/:id", async (req, res, next: NextFunction): Promise
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!MANAGEMENT_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const existing = await requireReservationAccess(me, req.params.id, res);
     if (!existing) return;
 
@@ -889,7 +889,7 @@ router.post("/reservations/:id/check-in", async (req, res, next: NextFunction): 
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!MANAGEMENT_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const existing = await requireReservationAccess(me, req.params.id, res);
     if (!existing) return;
     await db.update(reservationsTable).set({
@@ -899,7 +899,7 @@ router.post("/reservations/:id/check-in", async (req, res, next: NextFunction): 
     const [reservation] = await db.select().from(reservationsTable)
       .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!reservation) { res.status(404).json({ error: "Not found" }); return; }
+    if (!reservation) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     const formatted = await formatReservation(reservation);
     res.json(formatted);
     if (existing.clientId) {
@@ -932,11 +932,11 @@ router.post("/reservations/:reservationId/passengers", async (req, res, next: Ne
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role === "cliente") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const reservation = await requireReservationAccess(me, req.params.reservationId, res);
     if (!reservation) return;
     const parsed = CreatePassengerBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(passengersTable).values({
       id,
@@ -963,11 +963,11 @@ router.patch("/reservations/:reservationId/passengers/:id", async (req, res, nex
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role === "cliente") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const reservation = await requireReservationAccess(me, req.params.reservationId, res);
     if (!reservation) return;
     const parsed = UpdatePassengerBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const updates: Partial<typeof passengersTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.cpf !== undefined) updates.cpf = parsed.data.cpf ?? null;
@@ -978,7 +978,7 @@ router.patch("/reservations/:reservationId/passengers/:id", async (req, res, nex
     const [passenger] = await db.select().from(passengersTable)
       .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)))
       .limit(1);
-    if (!passenger) { res.status(404).json({ error: "Not found" }); return; }
+    if (!passenger) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(formatPassenger(passenger));
   } catch (err) {
     next(err);
@@ -989,7 +989,7 @@ router.delete("/reservations/:reservationId/passengers/:id", async (req, res, ne
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role === "cliente") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const reservation = await requireReservationAccess(me, req.params.reservationId, res);
     if (!reservation) return;
     await db.delete(passengersTable)
@@ -1004,7 +1004,7 @@ router.post("/reservations/:reservationId/passengers/:id/check-in", async (req, 
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!MANAGEMENT_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const reservation = await requireReservationAccess(me, req.params.reservationId, res);
     if (!reservation) return;
     await db.update(passengersTable)
@@ -1013,7 +1013,7 @@ router.post("/reservations/:reservationId/passengers/:id/check-in", async (req, 
     const [passenger] = await db.select().from(passengersTable)
       .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)))
       .limit(1);
-    if (!passenger) { res.status(404).json({ error: "Not found" }); return; }
+    if (!passenger) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(formatPassenger(passenger));
   } catch (err) {
     next(err);
@@ -1024,7 +1024,7 @@ router.delete("/reservations/:reservationId/passengers/:id/check-in", async (req
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!MANAGEMENT_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const reservation = await requireReservationAccess(me, req.params.reservationId, res);
     if (!reservation) return;
     await db.update(passengersTable)
@@ -1033,7 +1033,7 @@ router.delete("/reservations/:reservationId/passengers/:id/check-in", async (req
     const [passenger] = await db.select().from(passengersTable)
       .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)))
       .limit(1);
-    if (!passenger) { res.status(404).json({ error: "Not found" }); return; }
+    if (!passenger) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(formatPassenger(passenger));
   } catch (err) {
     next(err);
