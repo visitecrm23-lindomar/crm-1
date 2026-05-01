@@ -17,7 +17,7 @@ import {
 
 export interface ReservationCredentials {
   email: string
-  tempPassword: string
+  setupUrl: string
   loginUrl: string
 }
 
@@ -298,7 +298,7 @@ export function ReservationConfirmationEmail({
                 <Heading style={credentialsSectionTitle}>🔑 Acesse sua Área do Cliente</Heading>
                 <Text style={credentialsIntro}>
                   Criamos uma conta gratuita para você acompanhar sua reserva a qualquer momento.
-                  Use as credenciais abaixo para fazer o primeiro acesso:
+                  Clique no botão abaixo para configurar sua senha e acessar o portal pela primeira vez:
                 </Text>
                 <div style={credentialsBox}>
                   <table style={infoTable}>
@@ -307,18 +307,14 @@ export function ReservationConfirmationEmail({
                         <td style={infoLabel}>Login (e-mail):</td>
                         <td style={infoValue}>{credentials.email}</td>
                       </tr>
-                      <tr>
-                        <td style={infoLabel}>Senha temporária:</td>
-                        <td style={credentialsPassword}>{credentials.tempPassword}</td>
-                      </tr>
                     </tbody>
                   </table>
                 </div>
-                <Button style={credentialsButton} href={credentials.loginUrl}>
-                  Acessar Minha Área do Cliente
+                <Button style={credentialsButton} href={credentials.setupUrl}>
+                  Configurar Minha Senha e Acessar
                 </Button>
                 <Text style={credentialsNote}>
-                  Por segurança, recomendamos alterar sua senha no primeiro acesso.
+                  Este link é válido por 7 dias e pode ser usado apenas uma vez. Após acessar, você poderá definir sua própria senha.
                 </Text>
               </Section>
             </>
@@ -826,15 +822,6 @@ const credentialsBox: React.CSSProperties = {
   borderRadius: '8px',
   padding: '16px',
   marginBottom: '20px',
-}
-
-const credentialsPassword: React.CSSProperties = {
-  fontSize: '14px',
-  color: '#0369a1',
-  fontWeight: 'bold',
-  fontFamily: 'monospace',
-  letterSpacing: '1px',
-  padding: '8px 0',
 }
 
 const credentialsButton: React.CSSProperties = {

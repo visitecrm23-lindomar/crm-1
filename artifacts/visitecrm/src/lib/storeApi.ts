@@ -172,10 +172,10 @@ export const publicStoreApi = {
   },
   createOrder: (slug: string, data: CreateOrderInput) =>
     publicReq<StoreOrder>("POST", `/public/store/${slug}/orders`, data),
-  getOrder: (slug: string, orderNumber: string) =>
+  getOrder: (slug: string, orderNumber: string, customerEmail: string) =>
     publicReq<StoreOrder>(
       "GET",
-      `/public/store/${slug}/orders/${encodeURIComponent(orderNumber)}`
+      `/public/store/${slug}/orders/${encodeURIComponent(orderNumber)}?email=${encodeURIComponent(customerEmail)}`
     ),
   validateCoupon: (
     slug: string,

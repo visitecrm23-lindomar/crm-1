@@ -1118,7 +1118,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
       ;(async () => {
         try {
           // Step 1: Check if user already has a portal account; create one if not
-          let credentials: { email: string; tempPassword: string; loginUrl: string } | undefined;
+          let credentials: { email: string; setupUrl: string; loginUrl: string } | undefined;
 
           const [existingUser] = await db.select({ id: usersTable.id })
             .from(usersTable)
@@ -1126,7 +1126,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
             .limit(1);
 
           if (!existingUser) {
-            const temporaryPassword = generateTemporaryPassword();
+            const bootstrapPassword = generateTemporaryPassword();
             let newClerkId: string | null = null;
 
             try {
@@ -1135,7 +1135,7 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
               const lastName = nameParts.slice(1).join(" ") || undefined;
               const clerkUser = await clerkClient.users.createUser({
                 emailAddress: [ffEmail],
-                password: temporaryPassword,
+                password: bootstrapPassword,
                 firstName,
                 ...(lastName ? { lastName } : {}),
               });
@@ -1162,7 +1162,20 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
                 isActive: true,
                 referralCode,
               });
-              credentials = { email: ffEmail, tempPassword: temporaryPassword, loginUrl: ffLoginUrl };
+
+              // Generate a one-time sign-in link instead of emailing the raw password
+              try {
+                const signInToken = await clerkClient.signInTokens.createSignInToken({
+                  userId: newClerkId,
+                  expiresInSeconds: 604800, // 7 days
+                });
+                credentials = { email: ffEmail, setupUrl: signInToken.url, loginUrl: ffLoginUrl };
+              } catch (tokenErr) {
+                console.error("[store-public] Failed to create sign-in token:", tokenErr);
+                // Suppress credentials block entirely — the email is still sent without account
+                // setup instructions so we never send inaccurate copy or expose the bootstrap password.
+                credentials = undefined;
+              }
             }
           }
 
@@ -1262,6 +1275,13 @@ router.get("/public/store/:slug/orders/:orderNumber", async (req, res): Promise<
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+
+    const customerEmail = typeof req.query.email === "string" ? req.query.email.trim().toLowerCase() : "";
+    if (!customerEmail) {
+      res.status(400).json({ error: "Email is required to look up an order" });
+      return;
+    }
+
     const [order] = await db.select({
       id: storeOrdersTable.id,
       orderNumber: storeOrdersTable.orderNumber,
@@ -1295,6 +1315,12 @@ router.get("/public/store/:slug/orders/:orderNumber", async (req, res): Promise<
         eq(storeOrdersTable.orderNumber, req.params.orderNumber),
       )).limit(1);
     if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+
+    // Verify ownership: the provided email must match the order's customer email
+    if (order.customerEmail.trim().toLowerCase() !== customerEmail) {
+      res.status(404).json({ error: "Order not found" });
+      return;
+    }
     const rawItems = await db.select({
       id: storeOrderItemsTable.id,
       productId: storeOrderItemsTable.productId,

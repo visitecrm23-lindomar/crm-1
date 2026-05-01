@@ -1,5 +1,4 @@
-import { useState, useEffect, FormEvent } from "react";
-import { useParams } from "wouter";
+import { useState, FormEvent } from "react";
 import { publicStoreApi, PublicStore, StoreOrder } from "@/lib/storeApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,21 +52,23 @@ export default function VitrineOrderTracking({
   initialOrderNumber?: string;
 }) {
   const [orderNumber, setOrderNumber] = useState(initialOrderNumber ?? "");
+  const [email, setEmail] = useState("");
   const [order, setOrder] = useState<StoreOrder | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function searchByNumber(num: string) {
+  async function searchByNumber(num: string, emailAddress: string) {
     const trimmed = num.trim().toUpperCase();
-    if (!trimmed) return;
+    const emailTrimmed = emailAddress.trim();
+    if (!trimmed || !emailTrimmed) return;
     setLoading(true);
     setError(null);
     setOrder(null);
     try {
-      const o = await publicStoreApi.getOrder(slug, trimmed);
+      const o = await publicStoreApi.getOrder(slug, trimmed, emailTrimmed);
       setOrder(o);
     } catch {
-      setError("Pedido não encontrado. Verifique o número e tente novamente.");
+      setError("Pedido não encontrado. Verifique o número e o e-mail e tente novamente.");
     } finally {
       setLoading(false);
     }
@@ -75,14 +76,8 @@ export default function VitrineOrderTracking({
 
   async function search(e?: FormEvent) {
     e?.preventDefault();
-    await searchByNumber(orderNumber);
+    await searchByNumber(orderNumber, email);
   }
-
-  useEffect(() => {
-    if (initialOrderNumber) {
-      searchByNumber(initialOrderNumber);
-    }
-  }, [initialOrderNumber]);
 
   const statusInfo = order
     ? STATUS_INFO[order.status] ?? {
@@ -98,29 +93,38 @@ export default function VitrineOrderTracking({
         <Package className="w-14 h-14 mx-auto mb-4 text-muted-foreground/40" />
         <h1 className="text-3xl font-bold mb-2">Consultar Pedido</h1>
         <p className="text-muted-foreground">
-          Informe o número do pedido para acompanhar o status.
+          Informe o número do pedido e o e-mail usado na compra para acompanhar o status.
         </p>
       </div>
 
-      <form onSubmit={search} className="flex gap-3 mb-8">
+      <form onSubmit={search} className="space-y-3 mb-8">
         <Input
           value={orderNumber}
           onChange={(e) => setOrderNumber(e.target.value.toUpperCase())}
-          placeholder="Ex: ORD-XXXXX-XXX"
+          placeholder="Número do pedido (Ex: #2024-12345)"
           className="font-mono"
         />
-        <Button
-          type="submit"
-          disabled={loading || !orderNumber.trim()}
-          style={{ backgroundColor: store.primaryColor }}
-          className="text-white"
-        >
-          {loading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Search className="w-4 h-4" />
-          )}
-        </Button>
+        <div className="flex gap-3">
+          <Input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="E-mail usado na compra"
+            className="flex-1"
+          />
+          <Button
+            type="submit"
+            disabled={loading || !orderNumber.trim() || !email.trim()}
+            style={{ backgroundColor: store.primaryColor }}
+            className="text-white"
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Search className="w-4 h-4" />
+            )}
+          </Button>
+        </div>
       </form>
 
       {error && (
