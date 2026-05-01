@@ -86,7 +86,7 @@ The platform includes a multi-tenant e-commerce solution with both an admin pane
 - **Run backend only**: `pnpm --filter @workspace/api-server run test`
 - **Run frontend only**: `pnpm --filter @workspace/visitecrm run test`
 
-### Backend tests (`artifacts/api-server`) — 60 tests total
+### Backend tests (`artifacts/api-server`) — 72 tests total
 - Config: `vitest.config.ts` — `environment: "node"`, includes `src/**/*.test.ts`
 - `src/__tests__/errors.test.ts` — 15 tests covering all typed error classes (`AppError`, `NotFoundError`, `ConflictError`, `ForbiddenError`, `ValidationError`)
 - `src/__tests__/lib.test.ts` — 22 tests covering pure utility functions:
@@ -95,20 +95,26 @@ The platform includes a multi-tenant e-commerce solution with both an admin pane
   - DB and drizzle-orm imports are mocked via `vi.mock`
 - `src/__tests__/broadcastSeatUpdate.test.ts` — 5 tests verifying seat broadcast logic (confirmed/pending/merged maps), mocks db chain via `vi.hoisted`
 - `src/__tests__/reservation-calculations.test.ts` — 18 tests covering:
-  - Multi-discount application priority: coupon → loyalty → referral with sequential balance reduction
-  - Balance calculation (totalValue − paidValue)
-  - Store order lookup email validation logic
+  - `applyDiscounts(base, coupon, loyalty, referral)` — multi-discount priority: coupon → loyalty → referral with sequential balance reduction; capping; zero-discount path
+  - `computeBalance(totalValue, paidValue)` — partial payment, full payment, non-negative clamp
+  - `normalizeOrderEmail(raw)` — valid string, undefined, empty, whitespace, non-string types
+  All three functions imported directly from `src/lib/pricing.ts`.
+- `src/__tests__/endpoints.test.ts` — 12 endpoint-level tests via supertest (real route handlers, mocked DB/Clerk/queues):
+  - `POST /api/reservations`: required-field validation (400), client-not-found (400), partial-payment balance computation, fully-paid (balance=0), overpaid (balance clamped to 0), response body shape
+  - `GET /api/public/store/:slug/orders/:orderNumber`: absent/empty/whitespace email → 400 VALIDATION_ERROR, valid email with order-not-found → 404, store-not-found → 404, case-insensitive email normalization
 
-### Frontend tests (`artifacts/visitecrm`) — 46 tests total
+### Frontend tests (`artifacts/visitecrm`) — 51 tests total
 - Config: `vitest.config.ts` — `environment: "jsdom"`, `@` alias resolved to `src/`, includes `src/**/*.test.ts`
 - `src/__tests__/utils.test.ts` — 26 tests covering pure utility functions:
   - `formatCurrency`, `formatDate`, `getCountdownLabel`, `escapeHtml`, `formatCpf`, `generateProductSlug` from `pages/trips/utils.ts`
   - External workspace deps are mocked via `vi.mock`
-- `src/__tests__/reservation.test.ts` — 20 tests covering:
-  - `computeTotalValue(priceAdult, seats)` formula (adult price × seat count)
-  - `computeFinalValue(totalValue, totalDiscount)` (capped at zero)
-  - `CreateReservationBody` Zod schema validation (required fields, type errors)
-  - `CreateTripBody` Zod schema validation (required fields, optional pricing fields)
+- `src/__tests__/reservation.test.ts` — 25 tests covering:
+  - `computeReservationTotal(priceAdult, seats)` — adult price × seat count (0 seats, 1 seat, N seats, fractional price, zero price)
+  - `computeDetailedTotal({ priceAdult, adultSeats, priceChild, childSeats, priceSenior, seniorSeats })` — adult-only, adult+child, adult+senior, null child price falls back to adult price, all-empty
+  - `applyDiscount(totalValue, discountAmount)` — zero discount, full discount, excess discount clamped to 0, partial discount
+  - `CreateReservationBody` Zod schema validation (required fields, type errors, optional fields)
+  - `CreateTripBody` Zod schema validation (required fields, type errors, optional pricing fields)
+  All pricing functions imported directly from `src/lib/reservationPricing.ts`.
 
 ## External Dependencies
 
