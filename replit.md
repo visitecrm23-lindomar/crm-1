@@ -86,19 +86,29 @@ The platform includes a multi-tenant e-commerce solution with both an admin pane
 - **Run backend only**: `pnpm --filter @workspace/api-server run test`
 - **Run frontend only**: `pnpm --filter @workspace/visitecrm run test`
 
-### Backend tests (`artifacts/api-server`)
+### Backend tests (`artifacts/api-server`) — 60 tests total
 - Config: `vitest.config.ts` — `environment: "node"`, includes `src/**/*.test.ts`
 - `src/__tests__/errors.test.ts` — 15 tests covering all typed error classes (`AppError`, `NotFoundError`, `ConflictError`, `ForbiddenError`, `ValidationError`)
 - `src/__tests__/lib.test.ts` — 22 tests covering pure utility functions:
   - `tripTypeToCode`, `derivePrefix`, `getYearMonth`, `buildReservationNumber` from `lib/reservation-number.ts`
   - `deriveAgeCategory`, `getAgeYears` from `lib/passenger.ts`
   - DB and drizzle-orm imports are mocked via `vi.mock`
+- `src/__tests__/broadcastSeatUpdate.test.ts` — 5 tests verifying seat broadcast logic (confirmed/pending/merged maps), mocks db chain via `vi.hoisted`
+- `src/__tests__/reservation-calculations.test.ts` — 18 tests covering:
+  - Multi-discount application priority: coupon → loyalty → referral with sequential balance reduction
+  - Balance calculation (totalValue − paidValue)
+  - Store order lookup email validation logic
 
-### Frontend tests (`artifacts/visitecrm`)
-- Config: `vitest.config.ts` — `environment: "node"`, `@` alias resolved to `src/`, includes `src/**/*.test.ts`
+### Frontend tests (`artifacts/visitecrm`) — 46 tests total
+- Config: `vitest.config.ts` — `environment: "jsdom"`, `@` alias resolved to `src/`, includes `src/**/*.test.ts`
 - `src/__tests__/utils.test.ts` — 26 tests covering pure utility functions:
   - `formatCurrency`, `formatDate`, `getCountdownLabel`, `escapeHtml`, `formatCpf`, `generateProductSlug` from `pages/trips/utils.ts`
   - External workspace deps are mocked via `vi.mock`
+- `src/__tests__/reservation.test.ts` — 20 tests covering:
+  - `computeTotalValue(priceAdult, seats)` formula (adult price × seat count)
+  - `computeFinalValue(totalValue, totalDiscount)` (capped at zero)
+  - `CreateReservationBody` Zod schema validation (required fields, type errors)
+  - `CreateTripBody` Zod schema validation (required fields, optional pricing fields)
 
 ## External Dependencies
 
