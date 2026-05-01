@@ -1,0 +1,2270 @@
+PLANO DE AÇÃO: TRANSFORMAR VISITECRM EM SAAS PREMIUM
+📋 ANÁLISE E DIAGNÓSTICO
+Problemas Identificados:
+❌ Redundância de código - Múltiplas implementações da mesma funcionalidade
+❌ Schema desorganizado - Falta de clareza no multi-tenancy
+❌ Sincronização fragmentada - Dados não sincronizam entre módulos
+❌ Arquitetura monolítica - Dificulta manutenção e escalabilidade
+❌ Fluxo de reserva incompleto - Não integra todas as vias de entrada
+❌ Falta de padrões - Código inconsistente entre módulos
+
+SOLUÇÃO: ARQUITETURA MONOREPO PNPM
+Estrutura Final do Projeto
+
+visitecrm/
+├── apps/
+│   ├── web/                    # Next.js 14 App (Dashboard)
+│   ├── api/                    # API REST/GraphQL (opcional)
+│   └── docs/                   # Documentação (Nextra)
+│
+├── packages/
+│   ├── @visitecrm/database/    # Prisma + Schema + Migrations
+│   ├── @visitecrm/auth/        # NextAuth + Permissões
+│   ├── @visitecrm/ui/          # Componentes shadcn/ui
+│   ├── @visitecrm/lib/         # Utilities + Helpers
+│   ├── @visitecrm/config/      # Configs compartilhadas
+│   ├── @visitecrm/types/       # TypeScript Types
+│   └── @visitecrm/hooks/       # React Hooks compartilhados
+│
+├── services/
+│   ├── reservations/           # Serviço de Reservas
+│   ├── payments/               # Serviço de Pagamentos
+│   ├── notifications/          # Serviço de Notificações
+│   └── sync/                   # Serviço de Sincronização
+│
+├── pnpm-workspace.yaml
+├── turbo.json
+├── package.json
+└── tsconfig.json
+
+
+CONFIGURAÇÃO DO MONOREPO
+
+Arquivo pnpm-workspace.yaml
+
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "services/*"
+
+
+Arquivo turbo.json
+
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["**/.env.*local"],
+  "pipeline": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "dependsOn": ["^lint"]
+    },
+    "type-check": {
+      "dependsOn": ["^type-check"]
+    },
+    "test": {
+      "dependsOn": ["^test"]
+    },
+    "db:generate": {
+      "cache": false
+    },
+    "db:push": {
+      "cache": false
+    }
+  }
+}
+
+
+Root package.json
+{
+  "name": "visitecrm",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "test": "turbo run test",
+    "db:generate": "turbo run db:generate",
+    "db:push": "turbo run db:push",
+    "db:migrate": "turbo run db:migrate",
+    "db:studio": "pnpm --filter @visitecrm/database db:studio",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^1.13.0",
+    "typescript": "^5.4.0",
+    "@types/node": "^20.12.0",
+    "prettier": "^3.2.0",
+    "eslint": "^8.57.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0"
+}
+
+SCHEMA PRISMA OTIMIZADO (MULTI-TENANT REAL)
+packages/database/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════════════════
+// ENUMS
+// ═══════════════════════════════════════════════════════════
+
+enum UserRole {
+  SUPERADMIN
+  AGENCIA
+  VENDEDOR
+  CLIENT
+}
+
+enum ReservationStatus {
+  DRAFT
+  PENDING
+  CONFIRMED
+  PAID
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PipelineStage {
+  NOVO
+  CONTATO
+  QUALIFICADO
+  PROPOSTA
+  RESERVADO
+  EM_VIAGEM
+  POS_VENDA
+  PERDIDO
+}
+
+// ═══════════════════════════════════════════════════════════
+// MULTI-TENANCY
+// ═══════════════════════════════════════════════════════════
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  email     String
+  phone     String?
+  logo      String?
+  
+  // Configurações
+  settings  Json     @default("{}")
+  
+  // Status
+  isActive  Boolean  @default(true)
+  plan      String   @default("free")
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relações
+  users         User[]
+  clients       Client[]
+  trips         Trip[]
+  reservations  Reservation[]
+  products      Product[]
+  
+  @@map("tenants")
+}
+
+// ═══════════════════════════════════════════════════════════
+// AUTENTICAÇÃO
+// ═══════════════════════════════════════════════════════════
+
+model User {
+  id            String    @id @default(cuid())
+  tenantId      String?
+  tenant        Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  name          String
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  role          UserRole  @default(CLIENT)
+  
+  // OAuth
+  accounts      Account[]
+  sessions      Session[]
+  
+  // Timestamps
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relações
+  clientsCreated    Client[]      @relation("CreatedBy")
+  reservationsCreated Reservation[] @relation("CreatedBy")
+  
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("sessions")
+}
+
+// ═══════════════════════════════════════════════════════════
+// CRM - CLIENTES
+// ═══════════════════════════════════════════════════════════
+
+model Client {
+  id            String        @id @default(cuid())
+  tenantId      String
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  // Dados Pessoais
+  name          String
+  email         String?
+  cpf           String?
+  whatsapp      String?
+  phone         String?
+  birthDate     DateTime?
+  
+  // Endereço
+  city          String?
+  state         String?
+  
+  // Pipeline
+  pipelineStage PipelineStage @default(NOVO)
+  origin        String?
+  
+  // Financeiro
+  totalSpent    Decimal       @default(0) @db.Decimal(10, 2)
+  
+  // Observações
+  observations  String?       @db.Text
+  
+  // Status
+  isActive      Boolean       @default(true)
+  
+  // Criado por
+  createdById   String?
+  createdBy     User?         @relation("CreatedBy", fields: [createdById], references: [id])
+  
+  // Timestamps
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  // Relações
+  reservations  Reservation[]
+  
+  @@unique([tenantId, email])
+  @@unique([tenantId, cpf])
+  @@index([tenantId, pipelineStage])
+  @@map("clients")
+}
+
+// ═══════════════════════════════════════════════════════════
+// VIAGENS
+// ═══════════════════════════════════════════════════════════
+
+model Trip {
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  // Informações Básicas
+  title         String
+  slug          String
+  destination   String
+  
+  // Datas
+  departureDate DateTime
+  returnDate    DateTime?
+  
+  // Preços
+  priceAdult    Decimal  @db.Decimal(10, 2)
+  priceChild    Decimal? @db.Decimal(10, 2)
+  
+  // Capacidade
+  totalSeats    Int      @default(52)
+  
+  // Mapa de Assentos (JSON)
+  seatMap       Json     @default("{}")
+  
+  // Status
+  status        String   @default("draft")
+  isPublic      Boolean  @default(false)
+  isFeatured    Boolean  @default(false)
+  
+  // Descrição
+  description   String?  @db.Text
+  shortDescription String?
+  
+  // Mídia
+  coverImage    String?
+  gallery       String[] @default([])
+  
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relações
+  reservations  Reservation[]
+  
+  @@unique([tenantId, slug])
+  @@index([tenantId, status])
+  @@map("trips")
+}
+
+// ═══════════════════════════════════════════════════════════
+// RESERVAS (CORE DO SISTEMA)
+// ═══════════════════════════════════════════════════════════
+
+model Reservation {
+  id            String            @id @default(cuid())
+  tenantId      String
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  // Cliente
+  clientId      String
+  client        Client            @relation(fields: [clientId], references: [id])
+  
+  // Viagem
+  tripId        String
+  trip          Trip              @relation(fields: [tripId], references: [id])
+  
+  // Passageiros (JSON)
+  passengers    Json              @default("[]")
+  
+  // Assentos
+  seats         Int[]             @default([])
+  
+  // Financeiro
+  totalValue    Decimal           @db.Decimal(10, 2)
+  paidValue     Decimal           @default(0) @db.Decimal(10, 2)
+  balance       Decimal           @db.Decimal(10, 2)
+  
+  // Status
+  status        ReservationStatus @default(PENDING)
+  
+  // Voucher
+  voucherCode   String?           @unique
+  
+  // Criado por
+  createdById   String?
+  createdBy     User?             @relation("CreatedBy", fields: [createdById], references: [id])
+  
+  // Origem da reserva
+  source        String            @default("dashboard") // dashboard, loja, api
+  
+  // Check-in
+  checkedIn     Boolean           @default(false)
+  checkedInAt   DateTime?
+  
+  // Timestamps
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  
+  // Relações
+  payments      Payment[]
+  
+  @@index([tenantId, status])
+  @@index([clientId])
+  @@index([tripId])
+  @@map("reservations")
+}
+
+// ═══════════════════════════════════════════════════════════
+// PAGAMENTOS
+// ═══════════════════════════════════════════════════════════
+
+model Payment {
+  id            String        @id @default(cuid())
+  reservationId String
+  reservation   Reservation   @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  
+  amount        Decimal       @db.Decimal(10, 2)
+  paymentMethod String
+  status        PaymentStatus @default(PENDING)
+  
+  // Gateway
+  gateway       String?
+  gatewayId     String?
+  
+  // Comprovante
+  proof         String?
+  
+  // Datas
+  dueDate       DateTime?
+  paidAt        DateTime?
+  
+  // Timestamps
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  @@index([reservationId])
+  @@index([status])
+  @@map("payments")
+}
+
+// ═══════════════════════════════════════════════════════════
+// PRODUTOS (MARKETPLACE)
+// ═══════════════════════════════════════════════════════════
+
+model Product {
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  name          String
+  price         Decimal  @db.Decimal(10, 2)
+  stock         Int?
+  
+  isActive      Boolean  @default(true)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("products")
+}
+
+// ═══════════════════════════════════════════════════════════
+// EVENTOS DE SINCRONIZAÇÃO
+// ═══════════════════════════════════════════════════════════
+
+model SyncEvent {
+  id          String   @id @default(cuid())
+  tenantId    String
+  entityType  String   // client, reservation, trip, payment
+  entityId    String
+  action      String   // create, update, delete
+  data        Json
+  processed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  
+  @@index([tenantId, processed])
+  @@index([entityType, entityId])
+  @@map("sync_events")
+}
+
+SERVIÇO DE SINCRONIZAÇÃO CENTRALIZADO
+services/sync/src/index.ts
+
+import { prisma } from '@visitecrm/database'
+import { EventEmitter } from 'events'
+
+export const syncEmitter = new EventEmitter()
+
+// ═══════════════════════════════════════════════════════════
+// TIPOS
+// ═══════════════════════════════════════════════════════════
+
+type EntityType = 'client' | 'reservation' | 'trip' | 'payment'
+type Action = 'create' | 'update' | 'delete'
+
+interface SyncEventData {
+  tenantId: string
+  entityType: EntityType
+  entityId: string
+  action: Action
+  data: any
+}
+
+// ═══════════════════════════════════════════════════════════
+// CRIAR EVENTO DE SINCRONIZAÇÃO
+// ═══════════════════════════════════════════════════════════
+
+export async function createSyncEvent(event: SyncEventData) {
+  // Salvar no banco
+  const syncEvent = await prisma.syncEvent.create({
+    data: event,
+  })
+
+  // Emitir evento em tempo real
+  syncEmitter.emit('sync', syncEvent)
+
+  // Processar sincronização
+  await processSyncEvent(syncEvent)
+
+  return syncEvent
+}
+
+// ═══════════════════════════════════════════════════════════
+// PROCESSAR EVENTO DE SINCRONIZAÇÃO
+// ═══════════════════════════════════════════════════════════
+
+async function processSyncEvent(event: any) {
+  try {
+    switch (event.entityType) {
+      case 'client':
+        await syncClient(event)
+        break
+      case 'reservation':
+        await syncReservation(event)
+        break
+      case 'trip':
+        await syncTrip(event)
+        break
+      case 'payment':
+        await syncPayment(event)
+        break
+    }
+
+    // Marcar como processado
+    await prisma.syncEvent.update({
+      where: { id: event.id },
+      data: { processed: true },
+    })
+  } catch (error) {
+    console.error('Erro ao processar sync event:', error)
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SINCRONIZAR CLIENTE
+// ═══════════════════════════════════════════════════════════
+
+async function syncClient(event: any) {
+  const { entityId, action, data } = event
+
+  if (action === 'update') {
+    // Atualizar pipeline se necessário
+    if (data.pipelineStage) {
+      // Emitir evento para atualizar UI
+      syncEmitter.emit('client:pipeline:updated', {
+        clientId: entityId,
+        stage: data.pipelineStage,
+      })
+    }
+
+    // Atualizar total gasto se houver nova reserva
+    if (data.newReservation) {
+      const client = await prisma.client.findUnique({
+        where: { id: entityId },
+        include: {
+          reservations: {
+            where: { status: 'PAID' },
+          },
+        },
+      })
+
+      const totalSpent = client?.reservations.reduce(
+        (sum, r) => sum + Number(r.paidValue),
+        0
+      )
+
+      await prisma.client.update({
+        where: { id: entityId },
+        data: { totalSpent },
+      })
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SINCRONIZAR RESERVA
+// ═══════════════════════════════════════════════════════════
+
+async function syncReservation(event: any) {
+  const { entityId, action, data } = event
+
+  if (action === 'create' || action === 'update') {
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: entityId },
+      include: {
+        client: true,
+        trip: true,
+      },
+    })
+
+    if (!reservation) return
+
+    // Atualizar mapa de assentos da viagem
+    await updateTripSeatMap(reservation.tripId, reservation.seats)
+
+    // Atualizar pipeline do cliente
+    await updateClientPipeline(reservation.clientId, reservation.status)
+
+    // Atualizar total gasto do cliente
+    if (reservation.status === 'PAID') {
+      await updateClientTotalSpent(reservation.clientId)
+    }
+
+    // Emitir eventos para UI
+    syncEmitter.emit('reservation:updated', {
+      reservationId: entityId,
+      clientId: reservation.clientId,
+      tripId: reservation.tripId,
+      status: reservation.status,
+    })
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SINCRONIZAR VIAGEM
+// ═══════════════════════════════════════════════════════════
+
+async function syncTrip(event: any) {
+  const { entityId, action, data } = event
+
+  if (action === 'update') {
+    // Recalcular assentos disponíveis
+    const trip = await prisma.trip.findUnique({
+      where: { id: entityId },
+      include: {
+        reservations: {
+          where: {
+            status: { in: ['CONFIRMED', 'PAID', 'IN_PROGRESS'] },
+          },
+        },
+      },
+    })
+
+    if (trip) {
+      const occupiedSeats = trip.reservations.flatMap((r) => r.seats)
+      const availableSeats = trip.totalSeats - occupiedSeats.length
+
+      // Emitir evento
+      syncEmitter.emit('trip:seats:updated', {
+        tripId: entityId,
+        occupiedSeats,
+        availableSeats,
+      })
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SINCRONIZAR PAGAMENTO
+// ═══════════════════════════════════════════════════════════
+
+async function syncPayment(event: any) {
+  const { entityId, action, data } = event
+
+  if (action === 'create' || action === 'update') {
+    const payment = await prisma.payment.findUnique({
+      where: { id: entityId },
+      include: {
+        reservation: true,
+      },
+    })
+
+    if (!payment) return
+
+    // Recalcular saldo da reserva
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: payment.reservationId },
+      include: { payments: true },
+    })
+
+    if (reservation) {
+      const paidValue = reservation.payments
+        .filter((p) => p.status === 'PAID')
+        .reduce((sum, p) => sum + Number(p.amount), 0)
+
+      const balance = Number(reservation.totalValue) - paidValue
+
+      await prisma.reservation.update({
+        where: { id: payment.reservationId },
+        data: {
+          paidValue,
+          balance,
+          status: balance <= 0 ? 'PAID' : 'PENDING',
+        },
+      })
+
+      // Emitir evento
+      syncEmitter.emit('payment:updated', {
+        paymentId: entityId,
+        reservationId: payment.reservationId,
+        paidValue,
+        balance,
+      })
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+
+async function updateTripSeatMap(tripId: string, seats: number[]) {
+  const trip = await prisma.trip.findUnique({ where: { id: tripId } })
+  if (!trip) return
+
+  const seatMap = trip.seatMap as any
+  seats.forEach((seat) => {
+    seatMap[seat] = { occupied: true }
+  })
+
+  await prisma.trip.update({
+    where: { id: tripId },
+    data: { seatMap },
+  })
+}
+
+async function updateClientPipeline(
+  clientId: string,
+  reservationStatus: string
+) {
+  const stageMap: Record<string, string> = {
+    DRAFT: 'NOVO',
+    PENDING: 'RESERVADO',
+    CONFIRMED: 'RESERVADO',
+    PAID: 'RESERVADO',
+    IN_PROGRESS: 'EM_VIAGEM',
+    COMPLETED: 'POS_VENDA',
+    CANCELLED: 'PERDIDO',
+  }
+
+  const pipelineStage = stageMap[reservationStatus] || 'NOVO'
+
+  await prisma.client.update({
+    where: { id: clientId },
+    data: { pipelineStage },
+  })
+}
+
+async function updateClientTotalSpent(clientId: string) {
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    include: {
+      reservations: {
+        where: { status: 'PAID' },
+      },
+    },
+  })
+
+  if (!client) return
+
+  const totalSpent = client.reservations.reduce(
+    (sum, r) => sum + Number(r.paidValue),
+    0
+  )
+
+  await prisma.client.update({
+    where: { id: clientId },
+    data: { totalSpent },
+  })
+}
+
+
+FLUXO COMPLETO DE RESERVA
+services/reservations/src/create-reservation.ts
+
+import { prisma } from '@visitecrm/database'
+import { createSyncEvent } from '@visitecrm/sync'
+
+interface CreateReservationInput {
+  tenantId: string
+  clientId: string
+  tripId: string
+  passengers: Array<{
+    name: string
+    cpf?: string
+    birthDate?: string
+    ageCategory: string
+  }>
+  seats: number[]
+  totalValue: number
+  source: 'dashboard' | 'loja' | 'api'
+  createdById?: string
+}
+
+export async function createReservation(input: CreateReservationInput) {
+  // 1. Validar disponibilidade de assentos
+  const trip = await prisma.trip.findUnique({
+    where: { id: input.tripId },
+    include: {
+      reservations: {
+        where: {
+          status: { in: ['CONFIRMED', 'PAID', 'IN_PROGRESS'] },
+        },
+      },
+    },
+  })
+
+  if (!trip) throw new Error('Viagem não encontrada')
+
+  const occupiedSeats = trip.reservations.flatMap((r) => r.seats)
+  const hasConflict = input.seats.some((seat) => occupiedSeats.includes(seat))
+
+  if (hasConflict) {
+    throw new Error('Alguns assentos já estão ocupados')
+  }
+
+  // 2. Criar reserva
+  const reservation = await prisma.reservation.create({
+    data: {
+      tenantId: input.tenantId,
+      clientId: input.clientId,
+      tripId: input.tripId,
+      passengers: input.passengers,
+      seats: input.seats,
+      totalValue: input.totalValue,
+      paidValue: 0,
+      balance: input.totalValue,
+      status: 'PENDING',
+      source: input.source,
+      createdById: input.createdById,
+      voucherCode: generateVoucherCode(),
+    },
+  })
+
+  // 3. Criar evento de sincronização
+  await createSyncEvent({
+    tenantId: input.tenantId,
+    entityType: 'reservation',
+    entityId: reservation.id,
+    action: 'create',
+    data: reservation,
+  })
+
+  // 4. Atualizar cliente
+  await prisma.client.update({
+    where: { id: input.clientId },
+    data: {
+      pipelineStage: 'RESERVADO',
+    },
+  })
+
+  // 5. Criar evento de sincronização do cliente
+  await createSyncEvent({
+    tenantId: input.tenantId,
+    entityType: 'client',
+    entityId: input.clientId,
+    action: 'update',
+    data: { pipelineStage: 'RESERVADO', newReservation: true },
+  })
+
+  return reservation
+}
+
+function generateVoucherCode(): string {
+  return `VTC-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+}
+
+HOOKS DE SINCRONIZAÇÃO EM TEMPO REAL
+packages/hooks/src/use-sync.ts
+
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+
+export function useSync() {
+  const queryClient = useQueryClient()
+  const [isConnected, setIsConnected] = useState(false)
+
+  useEffect(() => {
+    // Conectar ao WebSocket/SSE
+    const eventSource = new EventSource('/api/sync/events')
+
+    eventSource.onopen = () => {
+      setIsConnected(true)
+    }
+
+    eventSource.onerror = () => {
+      setIsConnected(false)
+    }
+
+    eventSource.addEventListener('sync', (event) => {
+      const data = JSON.parse(event.data)
+      handleSyncEvent(data)
+    })
+
+    return () => {
+      eventSource.close()
+    }
+  }, [])
+
+  function handleSyncEvent(event: any) {
+    const { entityType, entityId, action } = event
+
+    // Invalidar queries relacionadas
+    switch (entityType) {
+      case 'client':
+        queryClient.invalidateQueries({ queryKey: ['clients'] })
+        queryClient.invalidateQueries({ queryKey: ['client', entityId] })
+        queryClient.invalidateQueries({ queryKey: ['pipeline'] })
+        break
+
+      case 'reservation':
+        queryClient.invalidateQueries({ queryKey: ['reservations'] })
+        queryClient.invalidateQueries({ queryKey: ['reservation', entityId] })
+        queryClient.invalidateQueries({ queryKey: ['clients'] })
+        queryClient.invalidateQueries({ queryKey: ['trips'] })
+        break
+
+      case 'trip':
+        queryClient.invalidateQueries({ queryKey: ['trips'] })
+        queryClient.invalidateQueries({ queryKey: ['trip', entityId] })
+        break
+
+      case 'payment':
+        queryClient.invalidateQueries({ queryKey: ['payments'] })
+        queryClient.invalidateQueries({ queryKey: ['reservations'] })
+        break
+    }
+  }
+
+  return { isConnected }
+}
+
+COMPONENTE DE CARD SINCRONIZADO
+packages/ui/src/client-card.tsx
+
+'use client'
+
+import { useQuery } from '@tanstack/react-query'
+import { Card } from './card'
+import { Badge } from './badge'
+
+interface ClientCardProps {
+  clientId: string
+}
+
+export function ClientCard({ clientId }: ClientCardProps) {
+  // Query com auto-refetch quando sincronização ocorrer
+  const { data: client, isLoading } = useQuery({
+    queryKey: ['client', clientId],
+    queryFn: () => fetch(`/api/clients/${clientId}`).then((r) => r.json()),
+    refetchOnWindowFocus: true,
+    staleTime: 0, // Sempre buscar dados frescos
+  })
+
+  if (isLoading) return <Card>Carregando...</Card>
+
+  return (
+    <Card>
+      <div className="p-4">
+        <h3 className="font-bold">{client.name}</h3>
+        <p className="text-sm text-gray-600">{client.whatsapp}</p>
+        <Badge>{client.pipelineStage}</Badge>
+        <div className="mt-2">
+          <p className="text-sm">
+            Total gasto: R$ {client.totalSpent.toFixed(2)}
+          </p>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+
+COMANDOS DE INSTALAÇÃO
+
+# 1. Criar estrutura do monorepo
+mkdir visitecrm
+cd visitecrm
+pnpm init
+
+# 2. Instalar Turbo
+pnpm add -D turbo
+
+# 3. Criar workspace
+touch pnpm-workspace.yaml
+
+# 4. Criar apps e packages
+mkdir -p apps/web packages/database packages/ui packages/lib services/sync
+
+# 5. Inicializar cada package
+cd apps/web && pnpm init
+cd ../.. && cd packages/database && pnpm init
+# ... repetir para todos
+
+# 6. Instalar dependências
+pnpm add -w next@latest react@latest react-dom@latest
+pnpm add -w @prisma/client prisma
+pnpm add -w next-auth@beta
+pnpm add -w @tanstack/react-query
+pnpm add -w zod
+
+# 7. Gerar Prisma Client
+pnpm --filter @visitecrm/database db:generate
+
+# 8. Rodar projeto
+pnpm dev
+
+OBJETIVO:
+
+ Zero Redundância - Código compartilhado em packages
+ Sincronização Real - Dados sempre atualizados em tempo real
+ Escalável - Monorepo permite crescimento organizado
+ Manutenível - Separação clara de responsabilidades
+ Performático - Turbo cache + React Query
+ Type-Safe - TypeScript em todo o projeto
+ Testável - Isolamento de lógica facilita testes
+ Profissional - Pronto para vender como SaaS Premium
+
+
+IMPLEMENTAÇÃO COMPLETA: VISITECRM SAAS PREMIUM
+Vou implementar TUDO agora, passo a passo, com código completo e funcional.
+
+📦 PASSO 1: ESTRUTURA DO MONOREPO
+1.1 Criar estrutura de pastas
+
+# Criar diretório raiz
+mkdir visitecrm
+cd visitecrm
+
+# Criar estrutura completa
+mkdir -p apps/web
+mkdir -p packages/{database,ui,lib,auth,config,types,hooks}
+mkdir -p services/{sync,reservations,payments,notifications}
+1.2 Arquivo pnpm-workspace.yaml
+
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "services/*"
+1.3 Root package.json
+
+{
+  "name": "visitecrm",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "db:generate": "turbo run db:generate",
+    "db:push": "turbo run db:push",
+    "db:studio": "pnpm --filter @visitecrm/database db:studio",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.0",
+    "turbo": "^1.13.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0"
+}
+1.4 turbo.json
+
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["**/.env.*local"],
+  "pipeline": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "dependsOn": ["^lint"]
+    },
+    "type-check": {
+      "dependsOn": ["^type-check"]
+    },
+    "db:generate": {
+      "cache": false
+    },
+    "db:push": {
+      "cache": false
+    }
+  }
+}
+1.5 Root tsconfig.json
+
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "jsx": "preserve",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
+📦 PASSO 2: PACKAGE DATABASE
+2.1 packages/database/package.json
+
+{
+  "name": "@visitecrm/database",
+  "version": "1.0.0",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.13.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.13.0"
+  }
+}
+2.2 packages/database/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════════════════
+// ENUMS
+// ═══════════════════════════════════════════════════════════
+
+enum UserRole {
+  SUPERADMIN
+  AGENCIA
+  VENDEDOR
+  CLIENT
+}
+
+enum ReservationStatus {
+  DRAFT
+  PENDING
+  CONFIRMED
+  PAID
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PipelineStage {
+  NOVO
+  CONTATO
+  QUALIFICADO
+  PROPOSTA
+  RESERVADO
+  EM_VIAGEM
+  POS_VENDA
+  PERDIDO
+}
+
+// ═══════════════════════════════════════════════════════════
+// MULTI-TENANCY
+// ═══════════════════════════════════════════════════════════
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  email     String
+  phone     String?
+  logo      String?
+  settings  Json     @default("{}")
+  isActive  Boolean  @default(true)
+  plan      String   @default("free")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  users         User[]
+  clients       Client[]
+  trips         Trip[]
+  reservations  Reservation[]
+  products      Product[]
+  
+  @@map("tenants")
+}
+
+// ═══════════════════════════════════════════════════════════
+// AUTENTICAÇÃO
+// ═══════════════════════════════════════════════════════════
+
+model User {
+  id            String    @id @default(cuid())
+  tenantId      String?
+  tenant        Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  name          String
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  role          UserRole  @default(CLIENT)
+  
+  accounts      Account[]
+  sessions      Session[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  clientsCreated      Client[]      @relation("CreatedBy")
+  reservationsCreated Reservation[] @relation("CreatedBy")
+  
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ═══════════════════════════════════════════════════════════
+// CRM - CLIENTES
+// ═══════════════════════════════════════════════════════════
+
+model Client {
+  id            String        @id @default(cuid())
+  tenantId      String
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  name          String
+  email         String?
+  cpf           String?
+  whatsapp      String?
+  phone         String?
+  birthDate     DateTime?
+  
+  city          String?
+  state         String?
+  
+  pipelineStage PipelineStage @default(NOVO)
+  origin        String?
+  
+  totalSpent    Decimal       @default(0) @db.Decimal(10, 2)
+  
+  observations  String?       @db.Text
+  
+  isActive      Boolean       @default(true)
+  
+  createdById   String?
+  createdBy     User?         @relation("CreatedBy", fields: [createdById], references: [id])
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  reservations  Reservation[]
+  
+  @@unique([tenantId, email])
+  @@unique([tenantId, cpf])
+  @@index([tenantId, pipelineStage])
+  @@map("clients")
+}
+
+// ═══════════════════════════════════════════════════════════
+// VIAGENS
+// ═══════════════════════════════════════════════════════════
+
+model Trip {
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  title         String
+  slug          String
+  destination   String
+  
+  departureDate DateTime
+  returnDate    DateTime?
+  
+  priceAdult    Decimal  @db.Decimal(10, 2)
+  priceChild    Decimal? @db.Decimal(10, 2)
+  
+  totalSeats    Int      @default(52)
+  
+  seatMap       Json     @default("{}")
+  
+  status        String   @default("draft")
+  isPublic      Boolean  @default(false)
+  isFeatured    Boolean  @default(false)
+  
+  description   String?  @db.Text
+  shortDescription String?
+  
+  coverImage    String?
+  gallery       String[] @default([])
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  reservations  Reservation[]
+  
+  @@unique([tenantId, slug])
+  @@index([tenantId, status])
+  @@map("trips")
+}
+
+// ═══════════════════════════════════════════════════════════
+// RESERVAS
+// ═══════════════════════════════════════════════════════════
+
+model Reservation {
+  id            String            @id @default(cuid())
+  tenantId      String
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  clientId      String
+  client        Client            @relation(fields: [clientId], references: [id])
+  
+  tripId        String
+  trip          Trip              @relation(fields: [tripId], references: [id])
+  
+  passengers    Json              @default("[]")
+  
+  seats         Int[]             @default([])
+  
+  totalValue    Decimal           @db.Decimal(10, 2)
+  paidValue     Decimal           @default(0) @db.Decimal(10, 2)
+  balance       Decimal           @db.Decimal(10, 2)
+  
+  status        ReservationStatus @default(PENDING)
+  
+  voucherCode   String?           @unique
+  
+  createdById   String?
+  createdBy     User?             @relation("CreatedBy", fields: [createdById], references: [id])
+  
+  source        String            @default("dashboard")
+  
+  checkedIn     Boolean           @default(false)
+  checkedInAt   DateTime?
+  
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  
+  payments      Payment[]
+  
+  @@index([tenantId, status])
+  @@index([clientId])
+  @@index([tripId])
+  @@map("reservations")
+}
+
+// ═══════════════════════════════════════════════════════════
+// PAGAMENTOS
+// ═══════════════════════════════════════════════════════════
+
+model Payment {
+  id            String        @id @default(cuid())
+  reservationId String
+  reservation   Reservation   @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  
+  amount        Decimal       @db.Decimal(10, 2)
+  paymentMethod String
+  status        PaymentStatus @default(PENDING)
+  
+  gateway       String?
+  gatewayId     String?
+  
+  proof         String?
+  
+  dueDate       DateTime?
+  paidAt        DateTime?
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  @@index([reservationId])
+  @@index([status])
+  @@map("payments")
+}
+
+// ═══════════════════════════════════════════════════════════
+// PRODUTOS
+// ═══════════════════════════════════════════════════════════
+
+model Product {
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  name          String
+  price         Decimal  @db.Decimal(10, 2)
+  stock         Int?
+  
+  isActive      Boolean  @default(true)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("products")
+}
+
+// ═══════════════════════════════════════════════════════════
+// SINCRONIZAÇÃO
+// ═══════════════════════════════════════════════════════════
+
+model SyncEvent {
+  id          String   @id @default(cuid())
+  tenantId    String
+  entityType  String
+  entityId    String
+  action      String
+  data        Json
+  processed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  
+  @@index([tenantId, processed])
+  @@index([entityType, entityId])
+  @@map("sync_events")
+}
+2.3 packages/database/src/index.ts
+
+import { PrismaClient } from './generated/client'
+
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined
+}
+
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+  })
+
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+
+export * from './generated/client'
+2.4 .env (criar na raiz)
+
+DATABASE_URL="postgresql://user:password@localhost:5432/visitecrm?schema=public"
+
+NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="generate-with-openssl-rand-base64-32"
+
+GOOGLE_CLIENT_ID="your-google-client-id"
+GOOGLE_CLIENT_SECRET="your-google-client-secret"
+📦 PASSO 3: PACKAGE TYPES
+3.1 packages/types/package.json
+
+{
+  "name": "@visitecrm/types",
+  "version": "1.0.0",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts"
+}
+3.2 packages/types/src/index.ts
+
+import { UserRole, ReservationStatus, PaymentStatus, PipelineStage } from '@visitecrm/database'
+
+export { UserRole, ReservationStatus, PaymentStatus, PipelineStage }
+
+// ═══════════════════════════════════════════════════════════
+// TIPOS DE SINCRONIZAÇÃO
+// ═══════════════════════════════════════════════════════════
+
+export type EntityType = 'client' | 'reservation' | 'trip' | 'payment'
+export type Action = 'create' | 'update' | 'delete'
+
+export interface SyncEventData {
+  tenantId: string
+  entityType: EntityType
+  entityId: string
+  action: Action
+  data: any
+}
+
+// ═══════════════════════════════════════════════════════════
+// TIPOS DE RESERVA
+// ═══════════════════════════════════════════════════════════
+
+export interface CreateReservationInput {
+  tenantId: string
+  clientId: string
+  tripId: string
+  passengers: Passenger[]
+  seats: number[]
+  totalValue: number
+  source: 'dashboard' | 'loja' | 'api'
+  createdById?: string
+}
+
+export interface Passenger {
+  name: string
+  cpf?: string
+  birthDate?: string
+  ageCategory: 'adult' | 'child' | 'infant'
+  seatNumber?: number
+}
+
+// ═══════════════════════════════════════════════════════════
+// TIPOS DE CLIENTE
+// ═══════════════════════════════════════════════════════════
+
+export interface CreateClientInput {
+  tenantId: string
+  name: string
+  email?: string
+  cpf?: string
+  whatsapp?: string
+  phone?: string
+  birthDate?: Date
+  city?: string
+  state?: string
+  origin?: string
+  createdById?: string
+}
+
+// ═══════════════════════════════════════════════════════════
+// TIPOS DE VIAGEM
+// ═══════════════════════════════════════════════════════════
+
+export interface CreateTripInput {
+  tenantId: string
+  title: string
+  slug: string
+  destination: string
+  departureDate: Date
+  returnDate?: Date
+  priceAdult: number
+  priceChild?: number
+  totalSeats?: number
+  description?: string
+  shortDescription?: string
+  coverImage?: string
+  isPublic?: boolean
+}
+📦 PASSO 4: SERVICE SYNC
+4.1 services/sync/package.json
+
+{
+  "name": "@visitecrm/sync",
+  "version": "1.0.0",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@visitecrm/database": "workspace:*",
+    "@visitecrm/types": "workspace:*",
+    "events": "^3.3.0"
+  }
+}
+4.2 services/sync/src/index.ts
+
+import { prisma } from '@visitecrm/database'
+import { SyncEventData, EntityType } from '@visitecrm/types'
+import { EventEmitter } from 'events'
+
+export const syncEmitter = new EventEmitter()
+
+// ═══════════════════════════════════════════════════════════
+// CRIAR EVENTO DE SINCRONIZAÇÃO
+// ═══════════════════════════════════════════════════════════
+
+export async function createSyncEvent(event: SyncEventData) {
+  const syncEvent = await prisma.syncEvent.create({
+    data: event,
+  })
+
+  syncEmitter.emit('sync', syncEvent)
+
+  await processSyncEvent(syncEvent)
+
+  return syncEvent
+}
+
+// ═══════════════════════════════════════════════════════════
+// PROCESSAR EVENTO
+// ═══════════════════════════════════════════════════════════
+
+async function processSyncEvent(event: any) {
+  try {
+    switch (event.entityType as EntityType) {
+      case 'client':
+        await syncClient(event)
+        break
+      case 'reservation':
+        await syncReservation(event)
+        break
+      case 'trip':
+        await syncTrip(event)
+        break
+      case 'payment':
+        await syncPayment(event)
+        break
+    }
+
+    await prisma.syncEvent.update({
+      where: { id: event.id },
+      data: { processed: true },
+    })
+  } catch (error) {
+    console.error('Erro ao processar sync event:', error)
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SINCRONIZAR CLIENTE
+// ═══════════════════════════════════════════════════════════
+
+async function syncClient(event: any) {
+  const { entityId, action, data } = event
+
+  if (action === 'update') {
+    if (data.pipelineStage) {
+      syncEmitter.emit('client:pipeline:updated', {
+        clientId: entityId,
+        stage: data.pipelineStage,
+      })
+    }
+
+    if (data.newReservation) {
+      const client = await prisma.client.findUnique({
+        where: { id: entityId },
+        include: {
+          reservations: {
+            where: { status: 'PAID' },
+          },
+        },
+      })
+
+      if (client) {
+        const totalSpent = client.reservations.reduce(
+          (sum, r) => sum + Number(r.paidValue),
+          0
+        )
+
+        await prisma.client.update({
+          where: { id: entityId },
+          data: { totalSpent },
+        })
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SINCRONIZAR RESERVA
+// ═══════════════════════════════════════════════════════════
+
+async function syncReservation(event: any) {
+  const { entityId, action } = event
+
+  if (action === 'create' || action === 'update') {
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: entityId },
+      include: {
+        client: true,
+        trip: true,
+      },
+    })
+
+    if (!reservation) return
+
+    await updateTripSeatMap(reservation.tripId, reservation.seats)
+    await updateClientPipeline(reservation.clientId, reservation.status)
+
+    if (reservation.status === 'PAID') {
+      await updateClientTotalSpent(reservation.clientId)
+    }
+
+    syncEmitter.emit('reservation:updated', {
+      reservationId: entityId,
+      clientId: reservation.clientId,
+      tripId: reservation.tripId,
+      status: reservation.status,
+    })
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SINCRONIZAR VIAGEM
+// ═══════════════════════════════════════════════════════════
+
+async function syncTrip(event: any) {
+  const { entityId } = event
+
+  const trip = await prisma.trip.findUnique({
+    where: { id: entityId },
+    include: {
+      reservations: {
+        where: {
+          status: { in: ['CONFIRMED', 'PAID', 'IN_PROGRESS'] },
+        },
+      },
+    },
+  })
+
+  if (trip) {
+    const occupiedSeats = trip.reservations.flatMap((r) => r.seats)
+    const availableSeats = trip.totalSeats - occupiedSeats.length
+
+    syncEmitter.emit('trip:seats:updated', {
+      tripId: entityId,
+      occupiedSeats,
+      availableSeats,
+    })
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SINCRONIZAR PAGAMENTO
+// ═══════════════════════════════════════════════════════════
+
+async function syncPayment(event: any) {
+  const { entityId } = event
+
+  const payment = await prisma.payment.findUnique({
+    where: { id: entityId },
+    include: {
+      reservation: {
+        include: { payments: true },
+      },
+    },
+  })
+
+  if (!payment) return
+
+  const reservation = payment.reservation
+
+  const paidValue = reservation.payments
+    .filter((p) => p.status === 'PAID')
+    .reduce((sum, p) => sum + Number(p.amount), 0)
+
+  const balance = Number(reservation.totalValue) - paidValue
+
+  await prisma.reservation.update({
+    where: { id: payment.reservationId },
+    data: {
+      paidValue,
+      balance,
+      status: balance <= 0 ? 'PAID' : 'PENDING',
+    },
+  })
+
+  syncEmitter.emit('payment:updated', {
+    paymentId: entityId,
+    reservationId: payment.reservationId,
+    paidValue,
+    balance,
+  })
+}
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+
+async function updateTripSeatMap(tripId: string, seats: number[]) {
+  const trip = await prisma.trip.findUnique({ where: { id: tripId } })
+  if (!trip) return
+
+  const seatMap = trip.seatMap as any
+  seats.forEach((seat) => {
+    seatMap[seat] = { occupied: true }
+  })
+
+  await prisma.trip.update({
+    where: { id: tripId },
+    data: { seatMap },
+  })
+}
+
+async function updateClientPipeline(clientId: string, reservationStatus: string) {
+  const stageMap: Record<string, string> = {
+    DRAFT: 'NOVO',
+    PENDING: 'RESERVADO',
+    CONFIRMED: 'RESERVADO',
+    PAID: 'RESERVADO',
+    IN_PROGRESS: 'EM_VIAGEM',
+    COMPLETED: 'POS_VENDA',
+    CANCELLED: 'PERDIDO',
+  }
+
+  const pipelineStage = stageMap[reservationStatus] || 'NOVO'
+
+  await prisma.client.update({
+    where: { id: clientId },
+    data: { pipelineStage: pipelineStage as any },
+  })
+}
+
+async function updateClientTotalSpent(clientId: string) {
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    include: {
+      reservations: {
+        where: { status: 'PAID' },
+      },
+    },
+  })
+
+  if (!client) return
+
+  const totalSpent = client.reservations.reduce(
+    (sum, r) => sum + Number(r.paidValue),
+    0
+  )
+
+  await prisma.client.update({
+    where: { id: clientId },
+    data: { totalSpent },
+  })
+}
+📦 PASSO 5: SERVICE RESERVATIONS
+5.1 services/reservations/package.json
+
+{
+  "name": "@visitecrm/reservations",
+  "version": "1.0.0",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@visitecrm/database": "workspace:*",
+    "@visitecrm/types": "workspace:*",
+    "@visitecrm/sync": "workspace:*"
+  }
+}
+5.2 services/reservations/src/index.ts
+
+import { prisma } from '@visitecrm/database'
+import { createSyncEvent } from '@visitecrm/sync'
+import { CreateReservationInput } from '@visitecrm/types'
+
+// ═══════════════════════════════════════════════════════════
+// CRIAR RESERVA
+// ═══════════════════════════════════════════════════════════
+
+export async function createReservation(input: CreateReservationInput) {
+  // 1. Validar disponibilidade de assentos
+  const trip = await prisma.trip.findUnique({
+    where: { id: input.tripId },
+    include: {
+      reservations: {
+        where: {
+          status: { in: ['CONFIRMED', 'PAID', 'IN_PROGRESS'] },
+        },
+      },
+    },
+  })
+
+  if (!trip) throw new Error('Viagem não encontrada')
+
+  const occupiedSeats = trip.reservations.flatMap((r) => r.seats)
+  const hasConflict = input.seats.some((seat) => occupiedSeats.includes(seat))
+
+  if (hasConflict) {
+    throw new Error('Alguns assentos já estão ocupados')
+  }
+
+  // 2. Criar reserva
+  const reservation = await prisma.reservation.create({
+    data: {
+      tenantId: input.tenantId,
+      clientId: input.clientId,
+      tripId: input.tripId,
+      passengers: input.passengers,
+      seats: input.seats,
+      totalValue: input.totalValue,
+      paidValue: 0,
+      balance: input.totalValue,
+      status: 'PENDING',
+      source: input.source,
+      createdById: input.createdById,
+      voucherCode: generateVoucherCode(),
+    },
+  })
+
+  // 3. Sincronizar reserva
+  await createSyncEvent({
+    tenantId: input.tenantId,
+    entityType: 'reservation',
+    entityId: reservation.id,
+    action: 'create',
+    data: reservation,
+  })
+
+  // 4. Atualizar cliente
+  await prisma.client.update({
+    where: { id: input.clientId },
+    data: {
+      pipelineStage: 'RESERVADO',
+    },
+  })
+
+  // 5. Sincronizar cliente
+  await createSyncEvent({
+    tenantId: input.tenantId,
+    entityType: 'client',
+    entityId: input.clientId,
+    action: 'update',
+    data: { pipelineStage: 'RESERVADO', newReservation: true },
+  })
+
+  return reservation
+}
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+
+function generateVoucherCode(): string {
+  return `VTC-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+}
+📦 PASSO 6: APP WEB (NEXT.JS)
+6.1 apps/web/package.json
+
+{
+  "name": "@visitecrm/web",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@visitecrm/database": "workspace:*",
+    "@visitecrm/types": "workspace:*",
+    "@visitecrm/sync": "workspace:*",
+    "@visitecrm/reservations": "workspace:*",
+    "next": "14.2.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "next-auth": "^5.0.0-beta.17",
+    "@tanstack/react-query": "^5.35.1",
+    "zod": "^3.23.8",
+    "bcryptjs": "^2.4.3",
+    "sonner": "^1.4.41"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.0",
+    "@types/bcryptjs": "^2.4.6",
+    "typescript": "^5.4.0",
+    "tailwindcss": "^3.4.3",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38"
+  }
+}
+6.2 apps/web/next.config.js
+
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  transpilePackages: [
+    '@visitecrm/database',
+    '@visitecrm/types',
+    '@visitecrm/sync',
+    '@visitecrm/reservations',
+  ],
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '2mb',
+    },
+  },
+}
+
+module.exports = nextConfig
+6.3 apps/web/tsconfig.json
+
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
+6.4 apps/web/tailwind.config.ts
+
+import type { Config } from 'tailwindcss'
+
+const config: Config = {
+  content: [
+    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+  ],
+  theme: {
+    extend: {
+      colors: {
+        border: 'hsl(var(--border))',
+        input: 'hsl(var(--input))',
+        ring: 'hsl(var(--ring))',
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        primary: {
+          DEFAULT: 'hsl(var(--primary))',
+          foreground: 'hsl(var(--primary-foreground))',
+        },
+        secondary: {
+          DEFAULT: 'hsl(var(--secondary))',
+          foreground: 'hsl(var(--secondary-foreground))',
+        },
+        destructive: {
+          DEFAULT: 'hsl(var(--destructive))',
+          foreground: 'hsl(var(--destructive-foreground))',
+        },
+        muted: {
+          DEFAULT: 'hsl(var(--muted))',
+          foreground: 'hsl(var(--muted-foreground))',
+        },
+        accent: {
+          DEFAULT: 'hsl(var(--accent))',
+          foreground: 'hsl(var(--accent-foreground))',
+        },
+        popover: {
+          DEFAULT: 'hsl(var(--popover))',
+          foreground: 'hsl(var(--popover-foreground))',
+        },
+        card: {
+          DEFAULT: 'hsl(var(--card))',
+          foreground: 'hsl(var(--card-foreground))',
+        },
+      },
+      borderRadius: {
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        sm: 'calc(var(--radius) - 4px)',
+      },
+    },
+  },
+  plugins: [require('tailwindcss-animate')],
+}
+export default config
+6.5 apps/web/src/app/globals.css
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+6.6 apps/web/src/app/layout.tsx
+
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import './globals.css'
+import { Providers } from '@/components/providers'
+
+const inter = Inter({ subsets: ['latin'] })
+
+export const metadata: Metadata = {
+  title: 'VisiteCRM - Sistema de Gestão para Agências de Turismo',
+  description: 'Sistema completo de CRM para agências de turismo',
+}
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="pt-BR">
+      <body className={inter.className}>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  )
+}
+6.7 apps/web/src/components/providers.tsx
+
+'use client'
+
+import { SessionProvider } from 'next-auth/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { Toaster } from 'sonner'
+import { useState } from 'react'
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 0,
+            refetchOnWindowFocus: true,
+          },
+        },
+      })
+  )
+
+  return (
+    <SessionProvider>
+      <QueryClientProvider client={queryClient}>
+        {children}
+        <Toaster position="top-right" richColors />
+      </QueryClientProvider>
+    </SessionProvider>
+  )
+}
+🚀 COMANDOS FINAIS
+
+# 1. Instalar todas as dependências
+pnpm install
+
+# 2. Gerar Prisma Client
+pnpm db:generate
+
+# 3. Criar banco de dados
+pnpm db:push
+
+# 4. Rodar projeto
+pnpm dev
