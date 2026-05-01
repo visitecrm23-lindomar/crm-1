@@ -114,6 +114,7 @@ expertMode = true
   [userenv.shared]
   VITE_UPLOADTHING_URL = "/api/uploadthing"
 SUPERADMIN_CLERK_ID = "user_3BxZQjJcO6wyIcaiDIe678ikmnba"
+VITE_CLERK_PUBLISHABLE_KEY = "pk_test_bWVycnkta2l0ZS03NC5jbGVyay5hY2NvdW50cy5kZXYk"
 
   [userenv.development]
-  CLERK_PROXY_URL = "https://visite-crm.replit.app/api/__clerk"
+CLERK_PROXY_URL = "https://a1a4d607-1ac3-4664-8acf-ab26aaa805de-00-1gulh5iqi9s68.picard.replit.dev/api/__clerk"
