@@ -2,7 +2,7 @@ import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { addSeatClient, removeSeatClient, emitSeatUpdate } from "../lib/seat-sse";
 import { broadcastSeatUpdate } from "../lib/realtime";
-import { AppError, NotFoundError, ValidationError } from "../lib/errors";
+import { AppError, NotFoundError, ValidationError, ConflictError } from "../lib/errors";
 import { normalizeOrderEmail } from "../lib/pricing";
 import {
   storesTable,
@@ -547,7 +547,7 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
           const totalRequested = quantityByProductId.get(product.id) ?? item.quantity;
           const available = product.stockQuantity ?? 0;
           if (available < totalRequested) {
-            next(new ValidationError(`Estoque insuficiente para "${product.name}". Disponível: ${available}`, "INSUFFICIENT_STOCK")); return;
+            next(new ConflictError(`Estoque insuficiente para "${product.name}". Disponível: ${available}`, "INSUFFICIENT_STOCK")); return;
           }
         }
         fetchedProducts.set(product.id, product);
@@ -603,7 +603,7 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
         next(new ValidationError(`Viagem vinculada ao produto "${product.name}" não encontrada`, "TRIP_NOT_FOUND")); return;
       }
       if (trip.availableSeats < totalQty) {
-        next(new ValidationError(`Sem vagas suficientes para "${product.name}". Disponível: ${trip.availableSeats} vaga(s)`, "INSUFFICIENT_SEATS")); return;
+        next(new ConflictError(`Sem vagas suficientes para "${product.name}". Disponível: ${trip.availableSeats} vaga(s)`, "INSUFFICIENT_SEATS")); return;
       }
     }
 
@@ -1048,11 +1048,11 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     } catch (txErr: unknown) {
       if (txErr instanceof Error && txErr.message === "insufficient_stock") {
         const e = txErr as Error & { productName?: string; available?: number };
-        next(new ValidationError(`Estoque insuficiente para "${e.productName}". Disponível: ${e.available ?? 0}`, "INSUFFICIENT_STOCK")); return;
+        next(new ConflictError(`Estoque insuficiente para "${e.productName}". Disponível: ${e.available ?? 0}`, "INSUFFICIENT_STOCK")); return;
       }
       if (txErr instanceof Error && txErr.message === "no_seats") {
         const e = txErr as Error & { productName?: string; available?: number };
-        next(new ValidationError(`Sem vagas suficientes para "${e.productName ?? ""}". Disponível: ${e.available ?? 0} vaga(s)`, "INSUFFICIENT_SEATS")); return;
+        next(new ConflictError(`Sem vagas suficientes para "${e.productName ?? ""}". Disponível: ${e.available ?? 0} vaga(s)`, "INSUFFICIENT_SEATS")); return;
       }
       if (txErr instanceof Error && txErr.message === "trip_not_found") {
         const e = txErr as Error & { productName?: string };
@@ -1226,7 +1226,7 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
       })();
     }
 
-    res.status(201).json({ ...order, items });
+    res.status(200).json({ ...order, orderId: order.id, items });
 
     // Emit real-time seat update to all SSE listeners for each trip in this order
     for (const [tripId] of tripLinkedProducts) {
