@@ -231,6 +231,10 @@ router.post("/users", async (req, res): Promise<void> => {
     }
     const parsed = CreateUserBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (me.role !== "superadmin" && parsed.data.role === "superadmin") {
+      res.status(403).json({ error: "Forbidden: apenas superadmins podem atribuir a funcao superadmin" });
+      return;
+    }
     const userId = generateId();
     const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     await db.insert(usersTable).values({
@@ -268,7 +272,13 @@ router.patch("/users/:id", async (req, res): Promise<void> => {
         res.status(403).json({ error: "Forbidden: apenas administradores podem alterar funcao ou status" });
         return;
       }
-      if (parsed.data.role != null) updates.role = parsed.data.role;
+      if (parsed.data.role != null) {
+        if (me.role !== "superadmin" && parsed.data.role === "superadmin") {
+          res.status(403).json({ error: "Forbidden: apenas superadmins podem atribuir a funcao superadmin" });
+          return;
+        }
+        updates.role = parsed.data.role;
+      }
       if (parsed.data.isActive != null) updates.isActive = parsed.data.isActive;
     }
     // Commission config — admin only

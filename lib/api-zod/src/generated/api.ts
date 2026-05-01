@@ -3802,7 +3802,7 @@ export const ListUsersResponse = zod.array(ListUsersResponseItem);
 export const CreateUserBody = zod.object({
   name: zod.string(),
   email: zod.string(),
-  role: zod.string(),
+  role: zod.enum(["superadmin", "agencia", "gerente", "vendedor", "suporte", "cliente"]),
 });
 
 /**
@@ -3814,7 +3814,7 @@ export const UpdateUserParams = zod.object({
 
 export const UpdateUserBody = zod.object({
   name: zod.string().nullish(),
-  role: zod.string().nullish(),
+  role: zod.enum(["superadmin", "agencia", "gerente", "vendedor", "suporte", "cliente"]).nullish(),
   isActive: zod.boolean().nullish(),
   commissionType: zod.string().nullish(),
   commissionRate: zod.number().nullish(),
