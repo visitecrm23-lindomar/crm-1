@@ -145,13 +145,20 @@ router.patch("/tenants/:id", async (req, res): Promise<void> => {
     const isAdminOfTenant = (me.role === "agencia" || me.role === "superadmin") && me.tenantId === req.params.id;
     const isSuperadmin = me.role === "superadmin";
     if (!isAdminOfTenant && !isSuperadmin) { res.status(403).json({ error: "Forbidden" }); return; }
-    if (me.role !== "superadmin" && (req.body.status === "suspended" || req.body.planId)) {
-      res.status(403).json({ error: "Forbidden: apenas superadmin pode alterar plano ou suspender tenant" }); return;
+    if (me.role !== "superadmin" && (req.body.planId || req.body.status !== undefined || req.body.maxUsersOverride !== undefined || req.body.maxClientsOverride !== undefined || req.body.maxTripsOverride !== undefined)) {
+      res.status(403).json({ error: "Forbidden: apenas superadmin pode alterar plano, status ou limites do tenant" }); return;
     }
     const parsed = UpdateTenantBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const { birthdayMessagesEnabled, ...rest } = parsed.data;
     const updateData: Record<string, unknown> = { ...rest };
+    if (me.role !== "superadmin") {
+      delete updateData.planId;
+      delete updateData.status;
+      delete updateData.maxUsersOverride;
+      delete updateData.maxClientsOverride;
+      delete updateData.maxTripsOverride;
+    }
     if (updateData.reservationPrefix != null) {
       updateData.reservationPrefix = (updateData.reservationPrefix as string).trim().toUpperCase().slice(0, 5) || null;
     }
