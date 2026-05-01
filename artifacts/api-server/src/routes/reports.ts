@@ -8,7 +8,7 @@ import { jsPDF } from "jspdf";
 import { applyPlugin } from "jspdf-autotable";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { AGENCY_STAFF_ROLES } from '../lib/tenant';
+import { MANAGEMENT_ROLES } from '../lib/tenant';
 
 applyPlugin(jsPDF);
 
@@ -58,7 +58,7 @@ router.post("/reports/export", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    if (!AGENCY_STAFF_ROLES.includes(me.role)) {
+    if (!MANAGEMENT_ROLES.includes(me.role)) {
       res.status(403).json({ error: "Sem permissão" });
       return;
     }
