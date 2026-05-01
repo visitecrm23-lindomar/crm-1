@@ -620,19 +620,21 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
         )).limit(1);
       if (coupon) {
         const now = new Date();
-        if (coupon.startsAt <= now && coupon.expiresAt >= now) {
-          if (!coupon.usageLimit || coupon.usageCount < coupon.usageLimit) {
-            if (coupon.type === "percentage") {
-              discountAmount = subtotal * (parseFloat(coupon.value) / 100);
-            } else if (coupon.type === "fixed") {
-              discountAmount = parseFloat(coupon.value);
-            }
-            if (coupon.maxDiscountAmount) {
-              discountAmount = Math.min(discountAmount, parseFloat(coupon.maxDiscountAmount));
-            }
-            couponId = coupon.id;
-          }
+        if (coupon.startsAt > now || coupon.expiresAt < now) {
+          next(new ValidationError("Este cupom está expirado", "COUPON_EXPIRED")); return;
         }
+        if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit) {
+          next(new ValidationError("Este cupom atingiu o limite de uso", "COUPON_USAGE_LIMIT_EXCEEDED")); return;
+        }
+        if (coupon.type === "percentage") {
+          discountAmount = subtotal * (parseFloat(coupon.value) / 100);
+        } else if (coupon.type === "fixed") {
+          discountAmount = parseFloat(coupon.value);
+        }
+        if (coupon.maxDiscountAmount) {
+          discountAmount = Math.min(discountAmount, parseFloat(coupon.maxDiscountAmount));
+        }
+        couponId = coupon.id;
       }
     }
     // Referral code gives discount (only if no coupon discount already applied)

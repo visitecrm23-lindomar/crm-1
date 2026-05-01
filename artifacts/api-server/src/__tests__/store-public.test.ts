@@ -339,7 +339,129 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     expect(res.body.code).toBe("INSUFFICIENT_STOCK");
   });
 
-  // ── 4. Valid order (200) ──────────────────────────────────────────────────
+  // ── 4. Coupon validation ──────────────────────────────────────────────────
+
+  it("returns 400 with COUPON_EXPIRED when coupon date range has passed", async () => {
+    const expiredCoupon = {
+      id: "coupon-001",
+      storeId: "store-001",
+      code: "EXPIRED10",
+      type: "percentage",
+      value: "10.00",
+      isActive: true,
+      startsAt: new Date("2020-01-01"),
+      expiresAt: new Date("2020-12-31"),
+      usageLimit: null,
+      usageCount: 0,
+      maxDiscountAmount: null,
+    };
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])
+      .mockResolvedValueOnce([FAKE_PRODUCT])
+      .mockResolvedValueOnce([expiredCoupon]);
+
+    const res = await request(buildApp())
+      .post("/api/public/store/minha-loja/orders")
+      .send({ ...VALID_BODY, couponCode: "EXPIRED10" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("COUPON_EXPIRED");
+  });
+
+  it("returns 400 with COUPON_USAGE_LIMIT_EXCEEDED when coupon has reached its usage cap", async () => {
+    const maxedCoupon = {
+      id: "coupon-002",
+      storeId: "store-001",
+      code: "MAXED20",
+      type: "fixed",
+      value: "20.00",
+      isActive: true,
+      startsAt: new Date("2020-01-01"),
+      expiresAt: new Date("2099-12-31"),
+      usageLimit: 5,
+      usageCount: 5,
+      maxDiscountAmount: null,
+    };
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])
+      .mockResolvedValueOnce([FAKE_PRODUCT])
+      .mockResolvedValueOnce([maxedCoupon]);
+
+    const res = await request(buildApp())
+      .post("/api/public/store/minha-loja/orders")
+      .send({ ...VALID_BODY, couponCode: "MAXED20" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("COUPON_USAGE_LIMIT_EXCEEDED");
+  });
+
+  it("returns 200 and applies fixed discount when coupon is valid (type=fixed)", async () => {
+    const fixedCoupon = {
+      id: "coupon-003",
+      storeId: "store-001",
+      code: "SAVE20",
+      type: "fixed",
+      value: "20.00",
+      isActive: true,
+      startsAt: new Date("2020-01-01"),
+      expiresAt: new Date("2099-12-31"),
+      usageLimit: null,
+      usageCount: 0,
+      maxDiscountAmount: null,
+    };
+    const discountedOrder = { ...FAKE_ORDER, discountAmount: "20.00", totalAmount: "130.00" };
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])
+      .mockResolvedValueOnce([FAKE_PRODUCT])
+      .mockResolvedValueOnce([fixedCoupon])
+      .mockResolvedValueOnce([discountedOrder])
+      .mockResolvedValue([]);
+
+    const res = await request(buildApp())
+      .post("/api/public/store/minha-loja/orders")
+      .send({ ...VALID_BODY, couponCode: "SAVE20" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("orderId");
+    expect(parseFloat(res.body.totalAmount)).toBe(130);
+  });
+
+  it("returns 200 and applies percentage discount when coupon is valid (type=percentage)", async () => {
+    const percentCoupon = {
+      id: "coupon-004",
+      storeId: "store-001",
+      code: "PERC10",
+      type: "percentage",
+      value: "10.00",
+      isActive: true,
+      startsAt: new Date("2020-01-01"),
+      expiresAt: new Date("2099-12-31"),
+      usageLimit: null,
+      usageCount: 0,
+      maxDiscountAmount: null,
+    };
+    const discountedOrder = { ...FAKE_ORDER, discountAmount: "15.00", totalAmount: "135.00" };
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])
+      .mockResolvedValueOnce([FAKE_PRODUCT])
+      .mockResolvedValueOnce([percentCoupon])
+      .mockResolvedValueOnce([discountedOrder])
+      .mockResolvedValue([]);
+
+    const res = await request(buildApp())
+      .post("/api/public/store/minha-loja/orders")
+      .send({ ...VALID_BODY, couponCode: "PERC10" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("orderId");
+    expect(parseFloat(res.body.totalAmount)).toBe(135);
+  });
+
+  // ── 5. Valid order (200) ──────────────────────────────────────────────────
 
   it("returns 200 with orderId when all fields are valid and product is in stock", async () => {
     mockLimit
