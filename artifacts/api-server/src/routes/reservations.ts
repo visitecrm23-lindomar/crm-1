@@ -457,7 +457,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
     const tenantPrefix = await getTenantReservationPrefix(me.tenantId);
     const yearMonth = getYearMonth();
 
-    type TxResult = { error: string; status: number } | { ok: true };
+    type TxResult = { error: string; status: number; code?: string } | { ok: true };
 
     const txResult: TxResult = await db.transaction(async (tx) => {
       const lockResult = await tx.execute(
@@ -603,7 +603,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
     });
 
     if ("error" in txResult) {
-      res.status(txResult.status).json({ error: txResult.error });
+      next(new AppError(txResult.error, txResult.status, txResult.code ?? "RESERVATION_ERROR"));
       return;
     }
 
