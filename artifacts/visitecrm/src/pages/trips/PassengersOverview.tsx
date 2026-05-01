@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useLocation, Link } from "wouter";
+import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useListTrips, useGetTrip, useListReservations, useUpdateReservation } from "@workspace/api-client-react";
 import { Client360Modal } from "@/components/client360-modal";
@@ -30,7 +30,6 @@ interface TripFinancialReport {
 }
 
 export function PassengersOverview({ tripId: initialTripId }: { tripId: string }) {
-  const [, navigate] = useLocation();
   const [tripId, setTripId] = useState(initialTripId);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{ status: string; paymentMethod: string }>({ status: "", paymentMethod: "" });
@@ -134,7 +133,6 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
 
   const STATUS_LABELS: Record<string, string> = { all: "Todos", confirmed: "Confirmado", pending: "Pendente", cancelled: "Cancelado", completed: "Concluído" };
 
-  void navigate;
 
   return (
     <div className="space-y-6">

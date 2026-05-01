@@ -1,5 +1,4 @@
 import { useState, useMemo } from "react";
-import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -58,7 +57,6 @@ const ALL_COLS_ON: Record<ColKey, boolean> = {
 };
 
 export function PassengersList({ tripId }: { tripId: string }) {
-  const [, navigate] = useLocation();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -235,7 +233,6 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const checkedInCount = allPassengers.filter(p => p.checkedInAt).length;
   const visibleColCount = PASSENGER_COLS.filter(c => visibleCols[c.key]).length + 2;
 
-  void navigate;
 
   return (
     <div className="space-y-6">

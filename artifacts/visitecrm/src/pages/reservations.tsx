@@ -1,16 +1,11 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, useRoute } from "wouter";
-import {
-  useListReservations, useGetReservationStats,
-  useUpdateReservation, useCheckInReservation,
-  useListTrips, useListUsers, useListBoardingLocations,
-} from "@workspace/api-client-react";
 import type { Reservation } from "@workspace/api-client-react";
 import { Client360Modal } from "@/components/client360-modal";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { useToast } from "@/hooks/use-toast";
 import { Plus, CalendarCheck, CheckCircle, Clock, TrendingDown } from "lucide-react";
+import { useReservations } from "@/hooks/useReservations";
 import { fmt } from "./reservations/constants";
 import { StatCard } from "./reservations/StatCard";
 import { ReservationDetailModal } from "./reservations/ReservationDetailModal";
@@ -26,13 +21,6 @@ export default function Reservations() {
   const [routeMatch, routeParams] = useRoute("/reservations/:id");
   const idFromRoute = routeMatch ? (routeParams as { id: string }).id : null;
 
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [tripFilter, setTripFilter] = useState("");
-  const [sellerFilter, setSellerFilter] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [page, setPage] = useState(1);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [paymentRes, setPaymentRes] = useState<Reservation | null>(null);
@@ -68,33 +56,17 @@ export default function Reservations() {
     }
   }, []);
 
+  const {
+    reservations, isLoading, total, totalPages, stats,
+    tripsData, sellers, boardingMap,
+    search, setSearch, statusFilter, setStatusFilter,
+    tripFilter, setTripFilter, sellerFilter, setSellerFilter,
+    dateFrom, setDateFrom, dateTo, setDateTo,
+    page, setPage, refetch, refetchStats,
+    handleCheckin, handleCancel,
+  } = useReservations();
+
   const activeDetailId = detailId ?? idFromRoute;
-  const { data, isLoading, refetch } = useListReservations({ status: statusFilter || undefined, tripId: tripFilter || undefined, search: search || undefined, createdById: sellerFilter || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, page, limit: 20 });
-  const { data: stats, refetch: refetchStats } = useGetReservationStats();
-  const { data: tripsData } = useListTrips({ limit: 100 });
-  const { data: usersRaw } = useListUsers();
-  const { data: boardingRaw } = useListBoardingLocations();
-  const updateReservation = useUpdateReservation();
-  const checkInReservation = useCheckInReservation();
-  const { toast } = useToast();
-
-  const sellers = useMemo(() => (usersRaw ?? []).filter(u => u.role === "vendedor" || u.role === "agencia"), [usersRaw]);
-  const boardingMap = useMemo(() => { const m: Record<string, string> = {}; for (const b of (boardingRaw ?? [])) m[b.id] = b.name; return m; }, [boardingRaw]);
-
-  const reservations = data?.data ?? [];
-  const total = data?.total ?? 0;
-  const totalPages = Math.ceil(total / 20);
-
-  const handleCheckin = async (r: Reservation) => {
-    try { await checkInReservation.mutateAsync({ id: r.id }); refetch(); refetchStats(); }
-    catch { toast({ title: "Não foi possível confirmar o check-in", description: "Tente novamente ou contate o suporte.", variant: "destructive" }); }
-  };
-  const handleCancel = async (id: string) => {
-    try { await updateReservation.mutateAsync({ id, data: { status: "cancelled" } }); refetch(); refetchStats(); }
-    catch { toast({ title: "Não foi possível cancelar a reserva", description: "Tente novamente ou contate o suporte.", variant: "destructive" }); }
-  };
-
-  void navigate;
 
   return (
     <div className="space-y-6">

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation, Link } from "wouter";
+import { Link } from "wouter";
 import { format, parseISO, isSameDay, isToday, startOfMonth, endOfMonth, eachDayOfInterval, getDay, startOfWeek, addDays, addMonths, addWeeks, subMonths, subWeeks } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useListTrips } from "@workspace/api-client-react";
@@ -19,7 +19,6 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export function TripCalendar() {
-  const [, navigate] = useLocation();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<"month" | "week" | "day">("month");
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
@@ -140,7 +139,6 @@ export function TripCalendar() {
     ? `Semana de ${format(startOfWeek(currentDate, { locale: ptBR }), "d MMM", { locale: ptBR })}`
     : format(currentDate, "d 'de' MMMM yyyy", { locale: ptBR });
 
-  void navigate;
 
   return (
     <div className="space-y-6">
