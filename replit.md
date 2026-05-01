@@ -79,6 +79,27 @@ The platform includes a multi-tenant e-commerce solution with both an admin pane
 - **Cleanup**: `req.on("close", ...)` removes clients and clears intervals.
 - **Scope limitation**: Single-instance only (no Redis pub/sub). Multi-instance support is out of scope.
 
+## Testing Infrastructure
+
+- **Test framework**: Vitest v3 (added to pnpm catalog as `vitest: ^3.1.0`)
+- **Run all tests**: `pnpm test` from the workspace root (runs backend then frontend)
+- **Run backend only**: `pnpm --filter @workspace/api-server run test`
+- **Run frontend only**: `pnpm --filter @workspace/visitecrm run test`
+
+### Backend tests (`artifacts/api-server`)
+- Config: `vitest.config.ts` — `environment: "node"`, includes `src/**/*.test.ts`
+- `src/__tests__/errors.test.ts` — 15 tests covering all typed error classes (`AppError`, `NotFoundError`, `ConflictError`, `ForbiddenError`, `ValidationError`)
+- `src/__tests__/lib.test.ts` — 22 tests covering pure utility functions:
+  - `tripTypeToCode`, `derivePrefix`, `getYearMonth`, `buildReservationNumber` from `lib/reservation-number.ts`
+  - `deriveAgeCategory`, `getAgeYears` from `lib/passenger.ts`
+  - DB and drizzle-orm imports are mocked via `vi.mock`
+
+### Frontend tests (`artifacts/visitecrm`)
+- Config: `vitest.config.ts` — `environment: "node"`, `@` alias resolved to `src/`, includes `src/**/*.test.ts`
+- `src/__tests__/utils.test.ts` — 26 tests covering pure utility functions:
+  - `formatCurrency`, `formatDate`, `getCountdownLabel`, `escapeHtml`, `formatCpf`, `generateProductSlug` from `pages/trips/utils.ts`
+  - External workspace deps are mocked via `vi.mock`
+
 ## External Dependencies
 
 - **Clerk**: For user authentication and authorization.
