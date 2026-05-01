@@ -243,13 +243,12 @@ router.post("/clients", async (req, res, next: NextFunction): Promise<void> => {
 async function requireClientAccess(
   me: { id: string; tenantId: string; role: string },
   clientId: string,
-  res: import("express").Response,
-): Promise<typeof clientsTable.$inferSelect | null> {
+): Promise<typeof clientsTable.$inferSelect> {
   const conditions: ReturnType<typeof eq>[] = [eq(clientsTable.id, clientId), eq(clientsTable.tenantId, me.tenantId)];
   if (me.role === "cliente") conditions.push(eq(clientsTable.userId, me.id));
   else if (me.role === "vendedor") conditions.push(eq(clientsTable.createdById, me.id));
   const [client] = await db.select().from(clientsTable).where(and(...conditions)).limit(1);
-  if (!client) { next(new NotFoundError("Not found", "NOT_FOUND")); return null; }
+  if (!client) throw new NotFoundError("Client not found", "CLIENT_NOT_FOUND");
   return client;
 }
 
@@ -257,8 +256,7 @@ router.get("/clients/:id", async (req, res, next: NextFunction): Promise<void> =
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const client = await requireClientAccess(me, req.params.id, res);
-    if (!client) return;
+    const client = await requireClientAccess(me, req.params.id);
     res.json(formatClient(client));
   } catch (err) {
     next(err);
@@ -270,8 +268,7 @@ router.patch("/clients/:id", async (req, res, next: NextFunction): Promise<void>
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
-    const existing = await requireClientAccess(me, req.params.id, res);
-    if (!existing) return;
+    const existing = await requireClientAccess(me, req.params.id);
 
     const parsed = UpdateClientBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
@@ -365,8 +362,7 @@ router.patch("/clients/:id/pipeline-stage", async (req, res, next: NextFunction)
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
-    const existing = await requireClientAccess(me, req.params.id, res);
-    if (!existing) return;
+    const existing = await requireClientAccess(me, req.params.id);
 
     const parsed = UpdateClientPipelineStageBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
@@ -386,8 +382,7 @@ router.get("/clients/:clientId/activities", async (req, res, next: NextFunction)
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const client = await requireClientAccess(me, req.params.clientId, res);
-    if (!client) return;
+    const client = await requireClientAccess(me, req.params.clientId);
     const activities = await db.select().from(notesTable)
       .where(eq(notesTable.clientId, req.params.clientId))
       .orderBy(desc(notesTable.createdAt));
@@ -407,8 +402,7 @@ router.post("/clients/:clientId/activities", async (req, res, next: NextFunction
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const client = await requireClientAccess(me, req.params.clientId, res);
-    if (!client) return;
+    const client = await requireClientAccess(me, req.params.clientId);
     const { type, content, metadata } = req.body as { type?: string; content?: string; metadata?: Record<string, unknown> | null };
     if (!type || !content) { next(new ValidationError("type and content are required", "VALIDATION_ERROR")); return; }
     const MANUAL_ACTIVITY_TYPES = ["note", "call", "whatsapp", "email", "meeting"];
@@ -445,8 +439,7 @@ router.get("/clients/:clientId/notes", async (req, res, next: NextFunction): Pro
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const client = await requireClientAccess(me, req.params.clientId, res);
-    if (!client) return;
+    const client = await requireClientAccess(me, req.params.clientId);
     const notes = await db.select().from(notesTable)
       .where(eq(notesTable.clientId, req.params.clientId))
       .orderBy(desc(notesTable.createdAt));
@@ -464,8 +457,7 @@ router.post("/clients/:clientId/notes", async (req, res, next: NextFunction): Pr
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const client = await requireClientAccess(me, req.params.clientId, res);
-    if (!client) return;
+    const client = await requireClientAccess(me, req.params.clientId);
     const parsed = CreateClientNoteBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const id = generateId();
@@ -494,8 +486,7 @@ router.delete("/clients/:clientId/notes/:noteId", async (req, res, next: NextFun
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const client = await requireClientAccess(me, req.params.clientId, res);
-    if (!client) return;
+    const client = await requireClientAccess(me, req.params.clientId);
     await db.delete(notesTable)
       .where(and(eq(notesTable.id, req.params.noteId), eq(notesTable.clientId, req.params.clientId)));
     res.json({ success: true });
@@ -508,8 +499,7 @@ router.get("/clients/:clientId/referral", async (req, res, next: NextFunction): 
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const client = await requireClientAccess(me, req.params.clientId, res);
-    if (!client) return;
+    const client = await requireClientAccess(me, req.params.clientId);
     const referrals = await db.select().from(referralsTable)
       .where(and(
         eq(referralsTable.tenantId, me.tenantId),
@@ -532,8 +522,7 @@ router.post("/clients/:clientId/referral/generate", async (req, res, next: NextF
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const client = await requireClientAccess(me, req.params.clientId, res);
-    if (!client) return;
+    const client = await requireClientAccess(me, req.params.clientId);
 
     // If client already has a code return it
     if (client.referralCode) {

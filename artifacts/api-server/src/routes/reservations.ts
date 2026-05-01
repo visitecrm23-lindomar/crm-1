@@ -700,23 +700,22 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
 async function requireReservationAccess(
   me: { id: string; tenantId: string; role: string },
   reservationId: string,
-  res: import("express").Response,
-): Promise<typeof reservationsTable.$inferSelect | null> {
+): Promise<typeof reservationsTable.$inferSelect> {
   const [reservation] = await db.select().from(reservationsTable)
     .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, me.tenantId)))
     .limit(1);
-  if (!reservation) { next(new NotFoundError("Not found", "NOT_FOUND")); return null; }
+  if (!reservation) throw new NotFoundError("Reservation not found", "RESERVATION_NOT_FOUND");
   if (me.role === "cliente") {
     const [clientRecord] = await db.select({ id: clientsTable.id }).from(clientsTable)
       .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.userId, me.id))).limit(1);
     if (!clientRecord || reservation.clientId !== clientRecord.id) {
-      next(new NotFoundError("Not found", "NOT_FOUND")); return null;
+      throw new NotFoundError("Reservation not found", "RESERVATION_NOT_FOUND");
     }
   } else if (me.role === "vendedor") {
     const [clientRecord] = await db.select({ createdById: clientsTable.createdById }).from(clientsTable)
       .where(and(eq(clientsTable.id, reservation.clientId), eq(clientsTable.tenantId, me.tenantId))).limit(1);
     if (!clientRecord || clientRecord.createdById !== me.id) {
-      next(new NotFoundError("Not found", "NOT_FOUND")); return null;
+      throw new NotFoundError("Reservation not found", "RESERVATION_NOT_FOUND");
     }
   }
   return reservation;
@@ -726,8 +725,7 @@ router.get("/reservations/:id", async (req, res, next: NextFunction): Promise<vo
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const reservation = await requireReservationAccess(me, req.params.id, res);
-    if (!reservation) return;
+    const reservation = await requireReservationAccess(me, req.params.id);
     const formatted = await formatReservation(reservation);
     res.json(formatted);
   } catch (err) {
@@ -743,8 +741,7 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
-    const existing = await requireReservationAccess(me, req.params.id, res);
-    if (!existing) return;
+    const existing = await requireReservationAccess(me, req.params.id);
 
     const parsed = UpdateReservationBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
@@ -861,8 +858,7 @@ router.delete("/reservations/:id", async (req, res, next: NextFunction): Promise
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
-    const existing = await requireReservationAccess(me, req.params.id, res);
-    if (!existing) return;
+    const existing = await requireReservationAccess(me, req.params.id);
 
     await db.transaction(async (tx) => {
       if (!CANCELLING_STATUSES.includes(existing.status)) {
@@ -890,8 +886,7 @@ router.post("/reservations/:id/check-in", async (req, res, next: NextFunction): 
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
-    const existing = await requireReservationAccess(me, req.params.id, res);
-    if (!existing) return;
+    const existing = await requireReservationAccess(me, req.params.id);
     await db.update(reservationsTable).set({
       checkedInAt: new Date(),
       status: "completed",
@@ -918,8 +913,7 @@ router.get("/reservations/:reservationId/passengers", async (req, res, next: Nex
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const reservation = await requireReservationAccess(me, req.params.reservationId, res);
-    if (!reservation) return;
+    const reservation = await requireReservationAccess(me, req.params.reservationId);
     const passengers = await db.select().from(passengersTable)
       .where(eq(passengersTable.reservationId, req.params.reservationId));
     res.json(passengers.map(formatPassenger));
@@ -933,8 +927,7 @@ router.post("/reservations/:reservationId/passengers", async (req, res, next: Ne
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
-    const reservation = await requireReservationAccess(me, req.params.reservationId, res);
-    if (!reservation) return;
+    const reservation = await requireReservationAccess(me, req.params.reservationId);
     const parsed = CreatePassengerBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const id = generateId();
@@ -964,8 +957,7 @@ router.patch("/reservations/:reservationId/passengers/:id", async (req, res, nex
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
-    const reservation = await requireReservationAccess(me, req.params.reservationId, res);
-    if (!reservation) return;
+    const reservation = await requireReservationAccess(me, req.params.reservationId);
     const parsed = UpdatePassengerBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const updates: Partial<typeof passengersTable.$inferInsert> = {};
@@ -990,8 +982,7 @@ router.delete("/reservations/:reservationId/passengers/:id", async (req, res, ne
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
-    const reservation = await requireReservationAccess(me, req.params.reservationId, res);
-    if (!reservation) return;
+    const reservation = await requireReservationAccess(me, req.params.reservationId);
     await db.delete(passengersTable)
       .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)));
     res.json({ success: true });
@@ -1005,8 +996,7 @@ router.post("/reservations/:reservationId/passengers/:id/check-in", async (req, 
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
-    const reservation = await requireReservationAccess(me, req.params.reservationId, res);
-    if (!reservation) return;
+    const reservation = await requireReservationAccess(me, req.params.reservationId);
     await db.update(passengersTable)
       .set({ checkedInAt: new Date() })
       .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)));
@@ -1025,8 +1015,7 @@ router.delete("/reservations/:reservationId/passengers/:id/check-in", async (req
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
-    const reservation = await requireReservationAccess(me, req.params.reservationId, res);
-    if (!reservation) return;
+    const reservation = await requireReservationAccess(me, req.params.reservationId);
     await db.update(passengersTable)
       .set({ checkedInAt: null })
       .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)));
