@@ -27,7 +27,7 @@ export function applyDiscounts(
 }
 
 export function computeBalance(totalValue: number, paidValue: number): number {
-  return Math.round((totalValue - paidValue) * 100) / 100;
+  return Math.max(0, Math.round((totalValue - paidValue) * 100) / 100);
 }
 
 export function normalizeOrderEmail(raw: unknown): string {
