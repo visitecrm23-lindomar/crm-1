@@ -1,9 +1,5 @@
-import { useState, useMemo } from "react";
-import { useLocation, Link } from "wouter";
-import { parseISO } from "date-fns";
-import {
-  useListTrips, useCreateTrip, useDeleteTrip, useGetDashboardUpcomingTrips, useGetMe,
-} from "@workspace/api-client-react";
+import { useState } from "react";
+import { Link } from "wouter";
 import type { Trip } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,94 +16,26 @@ import { STATUS_MAP, TRIP_TYPES, TRIP_TYPE_LABELS } from "./constants";
 import { formatCurrency, formatDate } from "./utils";
 import { TripCountdown, OccupancyBar } from "./TripCountdown";
 import { BoardingPanelModal } from "./BoardingPanelModal";
-import { TripCard } from "./TripCard";
+import { TripCard, PublishToStoreDialog } from "./TripCard";
+import { useTrips } from "@/hooks/useTrips";
 
 export function TripList() {
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState("");
-  const [page, setPage] = useState(1);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [boardingTrip, setBoardingTrip] = useState<{ id: string; name: string } | null>(null);
   const [publishingTrip, setPublishingTrip] = useState<Trip | null>(null);
-  const [, navigate] = useLocation();
-  const { data: me } = useGetMe();
-  const isVendedor = me?.role === "vendedor";
 
-  const { data: tripsData, isLoading, refetch } = useListTrips({
-    search: search || undefined,
-    status: statusFilter !== "all" ? statusFilter : undefined,
-    page, limit: 12,
-  });
-  const createTrip = useCreateTrip();
-  const deleteTrip = useDeleteTrip();
-  const { data: upcomingTrips = [] } = useGetDashboardUpcomingTrips();
-  const { data: allTrips } = useListTrips({ limit: 100 });
+  const {
+    trips, isLoading, totalPages, upcomingTrips, stats, isVendedor,
+    search, setSearch, statusFilter, setStatusFilter,
+    typeFilter, setTypeFilter, dateFilter, setDateFilter,
+    page, setPage, deleteTrip, handleDuplicate, handleDelete,
+  } = useTrips();
 
-  const trips = useMemo(() => {
-    let data = tripsData?.data ?? [];
-    if (typeFilter !== "all") data = data.filter(t => t.type === typeFilter);
-    if (dateFilter) {
-      const from = new Date(dateFilter);
-      data = data.filter(t => { try { return parseISO(t.departureDate) >= from; } catch { return true; } });
-    }
-    return data;
-  }, [tripsData, typeFilter, dateFilter]);
-
-  const stats = useMemo(() => {
-    const all = allTrips?.data ?? [];
-    const active = all.filter(t => t.status === "active" || t.status === "confirmed");
-    const totalSeats = active.reduce((acc, t) => acc + t.totalCapacity, 0);
-    const occupiedSeats = active.reduce((acc, t) => acc + t.reservedSeats + t.confirmedSeats, 0);
-    const totalRevenue = active.reduce((acc, t) => acc + (t.reservedSeats + t.confirmedSeats) * t.priceAdult, 0);
-    return { total: all.length, active: active.length, occupancyRate: totalSeats > 0 ? Math.round(occupiedSeats / totalSeats * 100) : 0, totalRevenue };
-  }, [allTrips]);
-
-  const handleDelete = async (id: string) => {
-    await deleteTrip.mutateAsync({ id });
+  const onDelete = async (id: string) => {
+    await handleDelete(id);
     setDeletingId(null);
-    refetch();
   };
-
-  const handleDuplicate = async (trip: Trip) => {
-    await createTrip.mutateAsync({
-      data: {
-        name: `${trip.name} (cópia)`,
-        description: trip.description ?? undefined,
-        destination: trip.destination,
-        destinationCity: trip.destinationCity,
-        destinationState: trip.destinationState,
-        type: trip.type,
-        category: trip.category,
-        departureDate: trip.departureDate.split("T")[0],
-        returnDate: trip.returnDate?.split("T")[0],
-        totalCapacity: trip.totalCapacity,
-        priceAdult: trip.priceAdult,
-        priceChild: trip.priceChild ?? undefined,
-        priceSenior: trip.priceSenior ?? undefined,
-        inclusions: trip.inclusions,
-        exclusions: trip.exclusions,
-        seatLayout: trip.seatLayout ?? "2x2",
-        vehicleType: trip.vehicleType ?? undefined,
-        vehiclePlate: trip.vehiclePlate ?? undefined,
-        driverName: trip.driverName ?? undefined,
-        coverImage: trip.coverImage ?? undefined,
-        boardingPoints: trip.boardingPoints ?? [],
-        itinerary: trip.itinerary ?? undefined,
-        fixedCosts: trip.fixedCosts ?? undefined,
-        variableCosts: trip.variableCosts ?? undefined,
-        gallery: trip.gallery ?? [],
-      },
-    });
-    refetch();
-  };
-
-  const totalPages = Math.ceil((tripsData?.total ?? 0) / 12);
-
-  void publishingTrip;
-  void setPublishingTrip;
 
   return (
     <div className="space-y-6">
@@ -219,7 +147,7 @@ export function TripList() {
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {trips.map(trip => (
-            <TripCard key={trip.id} trip={trip} isVendedor={isVendedor} onDelete={() => setDeletingId(trip.id)} onDuplicate={() => handleDuplicate(trip)} onBoarding={() => setBoardingTrip({ id: trip.id, name: trip.name })} navigate={navigate} />
+            <TripCard key={trip.id} trip={trip} isVendedor={isVendedor} onDelete={() => setDeletingId(trip.id)} onDuplicate={() => handleDuplicate(trip)} onBoarding={() => setBoardingTrip({ id: trip.id, name: trip.name })} />
           ))}
         </div>
       ) : (
@@ -274,7 +202,7 @@ export function TripList() {
           <p className="text-muted-foreground">Tem certeza que deseja excluir esta viagem? Esta ação não pode ser desfeita.</p>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setDeletingId(null)}>Cancelar</Button>
-            <Button variant="destructive" onClick={() => deletingId && handleDelete(deletingId)} disabled={deleteTrip.isPending}>
+            <Button variant="destructive" onClick={() => deletingId && onDelete(deletingId)} disabled={deleteTrip.isPending}>
               {deleteTrip.isPending ? "Excluindo..." : "Excluir"}
             </Button>
           </div>
@@ -287,6 +215,14 @@ export function TripList() {
           tripName={boardingTrip.name}
           open={!!boardingTrip}
           onClose={() => setBoardingTrip(null)}
+        />
+      )}
+
+      {publishingTrip && (
+        <PublishToStoreDialog
+          trip={publishingTrip}
+          open={!!publishingTrip}
+          onClose={() => setPublishingTrip(null)}
         />
       )}
     </div>

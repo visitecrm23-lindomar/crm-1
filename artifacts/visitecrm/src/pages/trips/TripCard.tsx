@@ -16,7 +16,7 @@ import { STATUS_MAP } from "./constants";
 import { formatCurrency, formatDate, generateProductSlug, buildTripProductPayload } from "./utils";
 import { TripCountdown, OccupancyBar } from "./TripCountdown";
 
-function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boolean; onClose: () => void }) {
+export function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boolean; onClose: () => void }) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -270,11 +270,10 @@ function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open: boole
   );
 }
 
-export function TripCard({ trip, isVendedor, onDelete, onDuplicate, onBoarding, navigate }: { trip: Trip; isVendedor?: boolean; onDelete: () => void; onDuplicate: () => void; onBoarding: () => void; navigate: (to: string) => void }) {
+export function TripCard({ trip, isVendedor, onDelete, onDuplicate, onBoarding }: { trip: Trip; isVendedor?: boolean; onDelete: () => void; onDuplicate: () => void; onBoarding: () => void }) {
   const pct = trip.totalCapacity > 0 ? Math.round((trip.reservedSeats + trip.confirmedSeats) / trip.totalCapacity * 100) : 0;
   const statusInfo = STATUS_MAP[trip.status] ?? { label: trip.status, color: "bg-gray-100 text-gray-600" };
   const [publishOpen, setPublishOpen] = useState(false);
-  void navigate;
   return (
     <div className="bg-card border rounded-xl overflow-hidden hover:shadow-md transition-shadow">
       <div className="relative h-36 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
