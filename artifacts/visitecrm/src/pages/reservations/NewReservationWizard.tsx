@@ -105,7 +105,7 @@ export function NewReservationWizard({ open, onClose, onSuccess, initialTripId, 
   }, [selectedSeats, manualSeats]);
 
   useEffect(() => {
-    if (selectedTripFull) setTotalValue(selectedTripFull.priceAdult ?? 0 * effectiveSeats.length);
+    if (selectedTripFull) setTotalValue((selectedTripFull.priceAdult ?? 0) * effectiveSeats.length);
   }, [selectedTripFull, effectiveSeats.length]);
 
   useEffect(() => {
