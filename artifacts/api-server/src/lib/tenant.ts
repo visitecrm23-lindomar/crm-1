@@ -36,7 +36,10 @@ export async function requireAuth(req: Request, res: Response): Promise<AuthedUs
     return null;
   }
   // Return superadmin with empty string tenantId so routes using me.tenantId gracefully return empty results
-  return { ...user, tenantId: user.tenantId ?? "" } as AuthedUser;
+  const authed = { ...user, tenantId: user.tenantId ?? "" } as AuthedUser;
+  req.tenantId = authed.tenantId;
+  req.userId = authed.id;
+  return authed;
 }
 
 export async function getTenantUser(req: Request): Promise<AuthedUser | null> {

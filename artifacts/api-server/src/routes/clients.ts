@@ -1,4 +1,5 @@
 import { Router, type NextFunction } from "express";
+import { AppError } from "../lib/errors";
 import { db } from "@workspace/db";
 import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable } from "@workspace/db";
 import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
@@ -225,7 +226,7 @@ router.post("/clients", async (req, res, next: NextFunction): Promise<void> => {
       })
       .returning();
 
-    if (!upserted) { res.status(500).json({ error: "Failed to create client" }); return; }
+    if (!upserted) { next(new AppError("Failed to create client", 500, "CLIENT_CREATE_FAILED")); return; }
 
     const isNew = upserted.id === id;
     const message = isNew ? "Cliente cadastrado com sucesso." : "Cliente já cadastrado — dados atualizados.";
@@ -429,7 +430,7 @@ router.post("/clients/:clientId/activities", async (req, res, next: NextFunction
     const [activity] = await db.select().from(notesTable)
       .where(and(eq(notesTable.id, id), eq(notesTable.clientId, req.params.clientId)))
       .limit(1);
-    if (!activity) { res.status(500).json({ error: "Failed to create activity" }); return; }
+    if (!activity) { next(new AppError("Failed to create activity", 500, "ACTIVITY_CREATE_FAILED")); return; }
     res.status(201).json({
       id: activity.id, clientId: activity.clientId, type: activity.type,
       content: activity.content,
@@ -480,7 +481,7 @@ router.post("/clients/:clientId/notes", async (req, res, next: NextFunction): Pr
     const [note] = await db.select().from(notesTable)
       .where(and(eq(notesTable.id, id), eq(notesTable.clientId, req.params.clientId)))
       .limit(1);
-    if (!note) { res.status(500).json({ error: "Failed to create note" }); return; }
+    if (!note) { next(new AppError("Failed to create note", 500, "NOTE_CREATE_FAILED")); return; }
     res.status(201).json({
       id: note.id, clientId: note.clientId, content: note.content,
       isPrivate: note.isPrivate, createdById: note.createdById,

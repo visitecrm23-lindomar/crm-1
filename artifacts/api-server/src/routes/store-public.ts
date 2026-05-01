@@ -2,6 +2,7 @@ import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { addSeatClient, removeSeatClient, emitSeatUpdate } from "../lib/seat-sse";
 import { broadcastSeatUpdate } from "../lib/realtime";
+import { AppError } from "../lib/errors";
 import {
   storesTable,
   storeProductsTable,
@@ -799,7 +800,7 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
           .where(and(inArray(tripsTable.id, tripIds), eq(tripsTable.tenantId, store.tenantId)));
         for (const t of tripRows) tripNameMap.set(t.id, t.name);
       } else {
-        res.status(500).json({ error: "Não foi possível criar a reserva: nenhum usuário ativo encontrado para esta agência" });
+        next(new AppError("Não foi possível criar a reserva: nenhum usuário ativo encontrado para esta agência", 500, "RESERVATION_NO_AGENCY_USER"));
         return;
       }
     }

@@ -14,6 +14,7 @@ import { syncReservationCommission } from "./payments";
 import { enqueueReservationConfirmationEmail } from "../queues/email-helpers";
 import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 import { broadcastSeatUpdate } from "../lib/realtime";
+import { AppError, NotFoundError, ConflictError } from "../lib/errors";
 
 
 const router = Router();
@@ -468,7 +469,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
 
       const availableSeats = Number(tripRow.available_seats);
       if (availableSeats < seatsCount) {
-        return { error: "Não há vagas suficientes nesta viagem", status: 400 };
+        return { error: "Não há vagas suficientes nesta viagem", status: 409, code: "RESERVATION_CONFLICT" };
       }
 
       if (serverCouponId) {
@@ -609,7 +610,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
     const [reservation] = await db.select().from(reservationsTable)
       .where(and(eq(reservationsTable.id, id), eq(reservationsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!reservation) { res.status(500).json({ error: "Failed to create reservation" }); return; }
+    if (!reservation) { next(new AppError("Failed to create reservation", 500, "RESERVATION_CREATE_FAILED")); return; }
     const formatted = await formatReservation(reservation);
     res.status(201).json(formatted);
     broadcastSeatUpdate(reservation.tripId, me.tenantId).catch(() => {});
@@ -951,7 +952,7 @@ router.post("/reservations/:reservationId/passengers", async (req, res, next: Ne
     const [passenger] = await db.select().from(passengersTable)
       .where(and(eq(passengersTable.id, id), eq(passengersTable.reservationId, req.params.reservationId)))
       .limit(1);
-    if (!passenger) { res.status(500).json({ error: "Failed to create passenger" }); return; }
+    if (!passenger) { next(new AppError("Failed to create passenger", 500, "PASSENGER_CREATE_FAILED")); return; }
     res.status(201).json(formatPassenger(passenger));
   } catch (err) {
     next(err);
