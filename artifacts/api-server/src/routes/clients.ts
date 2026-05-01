@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable } from "@workspace/db";
 import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
@@ -58,7 +58,7 @@ function formatClient(c: typeof clientsTable.$inferSelect, extra?: { isNew?: boo
   };
 }
 
-router.get("/clients", async (req, res): Promise<void> => {
+router.get("/clients", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -160,12 +160,11 @@ router.get("/clients", async (req, res): Promise<void> => {
       limit: limitNum,
     });
   } catch (err) {
-    req.log.error({ err }, "Error listing clients");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/clients", async (req, res): Promise<void> => {
+router.post("/clients", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -237,8 +236,7 @@ router.post("/clients", async (req, res): Promise<void> => {
       CalendarSyncService.syncBirthday(upserted.id).catch(() => {});
     }
   } catch (err) {
-    req.log.error({ err }, "Error creating client");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -255,7 +253,7 @@ async function requireClientAccess(
   return client;
 }
 
-router.get("/clients/:id", async (req, res): Promise<void> => {
+router.get("/clients/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -263,12 +261,11 @@ router.get("/clients/:id", async (req, res): Promise<void> => {
     if (!client) return;
     res.json(formatClient(client));
   } catch (err) {
-    req.log.error({ err }, "Error fetching client");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/clients/:id", async (req, res): Promise<void> => {
+router.patch("/clients/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -346,12 +343,11 @@ router.patch("/clients/:id", async (req, res): Promise<void> => {
       CalendarSyncService.syncBirthday(client.id).catch(() => {});
     }
   } catch (err) {
-    req.log.error({ err }, "Error updating client");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/clients/:id", async (req, res): Promise<void> => {
+router.delete("/clients/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -360,12 +356,11 @@ router.delete("/clients/:id", async (req, res): Promise<void> => {
       .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) {
-    req.log.error({ err }, "Error deleting client");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/clients/:id/pipeline-stage", async (req, res): Promise<void> => {
+router.patch("/clients/:id/pipeline-stage", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -383,12 +378,11 @@ router.patch("/clients/:id/pipeline-stage", async (req, res): Promise<void> => {
     if (!client) { res.status(404).json({ error: "Not found" }); return; }
     res.json(formatClient(client));
   } catch (err) {
-    req.log.error({ err }, "Error updating pipeline stage");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/clients/:clientId/activities", async (req, res): Promise<void> => {
+router.get("/clients/:clientId/activities", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -405,12 +399,11 @@ router.get("/clients/:clientId/activities", async (req, res): Promise<void> => {
       createdAt: n.createdAt.toISOString(),
     })));
   } catch (err) {
-    req.log.error({ err }, "Error listing activities");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/clients/:clientId/activities", async (req, res): Promise<void> => {
+router.post("/clients/:clientId/activities", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -445,12 +438,11 @@ router.post("/clients/:clientId/activities", async (req, res): Promise<void> => 
       createdAt: activity.createdAt.toISOString(),
     });
   } catch (err) {
-    req.log.error({ err }, "Error creating activity");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/clients/:clientId/notes", async (req, res): Promise<void> => {
+router.get("/clients/:clientId/notes", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -465,12 +457,11 @@ router.get("/clients/:clientId/notes", async (req, res): Promise<void> => {
       createdAt: n.createdAt.toISOString(),
     })));
   } catch (err) {
-    req.log.error({ err }, "Error listing notes");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/clients/:clientId/notes", async (req, res): Promise<void> => {
+router.post("/clients/:clientId/notes", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -496,12 +487,11 @@ router.post("/clients/:clientId/notes", async (req, res): Promise<void> => {
       createdAt: note.createdAt.toISOString(),
     });
   } catch (err) {
-    req.log.error({ err }, "Error creating note");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/clients/:clientId/notes/:noteId", async (req, res): Promise<void> => {
+router.delete("/clients/:clientId/notes/:noteId", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -511,12 +501,11 @@ router.delete("/clients/:clientId/notes/:noteId", async (req, res): Promise<void
       .where(and(eq(notesTable.id, req.params.noteId), eq(notesTable.clientId, req.params.clientId)));
     res.json({ success: true });
   } catch (err) {
-    req.log.error({ err }, "Error deleting note");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/clients/:clientId/referral", async (req, res): Promise<void> => {
+router.get("/clients/:clientId/referral", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -536,12 +525,11 @@ router.get("/clients/:clientId/referral", async (req, res): Promise<void> => {
       referrals,
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching client referral info");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/clients/:clientId/referral/generate", async (req, res): Promise<void> => {
+router.post("/clients/:clientId/referral/generate", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -581,8 +569,7 @@ router.post("/clients/:clientId/referral/generate", async (req, res): Promise<vo
 
     res.json({ code });
   } catch (err) {
-    req.log.error({ err }, "Error generating referral code for client");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

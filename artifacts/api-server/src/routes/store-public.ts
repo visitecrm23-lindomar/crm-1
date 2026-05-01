@@ -1,6 +1,7 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { addSeatClient, removeSeatClient, emitSeatUpdate } from "../lib/seat-sse";
+import { broadcastSeatUpdate } from "../lib/realtime";
 import {
   storesTable,
   storeProductsTable,
@@ -74,21 +75,6 @@ function detectOS(ua: string): string {
   return "Unknown";
 }
 
-async function broadcastSeatUpdate(tripId: string, tenantId: string): Promise<void> {
-  const reservations = await db.select({ seats: reservationsTable.seats, status: reservationsTable.status })
-    .from(reservationsTable)
-    .where(and(
-      eq(reservationsTable.tripId, tripId),
-      eq(reservationsTable.tenantId, tenantId),
-      inArray(reservationsTable.status, ["pending", "confirmed"]),
-    ));
-  const occupiedMap: Record<string, string> = {};
-  for (const r of reservations) {
-    const s = r.status === "confirmed" ? "confirmed" : "reserved";
-    for (const seat of r.seats) occupiedMap[seat] = s;
-  }
-  emitSeatUpdate({ tripId, seats: Object.entries(occupiedMap).map(([number, status]) => ({ number, status })) });
-}
 
 const router = Router();
 
@@ -101,7 +87,7 @@ async function getActiveStore(slug: string) {
   return store;
 }
 
-router.get("/public/store/:slug", async (req, res): Promise<void> => {
+router.get("/public/store/:slug", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
@@ -160,12 +146,11 @@ router.get("/public/store/:slug", async (req, res): Promise<void> => {
       .where(eq(storesTable.id, store.id));
     res.json(publicData);
   } catch (err) {
-    req.log.error({ err }, "Error getting public store");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/public/store/:slug/categories", async (req, res): Promise<void> => {
+router.get("/public/store/:slug/categories", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
@@ -177,12 +162,11 @@ router.get("/public/store/:slug/categories", async (req, res): Promise<void> => 
       .orderBy(asc(storeCategoriesTable.order));
     res.json(categories);
   } catch (err) {
-    req.log.error({ err }, "Error listing public store categories");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/public/store/:slug/products", async (req, res): Promise<void> => {
+router.get("/public/store/:slug/products", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
@@ -287,12 +271,11 @@ router.get("/public/store/:slug/products", async (req, res): Promise<void> => {
     }));
     res.json({ data: processedProducts, total: Number(countResult[0]?.count ?? 0), page, limit: limit ?? processedProducts.length });
   } catch (err) {
-    req.log.error({ err }, "Error listing public store products");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/public/store/:slug/products/:productSlug", async (req, res): Promise<void> => {
+router.get("/public/store/:slug/products/:productSlug", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
@@ -384,12 +367,11 @@ router.get("/public/store/:slug/products/:productSlug", async (req, res): Promis
       reviews,
     });
   } catch (err) {
-    req.log.error({ err }, "Error getting public store product");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/public/store/:slug/trips/:tripId/seat-map", async (req, res): Promise<void> => {
+router.get("/public/store/:slug/trips/:tripId/seat-map", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
@@ -445,12 +427,11 @@ router.get("/public/store/:slug/trips/:tripId/seat-map", async (req, res): Promi
       seats,
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching public seat map");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/public/store/:slug/trips/:tripId/seats/stream", async (req, res): Promise<void> => {
+router.get("/public/store/:slug/trips/:tripId/seats/stream", async (req, res, next: NextFunction): Promise<void> => {
   const store = await getActiveStore(req.params.slug).catch(() => null);
   if (!store) { res.status(404).json({ error: "Store not found" }); return; }
 
@@ -507,7 +488,7 @@ const CreateOrderBody = z.object({
   seats: z.array(z.string()).optional(),
 });
 
-router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
+router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
@@ -1266,12 +1247,11 @@ router.post("/public/store/:slug/orders", async (req, res): Promise<void> => {
       broadcastSeatUpdate(tripId, store.tenantId).catch(() => {});
     }
   } catch (err) {
-    req.log.error({ err }, "Error creating store order");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/public/store/:slug/orders/:orderNumber", async (req, res): Promise<void> => {
+router.get("/public/store/:slug/orders/:orderNumber", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
@@ -1347,12 +1327,11 @@ router.get("/public/store/:slug/orders/:orderNumber", async (req, res): Promise<
     });
     res.json({ ...order, items });
   } catch (err) {
-    req.log.error({ err }, "Error getting public store order");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/public/store/:slug/referral/validate", async (req, res): Promise<void> => {
+router.post("/public/store/:slug/referral/validate", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
@@ -1445,12 +1424,11 @@ router.post("/public/store/:slug/referral/validate", async (req, res): Promise<v
       description: `Desconto de ${discountPercent}% por indicação de ${referrerName}`,
     });
   } catch (err) {
-    req.log.error({ err }, "Error validating referral code");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/public/store/:slug/referral/info", async (req, res): Promise<void> => {
+router.get("/public/store/:slug/referral/info", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
@@ -1496,12 +1474,11 @@ router.get("/public/store/:slug/referral/info", async (req, res): Promise<void> 
       discountType: settings?.discountType ?? "percentage",
     });
   } catch (err) {
-    req.log.error({ err }, "Error getting referral info");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/public/store/:slug/referral/track", async (req, res): Promise<void> => {
+router.post("/public/store/:slug/referral/track", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
@@ -1584,12 +1561,11 @@ router.post("/public/store/:slug/referral/track", async (req, res): Promise<void
 
     res.json({ cookieId, tracked: true });
   } catch (err) {
-    req.log.error({ err }, "Error tracking referral visit");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/public/store/:slug/coupons/validate", async (req, res): Promise<void> => {
+router.post("/public/store/:slug/coupons/validate", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
@@ -1651,12 +1627,11 @@ router.post("/public/store/:slug/coupons/validate", async (req, res): Promise<vo
       description: coupon.description,
     });
   } catch (err) {
-    req.log.error({ err }, "Error validating coupon");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/public/store/:slug/reviews", async (req, res): Promise<void> => {
+router.get("/public/store/:slug/reviews", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const { slug } = req.params;
     const { limit: limitStr, featured } = req.query;
@@ -1674,8 +1649,7 @@ router.get("/public/store/:slug/reviews", async (req, res): Promise<void> => {
       .limit(limit);
     res.json(reviews);
   } catch (err) {
-    req.log.error({ err }, "Error listing public reviews");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

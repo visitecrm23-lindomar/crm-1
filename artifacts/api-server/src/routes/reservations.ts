@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, referralSettingsTable, dealsTable, pipelineStagesTable, tenantsTable, emailLogsTable } from "@workspace/db";
 import { eq, and, sql, desc, asc, inArray, or, ilike } from "drizzle-orm";
@@ -13,23 +13,8 @@ import { writeClientActivity } from "../lib/activities";
 import { syncReservationCommission } from "./payments";
 import { enqueueReservationConfirmationEmail } from "../queues/email-helpers";
 import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
-import { emitSeatUpdate } from "../lib/seat-sse";
+import { broadcastSeatUpdate } from "../lib/realtime";
 
-async function broadcastSeatUpdate(tripId: string, tenantId: string): Promise<void> {
-  const reservations = await db.select({ seats: reservationsTable.seats, status: reservationsTable.status })
-    .from(reservationsTable)
-    .where(and(
-      eq(reservationsTable.tripId, tripId),
-      eq(reservationsTable.tenantId, tenantId),
-      inArray(reservationsTable.status, ["pending", "confirmed"]),
-    ));
-  const occupiedMap: Record<string, string> = {};
-  for (const r of reservations) {
-    const s = r.status === "confirmed" ? "confirmed" : "reserved";
-    for (const seat of r.seats) occupiedMap[seat] = s;
-  }
-  emitSeatUpdate({ tripId, seats: Object.entries(occupiedMap).map(([number, status]) => ({ number, status })) });
-}
 
 const router = Router();
 
@@ -144,7 +129,7 @@ const ValidateCouponBodySchema = z.object({
   subtotal: z.number().positive(),
 });
 
-router.post("/reservations/validate-coupon", async (req, res): Promise<void> => {
+router.post("/reservations/validate-coupon", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -205,12 +190,11 @@ router.post("/reservations/validate-coupon", async (req, res): Promise<void> => 
 
     res.json({ valid: true, discountAmount: Math.round(discountAmount * 100) / 100, couponCode: code, message: null });
   } catch (err) {
-    req.log.error({ err }, "Error validating coupon");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/reservations/stats", async (req, res): Promise<void> => {
+router.get("/reservations/stats", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -236,12 +220,11 @@ router.get("/reservations/stats", async (req, res): Promise<void> => {
       totalOutstanding: Number(statsRow?.totalOutstanding ?? 0),
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching reservation stats");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/reservations", async (req, res): Promise<void> => {
+router.get("/reservations", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -330,12 +313,11 @@ router.get("/reservations", async (req, res): Promise<void> => {
     const data = await Promise.all(reservations.map(formatReservation));
     res.json({ data, total: Number(countResult?.count ?? 0), page: pageNum, limit: limitNum });
   } catch (err) {
-    req.log.error({ err }, "Error listing reservations");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/reservations", async (req, res): Promise<void> => {
+router.post("/reservations", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -710,8 +692,7 @@ router.post("/reservations", async (req, res): Promise<void> => {
       }
     })();
   } catch (err) {
-    req.log.error({ err }, "Error creating reservation");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -740,7 +721,7 @@ async function requireReservationAccess(
   return reservation;
 }
 
-router.get("/reservations/:id", async (req, res): Promise<void> => {
+router.get("/reservations/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -749,15 +730,14 @@ router.get("/reservations/:id", async (req, res): Promise<void> => {
     const formatted = await formatReservation(reservation);
     res.json(formatted);
   } catch (err) {
-    req.log.error({ err }, "Error fetching reservation");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
 const CANCELLING_STATUSES = ["cancelled", "refunded"];
 const ACTIVE_STATUSES = ["pending", "confirmed"];
 
-router.patch("/reservations/:id", async (req, res): Promise<void> => {
+router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -871,12 +851,11 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
     broadcastSeatUpdate(existing.tripId, me.tenantId).catch(() => {});
     CalendarSyncService.syncTrip(existing.tripId).catch(() => {});
   } catch (err) {
-    req.log.error({ err }, "Error updating reservation");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/reservations/:id", async (req, res): Promise<void> => {
+router.delete("/reservations/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -901,12 +880,11 @@ router.delete("/reservations/:id", async (req, res): Promise<void> => {
     broadcastSeatUpdate(existing.tripId, me.tenantId).catch(() => {});
     CalendarSyncService.syncTrip(existing.tripId).catch(() => {});
   } catch (err) {
-    req.log.error({ err }, "Error deleting reservation");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/reservations/:id/check-in", async (req, res): Promise<void> => {
+router.post("/reservations/:id/check-in", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -931,12 +909,11 @@ router.post("/reservations/:id/check-in", async (req, res): Promise<void> => {
         .catch((err) => req.log.error({ err }, "Error writing check-in activity"));
     }
   } catch (err) {
-    req.log.error({ err }, "Error checking in reservation");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/reservations/:reservationId/passengers", async (req, res): Promise<void> => {
+router.get("/reservations/:reservationId/passengers", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -946,12 +923,11 @@ router.get("/reservations/:reservationId/passengers", async (req, res): Promise<
       .where(eq(passengersTable.reservationId, req.params.reservationId));
     res.json(passengers.map(formatPassenger));
   } catch (err) {
-    req.log.error({ err }, "Error listing passengers");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/reservations/:reservationId/passengers", async (req, res): Promise<void> => {
+router.post("/reservations/:reservationId/passengers", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -978,12 +954,11 @@ router.post("/reservations/:reservationId/passengers", async (req, res): Promise
     if (!passenger) { res.status(500).json({ error: "Failed to create passenger" }); return; }
     res.status(201).json(formatPassenger(passenger));
   } catch (err) {
-    req.log.error({ err }, "Error creating passenger");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/reservations/:reservationId/passengers/:id", async (req, res): Promise<void> => {
+router.patch("/reservations/:reservationId/passengers/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -1005,12 +980,11 @@ router.patch("/reservations/:reservationId/passengers/:id", async (req, res): Pr
     if (!passenger) { res.status(404).json({ error: "Not found" }); return; }
     res.json(formatPassenger(passenger));
   } catch (err) {
-    req.log.error({ err }, "Error updating passenger");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/reservations/:reservationId/passengers/:id", async (req, res): Promise<void> => {
+router.delete("/reservations/:reservationId/passengers/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -1021,12 +995,11 @@ router.delete("/reservations/:reservationId/passengers/:id", async (req, res): P
       .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)));
     res.json({ success: true });
   } catch (err) {
-    req.log.error({ err }, "Error deleting passenger");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/reservations/:reservationId/passengers/:id/check-in", async (req, res): Promise<void> => {
+router.post("/reservations/:reservationId/passengers/:id/check-in", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -1042,12 +1015,11 @@ router.post("/reservations/:reservationId/passengers/:id/check-in", async (req, 
     if (!passenger) { res.status(404).json({ error: "Not found" }); return; }
     res.json(formatPassenger(passenger));
   } catch (err) {
-    req.log.error({ err }, "Error checking in passenger");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/reservations/:reservationId/passengers/:id/check-in", async (req, res): Promise<void> => {
+router.delete("/reservations/:reservationId/passengers/:id/check-in", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -1063,8 +1035,7 @@ router.delete("/reservations/:reservationId/passengers/:id/check-in", async (req
     if (!passenger) { res.status(404).json({ error: "Not found" }); return; }
     res.json(formatPassenger(passenger));
   } catch (err) {
-    req.log.error({ err }, "Error undoing passenger check-in");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

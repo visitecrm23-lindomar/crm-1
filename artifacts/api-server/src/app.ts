@@ -4,11 +4,13 @@ import pinoHttp from "pino-http";
 import cookieParser from "cookie-parser";
 import { clerkMiddleware } from "@clerk/express";
 import { CLERK_PROXY_PATH, clerkProxyMiddleware } from "./middlewares/clerkProxyMiddleware";
+import { requestId, errorHandler } from "./middlewares/errorHandler";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+app.use(requestId);
 app.use(
   pinoHttp({
     logger,
@@ -115,5 +117,6 @@ app.use((req, res, next) => {
 });
 
 app.use("/api", router);
+app.use(errorHandler);
 
 export default app;

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { addSeatClient, removeSeatClient } from "../lib/seat-sse";
 import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable, auditLogsTable } from "@workspace/db";
@@ -158,7 +158,7 @@ function formatTrip(t: typeof tripsTable.$inferSelect) {
   };
 }
 
-router.get("/trips", async (req, res): Promise<void> => {
+router.get("/trips", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -182,12 +182,11 @@ router.get("/trips", async (req, res): Promise<void> => {
 
     res.json({ data: trips.map(formatTrip), total: Number(countResult?.count ?? 0), page: pageNum, limit: limitNum });
   } catch (err) {
-    req.log.error({ err }, "Error listing trips");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/trips", async (req, res): Promise<void> => {
+router.post("/trips", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -295,12 +294,11 @@ router.post("/trips", async (req, res): Promise<void> => {
     res.status(201).json(formatTrip(trip));
     CalendarSyncService.syncTrip(id).catch(() => {});
   } catch (err) {
-    req.log.error({ err }, "Error creating trip");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/trips/:id", async (req, res): Promise<void> => {
+router.get("/trips/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -310,12 +308,11 @@ router.get("/trips/:id", async (req, res): Promise<void> => {
     if (!trip) { res.status(404).json({ error: "Not found" }); return; }
     res.json(formatTrip(trip));
   } catch (err) {
-    req.log.error({ err }, "Error fetching trip");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/trips/:id", async (req, res): Promise<void> => {
+router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -458,12 +455,11 @@ router.patch("/trips/:id", async (req, res): Promise<void> => {
     res.json(formatTrip(trip));
     CalendarSyncService.syncTrip(req.params.id).catch(() => {});
   } catch (err) {
-    req.log.error({ err }, "Error updating trip");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/trips/:id", async (req, res): Promise<void> => {
+router.delete("/trips/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -480,12 +476,11 @@ router.delete("/trips/:id", async (req, res): Promise<void> => {
     res.json({ success: true });
     CalendarSyncService.deleteEventsForTrip(req.params.id).catch(() => {});
   } catch (err) {
-    req.log.error({ err }, "Error deleting trip");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/trips/:id/seat-map", async (req, res): Promise<void> => {
+router.get("/trips/:id/seat-map", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -535,12 +530,11 @@ router.get("/trips/:id/seat-map", async (req, res): Promise<void> => {
       seats,
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching seat map");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/trips/:id/seats/stream", async (req, res): Promise<void> => {
+router.get("/trips/:id/seats/stream", async (req, res, next: NextFunction): Promise<void> => {
   const me = await requireAuth(req, res);
   if (!me) return;
 
@@ -566,7 +560,7 @@ router.get("/trips/:id/seats/stream", async (req, res): Promise<void> => {
   });
 });
 
-router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
+router.get("/trips/:id/boarding-panel", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -729,12 +723,11 @@ router.get("/trips/:id/boarding-panel", async (req, res): Promise<void> => {
       tourGuideRegistration: trip.tourGuideRegistration ?? null,
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching boarding panel");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/trips/:id/sync-passengers", async (req, res): Promise<void> => {
+router.post("/trips/:id/sync-passengers", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -798,12 +791,11 @@ router.post("/trips/:id/sync-passengers", async (req, res): Promise<void> => {
 
     res.json({ created });
   } catch (err) {
-    req.log.error({ err }, "Error syncing passengers");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/trips/:tripId/passengers/:passengerId", async (req, res): Promise<void> => {
+router.patch("/trips/:tripId/passengers/:passengerId", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -886,8 +878,7 @@ router.patch("/trips/:tripId/passengers/:passengerId", async (req, res): Promise
       documentType: updated.documentType ?? null,
     });
   } catch (err) {
-    req.log.error({ err }, "Error updating passenger");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -1291,7 +1282,7 @@ const SendManifestBody = z.discriminatedUnion("channel", [
   z.object({ channel: z.literal("whatsapp"), to: z.string().min(8, "Número de WhatsApp muito curto").max(20, "Número de WhatsApp muito longo").regex(/^[\d\s\(\)\-\+]+$/, "Número de WhatsApp inválido") }),
 ]);
 
-router.post("/trips/:id/manifest/send", async (req, res): Promise<void> => {
+router.post("/trips/:id/manifest/send", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
