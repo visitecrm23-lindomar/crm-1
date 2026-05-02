@@ -224,7 +224,7 @@ function ClientRoute({ component: Component }: { component: React.ComponentType 
   return (
     <>
       <Show when="signed-out">
-        <Redirect to="/sign-in" />
+        <Redirect to="/sign-in?redirect_url=%2Fperfil" />
       </Show>
       <Show when="signed-in">
         {isLoading ? null : me?.role === "cliente" ? (
@@ -248,7 +248,9 @@ function AgenciaRoute({ component: Component }: { component: React.ComponentType
         <Redirect to="/" />
       </Show>
       <Show when="signed-in">
-        {isLoading ? null : !me?.tenantId && me?.role !== "superadmin" ? (
+        {isLoading ? null : me?.role === "cliente" ? (
+          <Redirect to="/perfil" />
+        ) : !me?.tenantId && me?.role !== "superadmin" ? (
           <Redirect to="/onboarding" />
         ) : me?.role === "vendedor" ? (
           <Redirect to="/trips" />
@@ -268,7 +270,9 @@ function AgenciaOnlyRoute({ component: Component }: { component: React.Component
   return (
     <>
       <Show when="signed-in">
-        {isLoading ? null : !me?.tenantId && me?.role !== "superadmin" ? (
+        {isLoading ? null : me?.role === "cliente" ? (
+          <Redirect to="/perfil" />
+        ) : !me?.tenantId && me?.role !== "superadmin" ? (
           <Redirect to="/onboarding" />
         ) : me?.role === "vendedor" ? (
           <Redirect to="/meu-painel" />
@@ -294,7 +298,9 @@ function VendedorRoute({ component: Component }: { component: React.ComponentTyp
         <Redirect to="/" />
       </Show>
       <Show when="signed-in">
-        {isLoading ? null : me?.role === "vendedor" ? (
+        {isLoading ? null : me?.role === "cliente" ? (
+          <Redirect to="/perfil" />
+        ) : me?.role === "vendedor" ? (
           <Layout>
             <Component />
           </Layout>
