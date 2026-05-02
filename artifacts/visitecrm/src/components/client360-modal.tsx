@@ -28,9 +28,7 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 
-function formatCurrency(value: number) {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
+import { formatCurrency } from "@/lib/utils";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   active:    { label: "Ativo",    color: "bg-green-100 text-green-800 border-green-200" },

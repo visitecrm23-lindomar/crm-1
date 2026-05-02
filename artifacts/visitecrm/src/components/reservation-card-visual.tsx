@@ -10,6 +10,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { Reservation } from "@workspace/api-client-react";
+import { formatCurrency as fmtCurrency } from "@/lib/utils";
 
 interface ReservationCardVisualProps {
   reservation: Reservation;
@@ -58,10 +59,6 @@ function getStatusLabel(status: string) {
 function getPaymentLabel(balance: number) {
   if (balance <= 0) return "Pago";
   return "Pendente";
-}
-
-function fmtCurrency(v: number) {
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 function formatYearMonth(ym: string) {

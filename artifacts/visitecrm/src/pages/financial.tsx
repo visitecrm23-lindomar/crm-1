@@ -32,43 +32,12 @@ import {
   Pencil, Trash2, ArrowUpRight, ArrowDownRight, BarChart2, ExternalLink,
   Paperclip, X as XIcon, FileText, Image,
 } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
+import { PAYMENT_STATUS_LABELS as STATUS_LABELS, PAYMENT_STATUS_COLORS as STATUS_COLORS, PAYMENT_METHOD_LABELS as METHOD_LABELS, EXPENSE_CATEGORY_LABELS } from "@/lib/labels";
 
-const fmt = (v: number | string) => {
-  const n = typeof v === "string" ? parseFloat(v) : v;
-  return `R$ ${(isNaN(n) ? 0 : n).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
-};
+const fmt = (v: number | string) => formatCurrency(typeof v === "string" ? parseFloat(v) || 0 : v);
 
-const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-800",
-  paid: "bg-green-100 text-green-800",
-  overdue: "bg-red-100 text-red-800",
-  cancelled: "bg-gray-100 text-gray-800",
-  approved: "bg-blue-100 text-blue-800",
-};
-const STATUS_LABELS: Record<string, string> = {
-  pending: "Pendente",
-  paid: "Pago",
-  overdue: "Vencido",
-  cancelled: "Cancelado",
-  approved: "Aprovado",
-};
-const METHOD_LABELS: Record<string, string> = {
-  pix: "PIX",
-  credit_card: "Cartão de Crédito",
-  debit_card: "Cartão de Débito",
-  bank_transfer: "Transferência",
-  cash: "Dinheiro",
-  boleto: "Boleto",
-};
-const EXPENSE_CATEGORIES: Record<string, string> = {
-  transport: "Transporte",
-  accommodation: "Hospedagem",
-  food: "Alimentação",
-  marketing: "Marketing",
-  administrative: "Administrativo",
-  commission: "Comissão",
-  other: "Outro",
-};
+const EXPENSE_CATEGORIES: Record<string, string> = EXPENSE_CATEGORY_LABELS;
 
 function KpiCard({ icon: Icon, label, value, sub, trend, color }: {
   icon: React.ElementType; label: string; value: string; sub?: string; trend?: "up" | "down" | "neutral"; color: string;

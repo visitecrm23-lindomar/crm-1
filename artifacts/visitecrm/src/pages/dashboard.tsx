@@ -28,9 +28,7 @@ import {
 import { format, parseISO, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-function formatCurrency(value: number) {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
+import { formatCurrency } from "@/lib/utils";
 
 const TASKS_KEY = "visite-crm-tasks";
 

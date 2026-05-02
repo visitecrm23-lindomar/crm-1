@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { STATUS_MAP } from "./constants";
 import { formatCurrency, formatDate } from "./utils";
+import { PAYMENT_METHOD_LABELS } from "@/lib/labels";
 import type { FixedCostItem, VariableCostItem } from "./types";
 import { PassengersOverviewFinancialDialog } from "./PassengersOverviewFinancialDialog";
 
@@ -106,10 +107,7 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
     return counts;
   }, [reservations]);
 
-  const METHOD_LABELS: Record<string, string> = {
-    pix: "PIX", credit_card: "Cartão Crédito", debit_card: "Cartão Débito",
-    cash: "Dinheiro", bank_transfer: "Transferência", installment: "Parcelado",
-  };
+  const METHOD_LABELS = PAYMENT_METHOD_LABELS;
 
   const toggleSort = (key: string) => setSort(prev => ({ key, dir: prev.key === key && prev.dir === "asc" ? "desc" : "asc" }));
 

@@ -18,24 +18,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Pencil, Trash2, DollarSign, CheckCircle, Clock } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
+import { PAYMENT_STATUS_LABELS as STATUS_LABELS, PAYMENT_STATUS_COLORS as STATUS_COLORS } from "@/lib/labels";
 
-const fmt = (v: number | string) => {
-  const n = typeof v === "string" ? parseFloat(v) : v;
-  return `R$ ${(isNaN(n) ? 0 : n).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-800",
-  approved: "bg-blue-100 text-blue-800",
-  paid: "bg-green-100 text-green-800",
-  cancelled: "bg-gray-100 text-gray-800",
-};
-const STATUS_LABELS: Record<string, string> = {
-  pending: "Pendente",
-  approved: "Aprovada",
-  paid: "Paga",
-  cancelled: "Cancelada",
-};
+const fmt = (v: number | string) => formatCurrency(typeof v === "string" ? parseFloat(v) || 0 : v);
 
 export default function Commissions() {
   const [tab, setTab] = useState("commissions");

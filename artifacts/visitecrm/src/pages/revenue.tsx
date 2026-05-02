@@ -21,8 +21,9 @@ import {
   TrendingUp, DollarSign, ArrowUpRight, ArrowDownRight, BarChart2, Target,
   Users, CalendarCheck, Repeat, UserPlus, BarChart, Filter,
 } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
 
-const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+const fmt = (v: number) => formatCurrency(v);
 const fmtCompact = (v: number) => {
   if (v >= 1000000) return `R$ ${(v / 1000000).toFixed(1)}M`;
   if (v >= 1000) return `R$ ${(v / 1000).toFixed(1)}k`;

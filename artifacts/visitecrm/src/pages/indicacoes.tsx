@@ -47,11 +47,11 @@ import {
   Medal,
 } from "lucide-react";
 
+import { formatCurrency as _fmtCurrencyLib } from "@/lib/utils";
 function fmtCurrency(v: string | number | null | undefined) {
   if (v == null) return "R$ 0,00";
   const n = typeof v === "string" ? parseFloat(v) : v;
-  if (isNaN(n)) return "R$ 0,00";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return _fmtCurrencyLib(isNaN(n) ? 0 : n);
 }
 
 function fmtDate(v: string | null | undefined) {

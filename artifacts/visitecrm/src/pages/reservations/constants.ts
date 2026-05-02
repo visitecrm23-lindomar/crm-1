@@ -1,9 +1,4 @@
-export const AGE_CATEGORY_LABELS: Record<string, string> = {
-  adult: "Adulto",
-  child: "Criança",
-  senior: "Sênior",
-  baby: "Bebê (< 2 anos)",
-};
+export { PAYMENT_METHOD_LABELS as METHOD_LABELS, PAYMENT_METHOD_LABELS as PAYMENT_LABELS, TRIP_TYPE_LABELS, AGE_CATEGORY_LABELS } from "@/lib/labels";
 
 export const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
 
@@ -19,35 +14,4 @@ export const STATUS_LABELS: Record<string, string> = {
   confirmed: "Confirmada",
   completed: "Concluída",
   cancelled: "Cancelada",
-};
-
-export const TRIP_TYPE_LABELS: Record<string, string> = {
-  excursao: "Excursão",
-  bate_volta: "Bate-Volta",
-  trilha: "Trilha",
-  rota: "Rota",
-  transfer: "Transfer",
-  pacote_fechado: "Pacote Fechado",
-  personalizada: "Viagem Personalizada",
-  excursion: "Excursão",
-  package: "Pacote Fechado",
-  custom: "Viagem Personalizada",
-};
-
-export const METHOD_LABELS: Record<string, string> = {
-  pix: "PIX",
-  credit_card: "Cartão de Crédito",
-  debit_card: "Cartão de Débito",
-  bank_transfer: "Transferência",
-  cash: "Dinheiro",
-  boleto: "Boleto",
-};
-
-export const PAYMENT_LABELS: Record<string, string> = {
-  pix: "PIX",
-  credit_card: "Cartão de Crédito",
-  debit_card: "Cartão de Débito",
-  bank_transfer: "Transferência",
-  cash: "Dinheiro",
-  boleto: "Boleto",
 };

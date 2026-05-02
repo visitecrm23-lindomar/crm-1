@@ -25,14 +25,7 @@ import {
   Copy,
   Check,
 } from "lucide-react";
-
-const PAYMENT_LABELS: Record<string, string> = {
-  pix: "PIX",
-  boleto: "Boleto Bancário",
-  credit_card: "Cartão de Crédito",
-  debit_card: "Cartão de Débito",
-  transfer: "Transferência Bancária",
-};
+import { PAYMENT_METHOD_LABELS as PAYMENT_LABELS } from "@/lib/labels";
 
 type Step = "dados" | "revisao" | "pagamento" | "confirmado";
 

@@ -14,41 +14,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, CheckCircle, TrendingDown, Clock, AlertCircle } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
+import { PAYMENT_STATUS_LABELS as STATUS_LABELS, PAYMENT_STATUS_COLORS as STATUS_COLORS, PAYMENT_METHOD_LABELS as METHOD_LABELS, EXPENSE_CATEGORY_LABELS as CATEGORY_LABELS } from "@/lib/labels";
 
-const fmt = (v: number | string) => {
-  const n = typeof v === "string" ? parseFloat(v) : v;
-  return `R$ ${(isNaN(n) ? 0 : n).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-800",
-  paid: "bg-green-100 text-green-800",
-  overdue: "bg-red-100 text-red-800",
-  cancelled: "bg-gray-100 text-gray-800",
-};
-const STATUS_LABELS: Record<string, string> = {
-  pending: "Pendente",
-  paid: "Pago",
-  overdue: "Vencido",
-  cancelled: "Cancelado",
-};
-const CATEGORY_LABELS: Record<string, string> = {
-  transport: "Transporte",
-  accommodation: "Hospedagem",
-  food: "Alimentação",
-  marketing: "Marketing",
-  administrative: "Administrativo",
-  commission: "Comissão",
-  other: "Outro",
-};
-const METHOD_LABELS: Record<string, string> = {
-  pix: "PIX",
-  credit_card: "Cartão de Crédito",
-  debit_card: "Cartão de Débito",
-  bank_transfer: "Transferência",
-  cash: "Dinheiro",
-  boleto: "Boleto",
-};
+const fmt = (v: number | string) => formatCurrency(typeof v === "string" ? parseFloat(v) || 0 : v);
 const CATEGORY_COLORS: Record<string, string> = {
   transport: "#3B82F6",
   accommodation: "#8B5CF6",

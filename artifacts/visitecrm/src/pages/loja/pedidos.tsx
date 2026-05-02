@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { storeApi, StoreOrder } from "@/lib/storeApi";
+import { PAYMENT_METHOD_LABELS as PAYMENT_METHODS } from "@/lib/labels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -61,14 +62,6 @@ const FULFILLMENT_STATUSES = [
   { value: "partial", label: "Parcial" },
   { value: "fulfilled", label: "Enviado" },
 ];
-
-const PAYMENT_METHODS: Record<string, string> = {
-  pix: "PIX",
-  boleto: "Boleto",
-  credit_card: "Cartão de Crédito",
-  debit_card: "Cartão de Débito",
-  transfer: "Transferência",
-};
 
 function statusLabel(s: string) {
   return ORDER_STATUSES.find((x) => x.value === s)?.label ?? s;

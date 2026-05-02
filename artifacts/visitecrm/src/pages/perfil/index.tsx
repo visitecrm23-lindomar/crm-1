@@ -26,6 +26,7 @@ import {
   TrendingUp,
   Loader2,
 } from "lucide-react";
+import { formatCurrency as fmtCurrencyLib } from "@/lib/utils";
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   pending:   { label: "Aguardando",  variant: "secondary" },
@@ -59,9 +60,7 @@ function fmtDate(dateStr: string | null) {
   });
 }
 
-function fmtCurrency(v: number) {
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
+const fmtCurrency = fmtCurrencyLib;
 
 function ReservationCard({ r }: { r: ClientPortalProfile["reservations"][number] }) {
   return (

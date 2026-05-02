@@ -1,3 +1,5 @@
+export { TRIP_TYPE_LABELS, AGE_CATEGORY_LABELS } from "@/lib/labels";
+
 export const STATUS_MAP: Record<string, { label: string; color: string }> = {
   draft:      { label: "Rascunho",   color: "bg-gray-100 text-gray-600" },
   active:     { label: "Ativa",      color: "bg-green-100 text-green-700" },
@@ -9,12 +11,6 @@ export const STATUS_MAP: Record<string, { label: string; color: string }> = {
 export const VEHICLE_TYPES = ["Ônibus", "Micro-ônibus", "Van", "Carro", "Outro"];
 
 export const TRIP_TYPES = ["excursao", "bate_volta", "trilha", "rota", "transfer", "pacote_fechado", "personalizada"];
-
-export const TRIP_TYPE_LABELS: Record<string, string> = {
-  excursao: "Excursão", bate_volta: "Bate-Volta", trilha: "Trilha", rota: "Rota",
-  transfer: "Transfer", pacote_fechado: "Pacote Fechado", personalizada: "Viagem Personalizada",
-  excursion: "Excursão", package: "Pacote", custom: "Personalizado",
-};
 
 export const DOCUMENT_TYPES = ["RG", "CNH", "PASSAPORTE", "Certidão de Nascimento"] as const;
 
@@ -52,13 +48,6 @@ export const VARIABLE_COST_CATEGORIES: Record<string, string[]> = {
   "Hospedagem": ["Hospedagem por pessoa", "Outro"],
   "Logística": ["Transportes adicionais", "Transfers internos", "Outro"],
   "Extras": ["Brindes", "Taxas ambientais/locais", "Consumos extras", "Outro"],
-};
-
-export const AGE_CATEGORY_LABELS: Record<string, string> = {
-  adult: "Adulto",
-  child: "Criança",
-  senior: "Sênior",
-  baby: "Bebê (< 7 anos)",
 };
 
 export type ColKey = "name" | "cpf" | "rg" | "birthDate" | "ageCategory" | "boardingLocation" | "whatsapp" | "checkedInAt";

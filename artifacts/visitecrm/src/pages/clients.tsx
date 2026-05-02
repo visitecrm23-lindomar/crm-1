@@ -34,9 +34,7 @@ import { useToast } from "@/hooks/use-toast";
 import { SeatMapPicker } from "@/components/SeatMapPicker";
 import { PlanLimitWall, usePlanLimitError } from "@/components/plan-limit-wall";
 
-function formatCurrency(value: number) {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
+import { formatCurrency } from "@/lib/utils";
 
 function cleanCPF(cpf: string): string {
   return cpf.replace(/\D/g, "");

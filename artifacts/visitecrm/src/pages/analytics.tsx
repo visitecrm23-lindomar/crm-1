@@ -20,8 +20,10 @@ import {
   DollarSign, Users, MapPin, BarChart2, TrendingUp, CalendarCheck,
   Target, Award, ArrowUpRight, ExternalLink,
 } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
+import { EXPENSE_CATEGORY_LABELS } from "@/lib/labels";
 
-const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+const fmt = (v: number) => formatCurrency(v);
 const fmtCompact = (v: number) => {
   if (v >= 1000000) return `R$ ${(v / 1000000).toFixed(1)}M`;
   if (v >= 1000) return `R$ ${(v / 1000).toFixed(1)}k`;
@@ -159,15 +161,6 @@ const EXPENSE_CATEGORY_COLORS: Record<string, string> = {
   administrative: "#6366F1",
   commission: "#EF4444",
   other: "#94A3B8",
-};
-const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
-  transport: "Transporte",
-  accommodation: "Hospedagem",
-  food: "Alimentação",
-  marketing: "Marketing",
-  administrative: "Administrativo",
-  commission: "Comissão",
-  other: "Outro",
 };
 
 export default function Analytics() {

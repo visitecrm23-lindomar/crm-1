@@ -24,19 +24,8 @@ import type { BoardingPoint } from "./types";
 import { printPassengersManifest } from "./PassengersListManifest";
 import { PassengersListShareDialog } from "./PassengersListShareDialog";
 
-const AGE_CATEGORY_LABELS: Record<string, string> = {
-  adult: "Adulto",
-  child: "Criança",
-  senior: "Sênior",
-  baby: "Isento",
-};
-
-function formatCpf(cpf: string | null | undefined): string {
-  if (!cpf) return "—";
-  const digits = cpf.replace(/\D/g, "");
-  if (digits.length !== 11) return cpf;
-  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
-}
+import { formatCpf } from "@/lib/utils";
+import { AGE_CATEGORY_LABELS } from "@/lib/labels";
 
 type ColKey = "nome" | "cpf" | "birthDate" | "seatNumber" | "ageCategory" | "whatsapp" | "checkedInAt" | "boardingLocation";
 

@@ -1,16 +1,8 @@
-import { format, parseISO } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { parseISO } from "date-fns";
 import { calculateTripDuration } from "@/lib/tripDuration";
 import type { Trip } from "@workspace/api-client-react";
 
-export function formatCurrency(v: number) {
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
-export function formatDate(d: string) {
-  try { return format(new Date(d.slice(0, 10) + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR }); }
-  catch { return d; }
-}
+export { formatCurrency, formatDate, formatCpf } from "@/lib/utils";
 
 export function getCountdownLabel(date: string) {
   try {
@@ -36,12 +28,6 @@ export function escapeHtml(str: string) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-export function formatCpf(cpf: string) {
-  const d = cpf.replace(/\D/g, "");
-  if (d.length === 11) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
-  return cpf;
 }
 
 export function generateProductSlug(name: string): string {

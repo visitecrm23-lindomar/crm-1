@@ -43,6 +43,7 @@ import {
   ArrowDown,
   DollarSign,
 } from "lucide-react";
+import { TRIP_TYPE_LABELS } from "@/lib/labels";
 
 type Step = "dados" | "revisao" | "assento" | "pagamento" | "confirmado";
 
@@ -175,19 +176,6 @@ function StepIndicator({ current }: { current: Step }) {
     </div>
   );
 }
-
-const TRIP_TYPE_LABELS: Record<string, string> = {
-  excursao: "Excursão",
-  bate_volta: "Bate-Volta",
-  trilha: "Trilha",
-  rota: "Rota",
-  transfer: "Transfer",
-  pacote_fechado: "Pacote Fechado",
-  personalizada: "Viagem Personalizada",
-  excursion: "Excursão",
-  package: "Pacote Fechado",
-  custom: "Viagem Personalizada",
-};
 
 function ProductCard({ product, store }: { product: StoreProduct; store: PublicStore }) {
   const images = product.images ?? [];
