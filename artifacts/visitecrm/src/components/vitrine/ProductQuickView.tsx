@@ -23,26 +23,8 @@ import {
   Loader2,
 } from "lucide-react";
 
-const TYPE_LABELS: Record<string, string> = {
-  excursion: "Excursão",
-  package: "Pacote",
-  tour: "Passeio",
-  transfer: "Transfer",
-  cruise: "Cruzeiro",
-  hotel: "Hotel",
-  service: "Serviço",
-  custom: "Personalizado",
-};
-
-function fmtDate(d?: string | null) {
-  if (!d) return null;
-  const clean = d.length <= 10 ? d + "T12:00:00" : d;
-  return new Date(clean).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
+import { formatDateShort as fmtDate } from "@/lib/utils";
+import { TRIP_TYPE_LABELS as TYPE_LABELS } from "@/lib/labels";
 
 export function ProductQuickView({
   product,

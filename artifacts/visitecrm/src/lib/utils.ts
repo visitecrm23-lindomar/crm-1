@@ -11,9 +11,30 @@ export function formatCurrency(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+export function formatCurrencyBRL(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return "Grátis";
+  const num = Number(value);
+  if (num === 0) return "Grátis";
+  return formatCurrency(num);
+}
+
 export function formatDate(d: string): string {
   try {
     return format(new Date(d.slice(0, 10) + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR });
+  } catch {
+    return d;
+  }
+}
+
+export function formatDateShort(d?: string | null): string | null {
+  if (!d) return null;
+  try {
+    const clean = d.length <= 10 ? d + "T12:00:00" : d;
+    return new Date(clean).toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
   } catch {
     return d;
   }

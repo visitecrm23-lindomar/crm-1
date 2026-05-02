@@ -25,6 +25,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Pencil, Users, ChevronLeft, ChevronRight, ExternalLink, ShieldCheck } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { formatDate } from "@/lib/utils";
 
 const PAGE_SIZE = 15;
 
@@ -55,14 +56,6 @@ const PLAN_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "o
   pro: "secondary",
   enterprise: "default",
 };
-
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
 
 interface EditModalProps {
   tenant: AdminTenant | null;

@@ -81,6 +81,7 @@ import {
   Link2,
   Unlink,
 } from "lucide-react";
+import { formatCurrencyBRL } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -401,12 +402,6 @@ function AgencyProfileTab() {
 }
 
 /* ──────────────────── Plan & Billing Tab ──────────────────── */
-function formatCurrencyBRL(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return "Grátis";
-  const num = Number(value);
-  if (num === 0) return "Grátis";
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(num);
-}
 
 interface PixModalProps {
   invoice: SubscriptionInvoice;

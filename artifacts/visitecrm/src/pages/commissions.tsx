@@ -19,7 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Pencil, Trash2, DollarSign, CheckCircle, Clock } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
-import { PAYMENT_STATUS_LABELS as STATUS_LABELS, PAYMENT_STATUS_COLORS as STATUS_COLORS } from "@/lib/labels";
+import { COMMISSION_STATUS_LABELS as STATUS_LABELS, COMMISSION_STATUS_COLORS as STATUS_COLORS } from "@/lib/labels";
 
 const fmt = (v: number | string) => formatCurrency(typeof v === "string" ? parseFloat(v) || 0 : v);
 

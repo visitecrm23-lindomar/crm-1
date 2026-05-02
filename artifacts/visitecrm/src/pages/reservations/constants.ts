@@ -1,4 +1,4 @@
-export { PAYMENT_METHOD_LABELS as METHOD_LABELS, PAYMENT_METHOD_LABELS as PAYMENT_LABELS, TRIP_TYPE_LABELS, AGE_CATEGORY_LABELS } from "@/lib/labels";
+export { PAYMENT_METHOD_LABELS as METHOD_LABELS, TRIP_TYPE_LABELS, AGE_CATEGORY_LABELS } from "@/lib/labels";
 
 export const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
 
