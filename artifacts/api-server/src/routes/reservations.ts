@@ -1,6 +1,6 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
-import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, referralSettingsTable, dealsTable, pipelineStagesTable, tenantsTable, emailLogsTable } from "@workspace/db";
+import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, referralSettingsTable, dealsTable, pipelineStagesTable, tenantsTable, emailLogsTable, paymentsTable } from "@workspace/db";
 import { eq, and, sql, desc, asc, inArray, or, ilike } from "drizzle-orm";
 import { generateId, generateVoucherCode } from "../lib/id";
 import { getTenantReservationPrefix, tripTypeToCode, getYearMonth, nextReservationSequence, buildReservationNumber } from "../lib/reservation-number";
@@ -16,6 +16,7 @@ import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 import { broadcastSeatUpdate } from "../lib/realtime";
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { applyDiscounts, computeBalance, computeEffectiveLoyaltyPoints } from "../lib/pricing";
+import { calculateTier } from "../lib/loyalty-helpers";
 
 
 const router = Router();
@@ -771,6 +772,140 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
             availableSeats: sql`LEAST(total_capacity, GREATEST(0, available_seats + ${seatsCount}))`,
             reservedSeats: sql`GREATEST(0, reserved_seats - ${seatsCount})`,
           }).where(and(eq(tripsTable.id, existing.tripId), eq(tripsTable.tenantId, me.tenantId)));
+        }
+
+        // --- Reversal 1: coupon usage_count ---
+        if (existing.discountCouponCode) {
+          const storeRows = await tx.select({ id: storesTable.id })
+            .from(storesTable)
+            .where(eq(storesTable.tenantId, me.tenantId));
+          const storeIds = storeRows.map(s => s.id);
+          if (storeIds.length > 0) {
+            await tx.update(storeCouponsTable)
+              .set({ usageCount: sql`GREATEST(0, usage_count - 1)` })
+              .where(and(
+                inArray(storeCouponsTable.storeId, storeIds),
+                eq(storeCouponsTable.code, existing.discountCouponCode),
+              ));
+          }
+        }
+
+        // --- Reversal 2: loyalty points used as discount ---
+        const loyaltyPointsToRestore = existing.discountLoyaltyPoints ?? 0;
+        if (loyaltyPointsToRestore > 0 && existing.clientId) {
+          const [loyaltyMember] = await tx
+            .select({ id: loyaltyMembersTable.id, availablePoints: loyaltyMembersTable.availablePoints })
+            .from(loyaltyMembersTable)
+            .where(and(
+              eq(loyaltyMembersTable.tenantId, me.tenantId),
+              eq(loyaltyMembersTable.clientId, existing.clientId),
+            ))
+            .limit(1);
+          if (loyaltyMember) {
+            await tx.update(loyaltyMembersTable)
+              .set({
+                availablePoints: loyaltyMember.availablePoints + loyaltyPointsToRestore,
+                lastActivityAt: new Date(),
+              })
+              .where(eq(loyaltyMembersTable.id, loyaltyMember.id));
+            await tx.insert(loyaltyTransactionsTable).values({
+              id: generateId(),
+              tenantId: me.tenantId,
+              memberId: loyaltyMember.id,
+              type: "refund",
+              points: loyaltyPointsToRestore,
+              description: `Estorno de pontos — cancelamento da reserva ${existing.voucherCode}`,
+              referenceId: req.params.id,
+              referenceType: "reservation",
+            });
+          }
+        }
+
+        // --- Reversal 3: referral bonus credited to referrer ---
+        if (existing.discountReferralCode && existing.clientId) {
+          const [referralRecord] = await tx
+            .select({ id: referralsTable.id, referrerId: referralsTable.referrerId, bonusAmount: referralsTable.bonusAmount })
+            .from(referralsTable)
+            .where(and(
+              eq(referralsTable.tenantId, me.tenantId),
+              eq(referralsTable.code, existing.discountReferralCode),
+              eq(referralsTable.referredId, existing.clientId),
+              eq(referralsTable.status, "completed"),
+            ))
+            .limit(1);
+          if (referralRecord) {
+            const bonusToReverse = Number(referralRecord.bonusAmount);
+            await tx.update(clientsTable)
+              .set({
+                successfulReferrals: sql`GREATEST(0, COALESCE(successful_referrals, 0) - 1)`,
+                referralEarnings: sql`GREATEST(0, COALESCE(referral_earnings, 0) - ${bonusToReverse.toFixed(2)})`,
+              })
+              .where(eq(clientsTable.id, referralRecord.referrerId));
+            await tx.update(referralsTable)
+              .set({ status: "reversed" })
+              .where(eq(referralsTable.id, referralRecord.id));
+          }
+        }
+
+        // --- Reversal 4: loyalty points earned from payments ---
+        if (existing.clientId) {
+          const reservationPayments = await tx
+            .select({ id: paymentsTable.id })
+            .from(paymentsTable)
+            .where(and(
+              eq(paymentsTable.tenantId, me.tenantId),
+              eq(paymentsTable.reservationId, req.params.id),
+            ));
+          if (reservationPayments.length > 0) {
+            const paymentIds = reservationPayments.map(p => p.id);
+            const [loyaltyMember] = await tx
+              .select({
+                id: loyaltyMembersTable.id,
+                availablePoints: loyaltyMembersTable.availablePoints,
+                totalPoints: loyaltyMembersTable.totalPoints,
+              })
+              .from(loyaltyMembersTable)
+              .where(and(
+                eq(loyaltyMembersTable.tenantId, me.tenantId),
+                eq(loyaltyMembersTable.clientId, existing.clientId),
+              ))
+              .limit(1);
+            if (loyaltyMember) {
+              const earnTransactions = await tx
+                .select({ points: loyaltyTransactionsTable.points })
+                .from(loyaltyTransactionsTable)
+                .where(and(
+                  eq(loyaltyTransactionsTable.tenantId, me.tenantId),
+                  eq(loyaltyTransactionsTable.memberId, loyaltyMember.id),
+                  eq(loyaltyTransactionsTable.referenceType, "payment"),
+                  eq(loyaltyTransactionsTable.type, "earn"),
+                  inArray(loyaltyTransactionsTable.referenceId, paymentIds),
+                ));
+              const totalEarnedPoints = earnTransactions.reduce((sum, t) => sum + t.points, 0);
+              if (totalEarnedPoints > 0) {
+                const newAvailable = Math.max(0, loyaltyMember.availablePoints - totalEarnedPoints);
+                const newTotal = Math.max(0, loyaltyMember.totalPoints - totalEarnedPoints);
+                await tx.update(loyaltyMembersTable)
+                  .set({
+                    availablePoints: newAvailable,
+                    totalPoints: newTotal,
+                    tier: calculateTier(newTotal),
+                    lastActivityAt: new Date(),
+                  })
+                  .where(eq(loyaltyMembersTable.id, loyaltyMember.id));
+                await tx.insert(loyaltyTransactionsTable).values({
+                  id: generateId(),
+                  tenantId: me.tenantId,
+                  memberId: loyaltyMember.id,
+                  type: "cancellation",
+                  points: -totalEarnedPoints,
+                  description: `Estorno de pontos por pagamentos — cancelamento da reserva ${existing.voucherCode}`,
+                  referenceId: req.params.id,
+                  referenceType: "reservation",
+                });
+              }
+            }
+          }
         }
       }
 
