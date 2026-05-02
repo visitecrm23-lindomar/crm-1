@@ -812,22 +812,35 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
             ))
             .limit(1);
           if (loyaltyMember) {
-            await tx.update(loyaltyMembersTable)
-              .set({
-                availablePoints: loyaltyMember.availablePoints + loyaltyPointsToRestore,
-                lastActivityAt: new Date(),
-              })
-              .where(eq(loyaltyMembersTable.id, loyaltyMember.id));
-            await tx.insert(loyaltyTransactionsTable).values({
-              id: generateId(),
-              tenantId: me.tenantId,
-              memberId: loyaltyMember.id,
-              type: "refund",
-              points: loyaltyPointsToRestore,
-              description: `Estorno de pontos — cancelamento da reserva ${existing.voucherCode}`,
-              referenceId: req.params.id,
-              referenceType: "reservation",
-            });
+            // Idempotency: skip if a "refund" transaction for this reservation already exists
+            // (prevents double-reversal on reopen → re-cancel flows)
+            const [existingRefund] = await tx
+              .select({ id: loyaltyTransactionsTable.id })
+              .from(loyaltyTransactionsTable)
+              .where(and(
+                eq(loyaltyTransactionsTable.memberId, loyaltyMember.id),
+                eq(loyaltyTransactionsTable.type, "refund"),
+                eq(loyaltyTransactionsTable.referenceId, req.params.id),
+              ))
+              .limit(1);
+            if (!existingRefund) {
+              await tx.update(loyaltyMembersTable)
+                .set({
+                  availablePoints: loyaltyMember.availablePoints + loyaltyPointsToRestore,
+                  lastActivityAt: new Date(),
+                })
+                .where(eq(loyaltyMembersTable.id, loyaltyMember.id));
+              await tx.insert(loyaltyTransactionsTable).values({
+                id: generateId(),
+                tenantId: me.tenantId,
+                memberId: loyaltyMember.id,
+                type: "refund",
+                points: loyaltyPointsToRestore,
+                description: `Estorno de pontos — cancelamento da reserva ${existing.voucherCode}`,
+                referenceId: req.params.id,
+                referenceType: "reservation",
+              });
+            }
           }
         }
 
@@ -885,38 +898,51 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
               ))
               .limit(1);
             if (loyaltyMember) {
-              const earnTransactions = await tx
-                .select({ points: loyaltyTransactionsTable.points })
+              // Idempotency: skip if a "cancellation" transaction for this reservation already exists
+              // (prevents double-clawback on reopen → re-cancel flows)
+              const [existingClawback] = await tx
+                .select({ id: loyaltyTransactionsTable.id })
                 .from(loyaltyTransactionsTable)
                 .where(and(
-                  eq(loyaltyTransactionsTable.tenantId, me.tenantId),
                   eq(loyaltyTransactionsTable.memberId, loyaltyMember.id),
-                  eq(loyaltyTransactionsTable.referenceType, "payment"),
-                  eq(loyaltyTransactionsTable.type, "earn"),
-                  inArray(loyaltyTransactionsTable.referenceId, paymentIds),
-                ));
-              const totalEarnedPoints = earnTransactions.reduce((sum, t) => sum + t.points, 0);
-              if (totalEarnedPoints > 0) {
-                const newAvailable = Math.max(0, loyaltyMember.availablePoints - totalEarnedPoints);
-                const newTotal = Math.max(0, loyaltyMember.totalPoints - totalEarnedPoints);
-                await tx.update(loyaltyMembersTable)
-                  .set({
-                    availablePoints: newAvailable,
-                    totalPoints: newTotal,
-                    tier: calculateTier(newTotal),
-                    lastActivityAt: new Date(),
-                  })
-                  .where(eq(loyaltyMembersTable.id, loyaltyMember.id));
-                await tx.insert(loyaltyTransactionsTable).values({
-                  id: generateId(),
-                  tenantId: me.tenantId,
-                  memberId: loyaltyMember.id,
-                  type: "cancellation",
-                  points: -totalEarnedPoints,
-                  description: `Estorno de pontos por pagamentos — cancelamento da reserva ${existing.voucherCode}`,
-                  referenceId: req.params.id,
-                  referenceType: "reservation",
-                });
+                  eq(loyaltyTransactionsTable.type, "cancellation"),
+                  eq(loyaltyTransactionsTable.referenceId, req.params.id),
+                ))
+                .limit(1);
+              if (!existingClawback) {
+                const earnTransactions = await tx
+                  .select({ points: loyaltyTransactionsTable.points })
+                  .from(loyaltyTransactionsTable)
+                  .where(and(
+                    eq(loyaltyTransactionsTable.tenantId, me.tenantId),
+                    eq(loyaltyTransactionsTable.memberId, loyaltyMember.id),
+                    eq(loyaltyTransactionsTable.referenceType, "payment"),
+                    eq(loyaltyTransactionsTable.type, "earn"),
+                    inArray(loyaltyTransactionsTable.referenceId, paymentIds),
+                  ));
+                const totalEarnedPoints = earnTransactions.reduce((sum, t) => sum + t.points, 0);
+                if (totalEarnedPoints > 0) {
+                  const newAvailable = Math.max(0, loyaltyMember.availablePoints - totalEarnedPoints);
+                  const newTotal = Math.max(0, loyaltyMember.totalPoints - totalEarnedPoints);
+                  await tx.update(loyaltyMembersTable)
+                    .set({
+                      availablePoints: newAvailable,
+                      totalPoints: newTotal,
+                      tier: calculateTier(newTotal),
+                      lastActivityAt: new Date(),
+                    })
+                    .where(eq(loyaltyMembersTable.id, loyaltyMember.id));
+                  await tx.insert(loyaltyTransactionsTable).values({
+                    id: generateId(),
+                    tenantId: me.tenantId,
+                    memberId: loyaltyMember.id,
+                    type: "cancellation",
+                    points: -totalEarnedPoints,
+                    description: `Estorno de pontos por pagamentos — cancelamento da reserva ${existing.voucherCode}`,
+                    referenceId: req.params.id,
+                    referenceType: "reservation",
+                  });
+                }
               }
             }
           }

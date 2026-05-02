@@ -443,10 +443,12 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
 
     // tx select queue (in execution order):
     //   [0] Reversal 2 — loyalty member lookup
-    //   [1] Reversal 4 — payments lookup (empty → no further selects)
-    //   [2] re-fetch updated reservation
+    //   [1] Reversal 2 — idempotency check (no prior "refund" tx → proceed)
+    //   [2] Reversal 4 — payments lookup (empty → no further selects)
+    //   [3] re-fetch updated reservation
     const tx = buildTxMock([
       [{ id: "member-001", availablePoints: 300 }],
+      [], // no existing refund tx → proceed with restore
       [], // no payments
       [cancelled],
     ]);
@@ -558,11 +560,13 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     // tx select queue (in execution order):
     //   [0] Reversal 4 — payments lookup → 2 payments found
     //   [1] Reversal 4 — loyalty member lookup
-    //   [2] Reversal 4 — earn transactions lookup (15 + 20 = 35 pts)
-    //   [3] re-fetch updated reservation
+    //   [2] Reversal 4 — idempotency check (no prior "cancellation" tx → proceed)
+    //   [3] Reversal 4 — earn transactions lookup (15 + 20 = 35 pts)
+    //   [4] re-fetch updated reservation
     const tx = buildTxMock([
       [{ id: "pay-001" }, { id: "pay-002" }],
       [{ id: "member-001", availablePoints: 150, totalPoints: 300 }],
+      [], // no existing cancellation tx → proceed with clawback
       [{ points: 15 }, { points: 20 }],
       [cancelled],
     ]);
@@ -605,18 +609,22 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     //   [0] Reversal 1 (coupon) — store lookup (get store.id)
     //   [1] Reversal 1 (coupon) — coupon lookup by storeId + code → coupon.id
     //   [2] Reversal 2 (loyalty discount) — loyalty member
-    //   [3] Reversal 3 (referral) — referral record by reservationId
-    //   [4] Reversal 4 (payment loyalty) — payments
-    //   [5] Reversal 4 — loyalty member (for payment clawback)
-    //   [6] Reversal 4 — earn transactions
-    //   [7] re-fetch updated reservation
+    //   [3] Reversal 2 — idempotency check (no prior "refund" tx → proceed)
+    //   [4] Reversal 3 (referral) — referral record by reservationId
+    //   [5] Reversal 4 (payment loyalty) — payments
+    //   [6] Reversal 4 — loyalty member (for payment clawback)
+    //   [7] Reversal 4 — idempotency check (no prior "cancellation" tx → proceed)
+    //   [8] Reversal 4 — earn transactions
+    //   [9] re-fetch updated reservation
     const tx = buildTxMock([
       [{ id: "store-001" }],
       [{ id: "coupon-001" }],
       [{ id: "member-001", availablePoints: 200 }],
+      [], // no existing refund tx → proceed
       [{ id: "ref-001", referrerId: "ref-client-001", bonusAmount: "10.00" }],
       [{ id: "pay-001" }],
       [{ id: "member-001", availablePoints: 250, totalPoints: 500 }],
+      [], // no existing cancellation tx → proceed
       [{ points: 10 }],
       [cancelled],
     ]);
@@ -646,6 +654,53 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     // clients (referral earnings) + referrals (status) +
     // loyaltyMembers (payment clawback) + reservations = 7 updates
     expect(tx.update).toHaveBeenCalledTimes(7);
+  });
+
+  // -------------------------------------------------------------------------
+  it("does not double-apply loyalty refund when a previously cancelled reservation is re-cancelled (idempotency)", async () => {
+    // Simulates: cancel → reopen (manual admin action) → cancel again.
+    // The second cancellation detects an existing "refund" loyaltyTransaction
+    // for this reservationId and skips the loyalty restore to prevent drift.
+    const app = buildReservationsApp();
+    const existing = makeReservation({
+      discountLoyaltyPoints: 100,
+      discountLoyaltyAmount: "10",
+      clientId: "client-001",
+    });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] Reversal 2 — loyalty member lookup
+    //   [1] Reversal 2 — idempotency check → returns existing "refund" tx → SKIP
+    //   [2] Reversal 4 — payments lookup (empty → no further selects)
+    //   [3] re-fetch updated reservation
+    const tx = buildTxMock([
+      [{ id: "member-001", availablePoints: 300 }],
+      [{ id: "refund-tx-001" }], // existing refund tx → loyalty restore is skipped
+      [],                         // no payments
+      [cancelled],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+    // Only: trips (seat restore) + reservations (status update) = 2 updates
+    // loyaltyMembers is NOT updated a second time (idempotency guard fired)
+    expect(tx.update).toHaveBeenCalledTimes(2);
+    // No new loyalty transactions inserted (refund was skipped)
+    const refundTx = capturedInserts.find(
+      (i) => (i as Record<string, unknown>)["type"] === "refund",
+    );
+    expect(refundTx).toBeUndefined();
   });
 
   // -------------------------------------------------------------------------
