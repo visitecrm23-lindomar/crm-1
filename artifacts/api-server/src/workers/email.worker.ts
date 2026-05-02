@@ -1,27 +1,40 @@
 import { Worker } from "bullmq";
 import { db, emailLogsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { sendReservationConfirmationEmail } from "@workspace/email";
+import { sendReservationConfirmationEmail, sendReservationCancellationEmail } from "@workspace/email";
 import { getRedisConnection } from "../lib/redis";
 import { logger } from "../lib/logger";
-import type { ReservationEmailJobData } from "../queues/index";
+import type { ReservationEmailJobData, CancellationEmailJobData } from "../queues/index";
+import type { SendEmailResult } from "@workspace/email";
 
-let _worker: Worker<ReservationEmailJobData> | null = null;
+type EmailJobData = ReservationEmailJobData | CancellationEmailJobData;
 
-export function startEmailWorker(): Worker<ReservationEmailJobData> | null {
+let _worker: Worker<EmailJobData> | null = null;
+
+export function startEmailWorker(): Worker<EmailJobData> | null {
   const conn = getRedisConnection();
   if (!conn) {
     logger.warn("[email-worker] No Redis connection — worker not started");
     return null;
   }
 
-  _worker = new Worker<ReservationEmailJobData>(
+  _worker = new Worker<EmailJobData>(
     "emails",
     async (job) => {
-      const { emailLogId, tenantId, reservationId, ...emailProps } = job.data;
+      const { emailLogId, tenantId: _tenantId, reservationId } = job.data;
       logger.info({ jobId: job.id, emailLogId, reservationId }, "[email-worker] Processing job");
 
-      const result = await sendReservationConfirmationEmail(emailProps);
+      let result: SendEmailResult;
+
+      if (job.name === "reservation-cancellation") {
+        const { emailLogId: _e, tenantId: _t, reservationId: _r, ...cancellationProps } =
+          job.data as CancellationEmailJobData;
+        result = await sendReservationCancellationEmail(cancellationProps);
+      } else {
+        const { emailLogId: _e, tenantId: _t, reservationId: _r, ...emailProps } =
+          job.data as ReservationEmailJobData;
+        result = await sendReservationConfirmationEmail(emailProps);
+      }
 
       await db
         .update(emailLogsTable)

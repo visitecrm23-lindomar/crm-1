@@ -40,6 +40,7 @@ const QUEUES = {
 } as const;
 
 let _emailQueue: Queue<ReservationEmailJobData> | null = null;
+let _cancellationEmailQueue: Queue<CancellationEmailJobData> | null = null;
 let _reminderQueue: Queue<ReminderJobData> | null = null;
 let _pdfQueue: Queue<PdfJobData> | null = null;
 
@@ -59,6 +60,24 @@ export function getEmailQueue(): Queue<ReservationEmailJobData> | null {
     });
   }
   return _emailQueue;
+}
+
+export function getCancellationEmailQueue(): Queue<CancellationEmailJobData> | null {
+  const conn = getRedisConnection();
+  if (!conn) return null;
+
+  if (!_cancellationEmailQueue) {
+    _cancellationEmailQueue = new Queue<CancellationEmailJobData>(QUEUES.EMAIL, {
+      connection: conn,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 10_000 },
+        removeOnComplete: { count: 500 },
+        removeOnFail: { count: 200 },
+      },
+    });
+  }
+  return _cancellationEmailQueue;
 }
 
 export function getReminderQueue(): Queue<ReminderJobData> | null {
@@ -100,10 +119,12 @@ export function getPdfQueue(): Queue<PdfJobData> | null {
 export async function closeQueues(): Promise<void> {
   await Promise.all([
     _emailQueue?.close().catch(() => {}),
+    _cancellationEmailQueue?.close().catch(() => {}),
     _reminderQueue?.close().catch(() => {}),
     _pdfQueue?.close().catch(() => {}),
   ]);
   _emailQueue = null;
+  _cancellationEmailQueue = null;
   _reminderQueue = null;
   _pdfQueue = null;
 }

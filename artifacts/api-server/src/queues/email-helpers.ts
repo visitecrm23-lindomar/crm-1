@@ -1,10 +1,10 @@
 import { db, emailLogsTable, reservationsTable, tripsTable, clientsTable, tenantsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { generateId } from "../lib/id";
-import { getEmailQueue } from "./index";
-import { sendReservationConfirmationEmail } from "@workspace/email";
+import { getEmailQueue, getCancellationEmailQueue } from "./index";
+import { sendReservationConfirmationEmail, sendReservationCancellationEmail } from "@workspace/email";
 import { logger } from "../lib/logger";
-import type { ReservationConfirmationEmailProps } from "@workspace/email";
+import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps } from "@workspace/email";
 
 interface EnqueueEmailOpts {
   tenantId: string;
