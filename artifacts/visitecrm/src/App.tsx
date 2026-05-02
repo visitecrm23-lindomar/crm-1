@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, lazy, Suspense } from "react";
+import { useEffect, useRef, useState, lazy, Suspense, type ComponentType, type ReactNode } from "react";
 import { ClerkProvider, Show, useClerk, useUser } from "@clerk/react";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
@@ -164,23 +164,6 @@ function RoleRedirect() {
   );
 }
 
-function SyncUser() {
-  const syncMe = useSyncMe();
-  const { user } = useUser();
-  useEffect(() => {
-    if (!user) return;
-    syncMe.mutate({
-      data: {
-        clerkId: user.id,
-        name: user.fullName ?? user.firstName ?? "Usuário",
-        email: user.primaryEmailAddress?.emailAddress ?? "",
-        avatarUrl: user.imageUrl ?? undefined,
-      },
-    });
-  }, [user?.id]);
-  return null;
-}
-
 function HomeRedirect() {
   return (
     <>
@@ -194,140 +177,60 @@ function HomeRedirect() {
   );
 }
 
-function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  const { data: me, isLoading } = useGetMe();
+const AGENCY_ROLES = ["agencia", "gerente", "suporte", "superadmin"] as const;
 
-  return (
-    <>
-      <Show when="signed-in">
-        {isLoading ? null : me?.role === "cliente" ? (
-          <Redirect to="/perfil" />
-        ) : !me?.tenantId && me?.role !== "superadmin" ? (
-          <Redirect to="/onboarding" />
-        ) : (
-          <Layout>
-            <Component />
-          </Layout>
-        )}
-      </Show>
-      <Show when="signed-out">
-        <Redirect to="/" />
-      </Show>
-    </>
-  );
+interface RoleGateProps {
+  component: ComponentType;
+  allowedRoles: readonly string[] | "*";
+  layout: ComponentType<{ children: ReactNode }>;
+  signedOutPath?: string;
+  fallbackPath?: string;
+  vendedorFallback?: string;
+  requireTenant?: boolean;
 }
 
-function ClientRoute({ component: Component }: { component: React.ComponentType }) {
+function RoleGate({
+  component: Component,
+  allowedRoles,
+  layout: LayoutComponent,
+  signedOutPath = "/",
+  fallbackPath = "/dashboard",
+  vendedorFallback,
+  requireTenant = true,
+}: RoleGateProps) {
   const { data: me, isLoading } = useGetMe();
+  const role = me?.role;
+  const clientNotAllowed =
+    allowedRoles === "*" || !(allowedRoles as string[]).includes("cliente");
 
-  return (
-    <>
-      <Show when="signed-out">
-        <Redirect to="/sign-in?redirect_url=%2Fperfil" />
-      </Show>
-      <Show when="signed-in">
-        {isLoading ? null : me?.role === "cliente" ? (
-          <PortalLayout>
-            <Component />
-          </PortalLayout>
-        ) : me?.role ? (
-          <Redirect to="/dashboard" />
-        ) : null}
-      </Show>
-    </>
-  );
-}
-
-function AgenciaRoute({ component: Component }: { component: React.ComponentType }) {
-  const { data: me, isLoading } = useGetMe();
-
-  return (
-    <>
-      <Show when="signed-out">
-        <Redirect to="/" />
-      </Show>
-      <Show when="signed-in">
-        {isLoading ? null : me?.role === "cliente" ? (
-          <Redirect to="/perfil" />
-        ) : !me?.tenantId && me?.role !== "superadmin" ? (
-          <Redirect to="/onboarding" />
-        ) : me?.role === "vendedor" ? (
-          <Redirect to="/trips" />
+  let content: ReactNode = null;
+  if (!isLoading && me) {
+    if (clientNotAllowed && role === "cliente") {
+      content = <Redirect to="/perfil" />;
+    } else if (clientNotAllowed && requireTenant && !me.tenantId && role !== "superadmin") {
+      content = <Redirect to="/onboarding" />;
+    } else if (allowedRoles !== "*" && !(allowedRoles as string[]).includes(role ?? "")) {
+      content =
+        role === "vendedor" && vendedorFallback !== undefined ? (
+          <Redirect to={vendedorFallback} />
         ) : (
-          <Layout>
-            <Component />
-          </Layout>
-        )}
-      </Show>
-    </>
-  );
-}
-
-function AgenciaOnlyRoute({ component: Component }: { component: React.ComponentType }) {
-  const { data: me, isLoading } = useGetMe();
-
-  return (
-    <>
-      <Show when="signed-in">
-        {isLoading ? null : me?.role === "cliente" ? (
-          <Redirect to="/perfil" />
-        ) : !me?.tenantId && me?.role !== "superadmin" ? (
-          <Redirect to="/onboarding" />
-        ) : me?.role === "vendedor" ? (
-          <Redirect to="/meu-painel" />
-        ) : (
-          <Layout>
-            <Component />
-          </Layout>
-        )}
-      </Show>
-      <Show when="signed-out">
-        <Redirect to="/" />
-      </Show>
-    </>
-  );
-}
-
-function VendedorRoute({ component: Component }: { component: React.ComponentType }) {
-  const { data: me, isLoading } = useGetMe();
+          <Redirect to={fallbackPath} />
+        );
+    } else {
+      content = (
+        <LayoutComponent>
+          <Component />
+        </LayoutComponent>
+      );
+    }
+  }
 
   return (
     <>
       <Show when="signed-out">
-        <Redirect to="/" />
+        <Redirect to={signedOutPath} />
       </Show>
-      <Show when="signed-in">
-        {isLoading ? null : me?.role === "cliente" ? (
-          <Redirect to="/perfil" />
-        ) : me?.role === "vendedor" ? (
-          <Layout>
-            <Component />
-          </Layout>
-        ) : (
-          <Redirect to="/dashboard" />
-        )}
-      </Show>
-    </>
-  );
-}
-
-function AdminRoute({ component: Component }: { component: React.ComponentType }) {
-  const { data: me, isLoading } = useGetMe();
-
-  return (
-    <>
-      <Show when="signed-out">
-        <Redirect to="/" />
-      </Show>
-      <Show when="signed-in">
-        {isLoading ? null : me?.role === "superadmin" ? (
-          <AdminLayout>
-            <Component />
-          </AdminLayout>
-        ) : (
-          <Redirect to="/dashboard" />
-        )}
-      </Show>
+      <Show when="signed-in">{content}</Show>
     </>
   );
 }
@@ -354,7 +257,6 @@ function OnboardingRoute() {
   return (
     <>
       <Show when="signed-in">
-        <SyncUser />
         {!isLoading && <OnboardingPage />}
       </Show>
       <Show when="signed-out">
@@ -371,99 +273,61 @@ function Router() {
       <Route path="/sign-in/*?" component={SignInPage} />
       <Route path="/sign-up/*?" component={SignUpPage} />
       <Route path="/onboarding" component={OnboardingRoute} />
-      <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} />} />
-      <Route path="/pipeline" component={() => <ProtectedRoute component={Pipeline} />} />
-      <Route path="/clients" component={() => <ProtectedRoute component={Clients} />} />
-      <Route path="/clients/:id" component={() => <ProtectedRoute component={Clients} />} />
-      <Route path="/trips" component={() => <ProtectedRoute component={Trips} />} />
-      <Route path="/trips/new" component={() => <AgenciaRoute component={Trips} />} />
-      <Route path="/trips/calendar" component={() => <ProtectedRoute component={Trips} />} />
-      <Route path="/trips/:id/edit" component={() => <AgenciaRoute component={Trips} />} />
-      <Route path="/trips/:id/seat-map" component={() => <ProtectedRoute component={Trips} />} />
-      <Route
-        path="/trips/:id/passengers-overview"
-        component={() => <ProtectedRoute component={Trips} />}
-      />
-      <Route path="/trips/:id/passengers" component={() => <ProtectedRoute component={Trips} />} />
-      <Route path="/trips/:id" component={() => <ProtectedRoute component={Trips} />} />
-      <Route path="/reservations" component={() => <ProtectedRoute component={Reservations} />} />
-      <Route
-        path="/reservations/:id"
-        component={() => <ProtectedRoute component={Reservations} />}
-      />
+
+      {/* Staff routes — any authenticated non-client with a tenant */}
+      <Route path="/dashboard" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Dashboard} />} />
+      <Route path="/pipeline" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Pipeline} />} />
+      <Route path="/clients" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Clients} />} />
+      <Route path="/clients/:id" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Clients} />} />
+      <Route path="/trips" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Trips} />} />
+      <Route path="/trips/new" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} vendedorFallback="/trips" component={Trips} />} />
+      <Route path="/trips/calendar" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Trips} />} />
+      <Route path="/trips/:id/edit" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} vendedorFallback="/trips" component={Trips} />} />
+      <Route path="/trips/:id/seat-map" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Trips} />} />
+      <Route path="/trips/:id/passengers-overview" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Trips} />} />
+      <Route path="/trips/:id/passengers" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Trips} />} />
+      <Route path="/trips/:id" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Trips} />} />
+      <Route path="/reservations" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Reservations} />} />
+      <Route path="/reservations/:id" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Reservations} />} />
+
+      {/* Agency-only routes — vendedor redirected to /meu-painel */}
       <Route path="/financial" component={() => <Redirect to="/financeiro" />} />
-      <Route path="/financeiro" component={() => <AgenciaOnlyRoute component={Financial} />} />
-      <Route
-        path="/financeiro/commissions"
-        component={() => <AgenciaOnlyRoute component={Commissions} />}
-      />
-      <Route
-        path="/financeiro/expenses"
-        component={() => <AgenciaOnlyRoute component={Expenses} />}
-      />
-      <Route path="/comunicacao" component={() => <ProtectedRoute component={Communication} />} />
+      <Route path="/financeiro" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Financial} />} />
+      <Route path="/financeiro/commissions" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Commissions} />} />
+      <Route path="/financeiro/expenses" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Expenses} />} />
+      <Route path="/comunicacao" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Communication} />} />
       <Route path="/communication" component={() => <Redirect to="/comunicacao" />} />
-      <Route
-        path="/comunicacao/campanhas"
-        component={() => <AgenciaOnlyRoute component={Campaigns} />}
-      />
-      <Route path="/automacoes" component={() => <AgenciaOnlyRoute component={Automations} />} />
+      <Route path="/comunicacao/campanhas" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Campaigns} />} />
+      <Route path="/automacoes" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Automations} />} />
       <Route path="/automations" component={() => <Redirect to="/automacoes" />} />
-      <Route path="/marketing" component={() => <AgenciaOnlyRoute component={Marketing} />} />
-      <Route path="/fidelidade" component={() => <AgenciaOnlyRoute component={Loyalty} />} />
-      <Route path="/nps" component={() => <AgenciaOnlyRoute component={Nps} />} />
+      <Route path="/marketing" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Marketing} />} />
+      <Route path="/fidelidade" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Loyalty} />} />
+      <Route path="/nps" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Nps} />} />
 
       {/* Registrations hub + sub-pages */}
       <Route path="/registrations" component={() => <Redirect to="/cadastros" />} />
-      <Route path="/cadastros" component={() => <AgenciaOnlyRoute component={Registrations} />} />
-      <Route
-        path="/cadastros/fornecedores"
-        component={() => <AgenciaOnlyRoute component={Fornecedores} />}
-      />
-      <Route
-        path="/cadastros/veiculos"
-        component={() => <AgenciaOnlyRoute component={Veiculos} />}
-      />
-      <Route
-        path="/cadastros/hospedagens"
-        component={() => <AgenciaOnlyRoute component={Hospedagens} />}
-      />
-      <Route
-        path="/cadastros/destinos"
-        component={() => <AgenciaOnlyRoute component={Destinos} />}
-      />
-      <Route
-        path="/cadastros/produtos"
-        component={() => <AgenciaOnlyRoute component={Produtos} />}
-      />
-      <Route
-        path="/cadastros/layouts"
-        component={() => <AgenciaOnlyRoute component={Layouts} />}
-      />
+      <Route path="/cadastros" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Registrations} />} />
+      <Route path="/cadastros/fornecedores" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Fornecedores} />} />
+      <Route path="/cadastros/veiculos" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Veiculos} />} />
+      <Route path="/cadastros/hospedagens" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Hospedagens} />} />
+      <Route path="/cadastros/destinos" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Destinos} />} />
+      <Route path="/cadastros/produtos" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Produtos} />} />
+      <Route path="/cadastros/layouts" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Layouts} />} />
 
       {/* Analytics */}
-      <Route path="/analytics" component={() => <AgenciaOnlyRoute component={Analytics} />} />
-      <Route path="/analytics/revenue" component={() => <AgenciaOnlyRoute component={Revenue} />} />
-      <Route path="/analytics/historico-comparativo" component={() => <Suspense fallback={null}><AgenciaOnlyRoute component={HistoricoComparativo} /></Suspense>} />
-      <Route
-        path="/analytics/vendedores"
-        component={() => <AgenciaOnlyRoute component={Vendedores} />}
-      />
+      <Route path="/analytics" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Analytics} />} />
+      <Route path="/analytics/revenue" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Revenue} />} />
+      <Route path="/analytics/historico-comparativo" component={() => <Suspense fallback={null}><RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={HistoricoComparativo} /></Suspense>} />
+      <Route path="/analytics/vendedores" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Vendedores} />} />
 
-      {/* New Task 6 pages */}
-      <Route path="/vouchers" component={() => <ProtectedRoute component={Vouchers} />} />
-      <Route path="/indicacoes" component={() => <AgenciaOnlyRoute component={Indicacoes} />} />
-      <Route
-        path="/configuracoes"
-        component={() => <AgenciaOnlyRoute component={Configuracoes} />}
-      />
-      <Route
-        path="/downloads"
-        component={() => <AgenciaOnlyRoute component={Downloads} />}
-      />
+      {/* Task 6 pages */}
+      <Route path="/vouchers" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Vouchers} />} />
+      <Route path="/indicacoes" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Indicacoes} />} />
+      <Route path="/configuracoes" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Configuracoes} />} />
+      <Route path="/downloads" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Downloads} />} />
 
       {/* Seller dashboard */}
-      <Route path="/meu-painel" component={() => <VendedorRoute component={MeuPainel} />} />
+      <Route path="/meu-painel" component={() => <RoleGate allowedRoles={["vendedor"]} layout={Layout} fallbackPath="/dashboard" requireTenant={false} component={MeuPainel} />} />
 
       {/* Legacy redirects */}
       <Route path="/settings" component={() => <Redirect to="/configuracoes" />} />
@@ -471,53 +335,35 @@ function Router() {
       <Route path="/settings/billing" component={() => <Redirect to="/configuracoes?tab=plan" />} />
 
       {/* Super Admin */}
-      <Route path="/admin" component={() => <AdminRoute component={AdminDashboard} />} />
-      <Route path="/admin/tenants" component={() => <AdminRoute component={AdminTenants} />} />
-      <Route path="/admin/tenants/:id" component={() => <AdminRoute component={AdminTenantDetail} />} />
-      <Route path="/admin/plans" component={() => <AdminRoute component={AdminPlans} />} />
-      <Route path="/admin/billing" component={() => <AdminRoute component={AdminBilling} />} />
-      <Route path="/admin/metrics" component={() => <AdminRoute component={AdminMetrics} />} />
-      <Route path="/admin/users" component={() => <AdminRoute component={AdminUsers} />} />
-      <Route path="/admin/logs" component={() => <AdminRoute component={AdminLogs} />} />
-      <Route path="/admin/settings" component={() => <AdminRoute component={AdminSettings} />} />
-      <Route path="/admin/maintenance" component={() => <AdminRoute component={AdminMaintenance} />} />
+      <Route path="/admin" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminDashboard} />} />
+      <Route path="/admin/tenants" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminTenants} />} />
+      <Route path="/admin/tenants/:id" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminTenantDetail} />} />
+      <Route path="/admin/plans" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminPlans} />} />
+      <Route path="/admin/billing" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminBilling} />} />
+      <Route path="/admin/metrics" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminMetrics} />} />
+      <Route path="/admin/users" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminUsers} />} />
+      <Route path="/admin/logs" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminLogs} />} />
+      <Route path="/admin/settings" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminSettings} />} />
+      <Route path="/admin/maintenance" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminMaintenance} />} />
 
       {/* Store admin pages */}
       <Route path="/loja" component={() => <Redirect to="/loja/configuracoes" />} />
-      <Route
-        path="/loja/configuracoes"
-        component={() => <AgenciaOnlyRoute component={LojaConfiguracoes} />}
-      />
-      <Route
-        path="/loja/produtos"
-        component={() => <AgenciaOnlyRoute component={LojaProdutos} />}
-      />
-      <Route
-        path="/loja/categorias"
-        component={() => <AgenciaOnlyRoute component={LojaCategorias} />}
-      />
-      <Route
-        path="/loja/pedidos"
-        component={() => <AgenciaOnlyRoute component={LojaPedidos} />}
-      />
-      <Route
-        path="/loja/cupons"
-        component={() => <AgenciaOnlyRoute component={LojaCupons} />}
-      />
-      <Route
-        path="/loja/avaliacoes"
-        component={() => <AgenciaOnlyRoute component={LojaAvaliacoes} />}
-      />
+      <Route path="/loja/configuracoes" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={LojaConfiguracoes} />} />
+      <Route path="/loja/produtos" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={LojaProdutos} />} />
+      <Route path="/loja/categorias" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={LojaCategorias} />} />
+      <Route path="/loja/pedidos" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={LojaPedidos} />} />
+      <Route path="/loja/cupons" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={LojaCupons} />} />
+      <Route path="/loja/avaliacoes" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={LojaAvaliacoes} />} />
 
       {/* Client portal */}
-      <Route path="/perfil" component={() => <ClientRoute component={PerfilPage} />} />
+      <Route path="/perfil" component={() => <RoleGate allowedRoles={["cliente"]} layout={PortalLayout} signedOutPath="/sign-in?redirect_url=%2Fperfil" fallbackPath="/dashboard" requireTenant={false} component={PerfilPage} />} />
 
       {/* Public vitrine — must be after admin routes */}
       <Route path="/loja/:slug" component={Vitrine} />
       <Route path="/loja/:slug/*" component={Vitrine} />
 
       <Route
-        component={() => <ProtectedRoute component={() => <Redirect to="/dashboard" />} />}
+        component={() => <RoleGate allowedRoles="*" layout={Layout} component={() => <Redirect to="/dashboard" />} />}
       />
     </Switch>
   );
