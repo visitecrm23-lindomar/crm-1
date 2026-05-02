@@ -22,6 +22,7 @@ import {
   Users, CalendarCheck, Repeat, UserPlus, BarChart, Filter,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { PAYMENT_METHOD_LABELS } from "@/lib/labels";
 
 const fmt = (v: number) => formatCurrency(v);
 const fmtCompact = (v: number) => {
@@ -220,9 +221,6 @@ function BarChartHoriz({ data, valueKey, labelKey, colorFn }: {
 
 const PAYMENT_METHOD_COLORS: Record<string, string> = {
   pix: "#10B981", credit_card: "#8B5CF6", debit_card: "#6366F1", bank_transfer: "#3B82F6", cash: "#F59E0B", boleto: "#EF4444",
-};
-const PAYMENT_METHOD_LABELS: Record<string, string> = {
-  pix: "PIX", credit_card: "Cartão de Crédito", debit_card: "Cartão de Débito", bank_transfer: "Transferência", cash: "Dinheiro", boleto: "Boleto",
 };
 
 export default function Revenue() {

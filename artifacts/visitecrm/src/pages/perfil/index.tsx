@@ -26,7 +26,7 @@ import {
   TrendingUp,
   Loader2,
 } from "lucide-react";
-import { formatCurrency as fmtCurrencyLib } from "@/lib/utils";
+import { formatCurrency as fmtCurrencyLib, formatDateShort } from "@/lib/utils";
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   pending:   { label: "Aguardando",  variant: "secondary" },
@@ -51,15 +51,7 @@ function StatusIcon({ status }: { status: string }) {
   }
 }
 
-function fmtDate(dateStr: string | null) {
-  if (!dateStr) return "A confirmar";
-  return new Date(dateStr + "T00:00:00").toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
+const fmtDate = (dateStr: string | null) => formatDateShort(dateStr) ?? "A confirmar";
 const fmtCurrency = fmtCurrencyLib;
 
 function ReservationCard({ r }: { r: ClientPortalProfile["reservations"][number] }) {

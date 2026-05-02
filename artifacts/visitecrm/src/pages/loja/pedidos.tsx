@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { storeApi, StoreOrder } from "@/lib/storeApi";
 import { PAYMENT_METHOD_LABELS as PAYMENT_METHODS } from "@/lib/labels";
+import { formatDateTime as formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -82,10 +83,6 @@ function paymentColor(s: string) {
   return "bg-yellow-100 text-yellow-800";
 }
 
-function formatDate(d?: string | null) {
-  if (!d) return "—";
-  return new Date(d).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
 
 function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);

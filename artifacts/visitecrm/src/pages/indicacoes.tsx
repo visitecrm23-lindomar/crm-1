@@ -47,17 +47,13 @@ import {
   Medal,
 } from "lucide-react";
 
-import { formatCurrency as _fmtCurrencyLib } from "@/lib/utils";
+import { formatCurrency as _fmtCurrencyLib, formatDate as _formatDate } from "@/lib/utils";
 function fmtCurrency(v: string | number | null | undefined) {
   if (v == null) return "R$ 0,00";
   const n = typeof v === "string" ? parseFloat(v) : v;
   return _fmtCurrencyLib(isNaN(n) ? 0 : n);
 }
-
-function fmtDate(v: string | null | undefined) {
-  if (!v) return "—";
-  return new Date(v).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
+const fmtDate = (v: string | null | undefined) => v ? _formatDate(v) : "—";
 
 const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   pending: { label: "Pendente", variant: "secondary" },

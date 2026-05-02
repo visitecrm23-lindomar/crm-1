@@ -40,6 +40,17 @@ export function formatDateShort(d?: string | null): string | null {
   }
 }
 
+export function formatDateTime(d?: string | null): string {
+  if (!d) return "—";
+  return new Date(d).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export function formatCpf(cpf: string | null | undefined): string {
   if (!cpf) return "—";
   const digits = cpf.replace(/\D/g, "");
