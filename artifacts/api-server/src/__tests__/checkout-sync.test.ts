@@ -327,7 +327,7 @@ describe("POST /api/public/store/:slug/orders — checkout sync", () => {
     expect(mockWriteClientActivity).toHaveBeenCalledWith(
       "client-001",
       "reservation_created",
-      expect.stringContaining("vitrine"),
+      expect.stringContaining("loja"),
       "user-001",
       expect.any(Object),
     );

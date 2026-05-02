@@ -1243,7 +1243,7 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
       writeClientActivity(
         reservationClientId,
         "reservation_created",
-        `Reserva criada via vitrine — ${totalFormatted}`,
+        `Reserva criada via loja — ${totalFormatted}`,
         reservationCreatedById,
         { storeOrderId: orderId },
       ).catch(() => {});
