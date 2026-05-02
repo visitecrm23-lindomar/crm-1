@@ -28,7 +28,7 @@ import { generateId, generateVoucherCode, generateReferralCode } from "../lib/id
 import { getTenantReservationPrefix, tripTypeToCode, getYearMonth, nextReservationSequence, buildReservationNumber } from "../lib/reservation-number";
 import { randomBytes } from "crypto";
 import { clerkClient } from "@clerk/express";
-import { enqueueReservationConfirmationEmail } from "../queues/email-helpers";
+import { enqueueReservationConfirmationEmail, sendWelcomeEmail } from "../queues/email-helpers";
 import { writeClientActivity } from "../lib/activities";
 
 function generateCookieId(): string {
@@ -1133,19 +1133,47 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
                 referralCode,
               });
 
-              // Generate a one-time sign-in link instead of emailing the raw password
+              // Portal entry point for this storefront
+              const portalUrl = `${ffStoreBase}/perfil`;
+
+              // setupUrl starts as the regular portal URL; upgraded to a magic link if token succeeds
+              let setupUrl: string = portalUrl;
+
+              // Generate a one-time sign-in link that redirects to /perfil after authentication
               try {
                 const signInToken = await clerkClient.signInTokens.createSignInToken({
                   userId: newClerkId,
                   expiresInSeconds: 604800, // 7 days
                 });
-                credentials = { email: ffEmail, setupUrl: signInToken.url, loginUrl: ffLoginUrl };
+                // Append redirect_url so Clerk lands the user on /perfil after auto-sign-in
+                const redirectParam = encodeURIComponent(portalUrl);
+                const tokenBase = signInToken.url;
+                setupUrl = tokenBase.includes("?")
+                  ? `${tokenBase}&redirect_url=${redirectParam}`
+                  : `${tokenBase}?redirect_url=${redirectParam}`;
+                credentials = { email: ffEmail, setupUrl, loginUrl: ffLoginUrl };
               } catch (tokenErr) {
                 console.error("[store-public] Failed to create sign-in token:", tokenErr);
-                // Suppress credentials block entirely — the email is still sent without account
-                // setup instructions so we never send inaccurate copy or expose the bootstrap password.
+                // setupUrl remains as portalUrl — welcome email still goes out with regular link
                 credentials = undefined;
               }
+
+              // Always send a dedicated welcome email — even when token creation fails.
+              // isMagicLink drives accurate copy in the email (auto-sign-in vs manual sign-in).
+              sendWelcomeEmail(
+                {
+                  clientName: ffName,
+                  clientEmail: ffEmail,
+                  setupUrl,
+                  loginUrl: ffLoginUrl,
+                  agencyName: ffAgencyName,
+                  agencyLogo: ffAgencyLogo || null,
+                  isMagicLink: credentials !== undefined,
+                },
+                ffTenantId,
+              ).catch((welcomeErr) => {
+                console.error("[store-public] Failed to send welcome email:", welcomeErr);
+              });
             }
           }
 

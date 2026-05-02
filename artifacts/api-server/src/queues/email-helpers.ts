@@ -2,9 +2,9 @@ import { db, emailLogsTable, reservationsTable, tripsTable, clientsTable, tenant
 import { eq, and } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { getEmailQueue, getCancellationEmailQueue } from "./index";
-import { sendReservationConfirmationEmail, sendReservationCancellationEmail } from "@workspace/email";
+import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail } from "@workspace/email";
 import { logger } from "../lib/logger";
-import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps } from "@workspace/email";
+import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps } from "@workspace/email";
 
 interface EnqueueEmailOpts {
   tenantId: string;
@@ -285,6 +285,35 @@ async function buildEmailPropsFromReservation(
     consultUrl,
     whatsappUrl,
   };
+}
+
+// ── Send a welcome email for a newly created portal account ───────────────────
+// Sends directly (no queue) and logs the outcome to email_logs.
+
+export async function sendWelcomeEmail(
+  props: WelcomeCredentialsEmailProps,
+  tenantId: string,
+): Promise<void> {
+  const emailLogId = generateId();
+  const subject = `Bem-vindo(a)! Acesse sua Área do Cliente — ${props.agencyName}`;
+
+  const result = await sendWelcomeCredentialsEmail(props);
+
+  await db.insert(emailLogsTable).values({
+    id: emailLogId,
+    tenantId,
+    reservationId: null,
+    recipient: props.clientEmail,
+    subject,
+    status: result.success ? "sent" : "failed",
+    messageId: result.messageId ?? null,
+    errorMessage: result.error ?? null,
+  });
+
+  logger.info(
+    { emailLogId, recipient: props.clientEmail, success: result.success },
+    "[email-queue] Welcome email sent",
+  );
 }
 
 // ── Resend a failed email log ──────────────────────────────────────────────────

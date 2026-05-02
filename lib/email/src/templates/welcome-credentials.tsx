@@ -16,19 +16,21 @@ import {
 export interface WelcomeCredentialsEmailProps {
   clientName: string
   clientEmail: string
-  temporaryPassword: string
+  setupUrl: string
   loginUrl: string
   agencyName: string
   agencyLogo?: string | null
+  isMagicLink?: boolean
 }
 
 export function WelcomeCredentialsEmail({
   clientName,
   clientEmail,
-  temporaryPassword,
+  setupUrl,
   loginUrl,
   agencyName,
   agencyLogo,
+  isMagicLink = false,
 }: WelcomeCredentialsEmailProps) {
   const firstName = clientName.split(' ')[0]
 
@@ -40,10 +42,10 @@ export function WelcomeCredentialsEmail({
 
           {/* HEADER */}
           <Section style={header}>
-            <div style={iconWrap}>🔑</div>
+            <div style={iconWrap}>🎉</div>
             <Heading style={headerTitle}>Bem-vindo(a), {firstName}!</Heading>
             <Text style={headerSubtitle}>
-              Sua conta foi criada. Acesse sua área do cliente.
+              Sua conta foi criada. Acesse sua Área do Cliente.
             </Text>
           </Section>
 
@@ -53,17 +55,16 @@ export function WelcomeCredentialsEmail({
               Olá, <strong>{clientName}</strong>!
             </Text>
             <Text style={bodyText}>
-              Sua reserva foi confirmada com sucesso e criamos uma conta para você
-              acompanhar suas viagens, baixar vouchers e verificar pagamentos na sua
-              Área do Cliente.
+              Criamos uma conta gratuita para você acompanhar suas viagens, baixar
+              vouchers e verificar pagamentos diretamente na sua Área do Cliente.
             </Text>
           </Section>
 
           <Hr style={divider} />
 
-          {/* CREDENTIALS BOX */}
+          {/* ACCESS INFO */}
           <Section style={section}>
-            <Heading style={sectionTitle}>🔐 Suas Credenciais de Acesso</Heading>
+            <Heading style={sectionTitle}>🔐 Seu acesso</Heading>
             <div style={credentialsBox}>
               <table style={credTable}>
                 <tbody>
@@ -71,17 +72,27 @@ export function WelcomeCredentialsEmail({
                     <td style={credLabel}>E-mail:</td>
                     <td style={credValue}>{clientEmail}</td>
                   </tr>
-                  <tr>
-                    <td style={credLabel}>Senha temporária:</td>
-                    <td style={credValuePassword}>{temporaryPassword}</td>
-                  </tr>
                 </tbody>
               </table>
             </div>
-            <div style={alertWarning}>
-              🔒 Por segurança, altere sua senha após o primeiro acesso nas
-              configurações do seu perfil.
-            </div>
+            {isMagicLink ? (
+              <div style={alertInfo}>
+                🔗 Use o botão abaixo para entrar automaticamente — sem precisar de
+                senha. O link é válido por 7 dias.
+              </div>
+            ) : (
+              <div style={alertInfo}>
+                🔗 Use o botão abaixo para acessar sua Área do Cliente. Entre com
+                seu e-mail e defina uma senha no primeiro acesso.
+              </div>
+            )}
+          </Section>
+
+          {/* CTA BUTTON */}
+          <Section style={buttonSection}>
+            <Button style={buttonPrimary} href={setupUrl}>
+              🚀 Acessar Minha Área
+            </Button>
           </Section>
 
           <Hr style={divider} />
@@ -98,11 +109,16 @@ export function WelcomeCredentialsEmail({
             </div>
           </Section>
 
-          {/* CTA BUTTON */}
-          <Section style={buttonSection}>
-            <Button style={buttonPrimary} href={loginUrl}>
-              🚀 Acessar Minha Área
-            </Button>
+          <Hr style={divider} />
+
+          {/* FALLBACK LOGIN */}
+          <Section style={section}>
+            <Text style={fallbackText}>
+              Prefere entrar com e-mail e senha?{' '}
+              <Link href={loginUrl} style={fallbackLink}>
+                Clique aqui para ir à página de login
+              </Link>
+            </Text>
           </Section>
 
           <Hr style={divider} />
@@ -219,22 +235,13 @@ const credValue: React.CSSProperties = {
   padding: '6px 0',
 }
 
-const credValuePassword: React.CSSProperties = {
-  fontSize: '18px',
-  color: '#1e40af',
-  fontWeight: 'bold',
-  fontFamily: 'monospace',
-  letterSpacing: '2px',
-  padding: '6px 0',
-}
-
-const alertWarning: React.CSSProperties = {
-  backgroundColor: '#fef3c7',
-  border: '1px solid #fbbf24',
+const alertInfo: React.CSSProperties = {
+  backgroundColor: '#eff6ff',
+  border: '1px solid #93c5fd',
   borderRadius: '8px',
   padding: '12px 16px',
   fontSize: '13px',
-  color: '#92400e',
+  color: '#1e40af',
 }
 
 const featuresList: React.CSSProperties = {
@@ -275,6 +282,18 @@ const buttonPrimary: React.CSSProperties = {
   display: 'inline-block',
   textAlign: 'center',
   letterSpacing: '0.3px',
+}
+
+const fallbackText: React.CSSProperties = {
+  fontSize: '13px',
+  color: '#6b7280',
+  textAlign: 'center',
+  margin: '0',
+}
+
+const fallbackLink: React.CSSProperties = {
+  color: '#3b82f6',
+  textDecoration: 'underline',
 }
 
 const divider: React.CSSProperties = {
