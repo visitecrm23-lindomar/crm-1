@@ -462,7 +462,64 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     expect(parseFloat(res.body.totalAmount)).toBe(135);
   });
 
-  // ── 5. Valid order (200) ──────────────────────────────────────────────────
+  // ── 5. Trip seat availability ─────────────────────────────────────────────
+
+  it("returns 409 with INSUFFICIENT_SEATS when trip has 0 available seats", async () => {
+    const tripProduct = { ...FAKE_PRODUCT, tripId: "trip-001" };
+    const fullTrip = { availableSeats: 0 };
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])   // getActiveStore
+      .mockResolvedValueOnce([tripProduct])  // product fetch
+      .mockResolvedValueOnce([fullTrip]);    // trip seat check
+
+    const res = await request(buildApp())
+      .post("/api/public/store/minha-loja/orders")
+      .send(VALID_BODY);
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("INSUFFICIENT_SEATS");
+  });
+
+  it("returns 200 with orderId when trip has enough available seats", async () => {
+    const tripProduct = { ...FAKE_PRODUCT, tripId: "trip-001" };
+    const availableTrip = { availableSeats: 10 };
+
+    // mockWhere is consumed in call order. Calls 1-5 go through .limit() and
+    // must return { limit: mockLimit }. Calls 6 (stages) and 7 (trip names)
+    // are awaited directly without .limit(), so they must return a Promise.
+    mockWhere
+      .mockReturnValueOnce({ limit: mockLimit }) // 1 — store fetch
+      .mockReturnValueOnce({ limit: mockLimit }) // 2 — product fetch
+      .mockReturnValueOnce({ limit: mockLimit }) // 3 — trip seat check
+      .mockReturnValueOnce({ limit: mockLimit }) // 4 — admin user
+      .mockReturnValueOnce({ limit: mockLimit }) // 5 — existing client
+      .mockResolvedValueOnce([])                  // 6 — stages (no .limit())
+      .mockResolvedValueOnce([]);                 // 7 — trip names (no .limit())
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])                                        // getActiveStore
+      .mockResolvedValueOnce([tripProduct])                                        // product fetch
+      .mockResolvedValueOnce([availableTrip])                                      // trip seat check
+      .mockResolvedValueOnce([{ id: "admin-001" }])                               // admin user (Phase 2.5)
+      .mockResolvedValueOnce([{ id: "client-001", cpf: null, birthDate: null }])  // existing client
+      .mockResolvedValueOnce([FAKE_ORDER])                                         // post-tx order re-fetch
+      .mockResolvedValue([]);                                                       // remaining selects
+
+    // Skip executing the transaction callback to avoid mocking the FOR UPDATE
+    // SQL lock path; the preliminary seat check (Phase 1.5) is what we are testing.
+    mockTransaction.mockImplementationOnce(async (_cb: unknown) => {});
+
+    const res = await request(buildApp())
+      .post("/api/public/store/minha-loja/orders")
+      .send(VALID_BODY);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("orderId");
+    expect(res.body).toHaveProperty("totalAmount");
+  });
+
+  // ── 6. Valid order (200) ──────────────────────────────────────────────────
 
   it("returns 200 with orderId when all fields are valid and product is in stock", async () => {
     mockLimit
