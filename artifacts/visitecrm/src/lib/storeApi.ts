@@ -112,6 +112,15 @@ export const storeApi = {
     req<{ success: boolean; channel: string; whatsappUrl?: string }>("POST", `/trips/${tripId}/manifest/send`, data),
 };
 
+export class PublicApiError extends Error {
+  code?: string;
+  constructor(message: string, code?: string) {
+    super(message);
+    this.name = "PublicApiError";
+    this.code = code;
+  }
+}
+
 async function publicReq<T>(
   method: string,
   path: string,
@@ -124,7 +133,7 @@ async function publicReq<T>(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? "Request failed");
+    throw new PublicApiError(err.error ?? "Request failed", err.code);
   }
   return res.json();
 }

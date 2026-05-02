@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { publicStoreApi, PublicStore, CouponValidation, ReferralValidation } from "@/lib/storeApi";
+import { publicStoreApi, PublicApiError, PublicStore, CouponValidation, ReferralValidation } from "@/lib/storeApi";
 import { useCart } from "@/contexts/CartContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -303,8 +303,15 @@ export default function VitrineCheckout({
     try {
       const res = await publicStoreApi.validateCoupon(slug, form.couponCode, total);
       setCouponResult(res);
-    } catch {
-      setCouponResult({ valid: false, error: "Cupom inválido" });
+    } catch (err: unknown) {
+      const code = err instanceof PublicApiError ? err.code : undefined;
+      let errorMsg = "Cupom inválido";
+      if (code === "COUPON_EXPIRED") {
+        errorMsg = "Este cupom está expirado";
+      } else if (code === "COUPON_EXHAUSTED" || code === "COUPON_USAGE_LIMIT_EXCEEDED") {
+        errorMsg = "Este cupom atingiu o limite de uso";
+      }
+      setCouponResult({ valid: false, error: errorMsg });
     } finally {
       setValidatingCoupon(false);
     }
@@ -364,6 +371,19 @@ export default function VitrineCheckout({
       clearCart();
       setStep("confirmado");
     } catch (err: unknown) {
+      if (err instanceof PublicApiError) {
+        const { code } = err;
+        if (code === "COUPON_EXPIRED") {
+          setCouponResult({ valid: false, error: "Este cupom está expirado" });
+          setStep("revisao");
+          return;
+        }
+        if (code === "COUPON_EXHAUSTED" || code === "COUPON_USAGE_LIMIT_EXCEEDED") {
+          setCouponResult({ valid: false, error: "Este cupom atingiu o limite de uso" });
+          setStep("revisao");
+          return;
+        }
+      }
       alert(err instanceof Error ? err.message : "Erro ao finalizar pedido");
     } finally {
       setLoading(false);
