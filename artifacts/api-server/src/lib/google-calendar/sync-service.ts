@@ -106,6 +106,7 @@ export class CalendarSyncService {
         clientId: reservationsTable.clientId,
         sellerId: reservationsTable.sellerId,
         totalValue: reservationsTable.totalValue,
+        seats: reservationsTable.seats,
       }).from(reservationsTable)
         .where(and(eq(reservationsTable.tripId, tripId), eq(reservationsTable.status, "confirmed")));
 
@@ -119,6 +120,11 @@ export class CalendarSyncService {
       }
 
       const totalValue = reservations.reduce((s, r) => s + Number(r.totalValue), 0);
+      // Count individual seats across all confirmed reservations (one reservation may cover multiple seats)
+      const confirmedPassengerCount = reservations.reduce(
+        (sum, r) => sum + (Array.isArray(r.seats) ? r.seats.length : 1),
+        0,
+      );
 
       const baseEvent = {
         summary: `🚌 ${trip.name}`,
@@ -147,7 +153,7 @@ export class CalendarSyncService {
           `📅 Saída: ${fmtDate(trip.departureDate)}`,
           trip.returnDate ? `🔙 Retorno: ${fmtDate(trip.returnDate)}` : null,
           ``,
-          `👥 Passageiros confirmados: ${reservations.length}`,
+          `👥 Passageiros confirmados: ${confirmedPassengerCount}`,
           `💰 Receita Total: ${fmtCurrency(totalValue)}`,
           trip.description ?? null,
         ].filter(Boolean).join("\n");

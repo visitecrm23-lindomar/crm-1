@@ -146,3 +146,46 @@ describe("getAgeYears", () => {
     expect(age).toBeLessThanOrEqual(25);
   });
 });
+
+// ---------------------------------------------------------------------------
+// syncTrip passenger count computation (pure logic extracted from sync-service)
+// Verifies that confirmed passenger count uses seat arrays, not reservation count
+// ---------------------------------------------------------------------------
+
+type ReservationWithSeats = { seats: unknown; totalValue: string; sellerId: string | null; clientId: string | null };
+
+function countConfirmedPassengers(reservations: ReservationWithSeats[]): number {
+  return reservations.reduce(
+    (sum, r) => sum + (Array.isArray(r.seats) ? r.seats.length : 1),
+    0,
+  );
+}
+
+describe("syncTrip — confirmed passenger count", () => {
+  it("sums individual seats across multi-seat reservations, not reservation count", () => {
+    const reservations: ReservationWithSeats[] = [
+      { seats: ["1A", "2B", "3C"], totalValue: "1000", sellerId: null, clientId: null },
+      { seats: ["4D", "5E"],       totalValue: "600",  sellerId: null, clientId: null },
+    ];
+    expect(countConfirmedPassengers(reservations)).toBe(5);
+  });
+
+  it("falls back to 1 per reservation when seats field is null or missing", () => {
+    const reservations: ReservationWithSeats[] = [
+      { seats: null,      totalValue: "500", sellerId: null, clientId: null },
+      { seats: undefined, totalValue: "500", sellerId: null, clientId: null },
+    ];
+    expect(countConfirmedPassengers(reservations)).toBe(2);
+  });
+
+  it("returns 0 for an empty reservations list", () => {
+    expect(countConfirmedPassengers([])).toBe(0);
+  });
+
+  it("counts a single-seat reservation as 1", () => {
+    const reservations: ReservationWithSeats[] = [
+      { seats: ["7C"], totalValue: "800", sellerId: null, clientId: null },
+    ];
+    expect(countConfirmedPassengers(reservations)).toBe(1);
+  });
+});

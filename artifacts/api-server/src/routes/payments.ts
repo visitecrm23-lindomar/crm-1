@@ -233,7 +233,10 @@ export async function syncReservationCommission(reservationId: string, tenantId:
   }
 
   if (existingForSeller) {
-    if (existingForSeller.status === "pending") {
+    // Revive previously cancelled commissions (e.g. reservation reopened after cancellation)
+    // and update pending ones with the latest amounts.
+    // Approved/paid commissions are left untouched to preserve auditable state.
+    if (existingForSeller.status === "pending" || existingForSeller.status === "cancelled") {
       await db.update(commissionsTable)
         .set({
           ruleId: ruleId ?? undefined,
@@ -241,6 +244,7 @@ export async function syncReservationCommission(reservationId: string, tenantId:
           commissionAmount: String(commissionAmount.toFixed(2)),
           commissionRate: commissionRate != null ? String(commissionRate) : undefined,
           commissionType: commissionType ?? undefined,
+          status: "pending",
         })
         .where(eq(commissionsTable.id, existingForSeller.id));
     }
