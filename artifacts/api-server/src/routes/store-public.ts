@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { addSeatClient, removeSeatClient, emitSeatUpdate } from "../lib/seat-sse";
 import { broadcastSeatUpdate } from "../lib/realtime";
 import { AppError, NotFoundError, ValidationError, ConflictError } from "../lib/errors";
-import { normalizeOrderEmail } from "../lib/pricing";
+import { normalizeOrderEmail, roundMoney } from "../lib/pricing";
 import {
   storesTable,
   storeProductsTable,
@@ -627,12 +627,12 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
           next(new ValidationError("Este cupom atingiu o limite de uso", "COUPON_USAGE_LIMIT_EXCEEDED")); return;
         }
         if (coupon.type === "percentage") {
-          discountAmount = subtotal * (parseFloat(coupon.value) / 100);
+          discountAmount = roundMoney(subtotal * (Number(coupon.value) / 100));
         } else if (coupon.type === "fixed") {
-          discountAmount = parseFloat(coupon.value);
+          discountAmount = roundMoney(Number(coupon.value));
         }
         if (coupon.maxDiscountAmount) {
-          discountAmount = Math.min(discountAmount, parseFloat(coupon.maxDiscountAmount));
+          discountAmount = Math.min(discountAmount, roundMoney(Number(coupon.maxDiscountAmount)));
         }
         couponId = coupon.id;
       }
@@ -702,10 +702,10 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
             const discValue = Number(refSettings?.discountValue ?? "5");
             appliedReferralDiscountType = refSettings?.discountType ?? "percentage";
             if (appliedReferralDiscountType === "fixed") {
-              discountAmount = Math.min(discValue, subtotal);
+              discountAmount = roundMoney(Math.min(discValue, subtotal));
             } else {
               // Default: percentage
-              discountAmount = subtotal * (discValue / 100);
+              discountAmount = roundMoney(subtotal * (discValue / 100));
             }
             appliedReferralDiscountValue = discValue;
             appliedReferralCode = upperCode;
@@ -715,7 +715,7 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
       }
     }
 
-    const totalAmount = Math.max(0, subtotal - discountAmount);
+    const totalAmount = roundMoney(Math.max(0, subtotal - discountAmount));
     const orderId = generateId();
     const orderNumber = `#${new Date().getFullYear()}-${String(Math.floor(Math.random() * 99999)).padStart(5, "0")}`;
 
@@ -1585,12 +1585,12 @@ router.post("/public/store/:slug/coupons/validate", async (req, res, next: NextF
     }
     let discountAmount = 0;
     if (coupon.type === "percentage") {
-      discountAmount = cartTotal * (parseFloat(coupon.value) / 100);
+      discountAmount = roundMoney(cartTotal * (Number(coupon.value) / 100));
     } else if (coupon.type === "fixed") {
-      discountAmount = parseFloat(coupon.value);
+      discountAmount = roundMoney(Number(coupon.value));
     }
     if (coupon.maxDiscountAmount) {
-      discountAmount = Math.min(discountAmount, parseFloat(coupon.maxDiscountAmount));
+      discountAmount = Math.min(discountAmount, roundMoney(Number(coupon.maxDiscountAmount)));
     }
     res.json({
       valid: true,
@@ -1598,7 +1598,7 @@ router.post("/public/store/:slug/coupons/validate", async (req, res, next: NextF
       code: coupon.code,
       type: coupon.type,
       value: coupon.value,
-      discountAmount: Math.round(discountAmount * 100) / 100,
+      discountAmount,
       description: coupon.description,
     });
   } catch (err) {

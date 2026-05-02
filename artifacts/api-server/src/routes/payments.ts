@@ -7,6 +7,7 @@ import { requireAuth, getTenantUser } from "../lib/tenant";
 import { CreatePaymentBody, UpdatePaymentBody, CreateExpenseBody, UpdateExpenseBody } from "@workspace/api-zod";
 import { writeClientActivity } from "../lib/activities";
 import { loyaltyAwardPoints } from "../lib/loyalty-helpers";
+import { roundMoney } from "../lib/pricing";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { ADMIN_ROLES, MANAGEMENT_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
 
@@ -41,9 +42,9 @@ async function syncReservationPaymentStatus(reservationId: string, tenantId: str
     WHERE reservation_id = ${reservationId} AND tenant_id = ${tenantId} AND status = 'paid'
   `);
   const row = (result as unknown as { rows: Array<{ total_paid: string }> }).rows[0];
-  const paidValue = parseFloat(row?.total_paid ?? "0");
-  const totalValue = parseFloat(String(reservation.totalValue));
-  const balance = Math.max(totalValue - paidValue, 0);
+  const paidValue = roundMoney(Number(row?.total_paid ?? "0"));
+  const totalValue = roundMoney(Number(reservation.totalValue));
+  const balance = roundMoney(Math.max(totalValue - paidValue, 0));
 
   const updates: Partial<typeof reservationsTable.$inferInsert> = {
     paidValue: String(paidValue),

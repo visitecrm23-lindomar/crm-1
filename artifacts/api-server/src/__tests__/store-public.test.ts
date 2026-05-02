@@ -108,6 +108,7 @@ vi.mock("../lib/reservation-number.js", () => ({
 
 vi.mock("../lib/pricing.js", () => ({
   normalizeOrderEmail: vi.fn((e: unknown) => (typeof e === "string" ? e.trim().toLowerCase() : null)),
+  roundMoney: vi.fn((v: number) => Math.round(v * 100) / 100),
 }));
 
 // ---------------------------------------------------------------------------

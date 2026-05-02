@@ -1,3 +1,12 @@
+/**
+ * Single authoritative monetary rounding function.
+ * All monetary computations in the API must go through this function
+ * to avoid inconsistencies between parseFloat/toFixed approaches.
+ */
+export function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 export function applyDiscounts(
   baseValue: number,
   couponAmount: number,
@@ -12,16 +21,16 @@ export function applyDiscounts(
 } {
   let remaining = baseValue;
 
-  const appliedCoupon = Math.round(Math.min(couponAmount, remaining) * 100) / 100;
-  remaining = Math.round((remaining - appliedCoupon) * 100) / 100;
+  const appliedCoupon = roundMoney(Math.min(couponAmount, remaining));
+  remaining = roundMoney(remaining - appliedCoupon);
 
-  const appliedLoyalty = Math.round(Math.min(loyaltyAmount, remaining) * 100) / 100;
-  remaining = Math.round((remaining - appliedLoyalty) * 100) / 100;
+  const appliedLoyalty = roundMoney(Math.min(loyaltyAmount, remaining));
+  remaining = roundMoney(remaining - appliedLoyalty);
 
-  const appliedReferral = Math.round(Math.min(referralAmount, remaining) * 100) / 100;
+  const appliedReferral = roundMoney(Math.min(referralAmount, remaining));
 
-  const discountTotal = Math.round((appliedCoupon + appliedLoyalty + appliedReferral) * 100) / 100;
-  const finalTotal = Math.max(0, Math.round((baseValue - discountTotal) * 100) / 100);
+  const discountTotal = roundMoney(appliedCoupon + appliedLoyalty + appliedReferral);
+  const finalTotal = Math.max(0, roundMoney(baseValue - discountTotal));
 
   return { appliedCoupon, appliedLoyalty, appliedReferral, discountTotal, finalTotal };
 }
@@ -45,7 +54,7 @@ export function computeEffectiveLoyaltyPoints(
 }
 
 export function computeBalance(totalValue: number, paidValue: number): number {
-  return Math.max(0, Math.round((totalValue - paidValue) * 100) / 100);
+  return Math.max(0, roundMoney(totalValue - paidValue));
 }
 
 export function normalizeOrderEmail(raw: unknown): string {
