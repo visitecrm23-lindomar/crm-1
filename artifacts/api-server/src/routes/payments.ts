@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { paymentsTable, expensesTable, reservationsTable, clientsTable, commissionRulesTable, commissionsTable, usersTable, salesGoalsTable } from "@workspace/db";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
@@ -10,6 +10,7 @@ import { loyaltyAwardPoints } from "../lib/loyalty-helpers";
 import { roundMoney } from "../lib/pricing";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { ADMIN_ROLES, MANAGEMENT_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
+import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 
 const router = Router();
 
@@ -267,7 +268,7 @@ export async function syncReservationCommission(reservationId: string, tenantId:
   syncMonthlyGoalProgress(sellerId, tenantId).catch(() => undefined);
 }
 
-router.get("/trips/:tripId/financial-report", async (req, res): Promise<void> => {
+router.get("/trips/:tripId/financial-report", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -323,7 +324,7 @@ router.get("/trips/:tripId/financial-report", async (req, res): Promise<void> =>
     });
   } catch (err) {
     req.log.error({ err }, "Error fetching trip financial report");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -349,7 +350,7 @@ function formatExpense(e: typeof expensesTable.$inferSelect) {
   };
 }
 
-router.get("/payments/summary", async (req, res): Promise<void> => {
+router.get("/payments/summary", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -380,11 +381,11 @@ router.get("/payments/summary", async (req, res): Promise<void> => {
     res.json({ totalReceivable, totalPayable, overdueReceivable, overduePayable, collectedThisMonth, paidThisMonth });
   } catch (err) {
     req.log.error({ err }, "Error fetching payments summary");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/payments", async (req, res): Promise<void> => {
+router.get("/payments", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -442,31 +443,31 @@ router.get("/payments", async (req, res): Promise<void> => {
     res.json({ data: payments.map(formatPayment), total: Number(countResult?.count ?? 0), page: pageNum, limit: limitNum });
   } catch (err) {
     req.log.error({ err }, "Error listing payments");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/payments", async (req, res): Promise<void> => {
+router.post("/payments", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!MANAGEMENT_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreatePaymentBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message))); return; }
 
     let reservationClientId: string | null = null;
     if (parsed.data.reservationId) {
       const [reservation] = await db.select().from(reservationsTable)
         .where(and(eq(reservationsTable.id, parsed.data.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
         .limit(1);
-      if (!reservation) { res.status(400).json({ error: "Reservation not found or not in tenant" }); return; }
+      if (!reservation) { next(new NotFoundError("Reservation not found or not in tenant", "RESERVATION_NOT_FOUND")); return; }
       reservationClientId = reservation.clientId;
     }
     if (parsed.data.clientId) {
       const [client] = await db.select().from(clientsTable)
         .where(and(eq(clientsTable.id, parsed.data.clientId), eq(clientsTable.tenantId, me.tenantId)))
         .limit(1);
-      if (!client) { res.status(400).json({ error: "Client not found or not in tenant" }); return; }
+      if (!client) { next(new NotFoundError("Client not found or not in tenant", "CLIENT_NOT_FOUND")); return; }
     }
 
     const id = generateId();
@@ -502,7 +503,7 @@ router.post("/payments", async (req, res): Promise<void> => {
     const [payment] = await db.select().from(paymentsTable)
       .where(and(eq(paymentsTable.id, id), eq(paymentsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!payment) { res.status(500).json({ error: "Failed to create payment" }); return; }
+    if (!payment) { next(new AppError("Failed to create payment", 500, "PAYMENT_CREATE_FAILED")); return; }
     if (parsed.data.clientId) {
       await recalculateClientFinancials(parsed.data.clientId, me.tenantId);
     }
@@ -520,57 +521,55 @@ router.post("/payments", async (req, res): Promise<void> => {
     }
   } catch (err) {
     req.log.error({ err }, "Error creating payment");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
 async function requirePaymentAccess(
   me: { id: string; tenantId: string; role: string },
   paymentId: string,
-  res: import("express").Response,
-): Promise<typeof paymentsTable.$inferSelect | null> {
+): Promise<typeof paymentsTable.$inferSelect> {
   const [payment] = await db.select().from(paymentsTable)
     .where(and(eq(paymentsTable.id, paymentId), eq(paymentsTable.tenantId, me.tenantId)))
     .limit(1);
-  if (!payment) { res.status(404).json({ error: "Not found" }); return null; }
+  if (!payment) throw new NotFoundError("Payment not found", "NOT_FOUND");
   if (me.role === "cliente") {
-    if (!payment.clientId) { res.status(404).json({ error: "Not found" }); return null; }
+    if (!payment.clientId) throw new NotFoundError("Payment not found", "NOT_FOUND");
     const [clientRecord] = await db.select({ id: clientsTable.id }).from(clientsTable)
       .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.userId, me.id))).limit(1);
     if (!clientRecord || payment.clientId !== clientRecord.id) {
-      res.status(404).json({ error: "Not found" }); return null;
+      throw new NotFoundError("Payment not found", "NOT_FOUND");
     }
   } else if (me.role === "vendedor") {
-    if (!payment.clientId) { res.status(404).json({ error: "Not found" }); return null; }
+    if (!payment.clientId) throw new NotFoundError("Payment not found", "NOT_FOUND");
     const [clientRecord] = await db.select({ createdById: clientsTable.createdById }).from(clientsTable)
       .where(and(eq(clientsTable.id, payment.clientId), eq(clientsTable.tenantId, me.tenantId))).limit(1);
     if (!clientRecord || clientRecord.createdById !== me.id) {
-      res.status(404).json({ error: "Not found" }); return null;
+      throw new NotFoundError("Payment not found", "NOT_FOUND");
     }
   }
   return payment;
 }
 
-router.get("/payments/:id", async (req, res): Promise<void> => {
+router.get("/payments/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const payment = await requirePaymentAccess(me, req.params.id, res);
-    if (!payment) return;
+    const payment = await requirePaymentAccess(me, req.params.id);
     res.json(formatPayment(payment));
   } catch (err) {
     req.log.error({ err }, "Error fetching payment");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/payments/:id", async (req, res): Promise<void> => {
+router.patch("/payments/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = UpdatePaymentBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message))); return; }
     const updates: Partial<typeof paymentsTable.$inferInsert> = {};
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.paidAt !== undefined) updates.paidAt = parsed.data.paidAt ? new Date(parsed.data.paidAt) : null;
@@ -580,7 +579,7 @@ router.patch("/payments/:id", async (req, res): Promise<void> => {
     const [payment] = await db.select().from(paymentsTable)
       .where(and(eq(paymentsTable.id, req.params.id), eq(paymentsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!payment) { res.status(404).json({ error: "Not found" }); return; }
+    if (!payment) { next(new NotFoundError("Payment not found", "NOT_FOUND")); return; }
     if (payment.clientId) {
       await recalculateClientFinancials(payment.clientId, me.tenantId);
     }
@@ -600,11 +599,11 @@ router.patch("/payments/:id", async (req, res): Promise<void> => {
     CalendarSyncService.syncPayment(req.params.id).catch(() => {});
   } catch (err) {
     req.log.error({ err }, "Error updating payment");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/expenses", async (req, res): Promise<void> => {
+router.get("/expenses", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -628,16 +627,16 @@ router.get("/expenses", async (req, res): Promise<void> => {
     res.json({ data: expenses.map(formatExpense), total: Number(countResult?.count ?? 0), page: pageNum, limit: limitNum });
   } catch (err) {
     req.log.error({ err }, "Error listing expenses");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/expenses", async (req, res): Promise<void> => {
+router.post("/expenses", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     const parsed = CreateExpenseBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message))); return; }
 
     const id = generateId();
     await db.insert(expensesTable).values({
@@ -657,21 +656,21 @@ router.post("/expenses", async (req, res): Promise<void> => {
     const [expense] = await db.select().from(expensesTable)
       .where(and(eq(expensesTable.id, id), eq(expensesTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!expense) { res.status(500).json({ error: "Failed to create expense" }); return; }
+    if (!expense) { next(new AppError("Failed to create expense", 500, "EXPENSE_CREATE_FAILED")); return; }
     res.status(201).json(formatExpense(expense));
   } catch (err) {
     req.log.error({ err }, "Error creating expense");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/expenses/:id", async (req, res): Promise<void> => {
+router.patch("/expenses/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = UpdateExpenseBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message))); return; }
     const updates: Partial<typeof expensesTable.$inferInsert> = {};
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.paymentDate !== undefined) updates.paymentDate = parsed.data.paymentDate ? new Date(parsed.data.paymentDate) : null;
@@ -682,25 +681,25 @@ router.patch("/expenses/:id", async (req, res): Promise<void> => {
     const [expense] = await db.select().from(expensesTable)
       .where(and(eq(expensesTable.id, req.params.id), eq(expensesTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!expense) { res.status(404).json({ error: "Not found" }); return; }
+    if (!expense) { next(new NotFoundError("Expense not found", "NOT_FOUND")); return; }
     res.json(formatExpense(expense));
   } catch (err) {
     req.log.error({ err }, "Error updating expense");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/expenses/:id", async (req, res): Promise<void> => {
+router.delete("/expenses/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     await db.delete(expensesTable)
       .where(and(eq(expensesTable.id, req.params.id), eq(expensesTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Error deleting expense");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

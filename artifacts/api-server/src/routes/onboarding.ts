@@ -146,6 +146,8 @@ router.post("/onboarding/agency", async (req, res): Promise<void> => {
 
 router.get("/onboarding/plans", async (req, res): Promise<void> => {
   try {
+    const auth = await requireAuthLight(req, res);
+    if (!auth) return;
     const plans = await db.select().from(plansTable)
       .where(eq(plansTable.isActive, true))
       .orderBy(asc(plansTable.sortOrder), asc(plansTable.createdAt));

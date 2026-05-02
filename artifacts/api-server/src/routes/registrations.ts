@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { suppliersTable, vehiclesTable, accommodationsTable, destinationsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
@@ -7,6 +7,7 @@ import { requireAuth, getTenantUser } from "../lib/tenant";
 import { z } from "zod";
 import { deleteOrphanedImages } from "../lib/uploadthing";
 import { ADMIN_ROLES } from '../lib/tenant';
+import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 
 const router = Router();
 
@@ -169,7 +170,7 @@ function formatDestination(d: typeof destinationsTable.$inferSelect) {
   };
 }
 
-router.get("/suppliers", async (req, res): Promise<void> => {
+router.get("/suppliers", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -178,18 +179,17 @@ router.get("/suppliers", async (req, res): Promise<void> => {
       .orderBy(desc(suppliersTable.createdAt));
     res.json(suppliers.map(formatSupplier));
   } catch (err) {
-    req.log.error({ err }, "Error listing suppliers");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/suppliers", async (req, res): Promise<void> => {
+router.post("/suppliers", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateSupplierBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message))); return; }
     const id = generateId();
     await db.insert(suppliersTable).values({
       id, tenantId: me.tenantId,
@@ -209,21 +209,20 @@ router.post("/suppliers", async (req, res): Promise<void> => {
     const [supplier] = await db.select().from(suppliersTable)
       .where(and(eq(suppliersTable.id, id), eq(suppliersTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!supplier) { res.status(500).json({ error: "Failed to create supplier" }); return; }
+    if (!supplier) { next(new AppError("Failed to create supplier", 500, "SUPPLIER_CREATE_FAILED")); return; }
     res.status(201).json(formatSupplier(supplier));
   } catch (err) {
-    req.log.error({ err }, "Error creating supplier");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/suppliers/:id", async (req, res): Promise<void> => {
+router.patch("/suppliers/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = UpdateSupplierBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message))); return; }
     const updates: Partial<typeof suppliersTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.type != null) updates.type = parsed.data.type;
@@ -242,29 +241,27 @@ router.patch("/suppliers/:id", async (req, res): Promise<void> => {
     const [supplier] = await db.select().from(suppliersTable)
       .where(and(eq(suppliersTable.id, req.params.id), eq(suppliersTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!supplier) { res.status(404).json({ error: "Not found" }); return; }
+    if (!supplier) { next(new NotFoundError("Supplier not found", "NOT_FOUND")); return; }
     res.json(formatSupplier(supplier));
   } catch (err) {
-    req.log.error({ err }, "Error updating supplier");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/suppliers/:id", async (req, res): Promise<void> => {
+router.delete("/suppliers/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     await db.delete(suppliersTable)
       .where(and(eq(suppliersTable.id, req.params.id), eq(suppliersTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) {
-    req.log.error({ err }, "Error deleting supplier");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/vehicles", async (req, res): Promise<void> => {
+router.get("/vehicles", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -273,18 +270,17 @@ router.get("/vehicles", async (req, res): Promise<void> => {
       .orderBy(desc(vehiclesTable.createdAt));
     res.json(vehicles.map(formatVehicle));
   } catch (err) {
-    req.log.error({ err }, "Error listing vehicles");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/vehicles", async (req, res): Promise<void> => {
+router.post("/vehicles", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateVehicleBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message))); return; }
     const id = generateId();
     await db.insert(vehiclesTable).values({
       id, tenantId: me.tenantId,
@@ -302,21 +298,20 @@ router.post("/vehicles", async (req, res): Promise<void> => {
     const [vehicle] = await db.select().from(vehiclesTable)
       .where(and(eq(vehiclesTable.id, id), eq(vehiclesTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!vehicle) { res.status(500).json({ error: "Failed to create vehicle" }); return; }
+    if (!vehicle) { next(new AppError("Failed to create vehicle", 500, "VEHICLE_CREATE_FAILED")); return; }
     res.status(201).json(formatVehicle(vehicle));
   } catch (err) {
-    req.log.error({ err }, "Error creating vehicle");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/vehicles/:id", async (req, res): Promise<void> => {
+router.patch("/vehicles/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = UpdateVehicleBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message))); return; }
     const updates: Partial<typeof vehiclesTable.$inferInsert> = {};
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.name != null) updates.name = parsed.data.name;
@@ -332,29 +327,27 @@ router.patch("/vehicles/:id", async (req, res): Promise<void> => {
     const [vehicle] = await db.select().from(vehiclesTable)
       .where(and(eq(vehiclesTable.id, req.params.id), eq(vehiclesTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!vehicle) { res.status(404).json({ error: "Not found" }); return; }
+    if (!vehicle) { next(new NotFoundError("Vehicle not found", "NOT_FOUND")); return; }
     res.json(formatVehicle(vehicle));
   } catch (err) {
-    req.log.error({ err }, "Error updating vehicle");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/vehicles/:id", async (req, res): Promise<void> => {
+router.delete("/vehicles/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     await db.delete(vehiclesTable)
       .where(and(eq(vehiclesTable.id, req.params.id), eq(vehiclesTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) {
-    req.log.error({ err }, "Error deleting vehicle");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/accommodations", async (req, res): Promise<void> => {
+router.get("/accommodations", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -363,18 +356,17 @@ router.get("/accommodations", async (req, res): Promise<void> => {
       .orderBy(desc(accommodationsTable.createdAt));
     res.json(accommodations.map(formatAccommodation));
   } catch (err) {
-    req.log.error({ err }, "Error listing accommodations");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/accommodations", async (req, res): Promise<void> => {
+router.post("/accommodations", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateAccommodationBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message))); return; }
     const id = generateId();
     await db.insert(accommodationsTable).values({
       id, tenantId: me.tenantId,
@@ -391,25 +383,24 @@ router.post("/accommodations", async (req, res): Promise<void> => {
     const [accommodation] = await db.select().from(accommodationsTable)
       .where(and(eq(accommodationsTable.id, id), eq(accommodationsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!accommodation) { res.status(500).json({ error: "Failed to create accommodation" }); return; }
+    if (!accommodation) { next(new AppError("Failed to create accommodation", 500, "ACCOMMODATION_CREATE_FAILED")); return; }
     res.status(201).json(formatAccommodation(accommodation));
   } catch (err) {
-    req.log.error({ err }, "Error creating accommodation");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/accommodations/:id", async (req, res): Promise<void> => {
+router.patch("/accommodations/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = UpdateAccommodationBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message))); return; }
     const [existing] = await db.select().from(accommodationsTable)
       .where(and(eq(accommodationsTable.id, req.params.id), eq(accommodationsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+    if (!existing) { next(new NotFoundError("Accommodation not found", "NOT_FOUND")); return; }
     const updates: Partial<typeof accommodationsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.pricePerNight != null) updates.pricePerNight = String(parsed.data.pricePerNight);
@@ -423,37 +414,35 @@ router.patch("/accommodations/:id", async (req, res): Promise<void> => {
     const [accommodation] = await db.select().from(accommodationsTable)
       .where(and(eq(accommodationsTable.id, req.params.id), eq(accommodationsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!accommodation) { res.status(404).json({ error: "Not found" }); return; }
+    if (!accommodation) { next(new NotFoundError("Accommodation not found", "NOT_FOUND")); return; }
     if (parsed.data.galleryUrls != null) {
       await deleteOrphanedImages(existing.gallery ?? [], parsed.data.galleryUrls, req.log);
     }
     res.json(formatAccommodation(accommodation));
   } catch (err) {
-    req.log.error({ err }, "Error updating accommodation");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/accommodations/:id", async (req, res): Promise<void> => {
+router.delete("/accommodations/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const [existing] = await db.select().from(accommodationsTable)
       .where(and(eq(accommodationsTable.id, req.params.id), eq(accommodationsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+    if (!existing) { next(new NotFoundError("Accommodation not found", "NOT_FOUND")); return; }
     await db.delete(accommodationsTable)
       .where(and(eq(accommodationsTable.id, req.params.id), eq(accommodationsTable.tenantId, me.tenantId)));
     await deleteOrphanedImages(existing.gallery ?? [], [], req.log);
     res.json({ success: true });
   } catch (err) {
-    req.log.error({ err }, "Error deleting accommodation");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/destinations", async (req, res): Promise<void> => {
+router.get("/destinations", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -462,18 +451,17 @@ router.get("/destinations", async (req, res): Promise<void> => {
       .orderBy(desc(destinationsTable.createdAt));
     res.json(destinations.map(formatDestination));
   } catch (err) {
-    req.log.error({ err }, "Error listing destinations");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/destinations", async (req, res): Promise<void> => {
+router.post("/destinations", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateDestinationBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message))); return; }
     const id = generateId();
     await db.insert(destinationsTable).values({
       id, tenantId: me.tenantId,
@@ -489,21 +477,20 @@ router.post("/destinations", async (req, res): Promise<void> => {
     const [destination] = await db.select().from(destinationsTable)
       .where(and(eq(destinationsTable.id, id), eq(destinationsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!destination) { res.status(500).json({ error: "Failed to create destination" }); return; }
+    if (!destination) { next(new AppError("Failed to create destination", 500, "DESTINATION_CREATE_FAILED")); return; }
     res.status(201).json(formatDestination(destination));
   } catch (err) {
-    req.log.error({ err }, "Error creating destination");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/destinations/:id", async (req, res): Promise<void> => {
+router.patch("/destinations/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = UpdateDestinationBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message))); return; }
     const updates: Partial<typeof destinationsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.description !== undefined) updates.description = parsed.data.description ?? null;
@@ -514,25 +501,23 @@ router.patch("/destinations/:id", async (req, res): Promise<void> => {
     const [destination] = await db.select().from(destinationsTable)
       .where(and(eq(destinationsTable.id, req.params.id), eq(destinationsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!destination) { res.status(404).json({ error: "Not found" }); return; }
+    if (!destination) { next(new NotFoundError("Destination not found", "NOT_FOUND")); return; }
     res.json(formatDestination(destination));
   } catch (err) {
-    req.log.error({ err }, "Error updating destination");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/destinations/:id", async (req, res): Promise<void> => {
+router.delete("/destinations/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     await db.delete(destinationsTable)
       .where(and(eq(destinationsTable.id, req.params.id), eq(destinationsTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) {
-    req.log.error({ err }, "Error deleting destination");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
