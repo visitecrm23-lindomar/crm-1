@@ -1,25 +1,24 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db, tenantsTable, usersTable, plansTable, storesTable } from "@workspace/db";
 import { eq, asc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { getAuth } from "@clerk/express";
+import { AppError, ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 
 const router = Router();
 
-function requireAuthLight(req: import("express").Request, res: import("express").Response): Promise<{ clerkId: string } | null> {
+function requireAuthLight(req: import("express").Request): { clerkId: string } {
   const { userId } = getAuth(req);
   if (!userId) {
-    res.status(401).json({ error: "Not authenticated" });
-    return Promise.resolve(null);
+    throw new AppError("Not authenticated", 401, "UNAUTHORIZED");
   }
-  return Promise.resolve({ clerkId: userId });
+  return { clerkId: userId };
 }
 
-router.get("/onboarding/status", async (req, res): Promise<void> => {
+router.get("/onboarding/status", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const auth = await requireAuthLight(req, res);
-    if (!auth) return;
+    const auth = requireAuthLight(req);
     const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.clerkId)).limit(1);
     if (!user) {
       res.json({ onboardingComplete: false, hasTenant: false, user: null });
@@ -33,7 +32,7 @@ router.get("/onboarding/status", async (req, res): Promise<void> => {
     });
   } catch (err) {
     req.log.error({ err }, "Error fetching onboarding status");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -47,24 +46,23 @@ const AgencyOnboardingBody = z.object({
   planId: z.string().optional().default("starter"),
 });
 
-router.post("/onboarding/agency", async (req, res): Promise<void> => {
+router.post("/onboarding/agency", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const auth = await requireAuthLight(req, res);
-    if (!auth) return;
+    const auth = requireAuthLight(req);
 
     const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.clerkId)).limit(1);
     if (!user) {
-      res.status(404).json({ error: "User not found. Please sync first." });
+      next(new NotFoundError("User not found. Please sync first.", "USER_NOT_FOUND"));
       return;
     }
     if (user.tenantId) {
-      res.status(409).json({ error: "User already has a tenant assigned" });
+      next(new ConflictError("User already has a tenant assigned", "TENANT_ALREADY_ASSIGNED"));
       return;
     }
 
     const parsed = AgencyOnboardingBody.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: parsed.error.message });
+      next(new ValidationError(String(parsed.error.message)));
       return;
     }
 
@@ -75,7 +73,7 @@ router.post("/onboarding/agency", async (req, res): Promise<void> => {
       db.select({ id: storesTable.id }).from(storesTable).where(eq(storesTable.slug, slug)).limit(1),
     ]);
     if (existingTenantSlug || existingStoreSlug) {
-      res.status(409).json({ error: "Esse slug já está em uso. Escolha outro." });
+      next(new ConflictError("Esse slug já está em uso. Escolha outro.", "SLUG_CONFLICT"));
       return;
     }
 
@@ -129,40 +127,39 @@ router.post("/onboarding/agency", async (req, res): Promise<void> => {
     } catch (txErr) {
       const dbErr = txErr as { code?: string };
       if (dbErr?.code === "23505") {
-        res.status(409).json({ error: "Esse slug já está em uso. Escolha outro." });
+        next(new ConflictError("Esse slug já está em uso. Escolha outro.", "SLUG_CONFLICT"));
         return;
       }
       req.log.error({ txErr }, "Onboarding transaction failed");
-      res.status(500).json({ error: "Erro ao criar agência. Tente novamente." });
+      next(new AppError("Erro ao criar agência. Tente novamente.", 500, "ONBOARDING_TX_FAILED"));
       return;
     }
 
     res.status(201).json({ tenant, onboardingComplete: true });
   } catch (err) {
     req.log.error({ err }, "Error completing agency onboarding");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/onboarding/plans", async (req, res): Promise<void> => {
+router.get("/onboarding/plans", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const auth = await requireAuthLight(req, res);
-    if (!auth) return;
+    requireAuthLight(req);
     const plans = await db.select().from(plansTable)
       .where(eq(plansTable.isActive, true))
       .orderBy(asc(plansTable.sortOrder), asc(plansTable.createdAt));
     res.json(plans);
   } catch (err) {
     req.log.error({ err }, "Error listing plans for onboarding");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/onboarding/check-slug", async (req, res): Promise<void> => {
+router.get("/onboarding/check-slug", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const slug = req.query["slug"] as string;
     if (!slug) {
-      res.status(400).json({ error: "slug query param required" });
+      next(new ValidationError("slug query param required", "MISSING_PARAM"));
       return;
     }
     const [[existingTenant], [existingStore]] = await Promise.all([
@@ -172,7 +169,7 @@ router.get("/onboarding/check-slug", async (req, res): Promise<void> => {
     res.json({ available: !existingTenant && !existingStore });
   } catch (err) {
     req.log.error({ err }, "Error checking slug");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
