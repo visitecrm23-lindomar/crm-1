@@ -1,7 +1,9 @@
 export { ReservationConfirmationEmail } from './templates/reservation-confirmation';
 export type { ReservationConfirmationEmailProps } from './templates/reservation-confirmation';
-export { sendReservationConfirmationEmail, sendBirthdayEmail, sendManifestEmail, sendWelcomeCredentialsEmail, sendReminderHtmlEmail } from './service';
-export type { SendEmailResult, SendManifestEmailOptions, SendReminderEmailOptions } from './service';
+export { ReservationCancellationEmail } from './templates/reservation-cancellation';
+export type { ReservationCancellationEmailProps } from './templates/reservation-cancellation';
+export { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail, sendManifestEmail, sendWelcomeCredentialsEmail, sendReminderHtmlEmail } from './service';
+export type { SendEmailResult, SendManifestEmailOptions, SendReminderEmailOptions, ReservationCancellationEmailProps as CancellationEmailProps } from './service';
 export { BirthdayEmail } from './templates/birthday';
 export type { BirthdayEmailProps } from './templates/birthday';
 export { WelcomeCredentialsEmail } from './templates/welcome-credentials';

@@ -1,8 +1,14 @@
 import { Queue } from "bullmq";
 import { getRedisConnection } from "../lib/redis";
-import type { ReservationConfirmationEmailProps } from "@workspace/email";
+import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps } from "@workspace/email";
 
 export interface ReservationEmailJobData extends ReservationConfirmationEmailProps {
+  emailLogId: string;
+  tenantId: string;
+  reservationId?: string;
+}
+
+export interface CancellationEmailJobData extends ReservationCancellationEmailProps {
   emailLogId: string;
   tenantId: string;
   reservationId?: string;
