@@ -768,6 +768,79 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     expect(res.status).toBe(200);
     expect(mockEnqueueCancellationEmail).toHaveBeenCalledWith("res-001", "tenant-001");
   });
+
+  // -------------------------------------------------------------------------
+  it("does NOT enqueue cancellation email when status transitions to 'refunded'", async () => {
+    const app = buildReservationsApp();
+    const existing = makeReservation({ clientId: "client-001" });
+    const refunded = { ...existing, status: "refunded" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // Reversal 4 payments lookup + re-fetch
+    const tx = buildTxMock([[], [refunded]]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "refunded" });
+
+    expect(res.status).toBe(200);
+    expect(mockEnqueueCancellationEmail).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  it("does NOT enqueue cancellation email when already-cancelled reservation is re-patched to cancelled", async () => {
+    const app = buildReservationsApp();
+    // wasActive = false (already cancelled)
+    const existing = makeReservation({ status: "cancelled", clientId: "client-001" });
+    const stillCancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // No reversals run (wasActive = false); only the re-fetch after UPDATE
+    const tx = buildTxMock([[stillCancelled]]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+    expect(mockEnqueueCancellationEmail).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  it("does NOT enqueue cancellation email for an unrelated update (no status change)", async () => {
+    const app = buildReservationsApp();
+    const existing = makeReservation({ clientId: "client-001" });
+    const updated = { ...existing, notes: "Updated note" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // No status transition: no reversals, just the re-fetch
+    const tx = buildTxMock([[updated]]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ notes: "Updated note" });
+
+    expect(res.status).toBe(200);
+    expect(mockEnqueueCancellationEmail).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------

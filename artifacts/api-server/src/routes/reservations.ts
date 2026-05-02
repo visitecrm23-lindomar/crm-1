@@ -1018,7 +1018,9 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
     }
     const formatted = await formatReservation(reservation);
     res.json(formatted);
-    if (isBeingCancelled && existing.clientId) {
+    // Send cancellation email only on a true active → cancelled transition
+    // (not for "refunded", not for repeated patches on already-cancelled reservations)
+    if (parsed.data.status === "cancelled" && wasActive && existing.clientId) {
       enqueueReservationCancellationEmail(req.params.id, me.tenantId)
         .catch((err) => req.log.error({ err }, "Error enqueueing cancellation email"));
     }
