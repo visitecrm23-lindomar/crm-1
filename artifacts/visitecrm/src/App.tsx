@@ -33,7 +33,6 @@ import Commissions from "@/pages/commissions";
 import Expenses from "@/pages/expenses";
 import Revenue from "@/pages/revenue";
 const HistoricoComparativo = lazy(() => import("@/pages/historico-comparativo"));
-import Settings from "@/pages/settings";
 
 // Task 6 pages
 import Fornecedores from "@/pages/cadastros/fornecedores";
