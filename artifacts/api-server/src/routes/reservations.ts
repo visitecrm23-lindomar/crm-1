@@ -567,6 +567,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
 
       if (serverReferralCode && serverReferralReferrerId && appliedReferralAmount > 0) {
         // Insert a new completed referral record for this CRM reservation conversion
+        // reservationId is stored so that cancellation can reverse exactly this record
         await tx.insert(referralsTable).values({
           id: generateId(),
           tenantId: me.tenantId,
@@ -574,6 +575,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
           code: serverReferralCode,
           status: "completed",
           referredId: parsed.data.clientId,
+          reservationId: id,
           discountApplied: true,
           discountType: "percentage",
           discountValue: serverReferralDiscountPct.toFixed(2),
@@ -822,14 +824,15 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
         }
 
         // --- Reversal 3: referral bonus credited to referrer ---
-        if (existing.discountReferralCode && existing.clientId) {
+        // Uses reservationId for exact scoping — avoids matching the wrong completed
+        // referral when the same client has multiple bookings with the same code.
+        if (existing.discountReferralCode) {
           const [referralRecord] = await tx
             .select({ id: referralsTable.id, referrerId: referralsTable.referrerId, bonusAmount: referralsTable.bonusAmount })
             .from(referralsTable)
             .where(and(
               eq(referralsTable.tenantId, me.tenantId),
-              eq(referralsTable.code, existing.discountReferralCode),
-              eq(referralsTable.referredId, existing.clientId),
+              eq(referralsTable.reservationId, req.params.id),
               eq(referralsTable.status, "completed"),
             ))
             .limit(1);
@@ -840,7 +843,10 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
                 successfulReferrals: sql`GREATEST(0, COALESCE(successful_referrals, 0) - 1)`,
                 referralEarnings: sql`GREATEST(0, COALESCE(referral_earnings, 0) - ${bonusToReverse.toFixed(2)})`,
               })
-              .where(eq(clientsTable.id, referralRecord.referrerId));
+              .where(and(
+                eq(clientsTable.id, referralRecord.referrerId),
+                eq(clientsTable.tenantId, me.tenantId),
+              ));
             await tx.update(referralsTable)
               .set({ status: "reversed" })
               .where(eq(referralsTable.id, referralRecord.id));

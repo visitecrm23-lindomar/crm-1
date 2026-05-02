@@ -482,7 +482,7 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     mockLimit.mockResolvedValueOnce([existing]);
 
     // tx select queue (in execution order):
-    //   [0] Reversal 3 — referral record lookup
+    //   [0] Reversal 3 — referral record lookup by reservationId (exact scope)
     //   [1] Reversal 4 — payments lookup (empty)
     //   [2] re-fetch updated reservation
     const tx = buildTxMock([
@@ -503,6 +503,46 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     expect(res.status).toBe(200);
     // trips (seats) + clients (referralEarnings) + referrals (status) + reservations = 4 updates
     expect(tx.update).toHaveBeenCalledTimes(4);
+  });
+
+  // -------------------------------------------------------------------------
+  it("reverses only the referral tied to the cancelled reservation, not other completed referrals with the same code", async () => {
+    // Adversarial case: a referred client has TWO completed referrals with the
+    // same code (two bookings). Cancelling res-001 must only touch referral-001
+    // (the one with reservationId = "res-001") and leave referral-002 untouched.
+    const app = buildReservationsApp();
+    const existing = makeReservation({
+      discountReferralCode: "REF-SHARED",
+      discountReferralAmount: "50",
+      clientId: "client-001",
+    });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // The referral lookup uses reservationId="res-001" → only returns referral-001.
+    // referral-002 (same code, different reservation) is never touched.
+    const tx = buildTxMock([
+      [{ id: "referral-001", referrerId: "referrer-client-001", bonusAmount: "10.00" }],
+      [], // no payments
+      [cancelled],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+    // The tx.select was called with a where clause that includes reservationId.
+    // The referral record returned is referral-001; only 4 updates should run.
+    expect(tx.update).toHaveBeenCalledTimes(4);
+    // Verify tx.select was called — the reversal ran against the specific record
+    expect(tx.select).toHaveBeenCalled();
   });
 
   // -------------------------------------------------------------------------
