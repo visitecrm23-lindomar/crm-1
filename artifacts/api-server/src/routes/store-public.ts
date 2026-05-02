@@ -29,6 +29,7 @@ import { getTenantReservationPrefix, tripTypeToCode, getYearMonth, nextReservati
 import { randomBytes } from "crypto";
 import { clerkClient } from "@clerk/express";
 import { enqueueReservationConfirmationEmail } from "../queues/email-helpers";
+import { writeClientActivity } from "../lib/activities";
 
 function generateCookieId(): string {
   return randomBytes(16).toString("hex");
@@ -1233,6 +1234,19 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     // Emit real-time seat update to all SSE listeners for each trip in this order
     for (const [tripId] of tripLinkedProducts) {
       broadcastSeatUpdate(tripId, store.tenantId).catch(() => {});
+    }
+
+    // Record client activity for reservation(s) created via the storefront
+    if (reservationClientId && reservationCreatedById) {
+      const totalFormatted = Number(order?.totalAmount ?? 0)
+        .toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+      writeClientActivity(
+        reservationClientId,
+        "reservation_created",
+        `Reserva criada via vitrine — ${totalFormatted}`,
+        reservationCreatedById,
+        { storeOrderId: orderId },
+      ).catch(() => {});
     }
   } catch (err) {
     next(err);

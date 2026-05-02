@@ -11,7 +11,7 @@ import { z } from "zod/v4";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { writeClientActivity } from "../lib/activities";
 import { syncReservationCommission } from "./payments";
-import { enqueueReservationConfirmationEmail } from "../queues/email-helpers";
+import { enqueueReservationConfirmationEmail, enqueueReservationCancellationEmail } from "../queues/email-helpers";
 import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 import { broadcastSeatUpdate } from "../lib/realtime";
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
@@ -1018,6 +1018,10 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
     }
     const formatted = await formatReservation(reservation);
     res.json(formatted);
+    if (isBeingCancelled && existing.clientId) {
+      enqueueReservationCancellationEmail(req.params.id, me.tenantId)
+        .catch((err) => req.log.error({ err }, "Error enqueueing cancellation email"));
+    }
     broadcastSeatUpdate(existing.tripId, me.tenantId).catch(() => {});
     CalendarSyncService.syncTrip(existing.tripId).catch(() => {});
   } catch (err) {

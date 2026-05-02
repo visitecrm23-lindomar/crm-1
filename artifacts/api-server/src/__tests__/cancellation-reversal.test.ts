@@ -31,6 +31,7 @@ const {
   mockFrom,
   mockSelect,
   mockTransaction,
+  mockEnqueueCancellationEmail,
 } = vi.hoisted(() => {
   const capturedUpdates: Array<{ table: string; set: Record<string, unknown> }> = [];
   const capturedInserts: Record<string, unknown>[] = [];
@@ -45,6 +46,7 @@ const {
   const mockFrom = vi.fn(() => ({ where: mockWhere, limit: mockLimit }));
   const mockSelect = vi.fn(() => ({ from: mockFrom }));
   const mockTransaction = vi.fn();
+  const mockEnqueueCancellationEmail = vi.fn().mockResolvedValue(undefined);
 
   return {
     capturedUpdates,
@@ -58,6 +60,7 @@ const {
     mockFrom,
     mockSelect,
     mockTransaction,
+    mockEnqueueCancellationEmail,
   };
 });
 
@@ -139,6 +142,7 @@ vi.mock("../routes/payments.js", () => ({
 
 vi.mock("../queues/email-helpers.js", () => ({
   enqueueReservationConfirmationEmail: vi.fn().mockResolvedValue(undefined),
+  enqueueReservationCancellationEmail: mockEnqueueCancellationEmail,
 }));
 
 vi.mock("../lib/google-calendar/sync-service.js", () => ({
@@ -737,6 +741,32 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
       (i) => (i as Record<string, unknown>)["type"] === "refund",
     );
     expect(refundTx).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
+  it("enqueues a cancellation email when a reservation with a client is cancelled", async () => {
+    const app = buildReservationsApp();
+    const existing = makeReservation({ clientId: "client-001" });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] Reversal 4 — payments lookup (empty → skip loyalty clawback)
+    //   [1] re-fetch updated reservation
+    const tx = buildTxMock([[], [cancelled]]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+    expect(mockEnqueueCancellationEmail).toHaveBeenCalledWith("res-001", "tenant-001");
   });
 });
 

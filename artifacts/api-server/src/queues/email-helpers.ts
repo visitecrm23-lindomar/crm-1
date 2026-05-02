@@ -72,6 +72,126 @@ export async function enqueueReservationConfirmationEmail(opts: EnqueueEmailOpts
   }
 }
 
+// ── Enqueue / send a cancellation email ───────────────────────────────────────
+
+export async function enqueueReservationCancellationEmail(
+  reservationId: string,
+  tenantId: string,
+): Promise<void> {
+  const props = await buildCancellationEmailPropsFromReservation(reservationId, tenantId);
+  if (!props) {
+    logger.warn({ reservationId }, "[email-queue] Could not build cancellation email props — skipping");
+    return;
+  }
+
+  const emailLogId = generateId();
+  const subject = `Reserva Cancelada — ${props.reservationNumber}`;
+  const queue = getCancellationEmailQueue();
+
+  if (queue) {
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId,
+      recipient: props.clientEmail,
+      subject,
+      status: "queued",
+    });
+
+    try {
+      await queue.add("reservation-cancellation", {
+        ...props,
+        emailLogId,
+        tenantId,
+        reservationId,
+      });
+      logger.info({ emailLogId, reservationId }, "[email-queue] Cancellation email job enqueued");
+    } catch (enqueueErr) {
+      logger.error({ emailLogId, err: enqueueErr }, "[email-queue] Failed to enqueue cancellation — marking log as failed");
+      await db
+        .update(emailLogsTable)
+        .set({ status: "failed", errorMessage: "Queue enqueue failed" })
+        .where(eq(emailLogsTable.id, emailLogId));
+    }
+  } else {
+    const result = await sendReservationCancellationEmail(props);
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId,
+      recipient: props.clientEmail,
+      subject,
+      status: result.success ? "sent" : "failed",
+      messageId: result.messageId ?? null,
+      errorMessage: result.error ?? null,
+    });
+    logger.info(
+      { emailLogId, reservationId, success: result.success },
+      "[email-queue] Cancellation email sent directly (no queue)",
+    );
+  }
+}
+
+async function buildCancellationEmailPropsFromReservation(
+  reservationId: string,
+  tenantId: string,
+): Promise<ReservationCancellationEmailProps | null> {
+  const [row] = await db
+    .select({
+      reservationNumber: reservationsTable.reservationNumber,
+      voucherCode: reservationsTable.voucherCode,
+      totalValue: reservationsTable.totalValue,
+      clientName: clientsTable.name,
+      clientEmail: clientsTable.email,
+      tripName: tripsTable.name,
+      tripDestination: tripsTable.destination,
+      departureDate: tripsTable.departureDate,
+      agencyName: tenantsTable.name,
+      agencyLogo: tenantsTable.logoUrl,
+      agencyPhone: tenantsTable.whatsapp,
+      agencyPhoneVoice: tenantsTable.phone,
+      agencyEmail: tenantsTable.email,
+      agencyWebsite: tenantsTable.website,
+      tenantSlug: tenantsTable.slug,
+    })
+    .from(reservationsTable)
+    .innerJoin(clientsTable, eq(reservationsTable.clientId, clientsTable.id))
+    .innerJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
+    .innerJoin(tenantsTable, eq(reservationsTable.tenantId, tenantsTable.id))
+    .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)))
+    .limit(1);
+
+  if (!row || !row.clientEmail) return null;
+
+  const totalVal = Number(row.totalValue ?? 0);
+  const dDate = row.departureDate ? new Date(row.departureDate) : null;
+  const departureDate = dDate
+    ? dDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+    : "";
+
+  const agencyPhone = row.agencyPhone ?? row.agencyPhoneVoice ?? "";
+  const agencyWebsite = row.agencyWebsite ?? `https://${row.tenantSlug}.visitecrm.com.br`;
+  const whatsappNum = agencyPhone.replace(/\D/g, "");
+  const whatsappUrl = whatsappNum ? `https://wa.me/${whatsappNum}` : "";
+
+  return {
+    reservationNumber: row.reservationNumber ?? row.voucherCode ?? "",
+    voucherCode: row.voucherCode ?? "",
+    clientName: row.clientName ?? "",
+    clientEmail: row.clientEmail,
+    tripTitle: row.tripName,
+    destination: row.tripDestination ?? "",
+    departureDate,
+    totalAmount: totalVal,
+    agencyName: row.agencyName,
+    agencyLogo: row.agencyLogo ?? "",
+    agencyPhone,
+    agencyEmail: row.agencyEmail ?? "",
+    agencyWebsite,
+    whatsappUrl,
+  };
+}
+
 // ── Build email props from reservation ID ─────────────────────────────────────
 
 async function buildEmailPropsFromReservation(
