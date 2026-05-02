@@ -181,11 +181,23 @@ const AGENCY_ROLES = ["agencia", "gerente", "suporte", "superadmin"] as const;
 
 interface RoleGateProps {
   component: ComponentType;
+  /**
+   * Roles allowed to render this route.
+   * - Pass `"*"` for any authenticated staff member. NOTE: even with `"*"`,
+   *   `cliente` users are always redirected to `/perfil` and tenantless users to
+   *   `/onboarding` — `"*"` means "any non-client authenticated user", matching
+   *   the former `ProtectedRoute` behaviour.
+   * - To allow only specific roles, pass an array e.g. `["agencia", "gerente"]`.
+   * - Admin routes should use `["superadmin"]`; client portal uses `["cliente"]`.
+   */
   allowedRoles: readonly string[] | "*";
   layout: ComponentType<{ children: ReactNode }>;
   signedOutPath?: string;
   fallbackPath?: string;
+  /** Override redirect for `vendedor` when not in `allowedRoles` (used where
+   *  the old AgenciaRoute redirected vendedor to /trips instead of fallbackPath). */
   vendedorFallback?: string;
+  /** Set false to skip the tenantId guard (superadmin, vendedor, cliente). */
   requireTenant?: boolean;
 }
 
