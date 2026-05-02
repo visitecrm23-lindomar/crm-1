@@ -204,7 +204,9 @@ function RoleGate({
     allowedRoles === "*" || !(allowedRoles as string[]).includes("cliente");
 
   let content: ReactNode = null;
-  if (!isLoading && me) {
+  if (!isLoading && !me) {
+    content = <Redirect to="/onboarding" />;
+  } else if (!isLoading && me) {
     if (clientNotAllowed && role === "cliente") {
       content = <Redirect to="/perfil" />;
     } else if (clientNotAllowed && requireTenant && !me.tenantId && role !== "superadmin") {
