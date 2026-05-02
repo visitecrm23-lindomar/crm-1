@@ -63,10 +63,80 @@ function fmtCurrency(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function ReservasTab({ profile }: { profile: ClientPortalProfile }) {
-  const reservations = profile.reservations;
+function ReservationCard({ r }: { r: ClientPortalProfile["reservations"][number] }) {
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="p-0">
+        <div className="flex items-start gap-4 p-4">
+          <div className="mt-1">
+            <StatusIcon status={r.status} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2 flex-wrap">
+              <div>
+                <h4 className="font-semibold text-base leading-tight">{r.tripName}</h4>
+                <div className="flex items-center gap-1 text-sm text-muted-foreground mt-0.5">
+                  <MapPin className="w-3.5 h-3.5" />
+                  {r.tripDestination}
+                </div>
+              </div>
+              <StatusBadge status={r.status} />
+            </div>
 
-  if (!reservations.length) {
+            <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-sm">
+              <div>
+                <p className="text-muted-foreground text-xs">Partida</p>
+                <p className="font-medium">{fmtDate(r.tripDepartureDate)}</p>
+              </div>
+              {r.tripReturnDate && (
+                <div>
+                  <p className="text-muted-foreground text-xs">Retorno</p>
+                  <p className="font-medium">{fmtDate(r.tripReturnDate)}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-muted-foreground text-xs">Total</p>
+                <p className="font-medium">{fmtCurrency(r.totalValue)}</p>
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              {r.reservationNumber && (
+                <div className="flex items-center gap-1.5 text-xs bg-muted rounded px-2 py-1">
+                  <CalendarCheck className="w-3 h-3 text-muted-foreground" />
+                  <span className="font-mono">{r.reservationNumber}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-1.5 text-xs bg-muted rounded px-2 py-1">
+                <QrCode className="w-3 h-3 text-muted-foreground" />
+                <span className="font-mono">{r.voucherCode}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReservasTab({ profile }: { profile: ClientPortalProfile }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const all = profile.reservations;
+
+  const upcoming = all.filter(
+    (r) =>
+      r.status !== "cancelled" &&
+      r.status !== "completed" &&
+      (!r.tripDepartureDate || r.tripDepartureDate >= today),
+  );
+  const past = all.filter(
+    (r) =>
+      r.status === "cancelled" ||
+      r.status === "completed" ||
+      (!!r.tripDepartureDate && r.tripDepartureDate < today),
+  );
+
+  if (!all.length) {
     return (
       <div className="text-center py-16">
         <CalendarCheck className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
@@ -88,60 +158,32 @@ function ReservasTab({ profile }: { profile: ClientPortalProfile }) {
   }
 
   return (
-    <div className="space-y-4">
-      {reservations.map((r) => (
-        <Card key={r.id} className="overflow-hidden">
-          <CardContent className="p-0">
-            <div className="flex items-start gap-4 p-4">
-              <div className="mt-1">
-                <StatusIcon status={r.status} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2 flex-wrap">
-                  <div>
-                    <h4 className="font-semibold text-base leading-tight">{r.tripName}</h4>
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground mt-0.5">
-                      <MapPin className="w-3.5 h-3.5" />
-                      {r.tripDestination}
-                    </div>
-                  </div>
-                  <StatusBadge status={r.status} />
-                </div>
+    <div className="space-y-8">
+      {upcoming.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+            Próximas Viagens
+          </h2>
+          <div className="space-y-3">
+            {upcoming.map((r) => (
+              <ReservationCard key={r.id} r={r} />
+            ))}
+          </div>
+        </section>
+      )}
 
-                <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-sm">
-                  <div>
-                    <p className="text-muted-foreground text-xs">Partida</p>
-                    <p className="font-medium">{fmtDate(r.tripDepartureDate)}</p>
-                  </div>
-                  {r.tripReturnDate && (
-                    <div>
-                      <p className="text-muted-foreground text-xs">Retorno</p>
-                      <p className="font-medium">{fmtDate(r.tripReturnDate)}</p>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-muted-foreground text-xs">Total</p>
-                    <p className="font-medium">{fmtCurrency(r.totalValue)}</p>
-                  </div>
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  {r.reservationNumber && (
-                    <div className="flex items-center gap-1.5 text-xs bg-muted rounded px-2 py-1">
-                      <CalendarCheck className="w-3 h-3 text-muted-foreground" />
-                      <span className="font-mono">{r.reservationNumber}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-1.5 text-xs bg-muted rounded px-2 py-1">
-                    <QrCode className="w-3 h-3 text-muted-foreground" />
-                    <span className="font-mono">{r.voucherCode}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+      {past.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+            Histórico
+          </h2>
+          <div className="space-y-3">
+            {past.map((r) => (
+              <ReservationCard key={r.id} r={r} />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

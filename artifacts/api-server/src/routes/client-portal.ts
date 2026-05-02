@@ -8,7 +8,7 @@ import {
   referralsTable,
   tenantsTable,
 } from "@workspace/db";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, asc, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
@@ -113,7 +113,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
             eq(reservationsTable.tenantId, me.tenantId),
           ),
         )
-        .orderBy(desc(reservationsTable.createdAt));
+        .orderBy(asc(tripsTable.departureDate), desc(reservationsTable.createdAt));
 
       reservations = rows.map((r) => ({
         ...r,
