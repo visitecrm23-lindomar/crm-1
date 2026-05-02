@@ -9,6 +9,8 @@ import { useSyncMe, useGetMe } from "@workspace/api-client-react";
 
 import Layout from "@/components/layout";
 import AdminLayout from "@/components/admin-layout";
+import PortalLayout from "@/pages/perfil/layout";
+import PerfilPage from "@/pages/perfil/index";
 import Landing from "@/pages/landing";
 import SignInPage from "@/pages/sign-in";
 import SignUpPage from "@/pages/sign-up";
@@ -150,11 +152,7 @@ function RoleRedirect() {
     } else if (me.role === "agencia" || me.role === "gerente" || me.role === "suporte") {
       setLocation("/dashboard");
     } else if (me.role === "cliente") {
-      if (me.tenant?.slug) {
-        setLocation(`/loja/${me.tenant.slug}`);
-      } else {
-        setLocation("/dashboard");
-      }
+      setLocation("/perfil");
     } else {
       setLocation("/dashboard");
     }
@@ -203,7 +201,9 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   return (
     <>
       <Show when="signed-in">
-        {isLoading ? null : !me?.tenantId && me?.role !== "superadmin" ? (
+        {isLoading ? null : me?.role === "cliente" ? (
+          <Redirect to="/perfil" />
+        ) : !me?.tenantId && me?.role !== "superadmin" ? (
           <Redirect to="/onboarding" />
         ) : (
           <Layout>
@@ -213,6 +213,27 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
       </Show>
       <Show when="signed-out">
         <Redirect to="/" />
+      </Show>
+    </>
+  );
+}
+
+function ClientRoute({ component: Component }: { component: React.ComponentType }) {
+  const { data: me, isLoading } = useGetMe();
+
+  return (
+    <>
+      <Show when="signed-out">
+        <Redirect to="/sign-in" />
+      </Show>
+      <Show when="signed-in">
+        {isLoading ? null : me?.role === "cliente" ? (
+          <PortalLayout>
+            <Component />
+          </PortalLayout>
+        ) : me?.role ? (
+          <Redirect to="/dashboard" />
+        ) : null}
       </Show>
     </>
   );
@@ -317,6 +338,8 @@ function OnboardingRoute() {
         setLocation("/admin");
       } else if (me.role === "vendedor") {
         setLocation("/meu-painel");
+      } else if (me.role === "cliente") {
+        setLocation("/perfil");
       } else {
         setLocation("/dashboard");
       }
@@ -480,6 +503,9 @@ function Router() {
         path="/loja/avaliacoes"
         component={() => <AgenciaOnlyRoute component={LojaAvaliacoes} />}
       />
+
+      {/* Client portal */}
+      <Route path="/perfil" component={() => <ClientRoute component={PerfilPage} />} />
 
       {/* Public vitrine — must be after admin routes */}
       <Route path="/loja/:slug" component={Vitrine} />

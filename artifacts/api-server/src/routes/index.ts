@@ -41,6 +41,7 @@ import tripCostsRouter from "./trip-costs";
 import alertsRouter from "./alerts";
 import reportsRouter from "./reports";
 import subscriptionsRouter from "./subscriptions";
+import clientPortalRouter from "./client-portal";
 
 const router: IRouter = Router();
 
@@ -85,6 +86,7 @@ router.use(tripCostsRouter);
 router.use(alertsRouter);
 router.use(reportsRouter);
 router.use(subscriptionsRouter);
+router.use(clientPortalRouter);
 router.use("/uploadthing", uploadthingRouter);
 
 export default router;

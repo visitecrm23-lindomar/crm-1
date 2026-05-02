@@ -1,4 +1,7 @@
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
+import { useLocation } from "wouter";
+import { useUser } from "@clerk/react";
+import { useGetMe } from "@workspace/api-client-react";
 import { publicStoreApi, PublicStore, StoreOrder } from "@/lib/storeApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,11 +54,23 @@ export default function VitrineOrderTracking({
   store: PublicStore;
   initialOrderNumber?: string;
 }) {
+  const [, navigate] = useLocation();
+  const { isSignedIn, isLoaded } = useUser();
+  const { data: me } = useGetMe();
   const [orderNumber, setOrderNumber] = useState(initialOrderNumber ?? "");
   const [email, setEmail] = useState("");
   const [order, setOrder] = useState<StoreOrder | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (isSignedIn && me?.role === "cliente") {
+      navigate("/perfil");
+    } else if (!isSignedIn) {
+      navigate("/sign-in?redirect_url=%2Fperfil");
+    }
+  }, [isLoaded, isSignedIn, me?.role]);
 
   async function searchByNumber(num: string, emailAddress: string) {
     const trimmed = num.trim().toUpperCase();

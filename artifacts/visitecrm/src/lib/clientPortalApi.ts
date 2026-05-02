@@ -1,0 +1,80 @@
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+export interface ClientPortalReservation {
+  id: string;
+  reservationNumber: string | null;
+  status: string;
+  voucherCode: string;
+  totalValue: number;
+  paidValue: number;
+  paymentMethod: string | null;
+  storeOrderId: string | null;
+  createdAt: string;
+  tripName: string;
+  tripDestination: string;
+  tripDepartureDate: string | null;
+  tripReturnDate: string | null;
+  tripType: string;
+}
+
+export interface ClientPortalProfile {
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    cpf: string | null;
+    referralCode: string;
+    createdAt: string | null;
+  } | null;
+  client: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string | null;
+    cpf: string | null;
+    birthDate: string | null;
+    addressCity: string | null;
+    addressState: string | null;
+    referralCode: string | null;
+  } | null;
+  tenant: {
+    id: string;
+    name: string;
+    slug: string;
+    logoUrl: string | null;
+    primaryColor: string;
+  } | null;
+  reservations: ClientPortalReservation[];
+  referral: {
+    code: string | null;
+    totalReferrals: number;
+    completedReferrals: number;
+    pendingReferrals: number;
+    totalEarnings: string;
+  };
+}
+
+async function apiReq<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${BASE}/api${path}`, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: body != null ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.message ?? err.error ?? "Request failed");
+  }
+  if (res.status === 204) return undefined as unknown as T;
+  return res.json() as Promise<T>;
+}
+
+export const clientPortalApi = {
+  getProfile: () => apiReq<ClientPortalProfile>("GET", "/client/me"),
+  updateProfile: (data: {
+    name?: string;
+    phone?: string | null;
+    cpf?: string | null;
+    birthDate?: string | null;
+  }) => apiReq<ClientPortalProfile["client"]>("PATCH", "/client/me", data),
+};

@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
+import { useUser } from "@clerk/react";
+import { useGetMe } from "@workspace/api-client-react";
 import { PublicStore, publicStoreApi, ReferralValidation } from "@/lib/storeApi";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,12 +26,21 @@ function getUrlParams() {
 
 export default function ReferralLanding({ slug, store }: Props) {
   const [, navigate] = useLocation();
+  const { isSignedIn, isLoaded } = useUser();
+  const { data: me } = useGetMe();
   const [referralInfo, setReferralInfo] = useState<ReferralValidation | null>(null);
   const [loading, setLoading] = useState(true);
   const [tracked, setTracked] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const { code, utmSource, utmMedium, utmCampaign } = getUrlParams();
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (isSignedIn && me?.role === "cliente") {
+      navigate("/perfil?tab=indicacoes");
+    }
+  }, [isLoaded, isSignedIn, me?.role]);
 
   const primaryColor = store.primaryColor ?? "#6366f1";
   const secondaryColor = store.secondaryColor ?? "#4f46e5";
