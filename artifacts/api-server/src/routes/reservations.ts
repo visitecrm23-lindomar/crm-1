@@ -777,18 +777,26 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
         }
 
         // --- Reversal 1: coupon usage_count ---
+        // Two-step lookup mirrors creation: find exact coupon ID by code+store,
+        // then decrement by ID — symmetric with creation's WHERE id = serverCouponId.
         if (existing.discountCouponCode) {
-          const storeRows = await tx.select({ id: storesTable.id })
+          const [store] = await tx.select({ id: storesTable.id })
             .from(storesTable)
-            .where(eq(storesTable.tenantId, me.tenantId));
-          const storeIds = storeRows.map(s => s.id);
-          if (storeIds.length > 0) {
-            await tx.update(storeCouponsTable)
-              .set({ usageCount: sql`GREATEST(0, usage_count - 1)` })
+            .where(eq(storesTable.tenantId, me.tenantId))
+            .limit(1);
+          if (store) {
+            const [coupon] = await tx.select({ id: storeCouponsTable.id })
+              .from(storeCouponsTable)
               .where(and(
-                inArray(storeCouponsTable.storeId, storeIds),
+                eq(storeCouponsTable.storeId, store.id),
                 eq(storeCouponsTable.code, existing.discountCouponCode),
-              ));
+              ))
+              .limit(1);
+            if (coupon) {
+              await tx.update(storeCouponsTable)
+                .set({ usageCount: sql`GREATEST(0, usage_count - 1)` })
+                .where(eq(storeCouponsTable.id, coupon.id));
+            }
           }
         }
 

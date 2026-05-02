@@ -405,10 +405,12 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     mockLimit.mockResolvedValueOnce([existing]);
 
     // tx select queue (in execution order):
-    //   [0] Reversal 1 — stores lookup
-    //   [1] re-fetch updated reservation
+    //   [0] Reversal 1 — store lookup (get store.id for this tenant)
+    //   [1] Reversal 1 — coupon lookup by storeId + code → get coupon.id
+    //   [2] re-fetch updated reservation
     const tx = buildTxMock([
       [{ id: "store-001" }],
+      [{ id: "coupon-001" }],
       [cancelled],
     ]);
     mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
@@ -600,15 +602,17 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     mockLimit.mockResolvedValueOnce([existing]);
 
     // tx select queue (in execution order):
-    //   [0] Reversal 1 (coupon) — stores
-    //   [1] Reversal 2 (loyalty discount) — loyalty member
-    //   [2] Reversal 3 (referral) — referral record
-    //   [3] Reversal 4 (payment loyalty) — payments
-    //   [4] Reversal 4 — loyalty member (for payment clawback)
-    //   [5] Reversal 4 — earn transactions
-    //   [6] re-fetch updated reservation
+    //   [0] Reversal 1 (coupon) — store lookup (get store.id)
+    //   [1] Reversal 1 (coupon) — coupon lookup by storeId + code → coupon.id
+    //   [2] Reversal 2 (loyalty discount) — loyalty member
+    //   [3] Reversal 3 (referral) — referral record by reservationId
+    //   [4] Reversal 4 (payment loyalty) — payments
+    //   [5] Reversal 4 — loyalty member (for payment clawback)
+    //   [6] Reversal 4 — earn transactions
+    //   [7] re-fetch updated reservation
     const tx = buildTxMock([
       [{ id: "store-001" }],
+      [{ id: "coupon-001" }],
       [{ id: "member-001", availablePoints: 200 }],
       [{ id: "ref-001", referrerId: "ref-client-001", bonusAmount: "10.00" }],
       [{ id: "pay-001" }],
