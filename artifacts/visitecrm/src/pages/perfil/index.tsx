@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { clientPortalApi, type ClientPortalProfile } from "@/lib/clientPortalApi";
 import { useGetMe } from "@workspace/api-client-react";
+import { useSignIn } from "@clerk/react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
   CalendarCheck,
@@ -25,6 +27,9 @@ import {
   Gift,
   TrendingUp,
   Loader2,
+  ShieldCheck,
+  Mail,
+  KeyRound,
 } from "lucide-react";
 import { formatCurrency as fmtCurrencyLib, formatDateShort } from "@/lib/utils";
 
@@ -179,6 +184,179 @@ function ReservasTab({ profile }: { profile: ClientPortalProfile }) {
   );
 }
 
+type ResetStep = "idle" | "sending" | "code_sent" | "submitting" | "done";
+
+function SegurancaSection({ email }: { email: string }) {
+  const { toast } = useToast();
+  const { signIn } = useSignIn();
+  const [step, setStep] = useState<ResetStep>("idle");
+  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [fieldError, setFieldError] = useState<string | null>(null);
+
+  async function handleSendCode() {
+    if (!signIn) return;
+    setStep("sending");
+    setFieldError(null);
+    try {
+      const initResult = await signIn.create({ identifier: email });
+      if (initResult.error) throw initResult.error;
+      const sendResult = await signIn.resetPasswordEmailCode.sendCode();
+      if (sendResult.error) throw sendResult.error;
+      setStep("code_sent");
+    } catch (err) {
+      setStep("idle");
+      toast({
+        title: "Erro ao enviar código",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setFieldError(null);
+    if (!code.trim()) { setFieldError("Informe o código recebido."); return; }
+    if (password.length < 8) { setFieldError("A senha deve ter ao menos 8 caracteres."); return; }
+    if (password !== confirmPassword) { setFieldError("As senhas não coincidem."); return; }
+    if (!signIn) return;
+    setStep("submitting");
+    try {
+      const verifyResult = await signIn.resetPasswordEmailCode.verifyCode({ code: code.trim() });
+      if (verifyResult.error) throw verifyResult.error;
+      const submitResult = await signIn.resetPasswordEmailCode.submitPassword({ password, signOutOfOtherSessions: false });
+      if (submitResult.error) throw submitResult.error;
+      setStep("done");
+      toast({ title: "Senha atualizada!", description: "Sua nova senha foi definida com sucesso." });
+    } catch (err) {
+      setStep("code_sent");
+      const msg = err instanceof Error ? err.message : "Verifique o código e tente novamente.";
+      setFieldError(msg);
+    }
+  }
+
+  function handleCancel() {
+    setStep("idle");
+    setCode("");
+    setPassword("");
+    setConfirmPassword("");
+    setFieldError(null);
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4" />
+          Segurança
+        </CardTitle>
+        <CardDescription>Gerencie o acesso à sua conta.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="flex items-start gap-3">
+          <Mail className="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
+          <div>
+            <p className="text-sm font-medium">E-mail</p>
+            <p className="text-sm text-muted-foreground">
+              Seu e-mail de login é <span className="font-mono">{email}</span>. Por motivos de
+              segurança, a alteração de e-mail não está disponível neste portal — entre em
+              contato com a sua agência caso precise atualizá-lo.
+            </p>
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="flex items-start gap-3">
+          <KeyRound className="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium mb-1">Senha</p>
+
+            {step === "done" ? (
+              <div className="flex items-center gap-2 text-sm text-green-600">
+                <Check className="w-4 h-4" />
+                Senha atualizada com sucesso!
+              </div>
+            ) : step === "idle" || step === "sending" ? (
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <p className="text-sm text-muted-foreground">
+                  Clique no botão para receber um código de verificação no seu e-mail e definir uma nova senha.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSendCode}
+                  disabled={step === "sending" || !email}
+                  className="shrink-0"
+                >
+                  {step === "sending" && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+                  Redefinir senha
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-3 mt-1">
+                <p className="text-sm text-muted-foreground">
+                  Enviamos um código de verificação para <span className="font-mono">{email}</span>. Insira o código abaixo e escolha uma nova senha.
+                </p>
+                <div className="space-y-1.5">
+                  <Label htmlFor="reset-code" className="text-xs">Código de verificação</Label>
+                  <Input
+                    id="reset-code"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    placeholder="000000"
+                    className="font-mono w-40"
+                    maxLength={8}
+                    autoComplete="one-time-code"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="reset-password" className="text-xs">Nova senha</Label>
+                    <Input
+                      id="reset-password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Mínimo 8 caracteres"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="reset-confirm" className="text-xs">Confirmar nova senha</Label>
+                    <Input
+                      id="reset-confirm"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Repita a senha"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                </div>
+                {fieldError && (
+                  <p className="text-xs text-destructive">{fieldError}</p>
+                )}
+                <div className="flex gap-2 pt-1">
+                  <Button type="submit" size="sm" disabled={step === "submitting"}>
+                    {step === "submitting" && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+                    Salvar nova senha
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={handleCancel} disabled={step === "submitting"}>
+                    Cancelar
+                  </Button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function DadosTab({ profile, onUpdated }: { profile: ClientPortalProfile; onUpdated: (updated: ClientPortalProfile["client"]) => void }) {
   const { toast } = useToast();
   const client = profile.client;
@@ -213,72 +391,77 @@ function DadosTab({ profile, onUpdated }: { profile: ClientPortalProfile; onUpda
     }
   }
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Informações Pessoais</CardTitle>
-        <CardDescription>Mantenha seus dados atualizados para facilitar suas reservas.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSave} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="portal-name">Nome completo</Label>
-              <Input
-                id="portal-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Seu nome"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="portal-email">E-mail</Label>
-              <Input
-                id="portal-email"
-                value={client?.email ?? user?.email ?? ""}
-                disabled
-                className="bg-muted"
-              />
-              <p className="text-xs text-muted-foreground">O e-mail não pode ser alterado.</p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="portal-phone">Telefone / WhatsApp</Label>
-              <Input
-                id="portal-phone"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="(11) 99999-9999"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="portal-cpf">CPF</Label>
-              <Input
-                id="portal-cpf"
-                value={cpf}
-                onChange={(e) => setCpf(e.target.value)}
-                placeholder="000.000.000-00"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="portal-birthdate">Data de nascimento</Label>
-              <Input
-                id="portal-birthdate"
-                type="date"
-                value={birthDate ?? ""}
-                onChange={(e) => setBirthDate(e.target.value)}
-              />
-            </div>
-          </div>
+  const email = client?.email ?? user?.email ?? "";
 
-          <div className="pt-2">
-            <Button type="submit" disabled={saving}>
-              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Salvar Alterações
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Informações Pessoais</CardTitle>
+          <CardDescription>Mantenha seus dados atualizados para facilitar suas reservas.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSave} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="portal-name">Nome completo</Label>
+                <Input
+                  id="portal-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Seu nome"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="portal-email">E-mail</Label>
+                <Input
+                  id="portal-email"
+                  value={email}
+                  disabled
+                  className="bg-muted"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="portal-phone">Telefone / WhatsApp</Label>
+                <Input
+                  id="portal-phone"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="(11) 99999-9999"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="portal-cpf">CPF</Label>
+                <Input
+                  id="portal-cpf"
+                  value={cpf}
+                  onChange={(e) => setCpf(e.target.value)}
+                  placeholder="000.000.000-00"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="portal-birthdate">Data de nascimento</Label>
+                <Input
+                  id="portal-birthdate"
+                  type="date"
+                  value={birthDate ?? ""}
+                  onChange={(e) => setBirthDate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <Button type="submit" disabled={saving}>
+                {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Salvar Alterações
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <SegurancaSection email={email} />
+    </div>
   );
 }
 
