@@ -33,6 +33,7 @@ const {
   mockTransaction,
   mockEnqueueCancellationEmail,
   mockSyncTrip,
+  mockSyncTripGeneral,
 } = vi.hoisted(() => {
   const capturedUpdates: Array<{ table: string; set: Record<string, unknown> }> = [];
   const capturedInserts: Record<string, unknown>[] = [];
@@ -49,6 +50,7 @@ const {
   const mockTransaction = vi.fn();
   const mockEnqueueCancellationEmail = vi.fn().mockResolvedValue(undefined);
   const mockSyncTrip = vi.fn().mockResolvedValue(undefined);
+  const mockSyncTripGeneral = vi.fn().mockResolvedValue(undefined);
 
   return {
     capturedUpdates,
@@ -64,6 +66,7 @@ const {
     mockTransaction,
     mockEnqueueCancellationEmail,
     mockSyncTrip,
+    mockSyncTripGeneral,
   };
 });
 
@@ -151,7 +154,7 @@ vi.mock("../queues/email-helpers.js", () => ({
 
 vi.mock("../lib/google-calendar/sync-service.js", () => ({
   CalendarSyncService: {
-    syncTrip: vi.fn().mockResolvedValue(undefined),
+    syncTrip: mockSyncTripGeneral,
     syncTripOnReservationCancellation: mockSyncTrip,
   },
 }));
@@ -901,6 +904,36 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
 
     expect(res.status).toBe(200);
     expect(mockSyncTrip).toHaveBeenCalledWith(existing.tripId);
+    // General syncTrip must NOT be called on cancellation — only the dedicated method
+    expect(mockSyncTripGeneral).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  it("calls general CalendarSyncService.syncTrip for non-cancellation reservation PATCHes (regression guard)", async () => {
+    const app = buildReservationsApp();
+    // A notes-only update: no status change, no cancellation
+    const existing = makeReservation({ clientId: "client-001" });
+    const updated = { ...existing, notes: "Observação nova" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // No reversals: only the re-fetch after UPDATE
+    const tx = buildTxMock([[updated]]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ notes: "Observação nova" });
+
+    expect(res.status).toBe(200);
+    // General syncTrip must be called for non-cancellation PATCHes
+    expect(mockSyncTripGeneral).toHaveBeenCalledWith(existing.tripId);
+    // Cancellation-specific method must NOT be called
+    expect(mockSyncTrip).not.toHaveBeenCalled();
   });
 });
 

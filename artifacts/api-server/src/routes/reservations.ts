@@ -1050,15 +1050,16 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
         .catch((err) => req.log.error({ err }, "Error enqueueing cancellation email"));
     }
     broadcastSeatUpdate(existing.tripId, me.tenantId).catch(() => {});
-    // Sync Google Calendar events: use the dedicated cancellation path when an active
-    // reservation is cancelled/refunded so that the reduced passenger count and any
-    // stale seller events are reflected deterministically.
+    // Sync Google Calendar events after every reservation PATCH.
+    // Use the dedicated cancellation path for active→cancelled/refunded transitions
+    // (ensures stale seller events and reduced passenger count are reflected explicitly);
+    // fall back to the general syncTrip for all other updates (sellerId, totalValue, etc.)
     if (isBeingCancelled && wasActive) {
       CalendarSyncService.syncTripOnReservationCancellation(existing.tripId)
         .catch((err) => req.log.error({ err }, "Error syncing Google Calendar after reservation cancellation"));
-    } else if (parsed.data.status != null) {
+    } else {
       CalendarSyncService.syncTrip(existing.tripId)
-        .catch((err) => req.log.error({ err }, "Error syncing Google Calendar after reservation status change"));
+        .catch((err) => req.log.error({ err }, "Error syncing Google Calendar after reservation update"));
     }
   } catch (err) {
     next(err);
