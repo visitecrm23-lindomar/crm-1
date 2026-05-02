@@ -1,6 +1,6 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
-import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, referralSettingsTable, dealsTable, pipelineStagesTable, tenantsTable, emailLogsTable, paymentsTable } from "@workspace/db";
+import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, referralSettingsTable, dealsTable, pipelineStagesTable, tenantsTable, emailLogsTable, paymentsTable, commissionsTable } from "@workspace/db";
 import { eq, and, sql, desc, asc, inArray, or, ilike } from "drizzle-orm";
 import { generateId, generateVoucherCode } from "../lib/id";
 import { getTenantReservationPrefix, tripTypeToCode, getYearMonth, nextReservationSequence, buildReservationNumber } from "../lib/reservation-number";
@@ -533,6 +533,22 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
         isPrimary: true,
       });
 
+      // Create placeholder passengers for additional seats (seats 1..N-1)
+      for (let i = 1; i < seatsCount; i++) {
+        await tx.insert(passengersTable).values({
+          id: generateId(),
+          reservationId: id,
+          name: "A preencher",
+          cpf: null,
+          rg: null,
+          birthDate: null,
+          ageCategory: "adult",
+          seatNumber: parsed.data.seats[i] ?? null,
+          isChildUnder7: false,
+          isPrimary: false,
+        });
+      }
+
       await tx.update(tripsTable).set({
         reservedSeats: sql`reserved_seats + ${seatsCount}`,
         availableSeats: sql`available_seats - ${seatsCount}`,
@@ -947,6 +963,15 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
             }
           }
         }
+
+        // --- Cancel orphan commissions (pending/approved) tied to this reservation ---
+        await tx.update(commissionsTable)
+          .set({ status: "cancelled" })
+          .where(and(
+            eq(commissionsTable.reservationId, req.params.id),
+            eq(commissionsTable.tenantId, me.tenantId),
+            inArray(commissionsTable.status, ["pending", "approved"]),
+          ));
       }
 
       await tx.update(reservationsTable).set(updates)
@@ -1025,7 +1050,8 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
         .catch((err) => req.log.error({ err }, "Error enqueueing cancellation email"));
     }
     broadcastSeatUpdate(existing.tripId, me.tenantId).catch(() => {});
-    CalendarSyncService.syncTrip(existing.tripId).catch(() => {});
+    CalendarSyncService.syncTrip(existing.tripId)
+      .catch((err) => req.log.error({ err }, "Error syncing Google Calendar after reservation update"));
   } catch (err) {
     next(err);
   }

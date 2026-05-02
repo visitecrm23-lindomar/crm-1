@@ -32,6 +32,7 @@ const {
   mockSelect,
   mockTransaction,
   mockEnqueueCancellationEmail,
+  mockSyncTrip,
 } = vi.hoisted(() => {
   const capturedUpdates: Array<{ table: string; set: Record<string, unknown> }> = [];
   const capturedInserts: Record<string, unknown>[] = [];
@@ -47,6 +48,7 @@ const {
   const mockSelect = vi.fn(() => ({ from: mockFrom }));
   const mockTransaction = vi.fn();
   const mockEnqueueCancellationEmail = vi.fn().mockResolvedValue(undefined);
+  const mockSyncTrip = vi.fn().mockResolvedValue(undefined);
 
   return {
     capturedUpdates,
@@ -61,6 +63,7 @@ const {
     mockSelect,
     mockTransaction,
     mockEnqueueCancellationEmail,
+    mockSyncTrip,
   };
 });
 
@@ -99,6 +102,7 @@ vi.mock("@workspace/db", () => ({
   referralTrackingTable: {},
   usersTable: {},
   paymentsTable: {},
+  commissionsTable: {},
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -146,7 +150,7 @@ vi.mock("../queues/email-helpers.js", () => ({
 }));
 
 vi.mock("../lib/google-calendar/sync-service.js", () => ({
-  CalendarSyncService: { syncTrip: vi.fn().mockResolvedValue(undefined) },
+  CalendarSyncService: { syncTrip: mockSyncTrip },
 }));
 
 vi.mock("../lib/activities.js", () => ({
@@ -428,8 +432,8 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
       .send({ status: "cancelled" });
 
     expect(res.status).toBe(200);
-    // trips (seats) + storeCoupons (usageCount) + reservations (status)
-    expect(tx.update).toHaveBeenCalledTimes(3);
+    // trips (seats) + storeCoupons (usageCount) + commissions (cancel) + reservations (status)
+    expect(tx.update).toHaveBeenCalledTimes(4);
   });
 
   // -------------------------------------------------------------------------
@@ -509,8 +513,8 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
       .send({ status: "cancelled" });
 
     expect(res.status).toBe(200);
-    // trips (seats) + clients (referralEarnings) + referrals (status) + reservations = 4 updates
-    expect(tx.update).toHaveBeenCalledTimes(4);
+    // trips (seats) + clients (referralEarnings) + referrals (status) + commissions (cancel) + reservations = 5 updates
+    expect(tx.update).toHaveBeenCalledTimes(5);
   });
 
   // -------------------------------------------------------------------------
@@ -547,8 +551,8 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
 
     expect(res.status).toBe(200);
     // The tx.select was called with a where clause that includes reservationId.
-    // The referral record returned is referral-001; only 4 updates should run.
-    expect(tx.update).toHaveBeenCalledTimes(4);
+    // The referral record returned is referral-001; only 5 updates should run.
+    expect(tx.update).toHaveBeenCalledTimes(5);
     // Verify tx.select was called — the reversal ran against the specific record
     expect(tx.select).toHaveBeenCalled();
   });
@@ -656,8 +660,8 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
 
     // trips + storeCoupons + loyaltyMembers (discount restore) +
     // clients (referral earnings) + referrals (status) +
-    // loyaltyMembers (payment clawback) + reservations = 7 updates
-    expect(tx.update).toHaveBeenCalledTimes(7);
+    // loyaltyMembers (payment clawback) + commissions (cancel) + reservations = 8 updates
+    expect(tx.update).toHaveBeenCalledTimes(8);
   });
 
   // -------------------------------------------------------------------------
@@ -697,9 +701,9 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
       .send({ status: "cancelled" });
 
     expect(res.status).toBe(200);
-    // Only: trips (seat restore) + reservations (status update) = 2 updates
+    // trips (seat restore) + commissions (cancel) + reservations (status update) = 3 updates
     // loyaltyMembers is NOT updated a second time (idempotency guard fired)
-    expect(tx.update).toHaveBeenCalledTimes(2);
+    expect(tx.update).toHaveBeenCalledTimes(3);
     // No new loyalty transactions inserted (refund was skipped)
     const refundTx = capturedInserts.find(
       (i) => (i as Record<string, unknown>)["type"] === "refund",
@@ -840,6 +844,60 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
 
     expect(res.status).toBe(200);
     expect(mockEnqueueCancellationEmail).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  it("cancels pending/approved commissions for the reservation when it is cancelled", async () => {
+    const app = buildReservationsApp();
+    // No special discounts, no clientId → only seat restore + commission cancel + reservation update
+    const existing = makeReservation({ clientId: null });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue: only the re-fetch after UPDATE (no reversal selects needed)
+    const tx = buildTxMock([[cancelled]]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+
+    // Exactly one update should have set { status: "cancelled" } as its ONLY field
+    // (that's the commission cancel; the reservation update also carries cancelledAt)
+    const commissionCancel = capturedUpdates.find(
+      (u) => Object.keys(u.set).length === 1 && u.set.status === "cancelled",
+    );
+    expect(commissionCancel).toBeDefined();
+  });
+
+  // -------------------------------------------------------------------------
+  it("calls CalendarSyncService.syncTrip after a cancellation to reflect reduced passenger count", async () => {
+    const app = buildReservationsApp();
+    const existing = makeReservation({ clientId: null });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    const tx = buildTxMock([[cancelled]]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+    expect(mockSyncTrip).toHaveBeenCalledWith(existing.tripId);
   });
 });
 

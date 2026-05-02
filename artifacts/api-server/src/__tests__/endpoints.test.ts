@@ -61,6 +61,8 @@ vi.mock("@workspace/db", () => ({
   emailLogsTable: {},
   referralTrackingTable: {},
   usersTable: {},
+  paymentsTable: {},
+  commissionsTable: {},
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -105,6 +107,7 @@ vi.mock("../routes/payments.js", () => ({
 
 vi.mock("../queues/email-helpers.js", () => ({
   enqueueReservationConfirmationEmail: vi.fn().mockResolvedValue(undefined),
+  enqueueReservationCancellationEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../lib/google-calendar/sync-service.js", () => ({
@@ -418,6 +421,43 @@ describe("POST /api/reservations — endpoint pricing computation", () => {
     expect(res.status).toBe(201);
     expect(res.body.totalValue).toBe(800);
     expect(res.body.balance).toBe(600);
+  });
+
+  it("creates a placeholder passenger for each additional seat when more than 1 seat is booked", async () => {
+    const app = buildReservationsApp();
+    const fakeReservation = { ...makeFakeReservation("1500", "0", "1500"), seats: ["1A", "2B", "3C"] };
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_CLIENT])
+      .mockResolvedValueOnce([fakeReservation])
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .post("/api/reservations")
+      .send({ tripId: "trip-001", clientId: FAKE_CLIENT.id, seats: ["1A", "2B", "3C"], totalValue: 1500 });
+
+    expect(res.status).toBe(201);
+
+    // capturedInserts contains: [0]=reservation, [1]=primary passenger, [2..N]=placeholder passengers
+    const passengerInserts = capturedInserts.filter(
+      (i) => (i as Record<string, unknown>).reservationId !== undefined,
+    );
+    // 3 seats → 1 primary + 2 placeholders = 3 passenger rows
+    expect(passengerInserts).toHaveLength(3);
+
+    const primary = passengerInserts.find(
+      (p) => (p as Record<string, unknown>).isPrimary === true,
+    );
+    expect(primary).toBeDefined();
+    expect((primary as Record<string, unknown>).name).toBe(FAKE_CLIENT.name);
+
+    const placeholders = passengerInserts.filter(
+      (p) => (p as Record<string, unknown>).isPrimary !== true,
+    );
+    expect(placeholders).toHaveLength(2);
+    expect((placeholders[0] as Record<string, unknown>).name).toBe("A preencher");
+    expect((placeholders[1] as Record<string, unknown>).name).toBe("A preencher");
   });
 });
 
