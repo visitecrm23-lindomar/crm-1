@@ -1,14 +1,17 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import cookieParser from "cookie-parser";
 import { clerkMiddleware } from "@clerk/express";
+import rateLimit from "express-rate-limit";
 import { CLERK_PROXY_PATH, clerkProxyMiddleware } from "./middlewares/clerkProxyMiddleware";
 import { requestId, errorHandler } from "./middlewares/errorHandler";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
+
+app.set("trust proxy", 1);
 
 app.use(requestId);
 app.use(
@@ -115,6 +118,33 @@ app.use((req, res, next) => {
   }
   return clerkAuth(req, res, next);
 });
+
+const rateLimitHandler = (_req: Request, res: Response) => {
+  res.status(429).json({
+    error: "TOO_MANY_REQUESTS",
+    code: "TOO_MANY_REQUESTS",
+    message: "Muitas requisições. Aguarde um momento e tente novamente.",
+  });
+};
+
+const publicGeneralLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitHandler,
+});
+
+const publicOrderLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitHandler,
+});
+
+app.use("/api/public", publicGeneralLimiter);
+app.post("/api/public/store/:slug/orders", publicOrderLimiter);
 
 app.use("/api", router);
 app.use(errorHandler);
