@@ -519,7 +519,152 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     expect(res.body).toHaveProperty("totalAmount");
   });
 
-  // ── 6. Valid order (200) ──────────────────────────────────────────────────
+  // ── 6. Referral code validation ───────────────────────────────────────────
+
+  it("does not apply discount when referral code is expired (past expirationDays)", async () => {
+    const hundredDaysAgo = new Date();
+    hundredDaysAgo.setDate(hundredDaysAgo.getDate() - 100);
+
+    const expiredReferrer = {
+      id: "client-ref-001",
+      name: "João Referrer",
+      email: "referrer@example.com",
+      referralCodeGeneratedAt: hundredDaysAgo,
+    };
+    const refSettings = {
+      discountValue: "10.00",
+      discountType: "percentage",
+      isEnabled: true,
+      expirationDays: 30,
+      allowSelfReferral: true,
+      requireFirstPurchase: false,
+      bonusValue: "10.00",
+    };
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])       // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])      // product fetch
+      .mockResolvedValueOnce([expiredReferrer])   // referrer lookup
+      .mockResolvedValueOnce([refSettings])       // referral settings
+      .mockResolvedValueOnce([FAKE_ORDER])        // post-tx order re-fetch
+      .mockResolvedValue([]);
+
+    const res = await request(buildApp())
+      .post("/api/public/store/minha-loja/orders")
+      .send({ ...VALID_BODY, referralCode: "REF-EXPIRED" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("orderId");
+    expect(parseFloat(res.body.totalAmount)).toBe(150);
+  });
+
+  it("does not apply discount when customer self-refers and allowSelfReferral is false", async () => {
+    const selfReferrer = {
+      id: "client-ref-002",
+      name: "Maria Souza",
+      email: "maria@example.com",
+      referralCodeGeneratedAt: new Date(),
+    };
+    const refSettings = {
+      discountValue: "10.00",
+      discountType: "percentage",
+      isEnabled: true,
+      expirationDays: 365,
+      allowSelfReferral: false,
+      requireFirstPurchase: false,
+      bonusValue: "10.00",
+    };
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])
+      .mockResolvedValueOnce([FAKE_PRODUCT])
+      .mockResolvedValueOnce([selfReferrer])
+      .mockResolvedValueOnce([refSettings])
+      .mockResolvedValueOnce([FAKE_ORDER])
+      .mockResolvedValue([]);
+
+    const res = await request(buildApp())
+      .post("/api/public/store/minha-loja/orders")
+      .send({ ...VALID_BODY, referralCode: "SELF-REF" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("orderId");
+    expect(parseFloat(res.body.totalAmount)).toBe(150);
+  });
+
+  it("does not apply discount when requireFirstPurchase is true and a prior completed order exists", async () => {
+    const referrer = {
+      id: "client-ref-003",
+      name: "João Referrer",
+      email: "referrer@example.com",
+      referralCodeGeneratedAt: new Date(),
+    };
+    const refSettings = {
+      discountValue: "10.00",
+      discountType: "percentage",
+      isEnabled: true,
+      expirationDays: 365,
+      allowSelfReferral: true,
+      requireFirstPurchase: true,
+      bonusValue: "10.00",
+    };
+    const priorOrder = { id: "order-prior-001" };
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])
+      .mockResolvedValueOnce([FAKE_PRODUCT])
+      .mockResolvedValueOnce([referrer])
+      .mockResolvedValueOnce([refSettings])
+      .mockResolvedValueOnce([priorOrder])
+      .mockResolvedValueOnce([FAKE_ORDER])
+      .mockResolvedValue([]);
+
+    const res = await request(buildApp())
+      .post("/api/public/store/minha-loja/orders")
+      .send({ ...VALID_BODY, referralCode: "FIRSTPURCH" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("orderId");
+    expect(parseFloat(res.body.totalAmount)).toBe(150);
+  });
+
+  it("applies referral discount and reduces totalAmount when referral code is valid", async () => {
+    const referrer = {
+      id: "client-ref-004",
+      name: "João Referrer",
+      email: "referrer@example.com",
+      referralCodeGeneratedAt: new Date(),
+    };
+    const refSettings = {
+      discountValue: "10.00",
+      discountType: "percentage",
+      isEnabled: true,
+      expirationDays: 365,
+      allowSelfReferral: true,
+      requireFirstPurchase: false,
+      bonusValue: "10.00",
+    };
+    const discountedOrder = { ...FAKE_ORDER, discountAmount: "15.00", totalAmount: "135.00" };
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])
+      .mockResolvedValueOnce([FAKE_PRODUCT])
+      .mockResolvedValueOnce([referrer])
+      .mockResolvedValueOnce([refSettings])
+      .mockResolvedValueOnce([])             // referral bonus settings lookup inside transaction
+      .mockResolvedValueOnce([discountedOrder])
+      .mockResolvedValue([]);
+
+    const res = await request(buildApp())
+      .post("/api/public/store/minha-loja/orders")
+      .send({ ...VALID_BODY, referralCode: "VALID-REF" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("orderId");
+    expect(parseFloat(res.body.totalAmount)).toBeLessThan(150);
+  });
+
+  // ── 7. Valid order (200) ──────────────────────────────────────────────────
 
   it("returns 200 with orderId when all fields are valid and product is in stock", async () => {
     mockLimit
