@@ -111,7 +111,10 @@ vi.mock("../queues/email-helpers.js", () => ({
 }));
 
 vi.mock("../lib/google-calendar/sync-service.js", () => ({
-  CalendarSyncService: { syncTrip: vi.fn().mockResolvedValue(undefined) },
+  CalendarSyncService: {
+    syncTrip: vi.fn().mockResolvedValue(undefined),
+    syncTripOnReservationCancellation: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
 vi.mock("../lib/activities.js", () => ({

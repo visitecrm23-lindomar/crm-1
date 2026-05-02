@@ -244,6 +244,20 @@ export class CalendarSyncService {
   }
 
   /**
+   * syncTripOnReservationCancellation — explicit sync triggered when an active
+   * reservation is cancelled or refunded. Ensures the trip's calendar events are
+   * updated to reflect the reduced confirmed-passenger count and removes stale
+   * seller events for sellers who no longer have any confirmed reservations on
+   * this trip after the cancellation.
+   *
+   * Delegates to syncTrip which queries only "confirmed" reservations, so the
+   * cancelled reservation is automatically excluded from all event descriptions.
+   */
+  static async syncTripOnReservationCancellation(tripId: string): Promise<void> {
+    return CalendarSyncService.syncTrip(tripId);
+  }
+
+  /**
    * syncTripForUser — syncs a single trip to one specific user's calendar.
    * Used by user-initiated operations (manual sync, post-connect).
    */

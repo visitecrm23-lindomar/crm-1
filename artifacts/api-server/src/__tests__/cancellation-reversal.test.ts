@@ -150,7 +150,10 @@ vi.mock("../queues/email-helpers.js", () => ({
 }));
 
 vi.mock("../lib/google-calendar/sync-service.js", () => ({
-  CalendarSyncService: { syncTrip: mockSyncTrip },
+  CalendarSyncService: {
+    syncTrip: vi.fn().mockResolvedValue(undefined),
+    syncTripOnReservationCancellation: mockSyncTrip,
+  },
 }));
 
 vi.mock("../lib/activities.js", () => ({
@@ -878,7 +881,7 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
   });
 
   // -------------------------------------------------------------------------
-  it("calls CalendarSyncService.syncTrip after a cancellation to reflect reduced passenger count", async () => {
+  it("calls CalendarSyncService.syncTripOnReservationCancellation after an active reservation is cancelled", async () => {
     const app = buildReservationsApp();
     const existing = makeReservation({ clientId: null });
     const cancelled = { ...existing, status: "cancelled" };
