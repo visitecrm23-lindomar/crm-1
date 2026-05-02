@@ -274,6 +274,7 @@ router.patch("/client/me", async (req, res, next: NextFunction): Promise<void> =
         : null,
       addressCity: updated.addressCity,
       addressState: updated.addressState,
+      referralCode: updated.referralCode ?? null,
     });
   } catch (err) {
     next(err);
