@@ -2,10 +2,10 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   pix: "PIX",
   credit_card: "Cartão de Crédito",
   debit_card: "Cartão de Débito",
-  bank_transfer: "Transferência",
-  transfer: "Transferência",
+  bank_transfer: "Transferência Bancária",
+  transfer: "Transferência Bancária",
   cash: "Dinheiro",
-  boleto: "Boleto",
+  boleto: "Boleto Bancário",
   installment: "Parcelado",
 };
 
