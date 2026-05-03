@@ -1,4 +1,4 @@
-import { db, tenantsTable, usersTable, storesTable, storeProductsTable, storeCategoriesTable, storeOrderItemsTable, storeReviewsTable, tripsTable, productCategoriesTable, productImagesTable, vehiclesTable, accommodationsTable, destinationsTable, clientsTable, hurbProductsTable } from "@workspace/db";
+import { db, tenantsTable, usersTable, storesTable, storeProductsTable, storeCategoriesTable, storeOrderItemsTable, storeReviewsTable, tripsTable, productCategoriesTable, productImagesTable, vehiclesTable, accommodationsTable, destinationsTable, clientsTable } from "@workspace/db";
 import { extractVerifiedUploadThingKey } from "./uploadthing";
 
 export async function collectReferencedUploadThingKeys(): Promise<Set<string>> {
@@ -6,7 +6,7 @@ export async function collectReferencedUploadThingKeys(): Promise<Set<string>> {
     tenants, stores, storeCategories, storeProducts, storeOrderItems, storeReviews,
     trips, productCategories, productImages,
     vehicles, accommodations, destinations,
-    clients, users, hurbProducts,
+    clients, users,
   ] = await Promise.all([
     db.select({ logoUrl: tenantsTable.logoUrl }).from(tenantsTable),
     db.select({ logo: storesTable.logo, logoDark: storesTable.logoDark, favicon: storesTable.favicon, bannerHome: storesTable.bannerHome, bannerMobile: storesTable.bannerMobile }).from(storesTable),
@@ -22,7 +22,6 @@ export async function collectReferencedUploadThingKeys(): Promise<Set<string>> {
     db.select({ coverImage: destinationsTable.coverImage, gallery: destinationsTable.gallery }).from(destinationsTable),
     db.select({ photoUrl: clientsTable.photoUrl }).from(clientsTable),
     db.select({ avatarUrl: usersTable.avatarUrl }).from(usersTable),
-    db.select({ images: hurbProductsTable.images, thumbnail: hurbProductsTable.thumbnail }).from(hurbProductsTable),
   ]);
 
   const referencedKeys = new Set<string>();
@@ -47,7 +46,6 @@ export async function collectReferencedUploadThingKeys(): Promise<Set<string>> {
   for (const r of destinations) { addKey(r.coverImage); for (const url of r.gallery ?? []) addKey(url); }
   for (const r of clients) addKey(r.photoUrl);
   for (const r of users) addKey(r.avatarUrl);
-  for (const r of hurbProducts) { addKey(r.thumbnail); for (const url of r.images ?? []) addKey(url); }
 
   return referencedKeys;
 }

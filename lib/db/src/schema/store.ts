@@ -85,8 +85,6 @@ export const storesTable = pgTable("stores", {
   notificationEmail: text("notification_email"),
   orderNotificationEnabled: boolean("order_notification_enabled").notNull().default(true),
 
-  hurbEnabled: boolean("hurb_enabled").notNull().default(false),
-
   isActive: boolean("is_active").notNull().default(true),
   maintenanceMode: boolean("maintenance_mode").notNull().default(false),
   maintenanceMessage: text("maintenance_message"),

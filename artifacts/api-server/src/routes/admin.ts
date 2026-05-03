@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, tenantsTable, usersTable, auditLogsTable, plansTable, invoicesTable, featureFlagsTable, storesTable, storeProductsTable, storeCategoriesTable, storeOrderItemsTable, storeReviewsTable, tripsTable, productCategoriesTable, productImagesTable, vehiclesTable, accommodationsTable, destinationsTable, clientsTable, hurbProductsTable } from "@workspace/db";
+import { db, tenantsTable, usersTable, auditLogsTable, plansTable, invoicesTable, featureFlagsTable, storesTable, storeProductsTable, storeCategoriesTable, storeOrderItemsTable, storeReviewsTable, tripsTable, productCategoriesTable, productImagesTable, vehiclesTable, accommodationsTable, destinationsTable, clientsTable } from "@workspace/db";
 import { eq, desc, asc, count, sql, and, gte, lte, ne } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
@@ -559,9 +559,9 @@ router.post("/admin/tenants/:id/activate", async (req, res): Promise<void> => {
 // tenant logos, store assets (logo, logoDark, favicon, banners), store product
 // images/galleries, store review photos, store category images, trip covers and
 // galleries, catalog product images, vehicle photos, accommodation/destination
-// covers and galleries, client profile photos, user avatars, and Hurb product
-// thumbnails. extractVerifiedUploadThingKey() filters out non-UploadThing URLs
-// (Clerk avatars, external links, Hurb CDN images) so they are never deleted.
+// covers and galleries, client profile photos, and user avatars.
+// extractVerifiedUploadThingKey() filters out non-UploadThing URLs
+// (Clerk avatars, external links) so they are never deleted.
 
 router.post("/admin/cleanup-orphaned-uploadthing-files", async (req, res): Promise<void> => {
   try {

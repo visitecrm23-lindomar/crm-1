@@ -115,7 +115,6 @@ const StoreSettingsBody = z.object({
   privacyUrl: z.string().nullish(),
   notificationEmail: z.string().nullish(),
   orderNotificationEnabled: z.boolean().optional(),
-  hurbEnabled: z.boolean().optional(),
   isActive: z.boolean().optional(),
   maintenanceMode: z.boolean().optional(),
   maintenanceMessage: z.string().nullish(),

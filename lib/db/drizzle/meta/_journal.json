@@ -99,6 +99,13 @@
       "when": 1777820000000,
       "tag": "0013_add_google_calendar_status",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1777830000000,
+      "tag": "0014_drop_hurb_integration",
+      "breakpoints": true
     }
   ]
 }

@@ -877,15 +877,6 @@ const INTEGRATIONS: IntegrationConfig[] = [
     ],
   },
   {
-    key: "hurb",
-    label: "Hurb (Hotel Urbano)",
-    description: "Integração com marketplace Hurb para distribuição de viagens",
-    fields: [
-      { key: "partnerId", label: "Partner ID" },
-      { key: "apiKey", label: "API Key", type: "password" },
-    ],
-  },
-  {
     key: "google_analytics",
     label: "Google Analytics",
     description: "Rastreamento de eventos e conversões",
