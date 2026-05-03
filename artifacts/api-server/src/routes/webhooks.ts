@@ -514,22 +514,20 @@ async function applyGatewayPayment(tx: DbExecutor, args: ApplyArgs): Promise<voi
     return;
   }
 
-  // Distribute the payment across reservations proportionally to their totals.
-  // All inserted Payment rows share the SAME gateway transactionId. The
-  // partial unique index on (tenant_id, gateway, transaction_id,
-  // reservation_id) lets the multi-row split succeed while still rejecting
-  // duplicates of the same (tx, reservation) tuple if the top-level
-  // paymentExistsForGatewayTx guard races a concurrent webhook delivery.
+  // Mixed-cart orders may include non-reservation products. Cap the amount
+  // allocated to reservation Payment rows at the sum of reservation totals
+  // so non-reservation items don't inflate paidValue/balance.
   const totalReservationValue = reservations.reduce((acc, r) => acc + Number(r.totalValue), 0);
   if (totalReservationValue <= 0) return;
+  const allocatable = Math.min(amount, totalReservationValue);
 
   let allocated = 0;
   for (let i = 0; i < reservations.length; i++) {
     const r = reservations[i]!;
     const isLast = i === reservations.length - 1;
     const share = isLast
-      ? Math.round((amount - allocated) * 100) / 100
-      : Math.round((Number(r.totalValue) / totalReservationValue) * amount * 100) / 100;
+      ? Math.round((allocatable - allocated) * 100) / 100
+      : Math.round((Number(r.totalValue) / totalReservationValue) * allocatable * 100) / 100;
     allocated = Math.round((allocated + share) * 100) / 100;
 
     if (share <= 0) continue;
