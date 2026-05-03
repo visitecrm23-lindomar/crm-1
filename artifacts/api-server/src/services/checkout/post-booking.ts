@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { reservationsTable, tripsTable } from "@workspace/db";
+import { reservationsTable, storesTable, tripsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import {
   enqueueReservationConfirmationEmail,
@@ -8,40 +8,32 @@ import {
 import { ensurePortalAccount } from "./portal-account";
 
 export interface PostBookingArgs {
+  store: typeof storesTable.$inferSelect;
   customerEmail: string;
   customerName: string;
   customerCpf?: string;
   customerPhone?: string;
   paymentMethod?: string;
-  tenantId: string;
-  agencyName: string;
-  agencyLogo: string;
-  agencyPhone: string;
-  agencyEmail: string;
-  storeBase: string;
-  loginUrl: string;
-  consultUrl: string;
   orderNumber: string;
 }
 
-/**
- * Fire-and-forget post-booking side effects:
- * 1. Ensure Clerk portal account exists for the customer (sends welcome email if new).
- * 2. Enqueue reservation confirmation email (with credentials when account was just created).
- * 3. Notify the agency for every reservation in this order.
- *
- * Mirrors the original IIFE in `routes/store-public.ts` POST /orders. Errors are
- * swallowed/logged — never thrown — so the HTTP response is unaffected.
- */
 export async function runPostBookingSideEffects(args: PostBookingArgs): Promise<void> {
   const {
-    customerEmail, customerName, customerCpf, customerPhone, paymentMethod,
-    tenantId, agencyName, agencyLogo, agencyPhone, agencyEmail,
-    storeBase, loginUrl, consultUrl, orderNumber,
+    store, customerEmail, customerName, customerCpf, customerPhone, paymentMethod, orderNumber,
   } = args;
 
+  const tenantId = store.tenantId;
+  const agencyName = store.name;
+  const agencyLogo = store.logo ?? "";
+  const agencyPhone = store.whatsapp ?? store.phone ?? "";
+  const agencyEmail = store.email ?? "";
+  const storeBase = store.customDomain
+    ? `https://${store.customDomain}`
+    : `https://${store.slug}.visitecrm.com.br`;
+  const loginUrl = `${storeBase}/sign-in`;
+  const consultUrl = `${storeBase}/consultar-pedido`;
+
   try {
-    // Step 1: Ensure portal account (Clerk + welcome email if new)
     const { credentials } = await ensurePortalAccount({
       email: customerEmail,
       name: customerName,
@@ -52,7 +44,6 @@ export async function runPostBookingSideEffects(args: PostBookingArgs): Promise<
       agencyLogo,
     });
 
-    // Step 2: Fetch the first reservation linked to this order (with trip data)
     const [reservation] = await db
       .select({
         reservationId: reservationsTable.id,
@@ -91,7 +82,6 @@ export async function runPostBookingSideEffects(args: PostBookingArgs): Promise<
       const whatsappUrl = whatsappNumber ? `https://wa.me/${whatsappNumber}` : storeBase;
       const voucherUrl = `${consultUrl}?code=${reservation.voucherCode ?? ""}`;
 
-      // Step 3: Enqueue combined reservation confirmation email
       const subject = `Reserva Confirmada — ${reservation.reservationNumber ?? orderNumber}`;
       await enqueueReservationConfirmationEmail({
         tenantId,
@@ -130,8 +120,6 @@ export async function runPostBookingSideEffects(args: PostBookingArgs): Promise<
     console.error("[checkout/post-booking] Error sending post-booking email:", err);
   }
 
-  // Step 4: notify the agency for every reservation in this order,
-  // independently of the customer-facing e-mail flow.
   try {
     const reservationRows = await db
       .select({ id: reservationsTable.id })

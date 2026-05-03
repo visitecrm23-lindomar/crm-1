@@ -44,14 +44,6 @@ function generateTemporaryPassword(): string {
   return arr.join("");
 }
 
-/**
- * Ensures a Clerk portal account exists for the given customer email/tenant.
- * If the local user does not exist, creates a Clerk user, inserts the local user,
- * generates a one-time sign-in token, and fires a welcome email (fire-and-forget).
- *
- * Returns `{ credentials }` populated only when a brand-new account was created
- * AND the magic-link token was generated successfully (matches original behavior).
- */
 export async function ensurePortalAccount(
   args: EnsurePortalAccountArgs,
 ): Promise<{ credentials?: PortalCredentials }> {
@@ -102,17 +94,14 @@ export async function ensurePortalAccount(
     referralCode,
   });
 
-  // Portal entry point for this storefront
   const portalUrl = `${storeBase}/perfil`;
-
-  // setupUrl starts as the regular portal URL; upgraded to a magic link if token succeeds
   let setupUrl: string = portalUrl;
   let credentials: PortalCredentials | undefined;
 
   try {
     const signInToken = await clerkClient.signInTokens.createSignInToken({
       userId: newClerkId,
-      expiresInSeconds: 604800, // 7 days
+      expiresInSeconds: 604800,
     });
     const redirectParam = encodeURIComponent(portalUrl);
     const tokenBase = signInToken.url;
@@ -125,8 +114,6 @@ export async function ensurePortalAccount(
     credentials = undefined;
   }
 
-  // Always send a dedicated welcome email — even when token creation fails.
-  // isMagicLink drives accurate copy in the email (auto-sign-in vs manual sign-in).
   sendWelcomeEmail(
     {
       clientName: name,

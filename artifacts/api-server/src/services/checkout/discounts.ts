@@ -27,11 +27,6 @@ export interface ResolveDiscountsArgs {
   customerEmail: string;
 }
 
-/**
- * Resolves coupon and referral discounts for a checkout (Phase 2 of POST /orders).
- * Throws ValidationError for expired/exhausted coupons.
- * Referral discount is only applied when no coupon discount is in play (mirrors original logic).
- */
 export async function resolveCheckoutDiscounts(
   args: ResolveDiscountsArgs,
 ): Promise<ResolvedDiscounts> {
@@ -71,7 +66,6 @@ export async function resolveCheckoutDiscounts(
     }
   }
 
-  // Referral code gives discount (only if no coupon discount already applied)
   if (referralCode && !couponId) {
     const upperCode = referralCode.toUpperCase();
     const [referrer] = await db.select({

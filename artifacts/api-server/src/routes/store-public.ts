@@ -15,10 +15,8 @@ import {
   reservationsTable,
   tripsTable,
   clientsTable,
-  usersTable,
   referralTrackingTable,
   referralSettingsTable,
-  pipelineStagesTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, ilike, or, sql, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -27,7 +25,9 @@ import { getTenantReservationPrefix, getYearMonth } from "../lib/reservation-num
 import { randomBytes } from "crypto";
 import { writeClientActivity } from "../lib/activities";
 import { resolveCheckoutDiscounts } from "../services/checkout/discounts";
-import { persistCheckoutOrder, type PersistedOrderItem } from "../services/checkout/persist-order";
+import { prepareCheckoutItems } from "../services/checkout/items";
+import { loadReservationContext } from "../services/checkout/reservation-context";
+import { persistCheckoutOrder } from "../services/checkout/persist-order";
 import { runPostBookingSideEffects } from "../services/checkout/post-booking";
 
 function generateCookieId(): string {
@@ -480,89 +480,9 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const data = parsed.data;
 
-    // Phase 1: Aggregate quantities per product, validate products, preliminary stock check
-    const quantityByProductId = new Map<string, number>();
-    for (const item of data.items) {
-      quantityByProductId.set(item.productId, (quantityByProductId.get(item.productId) ?? 0) + item.quantity);
-    }
+    const { subtotal, orderItemsData, fetchedProducts, quantityByProductId, tripLinkedProducts } =
+      await prepareCheckoutItems({ storeId: store.id, tenantId: store.tenantId, items: data.items });
 
-    let subtotal = 0;
-    const orderItemsData: PersistedOrderItem[] = [];
-    const fetchedProducts = new Map<string, typeof storeProductsTable.$inferSelect>();
-    const tripLinkedProducts = new Map<string, { product: typeof storeProductsTable.$inferSelect; totalQty: number; totalValue: number }>();
-
-    for (const item of data.items) {
-      if (!fetchedProducts.has(item.productId)) {
-        const [product] = await db.select().from(storeProductsTable)
-          .where(and(
-            eq(storeProductsTable.id, item.productId),
-            eq(storeProductsTable.storeId, store.id),
-            eq(storeProductsTable.status, "active"),
-          )).limit(1);
-        if (!product) {
-          next(new ValidationError(`Product ${item.productId} not found or unavailable`, "VALIDATION_ERROR"));
-          return;
-        }
-        if (product.trackInventory && !product.allowBackorder) {
-          const totalRequested = quantityByProductId.get(product.id) ?? item.quantity;
-          const available = product.stockQuantity ?? 0;
-          if (available < totalRequested) {
-            next(new ConflictError(`Estoque insuficiente para "${product.name}". Disponível: ${available}`, "INSUFFICIENT_STOCK")); return;
-          }
-        }
-        fetchedProducts.set(product.id, product);
-      }
-      const product = fetchedProducts.get(item.productId)!;
-      const price = parseFloat(product.onSale && product.salePrice ? product.salePrice : product.price);
-      const lineTotal = price * item.quantity;
-      subtotal += lineTotal;
-      orderItemsData.push({
-        id: generateId(),
-        orderId: "",
-        productId: product.id,
-        productName: product.name,
-        productType: product.type,
-        productImage: product.thumbnail,
-        variant: item.variantData || (item.variantLabel ? { label: item.variantLabel } : null),
-        price: price.toFixed(2),
-        quantity: item.quantity,
-        subtotal: lineTotal.toFixed(2),
-        discount: "0",
-        total: lineTotal.toFixed(2),
-        metadata: item.metadata || null,
-      });
-    }
-
-    // Build tripLinkedProducts AFTER the items loop, using already-aggregated quantityByProductId.
-    for (const [productId, product] of fetchedProducts) {
-      if (!product.tripId) continue;
-      const totalQty = quantityByProductId.get(productId) ?? 0;
-      if (totalQty <= 0) continue;
-      const productPrice = parseFloat(product.onSale && product.salePrice ? product.salePrice : product.price);
-      const existing = tripLinkedProducts.get(product.tripId);
-      if (existing) {
-        existing.totalQty += totalQty;
-        existing.totalValue += productPrice * totalQty;
-      } else {
-        tripLinkedProducts.set(product.tripId, { product, totalQty, totalValue: productPrice * totalQty });
-      }
-    }
-
-    // Phase 1.5: Preliminary trip seat availability check (fast early rejection)
-    for (const [tripId, { product, totalQty }] of tripLinkedProducts) {
-      const [trip] = await db.select({ availableSeats: tripsTable.availableSeats })
-        .from(tripsTable)
-        .where(and(eq(tripsTable.id, tripId), eq(tripsTable.tenantId, store.tenantId)))
-        .limit(1);
-      if (!trip) {
-        next(new ValidationError(`Viagem vinculada ao produto "${product.name}" não encontrada`, "TRIP_NOT_FOUND")); return;
-      }
-      if (trip.availableSeats < totalQty) {
-        next(new ConflictError(`Sem vagas suficientes para "${product.name}". Disponível: ${trip.availableSeats} vaga(s)`, "INSUFFICIENT_SEATS")); return;
-      }
-    }
-
-    // Phase 2: Coupon/referral handling (outside transaction)
     const discounts = await resolveCheckoutDiscounts({
       storeId: store.id,
       tenantId: store.tenantId,
@@ -571,82 +491,62 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
       referralCode: data.referralCode,
       customerEmail: data.customerEmail,
     });
-    const { discountAmount, couponId, appliedReferralCode, appliedReferralReferrerId,
-      appliedReferralDiscountValue, appliedReferralDiscountType } = discounts;
 
-    const totalAmount = roundMoney(Math.max(0, subtotal - discountAmount));
+    const totalAmount = roundMoney(Math.max(0, subtotal - discounts.discountAmount));
     const orderId = generateId();
     const orderNumber = `#${new Date().getFullYear()}-${String(Math.floor(Math.random() * 99999)).padStart(5, "0")}`;
-    // One-shot token returned to the client and required by /payment-intent.
     const orderPaymentToken = (await import("node:crypto")).randomBytes(32).toString("base64url");
 
-    // Phase 2.5: Find admin user, vitrine stage and trip names for trip-linked reservation(s).
-    let reservationCreatedById: string | null = null;
-    let vitrineStageId: string | null = null;
     const parsedBirthDate: Date | null = data.customerBirthdate
       ? new Date(data.customerBirthdate.slice(0, 10) + "T12:00:00")
       : null;
-    const tripNameMap = new Map<string, string>();
-    if (tripLinkedProducts.size > 0) {
-      const [adminUser] = await db.select({ id: usersTable.id })
-        .from(usersTable)
-        .where(and(eq(usersTable.tenantId, store.tenantId), eq(usersTable.isActive, true)))
-        .limit(1);
-      if (adminUser) {
-        reservationCreatedById = adminUser.id;
-        const stages = await db.select({ id: pipelineStagesTable.id, isDefaultWeb: pipelineStagesTable.isDefaultWeb, name: pipelineStagesTable.name })
-          .from(pipelineStagesTable)
-          .where(eq(pipelineStagesTable.tenantId, store.tenantId));
-        const vitrine = stages.find(s => s.isDefaultWeb) ?? stages.find(s => s.name === "Vitrine");
-        vitrineStageId = vitrine?.id ?? null;
 
-        const tripIds = [...tripLinkedProducts.keys()];
-        const tripRows = await db.select({ id: tripsTable.id, name: tripsTable.name })
-          .from(tripsTable)
-          .where(and(inArray(tripsTable.id, tripIds), eq(tripsTable.tenantId, store.tenantId)));
-        for (const t of tripRows) tripNameMap.set(t.id, t.name);
-      } else {
-        next(new AppError("Não foi possível criar a reserva: nenhum usuário ativo encontrado para esta agência", 500, "RESERVATION_NO_AGENCY_USER"));
-        return;
-      }
+    let reservationCreatedById: string | null = null;
+    let vitrineStageId: string | null = null;
+    let tripNameMap = new Map<string, string>();
+    let tenantResPrefix = "";
+    if (tripLinkedProducts.size > 0) {
+      const ctx = await loadReservationContext({
+        tenantId: store.tenantId,
+        tripIds: [...tripLinkedProducts.keys()],
+      });
+      reservationCreatedById = ctx.reservationCreatedById;
+      vitrineStageId = ctx.vitrineStageId;
+      tripNameMap = ctx.tripNameMap;
+      tenantResPrefix = await getTenantReservationPrefix(store.tenantId);
     }
 
-    // TTL for pending reservations created via the storefront (configurable, default 15 min).
     const rawTtl = parseInt(process.env["PENDING_RESERVATION_TTL_MINUTES"] ?? "15", 10);
     const pendingReservationTtlMinutes = Number.isFinite(rawTtl) && rawTtl > 0 ? Math.min(rawTtl, 1440) : 15;
     const reservationExpiresAt = new Date(Date.now() + pendingReservationTtlMinutes * 60 * 1000);
 
-    // Fetch tenant reservation prefix before transaction (used for reservation numbering)
-    const tenantResPrefix = tripLinkedProducts.size > 0
-      ? await getTenantReservationPrefix(store.tenantId)
-      : "";
-    const resYearMonth = getYearMonth();
-
-    // Phase 3: Atomic transaction — lock trips, lock products, validate, write everything
     let reservationClientId: string | null = null;
     try {
       const result = await persistCheckoutOrder({
         store, data, orderId, orderNumber, orderPaymentToken,
-        subtotal, discountAmount, totalAmount,
-        couponId, appliedReferralCode, appliedReferralReferrerId,
-        appliedReferralDiscountValue, appliedReferralDiscountType,
+        subtotal, discountAmount: discounts.discountAmount, totalAmount,
+        couponId: discounts.couponId,
+        appliedReferralCode: discounts.appliedReferralCode,
+        appliedReferralReferrerId: discounts.appliedReferralReferrerId,
+        appliedReferralDiscountValue: discounts.appliedReferralDiscountValue,
+        appliedReferralDiscountType: discounts.appliedReferralDiscountType,
         orderItemsData, fetchedProducts, quantityByProductId, tripLinkedProducts,
         reservationCreatedById, vitrineStageId, parsedBirthDate, tripNameMap,
-        reservationExpiresAt, tenantResPrefix, resYearMonth,
+        reservationExpiresAt, tenantResPrefix, resYearMonth: getYearMonth(),
       });
       reservationClientId = result.reservationClientId;
     } catch (txErr: unknown) {
-      if (txErr instanceof Error && txErr.message === "insufficient_stock") {
-        const e = txErr as Error & { productName?: string; available?: number };
-        next(new ConflictError(`Estoque insuficiente para "${e.productName}". Disponível: ${e.available ?? 0}`, "INSUFFICIENT_STOCK")); return;
-      }
-      if (txErr instanceof Error && txErr.message === "no_seats") {
-        const e = txErr as Error & { productName?: string; available?: number };
-        next(new ConflictError(`Sem vagas suficientes para "${e.productName ?? ""}". Disponível: ${e.available ?? 0} vaga(s)`, "INSUFFICIENT_SEATS")); return;
-      }
-      if (txErr instanceof Error && txErr.message === "trip_not_found") {
-        const e = txErr as Error & { productName?: string };
-        next(new ValidationError(`Viagem vinculada ao produto "${e.productName ?? ""}" não encontrada`, "TRIP_NOT_FOUND")); return;
+      if (txErr instanceof Error) {
+        const tagged = txErr as Error & { productName?: string; available?: number };
+        if (txErr.message === "insufficient_stock") {
+          next(new ConflictError(`Estoque insuficiente para "${tagged.productName}". Disponível: ${tagged.available ?? 0}`, "INSUFFICIENT_STOCK")); return;
+        }
+        if (txErr.message === "no_seats") {
+          next(new ConflictError(`Sem vagas suficientes para "${tagged.productName ?? ""}". Disponível: ${tagged.available ?? 0} vaga(s)`, "INSUFFICIENT_SEATS")); return;
+        }
+        if (txErr.message === "trip_not_found") {
+          next(new ValidationError(`Viagem vinculada ao produto "${tagged.productName ?? ""}" não encontrada`, "TRIP_NOT_FOUND")); return;
+        }
       }
       throw txErr;
     }
@@ -656,33 +556,14 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     const items = await db.select().from(storeOrderItemsTable)
       .where(eq(storeOrderItemsTable.orderId, orderId));
 
-    // Fire-and-forget: create Clerk user + local user (if new) + send reservation confirmation email
     if (reservationClientId && tripLinkedProducts.size > 0) {
-      const storeBase = store.customDomain
-        ? `https://${store.customDomain}`
-        : `https://${store.slug}.visitecrm.com.br`;
-      // Note: store schema uses `whatsapp/phone/email` — historic code referenced
-      // contactWhatsapp/contactPhone/contactEmail which don't exist on the schema.
-      // Preserved here verbatim (will resolve to undefined → empty string) to avoid
-      // a behavior change in this refactor.
-      const storeUntyped = store as unknown as { contactWhatsapp?: string; contactPhone?: string; contactEmail?: string };
-      const agencyPhone = storeUntyped.contactWhatsapp ?? storeUntyped.contactPhone ?? "";
-      const agencyEmail = storeUntyped.contactEmail ?? "";
-
       void runPostBookingSideEffects({
+        store,
         customerEmail: data.customerEmail,
         customerName: data.customerName,
         customerCpf: data.customerCpf,
         customerPhone: data.customerPhone,
         paymentMethod: data.paymentMethod,
-        tenantId: store.tenantId,
-        agencyName: store.name,
-        agencyLogo: store.logo ?? "",
-        agencyPhone,
-        agencyEmail,
-        storeBase,
-        loginUrl: `${storeBase}/sign-in`,
-        consultUrl: `${storeBase}/consultar-pedido`,
         orderNumber,
       });
     }
@@ -695,12 +576,10 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
       reservationExpiresAt: tripLinkedProducts.size > 0 ? reservationExpiresAt.toISOString() : null,
     });
 
-    // Emit real-time seat update to all SSE listeners for each trip in this order
     for (const [tripId] of tripLinkedProducts) {
       broadcastSeatUpdate(tripId, store.tenantId).catch(() => {});
     }
 
-    // Record client activity for reservation(s) created via the storefront
     if (reservationClientId && reservationCreatedById) {
       const totalFormatted = Number(order?.totalAmount ?? 0)
         .toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
