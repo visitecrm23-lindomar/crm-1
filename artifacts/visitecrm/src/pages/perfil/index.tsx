@@ -196,6 +196,12 @@ function SegurancaSection({ email }: { email: string }) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [fieldError, setFieldError] = useState<string | null>(null);
 
+  function clerkErrorMessage(err: unknown): string {
+    if (err && typeof err === "object" && "message" in err) return String((err as { message: unknown }).message);
+    if (err instanceof Error) return err.message;
+    return "Tente novamente.";
+  }
+
   async function handleSendCode() {
     if (!signIn) return;
     setStep("sending");
@@ -206,11 +212,12 @@ function SegurancaSection({ email }: { email: string }) {
       const sendResult = await signIn.resetPasswordEmailCode.sendCode();
       if (sendResult.error) throw sendResult.error;
       setStep("code_sent");
+      toast({ title: "Código enviado!", description: `Verifique sua caixa de entrada em ${email}.` });
     } catch (err) {
       setStep("idle");
       toast({
         title: "Erro ao enviar código",
-        description: err instanceof Error ? err.message : "Tente novamente.",
+        description: clerkErrorMessage(err),
         variant: "destructive",
       });
     }
@@ -233,8 +240,7 @@ function SegurancaSection({ email }: { email: string }) {
       toast({ title: "Senha atualizada!", description: "Sua nova senha foi definida com sucesso." });
     } catch (err) {
       setStep("code_sent");
-      const msg = err instanceof Error ? err.message : "Verifique o código e tente novamente.";
-      setFieldError(msg);
+      setFieldError(clerkErrorMessage(err));
     }
   }
 
@@ -293,7 +299,7 @@ function SegurancaSection({ email }: { email: string }) {
                   className="shrink-0"
                 >
                   {step === "sending" && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
-                  Redefinir senha
+                  Alterar senha
                 </Button>
               </div>
             ) : (
