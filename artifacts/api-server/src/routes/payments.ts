@@ -12,7 +12,8 @@ import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { ADMIN_ROLES, MANAGEMENT_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { syncReservationPaymentStatus } from "../lib/reservation-payments";
-import { ROLES, type PaymentStatus, type PaymentType, type ExpenseStatus } from "@workspace/permissions";
+import { ROLES, RESERVATION_STATUS, COMMISSION_STATUS, PAYMENT_STATUS, type PaymentStatus, type PaymentType, type ExpenseStatus } from "@workspace/permissions";
+import { parsePaymentStatus, parsePaymentType, parseExpenseStatus } from "../lib/status-validators";
 
 const router = Router();
 
@@ -84,7 +85,7 @@ export async function syncReservationCommission(reservationId: string, tenantId:
     .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)))
     .limit(1);
   if (!reservation) return;
-  if (reservation.status === "cancelled" || reservation.status === "refunded") return;
+  if (reservation.status === RESERVATION_STATUS.CANCELLED || reservation.status === RESERVATION_STATUS.REFUNDED) return;
 
   const baseAmount = parseFloat(String(reservation.totalValue));
   const directAmount = reservation.commissionAmount;
@@ -195,7 +196,7 @@ export async function syncReservationCommission(reservationId: string, tenantId:
     ));
 
   const existingForSeller = existingCommissions.find(c => c.userId === sellerId);
-  const staleCommissions = existingCommissions.filter(c => c.userId !== sellerId && c.status === "pending");
+  const staleCommissions = existingCommissions.filter(c => c.userId !== sellerId && c.status === COMMISSION_STATUS.PENDING);
 
   // Remove stale pending commissions for old sellers
   for (const stale of staleCommissions) {
@@ -206,7 +207,7 @@ export async function syncReservationCommission(reservationId: string, tenantId:
     // Revive previously cancelled commissions (e.g. reservation reopened after cancellation)
     // and update pending ones with the latest amounts.
     // Approved/paid commissions are left untouched to preserve auditable state.
-    if (existingForSeller.status === "pending" || existingForSeller.status === "cancelled") {
+    if (existingForSeller.status === COMMISSION_STATUS.PENDING || existingForSeller.status === COMMISSION_STATUS.CANCELLED) {
       await db.update(commissionsTable)
         .set({
           ruleId: ruleId ?? undefined,
@@ -214,7 +215,7 @@ export async function syncReservationCommission(reservationId: string, tenantId:
           commissionAmount: String(commissionAmount.toFixed(2)),
           commissionRate: commissionRate != null ? String(commissionRate) : undefined,
           commissionType: commissionType ?? undefined,
-          status: "pending",
+          status: COMMISSION_STATUS.PENDING,
         })
         .where(eq(commissionsTable.id, existingForSeller.id));
     }
@@ -229,7 +230,7 @@ export async function syncReservationCommission(reservationId: string, tenantId:
       commissionAmount: String(commissionAmount.toFixed(2)),
       commissionRate: commissionRate != null ? String(commissionRate) : undefined,
       commissionType: commissionType ?? undefined,
-      status: "pending",
+      status: COMMISSION_STATUS.PENDING,
     });
   }
 
@@ -263,9 +264,9 @@ router.get("/trips/:tripId/financial-report", async (req, res, next: NextFunctio
     const totalExpenses = tripExpenses.reduce((s, e) => s + Number(e.amount), 0);
     const netProfit = totalPaid - totalExpenses;
 
-    const confirmedCount = tripReservations.filter(r => r.status === "confirmed").length;
-    const pendingCount = tripReservations.filter(r => r.status === "pending").length;
-    const cancelledCount = tripReservations.filter(r => r.status === "cancelled").length;
+    const confirmedCount = tripReservations.filter(r => r.status === RESERVATION_STATUS.CONFIRMED).length;
+    const pendingCount = tripReservations.filter(r => r.status === RESERVATION_STATUS.PENDING).length;
+    const cancelledCount = tripReservations.filter(r => r.status === RESERVATION_STATUS.CANCELLED).length;
 
     const revenueByMethod: Record<string, number> = {};
     for (const p of tripPayments.filter(p => p.status === "paid")) {
@@ -333,13 +334,13 @@ router.get("/payments/summary", async (req, res, next: NextFunction): Promise<vo
     for (const p of payments) {
       const amount = Number(p.amount);
       if (p.type === "receivable") {
-        if (p.status === "pending") {
+        if (p.status === PAYMENT_STATUS.PENDING) {
           totalReceivable += amount;
           if (p.dueDate < now) overdueReceivable += amount;
         }
         if (p.paidAt && p.paidAt >= startOfMonth) collectedThisMonth += amount;
       } else {
-        if (p.status === "pending") {
+        if (p.status === PAYMENT_STATUS.PENDING) {
           totalPayable += amount;
           if (p.dueDate < now) overduePayable += amount;
         }
@@ -366,8 +367,8 @@ router.get("/payments", async (req, res, next: NextFunction): Promise<void> => {
 
     const conditions: ReturnType<typeof eq>[] = [eq(paymentsTable.tenantId, me.tenantId)];
     if (reservationId) conditions.push(eq(paymentsTable.reservationId, reservationId));
-    if (status) conditions.push(eq(paymentsTable.status, status as PaymentStatus));
-    if (type) conditions.push(eq(paymentsTable.type, type as PaymentType));
+    if (status) conditions.push(eq(paymentsTable.status, parsePaymentStatus(status)));
+    if (type) conditions.push(eq(paymentsTable.type, parsePaymentType(type)));
 
     if (me.role === ROLES.CLIENT) {
       const [clientRecord] = await db.select({ id: clientsTable.id })
@@ -443,7 +444,7 @@ router.post("/payments", async (req, res, next: NextFunction): Promise<void> => 
     const installments = parsed.data.installments ?? 1;
     const receiptUrl = typeof req.body.receiptUrl === "string" ? req.body.receiptUrl : null;
     const canSetPaymentStatus = MANAGEMENT_ROLES.includes(me.role);
-    const explicitStatus = canSetPaymentStatus ? (parsed.data.status as PaymentStatus | undefined) : undefined;
+    const explicitStatus = canSetPaymentStatus && parsed.data.status != null ? parsePaymentStatus(parsed.data.status) : undefined;
     const explicitPaidAt = canSetPaymentStatus && parsed.data.paidAt ? new Date(parsed.data.paidAt) : undefined;
 
     for (let i = 1; i <= installments; i++) {
@@ -540,7 +541,7 @@ router.patch("/payments/:id", async (req, res, next: NextFunction): Promise<void
     const parsed = UpdatePaymentBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message))); return; }
     const updates: Partial<typeof paymentsTable.$inferInsert> = {};
-    if (parsed.data.status != null) updates.status = parsed.data.status as PaymentStatus;
+    if (parsed.data.status != null) updates.status = parsePaymentStatus(parsed.data.status);
     if (parsed.data.paidAt !== undefined) updates.paidAt = parsed.data.paidAt ? new Date(parsed.data.paidAt) : null;
     if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
     await db.update(paymentsTable).set(updates)
@@ -584,7 +585,7 @@ router.get("/expenses", async (req, res, next: NextFunction): Promise<void> => {
 
     const conditions: ReturnType<typeof eq>[] = [eq(expensesTable.tenantId, me.tenantId)];
     if (tripId) conditions.push(eq(expensesTable.tripId, tripId));
-    if (status) conditions.push(eq(expensesTable.status, status as ExpenseStatus));
+    if (status) conditions.push(eq(expensesTable.status, parseExpenseStatus(status)));
 
     const expenses = await db.select().from(expensesTable)
       .where(and(...conditions)).orderBy(desc(expensesTable.dueDate))
@@ -641,7 +642,7 @@ router.patch("/expenses/:id", async (req, res, next: NextFunction): Promise<void
     const parsed = UpdateExpenseBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message))); return; }
     const updates: Partial<typeof expensesTable.$inferInsert> = {};
-    if (parsed.data.status != null) updates.status = parsed.data.status as ExpenseStatus;
+    if (parsed.data.status != null) updates.status = parseExpenseStatus(parsed.data.status);
     if (parsed.data.paymentDate !== undefined) updates.paymentDate = parsed.data.paymentDate ? new Date(parsed.data.paymentDate) : null;
     if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
     if (parsed.data.amount != null) updates.amount = String(parsed.data.amount);

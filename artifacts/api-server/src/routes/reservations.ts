@@ -18,6 +18,7 @@ import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError
 import { applyDiscounts, computeBalance, computeEffectiveLoyaltyPoints } from "../lib/pricing";
 import { calculateTier } from "../lib/loyalty-helpers";
 import { ROLES, DEAL_STATUS, type ReservationStatus } from "@workspace/permissions";
+import { parseReservationStatus } from "../lib/status-validators";
 
 
 const router = Router();
@@ -245,7 +246,7 @@ router.get("/reservations", async (req, res, next: NextFunction): Promise<void> 
 
     const conditions: ReturnType<typeof eq>[] = [eq(reservationsTable.tenantId, me.tenantId)];
     if (tripId) conditions.push(eq(reservationsTable.tripId, tripId));
-    if (status) conditions.push(eq(reservationsTable.status, status as ReservationStatus));
+    if (status) conditions.push(eq(reservationsTable.status, parseReservationStatus(status)));
     if (commissionSyncStatus) conditions.push(eq(reservationsTable.commissionSyncStatus, commissionSyncStatus));
     if (createdById) conditions.push(eq(reservationsTable.createdById, createdById));
     if (dateFrom) conditions.push(sql`${reservationsTable.createdAt} >= ${dateFrom}::timestamptz` as ReturnType<typeof eq>);
@@ -767,7 +768,7 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
 
     const updates: Partial<typeof reservationsTable.$inferInsert> = {};
-    if (parsed.data.status != null) updates.status = parsed.data.status as ReservationStatus;
+    if (parsed.data.status != null) updates.status = parseReservationStatus(parsed.data.status);
     if (parsed.data.paymentMethod != null) updates.paymentMethod = parsed.data.paymentMethod;
     if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
     if (parsed.data.seats != null) updates.seats = parsed.data.seats;

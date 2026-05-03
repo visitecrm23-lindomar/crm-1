@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import { reservationsTable, paymentsTable } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
 import { roundMoney } from "./pricing";
+import { RESERVATION_STATUS } from "@workspace/permissions";
 
 /**
  * Minimal subset of the drizzle DB / transaction object that this module
@@ -36,7 +37,7 @@ export async function syncReservationPaymentStatus(
   // recoverable so a later successful retry on the same PaymentIntent can
   // promote the reservation back to 'confirmed'.
   if (
-    reservation.status === "cancelled" ||
+    reservation.status === RESERVATION_STATUS.CANCELLED ||
     reservation.status === "completed"
   ) {
     // Even when status is terminal, refresh paidValue/balance so refunds
@@ -78,11 +79,11 @@ export async function syncReservationPaymentStatus(
   };
 
   if (paidValue >= totalValue) {
-    updates["status"] = "confirmed";
+    updates["status"] = RESERVATION_STATUS.CONFIRMED;
     if (!reservation.confirmedAt) updates["confirmedAt"] = new Date();
     updates["expiresAt"] = null;
-  } else if (reservation.status === "confirmed") {
-    updates["status"] = "pending";
+  } else if (reservation.status === RESERVATION_STATUS.CONFIRMED) {
+    updates["status"] = RESERVATION_STATUS.PENDING;
   }
 
   await executor

@@ -19,6 +19,7 @@ import { z } from "zod";
 import PDFDocument from "pdfkit";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { RESERVATION_STATUS, type TripStatus } from "@workspace/permissions";
+import { parseTripStatus } from "../lib/status-validators";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 
 type SeatMapEntry = { row: number; col: number; floor?: number; status: string; type?: string };
@@ -172,7 +173,7 @@ router.get("/trips", async (req, res, next: NextFunction): Promise<void> => {
 
     const conditions: ReturnType<typeof eq>[] = [eq(tripsTable.tenantId, me.tenantId)];
     if (search) conditions.push(ilike(tripsTable.name, `%${search}%`) as ReturnType<typeof eq>);
-    if (status) conditions.push(eq(tripsTable.status, status as TripStatus));
+    if (status) conditions.push(eq(tripsTable.status, parseTripStatus(status)));
 
     const trips = await db.select().from(tripsTable)
       .where(and(...conditions))
@@ -322,7 +323,7 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
     const updates: Partial<typeof tripsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.description !== undefined) updates.description = parsed.data.description ?? null;
-    if (parsed.data.status != null) updates.status = parsed.data.status as TripStatus;
+    if (parsed.data.status != null) updates.status = parseTripStatus(parsed.data.status);
     if (parsed.data.isPublic != null) updates.isPublic = parsed.data.isPublic;
     if (parsed.data.isFeatured != null) updates.isFeatured = parsed.data.isFeatured;
     if (parsed.data.departureDate != null) updates.departureDate = new Date(parsed.data.departureDate);

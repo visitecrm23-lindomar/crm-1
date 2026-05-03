@@ -7,6 +7,7 @@ import { requireAuth, getTenantUser } from "../lib/tenant";
 import { z } from "zod";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { ROLES, DEAL_STATUS, type DealStatus } from "@workspace/permissions";
+import { parseDealStatus } from "../lib/status-validators";
 
 const router = Router();
 
@@ -142,7 +143,7 @@ router.get("/deals", async (req, res): Promise<void> => {
     if (stageId) conditions.push(eq(dealsTable.stageId, stageId));
     if (clientId) conditions.push(eq(dealsTable.clientId, clientId));
     if (ownerId) conditions.push(eq(dealsTable.ownerId, ownerId));
-    if (status) conditions.push(eq(dealsTable.status, status as DealStatus));
+    if (status) conditions.push(eq(dealsTable.status, parseDealStatus(status)));
     if (me.role === ROLES.SALES) conditions.push(eq(dealsTable.ownerId, me.id));
     const deals = await db.select().from(dealsTable)
       .where(and(...conditions)).orderBy(desc(dealsTable.createdAt));
@@ -245,7 +246,7 @@ router.patch("/deals/:id", async (req, res): Promise<void> => {
     if (parsed.data.title != null) updates.title = parsed.data.title;
     if (parsed.data.description !== undefined) updates.description = parsed.data.description ?? null;
     if (parsed.data.value != null) updates.value = String(parsed.data.value);
-    if (parsed.data.status != null) updates.status = parsed.data.status as DealStatus;
+    if (parsed.data.status != null) updates.status = parseDealStatus(parsed.data.status);
     if (parsed.data.lostReason != null) updates.lostReason = parsed.data.lostReason;
     if (parsed.data.expectedCloseDate !== undefined) {
       updates.expectedCloseDate = parsed.data.expectedCloseDate ? new Date(parsed.data.expectedCloseDate) : null;

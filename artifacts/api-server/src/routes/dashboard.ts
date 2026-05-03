@@ -453,7 +453,7 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
     // 6. AVG RESERVATIONS PER ACTIVE TRIP
     const [activeTripsCount] = await db.select({ count: sql<number>`count(*)::int` })
       .from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, TRIP_STATUS.ACTIVE)));
-    const confirmedResCount = reservationsByStatus.find(r => r.status === "confirmed")?.count ?? 0;
+    const confirmedResCount = reservationsByStatus.find(r => r.status === RESERVATION_STATUS.CONFIRMED)?.count ?? 0;
     const activeCount = Number(activeTripsCount?.count ?? 0);
     const avgReservationsPerTrip = activeCount > 0 ? Math.round((confirmedResCount / activeCount) * 10) / 10 : 0;
 
@@ -590,7 +590,7 @@ router.get("/dashboard/funnel", async (req, res): Promise<void> => {
     }
 
     const clientsWithReservation = new Set(allReservations.map(r => r.clientId));
-    const clientsWithConfirmed = new Set(allReservations.filter(r => r.status === "confirmed").map(r => r.clientId));
+    const clientsWithConfirmed = new Set(allReservations.filter(r => r.status === RESERVATION_STATUS.CONFIRMED).map(r => r.clientId));
 
     const totalLeads = allClients.length;
     const withReservation = allClients.filter(c => clientsWithReservation.has(c.id)).length;

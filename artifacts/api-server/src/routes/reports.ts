@@ -9,6 +9,7 @@ import { applyPlugin } from "jspdf-autotable";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { MANAGEMENT_ROLES } from '../lib/tenant';
+import { RESERVATION_STATUS, PAYMENT_STATUS } from "@workspace/permissions";
 
 applyPlugin(jsPDF);
 
@@ -109,7 +110,7 @@ router.post("/reports/export", async (req, res): Promise<void> => {
       const receivables = payments.filter(p => p.type === "receivable");
       const payables = payments.filter(p => p.type === "payable");
       const totalReceived = receivables.filter(p => p.status === "paid").reduce((s, p) => s + Number(p.amount), 0);
-      const totalPending = receivables.filter(p => p.status === "pending").reduce((s, p) => s + Number(p.amount), 0);
+      const totalPending = receivables.filter(p => p.status === PAYMENT_STATUS.PENDING).reduce((s, p) => s + Number(p.amount), 0);
       const totalExpenses = payables.filter(p => p.status === "paid").reduce((s, p) => s + Number(p.amount), 0) +
         expenses.reduce((s, e) => s + Number(e.amount), 0);
       const profit = totalReceived - totalExpenses;
@@ -284,10 +285,10 @@ router.post("/reports/export", async (req, res): Promise<void> => {
       const tripMap = new Map(tripsData.map(t => [t.id, t]));
       const clientMap = new Map(clientsData.map(c => [c.id, c]));
 
-      const totalSales = reservations.filter(r => r.status === "confirmed").reduce((s, r) => s + Number(r.totalValue), 0);
+      const totalSales = reservations.filter(r => r.status === RESERVATION_STATUS.CONFIRMED).reduce((s, r) => s + Number(r.totalValue), 0);
       const totalPaid = reservations.reduce((s, r) => s + Number(r.paidValue), 0);
-      const confirmedCount = reservations.filter(r => r.status === "confirmed").length;
-      const pendingCount = reservations.filter(r => r.status === "pending").length;
+      const confirmedCount = reservations.filter(r => r.status === RESERVATION_STATUS.CONFIRMED).length;
+      const pendingCount = reservations.filter(r => r.status === RESERVATION_STATUS.PENDING).length;
 
       const headers = ["Nº Reserva", "Cliente", "Email", "Viagem", "Destino", "Saída", "Status", "Assentos", "Valor Total", "Valor Pago", "Saldo", "Forma Pgto", "Parcelas", "Criado em", "Confirmado em"];
       const rows = reservations.map(r => {

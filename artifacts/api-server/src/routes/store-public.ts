@@ -2,6 +2,7 @@ import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { addSeatClient, removeSeatClient, emitSeatUpdate } from "../lib/seat-sse";
 import { broadcastSeatUpdate } from "../lib/realtime";
+import { RESERVATION_STATUS } from "@workspace/permissions";
 import { AppError, NotFoundError, ValidationError, ConflictError } from "../lib/errors";
 import { normalizeOrderEmail, roundMoney } from "../lib/pricing";
 import {
@@ -370,7 +371,7 @@ router.get("/public/store/:slug/trips/:tripId/seat-map", async (req, res, next: 
 
     if (!trip) { next(new NotFoundError("Trip not found", "NOT_FOUND")); return; }
 
-    const ACTIVE_STATUSES = ["pending", "confirmed"] as const;
+    const ACTIVE_STATUSES = [RESERVATION_STATUS.PENDING, RESERVATION_STATUS.CONFIRMED];
     const reservations = await db.select({ seats: reservationsTable.seats, status: reservationsTable.status })
       .from(reservationsTable)
       .where(and(
@@ -381,7 +382,7 @@ router.get("/public/store/:slug/trips/:tripId/seat-map", async (req, res, next: 
 
     const occupiedSeats: Record<string, string> = {};
     for (const r of reservations) {
-      const seatStatus = r.status === "confirmed" ? "confirmed" : "reserved";
+      const seatStatus = r.status === RESERVATION_STATUS.CONFIRMED ? "confirmed" : "reserved";
       for (const seat of r.seats) occupiedSeats[seat] = seatStatus;
     }
 
