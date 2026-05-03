@@ -786,6 +786,9 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
 
     const isBeingCancelled = parsed.data.status != null && CANCELLING_STATUSES.includes(parsed.data.status);
     const wasActive = ACTIVE_STATUSES.includes(existing.status);
+    const wasConfirmed = existing.status === RESERVATION_STATUS.CONFIRMED;
+    const isBeingConfirmed = parsed.data.status === RESERVATION_STATUS.CONFIRMED && existing.status === RESERVATION_STATUS.PENDING;
+    const isBeingDemoted = parsed.data.status === RESERVATION_STATUS.PENDING && wasConfirmed;
 
     const reservation = await db.transaction(async (tx) => {
       if (isBeingCancelled && wasActive) {
@@ -793,7 +796,9 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
         if (seatsCount > 0) {
           await tx.update(tripsTable).set({
             availableSeats: sql`LEAST(total_capacity, GREATEST(0, available_seats + ${seatsCount}))`,
-            reservedSeats: sql`GREATEST(0, reserved_seats - ${seatsCount})`,
+            ...(wasConfirmed
+              ? { confirmedSeats: sql`GREATEST(0, confirmed_seats - ${seatsCount})` }
+              : { reservedSeats: sql`GREATEST(0, reserved_seats - ${seatsCount})` }),
           }).where(and(eq(tripsTable.id, existing.tripId), eq(tripsTable.tenantId, me.tenantId)));
         }
 
@@ -977,6 +982,25 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
             eq(commissionsTable.tenantId, me.tenantId),
             inArray(commissionsTable.status, [COMMISSION_STATUS.PENDING, COMMISSION_STATUS.APPROVED]),
           ));
+      }
+
+      // --- Seat counter sync for manual status transitions ---
+      // pending → confirmed: move seats from reserved to confirmed bucket
+      if (isBeingConfirmed && existing.seats.length > 0) {
+        const seatsCount = existing.seats.length;
+        await tx.update(tripsTable).set({
+          confirmedSeats: sql`confirmed_seats + ${seatsCount}`,
+          reservedSeats: sql`GREATEST(0, reserved_seats - ${seatsCount})`,
+        }).where(and(eq(tripsTable.id, existing.tripId), eq(tripsTable.tenantId, me.tenantId)));
+      }
+
+      // confirmed → pending: revert seats from confirmed back to reserved bucket
+      if (isBeingDemoted && existing.seats.length > 0) {
+        const seatsCount = existing.seats.length;
+        await tx.update(tripsTable).set({
+          confirmedSeats: sql`GREATEST(0, confirmed_seats - ${seatsCount})`,
+          reservedSeats: sql`reserved_seats + ${seatsCount}`,
+        }).where(and(eq(tripsTable.id, existing.tripId), eq(tripsTable.tenantId, me.tenantId)));
       }
 
       await tx.update(reservationsTable).set(updates)

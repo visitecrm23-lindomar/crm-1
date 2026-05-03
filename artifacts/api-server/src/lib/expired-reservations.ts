@@ -48,7 +48,9 @@ export async function runExpiredReservationsCron(): Promise<void> {
 
     logger.info({ count: rows.length }, "[expired-reservations] Cancelling expired reservations");
 
-    // Aggregate seats to restore per trip within the same transaction
+    // Aggregate seats to restore per trip within the same transaction.
+    // Only PENDING reservations are eligible for expiry (see WHERE clause above), so
+    // these seats always live in the reserved_seats bucket — never in confirmed_seats.
     const seatsByTrip = new Map<string, number>();
     for (const row of rows) {
       const seatsCount = Array.isArray(row.seats) ? row.seats.length : 0;

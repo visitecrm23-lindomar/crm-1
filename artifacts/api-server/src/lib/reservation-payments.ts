@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { reservationsTable, paymentsTable } from "@workspace/db";
+import { reservationsTable, paymentsTable, tripsTable } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
 import { roundMoney } from "./pricing";
 import { RESERVATION_STATUS, PAYMENT_STATUS, type ReservationStatus } from "@workspace/permissions";
@@ -58,6 +58,8 @@ export async function syncReservationPaymentStatus(
     balance: String(balance),
   };
 
+  const previousStatus = reservation.status;
+
   if (paidValue >= totalValue) {
     updates.status = RESERVATION_STATUS.CONFIRMED;
     if (!reservation.confirmedAt) updates.confirmedAt = new Date();
@@ -70,6 +72,29 @@ export async function syncReservationPaymentStatus(
     .update(reservationsTable)
     .set(updates)
     .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)));
+
+  // Keep trip seat counters in sync when a payment auto-promotes or auto-demotes a reservation.
+  // Only reservations linked to a trip carry a tripId; client-only payment records don't.
+  const newStatus = updates.status;
+  if (newStatus && newStatus !== previousStatus && reservation.tripId) {
+    const seatsCount = Array.isArray(reservation.seats) ? reservation.seats.length : 0;
+    if (seatsCount > 0) {
+      const isNowConfirmed = newStatus === RESERVATION_STATUS.CONFIRMED && previousStatus === RESERVATION_STATUS.PENDING;
+      const isNowPending = newStatus === RESERVATION_STATUS.PENDING && previousStatus === RESERVATION_STATUS.CONFIRMED;
+
+      if (isNowConfirmed) {
+        await executor.update(tripsTable).set({
+          confirmedSeats: sql`confirmed_seats + ${seatsCount}`,
+          reservedSeats: sql`GREATEST(0, reserved_seats - ${seatsCount})`,
+        }).where(and(eq(tripsTable.id, reservation.tripId), eq(tripsTable.tenantId, tenantId)));
+      } else if (isNowPending) {
+        await executor.update(tripsTable).set({
+          confirmedSeats: sql`GREATEST(0, confirmed_seats - ${seatsCount})`,
+          reservedSeats: sql`reserved_seats + ${seatsCount}`,
+        }).where(and(eq(tripsTable.id, reservation.tripId), eq(tripsTable.tenantId, tenantId)));
+      }
+    }
+  }
 }
 
 export async function paymentExistsForGatewayTx(
