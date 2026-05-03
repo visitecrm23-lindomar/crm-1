@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useGetReservation, useListPayments } from "@workspace/api-client-react";
 import { PAYMENT_STATUS } from "@workspace/permissions";
 import { Client360Modal } from "@/components/client360-modal";
@@ -6,9 +6,22 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CheckCircle, DollarSign, Tag } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { CheckCircle, DollarSign, Tag, Mail, RefreshCcw, Check, XCircle, Clock } from "lucide-react";
 import { STATUS_COLORS, STATUS_LABELS, METHOD_LABELS, fmt } from "./constants";
 import { ReservationPassengersTab } from "./ReservationPassengersTab";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+interface EmailLog {
+  id: string;
+  recipient: string;
+  subject: string;
+  status: string;
+  errorMessage: string | null;
+  isAutoRetry: boolean;
+  createdAt: string;
+}
 
 export function ReservationDetailModal({ reservationId, open, onClose }: {
   reservationId: string;
@@ -16,6 +29,11 @@ export function ReservationDetailModal({ reservationId, open, onClose }: {
   onClose: () => void;
 }) {
   const [client360Id, setClient360Id] = useState<string | null>(null);
+  const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
+  const [loadingEmailLogs, setLoadingEmailLogs] = useState(false);
+  const [emailLogsError, setEmailLogsError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("details");
+
   const { data, isLoading } = useGetReservation(reservationId, {
     query: { queryKey: ["reservation", reservationId], enabled: open && !!reservationId },
   });
@@ -24,6 +42,38 @@ export function ReservationDetailModal({ reservationId, open, onClose }: {
     { query: { queryKey: ["payments", reservationId], enabled: open && !!reservationId } }
   );
   const payments = paymentsData?.data ?? [];
+
+  const fetchEmailLogs = useCallback(async () => {
+    if (!reservationId) return;
+    setLoadingEmailLogs(true);
+    setEmailLogsError(null);
+    try {
+      const res = await fetch(`${BASE}/api/email-logs?reservationId=${encodeURIComponent(reservationId)}`, {
+        credentials: "include",
+      });
+      if (res.ok) {
+        setEmailLogs(await res.json());
+      } else if (res.status === 403) {
+        setEmailLogsError("Você não tem permissão para visualizar os e-mails desta reserva.");
+      } else {
+        setEmailLogsError("Não foi possível carregar o histórico de e-mails.");
+      }
+    } catch {
+      setEmailLogsError("Erro de conexão ao carregar e-mails.");
+    } finally {
+      setLoadingEmailLogs(false);
+    }
+  }, [reservationId]);
+
+  useEffect(() => {
+    if (open && activeTab === "emails") {
+      fetchEmailLogs();
+    }
+  }, [open, activeTab, fetchEmailLogs]);
+
+  useEffect(() => {
+    if (!open) setActiveTab("details");
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -45,11 +95,12 @@ export function ReservationDetailModal({ reservationId, open, onClose }: {
             {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
           </div>
         ) : data ? (
-          <Tabs defaultValue="details" className="mt-2">
-            <TabsList className="grid w-full grid-cols-3">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="details">Detalhes</TabsTrigger>
               <TabsTrigger value="passengers">Passageiros</TabsTrigger>
               <TabsTrigger value="payments">Pagamentos</TabsTrigger>
+              <TabsTrigger value="emails">E-mails</TabsTrigger>
             </TabsList>
 
             <TabsContent value="details" className="space-y-4 mt-4">
@@ -179,6 +230,68 @@ export function ReservationDetailModal({ reservationId, open, onClose }: {
                 <div className="flex justify-between text-sm mt-1"><span className="text-muted-foreground">Total recebido:</span><span className="font-semibold text-green-600">{fmt(data.paidValue)}</span></div>
                 <div className="flex justify-between text-sm mt-1"><span className="text-muted-foreground">Saldo pendente:</span><span className={`font-semibold ${data.balance > 0 ? "text-destructive" : "text-green-600"}`}>{fmt(data.balance)}</span></div>
               </div>
+            </TabsContent>
+
+            <TabsContent value="emails" className="mt-4">
+              {loadingEmailLogs ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
+                </div>
+              ) : emailLogsError ? (
+                <div className="text-center py-10 text-muted-foreground">
+                  <Mail className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm text-destructive">{emailLogsError}</p>
+                </div>
+              ) : emailLogs.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground">
+                  <Mail className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">Nenhum e-mail registrado para esta reserva.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {emailLogs.map(log => (
+                    <div key={log.id} className="p-3 bg-muted/50 rounded-lg border text-sm space-y-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{log.subject || "—"}</p>
+                          <p className="text-xs text-muted-foreground">{log.recipient}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <Badge
+                            variant="outline"
+                            className={
+                              log.status === "sent"
+                                ? "bg-green-50 text-green-700 border-green-200"
+                                : log.status === "failed"
+                                ? "bg-red-50 text-red-700 border-red-200"
+                                : log.status === "queued"
+                                ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+                                : "bg-gray-50 text-gray-700 border-gray-200"
+                            }
+                          >
+                            {log.status === "sent" && <Check className="w-3 h-3 mr-1" />}
+                            {log.status === "failed" && <XCircle className="w-3 h-3 mr-1" />}
+                            {log.status === "queued" && <Clock className="w-3 h-3 mr-1" />}
+                            {log.status === "sent" ? "Enviado" : log.status === "failed" ? "Falhou" : log.status === "queued" ? "Na fila" : log.status}
+                          </Badge>
+                          {log.isAutoRetry && (
+                            <Badge className="text-xs bg-purple-50 text-purple-700 border-purple-200" variant="outline">
+                              <RefreshCcw className="w-3 h-3 mr-1" />
+                              Auto-reenviado
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      {log.errorMessage && (
+                        <p className="text-xs text-red-600 bg-red-50 rounded px-2 py-1">{log.errorMessage}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(log.createdAt).toLocaleString("pt-BR")}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         ) : (

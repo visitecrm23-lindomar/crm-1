@@ -5,7 +5,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { z } from "zod";
-import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
+import { ADMIN_ROLES, MANAGEMENT_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
 import { resendEmailLog } from "../queues/email-helpers";
 
 const router = Router();
@@ -334,14 +334,19 @@ router.get("/email-logs", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!MANAGEMENT_ROLES.includes(me.role)) {
+    const { reservationId } = req.query as Record<string, string>;
+    const isReservationScoped = !!reservationId;
+    const allowedRoles = isReservationScoped ? ALL_STAFF_ROLES : MANAGEMENT_ROLES;
+    if (!allowedRoles.includes(me.role)) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
+    const conditions = [eq(emailLogsTable.tenantId, me.tenantId)];
+    if (isReservationScoped) conditions.push(eq(emailLogsTable.reservationId, reservationId));
     const logs = await db
       .select()
       .from(emailLogsTable)
-      .where(eq(emailLogsTable.tenantId, me.tenantId))
+      .where(and(...conditions))
       .orderBy(desc(emailLogsTable.createdAt))
       .limit(200);
     res.json(logs);
