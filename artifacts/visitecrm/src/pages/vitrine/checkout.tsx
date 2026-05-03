@@ -249,6 +249,8 @@ export default function VitrineCheckout({
   const [step, setStep] = useState<Step>("dados");
   const [loading, setLoading] = useState(false);
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
+  const [reservationExpiresAt, setReservationExpiresAt] = useState<string | null>(null);
+  const [expiryCountdown, setExpiryCountdown] = useState<string | null>(null);
 
   const [form, setFormState] = useState(() => {
     const savedCode = localStorage.getItem("referral_code") ?? "";
@@ -368,6 +370,7 @@ export default function VitrineCheckout({
         notes: form.notes || undefined,
       });
       setOrderNumber(order.orderNumber);
+      if (order.reservationExpiresAt) setReservationExpiresAt(order.reservationExpiresAt);
       clearCart();
       setStep("confirmado");
     } catch (err: unknown) {
@@ -389,6 +392,20 @@ export default function VitrineCheckout({
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!reservationExpiresAt) return;
+    const tick = () => {
+      const diff = new Date(reservationExpiresAt).getTime() - Date.now();
+      if (diff <= 0) { setExpiryCountdown("00:00"); return; }
+      const m = Math.floor(diff / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setExpiryCountdown(`${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`);
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [reservationExpiresAt]);
 
   if (items.length === 0 && step !== "confirmado") {
     return (
@@ -414,10 +431,20 @@ export default function VitrineCheckout({
           Seu número de pedido é:{" "}
           <strong className="font-mono text-foreground">{orderNumber}</strong>
         </p>
-        <p className="text-sm text-muted-foreground mb-8">
+        <p className="text-sm text-muted-foreground mb-4">
           Você receberá uma confirmação no e-mail <strong>{form.customerEmail}</strong>.
           Nossa equipe entrará em contato em breve.
         </p>
+        {expiryCountdown !== null && (
+          <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-5 py-3 mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span className="text-sm">
+              Conclua o pagamento em{" "}
+              <strong className="font-mono text-base">{expiryCountdown}</strong>
+              {" "}ou a reserva será cancelada automaticamente.
+            </span>
+          </div>
+        )}
         <div className="flex gap-3 justify-center flex-wrap">
           <Button
             variant="outline"

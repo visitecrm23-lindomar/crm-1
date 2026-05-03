@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
 import cron from "node-cron";
 import { runBirthdayCron } from "./lib/birthday";
+import { runExpiredReservationsCron } from "./lib/expired-reservations";
 import { getRedisConnection } from "./lib/redis";
 import { getReminderQueue, closeQueues } from "./queues/index";
 import { startEmailWorker, stopEmailWorker } from "./workers/email.worker";
@@ -505,6 +506,10 @@ async function runMigrations() {
     `);
 
     await client.query(`
+      ALTER TABLE reservations ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+    `);
+
+    await client.query(`
       DO $$
       BEGIN
         IF EXISTS (
@@ -592,10 +597,25 @@ runMigrations()
           { name: "payment_reminder", data: { type: "payment_reminder" } },
         ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule payment reminder"));
 
+        // Expired reservations cleanup — every 5 minutes
+        await reminderQueue.upsertJobScheduler(
+          "expired-reservations-cleanup",
+          { pattern: "*/5 * * * *" },
+          { name: "expired_reservations_cleanup", data: { type: "expired_reservations_cleanup" } },
+        ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule expired reservations cleanup"));
+
         logger.info("[reminders] Repeatable reminder jobs registered");
       }
     } else {
       logger.warn("[queue] REDIS_URL not set — BullMQ workers not started, emails sent synchronously");
+
+      // ── Fallback: node-cron for expired reservations cleanup (no Redis required) ──
+      cron.schedule("*/5 * * * *", () => {
+        runExpiredReservationsCron().catch((err) =>
+          logger.error({ err }, "[expired-reservations] Cron failed"),
+        );
+      });
+      logger.info("[expired-reservations] node-cron fallback registered (every 5 minutes)");
     }
 
     // ── Graceful shutdown ──

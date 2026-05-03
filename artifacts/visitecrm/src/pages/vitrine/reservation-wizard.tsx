@@ -937,8 +937,9 @@ export default function ReservationWizard({
 
   const [step, setStep] = useState<Step>("dados");
   const [submitting, setSubmitting] = useState(false);
-  const [completedOrder, setCompletedOrder] = useState<{ orderNumber: string; totalAmount: string; createdAt: string } | null>(null);
+  const [completedOrder, setCompletedOrder] = useState<{ orderNumber: string; totalAmount: string; createdAt: string; reservationExpiresAt?: string | null } | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [expiryCountdown, setExpiryCountdown] = useState<string | null>(null);
 
   const [form, setFormState] = useState({
     customerName: "",
@@ -1198,6 +1199,7 @@ export default function ReservationWizard({
         orderNumber: order.orderNumber,
         totalAmount: order.totalAmount,
         createdAt: order.createdAt,
+        reservationExpiresAt: order.reservationExpiresAt,
       });
       localStorage.removeItem("referral_code");
       localStorage.removeItem("referral_code_expiry");
@@ -1225,6 +1227,21 @@ export default function ReservationWizard({
     if (idx > 0) setStep(order[idx - 1]);
     else navigate(`/loja/${slug}/produtos/${productSlug}`);
   }
+
+  useEffect(() => {
+    const expiresAt = completedOrder?.reservationExpiresAt;
+    if (!expiresAt) return;
+    const tick = () => {
+      const diff = new Date(expiresAt).getTime() - Date.now();
+      if (diff <= 0) { setExpiryCountdown("00:00"); return; }
+      const m = Math.floor(diff / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setExpiryCountdown(`${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`);
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [completedOrder?.reservationExpiresAt]);
 
   function handlePrint() {
     window.print();
@@ -1280,6 +1297,16 @@ export default function ReservationWizard({
                 <p className="text-2xl font-bold text-green-600 font-mono">{completedOrder.orderNumber}</p>
               </div>
             </div>
+            {expiryCountdown !== null && (
+              <div className="mt-4 inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-5 py-3">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span className="text-sm">
+                  Conclua o pagamento em{" "}
+                  <strong className="font-mono text-base">{expiryCountdown}</strong>
+                  {" "}ou a reserva será cancelada automaticamente.
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -477,6 +477,7 @@ export interface StoreOrder {
   updatedAt: string;
   itemCount?: number;
   items: StoreOrderItem[];
+  reservationExpiresAt?: string | null;
 }
 
 export interface StoreCoupon {

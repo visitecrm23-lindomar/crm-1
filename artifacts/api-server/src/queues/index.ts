@@ -15,7 +15,7 @@ export interface CancellationEmailJobData extends ReservationCancellationEmailPr
 }
 
 export interface ReminderJobData {
-  type: "boarding_reminder" | "payment_reminder";
+  type: "boarding_reminder" | "payment_reminder" | "expired_reservations_cleanup";
 }
 
 export interface PdfJobData {

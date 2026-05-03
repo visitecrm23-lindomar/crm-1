@@ -4,6 +4,7 @@ import { eq, and, gt, sql, gte, lt, isNull } from "drizzle-orm";
 import { sendReminderHtmlEmail } from "@workspace/email";
 import { getRedisConnection } from "../lib/redis";
 import { logger } from "../lib/logger";
+import { runExpiredReservationsCron } from "../lib/expired-reservations";
 import type { ReminderJobData } from "../queues/index";
 
 // ────────────────────────────────────────────────────────────
@@ -292,6 +293,8 @@ export function startReminderWorker(): Worker<ReminderJobData> | null {
         await processBoardingReminders();
       } else if (job.data.type === "payment_reminder") {
         await processPaymentReminders();
+      } else if (job.data.type === "expired_reservations_cleanup") {
+        await runExpiredReservationsCron();
       } else {
         logger.warn({ type: job.data.type }, "[reminder-worker] Unknown reminder type");
       }

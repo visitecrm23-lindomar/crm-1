@@ -720,10 +720,15 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     const orderId = generateId();
     const orderNumber = `#${new Date().getFullYear()}-${String(Math.floor(Math.random() * 99999)).padStart(5, "0")}`;
 
-    // Phase 2.5: Find/create client and admin user for trip-linked reservation(s)
+    // Phase 2.5: Find admin user, vitrine stage and trip names for trip-linked reservation(s).
+    // NOTE: client find/create is deferred to inside the transaction for full atomicity.
     let reservationClientId: string | null = null;
     let reservationCreatedById: string | null = null;
     let vitrineStageId: string | null = null;
+    // Parse birthdate here so it is accessible inside the transaction closure below.
+    const parsedBirthDate: Date | null = data.customerBirthdate
+      ? new Date(data.customerBirthdate.slice(0, 10) + "T12:00:00")
+      : null;
     const tripNameMap = new Map<string, string>();
     if (tripLinkedProducts.size > 0) {
       // Find the first active user in the tenant (needed for reservation.createdById)
@@ -733,56 +738,6 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
         .limit(1);
       if (adminUser) {
         reservationCreatedById = adminUser.id;
-        // Parse birthdate from YYYY-MM-DD string to Date (local noon to avoid UTC-3 shift)
-        const parsedBirthDate = data.customerBirthdate
-          ? new Date(data.customerBirthdate.slice(0, 10) + "T12:00:00")
-          : null;
-
-        // Find existing client by email, or create a new one
-        const [existingClient] = await db.select({ id: clientsTable.id, cpf: clientsTable.cpf, birthDate: clientsTable.birthDate })
-          .from(clientsTable)
-          .where(and(eq(clientsTable.tenantId, store.tenantId), eq(clientsTable.email, data.customerEmail)))
-          .limit(1);
-        if (existingClient) {
-          reservationClientId = existingClient.id;
-          // Backfill CPF and birthDate if the client doesn't have them yet
-          const updateFields: Record<string, unknown> = {};
-          if (!existingClient.cpf && data.customerCpf) updateFields.cpf = data.customerCpf;
-          if (!existingClient.birthDate && parsedBirthDate) updateFields.birthDate = parsedBirthDate;
-          if (Object.keys(updateFields).length > 0) {
-            try {
-              await db.update(clientsTable).set(updateFields).where(eq(clientsTable.id, existingClient.id));
-            } catch {
-              // CPF unique constraint violation — another client already holds it; skip silently
-            }
-          }
-        } else {
-          const newClientId = generateId();
-          try {
-            await db.insert(clientsTable).values({
-              id: newClientId,
-              tenantId: store.tenantId,
-              name: data.customerName,
-              email: data.customerEmail,
-              whatsapp: data.customerPhone ?? "",
-              createdById: adminUser.id,
-              ...(data.customerCpf ? { cpf: data.customerCpf } : {}),
-              ...(parsedBirthDate ? { birthDate: parsedBirthDate } : {}),
-            });
-          } catch {
-            // CPF unique constraint violation — insert without CPF
-            await db.insert(clientsTable).values({
-              id: newClientId,
-              tenantId: store.tenantId,
-              name: data.customerName,
-              email: data.customerEmail,
-              whatsapp: data.customerPhone ?? "",
-              createdById: adminUser.id,
-              ...(parsedBirthDate ? { birthDate: parsedBirthDate } : {}),
-            });
-          }
-          reservationClientId = newClientId;
-        }
         // Look up the "Vitrine" pipeline stage (isDefaultWeb=true, fallback: name='Vitrine')
         const stages = await db.select({ id: pipelineStagesTable.id, isDefaultWeb: pipelineStagesTable.isDefaultWeb, name: pipelineStagesTable.name })
           .from(pipelineStagesTable)
@@ -801,6 +756,12 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
         return;
       }
     }
+
+    // TTL for pending reservations created via the storefront (configurable, default 15 min).
+    // Clamp to [1, 1440] so an invalid or non-positive env value never produces an immediate expiry.
+    const rawTtl = parseInt(process.env["PENDING_RESERVATION_TTL_MINUTES"] ?? "15", 10);
+    const pendingReservationTtlMinutes = Number.isFinite(rawTtl) && rawTtl > 0 ? Math.min(rawTtl, 1440) : 15;
+    const reservationExpiresAt = new Date(Date.now() + pendingReservationTtlMinutes * 60 * 1000);
 
     // Fetch tenant reservation prefix before transaction (used for reservation numbering)
     const tenantResPrefix = tripLinkedProducts.size > 0
@@ -857,6 +818,65 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
             (stockErr as Error & Record<string, unknown>).productName = product.name;
             (stockErr as Error & Record<string, unknown>).available = currentStock;
             throw stockErr;
+          }
+        }
+
+        // Find or create client inside the transaction for full atomicity.
+        // If the transaction rolls back (e.g. stock exhausted), no orphan client record is left.
+        if (reservationCreatedById) {
+          // Capture in a const so TypeScript preserves the narrowing across awaits.
+          const clientCreatedById: string = reservationCreatedById;
+          const [existingClient] = await tx
+            .select({ id: clientsTable.id, cpf: clientsTable.cpf, birthDate: clientsTable.birthDate })
+            .from(clientsTable)
+            .where(and(eq(clientsTable.tenantId, store.tenantId), eq(clientsTable.email, data.customerEmail)))
+            .limit(1);
+          if (existingClient) {
+            reservationClientId = existingClient.id;
+            const updateFields: Record<string, unknown> = {};
+            if (!existingClient.birthDate && parsedBirthDate) updateFields.birthDate = parsedBirthDate;
+            // Only backfill CPF if the client doesn't have one AND no other client in the
+            // tenant already holds this CPF. Pre-checking avoids a constraint violation that
+            // would abort the whole transaction.
+            if (!existingClient.cpf && data.customerCpf) {
+              const [cpfOwner] = await tx
+                .select({ id: clientsTable.id })
+                .from(clientsTable)
+                .where(and(eq(clientsTable.tenantId, store.tenantId), eq(clientsTable.cpf, data.customerCpf)))
+                .limit(1);
+              if (!cpfOwner) updateFields.cpf = data.customerCpf;
+            }
+            if (Object.keys(updateFields).length > 0) {
+              await tx.update(clientsTable).set(updateFields).where(eq(clientsTable.id, existingClient.id));
+            }
+          } else {
+            const newClientId = generateId();
+            // Determine whether the CPF is safe to insert (pre-check avoids aborting the
+            // transaction on a unique-constraint violation — Postgres aborts the whole tx
+            // on any statement error unless a savepoint is used).
+            let cpfToInsert: string | undefined;
+            if (data.customerCpf) {
+              const [cpfOwner] = await tx
+                .select({ id: clientsTable.id })
+                .from(clientsTable)
+                .where(and(eq(clientsTable.tenantId, store.tenantId), eq(clientsTable.cpf, data.customerCpf)))
+                .limit(1);
+              if (!cpfOwner) cpfToInsert = data.customerCpf;
+            }
+            // The pre-check SELECT above eliminates virtually all CPF conflicts before reaching here.
+            // In the extremely rare race (two concurrent checkouts for the same CPF in the same millisecond),
+            // the transaction will be retried by the caller rather than silently corrupting data.
+            await tx.insert(clientsTable).values({
+              id: newClientId,
+              tenantId: store.tenantId,
+              name: data.customerName,
+              email: data.customerEmail,
+              whatsapp: data.customerPhone ?? "",
+              createdById: clientCreatedById,
+              ...(cpfToInsert ? { cpf: cpfToInsert } : {}),
+              ...(parsedBirthDate ? { birthDate: parsedBirthDate } : {}),
+            });
+            reservationClientId = newClientId;
           }
         }
 
@@ -943,6 +963,7 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
               createdById: reservationCreatedById,
               discountReferralCode: appliedReferralCode ?? undefined,
               discountReferralAmount: appliedReferralCode ? discountAmount.toFixed(2) : undefined,
+              expiresAt: reservationExpiresAt,
               ...(reservationNotes ? { notes: reservationNotes } : {}),
             });
             // Decrement trip available_seats and increment reserved_seats
@@ -1257,7 +1278,13 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
       })();
     }
 
-    res.status(200).json({ ...order, orderId: order.id, items });
+    res.status(200).json({
+      ...order,
+      orderId: order.id,
+      items,
+      // Expose the reservation expiry deadline so the storefront can display a countdown timer.
+      reservationExpiresAt: tripLinkedProducts.size > 0 ? reservationExpiresAt.toISOString() : null,
+    });
 
     // Emit real-time seat update to all SSE listeners for each trip in this order
     for (const [tripId] of tripLinkedProducts) {
