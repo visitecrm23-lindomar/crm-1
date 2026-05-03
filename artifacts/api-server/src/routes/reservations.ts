@@ -982,27 +982,35 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
       if (!updated) return null;
 
       if (parsed.data.seats != null) {
-        const newSeat = parsed.data.seats[0] ?? null;
-        const [principalPassenger] = await tx.select().from(passengersTable)
-          .where(and(
-            eq(passengersTable.reservationId, req.params.id),
-            eq(passengersTable.isPrimary, true),
-          ))
-          .limit(1);
-        if (principalPassenger) {
-          await tx.update(passengersTable).set({ seatNumber: newSeat })
-            .where(eq(passengersTable.id, principalPassenger.id));
-        } else {
-          const [anyPassenger] = await tx.select()
-            .from(passengersTable)
-            .where(eq(passengersTable.reservationId, req.params.id))
-            .orderBy(asc(passengersTable.id))
-            .limit(1);
-          if (anyPassenger) {
-            await tx.update(passengersTable)
-              .set({ seatNumber: newSeat, isPrimary: true })
-              .where(eq(passengersTable.id, anyPassenger.id));
-          } else if (existing.clientId) {
+        const newSeats = parsed.data.seats;
+        const newCount = newSeats.length;
+        const priorSeats: string[] = existing.seats ?? [];
+
+        // Order passengers by their position in the prior seats array (primary always first).
+        const currentPassengers = await tx.select()
+          .from(passengersTable)
+          .where(eq(passengersTable.reservationId, req.params.id))
+          .orderBy(desc(passengersTable.isPrimary), asc(passengersTable.id));
+
+        // Re-sort in JS to use prior seats index for stable positional mapping.
+        currentPassengers.sort((a, b) => {
+          if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+          const ai = priorSeats.indexOf(a.seatNumber ?? "");
+          const bi = priorSeats.indexOf(b.seatNumber ?? "");
+          return (ai === -1 ? priorSeats.length : ai) - (bi === -1 ? priorSeats.length : bi);
+        });
+
+        const currentCount = currentPassengers.length;
+
+        if (newCount === 0) {
+          // seats cleared: delete all passenger rows to keep count aligned with seats.length.
+          if (currentCount > 0) {
+            await tx.delete(passengersTable)
+              .where(eq(passengersTable.reservationId, req.params.id));
+          }
+        } else if (currentCount === 0) {
+          // No passengers exist yet — bootstrap primary from client data then add placeholders.
+          if (existing.clientId) {
             const [clientData] = await tx.select().from(clientsTable)
               .where(and(eq(clientsTable.id, existing.clientId), eq(clientsTable.tenantId, me.tenantId)))
               .limit(1);
@@ -1015,11 +1023,78 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
                 rg: clientData.rg ?? null,
                 birthDate: clientData.birthDate ?? null,
                 ageCategory: deriveAgeCategory(clientData.birthDate ?? null),
-                seatNumber: newSeat,
+                seatNumber: newSeats[0] ?? null,
                 isChildUnder7: getAgeYears(clientData.birthDate ?? null) < 7,
                 isPrimary: true,
               }).onConflictDoNothing();
             }
+          }
+          for (let i = 1; i < newCount; i++) {
+            await tx.insert(passengersTable).values({
+              id: generateId(),
+              reservationId: req.params.id,
+              name: "A preencher",
+              cpf: null,
+              rg: null,
+              birthDate: null,
+              ageCategory: "adult",
+              seatNumber: newSeats[i] ?? null,
+              isChildUnder7: false,
+              isPrimary: false,
+            });
+          }
+        } else if (newCount >= currentCount) {
+          // Same count or more: add placeholders for extra seats, remap existing ones.
+          for (let i = currentCount; i < newCount; i++) {
+            await tx.insert(passengersTable).values({
+              id: generateId(),
+              reservationId: req.params.id,
+              name: "A preencher",
+              cpf: null,
+              rg: null,
+              birthDate: null,
+              ageCategory: "adult",
+              seatNumber: newSeats[i] ?? null,
+              isChildUnder7: false,
+              isPrimary: false,
+            });
+          }
+          for (let i = 0; i < currentCount; i++) {
+            await tx.update(passengersTable)
+              .set({ seatNumber: newSeats[i] ?? null })
+              .where(eq(passengersTable.id, currentPassengers[i].id));
+          }
+        } else {
+          // Fewer seats: choose removal candidates globally.
+          // Priority: blank non-primary first (no cpf / placeholder name), then non-primary
+          // with data; primary is always the last to be removed.
+          const primaryPassenger = currentPassengers.find(p => p.isPrimary);
+          const nonPrimary = currentPassengers.filter(p => !p.isPrimary);
+
+          const sortedNonPrimary = [...nonPrimary].sort((a, b) => {
+            const aBlank = (!a.cpf && (!a.name || a.name === "A preencher")) ? 0 : 1;
+            const bBlank = (!b.cpf && (!b.name || b.name === "A preencher")) ? 0 : 1;
+            return aBlank - bBlank;
+          });
+
+          const keepNonPrimaryCount = primaryPassenger ? newCount - 1 : newCount;
+          const keepNonPrimary = sortedNonPrimary.slice(sortedNonPrimary.length - Math.max(0, keepNonPrimaryCount));
+          const removeNonPrimary = sortedNonPrimary.slice(0, sortedNonPrimary.length - Math.max(0, keepNonPrimaryCount));
+          const passengersToKeep = primaryPassenger ? [primaryPassenger, ...keepNonPrimary] : keepNonPrimary;
+
+          if (removeNonPrimary.length > 0) {
+            await tx.delete(passengersTable)
+              .where(inArray(passengersTable.id, removeNonPrimary.map(p => p.id)));
+          }
+
+          const orderedKept = [
+            ...passengersToKeep.filter(p => p.isPrimary),
+            ...passengersToKeep.filter(p => !p.isPrimary),
+          ];
+          for (let i = 0; i < orderedKept.length; i++) {
+            await tx.update(passengersTable)
+              .set({ seatNumber: newSeats[i] ?? null })
+              .where(eq(passengersTable.id, orderedKept[i].id));
           }
         }
       }
