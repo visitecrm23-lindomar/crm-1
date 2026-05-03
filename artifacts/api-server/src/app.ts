@@ -93,12 +93,30 @@ app.use(cors({
 app.use(cookieParser());
 app.use(
   express.json({
+    limit: "1mb",
     verify: (req: express.Request & { rawBody?: Buffer }, _res, buf) => {
       req.rawBody = buf;
     },
   })
 );
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+
+app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (
+    err !== null &&
+    typeof err === "object" &&
+    "type" in err &&
+    (err as { type: string }).type === "entity.too.large"
+  ) {
+    res.status(413).json({
+      error: "Payload too large",
+      code: "PAYLOAD_TOO_LARGE",
+      message: "Request body exceeds the 1 MB limit",
+    });
+    return;
+  }
+  next(err);
+});
 
 const clerkProxyUrl = process.env["CLERK_PROXY_URL"];
 const clerkProxyOrigin = clerkProxyUrl ? new URL(clerkProxyUrl).origin : undefined;
