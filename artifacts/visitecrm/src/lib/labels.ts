@@ -1,3 +1,5 @@
+import { PAYMENT_STATUS, COMMISSION_STATUS } from "@workspace/permissions";
+
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   pix: "PIX",
   credit_card: "Cartão de Crédito",
@@ -34,33 +36,39 @@ export const AGE_CATEGORY_LABELS: Record<string, string> = {
 };
 
 export const PAYMENT_STATUS_LABELS: Record<string, string> = {
-  pending: "Pendente",
-  paid: "Pago",
-  overdue: "Vencido",
-  cancelled: "Cancelado",
-  approved: "Aprovado",
+  [PAYMENT_STATUS.PENDING]: "Pendente",
+  [PAYMENT_STATUS.PAID]: "Pago",
+  [PAYMENT_STATUS.OVERDUE]: "Vencido",
+  [PAYMENT_STATUS.CANCELLED]: "Cancelado",
+  [PAYMENT_STATUS.APPROVED]: "Aprovado",
+  [PAYMENT_STATUS.FAILED]: "Falhou",
+  [PAYMENT_STATUS.REFUNDED]: "Reembolsado",
+  [PAYMENT_STATUS.CHARGED_BACK]: "Estornado",
 };
 
 export const PAYMENT_STATUS_COLORS: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-800",
-  paid: "bg-green-100 text-green-800",
-  overdue: "bg-red-100 text-red-800",
-  cancelled: "bg-gray-100 text-gray-800",
-  approved: "bg-blue-100 text-blue-800",
+  [PAYMENT_STATUS.PENDING]: "bg-yellow-100 text-yellow-800",
+  [PAYMENT_STATUS.PAID]: "bg-green-100 text-green-800",
+  [PAYMENT_STATUS.OVERDUE]: "bg-red-100 text-red-800",
+  [PAYMENT_STATUS.CANCELLED]: "bg-gray-100 text-gray-800",
+  [PAYMENT_STATUS.APPROVED]: "bg-blue-100 text-blue-800",
+  [PAYMENT_STATUS.FAILED]: "bg-red-100 text-red-800",
+  [PAYMENT_STATUS.REFUNDED]: "bg-orange-100 text-orange-800",
+  [PAYMENT_STATUS.CHARGED_BACK]: "bg-red-100 text-red-800",
 };
 
 export const COMMISSION_STATUS_LABELS: Record<string, string> = {
-  pending: "Pendente",
-  approved: "Aprovada",
-  paid: "Paga",
-  cancelled: "Cancelada",
+  [COMMISSION_STATUS.PENDING]: "Pendente",
+  [COMMISSION_STATUS.APPROVED]: "Aprovada",
+  [COMMISSION_STATUS.PAID]: "Paga",
+  [COMMISSION_STATUS.CANCELLED]: "Cancelada",
 };
 
 export const COMMISSION_STATUS_COLORS: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-800",
-  approved: "bg-blue-100 text-blue-800",
-  paid: "bg-green-100 text-green-800",
-  cancelled: "bg-gray-100 text-gray-800",
+  [COMMISSION_STATUS.PENDING]: "bg-yellow-100 text-yellow-800",
+  [COMMISSION_STATUS.APPROVED]: "bg-blue-100 text-blue-800",
+  [COMMISSION_STATUS.PAID]: "bg-green-100 text-green-800",
+  [COMMISSION_STATUS.CANCELLED]: "bg-gray-100 text-gray-800",
 };
 
 export const EXPENSE_CATEGORY_LABELS: Record<string, string> = {

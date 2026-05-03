@@ -475,13 +475,13 @@ router.post("/admin/sync-superadmin", async (req, res): Promise<void> => {
       res.status(404).json({ error: "User not found — sign in first to create your profile, then call this endpoint" }); return;
     }
 
-    if (existing.role === "superadmin") {
-      res.json({ ok: true, already: true, userId: existing.id, role: "superadmin" }); return;
+    if (existing.role === ROLES.SUPER_ADMIN) {
+      res.json({ ok: true, already: true, userId: existing.id, role: ROLES.SUPER_ADMIN }); return;
     }
 
-    await db.update(usersTable).set({ role: "superadmin" }).where(eq(usersTable.clerkId, clerkId));
+    await db.update(usersTable).set({ role: ROLES.SUPER_ADMIN }).where(eq(usersTable.clerkId, clerkId));
     req.log.info({ clerkId, userId: existing.id }, "Promoted user to superadmin via sync-superadmin");
-    res.json({ ok: true, already: false, userId: existing.id, role: "superadmin" });
+    res.json({ ok: true, already: false, userId: existing.id, role: ROLES.SUPER_ADMIN });
   } catch (err) {
     req.log.error({ err }, "Error syncing superadmin");
     res.status(500).json({ error: "Internal server error" });

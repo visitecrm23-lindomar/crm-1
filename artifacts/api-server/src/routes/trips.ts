@@ -18,6 +18,7 @@ import { ptBR } from "date-fns/locale";
 import { z } from "zod";
 import PDFDocument from "pdfkit";
 import { ADMIN_ROLES } from '../lib/tenant';
+import { RESERVATION_STATUS, type TripStatus } from "@workspace/permissions";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 
 type SeatMapEntry = { row: number; col: number; floor?: number; status: string; type?: string };
@@ -171,7 +172,7 @@ router.get("/trips", async (req, res, next: NextFunction): Promise<void> => {
 
     const conditions: ReturnType<typeof eq>[] = [eq(tripsTable.tenantId, me.tenantId)];
     if (search) conditions.push(ilike(tripsTable.name, `%${search}%`) as ReturnType<typeof eq>);
-    if (status) conditions.push(eq(tripsTable.status, status));
+    if (status) conditions.push(eq(tripsTable.status, status as TripStatus));
 
     const trips = await db.select().from(tripsTable)
       .where(and(...conditions))
@@ -321,7 +322,7 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
     const updates: Partial<typeof tripsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.description !== undefined) updates.description = parsed.data.description ?? null;
-    if (parsed.data.status != null) updates.status = parsed.data.status;
+    if (parsed.data.status != null) updates.status = parsed.data.status as TripStatus;
     if (parsed.data.isPublic != null) updates.isPublic = parsed.data.isPublic;
     if (parsed.data.isFeatured != null) updates.isFeatured = parsed.data.isFeatured;
     if (parsed.data.departureDate != null) updates.departureDate = new Date(parsed.data.departureDate);
@@ -418,7 +419,7 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
           .where(and(
             eq(reservationsTable.tripId, req.params.id),
             eq(reservationsTable.tenantId, me.tenantId),
-            inArray(reservationsTable.status, ["pending", "confirmed"]),
+            inArray(reservationsTable.status, [RESERVATION_STATUS.PENDING, RESERVATION_STATUS.CONFIRMED]),
           ));
 
         let reservedSeats = 0;
@@ -426,8 +427,8 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
         for (const r of activeReservations) {
           for (const seat of r.seats) {
             if (newSeatMap[seat]) {
-              newSeatMap[seat].status = r.status === "confirmed" ? "confirmed" : "reserved";
-              if (r.status === "confirmed") confirmedSeats++;
+              newSeatMap[seat].status = r.status === RESERVATION_STATUS.CONFIRMED ? "confirmed" : "reserved";
+              if (r.status === RESERVATION_STATUS.CONFIRMED) confirmedSeats++;
               else reservedSeats++;
             }
           }
@@ -487,17 +488,17 @@ router.get("/trips/:id/seat-map", async (req, res, next: NextFunction): Promise<
       .limit(1);
     if (!trip) { next(new NotFoundError("Trip not found", "NOT_FOUND")); return; }
 
-    const ACTIVE_STATUSES = ["pending", "confirmed"] as const;
+    const ACTIVE_STATUSES = [RESERVATION_STATUS.PENDING, RESERVATION_STATUS.CONFIRMED];
     const reservations = await db.select().from(reservationsTable)
       .where(and(
         eq(reservationsTable.tripId, req.params.id),
         eq(reservationsTable.tenantId, me.tenantId),
-        inArray(reservationsTable.status, [...ACTIVE_STATUSES]),
+        inArray(reservationsTable.status, ACTIVE_STATUSES),
       ));
 
     const occupiedSeats: Record<string, { reservationId: string; passengerName: string; seatStatus: string }> = {};
     for (const r of reservations) {
-      const seatStatus = r.status === "confirmed" ? "confirmed" : "reserved";
+      const seatStatus = r.status === RESERVATION_STATUS.CONFIRMED ? "confirmed" : "reserved";
       for (const seat of r.seats) {
         occupiedSeats[seat] = { reservationId: r.id, passengerName: "", seatStatus };
       }

@@ -5,6 +5,7 @@ import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { getAuth } from "@clerk/express";
 import { AppError, ConflictError, NotFoundError, ValidationError } from "../lib/errors";
+import { ROLES } from "@workspace/permissions";
 
 const router = Router();
 
@@ -98,7 +99,7 @@ router.post("/onboarding/agency", async (req, res, next: NextFunction): Promise<
           settings: { onboardingCompleted: true },
         });
         await tx.update(usersTable)
-          .set({ tenantId, role: "agencia" })
+          .set({ tenantId, role: ROLES.AGENCY_ADMIN })
           .where(eq(usersTable.clerkId, auth.clerkId));
 
         const [existingStore] = await tx

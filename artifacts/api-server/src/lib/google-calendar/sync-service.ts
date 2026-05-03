@@ -1,3 +1,4 @@
+import { ROLES } from "@workspace/permissions";
 import { db } from "@workspace/db";
 import {
   usersTable,
@@ -141,7 +142,7 @@ export class CalendarSyncService {
         .where(and(
           eq(usersTable.tenantId, trip.tenantId),
           eq(usersTable.googleCalendarEnabled, true),
-          eq(usersTable.role, "agencia"),
+          eq(usersTable.role, ROLES.AGENCY_ADMIN),
         ));
 
       for (const admin of adminUsers) {
@@ -190,7 +191,7 @@ export class CalendarSyncService {
           // Check if this is a seller (admins should keep their events)
           const [userRec] = await db.select({ role: usersTable.role })
             .from(usersTable).where(eq(usersTable.id, ev.userId)).limit(1);
-          if (userRec?.role === "vendedor") {
+          if (userRec?.role === ROLES.SALES) {
             const svc = await getCalendarService(ev.userId);
             if (svc) await svc.deleteEvent(ev.googleEventId).catch(() => {});
             await db.delete(calendarEventsTable).where(eq(calendarEventsTable.id, ev.id));
@@ -208,7 +209,7 @@ export class CalendarSyncService {
           .where(and(
             eq(usersTable.tenantId, trip.tenantId),
             eq(usersTable.googleCalendarEnabled, true),
-            eq(usersTable.role, "vendedor"),
+            eq(usersTable.role, ROLES.SALES),
           ));
 
         for (const seller of sellers) {
@@ -306,7 +307,7 @@ export class CalendarSyncService {
         .where(and(eq(reservationsTable.tripId, tripId), eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED)));
 
       let visibleReservations = reservations;
-      if (actor.role === "vendedor") {
+      if (actor.role === ROLES.SALES) {
         visibleReservations = reservations.filter((r) => r.sellerId === actorUserId);
         // Seller has no confirmed reservations for this trip → remove any existing event and skip
         if (visibleReservations.length === 0) {
@@ -462,7 +463,7 @@ export class CalendarSyncService {
         .where(and(
           eq(usersTable.tenantId, payment.tenantId),
           eq(usersTable.googleCalendarEnabled, true),
-          eq(usersTable.role, "agencia"),
+          eq(usersTable.role, ROLES.AGENCY_ADMIN),
         ));
 
       for (const admin of adminUsers) {
@@ -484,7 +485,7 @@ export class CalendarSyncService {
         const [seller] = await db.select({ id: usersTable.id, googleCalendarEnabled: usersTable.googleCalendarEnabled, role: usersTable.role })
           .from(usersTable)
           .where(and(eq(usersTable.id, sellerId), eq(usersTable.tenantId, payment.tenantId))).limit(1);
-        if (seller?.googleCalendarEnabled && seller.role === "vendedor") {
+        if (seller?.googleCalendarEnabled && seller.role === ROLES.SALES) {
           const svc = await getCalendarService(seller.id);
           if (svc) {
             await upsertCalendarEvent(
@@ -536,7 +537,7 @@ export class CalendarSyncService {
         }
       }
 
-      if (actor.role === "vendedor" && sellerId !== actorUserId) return;
+      if (actor.role === ROLES.SALES && sellerId !== actorUserId) return;
 
       const svc = await getCalendarService(actorUserId);
       if (!svc) return;
@@ -615,7 +616,7 @@ export class CalendarSyncService {
 
       const adminUsers = await db.select({ id: usersTable.id })
         .from(usersTable)
-        .where(and(eq(usersTable.tenantId, tenantId), eq(usersTable.googleCalendarEnabled, true), eq(usersTable.role, "agencia")));
+        .where(and(eq(usersTable.tenantId, tenantId), eq(usersTable.googleCalendarEnabled, true), eq(usersTable.role, ROLES.AGENCY_ADMIN)));
 
       for (const admin of adminUsers) {
         const svc = await getCalendarService(admin.id);
@@ -637,7 +638,7 @@ export class CalendarSyncService {
         const [seller] = await db.select({ id: usersTable.id, googleCalendarEnabled: usersTable.googleCalendarEnabled, role: usersTable.role })
           .from(usersTable)
           .where(and(eq(usersTable.id, sellerId), eq(usersTable.tenantId, tenantId))).limit(1);
-        if (seller?.googleCalendarEnabled && seller.role === "vendedor") {
+        if (seller?.googleCalendarEnabled && seller.role === ROLES.SALES) {
           const svc = await getCalendarService(seller.id);
           if (svc) {
             await upsertCalendarEvent(
@@ -691,7 +692,7 @@ export class CalendarSyncService {
         return;
       }
 
-      if (actor.role === "vendedor" && client.createdById !== actorUserId) return;
+      if (actor.role === ROLES.SALES && client.createdById !== actorUserId) return;
 
       const birthDate = new Date(client.birthDate);
       const now = new Date();

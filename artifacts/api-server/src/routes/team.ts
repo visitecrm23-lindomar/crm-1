@@ -6,6 +6,7 @@ import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { ADMIN_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
+import { ROLES } from "@workspace/permissions";
 
 const router = Router();
 
@@ -60,7 +61,7 @@ router.get("/team/invites", async (req, res): Promise<void> => {
 
 const InviteBody = z.object({
   email: z.string().email("E-mail inválido"),
-  role: z.enum(["vendedor", "gerente", "suporte"]).optional().default("vendedor"),
+  role: z.enum([ROLES.SALES, ROLES.AGENCY_MANAGER, ROLES.SUPPORT]).optional().default(ROLES.SALES),
 });
 
 router.post("/team/invite", async (req, res): Promise<void> => {

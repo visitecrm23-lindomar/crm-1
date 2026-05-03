@@ -132,7 +132,7 @@ router.post("/users/me/sync", async (req, res): Promise<void> => {
 
       const linkedTenantId = pendingInvite?.tenantId ?? null;
       const superadminClerkId = process.env.SUPERADMIN_CLERK_ID;
-      const assignedRole = (superadminClerkId && clerkId === superadminClerkId) ? "superadmin" : (pendingInvite?.role ?? "agencia");
+      const assignedRole = (superadminClerkId && clerkId === superadminClerkId) ? ROLES.SUPER_ADMIN : (pendingInvite?.role ?? ROLES.AGENCY_ADMIN);
 
       if (linkedTenantId) {
         const allowed = await checkPlanLimit(linkedTenantId, "users", req, res);
@@ -171,7 +171,7 @@ router.post("/users/me/sync", async (req, res): Promise<void> => {
 
       const superadminClerkIdForUpdate = process.env.SUPERADMIN_CLERK_ID;
       if (superadminClerkIdForUpdate && clerkId === superadminClerkIdForUpdate && existing.role !== ROLES.SUPER_ADMIN) {
-        updateSet.role = "superadmin";
+        updateSet.role = ROLES.SUPER_ADMIN;
         req.log.info({ clerkId, userId: existing.id }, "Auto-promoted user to superadmin via SUPERADMIN_CLERK_ID");
       }
 
@@ -232,7 +232,7 @@ router.post("/users", async (req, res): Promise<void> => {
     }
     const parsed = CreateUserBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    if (me.role !== ROLES.SUPER_ADMIN && parsed.data.role === "superadmin") {
+    if (me.role !== ROLES.SUPER_ADMIN && parsed.data.role === ROLES.SUPER_ADMIN) {
       res.status(403).json({ error: "Forbidden: apenas superadmins podem atribuir a funcao superadmin" });
       return;
     }
@@ -274,7 +274,7 @@ router.patch("/users/:id", async (req, res): Promise<void> => {
         return;
       }
       if (parsed.data.role != null) {
-        if (me.role !== ROLES.SUPER_ADMIN && parsed.data.role === "superadmin") {
+        if (me.role !== ROLES.SUPER_ADMIN && parsed.data.role === ROLES.SUPER_ADMIN) {
           res.status(403).json({ error: "Forbidden: apenas superadmins podem atribuir a funcao superadmin" });
           return;
         }

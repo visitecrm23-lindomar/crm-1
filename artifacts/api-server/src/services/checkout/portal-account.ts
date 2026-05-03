@@ -9,6 +9,7 @@ import { usersTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { generateId, generateReferralCode } from "../../lib/id";
 import { sendWelcomeEmail } from "../../queues/email-helpers";
+import { ROLES } from "@workspace/permissions";
 
 export interface PortalCredentials {
   email: string;
@@ -93,7 +94,7 @@ export async function ensurePortalAccount(
     tenantId,
     name,
     email,
-    role: "cliente",
+    role: ROLES.CLIENT,
     isActive: true,
     referralCode,
   });
