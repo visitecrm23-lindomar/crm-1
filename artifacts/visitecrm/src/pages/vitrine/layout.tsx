@@ -2,7 +2,7 @@ import { ReactNode, useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { PublicStore } from "@/lib/storeApi";
 import { useUser } from "@clerk/react";
-import { useGetMe } from "@workspace/api-client-react";
+import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
 import { ROLES } from "@workspace/permissions";
 import {
   X,
@@ -28,7 +28,7 @@ export default function VitrineLayout({
 }) {
   const [, navigate] = useLocation();
   const { isSignedIn } = useUser();
-  const { data: me } = useGetMe({ query: { enabled: !!isSignedIn, queryKey: [] as readonly unknown[] } });
+  const { data: me } = useGetMe({ query: { enabled: !!isSignedIn, queryKey: getGetMeQueryKey() } });
   const isCliente = isSignedIn && me?.role === ROLES.CLIENT;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);

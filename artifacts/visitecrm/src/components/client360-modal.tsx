@@ -1,5 +1,13 @@
 import { useState, useRef, useMemo } from "react";
 import {
+  getListClientActivitiesQueryKey,
+  getGetClientReferralQueryKey,
+  getGetClientQueryKey,
+  getListReservationsQueryKey,
+  getListPaymentsQueryKey,
+  getGetClientLoyaltyQueryKey,
+  getListLoyaltyMembersQueryKey,
+  getListLoyaltyTransactionsQueryKey,
   useGetClient,
   useListReservations,
   useListPayments,
@@ -96,7 +104,7 @@ function ClientHistoryTab({ clientId, isOpen }: { clientId: string; isOpen: bool
   const [showForm, setShowForm] = useState(false);
 
   const { data: activities, isLoading, refetch } = useListClientActivities(clientId, {
-    query: { enabled: isOpen && !!clientId, queryKey: [] as readonly unknown[] },
+    query: { enabled: isOpen && !!clientId, queryKey: getListClientActivitiesQueryKey(clientId) },
   });
 
   const { mutate: createActivity, isPending } = useCreateClientActivity({
@@ -295,7 +303,7 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
 }
 
 function ClientReferralTab({ clientId }: { clientId: string }) {
-  const { data, refetch } = useGetClientReferral(clientId, { query: { enabled: !!clientId, queryKey: [] as readonly unknown[] } });
+  const { data, refetch } = useGetClientReferral(clientId, { query: { enabled: !!clientId, queryKey: getGetClientReferralQueryKey(clientId) } });
   const generate = useGenerateClientReferralCode();
   const { data: me } = useGetMe();
   const { toast } = useToast();
@@ -438,29 +446,29 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
   const id = clientId ?? "";
 
   const { data: client, isLoading: loadingClient } = useGetClient(id, {
-    query: { enabled: open && !!id, queryKey: [] as readonly unknown[] },
+    query: { enabled: open && !!id, queryKey: getGetClientQueryKey(id) },
   });
 
   const { data: reservations } = useListReservations(
     { clientId: id, limit: 20 },
-    { query: { enabled: open && !!id, queryKey: [] as readonly unknown[] } }
+    { query: { enabled: open && !!id, queryKey: getListReservationsQueryKey({ clientId: id, limit: 20 }) } }
   );
 
   const { data: payments } = useListPayments(
     { clientId: id, limit: 20 },
-    { query: { enabled: open && !!id, queryKey: [] as readonly unknown[] } }
+    { query: { enabled: open && !!id, queryKey: getListPaymentsQueryKey({ clientId: id, limit: 20 }) } }
   );
 
   const { data: loyaltyInfo } = useGetClientLoyalty(id, {
-    query: { enabled: open && !!id, queryKey: [] as readonly unknown[] },
+    query: { enabled: open && !!id, queryKey: getGetClientLoyaltyQueryKey(id) },
   });
 
   const { data: loyaltyMembers } = useListLoyaltyMembers({
-    query: { enabled: open && !!id, queryKey: [] as readonly unknown[] },
+    query: { enabled: open && !!id, queryKey: getListLoyaltyMembersQueryKey() },
   });
 
   const { data: loyaltyTransactions } = useListLoyaltyTransactions({
-    query: { enabled: open && !!id && !!loyaltyInfo?.memberId, queryKey: [] as readonly unknown[] },
+    query: { enabled: open && !!id && !!loyaltyInfo?.memberId, queryKey: getListLoyaltyTransactionsQueryKey() },
   });
 
   const member = useMemo(() => {

@@ -17,7 +17,7 @@ import { broadcastSeatUpdate } from "../lib/realtime";
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { applyDiscounts, computeBalance, computeEffectiveLoyaltyPoints } from "../lib/pricing";
 import { calculateTier } from "../lib/loyalty-helpers";
-import { ROLES, DEAL_STATUS, type ReservationStatus } from "@workspace/permissions";
+import { ROLES, DEAL_STATUS, RESERVATION_STATUS, REFERRAL_STATUS, COMMISSION_STATUS, STORE_PAYMENT_STATUS, type ReservationStatus } from "@workspace/permissions";
 import { parseReservationStatus } from "../lib/status-validators";
 
 
@@ -509,7 +509,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
         commissionPercentage: parsed.data.commissionPercentage ? String(parsed.data.commissionPercentage) : null,
         commissionAmount: parsed.data.commissionAmount ? String(parsed.data.commissionAmount) : null,
         sellerId: parsed.data.sellerId ?? null,
-        status: "pending",
+        status: RESERVATION_STATUS.PENDING,
         voucherCode,
         reservationNumber,
         qrCode: `QR-${voucherCode}`,
@@ -593,7 +593,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
           tenantId: me.tenantId,
           referrerId: serverReferralReferrerId,
           code: serverReferralCode,
-          status: "completed",
+          status: REFERRAL_STATUS.COMPLETED,
           referredId: parsed.data.clientId,
           reservationId: id,
           discountApplied: true,
@@ -655,8 +655,8 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
         const totalVal = Number(reservation.totalValue);
         const paidVal = Number(reservation.paidValue);
         const balanceVal = Number(reservation.balance);
-        const paymentStatus: "paid" | "partial" | "pending" =
-          paidVal >= totalVal ? "paid" : paidVal > 0 ? "partial" : "pending";
+        const paymentStatus: typeof STORE_PAYMENT_STATUS.PAID | "partial" | typeof STORE_PAYMENT_STATUS.PENDING =
+          paidVal >= totalVal ? STORE_PAYMENT_STATUS.PAID : paidVal > 0 ? "partial" : STORE_PAYMENT_STATUS.PENDING;
         const [tripRecord] = await db.select().from(tripsTable).where(eq(tripsTable.id, reservation.tripId)).limit(1);
         const dDate = formatted.trip.departureDate ? new Date(formatted.trip.departureDate) : null;
         const departureDate = dDate
@@ -754,8 +754,8 @@ router.get("/reservations/:id", async (req, res, next: NextFunction): Promise<vo
   }
 });
 
-const CANCELLING_STATUSES = ["cancelled", "refunded"];
-const ACTIVE_STATUSES = ["pending", "confirmed"];
+const CANCELLING_STATUSES: readonly ReservationStatus[] = [RESERVATION_STATUS.CANCELLED, RESERVATION_STATUS.REFUNDED] as const;
+const ACTIVE_STATUSES: readonly ReservationStatus[] = [RESERVATION_STATUS.PENDING, RESERVATION_STATUS.CONFIRMED] as const;
 
 router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
@@ -874,7 +874,7 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
             .where(and(
               eq(referralsTable.tenantId, me.tenantId),
               eq(referralsTable.reservationId, req.params.id),
-              eq(referralsTable.status, "completed"),
+              eq(referralsTable.status, REFERRAL_STATUS.COMPLETED),
             ))
             .limit(1);
           if (referralRecord) {
@@ -970,11 +970,11 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
 
         // --- Cancel orphan commissions (pending/approved) tied to this reservation ---
         await tx.update(commissionsTable)
-          .set({ status: "cancelled" })
+          .set({ status: COMMISSION_STATUS.CANCELLED })
           .where(and(
             eq(commissionsTable.reservationId, req.params.id),
             eq(commissionsTable.tenantId, me.tenantId),
-            inArray(commissionsTable.status, ["pending", "approved"]),
+            inArray(commissionsTable.status, [COMMISSION_STATUS.PENDING, COMMISSION_STATUS.APPROVED]),
           ));
       }
 
@@ -1147,7 +1147,7 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
     res.json(formatted);
     // Send cancellation email only on a true active → cancelled transition
     // (not for "refunded", not for repeated patches on already-cancelled reservations)
-    if (parsed.data.status === "cancelled" && wasActive && existing.clientId) {
+    if (parsed.data.status === RESERVATION_STATUS.CANCELLED && wasActive && existing.clientId) {
       enqueueReservationCancellationEmail(req.params.id, me.tenantId)
         .catch((err) => req.log.error({ err }, "Error enqueueing cancellation email"));
     }
@@ -1204,7 +1204,7 @@ router.post("/reservations/:id/check-in", async (req, res, next: NextFunction): 
     const existing = await requireReservationAccess(me, req.params.id);
     await db.update(reservationsTable).set({
       checkedInAt: new Date(),
-      status: "completed",
+      status: RESERVATION_STATUS.COMPLETED,
     }).where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)));
     const [reservation] = await db.select().from(reservationsTable)
       .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)))

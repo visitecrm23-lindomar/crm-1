@@ -6,11 +6,17 @@ import {
   useUpdateCoupon,
   useDeleteCoupon,
   useListClients,
+  getListClientsQueryKey,
   useGetBirthdayToday,
+  getGetBirthdayTodayQueryKey,
   useGetBirthdayUpcoming,
+  getGetBirthdayUpcomingQueryKey,
   useGetBirthdayHistory,
+  getGetBirthdayHistoryQueryKey,
   useGetBirthdayStats,
+  getGetBirthdayStatsQueryKey,
   useGetBirthdaySettings,
+  getGetBirthdaySettingsQueryKey,
   sendBirthdayMessage,
   updateBirthdaySettings,
 } from "@workspace/api-client-react";
@@ -90,29 +96,29 @@ export default function Marketing() {
   const deleteCoupon = useDeleteCoupon();
 
   const { data: bdToday, isLoading: loadingToday, refetch: refetchToday } = useGetBirthdayToday({
-    query: { enabled: tab === "birthdays", queryKey: [] as readonly unknown[] },
+    query: { enabled: tab === "birthdays", queryKey: getGetBirthdayTodayQueryKey() },
   });
   const { data: bdUpcoming7, isLoading: loadingUpcoming7 } = useGetBirthdayUpcoming(
     { days: 7 },
-    { query: { enabled: tab === "birthdays" && birthdaySubTab === "upcoming7", queryKey: [] as readonly unknown[] } }
+    { query: { enabled: tab === "birthdays" && birthdaySubTab === "upcoming7", queryKey: getGetBirthdayUpcomingQueryKey({ days: 7 }) } }
   );
   const { data: bdUpcoming30, isLoading: loadingUpcoming30 } = useGetBirthdayUpcoming(
     { days: 30 },
-    { query: { enabled: tab === "birthdays" && birthdaySubTab === "upcoming30", queryKey: [] as readonly unknown[] } }
+    { query: { enabled: tab === "birthdays" && birthdaySubTab === "upcoming30", queryKey: getGetBirthdayUpcomingQueryKey({ days: 30 }) } }
   );
   const { data: bdHistory, isLoading: loadingHistory } = useGetBirthdayHistory(
     { year: new Date().getFullYear() },
-    { query: { enabled: tab === "birthdays" && birthdaySubTab === "history", queryKey: [] as readonly unknown[] } }
+    { query: { enabled: tab === "birthdays" && birthdaySubTab === "history", queryKey: getGetBirthdayHistoryQueryKey({ year: new Date().getFullYear() }) } }
   );
   const { data: bdStats } = useGetBirthdayStats({
-    query: { enabled: tab === "birthdays", queryKey: [] as readonly unknown[] },
+    query: { enabled: tab === "birthdays", queryKey: getGetBirthdayStatsQueryKey() },
   });
   const { data: bdSettings, isLoading: loadingSettings } = useGetBirthdaySettings({
-    query: { enabled: tab === "birthdays" && birthdaySubTab === "settings", refetchOnWindowFocus: false, queryKey: [] as readonly unknown[] },
+    query: { enabled: tab === "birthdays" && birthdaySubTab === "settings", refetchOnWindowFocus: false, queryKey: getGetBirthdaySettingsQueryKey() },
   });
 
   const { data: allClientsData } = useListClients({ limit: 1000, page: 1 }, {
-    query: { enabled: manualSendOpen, queryKey: [] as readonly unknown[] },
+    query: { enabled: manualSendOpen, queryKey: getListClientsQueryKey({ limit: 1000, page: 1 }) },
   });
 
   const filteredClients = useMemo(() => {
