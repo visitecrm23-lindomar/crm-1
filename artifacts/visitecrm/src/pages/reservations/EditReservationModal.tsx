@@ -5,7 +5,30 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { z } from "zod";
+import { RESERVATION_STATUS, type ReservationStatus } from "@workspace/permissions";
 import { fmt } from "./constants";
+
+const ReservationStatusSchema = z.enum([
+  RESERVATION_STATUS.PENDING,
+  RESERVATION_STATUS.CONFIRMED,
+  RESERVATION_STATUS.CANCELLED,
+  RESERVATION_STATUS.REFUNDED,
+  RESERVATION_STATUS.COMPLETED,
+  RESERVATION_STATUS.FAILED,
+]);
+
+const EDITABLE_STATUS_OPTIONS: { value: ReservationStatus; label: string }[] = [
+  { value: RESERVATION_STATUS.PENDING, label: "Pendente" },
+  { value: RESERVATION_STATUS.CONFIRMED, label: "Confirmada" },
+  { value: RESERVATION_STATUS.COMPLETED, label: "Concluída" },
+  { value: RESERVATION_STATUS.CANCELLED, label: "Cancelada" },
+];
+
+function parseReservationStatus(v: string): ReservationStatus | undefined {
+  const r = ReservationStatusSchema.safeParse(v);
+  return r.success ? r.data : undefined;
+}
 
 export function EditReservationModal({ reservationId, open, onClose, onSuccess }: {
   reservationId: string;
@@ -41,7 +64,7 @@ export function EditReservationModal({ reservationId, open, onClose, onSuccess }
     await updateReservation.mutateAsync({
       id: reservationId,
       data: {
-        status: (editStatus as "pending" | "confirmed" | "completed" | "cancelled") || undefined,
+        status: parseReservationStatus(editStatus),
         paymentMethod: paymentMethod || undefined,
         notes: (fd.get("notes") as string) || undefined,
         totalValue: totalValueRaw ? parseFloat(totalValueRaw) : undefined,
@@ -73,10 +96,9 @@ export function EditReservationModal({ reservationId, open, onClose, onSuccess }
                 <Select value={editStatus} onValueChange={setEditStatus}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pending">Pendente</SelectItem>
-                    <SelectItem value="confirmed">Confirmada</SelectItem>
-                    <SelectItem value="completed">Concluída</SelectItem>
-                    <SelectItem value="cancelled">Cancelada</SelectItem>
+                    {EDITABLE_STATUS_OPTIONS.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

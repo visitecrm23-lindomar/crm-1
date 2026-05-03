@@ -94,6 +94,16 @@ export const EXPENSE_STATUS = {
 } as const;
 export type ExpenseStatus = (typeof EXPENSE_STATUS)[keyof typeof EXPENSE_STATUS];
 
+export const INVOICE_STATUS = {
+  PENDING: "pending",
+  PAID: "paid",
+  OVERDUE: "overdue",
+  CANCELLED: "cancelled",
+  REFUNDED: "refunded",
+} as const;
+export type InvoiceStatus = (typeof INVOICE_STATUS)[keyof typeof INVOICE_STATUS];
+export const INVOICE_STATUS_VALUES = Object.values(INVOICE_STATUS) as [InvoiceStatus, ...InvoiceStatus[]];
+
 export const RESOURCES = {
   TRIPS: "trips",
   RESERVATIONS: "reservations",

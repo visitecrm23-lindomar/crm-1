@@ -151,6 +151,7 @@ vi.mock("../routes/payments.js", () => ({
 vi.mock("../queues/email-helpers.js", () => ({
   enqueueReservationConfirmationEmail: vi.fn().mockResolvedValue(undefined),
   enqueueReservationCancellationEmail: mockEnqueueCancellationEmail,
+  enqueueNewBookingNotificationEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../lib/google-calendar/sync-service.js", () => ({

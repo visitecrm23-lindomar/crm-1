@@ -4,13 +4,13 @@ import { eq, desc, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
-import { ROLES } from "@workspace/permissions";
+import { ROLES, INVOICE_STATUS, INVOICE_STATUS_VALUES } from "@workspace/permissions";
 
 async function activateInvoicePlan(invoiceId: string, tenantId: string): Promise<void> {
   const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
-  if (!invoice || invoice.status === "paid") return;
+  if (!invoice || invoice.status === INVOICE_STATUS.PAID) return;
 
-  await db.update(invoicesTable).set({ status: "paid", paidAt: new Date() })
+  await db.update(invoicesTable).set({ status: INVOICE_STATUS.PAID, paidAt: new Date() })
     .where(eq(invoicesTable.id, invoiceId));
 
   if (invoice.planId) {
@@ -46,14 +46,14 @@ const InvoiceBody = z.object({
   planId: z.string().optional(),
   amount: z.string(),
   currency: z.string().optional(),
-  status: z.string().optional(),
+  status: z.enum(INVOICE_STATUS_VALUES).optional(),
   dueDate: z.string().optional(),
   description: z.string().optional(),
   notes: z.string().optional(),
 });
 
 const UpdateInvoiceBody = z.object({
-  status: z.string().optional(),
+  status: z.enum(INVOICE_STATUS_VALUES).optional(),
   paidAt: z.string().optional(),
   notes: z.string().optional(),
   amount: z.string().optional(),
@@ -147,7 +147,7 @@ router.patch("/admin/invoices/:id", async (req, res): Promise<void> => {
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
     const update: {
-      status?: string;
+      status?: import("@workspace/permissions").InvoiceStatus;
       paidAt?: Date;
       notes?: string;
       amount?: string;
@@ -159,11 +159,11 @@ router.patch("/admin/invoices/:id", async (req, res): Promise<void> => {
     if (parsed.data.amount) update.amount = parsed.data.amount;
     if (parsed.data.paidAt) update.paidAt = new Date(parsed.data.paidAt);
     if (parsed.data.dueDate) update.dueDate = new Date(parsed.data.dueDate);
-    if (parsed.data.status === "paid" && !parsed.data.paidAt) {
+    if (parsed.data.status === INVOICE_STATUS.PAID && !parsed.data.paidAt) {
       update.paidAt = new Date();
     }
 
-    if (parsed.data.status === "paid") {
+    if (parsed.data.status === INVOICE_STATUS.PAID) {
       const [inv] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
       if (inv && inv.tenantId) {
         await activateInvoicePlan(req.params.id, inv.tenantId);

@@ -91,6 +91,8 @@ vi.mock("../lib/tenant.js", () => ({
 
 vi.mock("../queues/email-helpers.js", () => ({
   enqueueReservationConfirmationEmail: vi.fn().mockResolvedValue(undefined),
+  enqueueReservationCancellationEmail: vi.fn().mockResolvedValue(undefined),
+  enqueueNewBookingNotificationEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../lib/id.js", () => ({
@@ -217,7 +219,13 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockWhere.mockReturnValue({ limit: mockLimit });
+    // Default `where()` is a thenable that ALSO exposes `.limit` so both
+    // patterns work without extra setup:
+    //   `await db.select().from(t).where(...)`           → resolves to []
+    //   `await db.select().from(t).where(...).limit(1)`  → calls mockLimit
+    mockWhere.mockReturnValue(
+      Object.assign(Promise.resolve([]), { limit: mockLimit }),
+    );
     mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit });
     mockSelect.mockReturnValue({ from: mockFrom });
 
@@ -486,26 +494,17 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     const tripProduct = { ...FAKE_PRODUCT, tripId: "trip-001" };
     const availableTrip = { availableSeats: 10 };
 
-    // mockWhere is consumed in call order. Calls 1-5 go through .limit() and
-    // must return { limit: mockLimit }. Calls 6 (stages) and 7 (trip names)
-    // are awaited directly without .limit(), so they must return a Promise.
-    mockWhere
-      .mockReturnValueOnce({ limit: mockLimit }) // 1 — store fetch
-      .mockReturnValueOnce({ limit: mockLimit }) // 2 — product fetch
-      .mockReturnValueOnce({ limit: mockLimit }) // 3 — trip seat check
-      .mockReturnValueOnce({ limit: mockLimit }) // 4 — admin user
-      .mockReturnValueOnce({ limit: mockLimit }) // 5 — existing client
-      .mockResolvedValueOnce([])                  // 6 — stages (no .limit())
-      .mockResolvedValueOnce([]);                 // 7 — trip names (no .limit())
-
+    // Default mockWhere (thenable+limit) handles both `await .where()` and
+    // `await .where().limit()`. Sequential `.limit()` calls consume mockLimit
+    // in order; the existing-client lookup is now inside the tx callback,
+    // which we skip below — so it does NOT consume from mockLimit.
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])                                        // getActiveStore
-      .mockResolvedValueOnce([tripProduct])                                        // product fetch
-      .mockResolvedValueOnce([availableTrip])                                      // trip seat check
-      .mockResolvedValueOnce([{ id: "admin-001" }])                               // admin user (Phase 2.5)
-      .mockResolvedValueOnce([{ id: "client-001", cpf: null, birthDate: null }])  // existing client
-      .mockResolvedValueOnce([FAKE_ORDER])                                         // post-tx order re-fetch
-      .mockResolvedValue([]);                                                       // remaining selects
+      .mockResolvedValueOnce([FAKE_STORE])         // getActiveStore (db)
+      .mockResolvedValueOnce([tripProduct])         // product fetch (db)
+      .mockResolvedValueOnce([availableTrip])       // trip seat check (db)
+      .mockResolvedValueOnce([{ id: "admin-001" }]) // admin user (db, loadReservationContext)
+      .mockResolvedValueOnce([FAKE_ORDER])          // post-tx order re-fetch (db)
+      .mockResolvedValue([]);                       // remaining selects
 
     // Skip executing the transaction callback to avoid mocking the FOR UPDATE
     // SQL lock path; the preliminary seat check (Phase 1.5) is what we are testing.

@@ -100,6 +100,7 @@ vi.mock("../routes/payments.js", () => ({
 vi.mock("../queues/email-helpers.js", () => ({
   enqueueReservationConfirmationEmail: vi.fn().mockResolvedValue(undefined),
   enqueueReservationCancellationEmail: vi.fn().mockResolvedValue(undefined),
+  enqueueNewBookingNotificationEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../queues/commission-sync-helper.js", () => ({

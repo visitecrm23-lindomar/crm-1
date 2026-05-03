@@ -138,6 +138,7 @@ vi.mock("../lib/activities.js", () => ({
 vi.mock("../queues/email-helpers.js", () => ({
   enqueueReservationConfirmationEmail: mockEnqueueConfirmationEmail,
   enqueueReservationCancellationEmail: vi.fn().mockResolvedValue(undefined),
+  enqueueNewBookingNotificationEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../lib/reservation-number.js", () => ({
@@ -187,6 +188,17 @@ function buildApp() {
 }
 
 function buildTxMock() {
+  function makeTxSelect() {
+    const value = (selectQueue as unknown[][]).shift() ?? [];
+    const limitFn = vi.fn().mockResolvedValue(value);
+    const thenableResult = Object.assign(Promise.resolve(value), { limit: limitFn });
+    return {
+      from: vi.fn(() => ({
+        where: vi.fn(() => thenableResult),
+        limit: limitFn,
+      })),
+    };
+  }
   return {
     execute: vi.fn().mockResolvedValue({
       rows: [{ id: "trip-001", available_seats: 10, type: "excursao" }],
@@ -199,11 +211,7 @@ function buildTxMock() {
       ),
     })),
     update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]) })) })),
-    select: vi.fn(() => ({
-      from: vi.fn(() => ({
-        where: vi.fn(() => ({ limit: vi.fn().mockResolvedValue([]) })),
-      })),
-    })),
+    select: vi.fn(makeTxSelect),
   };
 }
 
@@ -271,16 +279,16 @@ const VALID_BODY = {
 function setupTripLinkedCheckoutQueue() {
   selectQueue.length = 0;
   selectQueue.push(
-    [FAKE_STORE],                                                 // 1. getActiveStore
-    [FAKE_TRIP_PRODUCT],                                          // 2. product fetch
-    [{ availableSeats: 10 }],                                     // 3. Phase 1.5 — trip seats
-    [{ id: "user-001" }],                                         // 4. Phase 2.5 — admin user
-    [{ id: "client-001", cpf: null, birthDate: null }],           // 5. Phase 2.5 — existing client
-    [],                                                           // 6. Pipeline stages (awaited directly)
-    [{ id: "trip-001", name: "Excursão Nordeste" }],              // 7. Trip names (awaited directly)
-    [FAKE_ORDER],                                                 // 8. Post-tx order
-    [],                                                           // 9. Post-tx items (awaited directly)
-    [],                                                           // 10. IIFE — portal user check
+    [FAKE_STORE],                                                 // 1. getActiveStore (db)
+    [FAKE_TRIP_PRODUCT],                                          // 2. product fetch (db)
+    [{ availableSeats: 10 }],                                     // 3. trip seats Phase 1.5 (db)
+    [{ id: "user-001" }],                                         // 4. admin user (db, loadReservationContext)
+    [],                                                           // 5. pipeline stages (db, loadReservationContext)
+    [{ id: "trip-001", name: "Excursão Nordeste" }],              // 6. trip names (db, loadReservationContext)
+    [{ id: "client-001", cpf: null, birthDate: null }],           // 7. existing client (tx, upsertCheckoutClient)
+    [FAKE_ORDER],                                                 // 8. post-tx order (db)
+    [],                                                           // 9. post-tx items (db)
+    [],                                                           // 10. IIFE — portal user check (db)
   );
 }
 

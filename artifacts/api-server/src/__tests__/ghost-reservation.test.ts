@@ -34,7 +34,8 @@ vi.mock("../lib/seat-sse.js", () => ({ addSeatClient: vi.fn(), removeSeatClient:
 vi.mock("../lib/realtime.js", () => ({ broadcastSeatUpdate: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../lib/tenant.js", () => ({ requireAuth: vi.fn(), getTenantUser: vi.fn(), ADMIN_ROLES: ["admin"], MANAGEMENT_ROLES: ["admin", "gerente"] }));
 vi.mock("../routes/payments.js", () => ({ syncReservationCommission: vi.fn().mockResolvedValue(undefined), default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), use: vi.fn() } }));
-vi.mock("../queues/email-helpers.js", () => ({ enqueueReservationConfirmationEmail: vi.fn().mockResolvedValue(undefined), enqueueReservationCancellationEmail: vi.fn().mockResolvedValue(undefined), sendWelcomeEmail: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("../queues/email-helpers.js", () => ({ enqueueReservationConfirmationEmail: vi.fn().mockResolvedValue(undefined), enqueueReservationCancellationEmail: vi.fn().mockResolvedValue(undefined),
+  enqueueNewBookingNotificationEmail: vi.fn().mockResolvedValue(undefined), sendWelcomeEmail: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../lib/google-calendar/sync-service.js", () => ({ CalendarSyncService: { syncTrip: vi.fn().mockResolvedValue(undefined) } }));
 vi.mock("../lib/activities.js", () => ({ writeClientActivity: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../lib/pricing.js", () => ({
