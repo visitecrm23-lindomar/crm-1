@@ -122,7 +122,7 @@ export default function Communication() {
   const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
   const [loadingEmailLogs, setLoadingEmailLogs] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
-  const [filterAutoRetry, setFilterAutoRetry] = useState<"all" | "auto" | "manual">("all");
+  const [filterAutoRetry, setFilterAutoRetry] = useState<"all" | "auto" | "manual" | "exhausted">("all");
 
   const MAX_AUTO_RETRY_ATTEMPTS = 3;
 
@@ -808,17 +808,27 @@ export default function Communication() {
                 Histórico de e-mails transacionais enviados pelo sistema.
               </p>
               <div className="flex items-center gap-1">
-                {(["all", "auto", "manual"] as const).map((f) => (
+                {(["all", "auto", "manual", "exhausted"] as const).map((f) => (
                   <button
                     key={f}
                     onClick={() => setFilterAutoRetry(f)}
                     className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
                       filterAutoRetry === f
-                        ? "bg-primary text-primary-foreground border-primary"
+                        ? f === "exhausted"
+                          ? "bg-orange-500 text-white border-orange-500"
+                          : "bg-primary text-primary-foreground border-primary"
+                        : f === "exhausted"
+                        ? "bg-background border-orange-300 text-orange-700 hover:bg-orange-50"
                         : "bg-background border-border hover:bg-muted"
                     }`}
                   >
-                    {f === "all" ? "Todos" : f === "auto" ? "Auto-reenviados" : "Manuais / Originais"}
+                    {f === "all"
+                      ? "Todos"
+                      : f === "auto"
+                      ? "Auto-reenviados"
+                      : f === "manual"
+                      ? "Manuais / Originais"
+                      : "Esgotadas"}
                   </button>
                 ))}
               </div>
@@ -858,6 +868,8 @@ export default function Communication() {
                       ? true
                       : filterAutoRetry === "auto"
                       ? log.isAutoRetry
+                      : filterAutoRetry === "exhausted"
+                      ? log.reservationId !== null && exhaustedReservationIds.has(log.reservationId)
                       : !log.isAutoRetry,
                   )
                   .map((log) => (
