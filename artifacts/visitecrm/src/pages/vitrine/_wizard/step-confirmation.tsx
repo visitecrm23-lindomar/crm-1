@@ -11,6 +11,7 @@ import {
   Search,
   Mail,
   Phone,
+  UserCircle,
 } from "lucide-react";
 import { PublicStore } from "@/lib/storeApi";
 import { calculateTripDuration } from "@/lib/tripDuration";
@@ -259,6 +260,34 @@ export function StepConfirmation({
           seats={effectiveSeats}
           paymentMethod={form.paymentMethod}
         />
+
+        <div className="rounded-2xl p-6 text-center border-2 print:hidden"
+          style={{ borderColor: store.primaryColor + "40", background: `${store.primaryColor}08` }}
+        >
+          <div className="flex justify-center mb-3">
+            <div
+              className="rounded-full p-3"
+              style={{ backgroundColor: store.primaryColor + "20" }}
+            >
+              <UserCircle className="w-8 h-8" style={{ color: store.primaryColor }} />
+            </div>
+          </div>
+          <h3 className="text-lg font-bold mb-1">Acompanhe sua reserva</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Acesse sua Área do Cliente para ver vouchers, pagamentos e todas as suas viagens.
+          </p>
+          <Button
+            onClick={() => navigate("/perfil")}
+            className="text-white font-semibold px-8"
+            style={{ backgroundColor: store.primaryColor }}
+          >
+            <UserCircle className="w-4 h-4 mr-2" />
+            Acessar Meu Perfil
+          </Button>
+          <p className="text-xs text-muted-foreground mt-3">
+            Use o e-mail e a senha enviados para <strong>{form.customerEmail}</strong>
+          </p>
+        </div>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center print:hidden">
           <Button onClick={handlePrint} variant="outline" className="flex items-center gap-2">

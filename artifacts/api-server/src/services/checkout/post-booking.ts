@@ -31,7 +31,7 @@ export async function runPostBookingSideEffects(args: PostBookingArgs): Promise<
   const storeBase = store.customDomain
     ? `https://${store.customDomain}`
     : `https://${store.slug}.visitecrm.com.br`;
-  const loginUrl = `${storeBase}/sign-in`;
+  const loginUrl = `${storeBase}/loja/${store.slug}/entrar`;
   const consultUrl = `${storeBase}/consultar-pedido`;
 
   try {

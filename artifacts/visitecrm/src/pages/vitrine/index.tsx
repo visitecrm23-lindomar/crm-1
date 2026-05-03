@@ -10,6 +10,7 @@ import VitrineCheckout from "./checkout";
 import VitrineOrderTracking from "./order-tracking";
 import ReservationWizard from "./reservation-wizard";
 import ReferralLanding from "./referral-landing";
+import VitrineSignIn from "./store-signin";
 import { Loader2, AlertCircle } from "lucide-react";
 
 interface WizardErrorBoundaryState { hasError: boolean }
@@ -219,6 +220,9 @@ function StoreRouter({ slug }: { slug: string }) {
         </Route>
         <Route path={`/loja/${slug}/consultar-pedido`}>
           <VitrineOrderTracking slug={slug} store={store} />
+        </Route>
+        <Route path={`/loja/${slug}/entrar`}>
+          <VitrineSignIn slug={slug} store={store} />
         </Route>
         <Route path={`/loja/${slug}/indicacao`}>
           <ReferralLanding slug={slug} store={store} />

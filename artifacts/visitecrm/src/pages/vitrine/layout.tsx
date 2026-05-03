@@ -113,7 +113,7 @@ export default function VitrineLayout({
               </a>
             ) : !isSignedIn ? (
               <a
-                href="/sign-in"
+                href={`/loja/${slug}/entrar`}
                 className="flex items-center gap-1.5 text-white/90 hover:text-white text-sm font-medium transition-colors bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg"
               >
                 <UserCircle className="w-4 h-4" />
@@ -216,7 +216,7 @@ export default function VitrineLayout({
               </a>
             ) : !isSignedIn ? (
               <a
-                href="/sign-in"
+                href={`/loja/${slug}/entrar`}
                 className="flex items-center gap-2 text-white/90 hover:text-white text-sm font-medium py-1"
                 onClick={() => setMobileMenuOpen(false)}
               >
