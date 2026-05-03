@@ -21,18 +21,21 @@ const {
   mockBroadcastSeatUpdate,
   mockWriteClientActivity,
   mockEnqueueConfirmationEmail,
+  mockSendWelcomeEmail,
 } = vi.hoisted(() => {
   const selectQueue: unknown[][] = [];
   const mockTransaction = vi.fn();
   const mockBroadcastSeatUpdate = vi.fn().mockResolvedValue(undefined);
   const mockWriteClientActivity = vi.fn().mockResolvedValue(undefined);
   const mockEnqueueConfirmationEmail = vi.fn().mockResolvedValue(undefined);
+  const mockSendWelcomeEmail = vi.fn().mockResolvedValue(undefined);
   return {
     selectQueue,
     mockTransaction,
     mockBroadcastSeatUpdate,
     mockWriteClientActivity,
     mockEnqueueConfirmationEmail,
+    mockSendWelcomeEmail,
   };
 });
 
@@ -139,6 +142,7 @@ vi.mock("../queues/email-helpers.js", () => ({
   enqueueReservationConfirmationEmail: mockEnqueueConfirmationEmail,
   enqueueReservationCancellationEmail: vi.fn().mockResolvedValue(undefined),
   enqueueNewBookingNotificationEmail: vi.fn().mockResolvedValue(undefined),
+  sendWelcomeEmail: mockSendWelcomeEmail,
 }));
 
 vi.mock("../lib/reservation-number.js", () => ({
@@ -161,6 +165,7 @@ vi.mock("../lib/id.js", () => ({
 
 import storePublicRouter from "../routes/store-public.js";
 import { errorHandler } from "../middlewares/errorHandler.js";
+import { clerkClient } from "@clerk/express";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -233,6 +238,18 @@ const FAKE_STORE = {
   customDomain: null,
 };
 
+const FAKE_RESERVATION = {
+  reservationId: "res-001",
+  reservationNumber: "AG-EX-202507-0001",
+  voucherCode: "VCH-001",
+  seats: [],
+  totalValue: "150.00",
+  tripName: "Excursão Nordeste",
+  tripDestination: "Fortaleza",
+  tripDepartureDate: new Date("2027-06-01"),
+  tripReturnDate: null,
+};
+
 const FAKE_TRIP_PRODUCT = {
   id: "prod-001",
   storeId: "store-001",
@@ -289,6 +306,24 @@ function setupTripLinkedCheckoutQueue() {
     [FAKE_ORDER],                                                 // 8. post-tx order (db)
     [],                                                           // 9. post-tx items (db)
     [],                                                           // 10. IIFE — portal user check (db)
+  );
+}
+
+function setupNewUserCheckoutQueue() {
+  selectQueue.length = 0;
+  selectQueue.push(
+    [FAKE_STORE],                                                 // 1. getActiveStore (db)
+    [FAKE_TRIP_PRODUCT],                                          // 2. product fetch (db)
+    [{ availableSeats: 10 }],                                     // 3. trip seats Phase 1.5 (db)
+    [{ id: "user-001" }],                                         // 4. admin user (db, loadReservationContext)
+    [],                                                           // 5. pipeline stages (db, loadReservationContext)
+    [{ id: "trip-001", name: "Excursão Nordeste" }],              // 6. trip names (db, loadReservationContext)
+    [{ id: "client-001", cpf: null, birthDate: null }],           // 7. existing client (tx, upsertCheckoutClient)
+    [FAKE_ORDER],                                                 // 8. post-tx order (db)
+    [],                                                           // 9. post-tx items (db)
+    [],                                                           // 10. portal user check — returns empty → new user
+    [FAKE_RESERVATION],                                           // 11. reservation query for confirmation email
+    [],                                                           // 12. reservation rows for agency notification
   );
 }
 
@@ -359,5 +394,66 @@ describe("POST /api/public/store/:slug/orders — checkout sync", () => {
     expect(res.status).toBe(200);
     expect(mockBroadcastSeatUpdate).not.toHaveBeenCalled();
     expect(mockWriteClientActivity).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Welcome e-mail + reservation confirmation credentials — new user happy path
+// ---------------------------------------------------------------------------
+
+describe("POST /api/public/store/:slug/orders — welcome email for new portal user", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSendWelcomeEmail.mockResolvedValue(undefined);
+    mockEnqueueConfirmationEmail.mockResolvedValue(undefined);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
+      cb(buildTxMock()),
+    );
+    vi.mocked(clerkClient.users.createUser).mockResolvedValue({
+      id: "clerk-user-new",
+    } as never);
+    vi.mocked(clerkClient.signInTokens.createSignInToken).mockResolvedValue({
+      url: "https://clerk.test/magic",
+    } as never);
+  });
+
+  // ── (c) sendWelcomeEmail receives plainTextPassword ──────────────────────
+
+  it("(c) calls sendWelcomeEmail with a non-empty plainTextPassword for a brand-new customer", async () => {
+    setupNewUserCheckoutQueue();
+
+    const res = await request(buildApp())
+      .post("/api/public/store/minha-loja/orders")
+      .send(VALID_BODY);
+
+    expect(res.status).toBe(200);
+
+    await vi.waitFor(() => expect(mockSendWelcomeEmail).toHaveBeenCalledOnce());
+
+    const [welcomeProps] = mockSendWelcomeEmail.mock.calls[0] as [Record<string, unknown>];
+    expect(typeof welcomeProps.plainTextPassword).toBe("string");
+    expect((welcomeProps.plainTextPassword as string).length).toBeGreaterThan(0);
+    expect(welcomeProps.clientEmail).toBe(VALID_BODY.customerEmail);
+  });
+
+  // ── (d) enqueueReservationConfirmationEmail includes credentials.plainTextPassword
+
+  it("(d) enqueueReservationConfirmationEmail includes credentials.plainTextPassword when the user is new", async () => {
+    setupNewUserCheckoutQueue();
+
+    const res = await request(buildApp())
+      .post("/api/public/store/minha-loja/orders")
+      .send(VALID_BODY);
+
+    expect(res.status).toBe(200);
+
+    await vi.waitFor(() => expect(mockEnqueueConfirmationEmail).toHaveBeenCalledOnce());
+
+    const callArgs = mockEnqueueConfirmationEmail.mock.calls[0][0] as {
+      props: { credentials?: { plainTextPassword?: string } };
+    };
+    expect(callArgs.props.credentials).toBeDefined();
+    expect(typeof callArgs.props.credentials?.plainTextPassword).toBe("string");
+    expect((callArgs.props.credentials?.plainTextPassword ?? "").length).toBeGreaterThan(0);
   });
 });
