@@ -214,7 +214,7 @@ router.post("/store/init", async (req, res): Promise<void> => {
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
     const existing = await getStoreForTenant(me.tenantId);
-    if (existing) { res.status(409).json({ error: "Store already exists", store: existing }); return; }
+    if (existing) { res.status(409).json({ error: "Store already exists", store: redactStore(existing as unknown as Record<string, unknown>) }); return; }
     const parsed = InitStoreBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const id = generateId();
@@ -228,7 +228,7 @@ router.post("/store/init", async (req, res): Promise<void> => {
       ...(parsed.data.paymentMethods && { paymentMethods: parsed.data.paymentMethods }),
     });
     const [store] = await db.select().from(storesTable).where(eq(storesTable.id, id)).limit(1);
-    res.status(201).json(store);
+    res.status(201).json(redactStore(store as unknown as Record<string, unknown>));
   } catch (err: unknown) {
     const dbErr = err as { code?: string };
     if (dbErr?.code === "23505") {

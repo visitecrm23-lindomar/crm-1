@@ -85,14 +85,25 @@ async function applyMigrations() {
   try {
     await runMigrations(migrationsFolder);
     logger.info("Drizzle migrations complete");
-    await backfillEncryptedCredentials();
   } catch (err) {
     logger.error({ err }, "Drizzle migration failed");
   }
+  // The credential backfill is intentionally OUTSIDE the try/catch above so
+  // a failure (bad encryption key, DB error mid-run) is fatal and aborts
+  // boot — leaving plaintext credentials half-encrypted is worse than
+  // refusing to start.
+  await backfillEncryptedCredentials();
+  logger.info("Credential backfill complete");
 }
 
 applyMigrations()
-  .catch((err) => logger.error({ err }, "applyMigrations threw unexpectedly"))
+  .catch((err) => {
+    // applyMigrations only throws when the credential backfill fails (drizzle
+    // errors are caught + logged inside it). Half-encrypted credentials would
+    // be worse than no boot at all, so abort the process.
+    logger.error({ err }, "Credential backfill failed — aborting boot");
+    process.exit(1);
+  })
   .then(async () => {
     // ── Birthday cron (node-cron, runs in-process, no Redis required) ──
     cron.schedule("0 0 * * *", () => {
