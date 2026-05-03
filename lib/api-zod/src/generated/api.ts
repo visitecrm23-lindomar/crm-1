@@ -12,6 +12,19 @@ import * as zod from "zod";
  */
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
+  redis: zod.object({
+    connected: zod.boolean(),
+    configured: zod.boolean(),
+  }),
+  bullmq: zod.object({
+    active: zod.boolean(),
+    workers: zod.object({
+      email: zod.boolean(),
+      reminder: zod.boolean(),
+      pdf: zod.boolean(),
+      commissionSync: zod.boolean(),
+    }),
+  }),
 });
 
 /**

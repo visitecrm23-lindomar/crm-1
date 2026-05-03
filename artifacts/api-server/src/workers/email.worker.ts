@@ -91,3 +91,7 @@ export async function stopEmailWorker(): Promise<void> {
     _worker = null;
   }
 }
+
+export function isEmailWorkerRunning(): boolean {
+  return _worker !== null;
+}

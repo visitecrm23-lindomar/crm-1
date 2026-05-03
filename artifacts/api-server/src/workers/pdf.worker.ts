@@ -76,3 +76,7 @@ export async function stopPdfWorker(): Promise<void> {
     _worker = null;
   }
 }
+
+export function isPdfWorkerRunning(): boolean {
+  return _worker !== null;
+}

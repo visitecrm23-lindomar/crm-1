@@ -320,3 +320,7 @@ export async function stopReminderWorker(): Promise<void> {
     _worker = null;
   }
 }
+
+export function isReminderWorkerRunning(): boolean {
+  return _worker !== null;
+}

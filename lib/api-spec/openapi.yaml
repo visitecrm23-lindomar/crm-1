@@ -61,7 +61,7 @@ tags:
     description: Client notes
 
 paths:
-  /healthz:
+  /health:
     get:
       operationId: healthCheck
       tags: [health]
@@ -69,6 +69,30 @@ paths:
       responses:
         "200":
           description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+        "503":
+          description: Degraded (Redis disconnected or BullMQ workers not running)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /healthz:
+    get:
+      operationId: healthCheckLegacy
+      tags: [health]
+      summary: Health check (legacy alias)
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+        "503":
+          description: Degraded (Redis disconnected or BullMQ workers not running)
           content:
             application/json:
               schema:
@@ -4532,7 +4556,33 @@ components:
       properties:
         status:
           type: string
-      required: [status]
+        redis:
+          type: object
+          properties:
+            connected:
+              type: boolean
+            configured:
+              type: boolean
+          required: [connected, configured]
+        bullmq:
+          type: object
+          properties:
+            active:
+              type: boolean
+            workers:
+              type: object
+              properties:
+                email:
+                  type: boolean
+                reminder:
+                  type: boolean
+                pdf:
+                  type: boolean
+                commissionSync:
+                  type: boolean
+              required: [email, reminder, pdf, commissionSync]
+          required: [active, workers]
+      required: [status, redis, bullmq]
 
     SuccessResponse:
       type: object

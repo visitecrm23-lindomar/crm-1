@@ -57,3 +57,7 @@ export async function stopCommissionSyncWorker(): Promise<void> {
     _worker = null;
   }
 }
+
+export function isCommissionSyncWorkerRunning(): boolean {
+  return _worker !== null;
+}
