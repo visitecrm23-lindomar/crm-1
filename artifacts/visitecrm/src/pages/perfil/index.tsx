@@ -803,12 +803,11 @@ function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
   );
 }
 
-const TIER_CONFIG: Record<string, { label: string; color: string; bg: string; min: number; max: number }> = {
-  bronze: { label: "Bronze", color: "text-amber-700", bg: "bg-amber-100", min: 0, max: 500 },
-  prata:  { label: "Prata",  color: "text-slate-500", bg: "bg-slate-100", min: 500, max: 2000 },
-  ouro:   { label: "Ouro",   color: "text-yellow-500", bg: "bg-yellow-50", min: 2000, max: 2000 },
-  silver: { label: "Prata",  color: "text-slate-500", bg: "bg-slate-100", min: 500, max: 2000 },
-  gold:   { label: "Ouro",   color: "text-yellow-500", bg: "bg-yellow-50", min: 2000, max: 2000 },
+const TIER_CONFIG: Record<string, { label: string; color: string; bg: string; min: number; next: number | null; nextLabel: string | null }> = {
+  bronze:  { label: "Bronze",   color: "text-amber-700",  bg: "bg-amber-100",  min: 0,    next: 500,  nextLabel: "Prata" },
+  silver:  { label: "Prata",    color: "text-slate-500",  bg: "bg-slate-100",  min: 500,  next: 1500, nextLabel: "Ouro" },
+  gold:    { label: "Ouro",     color: "text-yellow-500", bg: "bg-yellow-50",  min: 1500, next: 5000, nextLabel: "Diamante" },
+  diamond: { label: "Diamante", color: "text-cyan-500",   bg: "bg-cyan-50",    min: 5000, next: null, nextLabel: null },
 };
 
 function tierLabel(tier: string): string {
@@ -829,8 +828,9 @@ function TierBadge({ tier }: { tier: string }) {
 const TRANSACTION_TYPE_MAP: Record<string, { label: string; sign: "+" | "-"; color: string }> = {
   earn:    { label: "Ganho",   sign: "+", color: "text-green-600" },
   redeem:  { label: "Resgate", sign: "-", color: "text-red-600" },
-  refund:  { label: "Estorno", sign: "+", color: "text-blue-600" },
+  bonus:   { label: "Bônus",   sign: "+", color: "text-purple-600" },
   expire:  { label: "Expirado",sign: "-", color: "text-orange-500" },
+  refund:  { label: "Estorno", sign: "+", color: "text-blue-600" },
   adjust:  { label: "Ajuste",  sign: "+", color: "text-slate-500" },
 };
 
@@ -849,14 +849,14 @@ function FidelidadeTab({ loyalty, primaryColor }: { loyalty: ClientLoyalty | nul
 
   const tier = loyalty.tier.toLowerCase();
   const tierCfg = TIER_CONFIG[tier] ?? TIER_CONFIG["bronze"];
-  const nextTierName = tier === "bronze" ? "Prata" : tier === "silver" || tier === "prata" ? "Ouro" : null;
-  const progress = nextTierName
+  const nextTierName = tierCfg.nextLabel;
+  const progress = tierCfg.next !== null
     ? Math.min(
-        ((loyalty.totalPoints - tierCfg.min) / (tierCfg.max - tierCfg.min)) * 100,
+        ((loyalty.totalPoints - tierCfg.min) / (tierCfg.next - tierCfg.min)) * 100,
         100,
       )
     : 100;
-  const pointsToNext = nextTierName ? Math.max(tierCfg.max - loyalty.totalPoints, 0) : 0;
+  const pointsToNext = tierCfg.next !== null ? Math.max(tierCfg.next - loyalty.totalPoints, 0) : 0;
 
   const equivalentValue = (loyalty.availablePoints * loyalty.realPerPoint).toLocaleString("pt-BR", {
     style: "currency",
