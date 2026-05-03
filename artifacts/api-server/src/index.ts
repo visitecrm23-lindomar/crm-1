@@ -50,12 +50,18 @@ if (Number.isNaN(port) || port <= 0) {
         "and set it in the environment.",
     );
   }
-  const buf = Buffer.from(raw.trim(), "hex");
-  if (buf.length !== 32) {
+  // Strip every whitespace character (the value sometimes arrives with stray
+  // newlines, surrounding quotes, or copy-paste padding from the secrets UI).
+  const cleaned = raw.replace(/\s+/g, "").replace(/^["']|["']$/g, "");
+  if (!/^[0-9a-fA-F]{64}$/.test(cleaned)) {
     throw new Error(
-      `CREDENTIAL_ENCRYPTION_KEY must be 32 bytes (64 hex chars); got ${buf.length} bytes`,
+      `CREDENTIAL_ENCRYPTION_KEY must be exactly 64 hexadecimal characters (32 bytes). ` +
+        `Got a value of length ${cleaned.length}. ` +
+        `Generate a fresh one with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`,
     );
   }
+  // Re-export the cleaned value so downstream getKey() sees the canonical form.
+  process.env["CREDENTIAL_ENCRYPTION_KEY"] = cleaned;
 }
 
 // Webhook secret validation. In production both are mandatory; dev/test only warns.
