@@ -11,6 +11,7 @@ import { roundMoney } from "../lib/pricing";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { ADMIN_ROLES, MANAGEMENT_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
+import { syncReservationPaymentStatus } from "../lib/reservation-payments";
 
 const router = Router();
 
@@ -28,44 +29,6 @@ async function recalculateClientFinancials(clientId: string, tenantId: string): 
     totalSpent: row.total_spent,
     outstandingBalance: row.outstanding_balance,
   }).where(and(eq(clientsTable.id, clientId), eq(clientsTable.tenantId, tenantId)));
-}
-
-async function syncReservationPaymentStatus(reservationId: string, tenantId: string): Promise<void> {
-  const [reservation] = await db.select().from(reservationsTable)
-    .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)))
-    .limit(1);
-  if (!reservation) return;
-  if (reservation.status === "cancelled" || reservation.status === "completed") return;
-
-  const result = await db.execute(sql`
-    SELECT COALESCE(SUM(amount::numeric), 0) AS total_paid
-    FROM payments
-    WHERE reservation_id = ${reservationId} AND tenant_id = ${tenantId} AND status = 'paid'
-  `);
-  const row = (result as unknown as { rows: Array<{ total_paid: string }> }).rows[0];
-  const paidValue = roundMoney(Number(row?.total_paid ?? "0"));
-  const totalValue = roundMoney(Number(reservation.totalValue));
-  const balance = roundMoney(Math.max(totalValue - paidValue, 0));
-
-  const updates: Partial<typeof reservationsTable.$inferInsert> = {
-    paidValue: String(paidValue),
-    balance: String(balance),
-  };
-
-  if (paidValue >= totalValue) {
-    updates.status = "confirmed";
-    if (!reservation.confirmedAt) updates.confirmedAt = new Date();
-    updates.expiresAt = null;
-  } else if (reservation.status === "confirmed") {
-    // Partial payment reversal: demote back to pending.
-    // expiresAt is intentionally left null — there is no meaningful TTL to
-    // restore at this point, and automatically releasing seats after a reversal
-    // could cause data loss. Staff should handle seat release manually.
-    updates.status = "pending";
-  }
-
-  await db.update(reservationsTable).set(updates)
-    .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)));
 }
 
 async function syncMonthlyGoalProgress(sellerId: string, tenantId: string): Promise<void> {

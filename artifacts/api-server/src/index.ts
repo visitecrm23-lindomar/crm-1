@@ -36,6 +36,14 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+if (!process.env["STRIPE_WEBHOOK_SECRET"]) {
+  logger.warn("⚠️  STRIPE_WEBHOOK_SECRET is not set. POST /api/webhooks/store/stripe and SaaS billing webhook will reject events.");
+}
+
+if (!process.env["MP_WEBHOOK_SECRET"]) {
+  logger.warn("⚠️  MP_WEBHOOK_SECRET is not set. POST /api/webhooks/store/mercadopago will reject all events with 503.");
+}
+
 const __serverDir = path.dirname(fileURLToPath(import.meta.url));
 const migrationsFolder = path.resolve(__serverDir, "../../../lib/db/drizzle");
 
