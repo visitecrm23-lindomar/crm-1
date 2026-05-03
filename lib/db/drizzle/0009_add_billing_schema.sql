@@ -41,20 +41,6 @@ CREATE TABLE IF NOT EXISTS usage_tracking (
 
 CREATE INDEX IF NOT EXISTS usage_tracking_tenant_idx ON usage_tracking (tenant_id, period_start);
 
--- Seed default plans (Starter, Pro, Enterprise) — conflict on slug to be safe across envs
-INSERT INTO plans (id, name, slug, description, monthly_price, annual_price, max_users, max_clients, max_trips, features, is_active, is_featured, sort_order, trial_days, payment_required)
-VALUES
-  ('plan_starter',  'Starter',    'starter',    'Para agências iniciantes',    0.00,    0.00,   3,   500,   20,  '["Até 3 usuários","500 clientes","20 viagens"]'::json,                              true, false, 1, 0,  false),
-  ('plan_pro',      'Pro',        'pro',        'Para agências em crescimento', 97.00,  970.00, 10,  2000,  100, '["Até 10 usuários","2000 clientes","100 viagens","Suporte prioritário"]'::json,     true, true,  2, 14, true),
-  ('plan_enterprise','Enterprise','enterprise', 'Para grandes operadoras',     397.00, 3970.00, 50, 10000,  500, '["Usuários ilimitados","10000 clientes","500 viagens","Suporte dedicado"]'::json,  true, false, 3, 14, true)
-ON CONFLICT (slug) DO UPDATE SET
-  name             = EXCLUDED.name,
-  monthly_price    = EXCLUDED.monthly_price,
-  annual_price     = EXCLUDED.annual_price,
-  max_users        = EXCLUDED.max_users,
-  max_clients      = EXCLUDED.max_clients,
-  max_trips        = EXCLUDED.max_trips,
-  trial_days       = EXCLUDED.trial_days,
-  payment_required = EXCLUDED.payment_required,
-  is_active        = EXCLUDED.is_active,
-  sort_order       = EXCLUDED.sort_order;
+-- NOTE: Plan seed data (Starter/Pro/Enterprise) is NOT seeded here.
+-- Run `pnpm --filter @workspace/scripts run seed:plans` after migrations
+-- to populate or refresh plan rows. See scripts/src/seed-plans.ts.

@@ -116,6 +116,24 @@ The platform includes a multi-tenant e-commerce solution with both an admin pane
   - `CreateTripBody` Zod schema validation (required fields, type errors, optional pricing fields)
   All pricing functions imported directly from `src/lib/reservationPricing.ts`.
 
+## Database Migrations & Seeding
+
+### Migrations
+Drizzle ORM manages all schema migrations in `lib/db/drizzle/` (files `0000`–`0010`).  
+Migrations run automatically on API server startup via `runMigrations()` in `lib/db/src/migrate.ts`.  
+Migration `0000` uses `CREATE TABLE IF NOT EXISTS` and `DO $$ IF NOT EXISTS $$` guards on all FK constraints, making it safe to run against both fresh and existing databases.
+
+**Important**: Never mutate already-applied historical migrations (`0000`–`0009`). Add schema changes as new numbered migration files.
+
+### Plan Seeding
+Plan rows (Starter, Pro, Enterprise) are **not** seeded automatically on startup. After running migrations on a fresh database, seed plans manually:
+
+```bash
+pnpm --filter @workspace/scripts run seed:plans
+```
+
+This is required for the billing system, plan selection UI, and tenant onboarding to function correctly. See `scripts/src/seed-plans.ts`.
+
 ## External Dependencies
 
 - **Clerk**: For user authentication and authorization.

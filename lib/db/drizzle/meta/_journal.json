@@ -71,6 +71,13 @@
       "when": 1745500000000,
       "tag": "0009_add_billing_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1775940000000,
+      "tag": "0010_extracted_inline_migrations",
+      "breakpoints": true
     }
   ]
 }
