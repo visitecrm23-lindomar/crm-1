@@ -1,3 +1,7 @@
+// CRM client (clientsTable) upsert that runs INSIDE the order transaction for
+// atomicity. Clerk portal account creation lives in `portal-account.ts` because
+// it must run OUTSIDE the transaction (external Clerk API call, fire-and-forget,
+// post-commit) and is invoked from `post-booking.ts`.
 import { clientsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { generateId } from "../../lib/id";

@@ -1,3 +1,7 @@
+// Clerk portal account provisioning. Kept separate from `checkout-user.ts`
+// (CRM client upsert) because this runs OUTSIDE the order transaction —
+// Clerk API calls cannot participate in the DB transaction and are invoked
+// post-commit from `post-booking.ts` as fire-and-forget.
 import { randomBytes } from "crypto";
 import { clerkClient } from "@clerk/express";
 import { db } from "@workspace/db";
