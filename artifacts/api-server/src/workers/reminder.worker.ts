@@ -335,12 +335,20 @@ export async function retryFailedBookingEmails(): Promise<void> {
   for (const log of toRetry) {
     const reservationId = log.reservationId!;
 
-    // Fetch all email_log entries for this reservation in the 2-hour window.
-    // We use one query to check two things:
+    // Fetch email_log entries for this reservation in the 2-hour window.
+    // We select both `status` and `isAutoRetry` to check two things:
     //   1. Whether a successful send already exists (abort if so — delivery done).
-    //   2. How many auto-retries have already been attempted.
+    //   2. How many automatic retries have already been attempted.
+    //
+    // Counting strategy: we count only rows where isAutoRetry=true (i.e. rows
+    // written by this worker). This intentionally excludes:
+    //   - The original failure (isAutoRetry=false, written by the email queue).
+    //   - Any manual resends triggered by staff (isAutoRetry=false).
+    // Using the flag rather than "total window rows minus 1" prevents manual
+    // resends from eating into the auto-retry budget and avoids inflating the
+    // counter when old successful sends exist outside the window.
     const windowLogs = await db
-      .select({ status: emailLogsTable.status })
+      .select({ status: emailLogsTable.status, isAutoRetry: emailLogsTable.isAutoRetry })
       .from(emailLogsTable)
       .where(
         and(
@@ -364,11 +372,11 @@ export async function retryFailedBookingEmails(): Promise<void> {
       continue;
     }
 
-    // attemptsInWindow = 1 means only the original failure; each auto-retry
-    // that produced a new log (sent or failed) adds 1.
-    // autoRetriesDone = attemptsInWindow - 1 (excluding original failure).
+    // Count only auto-retry entries (isAutoRetry=true) to get an accurate
+    // picture of how many automatic delivery attempts have been made for
+    // this failure event, unaffected by manual resends or prior history.
+    const autoRetriesDone = windowLogs.filter((l) => l.isAutoRetry).length;
     const attemptsInWindow = windowLogs.length;
-    const autoRetriesDone = attemptsInWindow - 1;
 
     if (autoRetriesDone >= MAX_AUTO_RETRY_ATTEMPTS) {
       logger.warn(
