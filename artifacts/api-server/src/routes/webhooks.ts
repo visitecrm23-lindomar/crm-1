@@ -1,8 +1,8 @@
 import { Router, type Request, type NextFunction } from "express";
 import crypto from "node:crypto";
 import { db } from "@workspace/db";
-import { storeOrdersTable, reservationsTable, paymentsTable, storesTable } from "@workspace/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { storeOrdersTable, reservationsTable, paymentsTable, storesTable, tripsTable } from "@workspace/db";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { logger } from "../lib/logger";
 import { syncReservationPaymentStatus, paymentExistsForGatewayTx, type DbExecutor } from "../lib/reservation-payments";
@@ -680,7 +680,12 @@ async function markOrderRefunded(
   // CRM perspective). We then re-sync paid totals so balance/paidValue
   // reflect the demoted Payment rows.
   const reservations = await tx
-    .select({ id: reservationsTable.id, status: reservationsTable.status })
+    .select({
+      id: reservationsTable.id,
+      status: reservationsTable.status,
+      tripId: reservationsTable.tripId,
+      seats: reservationsTable.seats,
+    })
     .from(reservationsTable)
     .where(
       and(
@@ -692,7 +697,32 @@ async function markOrderRefunded(
   const cancellableIds = reservations
     .filter((r) => r.status !== RESERVATION_STATUS.CANCELLED && r.status !== RESERVATION_STATUS.COMPLETED)
     .map((r) => r.id);
+
+  // Restore trip seat counters BEFORE the bulk status update so we can read
+  // each reservation's current (pre-cancel) status. Confirmed seats go back
+  // to the confirmed bucket; reserved seats go back to the reserved bucket.
   if (cancellableIds.length > 0) {
+    const seatDeltaByTrip = new Map<string, { confirmed: number; reserved: number }>();
+    for (const r of reservations) {
+      if (!cancellableIds.includes(r.id)) continue;
+      const seatsCount = Array.isArray(r.seats) ? r.seats.length : 0;
+      if (seatsCount === 0 || !r.tripId) continue;
+      const entry = seatDeltaByTrip.get(r.tripId) ?? { confirmed: 0, reserved: 0 };
+      if (r.status === RESERVATION_STATUS.CONFIRMED) {
+        entry.confirmed += seatsCount;
+      } else {
+        entry.reserved += seatsCount;
+      }
+      seatDeltaByTrip.set(r.tripId, entry);
+    }
+    for (const [tripId, { confirmed, reserved }] of seatDeltaByTrip) {
+      await tx.update(tripsTable).set({
+        availableSeats: sql`LEAST(total_capacity, GREATEST(0, available_seats + ${confirmed + reserved}))`,
+        ...(confirmed > 0 ? { confirmedSeats: sql`GREATEST(0, confirmed_seats - ${confirmed})` } : {}),
+        ...(reserved > 0 ? { reservedSeats: sql`GREATEST(0, reserved_seats - ${reserved})` } : {}),
+      }).where(and(eq(tripsTable.id, tripId), eq(tripsTable.tenantId, order.tenantId)));
+    }
+
     await tx
       .update(reservationsTable)
       .set({ status: RESERVATION_STATUS.CANCELLED, cancelledAt: now })

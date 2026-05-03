@@ -1204,9 +1204,12 @@ router.delete("/reservations/:id", async (req, res, next: NextFunction): Promise
       if (!CANCELLING_STATUSES.includes(existing.status)) {
         const seatsCount = existing.seats.length;
         if (seatsCount > 0) {
+          const wasConfirmedOnDelete = existing.status === RESERVATION_STATUS.CONFIRMED;
           await tx.update(tripsTable).set({
             availableSeats: sql`LEAST(total_capacity, GREATEST(0, available_seats + ${seatsCount}))`,
-            reservedSeats: sql`GREATEST(0, reserved_seats - ${seatsCount})`,
+            ...(wasConfirmedOnDelete
+              ? { confirmedSeats: sql`GREATEST(0, confirmed_seats - ${seatsCount})` }
+              : { reservedSeats: sql`GREATEST(0, reserved_seats - ${seatsCount})` }),
           }).where(and(eq(tripsTable.id, existing.tripId), eq(tripsTable.tenantId, me.tenantId)));
         }
       }
