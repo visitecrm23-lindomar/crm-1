@@ -391,6 +391,69 @@ describe("PATCH /api/reservations/:id — seat-to-passenger reconciliation", () 
     expect(seatUpdates[1].seatNumber).toBe("6G");
   });
 
+  it("returns 409 PASSENGERS_FILLED when reducing seats would remove a non-primary passenger with filled details", async () => {
+    const app = buildApp();
+    const existing = makeReservation({ seats: ["1A", "2B", "3C"] });
+    const updated = { ...existing, seats: ["1A"] };
+    const primaryPax = makePassenger("pax-primary", true, "1A", "João Silva", "111.222.333-44");
+    const filledPax = makePassenger("pax-filled", false, "2B", "Maria Souza", "999.888.777-66");
+    const ph = makePassenger("pax-ph1", false, "3C");
+
+    mockLimit.mockResolvedValueOnce([existing]);
+    const tx = buildTxMock([[updated], [primaryPax, filledPax, ph]]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    const res = await request(app).patch("/api/reservations/res-001").send({ seats: ["1A"] });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("PASSENGERS_FILLED");
+    expect(Array.isArray(res.body.affectedPassengers)).toBe(true);
+    const affected = res.body.affectedPassengers as { id: string }[];
+    expect(affected.some((p) => p.id === "pax-filled")).toBe(true);
+    expect(affected.every((p) => p.id !== "pax-primary")).toBe(true);
+
+    expect(capturedDeletes).toHaveLength(0);
+  });
+
+  it("returns 409 PASSENGERS_FILLED when clearing all seats (newCount=0) with filled passengers", async () => {
+    const app = buildApp();
+    const existing = makeReservation({ seats: ["1A", "2B"] });
+    const updated = { ...existing, seats: [] as string[] };
+    const primaryPax = makePassenger("pax-primary", true, "1A", "João Silva", "111.222.333-44");
+    const filledPax = makePassenger("pax-filled", false, "2B", "Carlos Lima", "555.444.333-22");
+
+    mockLimit.mockResolvedValueOnce([existing]);
+    const tx = buildTxMock([[updated], [primaryPax, filledPax]]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    const res = await request(app).patch("/api/reservations/res-001").send({ seats: [] });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("PASSENGERS_FILLED");
+    expect(Array.isArray(res.body.affectedPassengers)).toBe(true);
+
+    expect(capturedDeletes).toHaveLength(0);
+  });
+
+  it("allows reducing seats when only blank placeholder passengers are removed", async () => {
+    const app = buildApp();
+    const existing = makeReservation({ seats: ["1A", "2B", "3C"] });
+    const updated = { ...existing, seats: ["1A", "2B"] };
+    const primaryPax = makePassenger("pax-primary", true, "1A", "João Silva", "111.222.333-44");
+    const ph1 = makePassenger("pax-ph1", false, "2B");
+    const ph2 = makePassenger("pax-ph2", false, "3C");
+
+    mockLimit.mockResolvedValueOnce([existing]);
+    const tx = buildTxMock([[updated], [primaryPax, ph1, ph2]]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+    mockLimit.mockResolvedValueOnce([FAKE_TRIP]).mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app).patch("/api/reservations/res-001").send({ seats: ["1A", "2B"] });
+
+    expect(res.status).toBe(200);
+    expect(capturedDeletes).toHaveLength(1);
+  });
+
   it("bootstraps primary from client data and creates placeholders when no passengers exist", async () => {
     const app = buildApp();
     const existing = makeReservation({ seats: [] as string[] });

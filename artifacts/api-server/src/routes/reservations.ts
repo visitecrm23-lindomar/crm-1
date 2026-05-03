@@ -1007,6 +1007,17 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
         if (newCount === 0) {
           // seats cleared: delete all passenger rows to keep count aligned with seats.length.
           if (currentCount > 0) {
+            const filledOnClear = currentPassengers.filter(p =>
+              (p.name && p.name !== "A preencher") || p.cpf
+            );
+            if (filledOnClear.length > 0) {
+              throw new AppError(
+                "Cannot reduce seats: some passengers being removed already have their details filled in. Please clear or reassign them first.",
+                409,
+                "PASSENGERS_FILLED",
+                { affectedPassengers: filledOnClear.map(p => ({ id: p.id, name: p.name, cpf: p.cpf })) },
+              );
+            }
             await tx.delete(passengersTable)
               .where(eq(passengersTable.reservationId, req.params.id));
           }
@@ -1083,6 +1094,18 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
           const keepNonPrimary = sortedNonPrimary.slice(sortedNonPrimary.length - Math.max(0, keepNonPrimaryCount));
           const removeNonPrimary = sortedNonPrimary.slice(0, sortedNonPrimary.length - Math.max(0, keepNonPrimaryCount));
           const passengersToKeep = primaryPassenger ? [primaryPassenger, ...keepNonPrimary] : keepNonPrimary;
+
+          const filledPassengers = removeNonPrimary.filter(p =>
+            (p.name && p.name !== "A preencher") || p.cpf
+          );
+          if (filledPassengers.length > 0) {
+            throw new AppError(
+              "Cannot reduce seats: some passengers being removed already have their details filled in. Please clear or reassign them first.",
+              409,
+              "PASSENGERS_FILLED",
+              { affectedPassengers: filledPassengers.map(p => ({ id: p.id, name: p.name, cpf: p.cpf })) },
+            );
+          }
 
           if (removeNonPrimary.length > 0) {
             await tx.delete(passengersTable)
