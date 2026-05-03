@@ -64,6 +64,7 @@ applyMigrations()
       startReminderWorker();
       startPdfWorker();
       startCommissionSyncWorker();
+      logger.info("[queue] BullMQ workers started");
 
       // Register repeatable reminder jobs (idempotent — BullMQ de-dups by key)
       const reminderQueue = getReminderQueue();

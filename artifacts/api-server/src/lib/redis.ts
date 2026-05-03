@@ -5,8 +5,21 @@ let _connection: Redis | null = null;
 export let isQueueEnabled = false;
 
 export function getRedisConnection(): Redis | null {
-  const url = process.env["REDIS_URL"];
-  if (!url) return null;
+  const raw = process.env["REDIS_URL"]?.trim();
+  if (!raw) return null;
+
+  // Extract the canonical URL from values that may be a redis-cli command
+  // e.g. "redis-cli --tls -u rediss://..." → "rediss://..."
+  const urlMatch = raw.match(/(rediss?:\/\/\S+)/);
+  const url = urlMatch ? urlMatch[1] : raw;
+
+  // Enable TLS when the scheme is rediss:// OR when the host is a known managed
+  // Redis provider that requires TLS (e.g. Upstash). Passing tls:{} lets Node
+  // use its built-in CA bundle so the server certificate is fully verified.
+  const knownTlsHosts = [".upstash.io", ".redis.cache.windows.net", ".redislabs.com"];
+  let parsedHost = "";
+  try { parsedHost = new URL(url.replace(/^redis:\/\//, "https://")).hostname; } catch { /* ignore */ }
+  const useTls = url.startsWith("rediss://") || knownTlsHosts.some((h) => parsedHost.endsWith(h));
 
   if (!_connection) {
     try {
@@ -14,6 +27,7 @@ export function getRedisConnection(): Redis | null {
         maxRetriesPerRequest: null,
         enableReadyCheck: false,
         lazyConnect: false,
+        ...(useTls ? { tls: {} } : {}),
       });
 
       _connection.on("connect", () => {
@@ -29,7 +43,6 @@ export function getRedisConnection(): Redis | null {
         logger.warn("[redis] Connection closed");
       });
 
-      isQueueEnabled = true;
     } catch (err) {
       logger.error({ err }, "[redis] Failed to create connection");
       _connection = null;

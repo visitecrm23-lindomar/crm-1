@@ -2,6 +2,7 @@ import { db, clientsTable, couponsTable, birthdayMessagesTable, tenantsTable, sy
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { generateId } from "./id";
 import { sendBirthdayEmail } from "@workspace/email";
+import { getBirthdayEmailQueue } from "../queues/index";
 
 interface EvolutionConfig {
   apiUrl: string;
@@ -226,7 +227,7 @@ export async function processBirthdayForClient(
 
   if (settings.sendEmail && client.emailOptIn !== false && client.email) {
     try {
-      const result = await sendBirthdayEmail({
+      const birthdayEmailProps = {
         clientName: client.name,
         clientEmail: client.email,
         agencyName: agencyName,
@@ -235,15 +236,28 @@ export async function processBirthdayForClient(
         couponCode,
         discountPercent: settings.discountPercent,
         validUntil: validUntilStr,
-      }, {
+      };
+      const birthdayEmailOptions = {
         emailSubject: settings.emailSubject ?? null,
         senderName: settings.senderName ?? null,
         emailMessage: settings.emailMessage ? interpolateTemplate(settings.emailMessage) : null,
-      });
-      if (result.success) {
+      };
+
+      const birthdayQueue = getBirthdayEmailQueue();
+      if (birthdayQueue) {
+        await birthdayQueue.add("birthday-email", {
+          ...birthdayEmailProps,
+          tenantId,
+          ...birthdayEmailOptions,
+        });
         sentEmail = true;
       } else {
-        emailError = result.error;
+        const result = await sendBirthdayEmail(birthdayEmailProps, birthdayEmailOptions);
+        if (result.success) {
+          sentEmail = true;
+        } else {
+          emailError = result.error;
+        }
       }
     } catch (err) {
       emailError = err instanceof Error ? err.message : String(err);

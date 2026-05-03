@@ -1,6 +1,6 @@
 import { Queue } from "bullmq";
 import { getRedisConnection } from "../lib/redis";
-import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps } from "@workspace/email";
+import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, BirthdayEmailProps } from "@workspace/email";
 
 export interface ReservationEmailJobData extends ReservationConfirmationEmailProps {
   emailLogId: string;
@@ -12,6 +12,13 @@ export interface CancellationEmailJobData extends ReservationCancellationEmailPr
   emailLogId: string;
   tenantId: string;
   reservationId?: string;
+}
+
+export interface BirthdayEmailJobData extends BirthdayEmailProps {
+  tenantId: string;
+  emailSubject?: string | null;
+  senderName?: string | null;
+  emailMessage?: string | null;
 }
 
 export interface ReminderJobData {
@@ -47,6 +54,7 @@ const QUEUES = {
 
 let _emailQueue: Queue<ReservationEmailJobData> | null = null;
 let _cancellationEmailQueue: Queue<CancellationEmailJobData> | null = null;
+let _birthdayEmailQueue: Queue<BirthdayEmailJobData> | null = null;
 let _reminderQueue: Queue<ReminderJobData> | null = null;
 let _pdfQueue: Queue<PdfJobData> | null = null;
 let _commissionSyncQueue: Queue<CommissionSyncJobData> | null = null;
@@ -85,6 +93,24 @@ export function getCancellationEmailQueue(): Queue<CancellationEmailJobData> | n
     });
   }
   return _cancellationEmailQueue;
+}
+
+export function getBirthdayEmailQueue(): Queue<BirthdayEmailJobData> | null {
+  const conn = getRedisConnection();
+  if (!conn) return null;
+
+  if (!_birthdayEmailQueue) {
+    _birthdayEmailQueue = new Queue<BirthdayEmailJobData>(QUEUES.EMAIL, {
+      connection: conn,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 10_000 },
+        removeOnComplete: { count: 500 },
+        removeOnFail: { count: 200 },
+      },
+    });
+  }
+  return _birthdayEmailQueue;
 }
 
 export function getReminderQueue(): Queue<ReminderJobData> | null {
@@ -145,12 +171,14 @@ export async function closeQueues(): Promise<void> {
   await Promise.all([
     _emailQueue?.close().catch(() => {}),
     _cancellationEmailQueue?.close().catch(() => {}),
+    _birthdayEmailQueue?.close().catch(() => {}),
     _reminderQueue?.close().catch(() => {}),
     _pdfQueue?.close().catch(() => {}),
     _commissionSyncQueue?.close().catch(() => {}),
   ]);
   _emailQueue = null;
   _cancellationEmailQueue = null;
+  _birthdayEmailQueue = null;
   _reminderQueue = null;
   _pdfQueue = null;
   _commissionSyncQueue = null;
