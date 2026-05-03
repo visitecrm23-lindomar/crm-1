@@ -96,6 +96,7 @@ export type ExpenseStatus = (typeof EXPENSE_STATUS)[keyof typeof EXPENSE_STATUS]
 
 export const INVOICE_STATUS = {
   PENDING: "pending",
+  PENDING_PAYMENT: "pending_payment",
   PROCESSING: "processing",
   PAID: "paid",
   OVERDUE: "overdue",

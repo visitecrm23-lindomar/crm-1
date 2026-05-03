@@ -57,7 +57,7 @@ async function syncClientDeal(clientId: string, tenantId: string, tripId: string
       tripId,
       title,
       value: String(totalValue),
-      status: "open",
+      status: DEAL_STATUS.OPEN,
       ownerId,
     });
   }

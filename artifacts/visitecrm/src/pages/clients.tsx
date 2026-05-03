@@ -35,7 +35,7 @@ import { SeatMapPicker } from "@/components/SeatMapPicker";
 import { PlanLimitWall, usePlanLimitError } from "@/components/plan-limit-wall";
 
 import { formatCurrency } from "@/lib/utils";
-import { ROLES } from "@workspace/permissions";
+import { ROLES, PAYMENT_STATUS } from "@workspace/permissions";
 
 function cleanCPF(cpf: string): string {
   return cpf.replace(/\D/g, "");
@@ -354,9 +354,9 @@ function ClientPaymentsSection({ clientId }: { clientId: string }) {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                  p.status === "paid" ? "bg-green-100 text-green-700" :
-                  p.status === "overdue" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"
-                }`}>{p.status === "paid" ? "Pago" : p.status === "overdue" ? "Vencido" : "Pendente"}</span>
+                  p.status === PAYMENT_STATUS.PAID ? "bg-green-100 text-green-700" :
+                  p.status === PAYMENT_STATUS.OVERDUE ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"
+                }`}>{p.status === PAYMENT_STATUS.PAID ? "Pago" : p.status === PAYMENT_STATUS.OVERDUE ? "Vencido" : "Pendente"}</span>
                 <span className="text-sm font-semibold">{formatCurrency(p.amount)}</span>
               </div>
             </div>

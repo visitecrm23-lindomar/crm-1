@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useListTrips, useGetTrip, useListReservations, useUpdateReservation } from "@workspace/api-client-react";
-import { RESERVATION_STATUS } from "@workspace/permissions";
+import { RESERVATION_STATUS, type ReservationStatus } from "@workspace/permissions";
 import { Client360Modal } from "@/components/client360-modal";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -122,7 +122,7 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
     await updateReservation.mutateAsync({
       id: editingId,
       data: {
-        status: editForm.status as "pending" | "confirmed" | "cancelled" | "completed",
+        status: editForm.status as ReservationStatus,
         paymentMethod: editForm.paymentMethod || undefined,
       },
     });
@@ -130,7 +130,13 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
     refetchReservations();
   };
 
-  const STATUS_LABELS: Record<string, string> = { all: "Todos", confirmed: "Confirmado", pending: "Pendente", cancelled: "Cancelado", completed: "Concluído" };
+  const STATUS_LABELS: Record<string, string> = {
+    all: "Todos",
+    [RESERVATION_STATUS.CONFIRMED]: "Confirmado",
+    [RESERVATION_STATUS.PENDING]: "Pendente",
+    [RESERVATION_STATUS.CANCELLED]: "Cancelado",
+    [RESERVATION_STATUS.COMPLETED]: "Concluído",
+  };
 
 
   return (
@@ -296,12 +302,22 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
         <div className="bg-card border rounded-xl p-6 space-y-4">
           <h3 className="font-semibold">Reservas por Status</h3>
           <div className="space-y-3">
-            {["confirmed", "pending", "cancelled", "completed"].map(s => {
+            {[RESERVATION_STATUS.CONFIRMED, RESERVATION_STATUS.PENDING, RESERVATION_STATUS.CANCELLED, RESERVATION_STATUS.COMPLETED].map(s => {
               const count = (reservations?.data ?? []).filter(r => r.status === s).length;
               const total = reservations?.total ?? 0;
               const pct = total > 0 ? Math.round(count / total * 100) : 0;
-              const colors: Record<string, string> = { confirmed: "bg-green-500", pending: "bg-amber-500", cancelled: "bg-red-500", completed: "bg-blue-500" };
-              const labels: Record<string, string> = { confirmed: "Confirmado", pending: "Pendente", cancelled: "Cancelado", completed: "Concluído" };
+              const colors: Record<string, string> = {
+                [RESERVATION_STATUS.CONFIRMED]: "bg-green-500",
+                [RESERVATION_STATUS.PENDING]: "bg-amber-500",
+                [RESERVATION_STATUS.CANCELLED]: "bg-red-500",
+                [RESERVATION_STATUS.COMPLETED]: "bg-blue-500",
+              };
+              const labels: Record<string, string> = {
+                [RESERVATION_STATUS.CONFIRMED]: "Confirmado",
+                [RESERVATION_STATUS.PENDING]: "Pendente",
+                [RESERVATION_STATUS.CANCELLED]: "Cancelado",
+                [RESERVATION_STATUS.COMPLETED]: "Concluído",
+              };
               return (
                 <div key={s} className="space-y-1">
                   <div className="flex justify-between text-sm"><span>{labels[s] ?? s}</span><span className="font-medium">{count} ({pct}%)</span></div>
@@ -383,13 +399,13 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
                         <Select value={editForm.status} onValueChange={v => setEditForm(f => ({ ...f, status: v }))}>
                           <SelectTrigger className="h-7 text-xs w-32"><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            {["pending","confirmed","cancelled","completed"].map(s => (
+                            {[RESERVATION_STATUS.PENDING, RESERVATION_STATUS.CONFIRMED, RESERVATION_STATUS.CANCELLED, RESERVATION_STATUS.COMPLETED].map(s => (
                               <SelectItem key={s} value={s}>{STATUS_LABELS[s] ?? s}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       ) : (
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${r.status === "confirmed" ? "bg-green-100 text-green-700" : r.status === "pending" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-700"}`}>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${r.status === RESERVATION_STATUS.CONFIRMED ? "bg-green-100 text-green-700" : r.status === RESERVATION_STATUS.PENDING ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-700"}`}>
                           {STATUS_LABELS[r.status] ?? r.status}
                         </span>
                       )}

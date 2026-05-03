@@ -82,7 +82,7 @@ import {
   Unlink,
 } from "lucide-react";
 import { formatCurrencyBRL } from "@/lib/utils";
-import { ROLES } from "@workspace/permissions";
+import { ROLES, INVOICE_STATUS } from "@workspace/permissions";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -593,7 +593,7 @@ function PlanTab() {
   const plans = subData?.plans ?? [];
   const usage = subData?.usage;
 
-  const pendingFromList = subData?.invoices?.find(inv => inv.status === "pending" && inv.pixCode);
+  const pendingFromList = subData?.invoices?.find(inv => inv.status === INVOICE_STATUS.PENDING && inv.pixCode);
 
   async function handleUpgrade(plan: PlanPublic) {
     try {
@@ -815,7 +815,7 @@ function PlanTab() {
                   <Badge variant={statusVariants[inv.status] ?? "secondary"} className="text-xs">
                     {statusLabels[inv.status] ?? inv.status}
                   </Badge>
-                  {(inv.status === "pending" || inv.status === "pending_payment") && (
+                  {(inv.status === INVOICE_STATUS.PENDING || inv.status === INVOICE_STATUS.PENDING_PAYMENT) && (
                     <Button size="sm" variant="outline" className="h-7 text-xs"
                       onClick={() => { setPendingInvoice(inv); setShowPixModal(true); }}>
                       Pagar

@@ -20,7 +20,7 @@ import {
   useGenerateClientReferralCode,
   useGetMe,
 } from "@workspace/api-client-react";
-import { RESERVATION_STATUS, REFERRAL_STATUS } from "@workspace/permissions";
+import { RESERVATION_STATUS, REFERRAL_STATUS, PAYMENT_STATUS } from "@workspace/permissions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -598,7 +598,7 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                       const catInfo = ageCategoryLabel[ageCategory];
                       const firstSeat = r.seats?.[0] ?? null;
                       const paidForReservation = (payments?.data ?? [])
-                        .filter(p => p.reservationId === r.id && p.status === "paid")
+                        .filter(p => p.reservationId === r.id && p.status === PAYMENT_STATUS.PAID)
                         .reduce((sum, p) => sum + Number(p.amount), 0);
                       return (
                         <div key={r.id} className="p-3 rounded-lg border space-y-1.5">
@@ -648,8 +648,8 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                         </div>
                         <div className="text-right">
                           <p className="font-semibold text-sm">{formatCurrency(p.amount)}</p>
-                          <Badge variant={p.status === "paid" ? "default" : p.status === "overdue" ? "destructive" : "secondary"} className="text-xs">
-                            {p.status === "paid" ? "Pago" : p.status === "overdue" ? "Vencido" : "Pendente"}
+                          <Badge variant={p.status === PAYMENT_STATUS.PAID ? "default" : p.status === PAYMENT_STATUS.OVERDUE ? "destructive" : "secondary"} className="text-xs">
+                            {p.status === PAYMENT_STATUS.PAID ? "Pago" : p.status === PAYMENT_STATUS.OVERDUE ? "Vencido" : "Pendente"}
                           </Badge>
                         </div>
                       </div>

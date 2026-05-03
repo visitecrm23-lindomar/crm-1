@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { PAYMENT_METHOD_LABELS } from "@/lib/labels";
-import { ROLES, RESERVATION_STATUS } from "@workspace/permissions";
+import { ROLES, RESERVATION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, COMMISSION_STATUS } from "@workspace/permissions";
 
 const fmt = (v: number) => formatCurrency(v);
 const fmtCompact = (v: number) => {
@@ -235,7 +235,7 @@ export default function Revenue() {
 
   const { data: chartData, isLoading: loadingChart } = useGetDashboardRevenueChart({ period });
   const { data: paymentSummary } = useGetPaymentsSummary();
-  const { data: paymentsData } = useListPayments({ type: "receivable", status: "paid", limit: 500 });
+  const { data: paymentsData } = useListPayments({ type: PAYMENT_TYPE.RECEIVABLE, status: PAYMENT_STATUS.PAID, limit: 500 });
   const { data: tripsData } = useListTrips({ limit: 50 });
   const { data: reservationsData } = useListReservations({ limit: 500 });
   const { data: commissionsRaw } = useListCommissions();
@@ -353,7 +353,7 @@ export default function Revenue() {
     for (const c of commissions) {
       if (!map[c.userId]) map[c.userId] = { total: 0, paid: 0, count: 0 };
       map[c.userId].total += parseFloat(c.commissionAmount);
-      if (c.status === "paid") map[c.userId].paid += parseFloat(c.commissionAmount);
+      if (c.status === COMMISSION_STATUS.PAID) map[c.userId].paid += parseFloat(c.commissionAmount);
       map[c.userId].count += 1;
     }
     return Object.entries(map)
@@ -443,10 +443,10 @@ export default function Revenue() {
               <SelectTrigger className="w-[150px] h-9 text-sm"><SelectValue placeholder="Status da Reserva" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos os Status</SelectItem>
-                <SelectItem value="pending">Pendente</SelectItem>
-                <SelectItem value="confirmed">Confirmada</SelectItem>
-                <SelectItem value="completed">Concluída</SelectItem>
-                <SelectItem value="cancelled">Cancelada</SelectItem>
+                <SelectItem value={RESERVATION_STATUS.PENDING}>Pendente</SelectItem>
+                <SelectItem value={RESERVATION_STATUS.CONFIRMED}>Confirmada</SelectItem>
+                <SelectItem value={RESERVATION_STATUS.COMPLETED}>Concluída</SelectItem>
+                <SelectItem value={RESERVATION_STATUS.CANCELLED}>Cancelada</SelectItem>
               </SelectContent>
             </Select>
             <Select value={filterPaymentMethod || "all"} onValueChange={v => setFilterPaymentMethod(v === "all" ? "" : v)}>

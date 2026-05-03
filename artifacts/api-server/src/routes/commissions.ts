@@ -5,6 +5,7 @@ import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { ADMIN_ROLES } from '../lib/tenant';
+import { COMMISSION_STATUS } from "@workspace/permissions";
 
 const router = Router();
 
@@ -168,7 +169,7 @@ router.get("/commissions/my-rank", async (req, res): Promise<void> => {
         COALESCE(SUM(commission_amount::numeric), 0) AS total_commission
       FROM commissions
       WHERE tenant_id = ${me.tenantId}
-        AND status IN ('pending', 'paid', 'approved')
+        AND status IN (${COMMISSION_STATUS.PENDING}, ${COMMISSION_STATUS.PAID}, ${COMMISSION_STATUS.APPROVED})
         AND to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM') = ${month}
       GROUP BY user_id
       ORDER BY total_commission DESC
