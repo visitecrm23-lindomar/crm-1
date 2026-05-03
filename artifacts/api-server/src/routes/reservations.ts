@@ -635,7 +635,8 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
     const formatted = await formatReservation(reservation);
     res.status(201).json(formatted);
     broadcastSeatUpdate(reservation.tripId, me.tenantId).catch(() => {});
-    CalendarSyncService.syncTrip(reservation.tripId).catch(() => {});
+    CalendarSyncService.syncTrip(reservation.tripId)
+      .catch((err) => req.log.warn({ err, context: "reservation.create", tripId: reservation.tripId, reservationId: id }, "Calendar sync falhou — continuando"));
     enqueueCommissionSync(id, me.tenantId)
       .catch((err) => req.log.error({ err }, "Error enqueuing commission sync after reservation creation"));
     if (reservation.clientId) {
@@ -1190,7 +1191,8 @@ router.delete("/reservations/:id", async (req, res, next: NextFunction): Promise
     });
     res.json({ success: true });
     broadcastSeatUpdate(existing.tripId, me.tenantId).catch(() => {});
-    CalendarSyncService.syncTrip(existing.tripId).catch(() => {});
+    CalendarSyncService.syncTrip(existing.tripId)
+      .catch((err) => req.log.warn({ err, context: "reservation.delete", tripId: existing.tripId, reservationId: req.params.id }, "Calendar sync falhou — continuando"));
   } catch (err) {
     next(err);
   }

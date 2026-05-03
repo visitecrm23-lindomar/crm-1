@@ -482,7 +482,8 @@ router.post("/payments", async (req, res, next: NextFunction): Promise<void> => 
       await syncReservationCommission(parsed.data.reservationId, me.tenantId);
     }
     res.status(201).json(formatPayment(payment));
-    CalendarSyncService.syncPayment(id).catch(() => {});
+    CalendarSyncService.syncPayment(id)
+      .catch((err) => req.log.warn({ err, context: "payment.create", paymentId: id, reservationId: parsed.data.reservationId }, "Calendar sync falhou — continuando"));
     const effectiveClientId = parsed.data.clientId ?? reservationClientId;
     if (effectiveClientId && parsed.data.reservationId && explicitStatus === PAYMENT_STATUS.PAID) {
       const amountFormatted = Number(parsed.data.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -566,7 +567,8 @@ router.patch("/payments/:id", async (req, res, next: NextFunction): Promise<void
       });
     }
     res.json(formatPayment(payment));
-    CalendarSyncService.syncPayment(req.params.id).catch(() => {});
+    CalendarSyncService.syncPayment(req.params.id)
+      .catch((err) => req.log.warn({ err, context: "payment.update", paymentId: req.params.id }, "Calendar sync falhou — continuando"));
   } catch (err) {
     req.log.error({ err }, "Error updating payment");
     next(err);

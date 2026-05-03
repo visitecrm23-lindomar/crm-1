@@ -28,7 +28,7 @@ export const usersTable = pgTable("users", {
   googleRefreshToken: text("google_refresh_token"),
   googleTokenExpiry: timestamp("google_token_expiry", { withTimezone: true }),
   googleCalendarEnabled: boolean("google_calendar_enabled").notNull().default(false),
-  googleCalendarStatus: text("google_calendar_status").notNull().default("connected"),
+  googleCalendarStatus: text("google_calendar_status").notNull().default("disconnected"),
 });
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({ createdAt: true, updatedAt: true });
