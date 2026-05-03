@@ -127,17 +127,32 @@ const rateLimitHandler = (_req: Request, res: Response) => {
   });
 };
 
+function parseRateLimitEnv(name: string, defaultValue: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return defaultValue;
+  const parsed = parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    logger.warn(`⚠️  ${name} has invalid value "${raw}"; falling back to default ${defaultValue}`);
+    return defaultValue;
+  }
+  return parsed;
+}
+
+const RATE_LIMIT_WINDOW_MS = parseRateLimitEnv("RATE_LIMIT_WINDOW_MS", 60_000);
+const RATE_LIMIT_PUBLIC_MAX = parseRateLimitEnv("RATE_LIMIT_PUBLIC_MAX", 60);
+const RATE_LIMIT_ORDERS_MAX = parseRateLimitEnv("RATE_LIMIT_ORDERS_MAX", 10);
+
 const publicGeneralLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 60,
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMIT_PUBLIC_MAX,
   standardHeaders: true,
   legacyHeaders: false,
   handler: rateLimitHandler,
 });
 
 const publicOrderLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 10,
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMIT_ORDERS_MAX,
   standardHeaders: true,
   legacyHeaders: false,
   handler: rateLimitHandler,
