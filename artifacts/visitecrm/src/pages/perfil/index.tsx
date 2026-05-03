@@ -1028,17 +1028,15 @@ export default function PerfilPage() {
             <Share2 className="w-4 h-4" />
             Indicações
           </TabsTrigger>
-          {profile.loyalty !== null && (
-            <TabsTrigger value="fidelidade" className="flex items-center gap-1.5">
-              <Star className="w-4 h-4" />
-              Fidelidade
-              {(profile.loyalty?.availablePoints ?? 0) > 0 && (
-                <Badge variant="secondary" className="ml-0.5 text-xs px-1.5 py-0">
-                  {(profile.loyalty?.availablePoints ?? 0).toLocaleString("pt-BR")}
-                </Badge>
-              )}
-            </TabsTrigger>
-          )}
+          <TabsTrigger value="fidelidade" className="flex items-center gap-1.5">
+            <Star className="w-4 h-4" />
+            Fidelidade
+            {profile.loyalty !== null && (profile.loyalty?.availablePoints ?? 0) > 0 && (
+              <Badge variant="secondary" className="ml-0.5 text-xs px-1.5 py-0">
+                {(profile.loyalty?.availablePoints ?? 0).toLocaleString("pt-BR")}
+              </Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="inicio">

@@ -212,6 +212,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
           .where(
             and(
               eq(loyaltyMembersTable.tenantId, me.tenantId),
+              eq(loyaltyMembersTable.programId, loyaltyProgram.id),
               eq(loyaltyMembersTable.clientId, client.id),
             ),
           )
