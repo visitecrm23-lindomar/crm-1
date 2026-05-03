@@ -5,14 +5,14 @@
  * VisiteCRM API - SaaS CRM for tourism agencies
  * OpenAPI spec version: 0.1.0
  */
+import type { TripStatus } from "./tripStatus";
 
 export interface UpdateTripBody {
   /** @nullable */
   name?: string | null;
   /** @nullable */
   description?: string | null;
-  /** @nullable */
-  status?: string | null;
+  status?: TripStatus | null;
   /** @nullable */
   isPublic?: boolean | null;
   /** @nullable */

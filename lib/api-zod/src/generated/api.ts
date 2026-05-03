@@ -28,6 +28,26 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
+ * @summary Health check (legacy alias)
+ */
+export const HealthCheckLegacyResponse = zod.object({
+  status: zod.string(),
+  redis: zod.object({
+    connected: zod.boolean(),
+    configured: zod.boolean(),
+  }),
+  bullmq: zod.object({
+    active: zod.boolean(),
+    workers: zod.object({
+      email: zod.boolean(),
+      reminder: zod.boolean(),
+      pdf: zod.boolean(),
+      commissionSync: zod.boolean(),
+    }),
+  }),
+});
+
+/**
  * @summary Get global platform stats (superadmin only)
  */
 export const GetAdminStatsResponse = zod.object({
@@ -1506,6 +1526,8 @@ export const createTripBodyFreeGuidesMax = 2;
 export const CreateTripBody = zod.object({
   name: zod.string(),
   description: zod.string().nullish(),
+  isPublic: zod.boolean().nullish(),
+  isFeatured: zod.boolean().nullish(),
   destination: zod.string(),
   destinationCity: zod.string(),
   destinationState: zod.string(),
@@ -1541,7 +1563,9 @@ export const CreateTripBody = zod.object({
   driver2CnhExpiry: zod.string().nullish(),
   tourGuideCpf: zod.string().nullish(),
   tourGuideRegistration: zod.string().nullish(),
-  status: zod.string().optional(),
+  status: zod
+    .enum(["draft", "published", "active", "cancelled", "completed"])
+    .optional(),
   gallery: zod.array(zod.string()).optional(),
   boardingPoints: zod.array(zod.unknown()).optional(),
   itinerary: zod.array(zod.unknown()).optional(),
@@ -1665,7 +1689,12 @@ export const updateTripBodyFreeGuidesMax = 2;
 export const UpdateTripBody = zod.object({
   name: zod.string().nullish(),
   description: zod.string().nullish(),
-  status: zod.string().nullish(),
+  status: zod
+    .union([
+      zod.enum(["draft", "published", "active", "cancelled", "completed"]),
+      zod.null(),
+    ])
+    .optional(),
   isPublic: zod.boolean().nullish(),
   isFeatured: zod.boolean().nullish(),
   departureDate: zod.string().nullish(),
@@ -1974,6 +2003,7 @@ export const ListReservationsQueryParams = zod.object({
   createdById: zod.coerce.string().nullish(),
   dateFrom: zod.coerce.string().nullish(),
   dateTo: zod.coerce.string().nullish(),
+  commissionSyncStatus: zod.coerce.string().nullish(),
   page: zod.coerce.number().default(listReservationsQueryPageDefault),
   limit: zod.coerce.number().default(listReservationsQueryLimitDefault),
 });
@@ -1995,8 +2025,16 @@ export const ListReservationsResponse = zod.object({
       installments: zod.number(),
       commissionPercentage: zod.number().nullish(),
       commissionAmount: zod.number().nullish(),
+      commissionSyncStatus: zod.string().nullish(),
       sellerId: zod.string().nullish(),
-      status: zod.string(),
+      status: zod.enum([
+        "pending",
+        "confirmed",
+        "cancelled",
+        "refunded",
+        "completed",
+        "failed",
+      ]),
       voucherCode: zod.string(),
       reservationNumber: zod.string().nullish(),
       qrCode: zod.string(),
@@ -2113,8 +2151,16 @@ export const GetReservationResponse = zod.object({
   installments: zod.number(),
   commissionPercentage: zod.number().nullish(),
   commissionAmount: zod.number().nullish(),
+  commissionSyncStatus: zod.string().nullish(),
   sellerId: zod.string().nullish(),
-  status: zod.string(),
+  status: zod.enum([
+    "pending",
+    "confirmed",
+    "cancelled",
+    "refunded",
+    "completed",
+    "failed",
+  ]),
   voucherCode: zod.string(),
   reservationNumber: zod.string().nullish(),
   qrCode: zod.string(),
@@ -2159,7 +2205,19 @@ export const UpdateReservationParams = zod.object({
 });
 
 export const UpdateReservationBody = zod.object({
-  status: zod.string().nullish(),
+  status: zod
+    .union([
+      zod.enum([
+        "pending",
+        "confirmed",
+        "cancelled",
+        "refunded",
+        "completed",
+        "failed",
+      ]),
+      zod.null(),
+    ])
+    .optional(),
   paymentMethod: zod.string().nullish(),
   notes: zod.string().nullish(),
   seats: zod.array(zod.string()).nullish(),
@@ -2191,8 +2249,16 @@ export const UpdateReservationResponse = zod.object({
   installments: zod.number(),
   commissionPercentage: zod.number().nullish(),
   commissionAmount: zod.number().nullish(),
+  commissionSyncStatus: zod.string().nullish(),
   sellerId: zod.string().nullish(),
-  status: zod.string(),
+  status: zod.enum([
+    "pending",
+    "confirmed",
+    "cancelled",
+    "refunded",
+    "completed",
+    "failed",
+  ]),
   voucherCode: zod.string(),
   reservationNumber: zod.string().nullish(),
   qrCode: zod.string(),
@@ -2230,6 +2296,17 @@ export const UpdateReservationResponse = zod.object({
 });
 
 /**
+ * @summary Retry commission sync for a reservation
+ */
+export const RetryCommissionSyncParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const RetryCommissionSyncResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
  * @summary Check in a reservation
  */
 export const CheckInReservationParams = zod.object({
@@ -2251,8 +2328,16 @@ export const CheckInReservationResponse = zod.object({
   installments: zod.number(),
   commissionPercentage: zod.number().nullish(),
   commissionAmount: zod.number().nullish(),
+  commissionSyncStatus: zod.string().nullish(),
   sellerId: zod.string().nullish(),
-  status: zod.string(),
+  status: zod.enum([
+    "pending",
+    "confirmed",
+    "cancelled",
+    "refunded",
+    "completed",
+    "failed",
+  ]),
   voucherCode: zod.string(),
   reservationNumber: zod.string().nullish(),
   qrCode: zod.string(),
@@ -2430,7 +2515,7 @@ export const ListPaymentsResponse = zod.object({
       id: zod.string(),
       reservationId: zod.string().nullish(),
       clientId: zod.string().nullish(),
-      type: zod.string(),
+      type: zod.enum(["receivable", "payable"]),
       category: zod.string(),
       amount: zod.number(),
       paymentMethod: zod.string(),
@@ -2438,7 +2523,16 @@ export const ListPaymentsResponse = zod.object({
       totalInstallments: zod.number(),
       dueDate: zod.string(),
       paidAt: zod.string().nullish(),
-      status: zod.string(),
+      status: zod.enum([
+        "pending",
+        "paid",
+        "overdue",
+        "cancelled",
+        "approved",
+        "failed",
+        "refunded",
+        "charged_back",
+      ]),
       description: zod.string().nullish(),
       notes: zod.string().nullish(),
       createdAt: zod.string(),
@@ -2456,7 +2550,7 @@ export const ListPaymentsResponse = zod.object({
 export const CreatePaymentBody = zod.object({
   reservationId: zod.string().nullish(),
   clientId: zod.string().nullish(),
-  type: zod.string(),
+  type: zod.enum(["receivable", "payable"]),
   category: zod.string(),
   amount: zod.number(),
   paymentMethod: zod.string(),
@@ -2464,7 +2558,21 @@ export const CreatePaymentBody = zod.object({
   dueDate: zod.string(),
   description: zod.string().nullish(),
   notes: zod.string().nullish(),
-  status: zod.string().nullish(),
+  status: zod
+    .union([
+      zod.enum([
+        "pending",
+        "paid",
+        "overdue",
+        "cancelled",
+        "approved",
+        "failed",
+        "refunded",
+        "charged_back",
+      ]),
+      zod.null(),
+    ])
+    .optional(),
   paidAt: zod.string().nullish(),
 });
 
@@ -2479,7 +2587,7 @@ export const GetPaymentResponse = zod.object({
   id: zod.string(),
   reservationId: zod.string().nullish(),
   clientId: zod.string().nullish(),
-  type: zod.string(),
+  type: zod.enum(["receivable", "payable"]),
   category: zod.string(),
   amount: zod.number(),
   paymentMethod: zod.string(),
@@ -2487,7 +2595,16 @@ export const GetPaymentResponse = zod.object({
   totalInstallments: zod.number(),
   dueDate: zod.string(),
   paidAt: zod.string().nullish(),
-  status: zod.string(),
+  status: zod.enum([
+    "pending",
+    "paid",
+    "overdue",
+    "cancelled",
+    "approved",
+    "failed",
+    "refunded",
+    "charged_back",
+  ]),
   description: zod.string().nullish(),
   notes: zod.string().nullish(),
   createdAt: zod.string(),
@@ -2502,7 +2619,21 @@ export const UpdatePaymentParams = zod.object({
 });
 
 export const UpdatePaymentBody = zod.object({
-  status: zod.string().nullish(),
+  status: zod
+    .union([
+      zod.enum([
+        "pending",
+        "paid",
+        "overdue",
+        "cancelled",
+        "approved",
+        "failed",
+        "refunded",
+        "charged_back",
+      ]),
+      zod.null(),
+    ])
+    .optional(),
   paidAt: zod.string().nullish(),
   notes: zod.string().nullish(),
 });
@@ -2511,7 +2642,7 @@ export const UpdatePaymentResponse = zod.object({
   id: zod.string(),
   reservationId: zod.string().nullish(),
   clientId: zod.string().nullish(),
-  type: zod.string(),
+  type: zod.enum(["receivable", "payable"]),
   category: zod.string(),
   amount: zod.number(),
   paymentMethod: zod.string(),
@@ -2519,7 +2650,16 @@ export const UpdatePaymentResponse = zod.object({
   totalInstallments: zod.number(),
   dueDate: zod.string(),
   paidAt: zod.string().nullish(),
-  status: zod.string(),
+  status: zod.enum([
+    "pending",
+    "paid",
+    "overdue",
+    "cancelled",
+    "approved",
+    "failed",
+    "refunded",
+    "charged_back",
+  ]),
   description: zod.string().nullish(),
   notes: zod.string().nullish(),
   createdAt: zod.string(),
@@ -2563,7 +2703,7 @@ export const ListExpensesResponse = zod.object({
       paymentMethod: zod.string().nullish(),
       paymentDate: zod.string().nullish(),
       dueDate: zod.string(),
-      status: zod.string(),
+      status: zod.enum(["pending", "paid", "overdue", "cancelled"]),
       notes: zod.string().nullish(),
       createdAt: zod.string(),
     }),
@@ -2595,7 +2735,9 @@ export const UpdateExpenseParams = zod.object({
 });
 
 export const UpdateExpenseBody = zod.object({
-  status: zod.string().nullish(),
+  status: zod
+    .union([zod.enum(["pending", "paid", "overdue", "cancelled"]), zod.null()])
+    .optional(),
   paymentDate: zod.string().nullish(),
   notes: zod.string().nullish(),
   amount: zod.number().nullish(),
@@ -2611,7 +2753,7 @@ export const UpdateExpenseResponse = zod.object({
   paymentMethod: zod.string().nullish(),
   paymentDate: zod.string().nullish(),
   dueDate: zod.string(),
-  status: zod.string(),
+  status: zod.enum(["pending", "paid", "overdue", "cancelled"]),
   notes: zod.string().nullish(),
   createdAt: zod.string(),
 });
@@ -2650,7 +2792,7 @@ export const ListDealsResponseItem = zod.object({
   reservationId: zod.string().nullish(),
   ownerId: zod.string(),
   expectedCloseDate: zod.string().nullish(),
-  status: zod.string(),
+  status: zod.enum(["open", "won", "lost"]),
   lostReason: zod.string().nullish(),
   source: zod.string(),
   autoCreated: zod.boolean(),
@@ -2703,7 +2845,7 @@ export const GetDealResponse = zod.object({
   reservationId: zod.string().nullish(),
   ownerId: zod.string(),
   expectedCloseDate: zod.string().nullish(),
-  status: zod.string(),
+  status: zod.enum(["open", "won", "lost"]),
   lostReason: zod.string().nullish(),
   source: zod.string(),
   autoCreated: zod.boolean(),
@@ -2728,7 +2870,7 @@ export const UpdateDealBody = zod.object({
   stageId: zod.string().nullish(),
   title: zod.string().nullish(),
   value: zod.number().nullish(),
-  status: zod.string().nullish(),
+  status: zod.union([zod.enum(["open", "won", "lost"]), zod.null()]).optional(),
   lostReason: zod.string().nullish(),
   description: zod.string().nullish(),
   expectedCloseDate: zod.string().nullish(),
@@ -2750,7 +2892,7 @@ export const UpdateDealResponse = zod.object({
   reservationId: zod.string().nullish(),
   ownerId: zod.string(),
   expectedCloseDate: zod.string().nullish(),
-  status: zod.string(),
+  status: zod.enum(["open", "won", "lost"]),
   lostReason: zod.string().nullish(),
   source: zod.string(),
   autoCreated: zod.boolean(),
@@ -2800,7 +2942,7 @@ export const MoveDealResponse = zod.object({
   reservationId: zod.string().nullish(),
   ownerId: zod.string(),
   expectedCloseDate: zod.string().nullish(),
-  status: zod.string(),
+  status: zod.enum(["open", "won", "lost"]),
   lostReason: zod.string().nullish(),
   source: zod.string(),
   autoCreated: zod.boolean(),
@@ -3815,7 +3957,7 @@ export const ListUsersResponse = zod.array(ListUsersResponseItem);
 export const CreateUserBody = zod.object({
   name: zod.string(),
   email: zod.string(),
-  role: zod.enum(["superadmin", "agencia", "gerente", "vendedor", "suporte", "cliente"]),
+  role: zod.string(),
 });
 
 /**
@@ -3827,7 +3969,7 @@ export const UpdateUserParams = zod.object({
 
 export const UpdateUserBody = zod.object({
   name: zod.string().nullish(),
-  role: zod.enum(["superadmin", "agencia", "gerente", "vendedor", "suporte", "cliente"]).nullish(),
+  role: zod.string().nullish(),
   isActive: zod.boolean().nullish(),
   commissionType: zod.string().nullish(),
   commissionRate: zod.number().nullish(),
@@ -5391,29 +5533,3 @@ export const GetCalendarCallbackQueryParams = zod.object({
     .optional()
     .describe("Present when the user denied access"),
 });
-
-export const DashboardComparativeItemSchema = zod.object({
-  month: zod.string(),
-  key: zod.string(),
-  revenue: zod.number(),
-  expenses: zod.number(),
-  profit: zod.number(),
-  reservations: zod.number(),
-  revenueGrowth: zod.number().nullable().optional(),
-  expensesGrowth: zod.number().nullable().optional(),
-  profitGrowth: zod.number().nullable().optional(),
-  reservationsGrowth: zod.number().nullable().optional(),
-});
-
-export const GetDashboardComparativeResponse = zod.array(DashboardComparativeItemSchema);
-
-export const DashboardTopCustomerSchema = zod.object({
-  id: zod.string(),
-  name: zod.string(),
-  email: zod.string(),
-  photoUrl: zod.string().nullable().optional(),
-  totalSpent: zod.number(),
-  reservationCount: zod.number(),
-});
-
-export const GetDashboardTopCustomersResponse = zod.array(DashboardTopCustomerSchema);

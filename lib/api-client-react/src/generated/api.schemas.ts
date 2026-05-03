@@ -5,8 +5,96 @@
  * VisiteCRM API - SaaS CRM for tourism agencies
  * OpenAPI spec version: 0.1.0
  */
+export type ReservationStatus =
+  (typeof ReservationStatus)[keyof typeof ReservationStatus];
+
+export const ReservationStatus = {
+  pending: "pending",
+  confirmed: "confirmed",
+  cancelled: "cancelled",
+  refunded: "refunded",
+  completed: "completed",
+  failed: "failed",
+} as const;
+
+export type PaymentStatus = (typeof PaymentStatus)[keyof typeof PaymentStatus];
+
+export const PaymentStatus = {
+  pending: "pending",
+  paid: "paid",
+  overdue: "overdue",
+  cancelled: "cancelled",
+  approved: "approved",
+  failed: "failed",
+  refunded: "refunded",
+  charged_back: "charged_back",
+} as const;
+
+export type PaymentType = (typeof PaymentType)[keyof typeof PaymentType];
+
+export const PaymentType = {
+  receivable: "receivable",
+  payable: "payable",
+} as const;
+
+export type CommissionStatus =
+  (typeof CommissionStatus)[keyof typeof CommissionStatus];
+
+export const CommissionStatus = {
+  pending: "pending",
+  approved: "approved",
+  paid: "paid",
+  cancelled: "cancelled",
+} as const;
+
+export type DealStatus = (typeof DealStatus)[keyof typeof DealStatus];
+
+export const DealStatus = {
+  open: "open",
+  won: "won",
+  lost: "lost",
+} as const;
+
+export type TripStatus = (typeof TripStatus)[keyof typeof TripStatus];
+
+export const TripStatus = {
+  draft: "draft",
+  published: "published",
+  active: "active",
+  cancelled: "cancelled",
+  completed: "completed",
+} as const;
+
+export type ExpenseStatus = (typeof ExpenseStatus)[keyof typeof ExpenseStatus];
+
+export const ExpenseStatus = {
+  pending: "pending",
+  paid: "paid",
+  overdue: "overdue",
+  cancelled: "cancelled",
+} as const;
+
+export type HealthStatusRedis = {
+  connected: boolean;
+  configured: boolean;
+};
+
+export type HealthStatusBullmqWorkers = {
+  email: boolean;
+  reminder: boolean;
+  pdf: boolean;
+  commissionSync: boolean;
+};
+
+export type HealthStatusBullmq = {
+  active: boolean;
+  workers: HealthStatusBullmqWorkers;
+};
+
 export interface HealthStatus {
   status: string;
+  redis: HealthStatusRedis;
+  bullmq: HealthStatusBullmq;
 }
 
 export interface SuccessResponse {
@@ -40,45 +128,6 @@ export interface DashboardSummary {
   totalPayable: number;
   avgReservationsPerTrip: number;
   totalFaturamento: number;
-  salesThisMonth?: number;
-  pendingReservations?: number;
-  overduePaymentsCount?: number;
-  overduePayments?: number;
-  loyaltyPointsIssued?: number;
-  retentionRate?: number;
-  tripsThisMonth?: number;
-  conversionRate?: number;
-  profit?: number;
-  profitMargin?: number;
-  avgNps?: number | null;
-  pipelineLeads?: number;
-}
-
-export interface DashboardComparativeItem {
-  month: string;
-  key: string;
-  revenue: number;
-  expenses: number;
-  profit: number;
-  reservations: number;
-  /** @nullable */
-  revenueGrowth?: number | null;
-  /** @nullable */
-  expensesGrowth?: number | null;
-  /** @nullable */
-  profitGrowth?: number | null;
-  /** @nullable */
-  reservationsGrowth?: number | null;
-}
-
-export interface DashboardTopCustomer {
-  id: string;
-  name: string;
-  email: string;
-  /** @nullable */
-  photoUrl?: string | null;
-  totalSpent: number;
-  reservationCount: number;
 }
 
 export type DashboardChartsTopDestinationsItem = {
@@ -620,6 +669,10 @@ export interface CreateTripBody {
   name: string;
   /** @nullable */
   description?: string | null;
+  /** @nullable */
+  isPublic?: boolean | null;
+  /** @nullable */
+  isFeatured?: boolean | null;
   destination: string;
   destinationCity: string;
   destinationState: string;
@@ -679,7 +732,7 @@ export interface CreateTripBody {
   tourGuideCpf?: string | null;
   /** @nullable */
   tourGuideRegistration?: string | null;
-  status?: string;
+  status?: TripStatus;
   gallery?: string[];
   boardingPoints?: unknown[];
   itinerary?: unknown[];
@@ -706,8 +759,7 @@ export interface UpdateTripBody {
   name?: string | null;
   /** @nullable */
   description?: string | null;
-  /** @nullable */
-  status?: string | null;
+  status?: TripStatus | null;
   /** @nullable */
   isPublic?: boolean | null;
   /** @nullable */
@@ -860,7 +912,7 @@ export interface Reservation {
   commissionSyncStatus?: string | null;
   /** @nullable */
   sellerId?: string | null;
-  status: string;
+  status: ReservationStatus;
   voucherCode: string;
   /** @nullable */
   reservationNumber?: string | null;
@@ -977,8 +1029,7 @@ export interface ReferralValidationResult {
 }
 
 export interface UpdateReservationBody {
-  /** @nullable */
-  status?: string | null;
+  status?: ReservationStatus | null;
   /** @nullable */
   paymentMethod?: string | null;
   /** @nullable */
@@ -1178,7 +1229,7 @@ export interface Payment {
   reservationId?: string | null;
   /** @nullable */
   clientId?: string | null;
-  type: string;
+  type: PaymentType;
   category: string;
   amount: number;
   paymentMethod: string;
@@ -1187,7 +1238,7 @@ export interface Payment {
   dueDate: string;
   /** @nullable */
   paidAt?: string | null;
-  status: string;
+  status: PaymentStatus;
   /** @nullable */
   description?: string | null;
   /** @nullable */
@@ -1208,7 +1259,7 @@ export interface CreatePaymentBody {
   reservationId?: string | null;
   /** @nullable */
   clientId?: string | null;
-  type: string;
+  type: PaymentType;
   category: string;
   amount: number;
   paymentMethod: string;
@@ -1218,15 +1269,13 @@ export interface CreatePaymentBody {
   description?: string | null;
   /** @nullable */
   notes?: string | null;
-  /** @nullable */
-  status?: string | null;
+  status?: PaymentStatus | null;
   /** @nullable */
   paidAt?: string | null;
 }
 
 export interface UpdatePaymentBody {
-  /** @nullable */
-  status?: string | null;
+  status?: PaymentStatus | null;
   /** @nullable */
   paidAt?: string | null;
   /** @nullable */
@@ -1256,7 +1305,7 @@ export interface Expense {
   /** @nullable */
   paymentDate?: string | null;
   dueDate: string;
-  status: string;
+  status: ExpenseStatus;
   /** @nullable */
   notes?: string | null;
   createdAt: string;
@@ -1285,8 +1334,7 @@ export interface CreateExpenseBody {
 }
 
 export interface UpdateExpenseBody {
-  /** @nullable */
-  status?: string | null;
+  status?: ExpenseStatus | null;
   /** @nullable */
   paymentDate?: string | null;
   /** @nullable */
@@ -1317,7 +1365,7 @@ export interface Deal {
   ownerId: string;
   /** @nullable */
   expectedCloseDate?: string | null;
-  status: string;
+  status: DealStatus;
   /** @nullable */
   lostReason?: string | null;
   source: string;
@@ -1366,8 +1414,7 @@ export interface UpdateDealBody {
   title?: string | null;
   /** @nullable */
   value?: number | null;
-  /** @nullable */
-  status?: string | null;
+  status?: DealStatus | null;
   /** @nullable */
   lostReason?: string | null;
   /** @nullable */
@@ -2805,13 +2852,9 @@ export interface InvoiceWithTenant {
   tenantId: string;
   /** @nullable */
   planId?: string | null;
-  /** @nullable */
-  invoiceNumber?: string | null;
   amount: string;
   currency: string;
   status: string;
-  /** @nullable */
-  paymentMethod?: string | null;
   /** @nullable */
   dueDate?: string | null;
   /** @nullable */
@@ -2820,18 +2863,10 @@ export interface InvoiceWithTenant {
   description?: string | null;
   /** @nullable */
   notes?: string | null;
-  /** @nullable */
-  pixCode?: string | null;
-  /** @nullable */
-  pixQrCodeUrl?: string | null;
-  /** @nullable */
-  pixExpiresAt?: string | null;
   createdAt: string;
   updatedAt: string;
   /** @nullable */
   tenantName?: string | null;
-  /** @nullable */
-  tenantEmail?: string | null;
 }
 
 export interface CreateInvoiceBody {
@@ -3290,6 +3325,10 @@ export type ListReservationsParams = {
   limit?: number;
 };
 
+export type RetryCommissionSync200 = {
+  success: boolean;
+};
+
 export type ListPaymentsParams = {
   /**
    * @nullable
@@ -3499,48 +3538,3 @@ export type GetCalendarCallbackParams = {
    */
   error?: string;
 };
-
-export interface TripCost {
-  id: string;
-  tripId: string;
-  category: string;
-  description: string;
-  supplierId: string | null;
-  supplierName: string | null;
-  amount: number;
-  status: string;
-  dueDate: string | null;
-  paidAt: string | null;
-  notes: string | null;
-  createdAt: string;
-}
-
-export interface TripCostSummary {
-  expectedRevenue: number;
-  totalRealCosts: number;
-  totalPaidCosts: number;
-  totalPendingCosts: number;
-  profit: number;
-  margin: number;
-  plannedBudget: number;
-  budgetVariance: number;
-  confirmedSeats: number;
-}
-
-export interface TripCostsResponse {
-  costs: TripCost[];
-  summary: TripCostSummary;
-}
-
-export interface CreateTripCostBody {
-  category: string;
-  description: string;
-  supplierName?: string | null;
-  amount: number;
-  status?: string;
-  dueDate?: string | null;
-  paidAt?: string | null;
-  notes?: string | null;
-}
-
-export type UpdateTripCostBody = Partial<CreateTripCostBody>;

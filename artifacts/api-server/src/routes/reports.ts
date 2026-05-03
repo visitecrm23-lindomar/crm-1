@@ -9,7 +9,7 @@ import { applyPlugin } from "jspdf-autotable";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { MANAGEMENT_ROLES } from '../lib/tenant';
-import { RESERVATION_STATUS, PAYMENT_STATUS } from "@workspace/permissions";
+import { RESERVATION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, EXPENSE_STATUS } from "@workspace/permissions";
 
 applyPlugin(jsPDF);
 
@@ -107,11 +107,11 @@ router.post("/reports/export", async (req, res): Promise<void> => {
         )),
       ]);
 
-      const receivables = payments.filter(p => p.type === "receivable");
-      const payables = payments.filter(p => p.type === "payable");
-      const totalReceived = receivables.filter(p => p.status === "paid").reduce((s, p) => s + Number(p.amount), 0);
+      const receivables = payments.filter(p => p.type === PAYMENT_TYPE.RECEIVABLE);
+      const payables = payments.filter(p => p.type === PAYMENT_TYPE.PAYABLE);
+      const totalReceived = receivables.filter(p => p.status === PAYMENT_STATUS.PAID).reduce((s, p) => s + Number(p.amount), 0);
       const totalPending = receivables.filter(p => p.status === PAYMENT_STATUS.PENDING).reduce((s, p) => s + Number(p.amount), 0);
-      const totalExpenses = payables.filter(p => p.status === "paid").reduce((s, p) => s + Number(p.amount), 0) +
+      const totalExpenses = payables.filter(p => p.status === PAYMENT_STATUS.PAID).reduce((s, p) => s + Number(p.amount), 0) +
         expenses.reduce((s, e) => s + Number(e.amount), 0);
       const profit = totalReceived - totalExpenses;
 
@@ -155,7 +155,7 @@ router.post("/reports/export", async (req, res): Promise<void> => {
           head: [["Categoria", "Descrição", "Valor", "Status", "Vencimento", "Pago em"]],
           body: receivables.map(p => [
             p.category, p.description ?? "", fmtCur(p.amount),
-            p.status === "paid" ? "Pago" : "Pendente",
+            p.status === PAYMENT_STATUS.PAID ? "Pago" : "Pendente",
             fmtDate(p.dueDate), fmtDate(p.paidAt),
           ]),
           styles: { fontSize: 8 },
@@ -166,8 +166,8 @@ router.post("/reports/export", async (req, res): Promise<void> => {
           doc.addPage();
           pdfSection(doc, "Despesas", 18);
           const allExpRows = [
-            ...payables.map(p => [p.category, p.description ?? "", fmtCur(p.amount), p.status === "paid" ? "Pago" : "Pendente", fmtDate(p.dueDate), fmtDate(p.paidAt)]),
-            ...expenses.map(e => [e.category, e.description, fmtCur(e.amount), e.status === "paid" ? "Pago" : "Pendente", fmtDate(e.dueDate), fmtDate(e.paymentDate)]),
+            ...payables.map(p => [p.category, p.description ?? "", fmtCur(p.amount), p.status === PAYMENT_STATUS.PAID ? "Pago" : "Pendente", fmtDate(p.dueDate), fmtDate(p.paidAt)]),
+            ...expenses.map(e => [e.category, e.description, fmtCur(e.amount), e.status === EXPENSE_STATUS.PAID ? "Pago" : "Pendente", fmtDate(e.dueDate), fmtDate(e.paymentDate)]),
           ];
           doc.autoTable({
             startY: 24,
@@ -215,7 +215,7 @@ router.post("/reports/export", async (req, res): Promise<void> => {
         ];
         ws2.getRow(1).font = { bold: true };
         for (const p of receivables) {
-          ws2.addRow({ category: p.category, description: p.description ?? "", amount: Number(p.amount), status: p.status === "paid" ? "Pago" : "Pendente", dueDate: fmtDate(p.dueDate), paidAt: fmtDate(p.paidAt), method: p.paymentMethod });
+          ws2.addRow({ category: p.category, description: p.description ?? "", amount: Number(p.amount), status: p.status === PAYMENT_STATUS.PAID ? "Pago" : "Pendente", dueDate: fmtDate(p.dueDate), paidAt: fmtDate(p.paidAt), method: p.paymentMethod });
         }
         ws2.getColumn("amount").numFmt = '"R$"#,##0.00';
 
@@ -231,10 +231,10 @@ router.post("/reports/export", async (req, res): Promise<void> => {
         ];
         ws3.getRow(1).font = { bold: true };
         for (const p of payables) {
-          ws3.addRow({ category: p.category, description: p.description ?? "", amount: Number(p.amount), status: p.status === "paid" ? "Pago" : "Pendente", dueDate: fmtDate(p.dueDate), paidAt: fmtDate(p.paidAt) });
+          ws3.addRow({ category: p.category, description: p.description ?? "", amount: Number(p.amount), status: p.status === PAYMENT_STATUS.PAID ? "Pago" : "Pendente", dueDate: fmtDate(p.dueDate), paidAt: fmtDate(p.paidAt) });
         }
         for (const e of expenses) {
-          ws3.addRow({ category: e.category, description: e.description, amount: Number(e.amount), status: e.status === "paid" ? "Pago" : "Pendente", dueDate: fmtDate(e.dueDate), paidAt: fmtDate(e.paymentDate) });
+          ws3.addRow({ category: e.category, description: e.description, amount: Number(e.amount), status: e.status === EXPENSE_STATUS.PAID ? "Pago" : "Pendente", dueDate: fmtDate(e.dueDate), paidAt: fmtDate(e.paymentDate) });
         }
         ws3.getColumn("amount").numFmt = '"R$"#,##0.00';
 

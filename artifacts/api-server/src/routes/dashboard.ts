@@ -66,12 +66,12 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
         const payments = await db.select().from(paymentsTable)
           .where(and(eq(paymentsTable.tenantId, tenantId), inArray(paymentsTable.clientId, myClientIds)));
         for (const p of payments) {
-          if (p.type === "receivable" && p.status === "paid") {
+          if (p.type === PAYMENT_TYPE.RECEIVABLE && p.status === PAYMENT_STATUS.PAID) {
             totalRevenue += Number(p.amount);
             if (p.paidAt && p.paidAt >= startOfMonth) revenueThisMonth += Number(p.amount);
             if (p.paidAt && p.paidAt >= startOfToday) receivedToday += Number(p.amount);
           }
-          if (p.status === "pending") pendingAmount += Number(p.amount);
+          if (p.status === PAYMENT_STATUS.PENDING) pendingAmount += Number(p.amount);
         }
       }
 
@@ -138,19 +138,19 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
     const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.tenantId, tenantId));
     let totalRevenue = 0, revenueThisMonth = 0, pendingPaymentsAmt = 0, receivedToday = 0, toReceiveNext3Days = 0, totalPayable = 0, pendingReceivableAmt = 0;
     for (const p of payments) {
-      if (p.type === "receivable" && p.status === "paid") {
+      if (p.type === PAYMENT_TYPE.RECEIVABLE && p.status === PAYMENT_STATUS.PAID) {
         totalRevenue += Number(p.amount);
         if (p.paidAt && p.paidAt >= startOfMonth) revenueThisMonth += Number(p.amount);
         if (p.paidAt && p.paidAt >= startOfToday) receivedToday += Number(p.amount);
       }
-      if (p.type === "receivable" && p.status === "pending") {
+      if (p.type === PAYMENT_TYPE.RECEIVABLE && p.status === PAYMENT_STATUS.PENDING) {
         pendingReceivableAmt += Number(p.amount);
         if (p.dueDate && p.dueDate >= startOfToday && p.dueDate <= next3Days) {
           toReceiveNext3Days += Number(p.amount);
         }
       }
-      if (p.type === "payable" && p.status === "pending") totalPayable += Number(p.amount);
-      if (p.status === "pending") pendingPaymentsAmt += Number(p.amount);
+      if (p.type === PAYMENT_TYPE.PAYABLE && p.status === PAYMENT_STATUS.PENDING) totalPayable += Number(p.amount);
+      if (p.status === PAYMENT_STATUS.PENDING) pendingPaymentsAmt += Number(p.amount);
     }
     const totalFaturamento = totalRevenue + pendingReceivableAmt;
 
@@ -172,8 +172,8 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
           .from(paymentsTable)
           .where(and(eq(paymentsTable.tenantId, tenantId), inArray(paymentsTable.reservationId, activeResIds)));
         for (const p of activePayments) {
-          if (p.type === "receivable" && p.status === "paid") receivedFromActiveTrips += Number(p.amount);
-          if (p.type === "receivable" && p.status === "pending") pendingFromActiveTrips += Number(p.amount);
+          if (p.type === PAYMENT_TYPE.RECEIVABLE && p.status === PAYMENT_STATUS.PAID) receivedFromActiveTrips += Number(p.amount);
+          if (p.type === PAYMENT_TYPE.RECEIVABLE && p.status === PAYMENT_STATUS.PENDING) pendingFromActiveTrips += Number(p.amount);
         }
       }
     }
@@ -336,11 +336,11 @@ router.get("/dashboard/revenue-chart", async (req, res): Promise<void> => {
       }
 
       const revenue = payments
-        .filter(p => p.type === "receivable" && p.status === "paid" && p.paidAt && p.paidAt >= startDate && p.paidAt <= endDate)
+        .filter(p => p.type === PAYMENT_TYPE.RECEIVABLE && p.status === PAYMENT_STATUS.PAID && p.paidAt && p.paidAt >= startDate && p.paidAt <= endDate)
         .reduce((a, p) => a + Number(p.amount), 0);
 
       const expenses = payments
-        .filter(p => p.type === "payable" && p.status === "paid" && p.paidAt && p.paidAt >= startDate && p.paidAt <= endDate)
+        .filter(p => p.type === PAYMENT_TYPE.PAYABLE && p.status === PAYMENT_STATUS.PAID && p.paidAt && p.paidAt >= startDate && p.paidAt <= endDate)
         .reduce((a, p) => a + Number(p.amount), 0);
 
       const res_count = reservations
@@ -437,7 +437,7 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
 
     // 5. CANCELLATION RATES (computed from SQL aggregates)
     const totalRes = reservationsByStatus.reduce((a, r) => a + r.count, 0);
-    const cancelledRes = reservationsByStatus.find(r => r.status === "cancelled")?.count ?? 0;
+    const cancelledRes = reservationsByStatus.find(r => r.status === RESERVATION_STATUS.CANCELLED)?.count ?? 0;
     const cancellationRate = totalRes > 0 ? Math.round((cancelledRes / totalRes) * 1000) / 10 : 0;
 
     const tripsByStatusRaw = await db.select({
@@ -447,7 +447,7 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
       .where(eq(tripsTable.tenantId, tenantId))
       .groupBy(tripsTable.status);
     const totalTripsAll = tripsByStatusRaw.reduce((a, r) => a + Number(r.count), 0);
-    const cancelledTripsCount = Number(tripsByStatusRaw.find(r => r.status === "cancelled")?.count ?? 0);
+    const cancelledTripsCount = Number(tripsByStatusRaw.find(r => r.status === TRIP_STATUS.CANCELLED)?.count ?? 0);
     const tripCancellationRate = totalTripsAll > 0 ? Math.round((cancelledTripsCount / totalTripsAll) * 1000) / 10 : 0;
 
     // 6. AVG RESERVATIONS PER ACTIVE TRIP

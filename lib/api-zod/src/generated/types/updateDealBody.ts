@@ -5,6 +5,7 @@
  * VisiteCRM API - SaaS CRM for tourism agencies
  * OpenAPI spec version: 0.1.0
  */
+import type { DealStatus } from "./dealStatus";
 
 export interface UpdateDealBody {
   /** @nullable */
@@ -13,8 +14,7 @@ export interface UpdateDealBody {
   title?: string | null;
   /** @nullable */
   value?: number | null;
-  /** @nullable */
-  status?: string | null;
+  status?: DealStatus | null;
   /** @nullable */
   lostReason?: string | null;
   /** @nullable */

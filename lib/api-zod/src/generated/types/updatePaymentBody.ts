@@ -5,10 +5,10 @@
  * VisiteCRM API - SaaS CRM for tourism agencies
  * OpenAPI spec version: 0.1.0
  */
+import type { PaymentStatus } from "./paymentStatus";
 
 export interface UpdatePaymentBody {
-  /** @nullable */
-  status?: string | null;
+  status?: PaymentStatus | null;
   /** @nullable */
   paidAt?: string | null;
   /** @nullable */

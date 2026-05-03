@@ -23,7 +23,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    if (!AGENCY_STAFF_ROLES.includes(me.role)) {
+    if (!(AGENCY_STAFF_ROLES as readonly string[]).includes(me.role)) {
       res.status(403).json({ error: "Sem permissão" });
       return;
     }

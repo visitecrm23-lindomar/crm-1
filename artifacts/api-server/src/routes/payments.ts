@@ -12,7 +12,7 @@ import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { ADMIN_ROLES, MANAGEMENT_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { syncReservationPaymentStatus } from "../lib/reservation-payments";
-import { ROLES, RESERVATION_STATUS, COMMISSION_STATUS, PAYMENT_STATUS, type PaymentStatus, type PaymentType, type ExpenseStatus } from "@workspace/permissions";
+import { ROLES, RESERVATION_STATUS, COMMISSION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, type PaymentStatus, type PaymentType, type ExpenseStatus } from "@workspace/permissions";
 import { parsePaymentStatus, parsePaymentType, parseExpenseStatus } from "../lib/status-validators";
 
 const router = Router();
@@ -269,7 +269,7 @@ router.get("/trips/:tripId/financial-report", async (req, res, next: NextFunctio
     const cancelledCount = tripReservations.filter(r => r.status === RESERVATION_STATUS.CANCELLED).length;
 
     const revenueByMethod: Record<string, number> = {};
-    for (const p of tripPayments.filter(p => p.status === "paid")) {
+    for (const p of tripPayments.filter(p => p.status === PAYMENT_STATUS.PAID)) {
       const m = p.paymentMethod ?? "other";
       revenueByMethod[m] = (revenueByMethod[m] ?? 0) + Number(p.amount);
     }
@@ -333,7 +333,7 @@ router.get("/payments/summary", async (req, res, next: NextFunction): Promise<vo
 
     for (const p of payments) {
       const amount = Number(p.amount);
-      if (p.type === "receivable") {
+      if (p.type === PAYMENT_TYPE.RECEIVABLE) {
         if (p.status === PAYMENT_STATUS.PENDING) {
           totalReceivable += amount;
           if (p.dueDate < now) overdueReceivable += amount;
@@ -484,7 +484,7 @@ router.post("/payments", async (req, res, next: NextFunction): Promise<void> => 
     res.status(201).json(formatPayment(payment));
     CalendarSyncService.syncPayment(id).catch(() => {});
     const effectiveClientId = parsed.data.clientId ?? reservationClientId;
-    if (effectiveClientId && parsed.data.reservationId && explicitStatus === "paid") {
+    if (effectiveClientId && parsed.data.reservationId && explicitStatus === PAYMENT_STATUS.PAID) {
       const amountFormatted = Number(parsed.data.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
       writeClientActivity(effectiveClientId, "payment", `Pagamento de ${amountFormatted} recebido`, me.id, { amount: parsed.data.amount, reservationId: parsed.data.reservationId })
         .catch(() => {});
@@ -557,7 +557,7 @@ router.patch("/payments/:id", async (req, res, next: NextFunction): Promise<void
       await syncReservationPaymentStatus(payment.reservationId, me.tenantId);
       await syncReservationCommission(payment.reservationId, me.tenantId);
     }
-    if (payment.status === "paid" && payment.type === "receivable" && payment.clientId) {
+    if (payment.status === PAYMENT_STATUS.PAID && payment.type === PAYMENT_TYPE.RECEIVABLE && payment.clientId) {
       await loyaltyAwardPoints({
         clientId: payment.clientId,
         paymentId: payment.id,

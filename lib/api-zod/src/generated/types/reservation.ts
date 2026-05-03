@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ReservationClient } from "./reservationClient";
+import type { ReservationStatus } from "./reservationStatus";
 import type { TripSummary } from "./tripSummary";
 
 export interface Reservation {
@@ -29,8 +30,10 @@ export interface Reservation {
   /** @nullable */
   commissionAmount?: number | null;
   /** @nullable */
+  commissionSyncStatus?: string | null;
+  /** @nullable */
   sellerId?: string | null;
-  status: string;
+  status: ReservationStatus;
   voucherCode: string;
   /** @nullable */
   reservationNumber?: string | null;

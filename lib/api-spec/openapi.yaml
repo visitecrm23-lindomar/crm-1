@@ -4551,6 +4551,27 @@ paths:
 
 components:
   schemas:
+    ReservationStatus:
+      type: string
+      enum: [pending, confirmed, cancelled, refunded, completed, failed]
+    PaymentStatus:
+      type: string
+      enum: [pending, paid, overdue, cancelled, approved, failed, refunded, charged_back]
+    PaymentType:
+      type: string
+      enum: [receivable, payable]
+    CommissionStatus:
+      type: string
+      enum: [pending, approved, paid, cancelled]
+    DealStatus:
+      type: string
+      enum: [open, won, lost]
+    TripStatus:
+      type: string
+      enum: [draft, published, active, cancelled, completed]
+    ExpenseStatus:
+      type: string
+      enum: [pending, paid, overdue, cancelled]
     HealthStatus:
       type: object
       properties:
@@ -5469,6 +5490,10 @@ components:
           type: string
         description:
           type: ["string", "null"]
+        isPublic:
+          type: ["boolean", "null"]
+        isFeatured:
+          type: ["boolean", "null"]
         destination:
           type: string
         destinationCity:
@@ -5544,7 +5569,7 @@ components:
         tourGuideRegistration:
           type: ["string", "null"]
         status:
-          type: string
+          $ref: "#/components/schemas/TripStatus"
         gallery:
           type: array
           items:
@@ -5590,7 +5615,9 @@ components:
         description:
           type: ["string", "null"]
         status:
-          type: ["string", "null"]
+          oneOf:
+            - $ref: "#/components/schemas/TripStatus"
+            - type: "null"
         isPublic:
           type: ["boolean", "null"]
         isFeatured:
@@ -5773,7 +5800,7 @@ components:
         sellerId:
           type: ["string", "null"]
         status:
-          type: string
+          $ref: "#/components/schemas/ReservationStatus"
         voucherCode:
           type: string
         reservationNumber:
@@ -5967,7 +5994,9 @@ components:
       type: object
       properties:
         status:
-          type: ["string", "null"]
+          oneOf:
+            - $ref: "#/components/schemas/ReservationStatus"
+            - type: "null"
         paymentMethod:
           type: ["string", "null"]
         notes:
@@ -6222,7 +6251,7 @@ components:
         clientId:
           type: ["string", "null"]
         type:
-          type: string
+          $ref: "#/components/schemas/PaymentType"
         category:
           type: string
         amount:
@@ -6238,7 +6267,7 @@ components:
         paidAt:
           type: ["string", "null"]
         status:
-          type: string
+          $ref: "#/components/schemas/PaymentStatus"
         description:
           type: ["string", "null"]
         notes:
@@ -6283,7 +6312,7 @@ components:
         clientId:
           type: ["string", "null"]
         type:
-          type: string
+          $ref: "#/components/schemas/PaymentType"
         category:
           type: string
         amount:
@@ -6299,7 +6328,9 @@ components:
         notes:
           type: ["string", "null"]
         status:
-          type: ["string", "null"]
+          oneOf:
+            - $ref: "#/components/schemas/PaymentStatus"
+            - type: "null"
         paidAt:
           type: ["string", "null"]
       required: [type, category, amount, paymentMethod, dueDate]
@@ -6308,7 +6339,9 @@ components:
       type: object
       properties:
         status:
-          type: ["string", "null"]
+          oneOf:
+            - $ref: "#/components/schemas/PaymentStatus"
+            - type: "null"
         paidAt:
           type: ["string", "null"]
         notes:
@@ -6360,7 +6393,7 @@ components:
         dueDate:
           type: string
         status:
-          type: string
+          $ref: "#/components/schemas/ExpenseStatus"
         notes:
           type: ["string", "null"]
         createdAt:
@@ -6407,7 +6440,9 @@ components:
       type: object
       properties:
         status:
-          type: ["string", "null"]
+          oneOf:
+            - $ref: "#/components/schemas/ExpenseStatus"
+            - type: "null"
         paymentDate:
           type: ["string", "null"]
         notes:
@@ -6446,7 +6481,7 @@ components:
         expectedCloseDate:
           type: ["string", "null"]
         status:
-          type: string
+          $ref: "#/components/schemas/DealStatus"
         lostReason:
           type: ["string", "null"]
         source:
@@ -6521,7 +6556,9 @@ components:
         value:
           type: ["number", "null"]
         status:
-          type: ["string", "null"]
+          oneOf:
+            - $ref: "#/components/schemas/DealStatus"
+            - type: "null"
         lostReason:
           type: ["string", "null"]
         description:

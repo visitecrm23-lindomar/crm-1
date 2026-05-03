@@ -1,11 +1,12 @@
 export { TRIP_TYPE_LABELS, AGE_CATEGORY_LABELS } from "@/lib/labels";
+import { TRIP_STATUS, EXPENSE_STATUS } from "@workspace/permissions";
 
 export const STATUS_MAP: Record<string, { label: string; color: string }> = {
-  draft:      { label: "Rascunho",   color: "bg-gray-100 text-gray-600" },
-  active:     { label: "Ativa",      color: "bg-green-100 text-green-700" },
-  confirmed:  { label: "Confirmada", color: "bg-blue-100 text-blue-700" },
-  completed:  { label: "Concluída",  color: "bg-purple-100 text-purple-700" },
-  cancelled:  { label: "Cancelada",  color: "bg-red-100 text-red-700" },
+  [TRIP_STATUS.DRAFT]:     { label: "Rascunho",   color: "bg-gray-100 text-gray-600" },
+  [TRIP_STATUS.ACTIVE]:    { label: "Ativa",      color: "bg-green-100 text-green-700" },
+  [TRIP_STATUS.PUBLISHED]: { label: "Publicada",  color: "bg-blue-100 text-blue-700" },
+  [TRIP_STATUS.COMPLETED]: { label: "Concluída",  color: "bg-purple-100 text-purple-700" },
+  [TRIP_STATUS.CANCELLED]: { label: "Cancelada",  color: "bg-red-100 text-red-700" },
 };
 
 export const VEHICLE_TYPES = ["Ônibus", "Micro-ônibus", "Van", "Carro", "Outro"];
@@ -28,9 +29,9 @@ export const CELL_COLORS: Record<string, string> = {
 export const COST_CATEGORIES = ["Transporte", "Hospedagem", "Alimentação", "Guia", "Marketing", "Seguro", "Taxas", "Outros"] as const;
 
 export const COST_STATUS_MAP: Record<string, { label: string; color: string }> = {
-  pending: { label: "Pendente", color: "bg-amber-100 text-amber-700 border-amber-200" },
-  paid:    { label: "Pago",     color: "bg-green-100 text-green-700 border-green-200" },
-  overdue: { label: "Vencido",  color: "bg-red-100 text-red-700 border-red-200" },
+  [EXPENSE_STATUS.PENDING]: { label: "Pendente", color: "bg-amber-100 text-amber-700 border-amber-200" },
+  [EXPENSE_STATUS.PAID]:    { label: "Pago",     color: "bg-green-100 text-green-700 border-green-200" },
+  [EXPENSE_STATUS.OVERDUE]: { label: "Vencido",  color: "bg-red-100 text-red-700 border-red-200" },
 };
 
 export const FIXED_COST_CATEGORIES: Record<string, string[]> = {

@@ -5,23 +5,8 @@
  * VisiteCRM API - SaaS CRM for tourism agencies
  * OpenAPI spec version: 0.1.0
  */
-
-export interface HealthStatusBullmqWorkers {
-  email: boolean;
-  reminder: boolean;
-  pdf: boolean;
-  commissionSync: boolean;
-}
-
-export interface HealthStatusBullmq {
-  active: boolean;
-  workers: HealthStatusBullmqWorkers;
-}
-
-export interface HealthStatusRedis {
-  connected: boolean;
-  configured: boolean;
-}
+import type { HealthStatusBullmq } from "./healthStatusBullmq";
+import type { HealthStatusRedis } from "./healthStatusRedis";
 
 export interface HealthStatus {
   status: string;

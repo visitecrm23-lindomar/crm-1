@@ -35,6 +35,10 @@ export type ListReservationsParams = {
    * @nullable
    */
   dateTo?: string | null;
+  /**
+   * @nullable
+   */
+  commissionSyncStatus?: string | null;
   page?: number;
   limit?: number;
 };

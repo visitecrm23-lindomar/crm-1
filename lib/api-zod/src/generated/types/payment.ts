@@ -5,6 +5,8 @@
  * VisiteCRM API - SaaS CRM for tourism agencies
  * OpenAPI spec version: 0.1.0
  */
+import type { PaymentStatus } from "./paymentStatus";
+import type { PaymentType } from "./paymentType";
 
 export interface Payment {
   id: string;
@@ -12,7 +14,7 @@ export interface Payment {
   reservationId?: string | null;
   /** @nullable */
   clientId?: string | null;
-  type: string;
+  type: PaymentType;
   category: string;
   amount: number;
   paymentMethod: string;
@@ -21,7 +23,7 @@ export interface Payment {
   dueDate: string;
   /** @nullable */
   paidAt?: string | null;
-  status: string;
+  status: PaymentStatus;
   /** @nullable */
   description?: string | null;
   /** @nullable */

@@ -5,6 +5,7 @@
  * VisiteCRM API - SaaS CRM for tourism agencies
  * OpenAPI spec version: 0.1.0
  */
+import type { ExpenseStatus } from "./expenseStatus";
 
 export interface Expense {
   id: string;
@@ -20,7 +21,7 @@ export interface Expense {
   /** @nullable */
   paymentDate?: string | null;
   dueDate: string;
-  status: string;
+  status: ExpenseStatus;
   /** @nullable */
   notes?: string | null;
   createdAt: string;
