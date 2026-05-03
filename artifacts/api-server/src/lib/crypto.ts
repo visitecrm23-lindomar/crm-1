@@ -51,8 +51,7 @@ export function decryptCredential(value: string): string {
   if (iv.length !== IV_BYTES || tag.length !== TAG_BYTES) {
     throw new Error("Malformed encrypted credential");
   }
-  const decipher = createDecipheriv("aes-256-gcm", getKey(), iv);
-  decipher.setAuthTagLength(TAG_BYTES);
+  const decipher = createDecipheriv("aes-256-gcm", getKey(), iv, { authTagLength: TAG_BYTES });
   decipher.setAuthTag(tag);
   const dec = Buffer.concat([decipher.update(enc), decipher.final()]);
   return dec.toString("utf8");
