@@ -7,7 +7,7 @@ import { requireAuth } from "../lib/tenant";
 import { getAuth } from "@clerk/express";
 import { utapi } from "../lib/uploadthing";
 import { collectReferencedUploadThingKeys } from "../lib/collectReferencedUploadThingKeys";
-import { ROLES } from "@workspace/permissions";
+import { ROLES, PAYMENT_STATUS } from "@workspace/permissions";
 
 const router = Router();
 
@@ -155,7 +155,7 @@ router.post("/admin/invoices", async (req, res): Promise<void> => {
       planId: parsed.data.planId,
       description: parsed.data.description,
       amount: parsed.data.amount,
-      status: parsed.data.status ?? "pending",
+      status: parsed.data.status ?? PAYMENT_STATUS.PENDING,
       dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : undefined,
       notes: parsed.data.notes,
     });
@@ -181,7 +181,7 @@ router.patch("/admin/invoices/:id", async (req, res): Promise<void> => {
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const updateData: Record<string, unknown> = { ...parsed.data };
     if (parsed.data.paidAt) updateData.paidAt = new Date(parsed.data.paidAt);
-    if (parsed.data.status === "paid" && !parsed.data.paidAt) updateData.paidAt = new Date();
+    if (parsed.data.status === PAYMENT_STATUS.PAID && !parsed.data.paidAt) updateData.paidAt = new Date();
     await db.update(invoicesTable).set(updateData).where(eq(invoicesTable.id, req.params.id));
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
     if (!invoice) { res.status(404).json({ error: "Not found" }); return; }

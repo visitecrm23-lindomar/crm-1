@@ -7,6 +7,7 @@ import {
 import { and, eq, sql } from "drizzle-orm";
 import { generateId } from "../../lib/id";
 import type { Tx } from "./tx";
+import { REFERRAL_STATUS } from "@workspace/permissions";
 
 export interface RecordReferralArgs {
   tenantId: string;
@@ -39,7 +40,7 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
     tenantId,
     referrerId,
     code: referralCode,
-    status: "completed",
+    status: REFERRAL_STATUS.COMPLETED,
     referredId: referredClientId,
     referredEmail: customerEmail,
     referredName: customerName,

@@ -6,6 +6,7 @@ import {
   enqueueNewBookingNotificationEmail,
 } from "../../queues/email-helpers";
 import { ensurePortalAccount } from "./portal-account";
+import { STORE_PAYMENT_STATUS } from "@workspace/permissions";
 
 export interface PostBookingArgs {
   store: typeof storesTable.$inferSelect;
@@ -103,7 +104,7 @@ export async function runPostBookingSideEffects(args: PostBookingArgs): Promise<
           amountPaid: 0,
           amountPending: totalAmount,
           paymentMethod: paymentMethod ?? "pix",
-          paymentStatus: "pending",
+          paymentStatus: STORE_PAYMENT_STATUS.PENDING,
           agencyName,
           agencyLogo,
           agencyPhone,

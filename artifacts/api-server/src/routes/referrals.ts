@@ -5,6 +5,7 @@ import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { ADMIN_ROLES } from '../lib/tenant';
+import { REFERRAL_STATUS } from "@workspace/permissions";
 
 const router = Router();
 
@@ -26,7 +27,7 @@ router.get("/referrals/validate/:code", async (req, res): Promise<void> => {
       .where(and(
         eq(referralsTable.tenantId, me.tenantId),
         eq(referralsTable.code, code),
-        eq(referralsTable.status, "pending"),
+        eq(referralsTable.status, REFERRAL_STATUS.PENDING),
       )).limit(1);
 
     if (!referral) {
@@ -69,7 +70,7 @@ router.get("/referrals/stats", async (req, res): Promise<void> => {
     }).from(referralsTable)
       .where(and(
         eq(referralsTable.tenantId, me.tenantId),
-        eq(referralsTable.status, "completed"),
+        eq(referralsTable.status, REFERRAL_STATUS.COMPLETED),
       ));
 
     const [discountRow] = await db.select({
@@ -77,7 +78,7 @@ router.get("/referrals/stats", async (req, res): Promise<void> => {
     }).from(referralsTable)
       .where(and(
         eq(referralsTable.tenantId, me.tenantId),
-        eq(referralsTable.status, "completed"),
+        eq(referralsTable.status, REFERRAL_STATUS.COMPLETED),
       ));
 
     const conversionRate = total > 0 ? Math.round((stats.completed / total) * 100) : 0;

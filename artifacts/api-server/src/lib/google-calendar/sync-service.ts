@@ -419,7 +419,7 @@ export class CalendarSyncService {
       const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, paymentId)).limit(1);
       if (!payment || !payment.dueDate) return;
 
-      if (payment.status === "paid" || payment.status === "cancelled") {
+      if (payment.status === PAYMENT_STATUS.PAID || payment.status === PAYMENT_STATUS.CANCELLED) {
         await CalendarSyncService.deleteEventsForPayment(paymentId);
         return;
       }
@@ -515,7 +515,7 @@ export class CalendarSyncService {
       const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, paymentId)).limit(1);
       if (!payment || !payment.dueDate) return;
 
-      if (payment.status === "paid" || payment.status === "cancelled") return;
+      if (payment.status === PAYMENT_STATUS.PAID || payment.status === PAYMENT_STATUS.CANCELLED) return;
 
       const [actor] = await db.select({ role: usersTable.role, tenantId: usersTable.tenantId })
         .from(usersTable)

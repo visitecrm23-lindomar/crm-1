@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import { reservationsTable, tripsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
+import { RESERVATION_STATUS } from "@workspace/permissions";
 
 type CancelledRow = {
   id: string;
@@ -23,11 +24,11 @@ export async function runExpiredReservationsCron(): Promise<void> {
       sql`
         UPDATE reservations
         SET
-          status       = 'cancelled',
+          status       = ${RESERVATION_STATUS.CANCELLED},
           cancelled_at = now(),
           updated_at   = now()
         WHERE
-          status     = 'pending'
+          status     = ${RESERVATION_STATUS.PENDING}
           AND expires_at IS NOT NULL
           AND expires_at < ${now}
           AND NOT EXISTS (

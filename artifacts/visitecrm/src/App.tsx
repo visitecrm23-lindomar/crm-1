@@ -178,7 +178,10 @@ function HomeRedirect() {
   );
 }
 
-const AGENCY_ROLES = ["agencia", "gerente", "suporte", "superadmin"] as const;
+const AGENCY_ROLES = [ROLES.AGENCY_ADMIN, ROLES.AGENCY_MANAGER, ROLES.SUPPORT, ROLES.SUPER_ADMIN] as const;
+const SUPERADMIN_ONLY = [ROLES.SUPER_ADMIN] as const;
+const VENDEDOR_ONLY = [ROLES.SALES] as const;
+const CLIENTE_ONLY = [ROLES.CLIENT] as const;
 
 interface RoleGateProps {
   component: ComponentType;
@@ -214,19 +217,19 @@ function RoleGate({
   const { data: me, isLoading } = useGetMe();
   const role = me?.role;
   const clientNotAllowed =
-    allowedRoles === "*" || !(allowedRoles as string[]).includes("cliente");
+    allowedRoles === "*" || !(allowedRoles as readonly string[]).includes(ROLES.CLIENT);
 
   let content: ReactNode = null;
   if (!isLoading && !me) {
     content = <Redirect to="/onboarding" />;
   } else if (!isLoading && me) {
-    if (clientNotAllowed && role === "cliente") {
+    if (clientNotAllowed && role === ROLES.CLIENT) {
       content = <Redirect to="/perfil" />;
-    } else if (clientNotAllowed && requireTenant && !me.tenantId && role !== "superadmin") {
+    } else if (clientNotAllowed && requireTenant && !me.tenantId && role !== ROLES.SUPER_ADMIN) {
       content = <Redirect to="/onboarding" />;
-    } else if (allowedRoles !== "*" && !(allowedRoles as string[]).includes(role ?? "")) {
+    } else if (allowedRoles !== "*" && !(allowedRoles as readonly string[]).includes(role ?? "")) {
       content =
-        role === "vendedor" && vendedorFallback !== undefined ? (
+        role === ROLES.SALES && vendedorFallback !== undefined ? (
           <Redirect to={vendedorFallback} />
         ) : (
           <Redirect to={fallbackPath} />
@@ -342,7 +345,7 @@ function Router() {
       <Route path="/downloads" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Downloads} />} />
 
       {/* Seller dashboard */}
-      <Route path="/meu-painel" component={() => <RoleGate allowedRoles={["vendedor"]} layout={Layout} fallbackPath="/dashboard" requireTenant={false} component={MeuPainel} />} />
+      <Route path="/meu-painel" component={() => <RoleGate allowedRoles={VENDEDOR_ONLY} layout={Layout} fallbackPath="/dashboard" requireTenant={false} component={MeuPainel} />} />
 
       {/* Legacy redirects */}
       <Route path="/settings" component={() => <Redirect to="/configuracoes" />} />
@@ -350,16 +353,16 @@ function Router() {
       <Route path="/settings/billing" component={() => <Redirect to="/configuracoes?tab=plan" />} />
 
       {/* Super Admin */}
-      <Route path="/admin" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminDashboard} />} />
-      <Route path="/admin/tenants" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminTenants} />} />
-      <Route path="/admin/tenants/:id" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminTenantDetail} />} />
-      <Route path="/admin/plans" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminPlans} />} />
-      <Route path="/admin/billing" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminBilling} />} />
-      <Route path="/admin/metrics" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminMetrics} />} />
-      <Route path="/admin/users" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminUsers} />} />
-      <Route path="/admin/logs" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminLogs} />} />
-      <Route path="/admin/settings" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminSettings} />} />
-      <Route path="/admin/maintenance" component={() => <RoleGate allowedRoles={["superadmin"]} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminMaintenance} />} />
+      <Route path="/admin" component={() => <RoleGate allowedRoles={SUPERADMIN_ONLY} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminDashboard} />} />
+      <Route path="/admin/tenants" component={() => <RoleGate allowedRoles={SUPERADMIN_ONLY} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminTenants} />} />
+      <Route path="/admin/tenants/:id" component={() => <RoleGate allowedRoles={SUPERADMIN_ONLY} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminTenantDetail} />} />
+      <Route path="/admin/plans" component={() => <RoleGate allowedRoles={SUPERADMIN_ONLY} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminPlans} />} />
+      <Route path="/admin/billing" component={() => <RoleGate allowedRoles={SUPERADMIN_ONLY} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminBilling} />} />
+      <Route path="/admin/metrics" component={() => <RoleGate allowedRoles={SUPERADMIN_ONLY} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminMetrics} />} />
+      <Route path="/admin/users" component={() => <RoleGate allowedRoles={SUPERADMIN_ONLY} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminUsers} />} />
+      <Route path="/admin/logs" component={() => <RoleGate allowedRoles={SUPERADMIN_ONLY} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminLogs} />} />
+      <Route path="/admin/settings" component={() => <RoleGate allowedRoles={SUPERADMIN_ONLY} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminSettings} />} />
+      <Route path="/admin/maintenance" component={() => <RoleGate allowedRoles={SUPERADMIN_ONLY} layout={AdminLayout} fallbackPath="/dashboard" requireTenant={false} component={AdminMaintenance} />} />
 
       {/* Store admin pages */}
       <Route path="/loja" component={() => <Redirect to="/loja/configuracoes" />} />
@@ -371,7 +374,7 @@ function Router() {
       <Route path="/loja/avaliacoes" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={LojaAvaliacoes} />} />
 
       {/* Client portal */}
-      <Route path="/perfil" component={() => <RoleGate allowedRoles={["cliente"]} layout={PortalLayout} signedOutPath="/sign-in?redirect_url=%2Fperfil" fallbackPath="/dashboard" requireTenant={false} component={PerfilPage} />} />
+      <Route path="/perfil" component={() => <RoleGate allowedRoles={CLIENTE_ONLY} layout={PortalLayout} signedOutPath="/sign-in?redirect_url=%2Fperfil" fallbackPath="/dashboard" requireTenant={false} component={PerfilPage} />} />
 
       {/* Public vitrine — must be after admin routes */}
       <Route path="/loja/:slug" component={Vitrine} />

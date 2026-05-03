@@ -6,6 +6,7 @@ import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { z } from "zod";
 import { ADMIN_ROLES } from '../lib/tenant';
+import { RESERVATION_STATUS, STORE_PAYMENT_STATUS } from "@workspace/permissions";
 
 const router = Router();
 
@@ -523,8 +524,8 @@ router.post("/orders", async (req, res): Promise<void> => {
       bonusUsed: "0",
       shippingCost: "0",
       finalAmount: String(totalAmount),
-      status: "pending",
-      paymentStatus: "pending",
+      status: RESERVATION_STATUS.PENDING,
+      paymentStatus: STORE_PAYMENT_STATUS.PENDING,
     });
 
     for (const item of items) {

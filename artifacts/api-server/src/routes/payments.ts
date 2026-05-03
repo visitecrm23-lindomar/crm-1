@@ -20,8 +20,8 @@ const router = Router();
 async function recalculateClientFinancials(clientId: string, tenantId: string): Promise<void> {
   const result = await db.execute(sql`
     SELECT
-      COALESCE(SUM(CASE WHEN status = 'paid' THEN amount::numeric ELSE 0 END), 0) AS total_spent,
-      COALESCE(SUM(CASE WHEN status IN ('pending', 'overdue') THEN amount::numeric ELSE 0 END), 0) AS outstanding_balance
+      COALESCE(SUM(CASE WHEN status = ${PAYMENT_STATUS.PAID} THEN amount::numeric ELSE 0 END), 0) AS total_spent,
+      COALESCE(SUM(CASE WHEN status IN (${PAYMENT_STATUS.PENDING}, ${PAYMENT_STATUS.OVERDUE}) THEN amount::numeric ELSE 0 END), 0) AS outstanding_balance
     FROM payments
     WHERE client_id = ${clientId} AND tenant_id = ${tenantId}
   `);
@@ -46,7 +46,7 @@ async function syncMonthlyGoalProgress(sellerId: string, tenantId: string): Prom
       FROM commissions
       WHERE tenant_id = ${tenantId}
         AND user_id = ${sellerId}
-        AND status IN ('paid', 'approved')
+        AND status IN (${PAYMENT_STATUS.PAID}, ${PAYMENT_STATUS.APPROVED})
         AND to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM') = ${month}
     `);
     const row = result.rows[0] as Record<string, unknown>;

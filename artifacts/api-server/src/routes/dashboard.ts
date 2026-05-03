@@ -413,7 +413,7 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
     const resByMonthRaw = await db.select({
       monthStart: sql<string>`date_trunc('month', ${reservationsTable.createdAt})::text`,
       count: sql<number>`count(*)::int`,
-      cancelled: sql<number>`sum(case when ${reservationsTable.status} = 'cancelled' then 1 else 0 end)::int`,
+      cancelled: sql<number>`sum(case when ${reservationsTable.status} = ${RESERVATION_STATUS.CANCELLED} then 1 else 0 end)::int`,
     }).from(reservationsTable)
       .where(and(eq(reservationsTable.tenantId, tenantId), gte(reservationsTable.createdAt, since)))
       .groupBy(sql`date_trunc('month', ${reservationsTable.createdAt})`)
@@ -471,8 +471,8 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
     // 8. REVENUE & EXPENSES BY MONTH — SQL GROUP BY
     const revenueExpRaw = await db.select({
       monthStart: sql<string>`date_trunc('month', ${paymentsTable.paidAt})::text`,
-      revenue: sql<string>`sum(case when ${paymentsTable.type} = 'receivable' and ${paymentsTable.status} = 'paid' then cast(${paymentsTable.amount} as numeric) else 0 end)`,
-      expenses: sql<string>`sum(case when ${paymentsTable.type} = 'payable' and ${paymentsTable.status} = 'paid' then cast(${paymentsTable.amount} as numeric) else 0 end)`,
+      revenue: sql<string>`sum(case when ${paymentsTable.type} = ${PAYMENT_TYPE.RECEIVABLE} and ${paymentsTable.status} = ${PAYMENT_STATUS.PAID} then cast(${paymentsTable.amount} as numeric) else 0 end)`,
+      expenses: sql<string>`sum(case when ${paymentsTable.type} = ${PAYMENT_TYPE.PAYABLE} and ${paymentsTable.status} = ${PAYMENT_STATUS.PAID} then cast(${paymentsTable.amount} as numeric) else 0 end)`,
     }).from(paymentsTable)
       .where(and(
         eq(paymentsTable.tenantId, tenantId),
@@ -765,8 +765,8 @@ router.get("/dashboard/comparative", async (req, res): Promise<void> => {
 
     const revenueExpRaw = await db.select({
       monthStart: sql<string>`date_trunc('month', ${paymentsTable.paidAt})::text`,
-      revenue: sql<string>`sum(case when ${paymentsTable.type} = 'receivable' and ${paymentsTable.status} = 'paid' then cast(${paymentsTable.amount} as numeric) else 0 end)`,
-      expenses: sql<string>`sum(case when ${paymentsTable.type} = 'payable' and ${paymentsTable.status} = 'paid' then cast(${paymentsTable.amount} as numeric) else 0 end)`,
+      revenue: sql<string>`sum(case when ${paymentsTable.type} = ${PAYMENT_TYPE.RECEIVABLE} and ${paymentsTable.status} = ${PAYMENT_STATUS.PAID} then cast(${paymentsTable.amount} as numeric) else 0 end)`,
+      expenses: sql<string>`sum(case when ${paymentsTable.type} = ${PAYMENT_TYPE.PAYABLE} and ${paymentsTable.status} = ${PAYMENT_STATUS.PAID} then cast(${paymentsTable.amount} as numeric) else 0 end)`,
     }).from(paymentsTable)
       .where(and(eq(paymentsTable.tenantId, tenantId), sql`${paymentsTable.paidAt} IS NOT NULL`, gte(paymentsTable.paidAt, since)))
       .groupBy(sql`date_trunc('month', ${paymentsTable.paidAt})`);

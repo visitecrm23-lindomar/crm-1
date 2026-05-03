@@ -4,7 +4,7 @@ import {
   useListTrips, useCreateTrip, useDeleteTrip, useGetDashboardUpcomingTrips, useGetMe,
 } from "@workspace/api-client-react";
 import type { Trip } from "@workspace/api-client-react";
-import { ROLES } from "@workspace/permissions";
+import { ROLES, TRIP_STATUS } from "@workspace/permissions";
 
 const PAGE_SIZE = 12;
 
@@ -42,7 +42,7 @@ export function useTrips() {
 
   const stats = useMemo(() => {
     const all = allTrips?.data ?? [];
-    const active = all.filter(t => t.status === "active" || t.status === "confirmed");
+    const active = all.filter(t => t.status === TRIP_STATUS.ACTIVE || t.status === TRIP_STATUS.CONFIRMED);
     const totalSeats = active.reduce((acc, t) => acc + t.totalCapacity, 0);
     const occupiedSeats = active.reduce((acc, t) => acc + t.reservedSeats + t.confirmedSeats, 0);
     const totalRevenue = active.reduce((acc, t) => acc + (t.reservedSeats + t.confirmedSeats) * t.priceAdult, 0);

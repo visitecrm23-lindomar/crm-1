@@ -210,10 +210,10 @@ router.get("/reservations/stats", async (req, res, next: NextFunction): Promise<
     const [statsRow] = await db
       .select({
         total: sql<number>`count(*)`,
-        confirmed: sql<number>`count(*) filter (where status = 'confirmed')`,
-        pending: sql<number>`count(*) filter (where status = 'pending')`,
-        cancelled: sql<number>`count(*) filter (where status = 'cancelled')`,
-        totalOutstanding: sql<number>`coalesce(sum(balance) filter (where status not in ('cancelled', 'completed')), 0)`,
+        confirmed: sql<number>`count(*) filter (where status = ${RESERVATION_STATUS.CONFIRMED})`,
+        pending: sql<number>`count(*) filter (where status = ${RESERVATION_STATUS.PENDING})`,
+        cancelled: sql<number>`count(*) filter (where status = ${RESERVATION_STATUS.CANCELLED})`,
+        totalOutstanding: sql<number>`coalesce(sum(balance) filter (where status not in (${RESERVATION_STATUS.CANCELLED}, ${RESERVATION_STATUS.COMPLETED})), 0)`,
       })
       .from(reservationsTable)
       .where(tenantCond);

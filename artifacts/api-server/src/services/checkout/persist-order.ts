@@ -20,6 +20,7 @@ import { upsertCheckoutClient } from "./checkout-user";
 import { lockTripsForCheckout, lockProductsForCheckout } from "./order-locks";
 import { recordReferralConversion } from "./referral-conversion";
 import type { Tx } from "./tx";
+import { RESERVATION_STATUS } from "@workspace/permissions";
 
 export interface PersistedOrderItem {
   id: string;
@@ -175,7 +176,7 @@ async function writeReservationsAndDeals(
       totalValue: totalValue.toFixed(2),
       paidValue: "0",
       balance: totalValue.toFixed(2),
-      status: "pending",
+      status: RESERVATION_STATUS.PENDING,
       voucherCode,
       reservationNumber,
       qrCode: `QR-${voucherCode}`,

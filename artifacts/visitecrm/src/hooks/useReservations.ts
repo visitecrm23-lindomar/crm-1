@@ -6,7 +6,7 @@ import {
 } from "@workspace/api-client-react";
 import type { Reservation } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
-import { ROLES } from "@workspace/permissions";
+import { ROLES, RESERVATION_STATUS } from "@workspace/permissions";
 
 export interface UseReservationsOptions {
   initialTripFilter?: string;
@@ -71,7 +71,7 @@ export function useReservations(options?: UseReservationsOptions) {
 
   const handleCancel = async (id: string) => {
     try {
-      await updateReservation.mutateAsync({ id, data: { status: "cancelled" } });
+      await updateReservation.mutateAsync({ id, data: { status: RESERVATION_STATUS.CANCELLED } });
       refetch();
       refetchStats();
     } catch {

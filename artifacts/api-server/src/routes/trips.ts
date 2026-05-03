@@ -619,7 +619,7 @@ router.get("/trips/:id/boarding-panel", async (req, res, next: NextFunction): Pr
       .where(and(
         eq(reservationsTable.tripId, trip.id),
         eq(reservationsTable.tenantId, me.tenantId),
-        sql`${reservationsTable.status} NOT IN ('cancelled', 'refunded')`,
+        sql`${reservationsTable.status} NOT IN (${RESERVATION_STATUS.CANCELLED}, ${RESERVATION_STATUS.REFUNDED})`,
       ));
 
     if (reservations.length === 0) {
@@ -743,7 +743,7 @@ router.post("/trips/:id/sync-passengers", async (req, res, next: NextFunction): 
       .where(and(
         eq(reservationsTable.tripId, trip.id),
         eq(reservationsTable.tenantId, me.tenantId),
-        sql`${reservationsTable.status} NOT IN ('cancelled', 'refunded')`,
+        sql`${reservationsTable.status} NOT IN (${RESERVATION_STATUS.CANCELLED}, ${RESERVATION_STATUS.REFUNDED})`,
       ));
 
     if (reservations.length === 0) {
@@ -1303,7 +1303,7 @@ router.post("/trips/:id/manifest/send", async (req, res, next: NextFunction): Pr
       .where(and(
         eq(reservationsTable.tripId, trip.id),
         eq(reservationsTable.tenantId, me.tenantId),
-        sql`${reservationsTable.status} NOT IN ('cancelled', 'refunded')`,
+        sql`${reservationsTable.status} NOT IN (${RESERVATION_STATUS.CANCELLED}, ${RESERVATION_STATUS.REFUNDED})`,
       ));
 
     const reservationIds = reservations.map(r => r.id);

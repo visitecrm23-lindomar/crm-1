@@ -6,6 +6,7 @@ import { getRedisConnection } from "../lib/redis";
 import { logger } from "../lib/logger";
 import { runExpiredReservationsCron } from "../lib/expired-reservations";
 import type { ReminderJobData } from "../queues/index";
+import { RESERVATION_STATUS, PAYMENT_STATUS } from "@workspace/permissions";
 
 // ────────────────────────────────────────────────────────────
 // D-1 Boarding reminder
@@ -43,7 +44,7 @@ async function processBoardingReminders(): Promise<void> {
     .innerJoin(tenantsTable, eq(reservationsTable.tenantId, tenantsTable.id))
     .where(
       and(
-        eq(reservationsTable.status, "confirmed"),
+        eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED),
         gte(tripsTable.departureDate, tomorrowStart),
         lt(tripsTable.departureDate, tomorrowEnd),
       ),
@@ -167,7 +168,7 @@ async function processPaymentReminders(): Promise<void> {
     .innerJoin(tenantsTable, eq(reservationsTable.tenantId, tenantsTable.id))
     .where(
       and(
-        eq(paymentsTable.status, "pending"),
+        eq(paymentsTable.status, PAYMENT_STATUS.PENDING),
         isNull(paymentsTable.paidAt),
         eq(paymentsTable.type, "receivable"),
         gte(paymentsTable.dueDate, d3Start),
