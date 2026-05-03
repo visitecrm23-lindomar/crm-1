@@ -8,6 +8,7 @@ import { z } from "zod";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { ROLES, DEAL_STATUS, type DealStatus } from "@workspace/permissions";
 import { parseDealStatus } from "../lib/status-validators";
+import { AppError } from "../lib/errors";
 
 const router = Router();
 
@@ -126,6 +127,7 @@ router.get("/pipeline/stages", async (req, res): Promise<void> => {
       .orderBy(asc(pipelineStagesTable.order));
     res.json(stages.map(formatStage));
   } catch (err) {
+    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
     req.log.error({ err }, "Error listing pipeline stages");
     res.status(500).json({ error: "Internal server error" });
   }
@@ -154,6 +156,7 @@ router.get("/deals", async (req, res): Promise<void> => {
       return formatDeal(d, info?.seats ?? [], info?.reservationNumber ?? null);
     }));
   } catch (err) {
+    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
     req.log.error({ err }, "Error listing deals");
     res.status(500).json({ error: "Internal server error" });
   }
@@ -203,6 +206,7 @@ router.post("/deals", async (req, res): Promise<void> => {
     if (!deal) { res.status(500).json({ error: "Failed to create deal" }); return; }
     res.status(201).json(formatDeal(deal));
   } catch (err) {
+    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
     req.log.error({ err }, "Error creating deal");
     res.status(500).json({ error: "Internal server error" });
   }
@@ -228,6 +232,7 @@ router.get("/deals/:id", async (req, res): Promise<void> => {
     if (!deal) return;
     res.json(formatDeal(deal));
   } catch (err) {
+    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
     req.log.error({ err }, "Error fetching deal");
     res.status(500).json({ error: "Internal server error" });
   }
@@ -274,6 +279,7 @@ router.patch("/deals/:id", async (req, res): Promise<void> => {
     if (!deal) { res.status(404).json({ error: "Not found" }); return; }
     res.json(formatDeal(deal));
   } catch (err) {
+    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
     req.log.error({ err }, "Error updating deal");
     res.status(500).json({ error: "Internal server error" });
   }
@@ -300,6 +306,7 @@ router.patch("/deals/:id/move", async (req, res): Promise<void> => {
     if (!deal) { res.status(404).json({ error: "Not found" }); return; }
     res.json(formatDeal(deal));
   } catch (err) {
+    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
     req.log.error({ err }, "Error moving deal");
     res.status(500).json({ error: "Internal server error" });
   }
@@ -315,6 +322,7 @@ router.delete("/deals/:id", async (req, res): Promise<void> => {
       .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) {
+    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
     req.log.error({ err }, "Error deleting deal");
     res.status(500).json({ error: "Internal server error" });
   }
@@ -333,6 +341,7 @@ router.get("/pipelines", async (req, res): Promise<void> => {
       createdAt: p.createdAt.toISOString(),
     })));
   } catch (err) {
+    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
     req.log.error({ err }, "Error listing pipelines");
     res.status(500).json({ error: "Internal server error" });
   }
@@ -353,6 +362,7 @@ router.post("/pipelines", async (req, res): Promise<void> => {
     const [pipeline] = await db.select().from(pipelinesTable).where(eq(pipelinesTable.id, id));
     res.status(201).json(pipeline);
   } catch (err) {
+    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
     req.log.error({ err }, "Error creating pipeline");
     res.status(500).json({ error: "Internal server error" });
   }
@@ -372,6 +382,7 @@ router.patch("/pipelines/:id", async (req, res): Promise<void> => {
     const [pipeline] = await db.select().from(pipelinesTable).where(and(eq(pipelinesTable.id, req.params.id), eq(pipelinesTable.tenantId, me.tenantId)));
     res.json(pipeline ?? { error: "Not found" });
   } catch (err) {
+    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
     req.log.error({ err }, "Error updating pipeline");
     res.status(500).json({ error: "Internal server error" });
   }
