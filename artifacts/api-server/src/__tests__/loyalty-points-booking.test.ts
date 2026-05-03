@@ -95,7 +95,7 @@ function buildApp() {
   app.use(express.json());
   app.use((req: express.Request & { log?: unknown; id?: string }, _res, next) => {
     const noop = () => {};
-    req.log = { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop };
+    req.log = { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop } as any;
     req.id = "test-req";
     next();
   });

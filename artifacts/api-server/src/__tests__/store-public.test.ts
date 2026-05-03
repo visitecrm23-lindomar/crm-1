@@ -128,7 +128,7 @@ function stubLogger(
   next: express.NextFunction,
 ) {
   const noop = () => {};
-  req.log = { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop };
+  req.log = { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop } as any;
   next();
 }
 
@@ -494,8 +494,8 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
       .mockReturnValueOnce({ limit: mockLimit }) // 3 — trip seat check
       .mockReturnValueOnce({ limit: mockLimit }) // 4 — admin user
       .mockReturnValueOnce({ limit: mockLimit }) // 5 — existing client
-      .mockResolvedValueOnce([])                  // 6 — stages (no .limit())
-      .mockResolvedValueOnce([]);                 // 7 — trip names (no .limit())
+      .mockResolvedValueOnce([] as any)                  // 6 — stages (no .limit())
+      .mockResolvedValueOnce([] as any);                 // 7 — trip names (no .limit())
 
     mockLimit
       .mockResolvedValueOnce([FAKE_STORE])                                        // getActiveStore

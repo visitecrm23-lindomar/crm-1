@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { clientPortalApi, type ClientPortalProfile } from "@/lib/clientPortalApi";
 import { useGetMe } from "@workspace/api-client-react";
-import { REFERRAL_STATUS } from "@workspace/permissions";
+import { RESERVATION_STATUS } from "@workspace/permissions";
 import { useSignIn } from "@clerk/react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -122,14 +122,14 @@ function ReservasTab({ profile }: { profile: ClientPortalProfile }) {
 
   const upcoming = all.filter(
     (r) =>
-      r.status !== REFERRAL_STATUS.COMPLETED &&
-      (r.status as string) !== "cancelled" &&
+      r.status !== RESERVATION_STATUS.COMPLETED &&
+      r.status !== RESERVATION_STATUS.CANCELLED &&
       (!r.tripDepartureDate || r.tripDepartureDate >= today),
   );
   const past = all.filter(
     (r) =>
-      (r.status as string) === "cancelled" ||
-      r.status === REFERRAL_STATUS.COMPLETED ||
+      r.status === RESERVATION_STATUS.CANCELLED ||
+      r.status === RESERVATION_STATUS.COMPLETED ||
       (!!r.tripDepartureDate && r.tripDepartureDate < today),
   );
 

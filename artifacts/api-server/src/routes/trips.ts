@@ -256,7 +256,7 @@ router.post("/trips", async (req, res, next: NextFunction): Promise<void> => {
       seatLayout: layout,
       layoutId: layoutId ?? null,
       itinerary: parsed.data.itinerary ?? null,
-      boardingPoints: parsed.data.boardingPoints ?? [],
+      boardingPoints: (parsed.data.boardingPoints ?? []) as { id: string; name: string; time: string; address: string }[],
       fixedCosts: Array.isArray(parsed.data.fixedCosts) ? (parsed.data.fixedCosts as FixedCostItem[]) : [],
       variableCosts: Array.isArray(parsed.data.variableCosts) ? (parsed.data.variableCosts as VariableCostItem[]) : [],
       gallery: parsed.data.gallery ?? [],
@@ -353,7 +353,7 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
     if (parsed.data.type !== undefined) updates.type = parsed.data.type ?? "";
     if (parsed.data.category !== undefined) updates.category = parsed.data.category ?? "";
     if (parsed.data.itinerary !== undefined) updates.itinerary = parsed.data.itinerary ?? null;
-    if (parsed.data.boardingPoints !== undefined) updates.boardingPoints = parsed.data.boardingPoints ?? [];
+    if (parsed.data.boardingPoints !== undefined) updates.boardingPoints = (parsed.data.boardingPoints ?? []) as { id: string; name: string; time: string; address: string }[];
     if (parsed.data.fixedCosts !== undefined) updates.fixedCosts = Array.isArray(parsed.data.fixedCosts) ? (parsed.data.fixedCosts as FixedCostItem[]) : [];
     if (parsed.data.variableCosts !== undefined) updates.variableCosts = Array.isArray(parsed.data.variableCosts) ? (parsed.data.variableCosts as VariableCostItem[]) : [];
     if (parsed.data.gallery !== undefined) updates.gallery = parsed.data.gallery ?? [];

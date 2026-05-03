@@ -90,29 +90,29 @@ export default function Marketing() {
   const deleteCoupon = useDeleteCoupon();
 
   const { data: bdToday, isLoading: loadingToday, refetch: refetchToday } = useGetBirthdayToday({
-    query: { enabled: tab === "birthdays" },
+    query: { enabled: tab === "birthdays" } as any,
   });
   const { data: bdUpcoming7, isLoading: loadingUpcoming7 } = useGetBirthdayUpcoming(
     { days: 7 },
-    { query: { enabled: tab === "birthdays" && birthdaySubTab === "upcoming7" } }
+    { query: { enabled: tab === "birthdays" && birthdaySubTab === "upcoming7" } as any }
   );
   const { data: bdUpcoming30, isLoading: loadingUpcoming30 } = useGetBirthdayUpcoming(
     { days: 30 },
-    { query: { enabled: tab === "birthdays" && birthdaySubTab === "upcoming30" } }
+    { query: { enabled: tab === "birthdays" && birthdaySubTab === "upcoming30" } as any }
   );
   const { data: bdHistory, isLoading: loadingHistory } = useGetBirthdayHistory(
     { year: new Date().getFullYear() },
-    { query: { enabled: tab === "birthdays" && birthdaySubTab === "history" } }
+    { query: { enabled: tab === "birthdays" && birthdaySubTab === "history" } as any }
   );
   const { data: bdStats } = useGetBirthdayStats({
-    query: { enabled: tab === "birthdays" },
+    query: { enabled: tab === "birthdays" } as any,
   });
   const { data: bdSettings, isLoading: loadingSettings } = useGetBirthdaySettings({
-    query: { enabled: tab === "birthdays" && birthdaySubTab === "settings", refetchOnWindowFocus: false },
+    query: { enabled: tab === "birthdays" && birthdaySubTab === "settings", refetchOnWindowFocus: false } as any,
   });
 
   const { data: allClientsData } = useListClients({ limit: 1000, page: 1 }, {
-    query: { enabled: manualSendOpen },
+    query: { enabled: manualSendOpen } as any,
   });
 
   const filteredClients = useMemo(() => {

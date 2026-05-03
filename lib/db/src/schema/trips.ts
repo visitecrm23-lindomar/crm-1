@@ -84,7 +84,7 @@ export const tripsTable = pgTable("trips", {
 });
 
 export const insertTripSchema = createInsertSchema(tripsTable).omit({ createdAt: true, updatedAt: true });
-export type InsertTrip = z.infer<typeof insertTripSchema>;
+export type InsertTrip = typeof tripsTable.$inferInsert;
 export type Trip = typeof tripsTable.$inferSelect;
 
 export const tripsRelations = relations(tripsTable, ({ one }) => ({

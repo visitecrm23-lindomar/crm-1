@@ -51,7 +51,7 @@ export const reservationsTable = pgTable("reservations", {
 });
 
 export const insertReservationSchema = createInsertSchema(reservationsTable).omit({ createdAt: true, updatedAt: true });
-export type InsertReservation = z.infer<typeof insertReservationSchema>;
+export type InsertReservation = typeof reservationsTable.$inferInsert;
 export type Reservation = typeof reservationsTable.$inferSelect;
 
 export const reservationsRelations = relations(reservationsTable, ({ one, many }) => ({

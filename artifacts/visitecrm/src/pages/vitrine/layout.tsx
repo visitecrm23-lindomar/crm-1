@@ -28,7 +28,7 @@ export default function VitrineLayout({
 }) {
   const [, navigate] = useLocation();
   const { isSignedIn } = useUser();
-  const { data: me } = useGetMe({ enabled: !!isSignedIn });
+  const { data: me } = useGetMe({ query: { enabled: !!isSignedIn } as any });
   const isCliente = isSignedIn && me?.role === ROLES.CLIENT;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);

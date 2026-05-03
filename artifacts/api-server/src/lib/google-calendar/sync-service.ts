@@ -734,6 +734,7 @@ export class CalendarSyncService {
     if (!actor) return 0;
 
     const tenantId = actor.tenantId;
+    if (!tenantId) return synced;
 
     const trips = await db.select({ id: tripsTable.id })
       .from(tripsTable)

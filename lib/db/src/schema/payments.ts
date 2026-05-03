@@ -34,7 +34,7 @@ export const paymentsTable = pgTable("payments", {
 });
 
 export const insertPaymentSchema = createInsertSchema(paymentsTable).omit({ createdAt: true, updatedAt: true });
-export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+export type InsertPayment = typeof paymentsTable.$inferInsert;
 export type Payment = typeof paymentsTable.$inferSelect;
 
 export const paymentsRelations = relations(paymentsTable, ({ one }) => ({

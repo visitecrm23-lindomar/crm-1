@@ -5,6 +5,7 @@ export const STATUS_MAP: Record<string, { label: string; color: string }> = {
   [TRIP_STATUS.DRAFT]:     { label: "Rascunho",   color: "bg-gray-100 text-gray-600" },
   [TRIP_STATUS.ACTIVE]:    { label: "Ativa",      color: "bg-green-100 text-green-700" },
   [TRIP_STATUS.PUBLISHED]: { label: "Publicada",  color: "bg-blue-100 text-blue-700" },
+  [TRIP_STATUS.CONFIRMED]: { label: "Confirmada", color: "bg-blue-100 text-blue-700" },
   [TRIP_STATUS.COMPLETED]: { label: "Concluída",  color: "bg-purple-100 text-purple-700" },
   [TRIP_STATUS.CANCELLED]: { label: "Cancelada",  color: "bg-red-100 text-red-700" },
 };

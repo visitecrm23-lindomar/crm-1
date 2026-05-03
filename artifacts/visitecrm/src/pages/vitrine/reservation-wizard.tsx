@@ -990,7 +990,7 @@ export default function ReservationWizard({
         if (streamOccupied[seat.number]) {
           return { ...seat, status: streamOccupied[seat.number] };
         }
-        if (SEAT_TYPES.includes(seat.type)) {
+        if (CLICKABLE_SEAT_TYPES.includes(seat.type)) {
           return { ...seat, status: "available" };
         }
         return seat;

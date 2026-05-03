@@ -162,7 +162,7 @@ function stubLogger(
   next: express.NextFunction,
 ) {
   const noop = () => {};
-  req.log = { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop };
+  req.log = { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop } as any;
   next();
 }
 
