@@ -22,7 +22,7 @@ async function main() {
     .limit(1);
 
   if (users.length === 0) {
-    console.error(`Error: No user found with email "${email}".`);
+    console.error("Error: No user found with the provided email.");
     process.exit(1);
   }
 
@@ -33,10 +33,8 @@ async function main() {
     .set({ role: "superadmin" })
     .where(eq(usersTable.id, user.id));
 
-  console.log(`Success! User updated to superadmin:`);
-  console.log(`  Name:  ${user.name}`);
-  console.log(`  Email: ${user.email}`);
-  console.log(`  ID:    ${user.id}`);
+  console.log("Success! User updated to superadmin.");
+  console.log(`  ID: ${user.id}`);
 }
 
 main().catch((err) => {
