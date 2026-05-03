@@ -233,10 +233,12 @@ function InicioTab({
   profile,
   primaryColor,
   onTabChange,
+  onGoToReservasFiltered,
 }: {
   profile: ClientPortalProfile;
   primaryColor: string;
   onTabChange: (tab: string) => void;
+  onGoToReservasFiltered: () => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const displayName = profile.client?.name ?? profile.user?.name ?? "Viajante";
@@ -254,6 +256,10 @@ function InicioTab({
 
   const totalReferrals = profile.referral.totalReferrals;
   const loyaltyPoints = profile.loyalty?.availablePoints ?? null;
+
+  const pendingBalance = profile.reservations.filter(
+    (r) => r.balance > 0 && r.status !== RESERVATION_STATUS.CANCELLED,
+  );
 
   const kpis = [
     {
@@ -354,6 +360,25 @@ function InicioTab({
         ))}
       </div>
 
+      {pendingBalance.length > 0 && (
+        <button
+          type="button"
+          className="w-full text-left flex items-start gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 hover:bg-orange-100 transition-colors"
+          onClick={onGoToReservasFiltered}
+        >
+          <AlertCircle className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-orange-800">
+              Você tem {pendingBalance.length} reserva{pendingBalance.length !== 1 ? "s" : ""} com pagamento pendente
+            </p>
+            <p className="text-xs text-orange-600 mt-0.5">
+              Regularize para garantir sua viagem. Clique para ver as reservas.
+            </p>
+          </div>
+          <ArrowRight className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
+        </button>
+      )}
+
       {nextTrip && (
         <div>
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
@@ -394,7 +419,15 @@ function InicioTab({
   );
 }
 
-function ReservasTab({ profile }: { profile: ClientPortalProfile }) {
+function ReservasTab({
+  profile,
+  filter,
+  onClearFilter,
+}: {
+  profile: ClientPortalProfile;
+  filter?: "com-saldo" | null;
+  onClearFilter?: () => void;
+}) {
   const today = new Date().toISOString().slice(0, 10);
   const all = profile.reservations;
 
@@ -427,6 +460,45 @@ function ReservasTab({ profile }: { profile: ClientPortalProfile }) {
           >
             Ver Pacotes
           </Button>
+        )}
+      </div>
+    );
+  }
+
+  if (filter === "com-saldo") {
+    const withBalance = all.filter(
+      (r) => r.balance > 0 && r.status !== RESERVATION_STATUS.CANCELLED,
+    );
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-orange-500" />
+            <span className="text-sm font-semibold text-orange-800">
+              {withBalance.length} reserva{withBalance.length !== 1 ? "s" : ""} com pagamento pendente
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs text-muted-foreground"
+            onClick={onClearFilter}
+          >
+            Ver todas
+            <ArrowRight className="w-3 h-3 ml-1" />
+          </Button>
+        </div>
+        {withBalance.length === 0 ? (
+          <div className="text-center py-10">
+            <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-400" />
+            <p className="text-muted-foreground text-sm">Nenhuma reserva com saldo pendente.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {withBalance.map((r) => (
+              <ReservationCard key={r.id} r={r} />
+            ))}
+          </div>
         )}
       </div>
     );
@@ -1025,6 +1097,7 @@ export default function PerfilPage() {
   const defaultTab = params.get("tab") ?? "inicio";
 
   const [activeTab, setActiveTab] = useState(defaultTab);
+  const [reservationFilter, setReservationFilter] = useState<"com-saldo" | null>(null);
 
   useEffect(() => {
     clientPortalApi
@@ -1059,7 +1132,13 @@ export default function PerfilPage() {
 
   return (
     <div>
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(tab) => {
+          if (tab === "reservas") setReservationFilter(null);
+          setActiveTab(tab);
+        }}
+      >
         <TabsList className="mb-6 w-full sm:w-auto flex-wrap h-auto gap-1">
           <TabsTrigger value="inicio" className="flex items-center gap-1.5">
             <LayoutDashboard className="w-4 h-4" />
@@ -1097,12 +1176,23 @@ export default function PerfilPage() {
           <InicioTab
             profile={profile}
             primaryColor={primaryColor}
-            onTabChange={setActiveTab}
+            onTabChange={(tab) => {
+              if (tab === "reservas") setReservationFilter(null);
+              setActiveTab(tab);
+            }}
+            onGoToReservasFiltered={() => {
+              setReservationFilter("com-saldo");
+              setActiveTab("reservas");
+            }}
           />
         </TabsContent>
 
         <TabsContent value="reservas">
-          <ReservasTab profile={profile} />
+          <ReservasTab
+            profile={profile}
+            filter={reservationFilter}
+            onClearFilter={() => setReservationFilter(null)}
+          />
         </TabsContent>
 
         <TabsContent value="dados">
