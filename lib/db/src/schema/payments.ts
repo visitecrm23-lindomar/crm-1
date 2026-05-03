@@ -2,6 +2,7 @@ import { pgTable, text, timestamp, numeric, integer } from "drizzle-orm/pg-core"
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import type { PaymentStatus, PaymentType, ExpenseStatus } from "@workspace/permissions";
 import { tenantsTable } from "./tenants";
 import { reservationsTable } from "./reservations";
 import { clientsTable } from "./clients";
@@ -14,7 +15,7 @@ export const paymentsTable = pgTable("payments", {
   reservationId: text("reservation_id").references(() => reservationsTable.id),
   clientId: text("client_id").references(() => clientsTable.id),
   orderId: text("order_id"),
-  type: text("type").notNull(),
+  type: text("type").$type<PaymentType>().notNull(),
   category: text("category").notNull(),
   amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
   paymentMethod: text("payment_method").notNull(),
@@ -22,7 +23,7 @@ export const paymentsTable = pgTable("payments", {
   totalInstallments: integer("total_installments").notNull().default(1),
   dueDate: timestamp("due_date", { withTimezone: true }).notNull(),
   paidAt: timestamp("paid_at", { withTimezone: true }),
-  status: text("status").notNull().default("pending"),
+  status: text("status").$type<PaymentStatus>().notNull().default("pending"),
   receiptUrl: text("receipt_url"),
   gateway: text("gateway"),
   transactionId: text("transaction_id"),
@@ -54,7 +55,7 @@ export const expensesTable = pgTable("expenses", {
   paymentDate: timestamp("payment_date", { withTimezone: true }),
   dueDate: timestamp("due_date", { withTimezone: true }).notNull(),
   receiptUrl: text("receipt_url"),
-  status: text("status").notNull().default("pending"),
+  status: text("status").$type<ExpenseStatus>().notNull().default("pending"),
   notes: text("notes"),
   createdById: text("created_by_id").notNull().references(() => usersTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

@@ -7,6 +7,7 @@ import { requireAuth } from "../lib/tenant";
 import { generatePixEMV, generatePixQrCodeUrl } from "../lib/pix";
 import { persistUsageSnapshot } from "../lib/planLimits";
 import { generateInvoiceNumber } from "../lib/invoiceNumber";
+import { ROLES } from "@workspace/permissions";
 
 const router = Router();
 
@@ -92,7 +93,7 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!me.tenantId) { res.status(400).json({ error: "No tenant" }); return; }
-    if (me.role !== "agencia" && me.role !== "superadmin") {
+    if (me.role !== ROLES.AGENCY_ADMIN && me.role !== ROLES.SUPER_ADMIN) {
       res.status(403).json({ error: "Apenas administradores podem alterar o plano" }); return;
     }
 
@@ -291,7 +292,7 @@ router.post("/invoices/:id/pix", async (req, res): Promise<void> => {
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
     if (!invoice) { res.status(404).json({ error: "Fatura não encontrada" }); return; }
 
-    if (me.role !== "superadmin" && invoice.tenantId !== me.tenantId) {
+    if (me.role !== ROLES.SUPER_ADMIN && invoice.tenantId !== me.tenantId) {
       res.status(403).json({ error: "Forbidden" }); return;
     }
 
@@ -332,7 +333,7 @@ router.post("/admin/invoices/:id/confirm-payment", async (req, res): Promise<voi
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden: superadmin only" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden: superadmin only" }); return; }
 
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
     if (!invoice) { res.status(404).json({ error: "Fatura não encontrada" }); return; }
@@ -402,7 +403,7 @@ router.post("/invoices/:id/stripe/checkout", async (req, res): Promise<void> => 
 
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
     if (!invoice) { res.status(404).json({ error: "Fatura não encontrada" }); return; }
-    if (me.role !== "superadmin" && invoice.tenantId !== me.tenantId) {
+    if (me.role !== ROLES.SUPER_ADMIN && invoice.tenantId !== me.tenantId) {
       res.status(403).json({ error: "Forbidden" }); return;
     }
     if (invoice.status === "paid") { res.status(400).json({ error: "Fatura já está paga" }); return; }

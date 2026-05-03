@@ -12,6 +12,7 @@ import { eq, and, desc, asc, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
+import { ROLES } from "@workspace/permissions";
 
 const router = Router();
 
@@ -46,7 +47,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    if (me.role !== "cliente") {
+    if (me.role !== ROLES.CLIENT) {
       next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE"));
       return;
     }
@@ -221,7 +222,7 @@ router.patch("/client/me", async (req, res, next: NextFunction): Promise<void> =
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    if (me.role !== "cliente") {
+    if (me.role !== ROLES.CLIENT) {
       next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE"));
       return;
     }

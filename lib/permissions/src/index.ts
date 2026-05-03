@@ -9,6 +9,66 @@ export const ROLES = {
 
 export type Role = (typeof ROLES)[keyof typeof ROLES];
 
+export const RESERVATION_STATUS = {
+  PENDING: "pending",
+  CONFIRMED: "confirmed",
+  CANCELLED: "cancelled",
+  REFUNDED: "refunded",
+  COMPLETED: "completed",
+  FAILED: "failed",
+} as const;
+export type ReservationStatus = (typeof RESERVATION_STATUS)[keyof typeof RESERVATION_STATUS];
+
+export const PAYMENT_STATUS = {
+  PENDING: "pending",
+  PAID: "paid",
+  OVERDUE: "overdue",
+  CANCELLED: "cancelled",
+  APPROVED: "approved",
+  FAILED: "failed",
+  REFUNDED: "refunded",
+  CHARGED_BACK: "charged_back",
+} as const;
+export type PaymentStatus = (typeof PAYMENT_STATUS)[keyof typeof PAYMENT_STATUS];
+
+export const PAYMENT_TYPE = {
+  RECEIVABLE: "receivable",
+  PAYABLE: "payable",
+} as const;
+export type PaymentType = (typeof PAYMENT_TYPE)[keyof typeof PAYMENT_TYPE];
+
+export const COMMISSION_STATUS = {
+  PENDING: "pending",
+  APPROVED: "approved",
+  PAID: "paid",
+  CANCELLED: "cancelled",
+} as const;
+export type CommissionStatus = (typeof COMMISSION_STATUS)[keyof typeof COMMISSION_STATUS];
+
+export const DEAL_STATUS = {
+  OPEN: "open",
+  WON: "won",
+  LOST: "lost",
+} as const;
+export type DealStatus = (typeof DEAL_STATUS)[keyof typeof DEAL_STATUS];
+
+export const TRIP_STATUS = {
+  DRAFT: "draft",
+  PUBLISHED: "published",
+  ACTIVE: "active",
+  CANCELLED: "cancelled",
+  COMPLETED: "completed",
+} as const;
+export type TripStatus = (typeof TRIP_STATUS)[keyof typeof TRIP_STATUS];
+
+export const EXPENSE_STATUS = {
+  PENDING: "pending",
+  PAID: "paid",
+  OVERDUE: "overdue",
+  CANCELLED: "cancelled",
+} as const;
+export type ExpenseStatus = (typeof EXPENSE_STATUS)[keyof typeof EXPENSE_STATUS];
+
 export const RESOURCES = {
   TRIPS: "trips",
   RESERVATIONS: "reservations",

@@ -16,6 +16,7 @@ import {
 } from "@workspace/api-zod";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { ADMIN_ROLES } from '../lib/tenant';
+import { ROLES } from "@workspace/permissions";
 
 const router = Router();
 
@@ -74,7 +75,7 @@ router.get("/clients", async (req, res, next: NextFunction): Promise<void> => {
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (pageNum - 1) * limitNum;
 
-    if (me.role === "cliente") {
+    if (me.role === ROLES.CLIENT) {
       const [clientRecord] = await db.select().from(clientsTable)
         .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.userId, me.id)))
         .limit(1);
@@ -91,7 +92,7 @@ router.get("/clients", async (req, res, next: NextFunction): Promise<void> => {
 
     const conditions: ReturnType<typeof eq>[] = [eq(clientsTable.tenantId, me.tenantId)];
 
-    if (me.role === "vendedor") {
+    if (me.role === ROLES.SALES) {
       conditions.push(eq(clientsTable.createdById, me.id));
     }
 
@@ -114,7 +115,7 @@ router.get("/clients", async (req, res, next: NextFunction): Promise<void> => {
     if (dateTo && !ISO_DATE.test(dateTo)) { next(new ValidationError("dateTo must be a valid ISO date (YYYY-MM-DD)", "VALIDATION_ERROR")); return; }
     if (dateFrom) conditions.push(sql`${clientsTable.createdAt} >= ${new Date(dateFrom)}` as ReturnType<typeof eq>);
     if (dateTo) conditions.push(sql`${clientsTable.createdAt} <= ${new Date(dateTo)}` as ReturnType<typeof eq>);
-    if (me.role !== "vendedor" && sellerId) conditions.push(eq(clientsTable.createdById, sellerId));
+    if (me.role !== ROLES.SALES && sellerId) conditions.push(eq(clientsTable.createdById, sellerId));
     if (tripId) {
       const clientIdsInTrip = await db.selectDistinct({ clientId: reservationsTable.clientId })
         .from(reservationsTable)
@@ -246,8 +247,8 @@ async function requireClientAccess(
   clientId: string,
 ): Promise<typeof clientsTable.$inferSelect> {
   const conditions: ReturnType<typeof eq>[] = [eq(clientsTable.id, clientId), eq(clientsTable.tenantId, me.tenantId)];
-  if (me.role === "cliente") conditions.push(eq(clientsTable.userId, me.id));
-  else if (me.role === "vendedor") conditions.push(eq(clientsTable.createdById, me.id));
+  if (me.role === ROLES.CLIENT) conditions.push(eq(clientsTable.userId, me.id));
+  else if (me.role === ROLES.SALES) conditions.push(eq(clientsTable.createdById, me.id));
   const [client] = await db.select().from(clientsTable).where(and(...conditions)).limit(1);
   if (!client) throw new NotFoundError("Client not found", "CLIENT_NOT_FOUND");
   return client;
@@ -268,7 +269,7 @@ router.patch("/clients/:id", async (req, res, next: NextFunction): Promise<void>
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+    if (me.role === ROLES.CLIENT) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const existing = await requireClientAccess(me, req.params.id);
 
     const parsed = UpdateClientBody.safeParse(req.body);
@@ -362,7 +363,7 @@ router.patch("/clients/:id/pipeline-stage", async (req, res, next: NextFunction)
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+    if (me.role === ROLES.CLIENT) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const existing = await requireClientAccess(me, req.params.id);
 
     const parsed = UpdateClientPipelineStageBody.safeParse(req.body);

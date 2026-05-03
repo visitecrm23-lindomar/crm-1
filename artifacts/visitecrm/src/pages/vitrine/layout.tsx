@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { PublicStore } from "@/lib/storeApi";
 import { useUser } from "@clerk/react";
 import { useGetMe } from "@workspace/api-client-react";
+import { ROLES } from "@workspace/permissions";
 import {
   X,
   Phone,
@@ -28,7 +29,7 @@ export default function VitrineLayout({
   const [, navigate] = useLocation();
   const { isSignedIn } = useUser();
   const { data: me } = useGetMe({ enabled: !!isSignedIn });
-  const isCliente = isSignedIn && me?.role === "cliente";
+  const isCliente = isSignedIn && me?.role === ROLES.CLIENT;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");

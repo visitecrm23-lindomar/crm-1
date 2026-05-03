@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, tenantsTable, usersTable, clientsTable, tripsTable, auditLogsTable, reservationsTable, plansTable, emailLogsTable } from "@workspace/db";
 import { eq, desc, and, count, sql } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
+import { ROLES } from "@workspace/permissions";
 
 const router = Router();
 
@@ -34,7 +35,7 @@ router.get("/admin/metrics/mrr", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
 
     const [tenants, planPriceMap] = await Promise.all([
       db.select().from(tenantsTable),
@@ -68,7 +69,7 @@ router.get("/admin/metrics/churn", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
 
     const tenants = await db.select().from(tenantsTable);
     const buckets = getMonthBuckets(12);
@@ -100,7 +101,7 @@ router.get("/admin/metrics/growth", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
 
     const tenants = await db.select().from(tenantsTable);
     const buckets = getMonthBuckets(12);
@@ -131,7 +132,7 @@ router.get("/tenants/:id/details", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
 
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
     if (!tenant) { res.status(404).json({ error: "Not found" }); return; }
@@ -167,7 +168,7 @@ router.get("/tenants/:id/users", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
 
     const users = await db.select().from(usersTable).where(eq(usersTable.tenantId, req.params.id)).orderBy(desc(usersTable.createdAt));
     res.json(users);
@@ -181,7 +182,7 @@ router.post("/tenants/:id/suspend", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
 
     await db.update(tenantsTable).set({ status: "suspended" }).where(eq(tenantsTable.id, req.params.id));
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
@@ -197,7 +198,7 @@ router.post("/tenants/:id/activate", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
 
     await db.update(tenantsTable).set({ status: "active" }).where(eq(tenantsTable.id, req.params.id));
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
@@ -213,7 +214,7 @@ router.get("/admin/users", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
 
     const users = await db.select({
       id: usersTable.id,
@@ -241,7 +242,7 @@ router.get("/admin/audit-logs", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
 
     const conditions = [];
     if (req.query.tenantId) conditions.push(eq(auditLogsTable.tenantId, req.query.tenantId as string));
@@ -284,7 +285,7 @@ router.get("/admin/email-jobs/failed-count", async (req, res): Promise<void> => 
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
 
     const [row] = await db
       .select({ count: count() })

@@ -6,6 +6,7 @@ import {
 } from "@workspace/api-client-react";
 import type { Reservation } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
+import { ROLES } from "@workspace/permissions";
 
 export interface UseReservationsOptions {
   initialTripFilter?: string;
@@ -44,7 +45,7 @@ export function useReservations(options?: UseReservationsOptions) {
   const checkInReservation = useCheckInReservation();
 
   const sellers = useMemo(
-    () => (usersRaw ?? []).filter(u => u.role === "vendedor" || u.role === "agencia"),
+    () => (usersRaw ?? []).filter(u => u.role === ROLES.SALES || u.role === ROLES.AGENCY_ADMIN),
     [usersRaw],
   );
 

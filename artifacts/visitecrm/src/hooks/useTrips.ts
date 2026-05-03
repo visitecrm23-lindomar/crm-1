@@ -4,6 +4,7 @@ import {
   useListTrips, useCreateTrip, useDeleteTrip, useGetDashboardUpcomingTrips, useGetMe,
 } from "@workspace/api-client-react";
 import type { Trip } from "@workspace/api-client-react";
+import { ROLES } from "@workspace/permissions";
 
 const PAGE_SIZE = 12;
 
@@ -15,7 +16,7 @@ export function useTrips() {
   const [page, setPage] = useState(1);
 
   const { data: me } = useGetMe();
-  const isVendedor = me?.role === "vendedor";
+  const isVendedor = me?.role === ROLES.SALES;
 
   const { data: tripsData, isLoading, refetch } = useListTrips({
     search: search || undefined,

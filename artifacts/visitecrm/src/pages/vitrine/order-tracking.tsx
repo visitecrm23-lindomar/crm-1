@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useUser } from "@clerk/react";
 import { useGetMe } from "@workspace/api-client-react";
 import { Loader2 } from "lucide-react";
+import { ROLES } from "@workspace/permissions";
 
 export default function VitrineOrderTracking({
   slug: _slug,
@@ -22,7 +23,7 @@ export default function VitrineOrderTracking({
       return;
     }
     if (meLoading) return;
-    if (me?.role === "cliente") {
+    if (me?.role === ROLES.CLIENT) {
       navigate("/perfil");
     } else if (me?.role) {
       navigate("/dashboard");

@@ -35,6 +35,7 @@ import { SeatMapPicker } from "@/components/SeatMapPicker";
 import { PlanLimitWall, usePlanLimitError } from "@/components/plan-limit-wall";
 
 import { formatCurrency } from "@/lib/utils";
+import { ROLES } from "@workspace/permissions";
 
 function cleanCPF(cpf: string): string {
   return cpf.replace(/\D/g, "");
@@ -854,7 +855,7 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
               sellerId={
                 form.consultantId !== "none"
                   ? form.consultantId
-                  : me?.role === "vendedor"
+                  : me?.role === ROLES.SALES
                   ? me.id
                   : form.consultantId
               }
@@ -1273,7 +1274,7 @@ export default function Clients() {
               <SelectTrigger className="w-44"><SelectValue placeholder="Vendedor / Captador" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos os vendedores</SelectItem>
-                {(sellers ?? []).filter(u => u.role === "vendedor" || u.role === "agencia").map(u => (
+                {(sellers ?? []).filter(u => u.role === ROLES.SALES || u.role === ROLES.AGENCY_ADMIN).map(u => (
                   <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                 ))}
               </SelectContent>

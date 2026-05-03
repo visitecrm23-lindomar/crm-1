@@ -3,6 +3,7 @@ import { db, platformSettingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 import { generateId } from "../lib/id";
+import { ROLES } from "@workspace/permissions";
 
 const router = Router();
 
@@ -10,7 +11,7 @@ router.get("/admin/platform-settings", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
 
     const settings = await db.select().from(platformSettingsTable).orderBy(platformSettingsTable.key);
     res.json(settings);
@@ -24,7 +25,7 @@ router.put("/admin/platform-settings/:key", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
 
     const { key } = req.params;
     const { value } = req.body;

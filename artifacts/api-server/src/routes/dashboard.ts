@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { clientsTable, tripsTable, reservationsTable, paymentsTable, dealsTable, npsResponsesTable, expensesTable, passengersTable, loyaltyMembersTable } from "@workspace/db";
 import { eq, and, gte, lte, lt, desc, sql, inArray } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
+import { ROLES, RESERVATION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, DEAL_STATUS, TRIP_STATUS } from "@workspace/permissions";
 
 const router = Router();
 
@@ -17,7 +18,7 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const next3Days = new Date(startOfToday.getTime() + 3 * 86400000);
 
-    if (me.role === "cliente") {
+    if (me.role === ROLES.CLIENT) {
       const [clientRecord] = await db.select({ id: clientsTable.id, totalSpent: clientsTable.totalSpent, outstandingBalance: clientsTable.outstandingBalance, npsScore: clientsTable.npsScore })
         .from(clientsTable)
         .where(and(eq(clientsTable.tenantId, tenantId), eq(clientsTable.userId, me.id)))
@@ -29,7 +30,7 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
         const [rc] = await db.select({ count: sql<number>`count(*)` })
           .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.clientId, clientId)));
         const [cc] = await db.select({ count: sql<number>`count(*)` })
-          .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.clientId, clientId), eq(reservationsTable.status, "confirmed")));
+          .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.clientId, clientId), eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED)));
         totalReservations = Number(rc?.count ?? 0);
         confirmedReservations = Number(cc?.count ?? 0);
       }
@@ -50,7 +51,7 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
       return;
     }
 
-    if (me.role === "vendedor") {
+    if (me.role === ROLES.SALES) {
       const [clientCount] = await db.select({ count: sql<number>`count(*)` })
         .from(clientsTable).where(and(eq(clientsTable.tenantId, tenantId), eq(clientsTable.createdById, me.id)));
       const [newClientCount] = await db.select({ count: sql<number>`count(*)` })
@@ -80,15 +81,15 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
         const [rc] = await db.select({ count: sql<number>`count(*)` })
           .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), inArray(reservationsTable.clientId, myClientIds)));
         const [cc] = await db.select({ count: sql<number>`count(*)` })
-          .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), inArray(reservationsTable.clientId, myClientIds), eq(reservationsTable.status, "confirmed")));
+          .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), inArray(reservationsTable.clientId, myClientIds), eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED)));
         totalReservations = Number(rc?.count ?? 0);
         confirmedReservations = Number(cc?.count ?? 0);
       }
 
       const [dealCount] = await db.select({ count: sql<number>`count(*)` })
-        .from(dealsTable).where(and(eq(dealsTable.tenantId, tenantId), eq(dealsTable.status, "open"), eq(dealsTable.ownerId, me.id)));
+        .from(dealsTable).where(and(eq(dealsTable.tenantId, tenantId), eq(dealsTable.status, DEAL_STATUS.OPEN), eq(dealsTable.ownerId, me.id)));
       const [dealValue] = await db.select({ total: sql<number>`sum(cast(value as numeric))` })
-        .from(dealsTable).where(and(eq(dealsTable.tenantId, tenantId), eq(dealsTable.status, "open"), eq(dealsTable.ownerId, me.id)));
+        .from(dealsTable).where(and(eq(dealsTable.tenantId, tenantId), eq(dealsTable.status, DEAL_STATUS.OPEN), eq(dealsTable.ownerId, me.id)));
 
       res.json({
         totalClients: Number(clientCount?.count ?? 0),
@@ -118,21 +119,21 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
     const [tripCount] = await db.select({ count: sql<number>`count(*)` })
       .from(tripsTable).where(eq(tripsTable.tenantId, tenantId));
     const [activeTripCount] = await db.select({ count: sql<number>`count(*)` })
-      .from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, "active")));
+      .from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, TRIP_STATUS.ACTIVE)));
 
     const [reservationCount] = await db.select({ count: sql<number>`count(*)` })
       .from(reservationsTable).where(eq(reservationsTable.tenantId, tenantId));
     const [confirmedReservationCount] = await db.select({ count: sql<number>`count(*)` })
-      .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, "confirmed")));
+      .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED)));
     const [cancelledReservationCount] = await db.select({ count: sql<number>`count(*)` })
-      .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, "cancelled")));
+      .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, RESERVATION_STATUS.CANCELLED)));
     const [todayReservationCount] = await db.select({ count: sql<number>`count(*)` })
       .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), gte(reservationsTable.createdAt, startOfToday)));
 
     const [avgTicketRow] = await db.select({ avg: sql<number>`avg(cast(total_value as numeric))` })
-      .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, "confirmed")));
+      .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED)));
     const [activeClientsRow] = await db.select({ count: sql<number>`count(distinct client_id)` })
-      .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, "confirmed")));
+      .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED)));
 
     const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.tenantId, tenantId));
     let totalRevenue = 0, revenueThisMonth = 0, pendingPaymentsAmt = 0, receivedToday = 0, toReceiveNext3Days = 0, totalPayable = 0, pendingReceivableAmt = 0;
@@ -158,7 +159,7 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
 
     // receivedFromActiveTrips and pendingFromActiveTrips
     const activeTrips = await db.select({ id: tripsTable.id })
-      .from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, "active")));
+      .from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, TRIP_STATUS.ACTIVE)));
     const activeTripIds = activeTrips.map(t => t.id);
     let receivedFromActiveTrips = 0, pendingFromActiveTrips = 0;
     if (activeTripIds.length > 0) {
@@ -178,7 +179,7 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
     }
 
     const trips = await db.select({ totalCapacity: tripsTable.totalCapacity, reservedSeats: tripsTable.reservedSeats })
-      .from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, "active")));
+      .from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, TRIP_STATUS.ACTIVE)));
     const totalCapacity = trips.reduce((a, t) => a + t.totalCapacity, 0);
     const totalReserved = trips.reduce((a, t) => a + t.reservedSeats, 0);
     const occupancyRate = totalCapacity > 0 ? (totalReserved / totalCapacity) * 100 : 0;
@@ -188,26 +189,26 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
     const averageNps = npsResponses.length > 0 ? npsResponses.reduce((a, r) => a + r.score, 0) / npsResponses.length : null;
 
     const [dealCount] = await db.select({ count: sql<number>`count(*)` })
-      .from(dealsTable).where(and(eq(dealsTable.tenantId, tenantId), eq(dealsTable.status, "open")));
+      .from(dealsTable).where(and(eq(dealsTable.tenantId, tenantId), eq(dealsTable.status, DEAL_STATUS.OPEN)));
     const [dealValue] = await db.select({ total: sql<number>`sum(cast(value as numeric))` })
-      .from(dealsTable).where(and(eq(dealsTable.tenantId, tenantId), eq(dealsTable.status, "open")));
+      .from(dealsTable).where(and(eq(dealsTable.tenantId, tenantId), eq(dealsTable.status, DEAL_STATUS.OPEN)));
 
     // New KPIs
     const [salesThisMonthRow] = await db.select({ count: sql<number>`count(*)` })
-      .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, "confirmed"), gte(reservationsTable.createdAt, startOfMonth)));
+      .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED), gte(reservationsTable.createdAt, startOfMonth)));
     const [pendingReservationsRow] = await db.select({ count: sql<number>`count(*)` })
-      .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, "pending")));
+      .from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, RESERVATION_STATUS.PENDING)));
     const [overduePaymentsRow] = await db.select({
       count: sql<number>`count(*)`,
       amount: sql<number>`coalesce(sum(cast(${paymentsTable.amount} as numeric)), 0)`,
-    }).from(paymentsTable).where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.type, "receivable"), eq(paymentsTable.status, "pending"), lt(paymentsTable.dueDate, now)));
+    }).from(paymentsTable).where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.type, PAYMENT_TYPE.RECEIVABLE), eq(paymentsTable.status, PAYMENT_STATUS.PENDING), lt(paymentsTable.dueDate, now)));
     const [loyaltyPointsRow] = await db.select({ total: sql<number>`sum(total_points)` })
       .from(loyaltyMembersTable).where(eq(loyaltyMembersTable.tenantId, tenantId));
 
     // Retention rate: clients with 2+ confirmed reservations / total clients
     const repeatBuyersRaw = await db.select({ clientId: reservationsTable.clientId, count: sql<number>`count(*)` })
       .from(reservationsTable)
-      .where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, "confirmed")))
+      .where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED)))
       .groupBy(reservationsTable.clientId)
       .having(sql`count(*) >= 2`);
     const totalClientsForRetention = Number(clientCount?.count ?? 0);
@@ -220,7 +221,7 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
     // Conversion rate: paying clients / total clients
     const payingClientsRaw = await db.select({ clientId: paymentsTable.clientId })
       .from(paymentsTable)
-      .where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.type, "receivable"), eq(paymentsTable.status, "paid")));
+      .where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.type, PAYMENT_TYPE.RECEIVABLE), eq(paymentsTable.status, PAYMENT_STATUS.PAID)));
     const payingClientCount = new Set(payingClientsRaw.map(p => p.clientId).filter(Boolean)).size;
     const conversionRate = totalClientsForRetention > 0 ? Math.round((payingClientCount / totalClientsForRetention) * 1000) / 10 : 0;
 
@@ -280,7 +281,7 @@ router.get("/dashboard/revenue-chart", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    if (me.role === "cliente") {
+    if (me.role === ROLES.CLIENT) {
       res.status(403).json({ error: "Access denied" });
       return;
     }
@@ -299,7 +300,7 @@ router.get("/dashboard/revenue-chart", async (req, res): Promise<void> => {
     let paymentConditions = and(eq(paymentsTable.tenantId, me.tenantId), gte(paymentsTable.createdAt, since))!;
     let reservationConditions = and(eq(reservationsTable.tenantId, me.tenantId), gte(reservationsTable.createdAt, since))!;
 
-    if (me.role === "vendedor") {
+    if (me.role === ROLES.SALES) {
       const sellerClients = await db.select({ id: clientsTable.id })
         .from(clientsTable)
         .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.createdById, me.id)));
@@ -360,7 +361,7 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    if (me.role === "cliente" || me.role === "vendedor") {
+    if (me.role === ROLES.CLIENT || me.role === ROLES.SALES) {
       res.status(403).json({ error: "Access denied" });
       return;
     }
@@ -388,7 +389,7 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
     }).from(tripsTable)
       .innerJoin(reservationsTable, and(
         eq(reservationsTable.tripId, tripsTable.id),
-        eq(reservationsTable.status, "confirmed"),
+        eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED),
         eq(reservationsTable.tenantId, tenantId),
       ))
       .where(eq(tripsTable.tenantId, tenantId))
@@ -451,7 +452,7 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
 
     // 6. AVG RESERVATIONS PER ACTIVE TRIP
     const [activeTripsCount] = await db.select({ count: sql<number>`count(*)::int` })
-      .from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, "active")));
+      .from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, TRIP_STATUS.ACTIVE)));
     const confirmedResCount = reservationsByStatus.find(r => r.status === "confirmed")?.count ?? 0;
     const activeCount = Number(activeTripsCount?.count ?? 0);
     const avgReservationsPerTrip = activeCount > 0 ? Math.round((confirmedResCount / activeCount) * 10) / 10 : 0;
@@ -531,7 +532,7 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
     }).from(reservationsTable)
       .where(and(
         eq(reservationsTable.tenantId, tenantId),
-        eq(reservationsTable.status, "confirmed"),
+        eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED),
         gte(reservationsTable.createdAt, since),
       ))
       .groupBy(sql`date_trunc('month', ${reservationsTable.createdAt})`)
@@ -565,7 +566,7 @@ router.get("/dashboard/funnel", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    if (me.role === "cliente" || me.role === "vendedor") {
+    if (me.role === ROLES.CLIENT || me.role === ROLES.SALES) {
       res.status(403).json({ error: "Access denied" });
       return;
     }
@@ -580,7 +581,7 @@ router.get("/dashboard/funnel", async (req, res): Promise<void> => {
 
     const clientPaidPayments = await db.select({ clientId: paymentsTable.clientId, amount: paymentsTable.amount })
       .from(paymentsTable)
-      .where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.status, "paid"), eq(paymentsTable.type, "receivable")));
+      .where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.status, PAYMENT_STATUS.PAID), eq(paymentsTable.type, PAYMENT_TYPE.RECEIVABLE)));
 
     const paidClientIds = new Set(clientPaidPayments.map(p => p.clientId).filter(Boolean) as string[]);
     const clientPaidAmount: Record<string, number> = {};
@@ -635,7 +636,7 @@ router.get("/dashboard/upcoming-trips", async (req, res): Promise<void> => {
 
     let trips;
 
-    if (me.role === "cliente") {
+    if (me.role === ROLES.CLIENT) {
       const [clientRecord] = await db.select({ id: clientsTable.id })
         .from(clientsTable)
         .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.userId, me.id)))
@@ -689,7 +690,7 @@ router.get("/dashboard/recent-activity", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    if (me.role === "cliente") {
+    if (me.role === ROLES.CLIENT) {
       res.status(403).json({ error: "Access denied" });
       return;
     }
@@ -697,7 +698,7 @@ router.get("/dashboard/recent-activity", async (req, res): Promise<void> => {
     let clientCondition = eq(clientsTable.tenantId, me.tenantId);
     let reservationCondition = eq(reservationsTable.tenantId, me.tenantId);
 
-    if (me.role === "vendedor") {
+    if (me.role === ROLES.SALES) {
       const sellerClients = await db.select({ id: clientsTable.id }).from(clientsTable)
         .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.createdById, me.id)));
       const sellerClientIds = sellerClients.map(c => c.id);
@@ -714,7 +715,7 @@ router.get("/dashboard/recent-activity", async (req, res): Promise<void> => {
       .where(clientCondition).orderBy(desc(clientsTable.createdAt)).limit(3);
     const recentReservations = await db.select().from(reservationsTable)
       .where(reservationCondition).orderBy(desc(reservationsTable.createdAt)).limit(3);
-    const recentTrips = me.role === "vendedor" ? [] : await db.select().from(tripsTable)
+    const recentTrips = me.role === ROLES.SALES ? [] : await db.select().from(tripsTable)
       .where(eq(tripsTable.tenantId, me.tenantId)).orderBy(desc(tripsTable.createdAt)).limit(2);
 
     const activities = [
@@ -746,7 +747,7 @@ router.get("/dashboard/comparative", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role === "cliente" || me.role === "vendedor") {
+    if (me.role === ROLES.CLIENT || me.role === ROLES.SALES) {
       res.status(403).json({ error: "Access denied" });
       return;
     }
@@ -812,7 +813,7 @@ router.get("/dashboard/top-customers", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role === "cliente" || me.role === "vendedor") {
+    if (me.role === ROLES.CLIENT || me.role === ROLES.SALES) {
       res.status(403).json({ error: "Access denied" });
       return;
     }

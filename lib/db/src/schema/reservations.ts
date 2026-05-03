@@ -2,6 +2,7 @@ import { pgTable, text, timestamp, boolean, numeric, integer, primaryKey } from 
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import type { ReservationStatus } from "@workspace/permissions";
 import { tenantsTable } from "./tenants";
 import { tripsTable } from "./trips";
 import { clientsTable } from "./clients";
@@ -25,7 +26,7 @@ export const reservationsTable = pgTable("reservations", {
   commissionPercentage: numeric("commission_percentage", { precision: 5, scale: 2 }),
   commissionAmount: numeric("commission_amount", { precision: 10, scale: 2 }),
   sellerId: text("seller_id").references(() => usersTable.id),
-  status: text("status").notNull().default("pending"),
+  status: text("status").$type<ReservationStatus>().notNull().default("pending"),
   voucherCode: text("voucher_code").notNull().unique(),
   qrCode: text("qr_code").notNull(),
   checkedInAt: timestamp("checked_in_at", { withTimezone: true }),

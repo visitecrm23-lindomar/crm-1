@@ -6,6 +6,7 @@ import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { z } from "zod";
 import { ADMIN_ROLES } from '../lib/tenant';
+import { ROLES, DEAL_STATUS, type DealStatus } from "@workspace/permissions";
 
 const router = Router();
 
@@ -132,7 +133,7 @@ router.get("/deals", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role === "cliente") {
+    if (me.role === ROLES.CLIENT) {
       res.status(403).json({ error: "Access denied" });
       return;
     }
@@ -141,8 +142,8 @@ router.get("/deals", async (req, res): Promise<void> => {
     if (stageId) conditions.push(eq(dealsTable.stageId, stageId));
     if (clientId) conditions.push(eq(dealsTable.clientId, clientId));
     if (ownerId) conditions.push(eq(dealsTable.ownerId, ownerId));
-    if (status) conditions.push(eq(dealsTable.status, status));
-    if (me.role === "vendedor") conditions.push(eq(dealsTable.ownerId, me.id));
+    if (status) conditions.push(eq(dealsTable.status, status as DealStatus));
+    if (me.role === ROLES.SALES) conditions.push(eq(dealsTable.ownerId, me.id));
     const deals = await db.select().from(dealsTable)
       .where(and(...conditions)).orderBy(desc(dealsTable.createdAt));
     const resInfoMap = await getReservationInfoForDeals(deals, me.tenantId);
@@ -185,7 +186,7 @@ router.post("/deals", async (req, res): Promise<void> => {
       description: parsed.data.description ?? null,
       value: String(parsed.data.value ?? 0),
       ownerId: me.id,
-      status: parsed.data.status ?? "open",
+      status: (parsed.data.status ?? DEAL_STATUS.OPEN) as DealStatus,
       leadName: parsed.data.leadName ?? null,
       leadEmail: parsed.data.leadEmail ?? null,
       leadWhatsapp: parsed.data.leadWhatsapp ?? null,
@@ -206,12 +207,12 @@ router.post("/deals", async (req, res): Promise<void> => {
 });
 
 async function requireDealAccess(me: { id: string; tenantId: string; role: string }, dealId: string, res: import("express").Response): Promise<typeof dealsTable.$inferSelect | null> {
-  if (me.role === "cliente") {
+  if (me.role === ROLES.CLIENT) {
     res.status(403).json({ error: "Access denied" });
     return null;
   }
   const dealConditions: ReturnType<typeof eq>[] = [eq(dealsTable.id, dealId), eq(dealsTable.tenantId, me.tenantId)];
-  if (me.role === "vendedor") dealConditions.push(eq(dealsTable.ownerId, me.id));
+  if (me.role === ROLES.SALES) dealConditions.push(eq(dealsTable.ownerId, me.id));
   const [deal] = await db.select().from(dealsTable).where(and(...dealConditions)).limit(1);
   if (!deal) { res.status(404).json({ error: "Not found" }); return null; }
   return deal;
@@ -244,7 +245,7 @@ router.patch("/deals/:id", async (req, res): Promise<void> => {
     if (parsed.data.title != null) updates.title = parsed.data.title;
     if (parsed.data.description !== undefined) updates.description = parsed.data.description ?? null;
     if (parsed.data.value != null) updates.value = String(parsed.data.value);
-    if (parsed.data.status != null) updates.status = parsed.data.status;
+    if (parsed.data.status != null) updates.status = parsed.data.status as DealStatus;
     if (parsed.data.lostReason != null) updates.lostReason = parsed.data.lostReason;
     if (parsed.data.expectedCloseDate !== undefined) {
       updates.expectedCloseDate = parsed.data.expectedCloseDate ? new Date(parsed.data.expectedCloseDate) : null;

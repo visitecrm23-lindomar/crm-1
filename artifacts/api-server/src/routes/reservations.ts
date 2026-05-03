@@ -17,6 +17,7 @@ import { broadcastSeatUpdate } from "../lib/realtime";
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { applyDiscounts, computeBalance, computeEffectiveLoyaltyPoints } from "../lib/pricing";
 import { calculateTier } from "../lib/loyalty-helpers";
+import { ROLES, DEAL_STATUS, type ReservationStatus } from "@workspace/permissions";
 
 
 const router = Router();
@@ -33,7 +34,7 @@ async function syncClientDeal(clientId: string, tenantId: string, tripId: string
 
   const [existingDeal] = await db.select({ id: dealsTable.id })
     .from(dealsTable)
-    .where(and(eq(dealsTable.clientId, clientId), eq(dealsTable.tenantId, tenantId), eq(dealsTable.status, "open")))
+    .where(and(eq(dealsTable.clientId, clientId), eq(dealsTable.tenantId, tenantId), eq(dealsTable.status, DEAL_STATUS.OPEN)))
     .orderBy(desc(dealsTable.createdAt))
     .limit(1);
 
@@ -244,7 +245,7 @@ router.get("/reservations", async (req, res, next: NextFunction): Promise<void> 
 
     const conditions: ReturnType<typeof eq>[] = [eq(reservationsTable.tenantId, me.tenantId)];
     if (tripId) conditions.push(eq(reservationsTable.tripId, tripId));
-    if (status) conditions.push(eq(reservationsTable.status, status));
+    if (status) conditions.push(eq(reservationsTable.status, status as ReservationStatus));
     if (commissionSyncStatus) conditions.push(eq(reservationsTable.commissionSyncStatus, commissionSyncStatus));
     if (createdById) conditions.push(eq(reservationsTable.createdById, createdById));
     if (dateFrom) conditions.push(sql`${reservationsTable.createdAt} >= ${dateFrom}::timestamptz` as ReturnType<typeof eq>);
@@ -275,7 +276,7 @@ router.get("/reservations", async (req, res, next: NextFunction): Promise<void> 
       }
     }
 
-    if (me.role === "cliente") {
+    if (me.role === ROLES.CLIENT) {
       const [clientRecord] = await db.select({ id: clientsTable.id })
         .from(clientsTable)
         .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.userId, me.id)))
@@ -285,7 +286,7 @@ router.get("/reservations", async (req, res, next: NextFunction): Promise<void> 
         return;
       }
       conditions.push(eq(reservationsTable.clientId, clientRecord.id));
-    } else if (me.role === "vendedor") {
+    } else if (me.role === ROLES.SALES) {
       const sellerClients = await db.select({ id: clientsTable.id })
         .from(clientsTable)
         .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.createdById, me.id)));
@@ -724,13 +725,13 @@ async function requireReservationAccess(
     .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, me.tenantId)))
     .limit(1);
   if (!reservation) throw new NotFoundError("Reservation not found", "RESERVATION_NOT_FOUND");
-  if (me.role === "cliente") {
+  if (me.role === ROLES.CLIENT) {
     const [clientRecord] = await db.select({ id: clientsTable.id }).from(clientsTable)
       .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.userId, me.id))).limit(1);
     if (!clientRecord || reservation.clientId !== clientRecord.id) {
       throw new NotFoundError("Reservation not found", "RESERVATION_NOT_FOUND");
     }
-  } else if (me.role === "vendedor") {
+  } else if (me.role === ROLES.SALES) {
     const [clientRecord] = await db.select({ createdById: clientsTable.createdById }).from(clientsTable)
       .where(and(eq(clientsTable.id, reservation.clientId), eq(clientsTable.tenantId, me.tenantId))).limit(1);
     if (!clientRecord || clientRecord.createdById !== me.id) {
@@ -759,14 +760,14 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+    if (me.role === ROLES.CLIENT) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const existing = await requireReservationAccess(me, req.params.id);
 
     const parsed = UpdateReservationBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
 
     const updates: Partial<typeof reservationsTable.$inferInsert> = {};
-    if (parsed.data.status != null) updates.status = parsed.data.status;
+    if (parsed.data.status != null) updates.status = parsed.data.status as ReservationStatus;
     if (parsed.data.paymentMethod != null) updates.paymentMethod = parsed.data.paymentMethod;
     if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
     if (parsed.data.seats != null) updates.seats = parsed.data.seats;
@@ -1239,7 +1240,7 @@ router.post("/reservations/:reservationId/passengers", async (req, res, next: Ne
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+    if (me.role === ROLES.CLIENT) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const reservation = await requireReservationAccess(me, req.params.reservationId);
     const parsed = CreatePassengerBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
@@ -1269,7 +1270,7 @@ router.patch("/reservations/:reservationId/passengers/:id", async (req, res, nex
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+    if (me.role === ROLES.CLIENT) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const reservation = await requireReservationAccess(me, req.params.reservationId);
     const parsed = UpdatePassengerBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
@@ -1294,7 +1295,7 @@ router.delete("/reservations/:reservationId/passengers/:id", async (req, res, ne
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+    if (me.role === ROLES.CLIENT) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const reservation = await requireReservationAccess(me, req.params.reservationId);
     await db.delete(passengersTable)
       .where(and(eq(passengersTable.id, req.params.id), eq(passengersTable.reservationId, req.params.reservationId)));

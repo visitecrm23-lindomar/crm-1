@@ -4,6 +4,7 @@ import { paymentsTable, tripsTable, dealsTable, clientsTable } from "@workspace/
 import { eq, and, lt, lte, gte, gt, sql } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 import { AGENCY_STAFF_ROLES } from '../lib/tenant';
+import { PAYMENT_STATUS, PAYMENT_TYPE, DEAL_STATUS, TRIP_STATUS } from "@workspace/permissions";
 
 const router = Router();
 
@@ -54,8 +55,8 @@ router.get("/alerts", async (req, res): Promise<void> => {
         total: sql<number>`coalesce(sum(cast(${paymentsTable.amount} as numeric)), 0)`,
       }).from(paymentsTable).where(and(
         eq(paymentsTable.tenantId, tenantId),
-        eq(paymentsTable.type, "receivable"),
-        eq(paymentsTable.status, "pending"),
+        eq(paymentsTable.type, PAYMENT_TYPE.RECEIVABLE),
+        eq(paymentsTable.status, PAYMENT_STATUS.PENDING),
         gte(paymentsTable.dueDate, startOfToday),
         lt(paymentsTable.dueDate, endOfToday),
       )),
@@ -66,8 +67,8 @@ router.get("/alerts", async (req, res): Promise<void> => {
         total: sql<number>`coalesce(sum(cast(${paymentsTable.amount} as numeric)), 0)`,
       }).from(paymentsTable).where(and(
         eq(paymentsTable.tenantId, tenantId),
-        eq(paymentsTable.type, "receivable"),
-        eq(paymentsTable.status, "pending"),
+        eq(paymentsTable.type, PAYMENT_TYPE.RECEIVABLE),
+        eq(paymentsTable.status, PAYMENT_STATUS.PENDING),
         lt(paymentsTable.dueDate, startOfToday),
       )),
 
@@ -77,8 +78,8 @@ router.get("/alerts", async (req, res): Promise<void> => {
         total: sql<number>`coalesce(sum(cast(${paymentsTable.amount} as numeric)), 0)`,
       }).from(paymentsTable).where(and(
         eq(paymentsTable.tenantId, tenantId),
-        eq(paymentsTable.type, "payable"),
-        eq(paymentsTable.status, "pending"),
+        eq(paymentsTable.type, PAYMENT_TYPE.PAYABLE),
+        eq(paymentsTable.status, PAYMENT_STATUS.PENDING),
         gte(paymentsTable.dueDate, startOfToday),
         lt(paymentsTable.dueDate, endOfDay3),
       )),
@@ -90,7 +91,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
         reservedSeats: tripsTable.reservedSeats,
       }).from(tripsTable).where(and(
         eq(tripsTable.tenantId, tenantId),
-        eq(tripsTable.status, "active"),
+        eq(tripsTable.status, TRIP_STATUS.ACTIVE),
         gte(tripsTable.departureDate, now),
         lte(tripsTable.departureDate, in24Hours),
         sql`${tripsTable.reservedSeats} = 0`,
@@ -104,7 +105,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
         reservedSeats: tripsTable.reservedSeats,
       }).from(tripsTable).where(and(
         eq(tripsTable.tenantId, tenantId),
-        eq(tripsTable.status, "active"),
+        eq(tripsTable.status, TRIP_STATUS.ACTIVE),
         gte(tripsTable.departureDate, now),
         lte(tripsTable.departureDate, in7Days),
         gt(tripsTable.totalCapacity, 0),
@@ -116,7 +117,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
         count: sql<number>`count(*)::int`,
       }).from(dealsTable).where(and(
         eq(dealsTable.tenantId, tenantId),
-        eq(dealsTable.status, "open"),
+        eq(dealsTable.status, DEAL_STATUS.OPEN),
         lte(dealsTable.updatedAt, sevenDaysAgo),
       )),
 

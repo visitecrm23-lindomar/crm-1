@@ -6,6 +6,7 @@ import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { loyaltyAwardPoints, calculateTier } from "../lib/loyalty-helpers";
 import { ADMIN_ROLES } from '../lib/tenant';
+import { ROLES, PAYMENT_STATUS, PAYMENT_TYPE } from "@workspace/permissions";
 
 const router = Router();
 
@@ -89,7 +90,7 @@ router.get("/clients/:clientId/loyalty", async (req, res): Promise<void> => {
     if (!me) return;
     const { clientId } = req.params;
 
-    if (me.role === "cliente") {
+    if (me.role === ROLES.CLIENT) {
       const [ownClient] = await db.select({ id: clientsTable.id })
         .from(clientsTable)
         .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.userId, me.id)))
@@ -98,7 +99,7 @@ router.get("/clients/:clientId/loyalty", async (req, res): Promise<void> => {
         res.status(403).json({ error: "Forbidden" });
         return;
       }
-    } else if (me.role === "vendedor") {
+    } else if (me.role === ROLES.SALES) {
       const [targetClient] = await db.select({ createdById: clientsTable.createdById })
         .from(clientsTable)
         .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.id, clientId)))
@@ -234,8 +235,8 @@ router.post("/loyalty/sync", async (req, res): Promise<void> => {
       .where(
         and(
           eq(paymentsTable.tenantId, me.tenantId),
-          eq(paymentsTable.status, "paid"),
-          eq(paymentsTable.type, "receivable"),
+          eq(paymentsTable.status, PAYMENT_STATUS.PAID),
+          eq(paymentsTable.type, PAYMENT_TYPE.RECEIVABLE),
           inArray(paymentsTable.clientId, clientIds)
         )
       );

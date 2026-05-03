@@ -82,6 +82,7 @@ import {
   Unlink,
 } from "lucide-react";
 import { formatCurrencyBRL } from "@/lib/utils";
+import { ROLES } from "@workspace/permissions";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -1025,7 +1026,7 @@ function GoogleCalendarCard() {
   const queryClient = useQueryClient();
   const [connecting, setConnecting] = useState(false);
 
-  const canConnect = me?.role === "agencia" || me?.role === "vendedor" || me?.role === "superadmin";
+  const canConnect = me?.role === ROLES.AGENCY_ADMIN || me?.role === ROLES.SALES || me?.role === ROLES.SUPER_ADMIN;
 
   const { data: status } = useGetCalendarStatus({
     query: { enabled: canConnect, queryKey: getGetCalendarStatusQueryKey() },
@@ -1518,7 +1519,7 @@ function TeamTab() {
     }
   }
 
-  const isManager = me?.role === "agencia" || me?.role === "superadmin";
+  const isManager = me?.role === ROLES.AGENCY_ADMIN || me?.role === ROLES.SUPER_ADMIN;
 
   return (
     <div className="space-y-4">

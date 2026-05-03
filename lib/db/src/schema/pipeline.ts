@@ -2,6 +2,7 @@ import { pgTable, text, timestamp, boolean, numeric, integer } from "drizzle-orm
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import type { DealStatus } from "@workspace/permissions";
 import { tenantsTable } from "./tenants";
 import { clientsTable } from "./clients";
 import { tripsTable } from "./trips";
@@ -53,7 +54,7 @@ export const dealsTable = pgTable("deals", {
   ownerId: text("owner_id").notNull().references(() => usersTable.id),
   expectedCloseDate: timestamp("expected_close_date", { withTimezone: true }),
   closedAt: timestamp("closed_at", { withTimezone: true }),
-  status: text("status").notNull().default("open"),
+  status: text("status").$type<DealStatus>().notNull().default("open"),
   lostReason: text("lost_reason"),
   reservationId: text("reservation_id"),
   source: text("source").notNull().default("manual"),

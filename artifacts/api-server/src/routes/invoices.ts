@@ -4,6 +4,7 @@ import { eq, desc, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { ROLES } from "@workspace/permissions";
 
 async function activateInvoicePlan(invoiceId: string, tenantId: string): Promise<void> {
   const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
@@ -63,7 +64,7 @@ router.get("/admin/invoices", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
 
     let query = db.select({
       id: invoicesTable.id,
@@ -114,7 +115,7 @@ router.post("/admin/invoices", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
     const parsed = InvoiceBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const id = generateId();
@@ -141,7 +142,7 @@ router.patch("/admin/invoices/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
     const parsed = UpdateInvoiceBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 

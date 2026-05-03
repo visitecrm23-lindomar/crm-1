@@ -4,6 +4,7 @@ import { eq, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { ROLES } from "@workspace/permissions";
 
 const router = Router();
 
@@ -25,7 +26,7 @@ router.get("/plans", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
     const plans = await db.select().from(plansTable).orderBy(desc(plansTable.createdAt));
     res.json(plans);
   } catch (err) {
@@ -38,7 +39,7 @@ router.post("/plans", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
     const parsed = PlanBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const id = generateId();
@@ -71,7 +72,7 @@ router.get("/plans/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
     const [plan] = await db.select().from(plansTable).where(eq(plansTable.id, req.params.id)).limit(1);
     if (!plan) { res.status(404).json({ error: "Not found" }); return; }
     res.json(plan);
@@ -85,7 +86,7 @@ router.patch("/plans/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
     const parsed = PlanBody.partial().safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     await db.update(plansTable).set(parsed.data).where(eq(plansTable.id, req.params.id));
@@ -102,7 +103,7 @@ router.delete("/plans/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
     await db.update(plansTable).set({ isActive: false }).where(eq(plansTable.id, req.params.id));
     res.json({ success: true });
   } catch (err) {
@@ -123,7 +124,7 @@ router.get("/admin/feature-flags", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
     const flags = await db.select().from(featureFlagsTable).orderBy(featureFlagsTable.key);
     res.json(flags);
   } catch (err) {
@@ -136,7 +137,7 @@ router.post("/admin/feature-flags", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
     const parsed = FeatureFlagBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const id = generateId();
@@ -153,7 +154,7 @@ router.patch("/admin/feature-flags/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
     const parsed = FeatureFlagBody.partial().safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     await db.update(featureFlagsTable).set(parsed.data).where(eq(featureFlagsTable.id, req.params.id));

@@ -12,6 +12,7 @@ import { format, addHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { GoogleCalendarService, refreshTokenIfNeeded } from "./calendar-service";
 import { generateId } from "../id";
+import { RESERVATION_STATUS, PAYMENT_STATUS, TRIP_STATUS } from "@workspace/permissions";
 
 async function getCalendarService(userId: string): Promise<GoogleCalendarService | null> {
   const token = await refreshTokenIfNeeded(userId);
@@ -108,7 +109,7 @@ export class CalendarSyncService {
         totalValue: reservationsTable.totalValue,
         seats: reservationsTable.seats,
       }).from(reservationsTable)
-        .where(and(eq(reservationsTable.tripId, tripId), eq(reservationsTable.status, "confirmed")));
+        .where(and(eq(reservationsTable.tripId, tripId), eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED)));
 
       const clientIds = reservations.map((r) => r.clientId);
       let clients: { id: string; name: string; email: string }[] = [];
@@ -302,7 +303,7 @@ export class CalendarSyncService {
         sellerId: reservationsTable.sellerId,
         totalValue: reservationsTable.totalValue,
       }).from(reservationsTable)
-        .where(and(eq(reservationsTable.tripId, tripId), eq(reservationsTable.status, "confirmed")));
+        .where(and(eq(reservationsTable.tripId, tripId), eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED)));
 
       let visibleReservations = reservations;
       if (actor.role === "vendedor") {
@@ -735,7 +736,7 @@ export class CalendarSyncService {
 
     const trips = await db.select({ id: tripsTable.id })
       .from(tripsTable)
-      .where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, "published")));
+      .where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, TRIP_STATUS.PUBLISHED)));
 
     for (const t of trips) {
       await CalendarSyncService.syncTripForUser(t.id, actorUserId);
@@ -744,7 +745,7 @@ export class CalendarSyncService {
 
     const payments = await db.select({ id: paymentsTable.id })
       .from(paymentsTable)
-      .where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.status, "pending")));
+      .where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.status, PAYMENT_STATUS.PENDING)));
 
     for (const p of payments) {
       await CalendarSyncService.syncPaymentForUser(p.id, actorUserId);
@@ -772,7 +773,7 @@ export class CalendarSyncService {
 
     const trips = await db.select({ id: tripsTable.id })
       .from(tripsTable)
-      .where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, "published")));
+      .where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, TRIP_STATUS.PUBLISHED)));
     for (const t of trips) {
       await CalendarSyncService.syncTrip(t.id);
       synced++;
@@ -780,7 +781,7 @@ export class CalendarSyncService {
 
     const payments = await db.select({ id: paymentsTable.id })
       .from(paymentsTable)
-      .where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.status, "pending")));
+      .where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.status, PAYMENT_STATUS.PENDING)));
     for (const p of payments) {
       await CalendarSyncService.syncPayment(p.id);
       synced++;

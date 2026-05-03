@@ -53,6 +53,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ROLES } from "@workspace/permissions";
 
 function fmtCurrency(v: number | string | null | undefined) {
   if (v == null) return "R$ 0,00";
@@ -602,7 +603,7 @@ export default function Vendedores() {
   const [configSeller, setConfigSeller] = useState<UserProfile | null>(null);
 
   const sellers = users.filter(
-    (u) => u.role === "vendedor" || u.role === "agencia" || u.role === "superadmin"
+    (u) => u.role === ROLES.SALES || u.role === ROLES.AGENCY_ADMIN || u.role === ROLES.SUPER_ADMIN
   );
 
   const stats: SellerStats[] = sellers.map((user) => {

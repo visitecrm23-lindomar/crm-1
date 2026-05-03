@@ -6,6 +6,7 @@ import { PublicStore, publicStoreApi, ReferralValidation } from "@/lib/storeApi"
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Gift, Tag, Users, ArrowRight, CheckCircle } from "lucide-react";
+import { ROLES } from "@workspace/permissions";
 
 interface Props {
   slug: string;
@@ -37,7 +38,7 @@ export default function ReferralLanding({ slug, store }: Props) {
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (isSignedIn && me?.role === "cliente") {
+    if (isSignedIn && me?.role === ROLES.CLIENT) {
       navigate("/perfil?tab=indicacoes");
     }
   }, [isLoaded, isSignedIn, me?.role]);

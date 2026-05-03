@@ -12,6 +12,7 @@ import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { ADMIN_ROLES, MANAGEMENT_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { syncReservationPaymentStatus } from "../lib/reservation-payments";
+import { ROLES, type PaymentStatus, type PaymentType, type ExpenseStatus } from "@workspace/permissions";
 
 const router = Router();
 
@@ -137,7 +138,7 @@ export async function syncReservationCommission(reservationId: string, tenantId:
         .from(usersTable)
         .where(and(eq(usersTable.id, reservation.createdById), eq(usersTable.tenantId, tenantId)))
         .limit(1);
-      if (!creator || creator.role !== "vendedor") return;
+      if (!creator || creator.role !== ROLES.SALES) return;
       sellerId = creator.id;
     }
 
@@ -365,10 +366,10 @@ router.get("/payments", async (req, res, next: NextFunction): Promise<void> => {
 
     const conditions: ReturnType<typeof eq>[] = [eq(paymentsTable.tenantId, me.tenantId)];
     if (reservationId) conditions.push(eq(paymentsTable.reservationId, reservationId));
-    if (status) conditions.push(eq(paymentsTable.status, status));
-    if (type) conditions.push(eq(paymentsTable.type, type));
+    if (status) conditions.push(eq(paymentsTable.status, status as PaymentStatus));
+    if (type) conditions.push(eq(paymentsTable.type, type as PaymentType));
 
-    if (me.role === "cliente") {
+    if (me.role === ROLES.CLIENT) {
       const [clientRecord] = await db.select({ id: clientsTable.id })
         .from(clientsTable)
         .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.userId, me.id)))
@@ -379,7 +380,7 @@ router.get("/payments", async (req, res, next: NextFunction): Promise<void> => {
         res.json({ data: [], total: 0, page: pageNum, limit: limitNum });
         return;
       }
-    } else if (me.role === "vendedor") {
+    } else if (me.role === ROLES.SALES) {
       const sellerClients = await db.select({ id: clientsTable.id })
         .from(clientsTable)
         .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.createdById, me.id)));
@@ -442,7 +443,7 @@ router.post("/payments", async (req, res, next: NextFunction): Promise<void> => 
     const installments = parsed.data.installments ?? 1;
     const receiptUrl = typeof req.body.receiptUrl === "string" ? req.body.receiptUrl : null;
     const canSetPaymentStatus = MANAGEMENT_ROLES.includes(me.role);
-    const explicitStatus = canSetPaymentStatus ? (parsed.data.status ?? undefined) : undefined;
+    const explicitStatus = canSetPaymentStatus ? (parsed.data.status as PaymentStatus | undefined) : undefined;
     const explicitPaidAt = canSetPaymentStatus && parsed.data.paidAt ? new Date(parsed.data.paidAt) : undefined;
 
     for (let i = 1; i <= installments; i++) {
@@ -453,7 +454,7 @@ router.post("/payments", async (req, res, next: NextFunction): Promise<void> => 
         tenantId: me.tenantId,
         reservationId: parsed.data.reservationId ?? null,
         clientId: parsed.data.clientId ?? null,
-        type: parsed.data.type,
+        type: parsed.data.type as PaymentType,
         category: parsed.data.category,
         amount: String(parsed.data.amount / installments),
         paymentMethod: parsed.data.paymentMethod,
@@ -501,14 +502,14 @@ async function requirePaymentAccess(
     .where(and(eq(paymentsTable.id, paymentId), eq(paymentsTable.tenantId, me.tenantId)))
     .limit(1);
   if (!payment) throw new NotFoundError("Payment not found", "NOT_FOUND");
-  if (me.role === "cliente") {
+  if (me.role === ROLES.CLIENT) {
     if (!payment.clientId) throw new NotFoundError("Payment not found", "NOT_FOUND");
     const [clientRecord] = await db.select({ id: clientsTable.id }).from(clientsTable)
       .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.userId, me.id))).limit(1);
     if (!clientRecord || payment.clientId !== clientRecord.id) {
       throw new NotFoundError("Payment not found", "NOT_FOUND");
     }
-  } else if (me.role === "vendedor") {
+  } else if (me.role === ROLES.SALES) {
     if (!payment.clientId) throw new NotFoundError("Payment not found", "NOT_FOUND");
     const [clientRecord] = await db.select({ createdById: clientsTable.createdById }).from(clientsTable)
       .where(and(eq(clientsTable.id, payment.clientId), eq(clientsTable.tenantId, me.tenantId))).limit(1);
@@ -539,7 +540,7 @@ router.patch("/payments/:id", async (req, res, next: NextFunction): Promise<void
     const parsed = UpdatePaymentBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message))); return; }
     const updates: Partial<typeof paymentsTable.$inferInsert> = {};
-    if (parsed.data.status != null) updates.status = parsed.data.status;
+    if (parsed.data.status != null) updates.status = parsed.data.status as PaymentStatus;
     if (parsed.data.paidAt !== undefined) updates.paidAt = parsed.data.paidAt ? new Date(parsed.data.paidAt) : null;
     if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
     await db.update(paymentsTable).set(updates)
@@ -583,7 +584,7 @@ router.get("/expenses", async (req, res, next: NextFunction): Promise<void> => {
 
     const conditions: ReturnType<typeof eq>[] = [eq(expensesTable.tenantId, me.tenantId)];
     if (tripId) conditions.push(eq(expensesTable.tripId, tripId));
-    if (status) conditions.push(eq(expensesTable.status, status));
+    if (status) conditions.push(eq(expensesTable.status, status as ExpenseStatus));
 
     const expenses = await db.select().from(expensesTable)
       .where(and(...conditions)).orderBy(desc(expensesTable.dueDate))
@@ -640,7 +641,7 @@ router.patch("/expenses/:id", async (req, res, next: NextFunction): Promise<void
     const parsed = UpdateExpenseBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message))); return; }
     const updates: Partial<typeof expensesTable.$inferInsert> = {};
-    if (parsed.data.status != null) updates.status = parsed.data.status;
+    if (parsed.data.status != null) updates.status = parsed.data.status as ExpenseStatus;
     if (parsed.data.paymentDate !== undefined) updates.paymentDate = parsed.data.paymentDate ? new Date(parsed.data.paymentDate) : null;
     if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
     if (parsed.data.amount != null) updates.amount = String(parsed.data.amount);

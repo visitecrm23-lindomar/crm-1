@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { PAYMENT_METHOD_LABELS } from "@/lib/labels";
+import { ROLES } from "@workspace/permissions";
 
 const fmt = (v: number) => formatCurrency(v);
 const fmtCompact = (v: number) => {
@@ -464,7 +465,7 @@ export default function Revenue() {
               <SelectTrigger className="w-[150px] h-9 text-sm"><SelectValue placeholder="Vendedor" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos os Vendedores</SelectItem>
-                {(usersRaw ?? []).filter(u => u.role === "vendedor" || u.role === "admin").map(u => (
+                {(usersRaw ?? []).filter(u => u.role === ROLES.SALES || u.role === "admin").map(u => (
                   <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                 ))}
               </SelectContent>

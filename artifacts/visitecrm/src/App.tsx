@@ -68,6 +68,7 @@ import LojaAvaliacoes from "@/pages/loja/avaliacoes";
 
 // Public vitrine
 import Vitrine from "@/pages/vitrine";
+import { ROLES } from "@workspace/permissions";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 const clerkProxyUrl: string =
@@ -142,15 +143,15 @@ function RoleRedirect() {
       return;
     }
 
-    if (me.role === "superadmin") {
+    if (me.role === ROLES.SUPER_ADMIN) {
       setLocation("/admin");
     } else if (!me.tenantId) {
       setLocation("/onboarding");
-    } else if (me.role === "vendedor") {
+    } else if (me.role === ROLES.SALES) {
       setLocation("/meu-painel");
-    } else if (me.role === "agencia" || me.role === "gerente" || me.role === "suporte") {
+    } else if (me.role === ROLES.AGENCY_ADMIN || me.role === ROLES.AGENCY_MANAGER || me.role === ROLES.SUPPORT) {
       setLocation("/dashboard");
-    } else if (me.role === "cliente") {
+    } else if (me.role === ROLES.CLIENT) {
       setLocation("/perfil");
     } else {
       setLocation("/dashboard");
@@ -256,11 +257,11 @@ function OnboardingRoute() {
   useEffect(() => {
     if (isLoading || !me) return;
     if (me.tenantId) {
-      if (me.role === "superadmin") {
+      if (me.role === ROLES.SUPER_ADMIN) {
         setLocation("/admin");
-      } else if (me.role === "vendedor") {
+      } else if (me.role === ROLES.SALES) {
         setLocation("/meu-painel");
-      } else if (me.role === "cliente") {
+      } else if (me.role === ROLES.CLIENT) {
         setLocation("/perfil");
       } else {
         setLocation("/dashboard");

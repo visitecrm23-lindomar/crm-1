@@ -2,6 +2,7 @@ import { pgTable, text, timestamp, boolean, numeric, integer, json } from "drizz
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import type { TripStatus } from "@workspace/permissions";
 import { tenantsTable } from "./tenants";
 
 export interface FixedCostItem { id: string; category: string; description: string; value: number; }
@@ -45,7 +46,7 @@ export const tripsTable = pgTable("trips", {
   coverImage: text("cover_image"),
   gallery: text("gallery").array().notNull().default([]),
   videos: text("videos").array().notNull().default([]),
-  status: text("status").notNull().default("draft"),
+  status: text("status").$type<TripStatus>().notNull().default("draft"),
   isPublic: boolean("is_public").notNull().default(false),
   isFeatured: boolean("is_featured").notNull().default(false),
   isAvailableInShop: boolean("is_available_in_shop").notNull().default(false),

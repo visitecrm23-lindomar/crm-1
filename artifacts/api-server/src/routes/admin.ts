@@ -7,11 +7,12 @@ import { requireAuth } from "../lib/tenant";
 import { getAuth } from "@clerk/express";
 import { utapi } from "../lib/uploadthing";
 import { collectReferencedUploadThingKeys } from "../lib/collectReferencedUploadThingKeys";
+import { ROLES } from "@workspace/permissions";
 
 const router = Router();
 
 function requireSuperAdmin(role: string, res: import("express").Response): boolean {
-  if (role !== "superadmin") {
+  if (role !== ROLES.SUPER_ADMIN) {
     res.status(403).json({ error: "Forbidden: superadmin only" });
     return false;
   }

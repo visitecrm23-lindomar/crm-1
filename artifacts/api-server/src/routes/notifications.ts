@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { tripsTable, paymentsTable, clientsTable, systemConfigsTable, reservationsTable } from "@workspace/db";
 import { eq, and, lt, gte, lte, gt } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
+import { ROLES, RESERVATION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, TRIP_STATUS } from "@workspace/permissions";
 
 const router = Router();
 
@@ -22,7 +23,7 @@ router.get("/notifications", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    const isClientRole = me.role === "cliente";
+    const isClientRole = me.role === ROLES.CLIENT;
 
     const configs = await db.select().from(systemConfigsTable)
       .where(and(eq(systemConfigsTable.tenantId, me.tenantId), eq(systemConfigsTable.key, "notifications")));
@@ -54,7 +55,7 @@ router.get("/notifications", async (req, res): Promise<void> => {
             .where(and(
               eq(reservationsTable.tenantId, me.tenantId),
               eq(reservationsTable.clientId, linkedClientId),
-              eq(reservationsTable.status, "confirmed"),
+              eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED),
             ));
           const tripIds = new Set(clientReservations.map(r => r.tripId));
 
@@ -85,7 +86,7 @@ router.get("/notifications", async (req, res): Promise<void> => {
             eq(tripsTable.tenantId, me.tenantId),
             gte(tripsTable.departureDate, now),
             lte(tripsTable.departureDate, in7Days),
-            eq(tripsTable.status, "active"),
+            eq(tripsTable.status, TRIP_STATUS.ACTIVE),
           )
         );
         upcomingTrips = rows as TripRow[];
@@ -113,8 +114,8 @@ router.get("/notifications", async (req, res): Promise<void> => {
       }).from(paymentsTable).where(
         and(
           eq(paymentsTable.tenantId, me.tenantId),
-          eq(paymentsTable.status, "pending"),
-          eq(paymentsTable.type, "receivable"),
+          eq(paymentsTable.status, PAYMENT_STATUS.PENDING),
+          eq(paymentsTable.type, PAYMENT_TYPE.RECEIVABLE),
           lt(paymentsTable.dueDate, now),
         )
       );
@@ -139,7 +140,7 @@ router.get("/notifications", async (req, res): Promise<void> => {
       }).from(reservationsTable).where(
         and(
           eq(reservationsTable.tenantId, me.tenantId),
-          eq(reservationsTable.status, "confirmed"),
+          eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED),
           gt(reservationsTable.balance, "0"),
         )
       );
@@ -167,7 +168,7 @@ router.get("/notifications", async (req, res): Promise<void> => {
         and(
           eq(tripsTable.tenantId, me.tenantId),
           gte(tripsTable.departureDate, now),
-          eq(tripsTable.status, "active"),
+          eq(tripsTable.status, TRIP_STATUS.ACTIVE),
         )
       );
 

@@ -14,6 +14,7 @@ import {
 } from "@workspace/api-zod";
 import { getAuth, clerkClient } from "@clerk/express";
 import { ADMIN_ROLES } from '../lib/tenant';
+import { ROLES } from "@workspace/permissions";
 
 const router = Router();
 
@@ -169,7 +170,7 @@ router.post("/users/me/sync", async (req, res): Promise<void> => {
       };
 
       const superadminClerkIdForUpdate = process.env.SUPERADMIN_CLERK_ID;
-      if (superadminClerkIdForUpdate && clerkId === superadminClerkIdForUpdate && existing.role !== "superadmin") {
+      if (superadminClerkIdForUpdate && clerkId === superadminClerkIdForUpdate && existing.role !== ROLES.SUPER_ADMIN) {
         updateSet.role = "superadmin";
         req.log.info({ clerkId, userId: existing.id }, "Auto-promoted user to superadmin via SUPERADMIN_CLERK_ID");
       }
@@ -179,7 +180,7 @@ router.post("/users/me/sync", async (req, res): Promise<void> => {
         if (reconcileInvite) {
           updateSet.tenantId = reconcileInvite.tenantId;
           // Never downgrade a superadmin via invite reconciliation
-          if (updateSet.role !== "superadmin") {
+          if (updateSet.role !== ROLES.SUPER_ADMIN) {
             updateSet.role = reconcileInvite.role;
           }
           await db.update(invitesTable)
@@ -225,13 +226,13 @@ router.post("/users", async (req, res): Promise<void> => {
       res.status(403).json({ error: "Apenas administradores podem criar usuarios" });
       return;
     }
-    if (me.tenantId && me.role !== "superadmin") {
+    if (me.tenantId && me.role !== ROLES.SUPER_ADMIN) {
       const allowed = await checkPlanLimit(me.tenantId, "users", req, res);
       if (!allowed) return;
     }
     const parsed = CreateUserBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    if (me.role !== "superadmin" && parsed.data.role === "superadmin") {
+    if (me.role !== ROLES.SUPER_ADMIN && parsed.data.role === "superadmin") {
       res.status(403).json({ error: "Forbidden: apenas superadmins podem atribuir a funcao superadmin" });
       return;
     }
@@ -273,7 +274,7 @@ router.patch("/users/:id", async (req, res): Promise<void> => {
         return;
       }
       if (parsed.data.role != null) {
-        if (me.role !== "superadmin" && parsed.data.role === "superadmin") {
+        if (me.role !== ROLES.SUPER_ADMIN && parsed.data.role === "superadmin") {
           res.status(403).json({ error: "Forbidden: apenas superadmins podem atribuir a funcao superadmin" });
           return;
         }

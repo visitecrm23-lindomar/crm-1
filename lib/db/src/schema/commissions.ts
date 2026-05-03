@@ -1,6 +1,7 @@
 import { pgTable, text, timestamp, numeric, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import type { CommissionStatus } from "@workspace/permissions";
 
 export const commissionRulesTable = pgTable("commission_rules", {
   id: text("id").primaryKey(),
@@ -29,7 +30,7 @@ export const commissionsTable = pgTable("commissions", {
   commissionAmount: numeric("commission_amount", { precision: 10, scale: 2 }).notNull(),
   commissionRate: numeric("commission_rate", { precision: 8, scale: 4 }),
   commissionType: text("commission_type"),
-  status: text("status").notNull().default("pending"),
+  status: text("status").$type<CommissionStatus>().notNull().default("pending"),
   paidAt: timestamp("paid_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

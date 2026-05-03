@@ -8,7 +8,7 @@ import { ROLES, ADMIN_ROLES, MANAGEMENT_ROLES, ALL_STAFF_ROLES } from "@workspac
 export type { Role } from "@workspace/permissions";
 export { ROLES, ADMIN_ROLES, MANAGEMENT_ROLES, ALL_STAFF_ROLES };
 
-export const AGENCY_STAFF_ROLES = [ROLES.AGENCY_ADMIN, ROLES.AGENCY_MANAGER, ROLES.SALES, ROLES.SUPPORT];
+export const AGENCY_STAFF_ROLES: string[] = [ROLES.AGENCY_ADMIN, ROLES.AGENCY_MANAGER, ROLES.SALES, ROLES.SUPPORT];
 
 export type AuthedUser = {
   id: string;

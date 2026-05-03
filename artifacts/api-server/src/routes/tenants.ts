@@ -5,6 +5,7 @@ import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { deleteOrphanedFile } from "../lib/uploadthing";
+import { ROLES } from "@workspace/permissions";
 
 const router = Router();
 
@@ -34,7 +35,7 @@ router.get("/admin/stats", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden: superadmin only" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden: superadmin only" }); return; }
 
     const [tenants, allPlans] = await Promise.all([
       db.select().from(tenantsTable),
@@ -77,7 +78,7 @@ router.get("/tenants", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden: superadmin only" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden: superadmin only" }); return; }
 
     const tenants = await db.select().from(tenantsTable).orderBy(desc(tenantsTable.createdAt));
 
@@ -103,7 +104,7 @@ router.get("/tenants/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin" && me.tenantId !== req.params.id) {
+    if (me.role !== ROLES.SUPER_ADMIN && me.tenantId !== req.params.id) {
       res.status(403).json({ error: "Forbidden" }); return;
     }
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
@@ -119,7 +120,7 @@ router.post("/tenants", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden: superadmin only" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden: superadmin only" }); return; }
     const parsed = z.object({
       name: z.string().min(1),
       slug: z.string().min(1),
@@ -142,17 +143,17 @@ router.patch("/tenants/:id", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const isAdminOfTenant = (me.role === "agencia" || me.role === "superadmin") && me.tenantId === req.params.id;
-    const isSuperadmin = me.role === "superadmin";
+    const isAdminOfTenant = (me.role === ROLES.AGENCY_ADMIN || me.role === ROLES.SUPER_ADMIN) && me.tenantId === req.params.id;
+    const isSuperadmin = me.role === ROLES.SUPER_ADMIN;
     if (!isAdminOfTenant && !isSuperadmin) { res.status(403).json({ error: "Forbidden" }); return; }
-    if (me.role !== "superadmin" && (req.body.planId || req.body.status !== undefined || req.body.maxUsersOverride !== undefined || req.body.maxClientsOverride !== undefined || req.body.maxTripsOverride !== undefined)) {
+    if (me.role !== ROLES.SUPER_ADMIN && (req.body.planId || req.body.status !== undefined || req.body.maxUsersOverride !== undefined || req.body.maxClientsOverride !== undefined || req.body.maxTripsOverride !== undefined)) {
       res.status(403).json({ error: "Forbidden: apenas superadmin pode alterar plano, status ou limites do tenant" }); return;
     }
     const parsed = UpdateTenantBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const { birthdayMessagesEnabled, ...rest } = parsed.data;
     const updateData: Record<string, unknown> = { ...rest };
-    if (me.role !== "superadmin") {
+    if (me.role !== ROLES.SUPER_ADMIN) {
       delete updateData.planId;
       delete updateData.status;
       delete updateData.maxUsersOverride;
