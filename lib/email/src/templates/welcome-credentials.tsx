@@ -103,7 +103,7 @@ export function WelcomeCredentialsEmail({
 
           {/* CTA BUTTON */}
           <Section style={buttonSection}>
-            <Button style={buttonPrimary} href={setupUrl}>
+            <Button style={buttonPrimary} href={plainTextPassword ? loginUrl : setupUrl}>
               🚀 Acessar Minha Área
             </Button>
           </Section>
