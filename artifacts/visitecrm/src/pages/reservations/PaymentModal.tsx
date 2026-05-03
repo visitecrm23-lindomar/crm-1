@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCreatePayment } from "@workspace/api-client-react";
 import type { Reservation } from "@workspace/api-client-react";
+import { PAYMENT_STATUS, PAYMENT_TYPE } from "@workspace/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -31,14 +32,14 @@ export function PaymentModal({ reservation, open, onClose, onSuccess }: {
       data: {
         reservationId: reservation.id,
         clientId: reservation.clientId,
-        type: "receivable",
+        type: PAYMENT_TYPE.RECEIVABLE,
         category: "reservation",
         amount,
         paymentMethod: method,
         dueDate: now.split("T")[0],
         description: `Pagamento reserva ${reservation.voucherCode}`,
         installments: parseInt(fd.get("installments") as string || "1"),
-        status: "paid",
+        status: PAYMENT_STATUS.PAID,
         paidAt: now,
       }
     });

@@ -49,9 +49,9 @@ function StatusBadge({ status }: { status: string }) {
 
 function StatusIcon({ status }: { status: string }) {
   switch (status) {
-    case "confirmed": return <CheckCircle className="w-5 h-5 text-blue-500" />;
-    case "completed": return <CheckCircle className="w-5 h-5 text-green-500" />;
-    case "cancelled": return <XCircle className="w-5 h-5 text-red-500" />;
+    case RESERVATION_STATUS.CONFIRMED: return <CheckCircle className="w-5 h-5 text-blue-500" />;
+    case RESERVATION_STATUS.COMPLETED: return <CheckCircle className="w-5 h-5 text-green-500" />;
+    case RESERVATION_STATUS.CANCELLED: return <XCircle className="w-5 h-5 text-red-500" />;
     case "processing": return <Package className="w-5 h-5 text-purple-500" />;
     default: return <Clock className="w-5 h-5 text-yellow-500" />;
   }

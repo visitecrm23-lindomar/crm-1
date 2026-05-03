@@ -53,7 +53,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { ROLES } from "@workspace/permissions";
+import { ROLES, COMMISSION_STATUS } from "@workspace/permissions";
 
 function fmtCurrency(v: number | string | null | undefined) {
   if (v == null) return "R$ 0,00";
@@ -954,10 +954,10 @@ export default function Vendedores() {
                               </TableCell>
                               <TableCell>
                                 <Badge
-                                  variant={c.status === "paid" ? "default" : "secondary"}
+                                  variant={c.status === COMMISSION_STATUS.PAID ? "default" : "secondary"}
                                   className="text-xs"
                                 >
-                                  {c.status === "paid" ? "Pago" : c.status === "pending" ? "Pendente" : c.status}
+                                  {c.status === COMMISSION_STATUS.PAID ? "Pago" : c.status === COMMISSION_STATUS.PENDING ? "Pendente" : c.status}
                                 </Badge>
                               </TableCell>
                             </TableRow>

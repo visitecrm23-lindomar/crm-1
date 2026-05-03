@@ -46,7 +46,7 @@ async function syncMonthlyGoalProgress(sellerId: string, tenantId: string): Prom
       FROM commissions
       WHERE tenant_id = ${tenantId}
         AND user_id = ${sellerId}
-        AND status IN (${PAYMENT_STATUS.PAID}, ${PAYMENT_STATUS.APPROVED})
+        AND status IN (${COMMISSION_STATUS.PAID}, ${COMMISSION_STATUS.APPROVED})
         AND to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM') = ${month}
     `);
     const row = result.rows[0] as Record<string, unknown>;

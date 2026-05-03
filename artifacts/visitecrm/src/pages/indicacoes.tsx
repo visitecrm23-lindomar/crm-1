@@ -425,7 +425,7 @@ export default function Indicacoes() {
                           <Button size="sm" variant="ghost" onClick={() => openDetail(r)}>
                             <Eye className="w-3 h-3" />
                           </Button>
-                          {r.isActive && r.status === "pending" && (
+                          {r.isActive && r.status === REFERRAL_STATUS.PENDING && (
                             <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDeactivate(r)}>
                               <Ban className="w-3 h-3" />
                             </Button>

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useGetReservation, useListPayments } from "@workspace/api-client-react";
+import { PAYMENT_STATUS } from "@workspace/permissions";
 import { Client360Modal } from "@/components/client360-modal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -162,11 +163,11 @@ export function ReservationDetailModal({ reservationId, open, onClose }: {
                         {p.paidAt && <p className="text-xs text-green-600 mt-0.5">Pago em {new Date(p.paidAt).toLocaleDateString("pt-BR")}</p>}
                       </div>
                       <div className="text-right">
-                        <p className={`font-semibold text-base ${p.status === "paid" ? "text-green-600" : ""}`}>
+                        <p className={`font-semibold text-base ${p.status === PAYMENT_STATUS.PAID ? "text-green-600" : ""}`}>
                           {fmt(parseFloat(String(p.amount)))}
                         </p>
-                        <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${p.status === "paid" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
-                          {p.status === "paid" ? "Pago" : "Pendente"}
+                        <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${p.status === PAYMENT_STATUS.PAID ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+                          {p.status === PAYMENT_STATUS.PAID ? "Pago" : "Pendente"}
                         </span>
                       </div>
                     </div>
