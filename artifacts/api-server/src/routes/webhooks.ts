@@ -698,9 +698,10 @@ async function markOrderRefunded(
     .filter((r) => r.status !== RESERVATION_STATUS.CANCELLED && r.status !== RESERVATION_STATUS.COMPLETED)
     .map((r) => r.id);
 
-  // Restore trip seat counters BEFORE the bulk status update so we can read
-  // each reservation's current (pre-cancel) status. Confirmed seats go back
-  // to the confirmed bucket; reserved seats go back to the reserved bucket.
+  // Update trip seat counters BEFORE the bulk status update so we can read
+  // each reservation's current (pre-cancel) status. Confirmed reservations
+  // decrement confirmed_seats; pending ones decrement reserved_seats. In both
+  // cases available_seats is incremented by the total number of freed seats.
   if (cancellableIds.length > 0) {
     const seatDeltaByTrip = new Map<string, { confirmed: number; reserved: number }>();
     for (const r of reservations) {
