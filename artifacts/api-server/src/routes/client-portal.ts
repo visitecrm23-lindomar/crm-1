@@ -16,6 +16,9 @@ import { z } from "zod/v4";
 import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { ROLES, REFERRAL_STATUS, RESERVATION_STATUS } from "@workspace/permissions";
+import { generateVoucherPdf } from "../lib/voucher-pdf";
+import { getPdfQueue } from "../queues/index";
+import { generateId } from "../lib/id";
 
 const router = Router();
 
@@ -297,6 +300,145 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
       stats,
       loyalty,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/client/reservations/:id/voucher", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    if (me.role !== ROLES.CLIENT) {
+      next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE"));
+      return;
+    }
+
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) {
+      next(new NotFoundError("Perfil de cliente não encontrado", "NOT_FOUND"));
+      return;
+    }
+
+    const [row] = await db
+      .select({
+        id: reservationsTable.id,
+        reservationNumber: reservationsTable.reservationNumber,
+        status: reservationsTable.status,
+        voucherCode: reservationsTable.voucherCode,
+        totalValue: reservationsTable.totalValue,
+        paidValue: reservationsTable.paidValue,
+        paymentMethod: reservationsTable.paymentMethod,
+        createdAt: reservationsTable.createdAt,
+        seats: reservationsTable.seats,
+        tripName: tripsTable.name,
+        tripDestination: tripsTable.destination,
+        tripDepartureDate: tripsTable.departureDate,
+        tripReturnDate: tripsTable.returnDate,
+      })
+      .from(reservationsTable)
+      .innerJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
+      .where(
+        and(
+          eq(reservationsTable.id, req.params.id),
+          eq(reservationsTable.clientId, client.id),
+          eq(reservationsTable.tenantId, me.tenantId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) {
+      next(new NotFoundError("Reserva não encontrada", "NOT_FOUND"));
+      return;
+    }
+
+    const [[tenant], [user]] = await Promise.all([
+      db
+        .select({ name: tenantsTable.name, primaryColor: tenantsTable.primaryColor })
+        .from(tenantsTable)
+        .where(eq(tenantsTable.id, me.tenantId))
+        .limit(1),
+      db
+        .select({ name: usersTable.name })
+        .from(usersTable)
+        .where(eq(usersTable.id, me.id))
+        .limit(1),
+    ]);
+
+    const passengerName = client.name ?? user?.name ?? "Passageiro";
+    const agencyName = tenant?.name ?? "Agência";
+    const primaryColor = tenant?.primaryColor ?? "#3B82F6";
+    const totalValue = Number(row.totalValue);
+    const paidValue = Number(row.paidValue);
+    const balance = Math.max(totalValue - paidValue, 0);
+    const seatsCount = Array.isArray(row.seats) ? row.seats.length : 0;
+    const tripDepartureDate = row.tripDepartureDate
+      ? (row.tripDepartureDate as unknown as Date).toISOString().slice(0, 10)
+      : null;
+    const tripReturnDate = row.tripReturnDate
+      ? (row.tripReturnDate as unknown as Date).toISOString().slice(0, 10)
+      : null;
+
+    const voucherData = {
+      passengerName,
+      agencyName,
+      primaryColor,
+      reservationId: row.id,
+      reservationNumber: row.reservationNumber,
+      status: row.status,
+      voucherCode: row.voucherCode,
+      reservationDate: row.createdAt,
+      paymentMethod: row.paymentMethod,
+      totalValue,
+      paidValue,
+      balance,
+      seatsCount,
+      tripName: row.tripName,
+      tripDestination: row.tripDestination,
+      tripDepartureDate,
+      tripReturnDate,
+    };
+
+    const pdfBuffer = generateVoucherPdf(voucherData);
+
+    const pdfQueue = getPdfQueue();
+    if (pdfQueue) {
+      pdfQueue
+        .add(`voucher-${generateId()}`, {
+          type: "voucher",
+          tenantId: me.tenantId,
+          reservationId: row.id,
+          passengerName,
+          agencyName,
+          primaryColor,
+          reservationNumber: row.reservationNumber,
+          status: row.status,
+          voucherCode: row.voucherCode,
+          reservationDate: row.createdAt.toISOString(),
+          paymentMethod: row.paymentMethod,
+          totalValue,
+          paidValue,
+          balance,
+          seatsCount,
+          tripName: row.tripName,
+          tripDestination: row.tripDestination,
+          tripDepartureDate,
+          tripReturnDate,
+          userId: me.id,
+          ipAddress: req.ip ?? null,
+          userAgent: req.headers["user-agent"] ?? null,
+        })
+        .catch((err) => req.log.warn({ err }, "[voucher] Failed to enqueue audit job"));
+    }
+
+    const safeTrip = row.tripName.replace(/[^a-z0-9]/gi, "_").slice(0, 30);
+    const filename = `comprovante_${safeTrip}_${row.voucherCode ?? row.id}.pdf`;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
+    res.send(pdfBuffer);
   } catch (err) {
     next(err);
   }

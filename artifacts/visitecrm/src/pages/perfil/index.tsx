@@ -39,6 +39,7 @@ import {
   Coins,
   ArrowRight,
   AlertCircle,
+  Download,
 } from "lucide-react";
 import { formatCurrency as fmtCurrencyLib, formatDateShort } from "@/lib/utils";
 
@@ -78,8 +79,44 @@ function daysUntil(dateStr: string | null): number | null {
 }
 
 function ReservationCard({ r, compact = false }: { r: ClientPortalProfile["reservations"][number]; compact?: boolean }) {
+  const { toast } = useToast();
+  const [downloading, setDownloading] = useState(false);
   const days = daysUntil(r.tripDepartureDate);
   const isImminent = days !== null && days >= 0 && days <= 30;
+
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+  async function handleDownloadVoucher() {
+    setDownloading(true);
+    try {
+      const res = await fetch(`${BASE}/api/client/reservations/${r.id}/voucher`, {
+        method: "GET",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.message ?? err.error ?? "Erro ao gerar comprovante");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const safeTrip = r.tripName.replace(/[^a-z0-9]/gi, "_").slice(0, 30);
+      a.href = url;
+      a.download = `comprovante_${safeTrip}_${r.voucherCode}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast({
+        title: "Erro ao baixar comprovante",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   return (
     <Card className="overflow-hidden">
@@ -167,6 +204,23 @@ function ReservationCard({ r, compact = false }: { r: ClientPortalProfile["reser
                   <span>Saldo pendente: {fmtCurrency(r.balance)}</span>
                 </div>
               )}
+            </div>
+
+            <div className="mt-3">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1.5"
+                onClick={handleDownloadVoucher}
+                disabled={downloading}
+              >
+                {downloading ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Download className="w-3 h-3" />
+                )}
+                {downloading ? "Gerando..." : "Baixar comprovante"}
+              </Button>
             </div>
           </div>
         </div>

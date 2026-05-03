@@ -33,7 +33,7 @@ export interface ReminderJobData {
   type: "boarding_reminder" | "payment_reminder" | "expired_reservations_cleanup";
 }
 
-export interface PdfJobData {
+export interface PdfManifestJobData {
   type: "manifest";
   tenantId: string;
   tripId: string;
@@ -47,6 +47,33 @@ export interface PdfJobData {
   ipAddress: string | null;
   userAgent: string | null;
 }
+
+export interface PdfVoucherJobData {
+  type: "voucher";
+  tenantId: string;
+  reservationId: string;
+  passengerName: string;
+  agencyName: string;
+  primaryColor: string;
+  reservationNumber: string | null;
+  status: string;
+  voucherCode: string | null;
+  reservationDate: string;
+  paymentMethod: string | null;
+  totalValue: number;
+  paidValue: number;
+  balance: number;
+  seatsCount: number;
+  tripName: string;
+  tripDestination: string;
+  tripDepartureDate: string | null;
+  tripReturnDate: string | null;
+  userId: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+}
+
+export type PdfJobData = PdfManifestJobData | PdfVoucherJobData;
 
 export interface CommissionSyncJobData {
   reservationId: string;

@@ -18,11 +18,12 @@ export function startPdfWorker(): Worker<PdfJobData> | null {
   _worker = new Worker<PdfJobData>(
     "pdfs",
     async (job) => {
-      const { type, tenantId, tripId, tripName, manifestNumber, agencyName, recipientEmail, htmlContent, pdfBase64, userId, ipAddress, userAgent } = job.data;
+      const { type, tenantId, userId, ipAddress, userAgent } = job.data;
 
-      logger.info({ jobId: job.id, type, tripId }, "[pdf-worker] Processing job");
+      logger.info({ jobId: job.id, type }, "[pdf-worker] Processing job");
 
       if (type === "manifest") {
+        const { tripId, tripName, manifestNumber, agencyName, recipientEmail, htmlContent, pdfBase64 } = job.data;
         const pdfBuffer = Buffer.from(pdfBase64, "base64");
 
         const result = await sendManifestEmail({
@@ -51,6 +52,22 @@ export function startPdfWorker(): Worker<PdfJobData> | null {
         });
 
         logger.info({ tripId, recipient: recipientEmail.replace(/(.{2}).+(@.+)/, "$1***$2") }, "[pdf-worker] Manifest email sent");
+      } else if (type === "voucher") {
+        const { reservationId } = job.data;
+
+        await db.insert(auditLogsTable).values({
+          id: generateId(),
+          tenantId,
+          userId,
+          action: "voucher_downloaded",
+          entityType: "reservation",
+          entityId: reservationId,
+          after: { channel: "download" },
+          ipAddress: ipAddress ?? null,
+          userAgent: userAgent ?? null,
+        });
+
+        logger.info({ reservationId }, "[pdf-worker] Voucher download logged");
       } else {
         logger.warn({ type }, "[pdf-worker] Unknown PDF job type");
       }
