@@ -600,6 +600,54 @@ export default function VitrineCatalog({
 
   const [filtersOpen, setFiltersOpen] = useState(false);
 
+  const [pendingOrder, setPendingOrder] = useState<{ orderNumber: string; reservationExpiresAt: string; storeSlug: string } | null>(null);
+  const [pendingCountdown, setPendingCountdown] = useState<string | null>(null);
+  const [pendingExpired, setPendingExpired] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("pending_order");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed.storeSlug !== slug) return;
+      if (new Date(parsed.reservationExpiresAt).getTime() <= Date.now()) {
+        localStorage.removeItem("pending_order");
+        return;
+      }
+      setPendingOrder(parsed);
+    } catch {
+      localStorage.removeItem("pending_order");
+    }
+  }, [slug]);
+
+  useEffect(() => {
+    if (!pendingOrder) return;
+    let timer: ReturnType<typeof setInterval>;
+    const tick = () => {
+      const diff = new Date(pendingOrder.reservationExpiresAt).getTime() - Date.now();
+      if (diff <= 0) {
+        setPendingCountdown("00:00");
+        setPendingExpired(true);
+        localStorage.removeItem("pending_order");
+        clearInterval(timer);
+        return;
+      }
+      const m = Math.floor(diff / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setPendingCountdown(`${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`);
+    };
+    tick();
+    timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [pendingOrder]);
+
+  function dismissPendingOrder() {
+    setPendingOrder(null);
+    setPendingCountdown(null);
+    setPendingExpired(false);
+    localStorage.removeItem("pending_order");
+  }
+
   async function load() {
     setLoading(true);
     try {
@@ -651,6 +699,20 @@ export default function VitrineCatalog({
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
+      {pendingOrder && pendingCountdown !== null && !pendingExpired && (
+        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-3 mb-5">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span className="text-sm flex-1">
+            Assentos reservados para o pedido{" "}
+            <strong className="font-mono">{pendingOrder.orderNumber}</strong>
+            {" — "}conclua o pagamento em{" "}
+            <strong className="font-mono">{pendingCountdown}</strong>
+          </span>
+          <button onClick={dismissPendingOrder} className="shrink-0 hover:opacity-70">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       <div className="mb-6">
         <h1 className="text-3xl font-bold mb-1">Nossos Pacotes</h1>
         <p className="text-muted-foreground text-sm">

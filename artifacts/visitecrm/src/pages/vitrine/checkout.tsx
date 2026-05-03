@@ -251,6 +251,7 @@ export default function VitrineCheckout({
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
   const [reservationExpiresAt, setReservationExpiresAt] = useState<string | null>(null);
   const [expiryCountdown, setExpiryCountdown] = useState<string | null>(null);
+  const [reservationExpired, setReservationExpired] = useState(false);
 
   const [form, setFormState] = useState(() => {
     const savedCode = localStorage.getItem("referral_code") ?? "";
@@ -370,7 +371,14 @@ export default function VitrineCheckout({
         notes: form.notes || undefined,
       });
       setOrderNumber(order.orderNumber);
-      if (order.reservationExpiresAt) setReservationExpiresAt(order.reservationExpiresAt);
+      if (order.reservationExpiresAt) {
+        setReservationExpiresAt(order.reservationExpiresAt);
+        localStorage.setItem("pending_order", JSON.stringify({
+          orderNumber: order.orderNumber,
+          reservationExpiresAt: order.reservationExpiresAt,
+          storeSlug: slug,
+        }));
+      }
       clearCart();
       setStep("confirmado");
     } catch (err: unknown) {
@@ -395,15 +403,22 @@ export default function VitrineCheckout({
 
   useEffect(() => {
     if (!reservationExpiresAt) return;
+    let timer: ReturnType<typeof setInterval>;
     const tick = () => {
       const diff = new Date(reservationExpiresAt).getTime() - Date.now();
-      if (diff <= 0) { setExpiryCountdown("00:00"); return; }
+      if (diff <= 0) {
+        setExpiryCountdown("00:00");
+        setReservationExpired(true);
+        localStorage.removeItem("pending_order");
+        clearInterval(timer);
+        return;
+      }
       const m = Math.floor(diff / 60000);
       const s = Math.floor((diff % 60000) / 1000);
       setExpiryCountdown(`${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`);
     };
     tick();
-    const timer = setInterval(tick, 1000);
+    timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
   }, [reservationExpiresAt]);
 
@@ -435,13 +450,21 @@ export default function VitrineCheckout({
           Você receberá uma confirmação no e-mail <strong>{form.customerEmail}</strong>.
           Nossa equipe entrará em contato em breve.
         </p>
-        {expiryCountdown !== null && (
+        {expiryCountdown !== null && !reservationExpired && (
           <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-5 py-3 mb-6">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             <span className="text-sm">
               Conclua o pagamento em{" "}
               <strong className="font-mono text-base">{expiryCountdown}</strong>
               {" "}ou a reserva será cancelada automaticamente.
+            </span>
+          </div>
+        )}
+        {reservationExpired && (
+          <div className="inline-flex items-center gap-2 bg-red-50 border border-red-200 text-red-800 rounded-xl px-5 py-3 mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span className="text-sm">
+              Sua reserva expirou. Entre em contato com a nossa equipe para confirmar sua reserva.
             </span>
           </div>
         )}
