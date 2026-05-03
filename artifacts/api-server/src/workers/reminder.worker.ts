@@ -1,12 +1,14 @@
 import { Worker } from "bullmq";
-import { db, reservationsTable, tripsTable, clientsTable, tenantsTable, paymentsTable } from "@workspace/db";
-import { eq, and, gt, sql, gte, lt, isNull } from "drizzle-orm";
-import { sendReminderHtmlEmail } from "@workspace/email";
+import { db, reservationsTable, tripsTable, clientsTable, tenantsTable, paymentsTable, emailLogsTable } from "@workspace/db";
+import { eq, and, gt, sql, gte, lt, isNull, isNotNull, notLike } from "drizzle-orm";
+import { sendReminderHtmlEmail, sendReservationConfirmationEmail } from "@workspace/email";
 import { getRedisConnection } from "../lib/redis";
 import { logger } from "../lib/logger";
 import { runExpiredReservationsCron } from "../lib/expired-reservations";
 import type { ReminderJobData } from "../queues/index";
 import { RESERVATION_STATUS, PAYMENT_STATUS } from "@workspace/permissions";
+import { buildEmailPropsFromReservation } from "../queues/email-helpers";
+import { generateId } from "../lib/id";
 
 function escapeHtml(str: string | null | undefined): string {
   return (str ?? "")
@@ -282,6 +284,151 @@ async function processPaymentReminders(): Promise<void> {
 }
 
 // ────────────────────────────────────────────────────────────
+// Auto-retry failed booking confirmation emails
+// ────────────────────────────────────────────────────────────
+
+const MAX_AUTO_RETRY_ATTEMPTS = 3;
+
+export async function retryFailedBookingEmails(): Promise<void> {
+  const now = new Date();
+  const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+
+  // Only pick up reservation confirmation emails — cancellation and agency
+  // notification emails also carry a reservationId but must not be retried
+  // as confirmation emails. We exclude them by their known subject prefixes.
+  const failedLogs = await db
+    .select({
+      id: emailLogsTable.id,
+      tenantId: emailLogsTable.tenantId,
+      reservationId: emailLogsTable.reservationId,
+      subject: emailLogsTable.subject,
+    })
+    .from(emailLogsTable)
+    .where(
+      and(
+        eq(emailLogsTable.status, "failed"),
+        isNotNull(emailLogsTable.reservationId),
+        gte(emailLogsTable.createdAt, twoHoursAgo),
+        notLike(emailLogsTable.subject, "Reserva Cancelada%"),
+        notLike(emailLogsTable.subject, "Nova reserva%"),
+      ),
+    );
+
+  if (failedLogs.length === 0) {
+    logger.debug("[email-retry] No failed booking confirmation emails in the last 2 hours");
+    return;
+  }
+
+  const seenReservations = new Set<string>();
+  const toRetry = failedLogs.filter((log) => {
+    if (!log.reservationId || seenReservations.has(log.reservationId)) return false;
+    seenReservations.add(log.reservationId);
+    return true;
+  });
+
+  logger.info({ count: toRetry.length }, "[email-retry] Failed booking confirmation emails found — evaluating retries");
+
+  let retried = 0;
+  let skipped = 0;
+  let errors = 0;
+
+  for (const log of toRetry) {
+    const reservationId = log.reservationId!;
+
+    // Fetch all email_log entries for this reservation in the 2-hour window.
+    // We use one query to check two things:
+    //   1. Whether a successful send already exists (abort if so — delivery done).
+    //   2. How many auto-retries have already been attempted.
+    const windowLogs = await db
+      .select({ status: emailLogsTable.status })
+      .from(emailLogsTable)
+      .where(
+        and(
+          eq(emailLogsTable.reservationId, reservationId),
+          gte(emailLogsTable.createdAt, twoHoursAgo),
+          notLike(emailLogsTable.subject, "Reserva Cancelada%"),
+          notLike(emailLogsTable.subject, "Nova reserva%"),
+        ),
+      );
+
+    // If any log in the window already has status="sent", the email was
+    // successfully delivered (by a previous auto-retry or by the queue
+    // recovering). Stop retrying to avoid duplicates.
+    const alreadyDelivered = windowLogs.some((l) => l.status === "sent");
+    if (alreadyDelivered) {
+      logger.info(
+        { reservationId },
+        "[email-retry] Skipping — a successful send already exists for this reservation in the window",
+      );
+      skipped++;
+      continue;
+    }
+
+    // attemptsInWindow = 1 means only the original failure; each auto-retry
+    // that produced a new log (sent or failed) adds 1.
+    // autoRetriesDone = attemptsInWindow - 1 (excluding original failure).
+    const attemptsInWindow = windowLogs.length;
+    const autoRetriesDone = attemptsInWindow - 1;
+
+    if (autoRetriesDone >= MAX_AUTO_RETRY_ATTEMPTS) {
+      logger.warn(
+        { reservationId, attemptsInWindow, autoRetriesDone, limit: MAX_AUTO_RETRY_ATTEMPTS },
+        "[email-retry] Skipping — max auto-retry limit reached for this reservation",
+      );
+      skipped++;
+      continue;
+    }
+
+    const props = await buildEmailPropsFromReservation(reservationId, log.tenantId);
+    if (!props) {
+      logger.warn(
+        { emailLogId: log.id, reservationId },
+        "[email-retry] Cannot rebuild email props — skipping",
+      );
+      skipped++;
+      continue;
+    }
+
+    const newLogId = generateId();
+    await db.insert(emailLogsTable).values({
+      id: newLogId,
+      tenantId: log.tenantId,
+      reservationId,
+      recipient: props.clientEmail,
+      subject: log.subject,
+      status: "queued",
+    });
+
+    const result = await sendReservationConfirmationEmail(props);
+
+    await db
+      .update(emailLogsTable)
+      .set({
+        status: result.success ? "sent" : "failed",
+        messageId: result.messageId ?? null,
+        errorMessage: result.error ?? null,
+      })
+      .where(eq(emailLogsTable.id, newLogId));
+
+    if (result.success) {
+      retried++;
+      logger.info(
+        { newLogId, reservationId, attempt: attemptsInWindow + 1 },
+        "[email-retry] Auto-retry sent successfully",
+      );
+    } else {
+      errors++;
+      logger.error(
+        { newLogId, reservationId, attempt: attemptsInWindow + 1, error: result.error },
+        "[email-retry] Auto-retry send failed",
+      );
+    }
+  }
+
+  logger.info({ retried, skipped, errors, total: toRetry.length }, "[email-retry] Auto-retry run complete");
+}
+
+// ────────────────────────────────────────────────────────────
 // Worker bootstrap
 // ────────────────────────────────────────────────────────────
 
@@ -305,6 +452,8 @@ export function startReminderWorker(): Worker<ReminderJobData> | null {
         await processPaymentReminders();
       } else if (job.data.type === "expired_reservations_cleanup") {
         await runExpiredReservationsCron();
+      } else if (job.data.type === "failed_email_retry") {
+        await retryFailedBookingEmails();
       } else {
         logger.warn({ type: job.data.type }, "[reminder-worker] Unknown reminder type");
       }

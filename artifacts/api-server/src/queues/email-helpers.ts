@@ -390,7 +390,7 @@ async function buildNewBookingNotificationFromReservation(
 
 // ── Build email props from reservation ID ─────────────────────────────────────
 
-async function buildEmailPropsFromReservation(
+export async function buildEmailPropsFromReservation(
   reservationId: string,
   tenantId: string,
 ): Promise<ReservationConfirmationEmailProps | null> {

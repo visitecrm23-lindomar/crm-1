@@ -10,7 +10,7 @@ import { runExpiredReservationsCron } from "./lib/expired-reservations";
 import { getRedisConnection } from "./lib/redis";
 import { getReminderQueue, closeQueues } from "./queues/index";
 import { startEmailWorker, stopEmailWorker } from "./workers/email.worker";
-import { startReminderWorker, stopReminderWorker } from "./workers/reminder.worker";
+import { startReminderWorker, stopReminderWorker, retryFailedBookingEmails } from "./workers/reminder.worker";
 import { startPdfWorker, stopPdfWorker } from "./workers/pdf.worker";
 import { startCommissionSyncWorker, stopCommissionSyncWorker } from "./workers/commission-sync.worker";
 
@@ -155,6 +155,13 @@ applyMigrations()
           { name: "expired_reservations_cleanup", data: { type: "expired_reservations_cleanup" } },
         ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule expired reservations cleanup"));
 
+        // Failed booking email auto-retry — every 15 minutes
+        await reminderQueue.upsertJobScheduler(
+          "failed-email-retry",
+          { pattern: "*/15 * * * *" },
+          { name: "failed_email_retry", data: { type: "failed_email_retry" } },
+        ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule failed-email retry"));
+
         logger.info("[reminders] Repeatable reminder jobs registered");
       }
     } else {
@@ -167,6 +174,14 @@ applyMigrations()
         );
       });
       logger.info("[expired-reservations] node-cron fallback registered (every 5 minutes)");
+
+      // ── Fallback: node-cron for failed-email auto-retry (no Redis required) ──
+      cron.schedule("*/15 * * * *", () => {
+        retryFailedBookingEmails().catch((err) =>
+          logger.error({ err }, "[email-retry] node-cron fallback failed"),
+        );
+      });
+      logger.info("[email-retry] node-cron fallback registered (every 15 minutes)");
     }
 
     // ── Graceful shutdown ──

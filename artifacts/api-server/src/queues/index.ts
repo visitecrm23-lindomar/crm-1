@@ -30,7 +30,7 @@ export interface NewBookingNotificationEmailJobData extends NewBookingNotificati
 }
 
 export interface ReminderJobData {
-  type: "boarding_reminder" | "payment_reminder" | "expired_reservations_cleanup";
+  type: "boarding_reminder" | "payment_reminder" | "expired_reservations_cleanup" | "failed_email_retry";
 }
 
 export interface PdfManifestJobData {
