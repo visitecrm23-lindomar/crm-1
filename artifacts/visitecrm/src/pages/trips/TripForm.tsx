@@ -16,6 +16,7 @@ import { TiptapEditor } from "./TiptapEditor";
 import { LayoutMiniPreview, TripCostsTab } from "./TripCostsSection";
 import { formatCurrency } from "./utils";
 import { TRIP_TYPES, TRIP_TYPE_LABELS, VEHICLE_TYPES, FIXED_COST_CATEGORIES, VARIABLE_COST_CATEGORIES } from "./constants";
+import { TRIP_STATUS, type TripStatus } from "@workspace/permissions";
 import { type TripFormData, EMPTY_FORM, toTripFormData, newBP, newDay } from "./types";
 import { TripFormPricesTab } from "./TripFormPricesTab";
 import { TripFormTransportTab } from "./TripFormTransportTab";
@@ -78,7 +79,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
     }
     const inclArr = form.inclusions.split("\n").map(s => s.trim()).filter(Boolean);
     const exclArr = form.exclusions.split("\n").map(s => s.trim()).filter(Boolean);
-    const statusToSave = publish ? "active" : form.status;
+    const statusToSave: TripStatus = (publish ? TRIP_STATUS.ACTIVE : (form.status as TripStatus));
     const itineraryToSave = form.itinerary.filter(d => d.title || d.description);
     const boardingPointsToSave = form.boardingPoints.filter(bp => bp.name);
     try {

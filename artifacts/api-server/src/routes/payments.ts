@@ -455,7 +455,7 @@ router.post("/payments", async (req, res, next: NextFunction): Promise<void> => 
         tenantId: me.tenantId,
         reservationId: parsed.data.reservationId ?? null,
         clientId: parsed.data.clientId ?? null,
-        type: parsed.data.type as PaymentType,
+        type: parsePaymentType(parsed.data.type),
         category: parsed.data.category,
         amount: String(parsed.data.amount / installments),
         paymentMethod: parsed.data.paymentMethod,

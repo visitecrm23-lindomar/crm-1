@@ -187,7 +187,7 @@ router.post("/deals", async (req, res): Promise<void> => {
       description: parsed.data.description ?? null,
       value: String(parsed.data.value ?? 0),
       ownerId: me.id,
-      status: (parsed.data.status ?? DEAL_STATUS.OPEN) as DealStatus,
+      status: parseDealStatus(parsed.data.status ?? DEAL_STATUS.OPEN),
       leadName: parsed.data.leadName ?? null,
       leadEmail: parsed.data.leadEmail ?? null,
       leadWhatsapp: parsed.data.leadWhatsapp ?? null,
