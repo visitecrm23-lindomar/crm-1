@@ -810,7 +810,7 @@ export default function LojaConfiguracoes() {
                         type="password"
                         value={form.stripeSecretKey ?? ""}
                         onChange={(e) => set("stripeSecretKey", e.target.value)}
-                        placeholder="sk_live_..."
+                        placeholder={form.stripeSecretKeyConfigured ? "•••••• (deixe em branco para manter)" : "sk_live_..."}
                         className="font-mono text-sm"
                       />
                     </div>
@@ -851,7 +851,7 @@ export default function LojaConfiguracoes() {
                       type="password"
                       value={form.mpAccessToken ?? ""}
                       onChange={(e) => set("mpAccessToken", e.target.value)}
-                      placeholder="APP_USR-..."
+                      placeholder={form.mpAccessTokenConfigured ? "•••••• (deixe em branco para manter)" : "APP_USR-..."}
                       className="font-mono text-sm"
                     />
                   </div>
@@ -880,9 +880,10 @@ export default function LojaConfiguracoes() {
                     <div className="space-y-2">
                       <Label>Chave PIX</Label>
                       <Input
+                        type="password"
                         value={form.pixKey ?? ""}
                         onChange={(e) => set("pixKey", e.target.value)}
-                        placeholder="CPF, CNPJ, e-mail ou chave aleatória"
+                        placeholder={form.pixKeyConfigured ? "•••••• (deixe em branco para manter)" : "CPF, CNPJ, e-mail ou chave aleatória"}
                       />
                     </div>
                     <div className="space-y-2">

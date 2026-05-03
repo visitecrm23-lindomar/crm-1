@@ -19,6 +19,40 @@ import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { deleteOrphanedFile, deleteOrphanedImages } from "../lib/uploadthing";
 import { ADMIN_ROLES } from '../lib/tenant';
+import { encryptCredential } from "../lib/crypto";
+
+// Fields that hold gateway secrets. They are encrypted at rest, never
+// returned by GET endpoints, and only updated when the request body
+// supplies a non-empty value (so saving the form without retyping a
+// credential leaves the stored value intact).
+const SENSITIVE_CREDENTIAL_FIELDS = ["stripeSecretKey", "mpAccessToken", "pixKey"] as const;
+type SensitiveField = typeof SENSITIVE_CREDENTIAL_FIELDS[number];
+
+function redactStore<T extends Record<string, unknown>>(store: T | undefined): (T & { stripeSecretKeyConfigured: boolean; mpAccessTokenConfigured: boolean; pixKeyConfigured: boolean }) | undefined {
+  if (!store) return store as undefined;
+  const out: Record<string, unknown> = { ...store };
+  out["stripeSecretKeyConfigured"] = !!store["stripeSecretKey"];
+  out["mpAccessTokenConfigured"] = !!store["mpAccessToken"];
+  out["pixKeyConfigured"] = !!store["pixKey"];
+  for (const f of SENSITIVE_CREDENTIAL_FIELDS) delete out[f];
+  return out as T & { stripeSecretKeyConfigured: boolean; mpAccessTokenConfigured: boolean; pixKeyConfigured: boolean };
+}
+
+// Replace each sensitive field with its encrypted form when present and
+// non-empty; drop the field entirely otherwise so the existing stored
+// value is preserved.
+function applyCredentialEncryption(data: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...data };
+  for (const f of SENSITIVE_CREDENTIAL_FIELDS) {
+    const v = out[f];
+    if (typeof v === "string" && v.trim().length > 0) {
+      out[f] = encryptCredential(v.trim());
+    } else {
+      delete out[f as SensitiveField];
+    }
+  }
+  return out;
+}
 
 const router = Router();
 
@@ -213,7 +247,7 @@ router.get("/store/settings", async (req, res): Promise<void> => {
     if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
     const store = await getStoreForTenant(me.tenantId);
     if (!store) { res.status(404).json({ error: "Store not found" }); return; }
-    res.json(store);
+    res.json(redactStore(store as unknown as Record<string, unknown>));
   } catch (err) {
     req.log.error({ err }, "Error getting store settings");
     res.status(500).json({ error: "Internal server error" });
@@ -230,21 +264,22 @@ router.put("/store/settings", async (req, res): Promise<void> => {
     const existingStore = await getStoreForTenant(me.tenantId);
     if (!existingStore) {
       const id = generateId();
-      const data = parsed.data as Record<string, unknown>;
+      const data = applyCredentialEncryption(parsed.data as Record<string, unknown>);
       await db.insert(storesTable).values({
         id,
         tenantId: me.tenantId,
-        name: (data.name as string) || "Minha Loja",
-        slug: (data.slug as string) || me.tenantId,
-        email: (data.email as string) || me.email,
+        name: (data["name"] as string) || "Minha Loja",
+        slug: (data["slug"] as string) || me.tenantId,
+        email: (data["email"] as string) || me.email,
         ...data,
       });
       const [newStore] = await db.select().from(storesTable).where(eq(storesTable.id, id)).limit(1);
-      res.status(201).json(newStore);
+      res.status(201).json(redactStore(newStore as unknown as Record<string, unknown>));
       return;
     }
 
-    await db.update(storesTable).set(parsed.data as Record<string, unknown>)
+    const updates = applyCredentialEncryption(parsed.data as Record<string, unknown>);
+    await db.update(storesTable).set(updates)
       .where(eq(storesTable.tenantId, me.tenantId));
 
     const d = parsed.data;
@@ -258,7 +293,7 @@ router.put("/store/settings", async (req, res): Promise<void> => {
 
     const [updated] = await db.select().from(storesTable)
       .where(eq(storesTable.tenantId, me.tenantId)).limit(1);
-    res.json(updated);
+    res.json(redactStore(updated as unknown as Record<string, unknown>));
   } catch (err) {
     req.log.error({ err }, "Error updating store settings");
     res.status(500).json({ error: "Internal server error" });

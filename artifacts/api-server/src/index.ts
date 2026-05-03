@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runMigrations } from "@workspace/db";
+import { backfillEncryptedCredentials } from "./lib/credential-backfill";
 import cron from "node-cron";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -36,11 +37,28 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-// Webhook secret validation. In production both are mandatory (the API
-// will refuse to boot without them so storefronts cannot ship a paid
-// reservation flow that silently no-ops). In dev/test we only warn so
-// engineers can still iterate on unrelated areas without provisioning
-// secrets.
+// CREDENTIAL_ENCRYPTION_KEY is mandatory in every environment because gateway
+// credentials are encrypted at rest. Validating its shape here means the
+// server will not boot with a missing/malformed key, instead of failing
+// later at the first PATCH /store/settings or webhook fetch.
+{
+  const raw = process.env["CREDENTIAL_ENCRYPTION_KEY"];
+  if (!raw) {
+    throw new Error(
+      "CREDENTIAL_ENCRYPTION_KEY is required. Generate one with " +
+        "`node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"` " +
+        "and set it in the environment.",
+    );
+  }
+  const buf = Buffer.from(raw.trim(), "hex");
+  if (buf.length !== 32) {
+    throw new Error(
+      `CREDENTIAL_ENCRYPTION_KEY must be 32 bytes (64 hex chars); got ${buf.length} bytes`,
+    );
+  }
+}
+
+// Webhook secret validation. In production both are mandatory; dev/test only warns.
 {
   const isProd = process.env["NODE_ENV"] === "production";
   const missing: string[] = [];
@@ -67,6 +85,7 @@ async function applyMigrations() {
   try {
     await runMigrations(migrationsFolder);
     logger.info("Drizzle migrations complete");
+    await backfillEncryptedCredentials();
   } catch (err) {
     logger.error({ err }, "Drizzle migration failed");
   }

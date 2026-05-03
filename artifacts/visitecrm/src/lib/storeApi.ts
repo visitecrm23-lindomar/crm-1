@@ -292,12 +292,18 @@ export interface StoreSettings {
   paymentMethods: string[];
   stripeEnabled: boolean;
   stripePublicKey?: string | null;
+  // Sensitive credentials are write-only: PUT accepts a non-empty string to
+  // update; GET never returns the stored value. The *Configured flags let
+  // the UI show whether a credential is currently set.
   stripeSecretKey?: string | null;
+  stripeSecretKeyConfigured?: boolean;
   mpEnabled: boolean;
   mpPublicKey?: string | null;
   mpAccessToken?: string | null;
+  mpAccessTokenConfigured?: boolean;
   pixEnabled: boolean;
   pixKey?: string | null;
+  pixKeyConfigured?: boolean;
   pixKeyType?: string | null;
   boletoEnabled: boolean;
 

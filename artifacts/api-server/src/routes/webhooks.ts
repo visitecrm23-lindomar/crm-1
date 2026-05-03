@@ -6,6 +6,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { logger } from "../lib/logger";
 import { syncReservationPaymentStatus, paymentExistsForGatewayTx, type DbExecutor } from "../lib/reservation-payments";
+import { decryptOrPassthrough } from "../lib/crypto";
 
 const router = Router();
 
@@ -311,7 +312,8 @@ router.post("/webhooks/mercadopago/:storeSlug", async (req, res, next: NextFunct
       return;
     }
 
-    if (!store.mpAccessToken) {
+    const accessToken = decryptOrPassthrough(store.mpAccessToken);
+    if (!accessToken) {
       logger.warn(
         { slug: store.slug, dataId },
         "[webhooks/mercadopago] Store has no MP access token configured",
@@ -320,7 +322,7 @@ router.post("/webhooks/mercadopago/:storeSlug", async (req, res, next: NextFunct
       return;
     }
 
-    const payment = await fetchMpPayment(dataId, store.mpAccessToken);
+    const payment = await fetchMpPayment(dataId, accessToken);
     if (!payment) {
       // MP API failure — ask the provider to retry.
       res.status(502).json({ error: "Could not fetch payment from MercadoPago" });
