@@ -1,13 +1,13 @@
 import { Worker } from "bullmq";
 import { db, emailLogsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail } from "@workspace/email";
+import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail, sendNewBookingNotificationEmail } from "@workspace/email";
 import { getRedisConnection } from "../lib/redis";
 import { logger } from "../lib/logger";
-import type { ReservationEmailJobData, CancellationEmailJobData, BirthdayEmailJobData } from "../queues/index";
+import type { ReservationEmailJobData, CancellationEmailJobData, BirthdayEmailJobData, NewBookingNotificationEmailJobData } from "../queues/index";
 import type { SendEmailResult } from "@workspace/email";
 
-type EmailJobData = ReservationEmailJobData | CancellationEmailJobData | BirthdayEmailJobData;
+type EmailJobData = ReservationEmailJobData | CancellationEmailJobData | BirthdayEmailJobData | NewBookingNotificationEmailJobData;
 
 let _worker: Worker<EmailJobData> | null = null;
 
@@ -30,6 +30,23 @@ export function startEmailWorker(): Worker<EmailJobData> | null {
           job.data as CancellationEmailJobData;
         result = await sendReservationCancellationEmail(cancellationProps);
         const { emailLogId } = job.data as CancellationEmailJobData;
+        if (result.success) {
+          await db
+            .update(emailLogsTable)
+            .set({ status: "sent", messageId: result.messageId ?? null })
+            .where(eq(emailLogsTable.id, emailLogId));
+        }
+      } else if (job.name === "new-booking-notification") {
+        const {
+          emailLogId: _e,
+          tenantId: _t,
+          reservationId: _r,
+          recipients,
+          cc,
+          ...notificationProps
+        } = job.data as NewBookingNotificationEmailJobData;
+        result = await sendNewBookingNotificationEmail(notificationProps, { to: recipients, cc });
+        const { emailLogId } = job.data as NewBookingNotificationEmailJobData;
         if (result.success) {
           await db
             .update(emailLogsTable)

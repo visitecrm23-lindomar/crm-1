@@ -28,7 +28,7 @@ import { generateId, generateVoucherCode, generateReferralCode } from "../lib/id
 import { getTenantReservationPrefix, tripTypeToCode, getYearMonth, nextReservationSequence, buildReservationNumber } from "../lib/reservation-number";
 import { randomBytes } from "crypto";
 import { clerkClient } from "@clerk/express";
-import { enqueueReservationConfirmationEmail, sendWelcomeEmail } from "../queues/email-helpers";
+import { enqueueReservationConfirmationEmail, sendWelcomeEmail, enqueueNewBookingNotificationEmail } from "../queues/email-helpers";
 import { writeClientActivity } from "../lib/activities";
 
 function generateCookieId(): string {
@@ -1277,6 +1277,27 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
           });
         } catch (err) {
           console.error("[store-public] Error sending post-booking email:", err);
+        }
+
+        // Step 4: Notify the agency about the new booking (non-blocking).
+        // Runs independently of the customer-facing email flow so a failure
+        // sending the welcome/confirmation email does not silence the
+        // agency notification, and vice-versa.
+        try {
+          const [reservationRow] = await db
+            .select({ id: reservationsTable.id })
+            .from(reservationsTable)
+            .where(eq(reservationsTable.storeOrderId, ffOrderNumber))
+            .limit(1);
+
+          if (reservationRow) {
+            await enqueueNewBookingNotificationEmail(reservationRow.id, ffTenantId);
+          }
+        } catch (notifyErr) {
+          console.error(
+            "[store-public] Failed to enqueue agency new-booking notification:",
+            notifyErr,
+          );
         }
       })();
     }

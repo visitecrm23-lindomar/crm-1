@@ -1,10 +1,11 @@
-import { db, emailLogsTable, reservationsTable, tripsTable, clientsTable, tenantsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { db, emailLogsTable, reservationsTable, tripsTable, clientsTable, tenantsTable, storesTable, usersTable } from "@workspace/db";
+import { eq, and, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
-import { getEmailQueue, getCancellationEmailQueue } from "./index";
-import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail } from "@workspace/email";
+import { getEmailQueue, getCancellationEmailQueue, getNewBookingNotificationEmailQueue } from "./index";
+import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail } from "@workspace/email";
+import { ROLES } from "@workspace/permissions";
 import { logger } from "../lib/logger";
-import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps } from "@workspace/email";
+import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps } from "@workspace/email";
 
 interface EnqueueEmailOpts {
   tenantId: string;
@@ -189,6 +190,180 @@ async function buildCancellationEmailPropsFromReservation(
     agencyEmail: row.agencyEmail ?? "",
     agencyWebsite,
     whatsappUrl,
+  };
+}
+
+// ── Enqueue / send a new-booking notification to the agency ───────────────────
+
+export async function enqueueNewBookingNotificationEmail(
+  reservationId: string,
+  tenantId: string,
+): Promise<void> {
+  const built = await buildNewBookingNotificationFromReservation(reservationId, tenantId);
+  if (!built) {
+    logger.warn(
+      { reservationId, tenantId },
+      "[email-queue] Could not build new-booking notification — skipping",
+    );
+    return;
+  }
+
+  const { props, recipients, cc } = built;
+  if (recipients.length === 0) {
+    logger.warn(
+      { reservationId, tenantId },
+      "[email-queue] No agency recipient configured — skipping new-booking notification",
+    );
+    return;
+  }
+
+  const emailLogId = generateId();
+  const subject = `Nova reserva — ${props.reservationNumber} (${props.destination})`;
+  const queue = getNewBookingNotificationEmailQueue();
+  const primaryRecipient = recipients[0];
+
+  if (queue) {
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId,
+      recipient: primaryRecipient,
+      subject,
+      status: "queued",
+    });
+
+    try {
+      await queue.add("new-booking-notification", {
+        ...props,
+        emailLogId,
+        tenantId,
+        reservationId,
+        recipients,
+        cc,
+      });
+      logger.info(
+        { emailLogId, reservationId, recipients, cc },
+        "[email-queue] New-booking notification enqueued",
+      );
+    } catch (enqueueErr) {
+      logger.error(
+        { emailLogId, err: enqueueErr },
+        "[email-queue] Failed to enqueue new-booking notification — marking log as failed",
+      );
+      await db
+        .update(emailLogsTable)
+        .set({ status: "failed", errorMessage: "Queue enqueue failed" })
+        .where(eq(emailLogsTable.id, emailLogId));
+    }
+  } else {
+    const result = await sendNewBookingNotificationEmail(props, { to: recipients, cc });
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId,
+      recipient: primaryRecipient,
+      subject,
+      status: result.success ? "sent" : "failed",
+      messageId: result.messageId ?? null,
+      errorMessage: result.error ?? null,
+    });
+    logger.info(
+      { emailLogId, reservationId, success: result.success },
+      "[email-queue] New-booking notification sent directly (no queue)",
+    );
+  }
+}
+
+interface BuiltNewBookingNotification {
+  props: NewBookingNotificationEmailProps;
+  recipients: string[];
+  cc: string[];
+}
+
+async function buildNewBookingNotificationFromReservation(
+  reservationId: string,
+  tenantId: string,
+): Promise<BuiltNewBookingNotification | null> {
+  const [row] = await db
+    .select({
+      reservationNumber: reservationsTable.reservationNumber,
+      voucherCode: reservationsTable.voucherCode,
+      totalValue: reservationsTable.totalValue,
+      clientName: clientsTable.name,
+      clientEmail: clientsTable.email,
+      clientPhone: clientsTable.whatsapp,
+      tripDestination: tripsTable.destination,
+      tripName: tripsTable.name,
+      departureDate: tripsTable.departureDate,
+      agencyName: tenantsTable.name,
+      agencyLogo: tenantsTable.logoUrl,
+    })
+    .from(reservationsTable)
+    .innerJoin(clientsTable, eq(reservationsTable.clientId, clientsTable.id))
+    .innerJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
+    .innerJoin(tenantsTable, eq(reservationsTable.tenantId, tenantsTable.id))
+    .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)))
+    .limit(1);
+
+  if (!row) return null;
+
+  const [store] = await db
+    .select({ email: storesTable.email })
+    .from(storesTable)
+    .where(eq(storesTable.tenantId, tenantId))
+    .limit(1);
+
+  const dDate = row.departureDate ? new Date(row.departureDate) : null;
+  const departureDate = dDate
+    ? dDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+    : "A confirmar";
+
+  const ccUsers = await db
+    .select({ email: usersTable.email })
+    .from(usersTable)
+    .where(
+      and(
+        eq(usersTable.tenantId, tenantId),
+        eq(usersTable.isActive, true),
+        inArray(usersTable.role, [ROLES.AGENCY_ADMIN, ROLES.AGENCY_MANAGER]),
+      ),
+    );
+
+  const recipients: string[] = [];
+  if (store?.email) recipients.push(store.email);
+
+  // If the store has no e-mail configured, promote agency admins/managers
+  // to the primary "to" list so the notification still goes out.
+  if (recipients.length === 0) {
+    for (const u of ccUsers) {
+      if (u.email && !recipients.includes(u.email)) recipients.push(u.email);
+    }
+  }
+
+  const ccSet = new Set<string>();
+  for (const u of ccUsers) {
+    if (u.email && !recipients.includes(u.email)) ccSet.add(u.email);
+  }
+  const cc = Array.from(ccSet);
+
+  const frontendBase = (process.env["FRONTEND_URL"] ?? "https://app.visitecrm.com.br").replace(/\/$/, "");
+  const crmReservationUrl = `${frontendBase}/reservations/${reservationId}`;
+
+  return {
+    props: {
+      agencyName: row.agencyName,
+      agencyLogo: row.agencyLogo ?? null,
+      clientName: row.clientName ?? "",
+      clientEmail: row.clientEmail ?? undefined,
+      clientPhone: row.clientPhone ?? undefined,
+      destination: row.tripDestination ?? row.tripName ?? "A confirmar",
+      departureDate,
+      reservationNumber: row.reservationNumber ?? row.voucherCode ?? "",
+      totalValue: Number(row.totalValue ?? 0),
+      crmReservationUrl,
+    },
+    recipients,
+    cc,
   };
 }
 
