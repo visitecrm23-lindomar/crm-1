@@ -1,3 +1,4 @@
+import { ROLES } from "@workspace/permissions";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
@@ -162,7 +163,7 @@ function buildApp() {
 const FAKE_USER = {
   id: "user-001",
   tenantId: "tenant-001",
-  role: "admin",
+  role: ROLES.AGENCY_ADMIN,
   name: "Test Agent",
   email: "agent@example.com",
 };

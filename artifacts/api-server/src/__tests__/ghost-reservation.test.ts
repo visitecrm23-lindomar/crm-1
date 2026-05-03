@@ -1,3 +1,4 @@
+import { ROLES } from "@workspace/permissions";
 import { randomUUID } from "crypto";
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import { eq, and, sql } from "drizzle-orm";
@@ -82,7 +83,7 @@ function buildApp() {
 beforeAll(async () => {
   vi.mocked(requireAuth).mockResolvedValue({} as never);
   await db.insert(tenantsTable).values({ id: TENANT_ID, name: "Ghost Agency", slug: `ghost-agency-${RUN}`, email: `ghost-${RUN}@agency.com`, planId: "starter", status: "trial" });
-  await db.insert(usersTable).values({ id: USER_ID, clerkId: `ghost_clerk_${RUN}`, tenantId: TENANT_ID, name: "Ghost Agent", email: `ghost-agent-${RUN}@agency.com`, role: "admin", referralCode: `GHRF${RUN.toUpperCase()}` });
+  await db.insert(usersTable).values({ id: USER_ID, clerkId: `ghost_clerk_${RUN}`, tenantId: TENANT_ID, name: "Ghost Agent", email: `ghost-agent-${RUN}@agency.com`, role: ROLES.AGENCY_ADMIN, referralCode: `GHRF${RUN.toUpperCase()}` });
   await db.insert(storesTable).values({ id: STORE_ID, tenantId: TENANT_ID, slug: SLUG, name: "Ghost Store", email: `store-${RUN}@agency.com` });
   await db.insert(tripsTable).values({ id: TRIP_ID, tenantId: TENANT_ID, name: "Ghost Trip", slug: `ghost-trip-${RUN}`, destination: "Fortaleza", destinationCity: "Fortaleza", destinationState: "CE", type: "excursao", category: "standard", departureDate: new Date("2027-06-01"), totalCapacity: 40, availableSeats: 40, reservedSeats: 0, priceAdult: "300", createdById: USER_ID });
   await db.insert(storeProductsTable).values({ id: PROD_ID, storeId: STORE_ID, type: "trip", name: "Excursão Nordeste", slug: `excursao-nordeste-${RUN}`, price: "300", status: "active", trackInventory: false, tripId: TRIP_ID });

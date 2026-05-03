@@ -1,3 +1,4 @@
+import { ROLES } from "@workspace/permissions";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
@@ -126,7 +127,7 @@ import { errorHandler } from "../middlewares/errorHandler.js";
 const FAKE_USER = {
   id: "user-001",
   tenantId: "tenant-001",
-  role: "admin",
+  role: ROLES.AGENCY_ADMIN,
   name: "Test User",
   email: "test@example.com",
 };

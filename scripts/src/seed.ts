@@ -6,6 +6,16 @@ import {
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import crypto from "crypto";
+import {
+  ROLES,
+  TRIP_STATUS,
+  RESERVATION_STATUS,
+  PAYMENT_STATUS,
+  PAYMENT_TYPE,
+  type ReservationStatus,
+  type PaymentStatus,
+  type PaymentType,
+} from "@workspace/permissions";
 
 function generateId(): string {
   return crypto.randomBytes(12).toString("base64url");
@@ -41,7 +51,7 @@ async function main() {
     tenantId,
     name: "Super Admin",
     email: "superadmin@demo.com",
-    role: "superadmin",
+    role: ROLES.SUPER_ADMIN,
     referralCode: "SUPER1",
     referralBalance: "0",
     isActive: true,
@@ -54,7 +64,7 @@ async function main() {
     tenantId,
     name: "Admin Demo",
     email: "admin@demo.com",
-    role: "agencia",
+    role: ROLES.AGENCY_ADMIN,
     referralCode: "DEMO01",
     referralBalance: "0",
     isActive: true,
@@ -67,7 +77,7 @@ async function main() {
     tenantId,
     name: "Joao Vendedor",
     email: "joao@demo.com",
-    role: "vendedor",
+    role: ROLES.SALES,
     referralCode: "VEND01",
     referralBalance: "50",
     isActive: true,
@@ -80,7 +90,7 @@ async function main() {
     tenantId,
     name: "Ana Cliente",
     email: "ana.cliente@demo.com",
-    role: "cliente",
+    role: ROLES.CLIENT,
     referralCode: "CLI001",
     referralBalance: "25",
     isActive: true,
@@ -109,7 +119,7 @@ async function main() {
       name: c.name, email: c.email, whatsapp: c.whatsapp,
       addressCity: c.city, addressState: c.state, addressCountry: "Brasil",
       classification: c.classification,
-      status: "active",
+      status: TRIP_STATUS.ACTIVE,
       createdById: adminId,
     });
   }
@@ -131,7 +141,7 @@ async function main() {
       priceAdult: "1890",
       type: "excursao",
       category: "lazer",
-      status: "active",
+      status: TRIP_STATUS.ACTIVE,
     },
     {
       name: "Bonito Pantanal - Ecoturismo",
@@ -147,7 +157,7 @@ async function main() {
       priceAdult: "2450",
       type: "ecoturismo",
       category: "aventura",
-      status: "active",
+      status: TRIP_STATUS.ACTIVE,
     },
     {
       name: "Nordeste Magico - Natal e Fortaleza",
@@ -163,7 +173,7 @@ async function main() {
       priceAdult: "3200",
       type: "excursao",
       category: "praia",
-      status: "active",
+      status: TRIP_STATUS.ACTIVE,
     },
   ];
 
@@ -212,28 +222,28 @@ async function main() {
 
   const reservationIds: string[] = [];
   const reservationsData = [
-    { tripIdx: 0, clientIdx: 0, seats: 2, status: "confirmed", value: "3780" },
-    { tripIdx: 0, clientIdx: 1, seats: 1, status: "confirmed", value: "1890" },
-    { tripIdx: 0, clientIdx: 2, seats: 2, status: "confirmed", value: "3780" },
-    { tripIdx: 0, clientIdx: 3, seats: 1, status: "pending", value: "1890" },
-    { tripIdx: 0, clientIdx: 4, seats: 2, status: "confirmed", value: "3780" },
-    { tripIdx: 1, clientIdx: 5, seats: 1, status: "confirmed", value: "2450" },
-    { tripIdx: 1, clientIdx: 6, seats: 2, status: "pending", value: "4900" },
-    { tripIdx: 1, clientIdx: 7, seats: 1, status: "confirmed", value: "2450" },
-    { tripIdx: 2, clientIdx: 0, seats: 1, status: "confirmed", value: "3200" },
-    { tripIdx: 2, clientIdx: 8, seats: 2, status: "pending", value: "6400" },
-    { tripIdx: 0, clientIdx: 9, seats: 1, status: "confirmed", value: "1890" },
-    { tripIdx: 1, clientIdx: 2, seats: 1, status: "confirmed", value: "2450" },
-    { tripIdx: 2, clientIdx: 3, seats: 1, status: "pending", value: "3200" },
-    { tripIdx: 0, clientIdx: 6, seats: 2, status: "confirmed", value: "3780" },
-    { tripIdx: 1, clientIdx: 4, seats: 1, status: "confirmed", value: "2450" },
+    { tripIdx: 0, clientIdx: 0, seats: 2, status: RESERVATION_STATUS.CONFIRMED, value: "3780" },
+    { tripIdx: 0, clientIdx: 1, seats: 1, status: RESERVATION_STATUS.CONFIRMED, value: "1890" },
+    { tripIdx: 0, clientIdx: 2, seats: 2, status: RESERVATION_STATUS.CONFIRMED, value: "3780" },
+    { tripIdx: 0, clientIdx: 3, seats: 1, status: RESERVATION_STATUS.PENDING, value: "1890" },
+    { tripIdx: 0, clientIdx: 4, seats: 2, status: RESERVATION_STATUS.CONFIRMED, value: "3780" },
+    { tripIdx: 1, clientIdx: 5, seats: 1, status: RESERVATION_STATUS.CONFIRMED, value: "2450" },
+    { tripIdx: 1, clientIdx: 6, seats: 2, status: RESERVATION_STATUS.PENDING, value: "4900" },
+    { tripIdx: 1, clientIdx: 7, seats: 1, status: RESERVATION_STATUS.CONFIRMED, value: "2450" },
+    { tripIdx: 2, clientIdx: 0, seats: 1, status: RESERVATION_STATUS.CONFIRMED, value: "3200" },
+    { tripIdx: 2, clientIdx: 8, seats: 2, status: RESERVATION_STATUS.PENDING, value: "6400" },
+    { tripIdx: 0, clientIdx: 9, seats: 1, status: RESERVATION_STATUS.CONFIRMED, value: "1890" },
+    { tripIdx: 1, clientIdx: 2, seats: 1, status: RESERVATION_STATUS.CONFIRMED, value: "2450" },
+    { tripIdx: 2, clientIdx: 3, seats: 1, status: RESERVATION_STATUS.PENDING, value: "3200" },
+    { tripIdx: 0, clientIdx: 6, seats: 2, status: RESERVATION_STATUS.CONFIRMED, value: "3780" },
+    { tripIdx: 1, clientIdx: 4, seats: 1, status: RESERVATION_STATUS.CONFIRMED, value: "2450" },
   ];
 
   for (const r of reservationsData) {
     const id = generateId();
     reservationIds.push(id);
     const voucherCode = generateVoucher();
-    const paidValue = r.status === "confirmed" ? r.value : "0";
+    const paidValue = r.status === RESERVATION_STATUS.CONFIRMED ? r.value : "0";
     await db.insert(reservationsTable).values({
       id, tenantId,
       tripId: tripIds[r.tripIdx]!,
@@ -253,26 +263,26 @@ async function main() {
 
   const now = new Date();
   const paymentData = [
-    { reservationIdx: 0, type: "receivable", amount: "3780", status: "paid", paidDaysAgo: 20 },
-    { reservationIdx: 1, type: "receivable", amount: "1890", status: "paid", paidDaysAgo: 18 },
-    { reservationIdx: 2, type: "receivable", amount: "3780", status: "paid", paidDaysAgo: 15 },
-    { reservationIdx: 4, type: "receivable", amount: "3780", status: "paid", paidDaysAgo: 12 },
-    { reservationIdx: 5, type: "receivable", amount: "2450", status: "paid", paidDaysAgo: 10 },
-    { reservationIdx: 7, type: "receivable", amount: "2450", status: "paid", paidDaysAgo: 8 },
-    { reservationIdx: 8, type: "receivable", amount: "3200", status: "paid", paidDaysAgo: 7 },
-    { reservationIdx: 10, type: "receivable", amount: "1890", status: "paid", paidDaysAgo: 5 },
-    { reservationIdx: 11, type: "receivable", amount: "2450", status: "paid", paidDaysAgo: 3 },
-    { reservationIdx: 13, type: "receivable", amount: "3780", status: "paid", paidDaysAgo: 2 },
-    { reservationIdx: 3, type: "receivable", amount: "1890", status: "pending", paidDaysAgo: 0 },
-    { reservationIdx: 6, type: "receivable", amount: "4900", status: "pending", paidDaysAgo: 0 },
-    { reservationIdx: 9, type: "receivable", amount: "6400", status: "pending", paidDaysAgo: 0 },
-    { reservationIdx: 12, type: "receivable", amount: "3200", status: "pending", paidDaysAgo: 0 },
-    { reservationIdx: 3, type: "payable", amount: "800", status: "paid", paidDaysAgo: 15 },
-    { reservationIdx: 5, type: "payable", amount: "500", status: "paid", paidDaysAgo: 9 },
-    { reservationIdx: 8, type: "payable", amount: "1200", status: "pending", paidDaysAgo: 0 },
-    { reservationIdx: 1, type: "payable", amount: "300", status: "paid", paidDaysAgo: 17 },
-    { reservationIdx: 11, type: "payable", amount: "600", status: "pending", paidDaysAgo: 0 },
-    { reservationIdx: 13, type: "payable", amount: "900", status: "paid", paidDaysAgo: 1 },
+    { reservationIdx: 0, type: PAYMENT_TYPE.RECEIVABLE, amount: "3780", status: PAYMENT_STATUS.PAID, paidDaysAgo: 20 },
+    { reservationIdx: 1, type: PAYMENT_TYPE.RECEIVABLE, amount: "1890", status: PAYMENT_STATUS.PAID, paidDaysAgo: 18 },
+    { reservationIdx: 2, type: PAYMENT_TYPE.RECEIVABLE, amount: "3780", status: PAYMENT_STATUS.PAID, paidDaysAgo: 15 },
+    { reservationIdx: 4, type: PAYMENT_TYPE.RECEIVABLE, amount: "3780", status: PAYMENT_STATUS.PAID, paidDaysAgo: 12 },
+    { reservationIdx: 5, type: PAYMENT_TYPE.RECEIVABLE, amount: "2450", status: PAYMENT_STATUS.PAID, paidDaysAgo: 10 },
+    { reservationIdx: 7, type: PAYMENT_TYPE.RECEIVABLE, amount: "2450", status: PAYMENT_STATUS.PAID, paidDaysAgo: 8 },
+    { reservationIdx: 8, type: PAYMENT_TYPE.RECEIVABLE, amount: "3200", status: PAYMENT_STATUS.PAID, paidDaysAgo: 7 },
+    { reservationIdx: 10, type: PAYMENT_TYPE.RECEIVABLE, amount: "1890", status: PAYMENT_STATUS.PAID, paidDaysAgo: 5 },
+    { reservationIdx: 11, type: PAYMENT_TYPE.RECEIVABLE, amount: "2450", status: PAYMENT_STATUS.PAID, paidDaysAgo: 3 },
+    { reservationIdx: 13, type: PAYMENT_TYPE.RECEIVABLE, amount: "3780", status: PAYMENT_STATUS.PAID, paidDaysAgo: 2 },
+    { reservationIdx: 3, type: PAYMENT_TYPE.RECEIVABLE, amount: "1890", status: PAYMENT_STATUS.PENDING, paidDaysAgo: 0 },
+    { reservationIdx: 6, type: PAYMENT_TYPE.RECEIVABLE, amount: "4900", status: PAYMENT_STATUS.PENDING, paidDaysAgo: 0 },
+    { reservationIdx: 9, type: PAYMENT_TYPE.RECEIVABLE, amount: "6400", status: PAYMENT_STATUS.PENDING, paidDaysAgo: 0 },
+    { reservationIdx: 12, type: PAYMENT_TYPE.RECEIVABLE, amount: "3200", status: PAYMENT_STATUS.PENDING, paidDaysAgo: 0 },
+    { reservationIdx: 3, type: PAYMENT_TYPE.PAYABLE, amount: "800", status: PAYMENT_STATUS.PAID, paidDaysAgo: 15 },
+    { reservationIdx: 5, type: PAYMENT_TYPE.PAYABLE, amount: "500", status: PAYMENT_STATUS.PAID, paidDaysAgo: 9 },
+    { reservationIdx: 8, type: PAYMENT_TYPE.PAYABLE, amount: "1200", status: PAYMENT_STATUS.PENDING, paidDaysAgo: 0 },
+    { reservationIdx: 1, type: PAYMENT_TYPE.PAYABLE, amount: "300", status: PAYMENT_STATUS.PAID, paidDaysAgo: 17 },
+    { reservationIdx: 11, type: PAYMENT_TYPE.PAYABLE, amount: "600", status: PAYMENT_STATUS.PENDING, paidDaysAgo: 0 },
+    { reservationIdx: 13, type: PAYMENT_TYPE.PAYABLE, amount: "900", status: PAYMENT_STATUS.PAID, paidDaysAgo: 1 },
   ];
 
   for (const p of paymentData) {

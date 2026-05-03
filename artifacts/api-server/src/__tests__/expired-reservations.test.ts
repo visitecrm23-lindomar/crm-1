@@ -1,3 +1,4 @@
+import { ROLES } from "@workspace/permissions";
 import { randomUUID } from "crypto";
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from "vitest";
 import { eq, and, sql } from "drizzle-orm";
@@ -61,7 +62,7 @@ function makeReservation(fields: Pick<InsertReservation, "id" | "seats" | "total
 
 beforeAll(async () => {
   await db.insert(tenantsTable).values({ id: TENANT_ID, name: "Cron Test Agency", slug: `cron-test-${RUN}`, email: `cron-${RUN}@test.com`, planId: "starter", status: "trial" });
-  await db.insert(usersTable).values({ id: USER_ID, clerkId: `clerk_${RUN}`, tenantId: TENANT_ID, name: "Cron Agent", email: `agent-${RUN}@test.com`, role: "admin", referralCode: `REF${RUN.toUpperCase()}` });
+  await db.insert(usersTable).values({ id: USER_ID, clerkId: `clerk_${RUN}`, tenantId: TENANT_ID, name: "Cron Agent", email: `agent-${RUN}@test.com`, role: ROLES.AGENCY_ADMIN, referralCode: `REF${RUN.toUpperCase()}` });
   await db.insert(tripsTable).values({ id: TRIP_ID, tenantId: TENANT_ID, name: "Cron Test Trip", slug: `cron-trip-${RUN}`, destination: "Fortaleza", destinationCity: "Fortaleza", destinationState: "CE", type: "excursao", category: "standard", departureDate: new Date("2027-01-10"), totalCapacity: INITIAL_SEATS, availableSeats: INITIAL_SEATS, reservedSeats: 0, priceAdult: "200", createdById: USER_ID });
   await db.insert(clientsTable).values(makeClient());
 });

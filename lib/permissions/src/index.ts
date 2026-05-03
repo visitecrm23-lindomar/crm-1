@@ -62,6 +62,30 @@ export const TRIP_STATUS = {
 } as const;
 export type TripStatus = (typeof TRIP_STATUS)[keyof typeof TRIP_STATUS];
 
+export const REFERRAL_STATUS = {
+  PENDING: "pending",
+  COMPLETED: "completed",
+  CONVERTED: "converted",
+  EXPIRED: "expired",
+} as const;
+export type ReferralStatus = (typeof REFERRAL_STATUS)[keyof typeof REFERRAL_STATUS];
+
+export const STORE_ORDER_STATUS = {
+  PENDING: "pending",
+  CONFIRMED: "confirmed",
+  COMPLETED: "completed",
+  CANCELLED: "cancelled",
+} as const;
+export type StoreOrderStatus = (typeof STORE_ORDER_STATUS)[keyof typeof STORE_ORDER_STATUS];
+
+export const STORE_PAYMENT_STATUS = {
+  PENDING: "pending",
+  PAID: "paid",
+  REFUNDED: "refunded",
+  FAILED: "failed",
+} as const;
+export type StorePaymentStatus = (typeof STORE_PAYMENT_STATUS)[keyof typeof STORE_PAYMENT_STATUS];
+
 export const EXPENSE_STATUS = {
   PENDING: "pending",
   PAID: "paid",

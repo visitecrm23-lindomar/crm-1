@@ -10,6 +10,7 @@
  * the test is self-contained. @workspace/db and drizzle-orm are NOT mocked.
  */
 
+import { ROLES } from "@workspace/permissions";
 import { randomUUID } from "crypto";
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from "vitest";
 import express from "express";
@@ -139,7 +140,7 @@ describe("POST /api/reservations — loyalty points deducted in real DB", () => 
       tenantId: TENANT_ID,
       name: "Test Agent",
       email: "agent@agency.com",
-      role: "admin",
+      role: ROLES.AGENCY_ADMIN,
       referralCode: `REF${RUN.toUpperCase()}`,
     });
 
@@ -203,7 +204,7 @@ describe("POST /api/reservations — loyalty points deducted in real DB", () => 
       id: USER_ID,
       clerkId: `clerk_${RUN}`,
       tenantId: TENANT_ID,
-      role: "admin",
+      role: ROLES.AGENCY_ADMIN,
       name: "Test Agent",
       email: "agent@agency.com",
     } as never);

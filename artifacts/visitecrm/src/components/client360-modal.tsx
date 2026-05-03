@@ -12,6 +12,7 @@ import {
   useGenerateClientReferralCode,
   useGetMe,
 } from "@workspace/api-client-react";
+import { RESERVATION_STATUS, REFERRAL_STATUS } from "@workspace/permissions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -413,7 +414,7 @@ function ClientReferralTab({ clientId }: { clientId: string }) {
               </div>
               <div className="text-right">
                 <p className={`text-sm font-medium ${STATUS_COLORS[r.status] ?? ""}`}>
-                  {r.status === "pending" ? "Pendente" : r.status === "completed" || r.status === "converted" ? "Convertida" : "Expirada"}
+                  {r.status === REFERRAL_STATUS.PENDING ? "Pendente" : r.status === REFERRAL_STATUS.COMPLETED || r.status === REFERRAL_STATUS.CONVERTED ? "Convertida" : "Expirada"}
                 </p>
                 {r.discountApplied && (
                   <p className="text-xs text-muted-foreground">Desconto: {formatCurrency(Number(r.discountAmount ?? 0))}</p>
@@ -596,10 +597,10 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                           <div className="flex items-center justify-between">
                             <p className="font-medium text-sm">{r.trip.name}</p>
                             <Badge
-                              variant={r.status === "confirmed" || r.status === "completed" ? "default" : r.status === "cancelled" ? "destructive" : "secondary"}
+                              variant={r.status === RESERVATION_STATUS.CONFIRMED || r.status === RESERVATION_STATUS.COMPLETED ? "default" : r.status === RESERVATION_STATUS.CANCELLED ? "destructive" : "secondary"}
                               className="text-xs"
                             >
-                              {r.status === "confirmed" ? "Confirmada" : r.status === "pending" ? "Pendente" : r.status === "completed" ? "Concluída" : r.status === "cancelled" ? "Cancelada" : r.status}
+                              {r.status === RESERVATION_STATUS.CONFIRMED ? "Confirmada" : r.status === RESERVATION_STATUS.PENDING ? "Pendente" : r.status === RESERVATION_STATUS.COMPLETED ? "Concluída" : r.status === RESERVATION_STATUS.CANCELLED ? "Cancelada" : r.status}
                             </Badge>
                           </div>
                           <p className="text-xs text-muted-foreground">{format(parseISO(r.trip.departureDate), "dd/MM/yyyy", { locale: ptBR })} · {r.seats.length} lugar(es)</p>

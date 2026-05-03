@@ -12,7 +12,7 @@ import { eq, and, desc, asc, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
-import { ROLES } from "@workspace/permissions";
+import { ROLES, REFERRAL_STATUS } from "@workspace/permissions";
 
 const router = Router();
 
@@ -151,11 +151,11 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
 
       for (const row of refRows) {
         totalReferrals += Number(row.cnt);
-        if (row.status === "completed") {
+        if (row.status === REFERRAL_STATUS.COMPLETED) {
           completedReferrals = Number(row.cnt);
           totalEarnings = Number(row.total);
         }
-        if (row.status === "pending") pendingReferrals = Number(row.cnt);
+        if (row.status === REFERRAL_STATUS.PENDING) pendingReferrals = Number(row.cnt);
       }
 
       referralStats = {

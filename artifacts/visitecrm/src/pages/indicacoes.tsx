@@ -7,6 +7,7 @@ import {
   useUpdateReferralSettings,
 } from "@workspace/api-client-react";
 import type { Referral, ReferralSettings } from "@workspace/api-client-react";
+import { REFERRAL_STATUS } from "@workspace/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -291,14 +292,14 @@ export default function Indicacoes() {
           const bonus = parseFloat(String(r.bonusAmount ?? "0")) || 0;
           if (existing) {
             existing.total += 1;
-            if (r.status === "completed") { existing.conversions += 1; existing.earnings += bonus; }
+            if (r.status === REFERRAL_STATUS.COMPLETED) { existing.conversions += 1; existing.earnings += bonus; }
           } else {
             rankMap.set(key, {
               name: r.referrerName ?? r.referrerId.slice(0, 8),
               code: r.code,
               total: 1,
-              conversions: r.status === "completed" ? 1 : 0,
-              earnings: r.status === "completed" ? bonus : 0,
+              conversions: r.status === REFERRAL_STATUS.COMPLETED ? 1 : 0,
+              earnings: r.status === REFERRAL_STATUS.COMPLETED ? bonus : 0,
             });
           }
         }
@@ -511,7 +512,7 @@ export default function Indicacoes() {
             </div>
           )}
           <DialogFooter>
-            {selectedReferral && selectedReferral.status === "completed" && !selectedReferral.bonusPaid && (
+            {selectedReferral && selectedReferral.status === REFERRAL_STATUS.COMPLETED && !selectedReferral.bonusPaid && (
               <Button onClick={() => handleMarkPaid(selectedReferral)}>
                 <Check className="w-4 h-4 mr-2" />
                 Marcar bônus como pago

@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useListTrips, useGetTrip, useListReservations, useUpdateReservation } from "@workspace/api-client-react";
+import { RESERVATION_STATUS } from "@workspace/permissions";
 import { Client360Modal } from "@/components/client360-modal";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -71,8 +72,8 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
 
   const stats = useMemo(() => {
     const all = reservations?.data ?? [];
-    const confirmed = all.filter(r => r.status === "confirmed" || r.status === "completed");
-    const pending = all.filter(r => r.status === "pending");
+    const confirmed = all.filter(r => r.status === RESERVATION_STATUS.CONFIRMED || r.status === RESERVATION_STATUS.COMPLETED);
+    const pending = all.filter(r => r.status === RESERVATION_STATUS.PENDING);
     const totalRevenue = all.reduce((acc, r) => acc + r.totalValue, 0);
     const amountReceived = all.reduce((acc, r) => acc + r.paidValue, 0);
     const amountPending = totalRevenue - amountReceived;

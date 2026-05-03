@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { PAYMENT_METHOD_LABELS } from "@/lib/labels";
-import { ROLES } from "@workspace/permissions";
+import { ROLES, RESERVATION_STATUS } from "@workspace/permissions";
 
 const fmt = (v: number) => formatCurrency(v);
 const fmtCompact = (v: number) => {
@@ -268,7 +268,7 @@ export default function Revenue() {
   const goalRevenue = totalRevenue * 1.2;
 
   const reservations = reservationsData?.data ?? [];
-  const confirmedReservations = reservations.filter(r => r.status === "confirmed" || r.status === "completed");
+  const confirmedReservations = reservations.filter(r => r.status === RESERVATION_STATUS.CONFIRMED || r.status === RESERVATION_STATUS.COMPLETED);
   const avgTicket = confirmedReservations.length > 0 ? confirmedReservations.reduce((s, r) => s + r.totalValue, 0) / confirmedReservations.length : 0;
   const conversionRate = (summary?.totalReservations ?? 0) > 0 && (summary?.totalClients ?? 0) > 0
     ? (((summary?.confirmedReservations ?? 0) / (summary?.totalReservations ?? 1)) * 100) : 0;
@@ -382,8 +382,8 @@ export default function Revenue() {
 
   const funnelStages = useMemo(() => {
     const total = reservations.length;
-    const pending = reservations.filter(r => r.status === "pending").length;
-    const confirmed = reservations.filter(r => r.status === "confirmed" || r.status === "completed").length;
+    const pending = reservations.filter(r => r.status === RESERVATION_STATUS.PENDING).length;
+    const confirmed = reservations.filter(r => r.status === RESERVATION_STATUS.CONFIRMED || r.status === RESERVATION_STATUS.COMPLETED).length;
     const withPayment = reservations.filter(r => r.paidValue > 0).length;
     const fullPaid = reservations.filter(r => r.balance === 0 && r.paidValue > 0).length;
     return [
@@ -465,7 +465,7 @@ export default function Revenue() {
               <SelectTrigger className="w-[150px] h-9 text-sm"><SelectValue placeholder="Vendedor" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos os Vendedores</SelectItem>
-                {(usersRaw ?? []).filter(u => u.role === ROLES.SALES || u.role === "admin").map(u => (
+                {(usersRaw ?? []).filter(u => u.role === ROLES.SALES || u.role === ROLES.AGENCY_ADMIN).map(u => (
                   <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                 ))}
               </SelectContent>

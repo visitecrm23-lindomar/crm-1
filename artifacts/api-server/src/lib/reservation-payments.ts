@@ -38,7 +38,7 @@ export async function syncReservationPaymentStatus(
   // promote the reservation back to 'confirmed'.
   if (
     reservation.status === RESERVATION_STATUS.CANCELLED ||
-    reservation.status === "completed"
+    reservation.status === RESERVATION_STATUS.COMPLETED
   ) {
     // Even when status is terminal, refresh paidValue/balance so refunds
     // appear in financial views.

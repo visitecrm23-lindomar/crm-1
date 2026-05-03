@@ -19,6 +19,7 @@ import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { deleteOrphanedFile, deleteOrphanedImages } from "../lib/uploadthing";
 import { ADMIN_ROLES } from '../lib/tenant';
+import { STORE_ORDER_STATUS, STORE_PAYMENT_STATUS } from "@workspace/permissions";
 import { encryptCredential } from "../lib/crypto";
 
 // Fields that hold gateway secrets. They are encrypted at rest, never
@@ -684,11 +685,11 @@ router.put("/store/orders/:id/status", async (req, res): Promise<void> => {
     if (parsed.data.paymentStatus) updates.paymentStatus = parsed.data.paymentStatus;
     if (parsed.data.fulfillmentStatus) updates.fulfillmentStatus = parsed.data.fulfillmentStatus;
     if (parsed.data.internalNotes) updates.internalNotes = parsed.data.internalNotes;
-    const isTransitioningToPaid = parsed.data.paymentStatus === "paid";
-    const isTransitioningToCompleted = parsed.data.status === "completed";
-    if (parsed.data.status === "completed") updates.completedAt = new Date();
-    if (parsed.data.status === "cancelled") updates.cancelledAt = new Date();
-    if (parsed.data.paymentStatus === "paid") updates.paidAt = new Date();
+    const isTransitioningToPaid = parsed.data.paymentStatus === STORE_PAYMENT_STATUS.PAID;
+    const isTransitioningToCompleted = parsed.data.status === STORE_ORDER_STATUS.COMPLETED;
+    if (parsed.data.status === STORE_ORDER_STATUS.COMPLETED) updates.completedAt = new Date();
+    if (parsed.data.status === STORE_ORDER_STATUS.CANCELLED) updates.cancelledAt = new Date();
+    if (parsed.data.paymentStatus === STORE_PAYMENT_STATUS.PAID) updates.paidAt = new Date();
     await db.update(storeOrdersTable).set(updates)
       .where(and(eq(storeOrdersTable.id, req.params.id), eq(storeOrdersTable.storeId, store.id)));
     const [order] = await db.select().from(storeOrdersTable)
