@@ -66,6 +66,10 @@ async function syncClientDeal(clientId: string, tenantId: string, tripId: string
 async function formatReservation(r: typeof reservationsTable.$inferSelect) {
   const [trip] = await db.select().from(tripsTable).where(eq(tripsTable.id, r.tripId)).limit(1);
   const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, r.clientId)).limit(1);
+  const [autoRetryLog] = await db.select({ id: emailLogsTable.id })
+    .from(emailLogsTable)
+    .where(and(eq(emailLogsTable.reservationId, r.id), eq(emailLogsTable.isAutoRetry, true)))
+    .limit(1);
   return {
     id: r.id,
     tripId: r.tripId,
@@ -100,6 +104,7 @@ async function formatReservation(r: typeof reservationsTable.$inferSelect) {
     discountTotal: r.discountTotal != null ? Number(r.discountTotal) : null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
+    hasAutoRetry: autoRetryLog !== undefined,
     trip: trip ? {
       id: trip.id,
       name: trip.name,

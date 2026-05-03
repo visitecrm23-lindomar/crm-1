@@ -889,6 +889,7 @@ export interface Reservation {
   discountTotal?: number | null;
   createdAt: string;
   updatedAt: string;
+  hasAutoRetry?: boolean;
   trip: TripSummary;
   client: ReservationClient;
 }

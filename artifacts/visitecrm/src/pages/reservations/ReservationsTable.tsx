@@ -1,4 +1,5 @@
 import type { Reservation } from "@workspace/api-client-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -7,7 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Search, MoreHorizontal, Eye, DollarSign, QrCode, CheckCircle, XCircle,
-  CalendarCheck, Pencil, Tag,
+  CalendarCheck, Pencil, Tag, RefreshCcw,
 } from "lucide-react";
 import { STATUS_COLORS, STATUS_LABELS, METHOD_LABELS } from "./constants";
 import { RESERVATION_STATUS } from "@workspace/permissions";
@@ -141,9 +142,17 @@ export function ReservationsTable({
                         <Tag className="w-3.5 h-3.5 text-muted-foreground" />
                         <span className="font-mono text-xs font-semibold">{r.reservationNumber ?? r.voucherCode}</span>
                       </div>
-                      {(r as { storeOrderId?: string | null }).storeOrderId && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 w-fit">Vitrine</span>
-                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {(r as { storeOrderId?: string | null }).storeOrderId && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">Vitrine</span>
+                        )}
+                        {r.hasAutoRetry && (
+                          <Badge className="text-xs bg-purple-50 text-purple-700 border-purple-200" variant="outline">
+                            <RefreshCcw className="w-3 h-3 mr-1" />
+                            Auto-reenviado
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell>

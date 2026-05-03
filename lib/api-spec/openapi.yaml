@@ -5836,6 +5836,8 @@ components:
           type: string
         updatedAt:
           type: string
+        hasAutoRetry:
+          type: boolean
         trip:
           $ref: "#/components/schemas/TripSummary"
         client:
