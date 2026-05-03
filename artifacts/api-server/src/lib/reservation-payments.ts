@@ -2,26 +2,30 @@ import { db } from "@workspace/db";
 import { reservationsTable, paymentsTable } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
 import { roundMoney } from "./pricing";
-import { RESERVATION_STATUS } from "@workspace/permissions";
+import { RESERVATION_STATUS, PAYMENT_STATUS, type ReservationStatus } from "@workspace/permissions";
 
-/**
- * Minimal subset of the drizzle DB / transaction object that this module
- * relies on. Using a structural type lets webhook handlers thread their
- * `db.transaction(tx => ...)` callback through without coupling to the full
- * Drizzle types.
- */
 export type DbExecutor = typeof db;
 
-/**
- * Recomputes the paid/balance totals for a reservation from its payments
- * (only those with status='paid') and promotes/demotes the reservation
- * status accordingly:
- *   - paidValue >= totalValue → 'confirmed' (sets confirmedAt if missing)
- *   - confirmed reservation that lost paid coverage → demoted to 'pending'
- * Reservations already in terminal states ('cancelled', 'completed',
- * 'failed') are left untouched so this can run after webhook cascades
- * without overwriting them.
- */
+type ReservationUpdate = Partial<typeof reservationsTable.$inferInsert> & {
+  status?: ReservationStatus;
+};
+
+async function sumPaidPayments(
+  executor: DbExecutor,
+  reservationId: string,
+  tenantId: string,
+): Promise<number> {
+  const result = await executor.execute(sql`
+    SELECT COALESCE(SUM(amount::numeric), 0) AS total_paid
+    FROM payments
+    WHERE reservation_id = ${reservationId}
+      AND tenant_id = ${tenantId}
+      AND status = ${PAYMENT_STATUS.PAID}
+  `);
+  const row = (result as unknown as { rows: Array<{ total_paid: string }> }).rows[0];
+  return roundMoney(Number(row?.total_paid ?? "0"));
+}
+
 export async function syncReservationPaymentStatus(
   reservationId: string,
   tenantId: string,
@@ -33,24 +37,15 @@ export async function syncReservationPaymentStatus(
     .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)))
     .limit(1);
   if (!reservation) return;
-  // Only 'cancelled' and 'completed' are truly terminal. 'failed' is left
-  // recoverable so a later successful retry on the same PaymentIntent can
-  // promote the reservation back to 'confirmed'.
+
+  const totalValue = roundMoney(Number(reservation.totalValue));
+  const paidValue = await sumPaidPayments(executor, reservationId, tenantId);
+  const balance = roundMoney(Math.max(totalValue - paidValue, 0));
+
   if (
     reservation.status === RESERVATION_STATUS.CANCELLED ||
     reservation.status === RESERVATION_STATUS.COMPLETED
   ) {
-    // Even when status is terminal, refresh paidValue/balance so refunds
-    // appear in financial views.
-    const result = await executor.execute(sql`
-      SELECT COALESCE(SUM(amount::numeric), 0) AS total_paid
-      FROM payments
-      WHERE reservation_id = ${reservationId} AND tenant_id = ${tenantId} AND status = 'paid'
-    `);
-    const row = (result as unknown as { rows: Array<{ total_paid: string }> }).rows[0];
-    const paidValue = roundMoney(Number(row?.total_paid ?? "0"));
-    const totalValue = roundMoney(Number(reservation.totalValue));
-    const balance = roundMoney(Math.max(totalValue - paidValue, 0));
     await executor
       .update(reservationsTable)
       .set({ paidValue: String(paidValue), balance: String(balance) })
@@ -58,32 +53,17 @@ export async function syncReservationPaymentStatus(
     return;
   }
 
-  const result = await executor.execute(sql`
-    SELECT COALESCE(SUM(amount::numeric), 0) AS total_paid
-    FROM payments
-    WHERE reservation_id = ${reservationId} AND tenant_id = ${tenantId} AND status = 'paid'
-  `);
-  const row = (result as unknown as { rows: Array<{ total_paid: string }> }).rows[0];
-  const paidValue = roundMoney(Number(row?.total_paid ?? "0"));
-  const totalValue = roundMoney(Number(reservation.totalValue));
-  const balance = roundMoney(Math.max(totalValue - paidValue, 0));
-
-  // Use a permissive shape for the update payload — drizzle's $inferInsert
-  // generic occasionally drops nullable columns from the inferred type when
-  // the schema package is consumed across project references; using a
-  // Record<string, unknown> avoids spurious type errors without sacrificing
-  // runtime correctness (the actual columns are validated by drizzle).
-  const updates: Record<string, unknown> = {
+  const updates: ReservationUpdate = {
     paidValue: String(paidValue),
     balance: String(balance),
   };
 
   if (paidValue >= totalValue) {
-    updates["status"] = RESERVATION_STATUS.CONFIRMED;
-    if (!reservation.confirmedAt) updates["confirmedAt"] = new Date();
-    updates["expiresAt"] = null;
+    updates.status = RESERVATION_STATUS.CONFIRMED;
+    if (!reservation.confirmedAt) updates.confirmedAt = new Date();
+    updates.expiresAt = null;
   } else if (reservation.status === RESERVATION_STATUS.CONFIRMED) {
-    updates["status"] = RESERVATION_STATUS.PENDING;
+    updates.status = RESERVATION_STATUS.PENDING;
   }
 
   await executor
@@ -92,16 +72,6 @@ export async function syncReservationPaymentStatus(
     .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)));
 }
 
-/**
- * Returns true if any payment row with this (tenant, gateway, transactionId)
- * tuple already exists. Webhook handlers use this as the canonical
- * idempotency guard to short-circuit replayed events. The DB also enforces
- * uniqueness via the partial index
- * `payments_tenant_gateway_tx_reservation_uidx`
- * (which includes reservation_id so multi-reservation splits of a single
- * gateway transaction remain valid while same-reservation replays are
- * rejected even if this app-level check races).
- */
 export async function paymentExistsForGatewayTx(
   tenantId: string,
   gateway: string,

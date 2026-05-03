@@ -7,7 +7,7 @@ import { requireAuth } from "../lib/tenant";
 import { generatePixEMV, generatePixQrCodeUrl } from "../lib/pix";
 import { persistUsageSnapshot } from "../lib/planLimits";
 import { generateInvoiceNumber } from "../lib/invoiceNumber";
-import { ROLES } from "@workspace/permissions";
+import { ROLES, INVOICE_STATUS, TENANT_STATUS, SUBSCRIPTION_STATUS } from "@workspace/permissions";
 
 const router = Router();
 
@@ -118,21 +118,21 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
 
     if (isDowngradeToFree) {
       await db.update(tenantsTable)
-        .set({ planId: newPlan.slug, status: "active", updatedAt: new Date() })
+        .set({ planId: newPlan.slug, status: TENANT_STATUS.ACTIVE, updatedAt: new Date() })
         .where(eq(tenantsTable.id, me.tenantId));
 
       await db.update(subscriptionsTable)
-        .set({ status: "canceled", canceledAt: new Date() })
+        .set({ status: SUBSCRIPTION_STATUS.CANCELED, canceledAt: new Date() })
         .where(and(
           eq(subscriptionsTable.tenantId, me.tenantId),
-          eq(subscriptionsTable.status, "active"),
+          eq(subscriptionsTable.status, SUBSCRIPTION_STATUS.ACTIVE),
         ));
 
       await db.insert(subscriptionsTable).values({
         id: generateId(),
         tenantId: me.tenantId,
         planId: newPlan.id,
-        status: "active",
+        status: SUBSCRIPTION_STATUS.ACTIVE,
         billingCycle: parsed.data.billingCycle,
         currentPeriodStart: new Date(),
         currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
@@ -151,9 +151,9 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
         .where(and(
           eq(subscriptionsTable.tenantId, me.tenantId),
           or(
-            eq(subscriptionsTable.status, "active"),
-            eq(subscriptionsTable.status, "trial"),
-            eq(subscriptionsTable.status, "canceled"),
+            eq(subscriptionsTable.status, SUBSCRIPTION_STATUS.ACTIVE),
+            eq(subscriptionsTable.status, SUBSCRIPTION_STATUS.TRIAL),
+            eq(subscriptionsTable.status, SUBSCRIPTION_STATUS.CANCELED),
           )
         ))
         .limit(1);
@@ -163,14 +163,14 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
         const trialEnd = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
 
         await db.update(tenantsTable)
-          .set({ planId: newPlan.slug, status: "active", updatedAt: now })
+          .set({ planId: newPlan.slug, status: TENANT_STATUS.ACTIVE, updatedAt: now })
           .where(eq(tenantsTable.id, me.tenantId));
 
         await db.insert(subscriptionsTable).values({
           id: generateId(),
           tenantId: me.tenantId,
           planId: newPlan.id,
-          status: "trial",
+          status: SUBSCRIPTION_STATUS.TRIAL,
           billingCycle: parsed.data.billingCycle,
           currentPeriodStart: now,
           currentPeriodEnd: trialEnd,
@@ -193,7 +193,7 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
             amount: String(trialPrice),
             totalAmount: String(trialPrice),
             currency: "BRL",
-            status: "pending",
+            status: INVOICE_STATUS.PENDING,
             paymentMethod: "pix",
             dueDate: trialEnd,
             description: `${newPlan.name} — ${parsed.data.billingCycle === "annual" ? "anual" : "mensal"} (vence após trial)`,
@@ -248,7 +248,7 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
       planId: newPlan.id,
       amount: String(price),
       currency: "BRL",
-      status: "pending",
+      status: INVOICE_STATUS.PENDING,
       paymentMethod: pixKey ? "pix" : "manual",
       dueDate,
       description: `Assinatura ${newPlan.name} — ${parsed.data.billingCycle === "annual" ? "Anual" : "Mensal"}`,
@@ -262,7 +262,7 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
 
     await db.update(tenantsTable)
-      .set({ status: "pending_payment", pendingPlanId: newPlan.slug, updatedAt: now })
+      .set({ status: TENANT_STATUS.PENDING_PAYMENT, pendingPlanId: newPlan.slug, updatedAt: now })
       .where(eq(tenantsTable.id, me.tenantId));
 
     void persistUsageSnapshot(me.tenantId);
@@ -271,7 +271,7 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
       id: generateId(),
       tenantId: me.tenantId,
       planId: newPlan.id,
-      status: "pending_payment",
+      status: SUBSCRIPTION_STATUS.PENDING_PAYMENT,
       billingCycle: parsed.data.billingCycle,
       currentPeriodStart: periodStart,
       currentPeriodEnd: periodEnd,
@@ -318,7 +318,7 @@ router.post("/invoices/:id/pix", async (req, res): Promise<void> => {
       pixQrCodeUrl,
       pixExpiresAt,
       paymentMethod: "pix",
-      status: "processing",
+      status: INVOICE_STATUS.PROCESSING,
     }).where(eq(invoicesTable.id, req.params.id));
 
     const [updated] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
@@ -337,10 +337,10 @@ router.post("/admin/invoices/:id/confirm-payment", async (req, res): Promise<voi
 
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
     if (!invoice) { res.status(404).json({ error: "Fatura não encontrada" }); return; }
-    if (invoice.status === "paid") { res.status(400).json({ error: "Fatura já está paga" }); return; }
+    if (invoice.status === INVOICE_STATUS.PAID) { res.status(400).json({ error: "Fatura já está paga" }); return; }
 
     await db.update(invoicesTable).set({
-      status: "paid",
+      status: INVOICE_STATUS.PAID,
       paidAt: new Date(),
     }).where(eq(invoicesTable.id, req.params.id));
 
@@ -350,7 +350,7 @@ router.post("/admin/invoices/:id/confirm-payment", async (req, res): Promise<voi
         await db.update(tenantsTable).set({
           planId: plan.slug,
           pendingPlanId: null,
-          status: "active",
+          status: TENANT_STATUS.ACTIVE,
         }).where(eq(tenantsTable.id, invoice.tenantId));
 
         const existingSub = await db
@@ -365,7 +365,7 @@ router.post("/admin/invoices/:id/confirm-payment", async (req, res): Promise<voi
         if (existingSub.length > 0) {
           await db.update(subscriptionsTable).set({
             planId: plan.id,
-            status: "active",
+            status: SUBSCRIPTION_STATUS.ACTIVE,
             currentPeriodEnd: periodEnd,
           }).where(eq(subscriptionsTable.id, existingSub[0]!.id));
         } else {
@@ -373,7 +373,7 @@ router.post("/admin/invoices/:id/confirm-payment", async (req, res): Promise<voi
             id: generateId(),
             tenantId: invoice.tenantId,
             planId: plan.id,
-            status: "active",
+            status: SUBSCRIPTION_STATUS.ACTIVE,
             billingCycle: "monthly",
             currentPeriodStart: new Date(),
             currentPeriodEnd: periodEnd,
@@ -406,7 +406,7 @@ router.post("/invoices/:id/stripe/checkout", async (req, res): Promise<void> => 
     if (me.role !== ROLES.SUPER_ADMIN && invoice.tenantId !== me.tenantId) {
       res.status(403).json({ error: "Forbidden" }); return;
     }
-    if (invoice.status === "paid") { res.status(400).json({ error: "Fatura já está paga" }); return; }
+    if (invoice.status === INVOICE_STATUS.PAID) { res.status(400).json({ error: "Fatura já está paga" }); return; }
 
     const amountCents = Math.round(Number(invoice.amount) * 100);
 
@@ -455,10 +455,10 @@ async function activateInvoicePlan(
   log: { error: (obj: object, msg: string) => void }
 ): Promise<void> {
   const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
-  if (!invoice || invoice.status === "paid") return;
+  if (!invoice || invoice.status === INVOICE_STATUS.PAID) return;
 
   await db.update(invoicesTable).set({
-    status: "paid",
+    status: INVOICE_STATUS.PAID,
     paidAt: new Date(),
   }).where(eq(invoicesTable.id, invoiceId));
 
@@ -468,7 +468,7 @@ async function activateInvoicePlan(
       await db.update(tenantsTable).set({
         planId: plan.slug,
         pendingPlanId: null,
-        status: "active",
+        status: TENANT_STATUS.ACTIVE,
         updatedAt: new Date(),
       }).where(eq(tenantsTable.id, tenantId));
 
@@ -484,7 +484,7 @@ async function activateInvoicePlan(
       if (existingSub.length > 0) {
         await db.update(subscriptionsTable).set({
           planId: plan.id,
-          status: "active",
+          status: SUBSCRIPTION_STATUS.ACTIVE,
           currentPeriodEnd: periodEnd,
         }).where(eq(subscriptionsTable.id, existingSub[0]!.id));
       } else {
@@ -492,7 +492,7 @@ async function activateInvoicePlan(
           id: generateId(),
           tenantId,
           planId: plan.id,
-          status: "active",
+          status: SUBSCRIPTION_STATUS.ACTIVE,
           billingCycle: "monthly",
           currentPeriodStart: new Date(),
           currentPeriodEnd: periodEnd,
@@ -504,7 +504,7 @@ async function activateInvoicePlan(
 
 async function failInvoice(invoiceId: string): Promise<void> {
   await db.update(invoicesTable).set({
-    status: "failed",
+    status: INVOICE_STATUS.FAILED,
     notes: "Pagamento falhou via Stripe",
   }).where(eq(invoicesTable.id, invoiceId));
 }

@@ -10,6 +10,7 @@ import {
   CalendarCheck, Pencil, Tag,
 } from "lucide-react";
 import { STATUS_COLORS, STATUS_LABELS, METHOD_LABELS } from "./constants";
+import { RESERVATION_STATUS } from "@workspace/permissions";
 
 interface ReservationsTableProps {
   reservations: Reservation[];
@@ -63,10 +64,10 @@ export function ReservationsTable({
           <SelectTrigger className="w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos os status</SelectItem>
-            <SelectItem value="pending">Pendente</SelectItem>
-            <SelectItem value="confirmed">Confirmada</SelectItem>
-            <SelectItem value="completed">Concluída</SelectItem>
-            <SelectItem value="cancelled">Cancelada</SelectItem>
+            <SelectItem value={RESERVATION_STATUS.PENDING}>Pendente</SelectItem>
+            <SelectItem value={RESERVATION_STATUS.CONFIRMED}>Confirmada</SelectItem>
+            <SelectItem value={RESERVATION_STATUS.COMPLETED}>Concluída</SelectItem>
+            <SelectItem value={RESERVATION_STATUS.CANCELLED}>Cancelada</SelectItem>
           </SelectContent>
         </Select>
         <Select value={tripFilter || "all"} onValueChange={v => { setTripFilter(v === "all" ? "" : v); setPage(1); }}>
@@ -187,11 +188,11 @@ export function ReservationsTable({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => onViewDetail(r.id)}><Eye className="w-4 h-4 mr-2" /> Visualizar</DropdownMenuItem>
-                        {r.status !== "cancelled" && <DropdownMenuItem onClick={() => onEdit(r.id)}><Pencil className="w-4 h-4 mr-2" /> Editar</DropdownMenuItem>}
-                        {r.balance > 0 && r.status !== "cancelled" && <DropdownMenuItem onClick={() => onPayment(r)}><DollarSign className="w-4 h-4 mr-2" /> Registrar Pagamento</DropdownMenuItem>}
+                        {r.status !== RESERVATION_STATUS.CANCELLED && <DropdownMenuItem onClick={() => onEdit(r.id)}><Pencil className="w-4 h-4 mr-2" /> Editar</DropdownMenuItem>}
+                        {r.balance > 0 && r.status !== RESERVATION_STATUS.CANCELLED && <DropdownMenuItem onClick={() => onPayment(r)}><DollarSign className="w-4 h-4 mr-2" /> Registrar Pagamento</DropdownMenuItem>}
                         <DropdownMenuItem onClick={() => onVoucher(r)}><QrCode className="w-4 h-4 mr-2" /> Ver Voucher</DropdownMenuItem>
-                        {r.status !== "cancelled" && r.status !== "completed" && <DropdownMenuItem onClick={() => onCheckin(r)}><CheckCircle className="w-4 h-4 mr-2" /> Check-in</DropdownMenuItem>}
-                        {r.status !== "cancelled" && <DropdownMenuItem className="text-destructive" onClick={() => onCancel(r.id)}><XCircle className="w-4 h-4 mr-2" /> Cancelar Reserva</DropdownMenuItem>}
+                        {r.status !== RESERVATION_STATUS.CANCELLED && r.status !== RESERVATION_STATUS.COMPLETED && <DropdownMenuItem onClick={() => onCheckin(r)}><CheckCircle className="w-4 h-4 mr-2" /> Check-in</DropdownMenuItem>}
+                        {r.status !== RESERVATION_STATUS.CANCELLED && <DropdownMenuItem className="text-destructive" onClick={() => onCancel(r.id)}><XCircle className="w-4 h-4 mr-2" /> Cancelar Reserva</DropdownMenuItem>}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

@@ -4,7 +4,7 @@ import { eq, desc, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
-import { ROLES, INVOICE_STATUS, INVOICE_STATUS_VALUES } from "@workspace/permissions";
+import { ROLES, INVOICE_STATUS, INVOICE_STATUS_VALUES, TENANT_STATUS, SUBSCRIPTION_STATUS } from "@workspace/permissions";
 
 async function activateInvoicePlan(invoiceId: string, tenantId: string): Promise<void> {
   const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
@@ -16,7 +16,7 @@ async function activateInvoicePlan(invoiceId: string, tenantId: string): Promise
   if (invoice.planId) {
     const [plan] = await db.select().from(plansTable).where(eq(plansTable.id, invoice.planId)).limit(1);
     if (plan) {
-      await db.update(tenantsTable).set({ planId: plan.slug, pendingPlanId: null, status: "active", updatedAt: new Date() })
+      await db.update(tenantsTable).set({ planId: plan.slug, pendingPlanId: null, status: TENANT_STATUS.ACTIVE, updatedAt: new Date() })
         .where(eq(tenantsTable.id, tenantId));
 
       const [existingSub] = await db.select().from(subscriptionsTable)
@@ -27,11 +27,11 @@ async function activateInvoicePlan(invoiceId: string, tenantId: string): Promise
       const periodEnd = invoice.billingPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       if (existingSub) {
         await db.update(subscriptionsTable)
-          .set({ planId: plan.id, status: "active", currentPeriodEnd: periodEnd })
+          .set({ planId: plan.id, status: SUBSCRIPTION_STATUS.ACTIVE, currentPeriodEnd: periodEnd })
           .where(eq(subscriptionsTable.id, existingSub.id));
       } else {
         await db.insert(subscriptionsTable).values({
-          id: generateId(), tenantId, planId: plan.id, status: "active",
+          id: generateId(), tenantId, planId: plan.id, status: SUBSCRIPTION_STATUS.ACTIVE,
           billingCycle: "monthly", currentPeriodStart: new Date(), currentPeriodEnd: periodEnd,
         });
       }

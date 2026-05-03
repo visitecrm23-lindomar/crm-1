@@ -96,13 +96,34 @@ export type ExpenseStatus = (typeof EXPENSE_STATUS)[keyof typeof EXPENSE_STATUS]
 
 export const INVOICE_STATUS = {
   PENDING: "pending",
+  PROCESSING: "processing",
   PAID: "paid",
   OVERDUE: "overdue",
   CANCELLED: "cancelled",
   REFUNDED: "refunded",
+  FAILED: "failed",
 } as const;
 export type InvoiceStatus = (typeof INVOICE_STATUS)[keyof typeof INVOICE_STATUS];
 export const INVOICE_STATUS_VALUES = Object.values(INVOICE_STATUS) as [InvoiceStatus, ...InvoiceStatus[]];
+
+export const TENANT_STATUS = {
+  TRIAL: "trial",
+  ACTIVE: "active",
+  PENDING_PAYMENT: "pending_payment",
+  SUSPENDED: "suspended",
+  CANCELLED: "cancelled",
+} as const;
+export type TenantStatus = (typeof TENANT_STATUS)[keyof typeof TENANT_STATUS];
+
+export const SUBSCRIPTION_STATUS = {
+  ACTIVE: "active",
+  TRIAL: "trial",
+  PENDING_PAYMENT: "pending_payment",
+  PAST_DUE: "past_due",
+  CANCELED: "canceled",
+  EXPIRED: "expired",
+} as const;
+export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUS)[keyof typeof SUBSCRIPTION_STATUS];
 
 export const RESOURCES = {
   TRIPS: "trips",
