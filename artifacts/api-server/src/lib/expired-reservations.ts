@@ -3,15 +3,21 @@ import { reservationsTable, tripsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { RESERVATION_STATUS } from "@workspace/permissions";
+import { broadcastSeatUpdate } from "./realtime";
 
 type CancelledRow = {
   id: string;
   trip_id: string;
+  tenant_id: string;
   seats: string[] | null;
 };
 
 export async function runExpiredReservationsCron(): Promise<void> {
   const now = new Date();
+
+  // Capture the affected rows outside the transaction so we can broadcast
+  // SSE notifications after the commit, when clients can query fresh data.
+  let cancelledRows: CancelledRow[] = [];
 
   // Wrap the entire operation in a single transaction so that if any trip
   // seat update fails the reservation cancellations are also rolled back,
@@ -35,7 +41,7 @@ export async function runExpiredReservationsCron(): Promise<void> {
             SELECT 1 FROM payments
             WHERE payments.reservation_id = reservations.id
           )
-        RETURNING id, trip_id, seats
+        RETURNING id, trip_id, tenant_id, seats
       `,
     );
 
@@ -77,5 +83,25 @@ export async function runExpiredReservationsCron(): Promise<void> {
       { totalCancelled: rows.length, tripsUpdated: seatsByTrip.size },
       "[expired-reservations] Run complete",
     );
+
+    // Save rows for post-commit SSE broadcast (must happen after tx commits).
+    cancelledRows = rows;
   });
+
+  // Notify connected vitrine clients so their seat maps update immediately.
+  // Broadcast runs after the transaction commits so SSE queries see fresh data.
+  // One broadcast per trip is enough — deduplication via Set.
+  // Fire-and-forget: a broadcast failure must never fail the cron run.
+  if (cancelledRows.length > 0) {
+    const seen = new Set<string>();
+    for (const row of cancelledRows) {
+      if (!row.trip_id || !row.tenant_id) continue;
+      const key = `${row.trip_id}:${row.tenant_id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      broadcastSeatUpdate(row.trip_id, row.tenant_id).catch((err) => {
+        logger.warn({ err, tripId: row.trip_id }, "[expired-reservations] broadcastSeatUpdate failed — continuing");
+      });
+    }
+  }
 }
