@@ -113,7 +113,14 @@ export async function runPostBookingSideEffects(args: PostBookingArgs): Promise<
           voucherUrl,
           consultUrl,
           whatsappUrl,
-          ...(credentials ? { credentials } : {}),
+          ...(credentials ? {
+            credentials: {
+              email: credentials.email,
+              setupUrl: credentials.setupUrl,
+              loginUrl: credentials.loginUrl,
+              ...(credentials.plainTextPassword ? { plainTextPassword: credentials.plainTextPassword } : {}),
+            },
+          } : {}),
         },
       });
     }

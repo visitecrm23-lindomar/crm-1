@@ -19,6 +19,7 @@ export interface ReservationCredentials {
   email: string
   setupUrl: string
   loginUrl: string
+  plainTextPassword?: string
 }
 
 export interface ReservationConfirmationEmailProps {
@@ -298,7 +299,6 @@ export function ReservationConfirmationEmail({
                 <Heading style={credentialsSectionTitle}>🔑 Acesse sua Área do Cliente</Heading>
                 <Text style={credentialsIntro}>
                   Criamos uma conta gratuita para você acompanhar sua reserva a qualquer momento.
-                  Clique no botão abaixo para configurar sua senha e acessar o portal pela primeira vez:
                 </Text>
                 <div style={credentialsBox}>
                   <table style={infoTable}>
@@ -307,15 +307,34 @@ export function ReservationConfirmationEmail({
                         <td style={infoLabel}>Login (e-mail):</td>
                         <td style={infoValue}>{credentials.email}</td>
                       </tr>
+                      {credentials.plainTextPassword && (
+                        <tr>
+                          <td style={infoLabel}>Senha:</td>
+                          <td style={infoValue}>{credentials.plainTextPassword}</td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
-                <Button style={credentialsButton} href={credentials.setupUrl}>
-                  Configurar Minha Senha e Acessar
-                </Button>
-                <Text style={credentialsNote}>
-                  Este link é válido por 7 dias e pode ser usado apenas uma vez. Após acessar, você poderá definir sua própria senha.
-                </Text>
+                {credentials.plainTextPassword ? (
+                  <>
+                    <Text style={credentialsNote}>
+                      Use o e-mail e a senha acima para entrar na sua Área do Cliente. Você pode trocar a senha a qualquer momento pelo portal.
+                    </Text>
+                    <Button style={credentialsButton} href={credentials.loginUrl}>
+                      Acessar Minha Área do Cliente
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button style={credentialsButton} href={credentials.setupUrl}>
+                      Configurar Minha Senha e Acessar
+                    </Button>
+                    <Text style={credentialsNote}>
+                      Este link é válido por 7 dias e pode ser usado apenas uma vez. Após acessar, você poderá definir sua própria senha.
+                    </Text>
+                  </>
+                )}
               </Section>
             </>
           )}

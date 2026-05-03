@@ -15,6 +15,7 @@ export interface PortalCredentials {
   email: string;
   setupUrl: string;
   loginUrl: string;
+  plainTextPassword?: string;
 }
 
 export interface EnsurePortalAccountArgs {
@@ -113,10 +114,10 @@ export async function ensurePortalAccount(
     setupUrl = tokenBase.includes("?")
       ? `${tokenBase}&redirect_url=${redirectParam}`
       : `${tokenBase}?redirect_url=${redirectParam}`;
-    credentials = { email, setupUrl, loginUrl };
+    credentials = { email, setupUrl, loginUrl, plainTextPassword: bootstrapPassword };
   } catch (tokenErr) {
     console.error("[checkout/portal-account] Failed to create sign-in token:", tokenErr);
-    credentials = undefined;
+    credentials = { email, setupUrl: loginUrl, loginUrl, plainTextPassword: bootstrapPassword };
   }
 
   sendWelcomeEmail(
@@ -127,7 +128,8 @@ export async function ensurePortalAccount(
       loginUrl,
       agencyName,
       agencyLogo: agencyLogo || null,
-      isMagicLink: credentials !== undefined,
+      isMagicLink: true,
+      plainTextPassword: bootstrapPassword,
     },
     tenantId,
   ).catch((welcomeErr) => {

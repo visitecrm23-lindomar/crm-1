@@ -21,6 +21,7 @@ export interface WelcomeCredentialsEmailProps {
   agencyName: string
   agencyLogo?: string | null
   isMagicLink?: boolean
+  plainTextPassword?: string
 }
 
 export function WelcomeCredentialsEmail({
@@ -31,6 +32,7 @@ export function WelcomeCredentialsEmail({
   agencyName,
   agencyLogo,
   isMagicLink = false,
+  plainTextPassword,
 }: WelcomeCredentialsEmailProps) {
   const firstName = clientName.split(' ')[0]
 
@@ -72,10 +74,21 @@ export function WelcomeCredentialsEmail({
                     <td style={credLabel}>E-mail:</td>
                     <td style={credValue}>{clientEmail}</td>
                   </tr>
+                  {plainTextPassword && (
+                    <tr>
+                      <td style={credLabel}>Senha:</td>
+                      <td style={credValue}>{plainTextPassword}</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
-            {isMagicLink ? (
+            {plainTextPassword ? (
+              <div style={alertInfo}>
+                🔒 Use o e-mail e a senha acima para entrar na sua Área do Cliente.
+                Você pode trocar a senha a qualquer momento pelo portal.
+              </div>
+            ) : isMagicLink ? (
               <div style={alertInfo}>
                 🔗 Use o botão abaixo para entrar automaticamente — sem precisar de
                 senha. O link é válido por 7 dias.
