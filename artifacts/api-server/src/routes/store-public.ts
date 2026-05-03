@@ -719,9 +719,7 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     const totalAmount = roundMoney(Math.max(0, subtotal - discountAmount));
     const orderId = generateId();
     const orderNumber = `#${new Date().getFullYear()}-${String(Math.floor(Math.random() * 99999)).padStart(5, "0")}`;
-    // Cryptographically random one-shot token (returned to the client, then
-    // required to attach a gateway paymentIntentId). 32 bytes → 256 bits of
-    // entropy, far above brute-force reach.
+    // One-shot token returned to the client and required by /payment-intent.
     const orderPaymentToken = (await import("node:crypto")).randomBytes(32).toString("base64url");
 
     // Phase 2.5: Find admin user, vitrine stage and trip names for trip-linked reservation(s).
@@ -890,8 +888,6 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
           storeId: store.id,
           tenantId: store.tenantId,
           orderNumber,
-          // 32-byte URL-safe token returned in the response and required to
-          // attach a gateway paymentIntentId via the public endpoint.
           paymentToken: orderPaymentToken,
           customerName: data.customerName,
           customerEmail: data.customerEmail,
@@ -1289,8 +1285,6 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
       ...order,
       orderId: order.id,
       items,
-      // One-shot token the storefront must POST back when attaching the
-      // gateway paymentIntentId. Never log or expose it elsewhere.
       paymentToken: orderPaymentToken,
       // Expose the reservation expiry deadline so the storefront can display a countdown timer.
       reservationExpiresAt: tripLinkedProducts.size > 0 ? reservationExpiresAt.toISOString() : null,
@@ -1318,19 +1312,8 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
   }
 });
 
-/**
- * Attach a payment-gateway reference (Stripe paymentIntentId or MercadoPago
- * payment id) to an existing order. The storefront calls this immediately
- * after creating the gateway intent client-side and BEFORE redirecting the
- * customer to the gateway, so that the webhook handlers can later look the
- * order up by its provider id when payment succeeds/fails.
- *
- * The endpoint is public (storefront-facing) but is gated by:
- *   - matching customerEmail (proves the caller owns the order)
- *   - one-shot semantics: once paymentIntentId is set, it cannot be changed
- *     (prevents an attacker from re-pointing someone else's gateway tx at
- *      this order).
- */
+// Attach a gateway payment id (Stripe paymentIntentId / MP payment id) to
+// an order. Gated by the one-shot paymentToken returned at order creation.
 router.post("/public/store/:slug/orders/:orderNumber/payment-intent", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
@@ -1366,8 +1349,6 @@ router.post("/public/store/:slug/orders/:orderNumber/payment-intent", async (req
 
     if (!order) { next(new NotFoundError("Order not found", "NOT_FOUND")); return; }
 
-    // Constant-time token compare — falls back to false if the order has
-    // no stored token (legacy rows from before migration 0012).
     const stored = order.storedPaymentToken ?? "";
     const a = Buffer.from(paymentToken);
     const b = Buffer.from(stored);

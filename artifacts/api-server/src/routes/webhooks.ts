@@ -334,14 +334,6 @@ router.post("/webhooks/mercadopago/:storeSlug", async (req, res, next: NextFunct
 });
 
 async function handleMpPayment(store: StoreScope, paymentId: string, payment: MpPayment): Promise<void> {
-  // MercadoPago payments carry an `external_reference` we set to the
-  // store's `orderNumber` when the payment is created. The order may not
-  // yet have its `paymentIntentId` attached (the storefront might create
-  // the MP payment server-side with no callback to attach the id back to
-  // the order, or the attach call may simply have raced the webhook), so
-  // resolveOrderForMp first tries paymentIntentId, then external_reference,
-  // and finally writes paymentIntentId back to the order so subsequent
-  // events match on the fast path.
   const externalRef = typeof payment.external_reference === "string"
     ? payment.external_reference.trim()
     : "";
