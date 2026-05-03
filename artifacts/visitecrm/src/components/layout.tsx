@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useUser, useClerk } from "@clerk/react";
 import { useGetMe } from "@workspace/api-client-react";
+import { ROLES } from "@workspace/permissions";
 import { AlertsBell } from "./alerts-bell";
 import {
   LayoutDashboard,
@@ -108,10 +109,12 @@ const VENDOR_NAVIGATION: NavItem[] = [
 ];
 
 const ROLE_LABELS: Record<string, string> = {
-  superadmin: "Super Admin",
-  agencia: "Agência",
-  vendedor: "Vendedor",
-  cliente: "Cliente",
+  [ROLES.SUPER_ADMIN]: "Super Admin",
+  [ROLES.AGENCY_ADMIN]: "Agência",
+  [ROLES.AGENCY_MANAGER]: "Gerente",
+  [ROLES.SALES]: "Vendedor",
+  [ROLES.SUPPORT]: "Suporte",
+  [ROLES.CLIENT]: "Cliente",
 };
 
 function NavLink({
@@ -179,7 +182,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const userRole: string | undefined = me?.role;
   const tenantInitial = tenantName.charAt(0).toUpperCase();
 
-  const navItems = userRole === "vendedor" ? VENDOR_NAVIGATION : AGENCY_NAVIGATION;
+  const navItems = userRole === ROLES.SALES ? VENDOR_NAVIGATION : AGENCY_NAVIGATION;
 
   // Find current nav item (including children)
   let currentSection: NavItem | undefined;
@@ -315,7 +318,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                     </Badge>
                   </div>
                 )}
-                {userRole !== "vendedor" && (
+                {userRole !== ROLES.SALES && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>

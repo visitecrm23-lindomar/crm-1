@@ -5,6 +5,7 @@ import { Bell, AlertTriangle, Info, XCircle, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ROLES } from "@workspace/permissions";
 
 interface Alert {
   id: string;
@@ -51,7 +52,7 @@ const TYPE_CONFIG = {
 export function AlertsBell({ userRole }: { userRole?: string }) {
   const [open, setOpen] = useState(false);
   const [, navigate] = useLocation();
-  const canSeeAlerts = userRole === "agencia" || userRole === "vendedor";
+  const canSeeAlerts = userRole === ROLES.AGENCY_ADMIN || userRole === ROLES.SALES;
 
   const { data } = useQuery<AlertsResponse>({
     queryKey: ["alerts"],
