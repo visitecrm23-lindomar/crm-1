@@ -63,6 +63,7 @@ interface EmailLog {
   status: string;
   errorMessage: string | null;
   reservationId: string | null;
+  isAutoRetry: boolean;
   createdAt: string;
 }
 
@@ -120,6 +121,7 @@ export default function Communication() {
   const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
   const [loadingEmailLogs, setLoadingEmailLogs] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [filterAutoRetry, setFilterAutoRetry] = useState<"all" | "auto" | "manual">("all");
 
   const fetchEmailLogs = useCallback(async () => {
     setLoadingEmailLogs(true);
@@ -781,9 +783,26 @@ export default function Communication() {
 
         <TabsContent value="email-logs" className="mt-4">
           <div className="flex items-center justify-between mb-4">
-            <p className="text-sm text-muted-foreground">
-              Histórico de e-mails transacionais enviados pelo sistema.
-            </p>
+            <div className="flex items-center gap-3">
+              <p className="text-sm text-muted-foreground">
+                Histórico de e-mails transacionais enviados pelo sistema.
+              </p>
+              <div className="flex items-center gap-1">
+                {(["all", "auto", "manual"] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFilterAutoRetry(f)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                      filterAutoRetry === f
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background border-border hover:bg-muted"
+                    }`}
+                  >
+                    {f === "all" ? "Todos" : f === "auto" ? "Auto-reenviados" : "Manuais / Originais"}
+                  </button>
+                ))}
+              </div>
+            </div>
             <Button variant="outline" size="sm" onClick={fetchEmailLogs} disabled={loadingEmailLogs}>
               <RefreshCcw className={`w-4 h-4 mr-2 ${loadingEmailLogs ? "animate-spin" : ""}`} />
               Atualizar
@@ -813,55 +832,71 @@ export default function Communication() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {emailLogs.map((log) => (
-                  <TableRow key={log.id}>
-                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                      {new Date(log.createdAt).toLocaleString("pt-BR")}
-                    </TableCell>
-                    <TableCell className="text-sm">{log.recipient}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs">
-                        {log.reservationId ? "Confirmação" : "Transacional"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm max-w-[200px] truncate">
-                      {log.subject || "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={
-                          log.status === "sent"
-                            ? "bg-green-50 text-green-700 border-green-200"
-                            : log.status === "failed"
-                            ? "bg-red-50 text-red-700 border-red-200"
-                            : log.status === "queued"
-                            ? "bg-yellow-50 text-yellow-700 border-yellow-200"
-                            : "bg-gray-50 text-gray-700 border-gray-200"
-                        }
-                      >
-                        {log.status === "sent" && <Check className="w-3 h-3 mr-1" />}
-                        {log.status === "failed" && <XCircle className="w-3 h-3 mr-1" />}
-                        {log.status === "queued" && <Clock className="w-3 h-3 mr-1" />}
-                        {log.status === "sent" ? "Enviado" : log.status === "failed" ? "Falhou" : log.status === "queued" ? "Na fila" : log.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {log.status === "failed" && (
-                        <Button
-                          size="sm"
+                {emailLogs
+                  .filter((log) =>
+                    filterAutoRetry === "all"
+                      ? true
+                      : filterAutoRetry === "auto"
+                      ? log.isAutoRetry
+                      : !log.isAutoRetry,
+                  )
+                  .map((log) => (
+                    <TableRow key={log.id}>
+                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                        {new Date(log.createdAt).toLocaleString("pt-BR")}
+                      </TableCell>
+                      <TableCell className="text-sm">{log.recipient}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Badge variant="outline" className="text-xs">
+                            {log.reservationId ? "Confirmação" : "Transacional"}
+                          </Badge>
+                          {log.isAutoRetry && (
+                            <Badge className="text-xs bg-purple-50 text-purple-700 border-purple-200" variant="outline">
+                              <RefreshCcw className="w-3 h-3 mr-1" />
+                              Auto-reenviado
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm max-w-[200px] truncate">
+                        {log.subject || "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
                           variant="outline"
-                          onClick={() => handleResend(log.id)}
-                          disabled={resendingId === log.id}
-                          title={log.errorMessage ?? undefined}
+                          className={
+                            log.status === "sent"
+                              ? "bg-green-50 text-green-700 border-green-200"
+                              : log.status === "failed"
+                              ? "bg-red-50 text-red-700 border-red-200"
+                              : log.status === "queued"
+                              ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+                              : "bg-gray-50 text-gray-700 border-gray-200"
+                          }
                         >
-                          <RefreshCcw className={`w-3.5 h-3.5 mr-1 ${resendingId === log.id ? "animate-spin" : ""}`} />
-                          Reenviar
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                          {log.status === "sent" && <Check className="w-3 h-3 mr-1" />}
+                          {log.status === "failed" && <XCircle className="w-3 h-3 mr-1" />}
+                          {log.status === "queued" && <Clock className="w-3 h-3 mr-1" />}
+                          {log.status === "sent" ? "Enviado" : log.status === "failed" ? "Falhou" : log.status === "queued" ? "Na fila" : log.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {log.status === "failed" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleResend(log.id)}
+                            disabled={resendingId === log.id}
+                            title={log.errorMessage ?? undefined}
+                          >
+                            <RefreshCcw className={`w-3.5 h-3.5 mr-1 ${resendingId === log.id ? "animate-spin" : ""}`} />
+                            Reenviar
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
               </TableBody>
             </Table>
           )}

@@ -397,6 +397,7 @@ export async function retryFailedBookingEmails(): Promise<void> {
       recipient: props.clientEmail,
       subject: log.subject,
       status: "queued",
+      isAutoRetry: true,
     });
 
     const result = await sendReservationConfirmationEmail(props);

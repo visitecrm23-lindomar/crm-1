@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean } from "drizzle-orm/pg-core";
 
 export const emailLogsTable = pgTable("email_logs", {
   id: text("id").primaryKey(),
@@ -9,6 +9,7 @@ export const emailLogsTable = pgTable("email_logs", {
   status: text("status").notNull(),
   messageId: text("message_id"),
   errorMessage: text("error_message"),
+  isAutoRetry: boolean("is_auto_retry").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
