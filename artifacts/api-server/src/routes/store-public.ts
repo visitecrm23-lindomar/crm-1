@@ -1279,23 +1279,35 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
           console.error("[store-public] Error sending post-booking email:", err);
         }
 
-        // Step 4: Notify the agency about the new booking (non-blocking).
-        // Runs independently of the customer-facing email flow so a failure
-        // sending the welcome/confirmation email does not silence the
-        // agency notification, and vice-versa.
+        // Step 4: notify the agency for every reservation in this order,
+        // independently of the customer-facing e-mail flow.
         try {
-          const [reservationRow] = await db
+          const reservationRows = await db
             .select({ id: reservationsTable.id })
             .from(reservationsTable)
-            .where(eq(reservationsTable.storeOrderId, ffOrderNumber))
-            .limit(1);
+            .where(
+              and(
+                eq(reservationsTable.storeOrderId, ffOrderNumber),
+                eq(reservationsTable.tenantId, ffTenantId),
+              ),
+            );
 
-          if (reservationRow) {
-            await enqueueNewBookingNotificationEmail(reservationRow.id, ffTenantId);
+          const settled = await Promise.allSettled(
+            reservationRows.map((r) =>
+              enqueueNewBookingNotificationEmail(r.id, ffTenantId),
+            ),
+          );
+          for (const result of settled) {
+            if (result.status === "rejected") {
+              console.error(
+                "[store-public] Failed to enqueue agency new-booking notification:",
+                result.reason,
+              );
+            }
           }
         } catch (notifyErr) {
           console.error(
-            "[store-public] Failed to enqueue agency new-booking notification:",
+            "[store-public] Failed to load reservations for agency notification:",
             notifyErr,
           );
         }
