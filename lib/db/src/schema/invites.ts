@@ -1,11 +1,12 @@
 import { pgTable, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import type { Role } from "@workspace/permissions";
 import { tenantsTable } from "./tenants";
 
 export const invitesTable = pgTable("invites", {
   id: text("id").primaryKey(),
   tenantId: text("tenant_id").notNull().references(() => tenantsTable.id, { onDelete: "cascade" }),
   email: text("email").notNull(),
-  role: text("role").notNull().default("vendedor"),
+  role: text("role").$type<Role>().notNull().default("vendedor"),
   invitedBy: text("invited_by"),
   token: text("token").notNull().unique(),
   accepted: boolean("accepted").notNull().default(false),

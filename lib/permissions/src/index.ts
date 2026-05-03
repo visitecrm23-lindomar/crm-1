@@ -56,6 +56,7 @@ export const TRIP_STATUS = {
   DRAFT: "draft",
   PUBLISHED: "published",
   ACTIVE: "active",
+  CONFIRMED: "confirmed",
   CANCELLED: "cancelled",
   COMPLETED: "completed",
 } as const;

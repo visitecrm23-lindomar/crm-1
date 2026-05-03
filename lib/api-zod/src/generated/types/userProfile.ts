@@ -5,6 +5,7 @@
  * VisiteCRM API - SaaS CRM for tourism agencies
  * OpenAPI spec version: 0.1.0
  */
+import type { Role } from "./role";
 import type { UserProfileTenant } from "./userProfileTenant";
 
 export interface UserProfile {
@@ -12,7 +13,7 @@ export interface UserProfile {
   clerkId: string;
   name: string;
   email: string;
-  role: string;
+  role: Role;
   /** @nullable */
   avatarUrl?: string | null;
   isActive: boolean;

@@ -4568,7 +4568,10 @@ components:
       enum: [open, won, lost]
     TripStatus:
       type: string
-      enum: [draft, published, active, cancelled, completed]
+      enum: [draft, published, active, confirmed, cancelled, completed]
+    Role:
+      type: string
+      enum: [superadmin, agencia, gerente, vendedor, suporte, cliente]
     ExpenseStatus:
       type: string
       enum: [pending, paid, overdue, cancelled]
@@ -7365,7 +7368,7 @@ components:
         email:
           type: string
         role:
-          type: string
+          $ref: "#/components/schemas/Role"
         avatarUrl:
           type: ["string", "null"]
         isActive:
@@ -7432,7 +7435,7 @@ components:
         email:
           type: string
         role:
-          type: string
+          $ref: "#/components/schemas/Role"
       required: [name, email, role]
 
     UpdateUserBody:
@@ -7441,7 +7444,9 @@ components:
         name:
           type: ["string", "null"]
         role:
-          type: ["string", "null"]
+          oneOf:
+            - $ref: "#/components/schemas/Role"
+            - type: "null"
         isActive:
           type: ["boolean", "null"]
         commissionType:

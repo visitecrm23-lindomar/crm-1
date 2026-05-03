@@ -1380,7 +1380,7 @@ router.post("/trips/:id/manifest/send", async (req, res, next: NextFunction): Pr
           recipientEmail: to,
           htmlContent: html,
           pdfBase64: pdfBuffer.toString("base64"),
-          userId: me.userId,
+          userId: me.id,
           ipAddress: req.ip ?? null,
           userAgent: req.headers["user-agent"] ?? null,
         });
@@ -1406,7 +1406,7 @@ router.post("/trips/:id/manifest/send", async (req, res, next: NextFunction): Pr
       await db.insert(auditLogsTable).values({
         id: generateId(),
         tenantId: me.tenantId,
-        userId: me.userId,
+        userId: me.id,
         action: "manifest_sent",
         entityType: "trip",
         entityId: trip.id,
@@ -1441,7 +1441,7 @@ router.post("/trips/:id/manifest/send", async (req, res, next: NextFunction): Pr
       await db.insert(auditLogsTable).values({
         id: generateId(),
         tenantId: me.tenantId,
-        userId: me.userId,
+        userId: me.id,
         action: "manifest_sent",
         entityType: "trip",
         entityId: trip.id,

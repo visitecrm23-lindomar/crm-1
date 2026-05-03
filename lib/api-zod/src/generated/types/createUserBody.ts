@@ -5,9 +5,10 @@
  * VisiteCRM API - SaaS CRM for tourism agencies
  * OpenAPI spec version: 0.1.0
  */
+import type { Role } from "./role";
 
 export interface CreateUserBody {
   name: string;
   email: string;
-  role: string;
+  role: Role;
 }

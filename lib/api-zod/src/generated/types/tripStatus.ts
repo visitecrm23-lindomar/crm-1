@@ -12,6 +12,7 @@ export const TripStatus = {
   draft: "draft",
   published: "published",
   active: "active",
+  confirmed: "confirmed",
   cancelled: "cancelled",
   completed: "completed",
 } as const;

@@ -208,6 +208,7 @@ export * from "./reservationListResponse";
 export * from "./reservationStats";
 export * from "./reservationStatus";
 export * from "./retryCommissionSync200";
+export * from "./role";
 export * from "./salesGoal";
 export * from "./seat";
 export * from "./seatMap";

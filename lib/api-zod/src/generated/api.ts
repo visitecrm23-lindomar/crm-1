@@ -454,7 +454,14 @@ export const ListTenantUsersResponseItem = zod.object({
   clerkId: zod.string(),
   name: zod.string(),
   email: zod.string(),
-  role: zod.string(),
+  role: zod.enum([
+    "superadmin",
+    "agencia",
+    "gerente",
+    "vendedor",
+    "suporte",
+    "cliente",
+  ]),
   avatarUrl: zod.string().nullish(),
   isActive: zod.boolean(),
   tenantId: zod.string().nullish(),
@@ -1564,7 +1571,14 @@ export const CreateTripBody = zod.object({
   tourGuideCpf: zod.string().nullish(),
   tourGuideRegistration: zod.string().nullish(),
   status: zod
-    .enum(["draft", "published", "active", "cancelled", "completed"])
+    .enum([
+      "draft",
+      "published",
+      "active",
+      "confirmed",
+      "cancelled",
+      "completed",
+    ])
     .optional(),
   gallery: zod.array(zod.string()).optional(),
   boardingPoints: zod.array(zod.unknown()).optional(),
@@ -1691,7 +1705,14 @@ export const UpdateTripBody = zod.object({
   description: zod.string().nullish(),
   status: zod
     .union([
-      zod.enum(["draft", "published", "active", "cancelled", "completed"]),
+      zod.enum([
+        "draft",
+        "published",
+        "active",
+        "confirmed",
+        "cancelled",
+        "completed",
+      ]),
       zod.null(),
     ])
     .optional(),
@@ -3849,7 +3870,14 @@ export const GetMeResponse = zod.object({
   clerkId: zod.string(),
   name: zod.string(),
   email: zod.string(),
-  role: zod.string(),
+  role: zod.enum([
+    "superadmin",
+    "agencia",
+    "gerente",
+    "vendedor",
+    "suporte",
+    "cliente",
+  ]),
   avatarUrl: zod.string().nullish(),
   isActive: zod.boolean(),
   tenantId: zod.string().nullish(),
@@ -3890,7 +3918,14 @@ export const SyncMeResponse = zod.object({
   clerkId: zod.string(),
   name: zod.string(),
   email: zod.string(),
-  role: zod.string(),
+  role: zod.enum([
+    "superadmin",
+    "agencia",
+    "gerente",
+    "vendedor",
+    "suporte",
+    "cliente",
+  ]),
   avatarUrl: zod.string().nullish(),
   isActive: zod.boolean(),
   tenantId: zod.string().nullish(),
@@ -3924,7 +3959,14 @@ export const ListUsersResponseItem = zod.object({
   clerkId: zod.string(),
   name: zod.string(),
   email: zod.string(),
-  role: zod.string(),
+  role: zod.enum([
+    "superadmin",
+    "agencia",
+    "gerente",
+    "vendedor",
+    "suporte",
+    "cliente",
+  ]),
   avatarUrl: zod.string().nullish(),
   isActive: zod.boolean(),
   tenantId: zod.string().nullish(),
@@ -3957,7 +3999,14 @@ export const ListUsersResponse = zod.array(ListUsersResponseItem);
 export const CreateUserBody = zod.object({
   name: zod.string(),
   email: zod.string(),
-  role: zod.string(),
+  role: zod.enum([
+    "superadmin",
+    "agencia",
+    "gerente",
+    "vendedor",
+    "suporte",
+    "cliente",
+  ]),
 });
 
 /**
@@ -3969,7 +4018,19 @@ export const UpdateUserParams = zod.object({
 
 export const UpdateUserBody = zod.object({
   name: zod.string().nullish(),
-  role: zod.string().nullish(),
+  role: zod
+    .union([
+      zod.enum([
+        "superadmin",
+        "agencia",
+        "gerente",
+        "vendedor",
+        "suporte",
+        "cliente",
+      ]),
+      zod.null(),
+    ])
+    .optional(),
   isActive: zod.boolean().nullish(),
   commissionType: zod.string().nullish(),
   commissionRate: zod.number().nullish(),
@@ -3982,7 +4043,14 @@ export const UpdateUserResponse = zod.object({
   clerkId: zod.string(),
   name: zod.string(),
   email: zod.string(),
-  role: zod.string(),
+  role: zod.enum([
+    "superadmin",
+    "agencia",
+    "gerente",
+    "vendedor",
+    "suporte",
+    "cliente",
+  ]),
   avatarUrl: zod.string().nullish(),
   isActive: zod.boolean(),
   tenantId: zod.string().nullish(),

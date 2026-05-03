@@ -17,7 +17,7 @@ export type AuthedUser = {
   tenantId: string;
   name: string;
   email: string;
-  role: string;
+  role: Role;
 };
 
 export async function requireAuth(req: Request, res: Response): Promise<AuthedUser | null> {

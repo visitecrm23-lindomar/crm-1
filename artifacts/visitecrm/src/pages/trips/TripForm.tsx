@@ -79,7 +79,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
     }
     const inclArr = form.inclusions.split("\n").map(s => s.trim()).filter(Boolean);
     const exclArr = form.exclusions.split("\n").map(s => s.trim()).filter(Boolean);
-    const statusToSave: TripStatus = (publish ? TRIP_STATUS.ACTIVE : (form.status as TripStatus));
+    const statusToSave: TripStatus = publish ? TRIP_STATUS.ACTIVE : form.status;
     const itineraryToSave = form.itinerary.filter(d => d.title || d.description);
     const boardingPointsToSave = form.boardingPoints.filter(bp => bp.name);
     try {

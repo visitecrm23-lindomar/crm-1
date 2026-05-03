@@ -1,4 +1,5 @@
 import type { Trip } from "@workspace/api-client-react";
+import type { TripStatus } from "@workspace/permissions";
 
 export interface BoardingPoint { id: string; name: string; time?: string; address?: string; }
 export interface ItineraryDay { day: number; title: string; description: string; }
@@ -21,7 +22,7 @@ export interface TripFormData {
   driver1Cpf: string; driver1Cnh: string; driver1CnhCategory: string; driver1CnhExpiry: string;
   driver2Name: string; driver2Cpf: string; driver2Cnh: string; driver2CnhCategory: string; driver2CnhExpiry: string;
   tourGuideCpf: string; tourGuideRegistration: string;
-  status: string;
+  status: TripStatus;
   boardingPoints: BoardingPoint[];
   itinerary: ItineraryDay[];
   fixedCostItems: FixedCostItem[];
@@ -103,7 +104,7 @@ export const toTripFormData = (trip: Trip): TripFormData => ({
   driver2CnhExpiry: trip.driver2CnhExpiry ?? "",
   tourGuideCpf: trip.tourGuideCpf ?? "",
   tourGuideRegistration: trip.tourGuideRegistration ?? "",
-  status: trip.status,
+  status: trip.status as TripStatus,
   boardingPoints: trip.boardingPoints?.length ? (trip.boardingPoints as BoardingPoint[]) : [newBP()],
   itinerary: trip.itinerary?.length ? (trip.itinerary as unknown as ItineraryDay[]) : [newDay(1)],
   fixedCostItems: Array.isArray(trip.fixedCosts) ? (trip.fixedCosts as unknown as FixedCostItem[]) : [],

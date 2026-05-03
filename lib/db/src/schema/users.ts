@@ -2,6 +2,7 @@ import { pgTable, text, timestamp, boolean, numeric } from "drizzle-orm/pg-core"
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import type { Role } from "@workspace/permissions";
 import { tenantsTable } from "./tenants";
 
 export const usersTable = pgTable("users", {
@@ -12,7 +13,7 @@ export const usersTable = pgTable("users", {
   email: text("email").notNull(),
   cpf: text("cpf"),
   avatarUrl: text("avatar_url"),
-  role: text("role").notNull().default("agencia"),
+  role: text("role").$type<Role>().notNull().default("agencia"),
   isActive: boolean("is_active").notNull().default(true),
   referralCode: text("referral_code").notNull().unique(),
   referralBalance: numeric("referral_balance", { precision: 10, scale: 2 }).notNull().default("0"),
