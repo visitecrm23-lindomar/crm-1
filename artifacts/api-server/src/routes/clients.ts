@@ -4,6 +4,7 @@ import { db } from "@workspace/db";
 import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable } from "@workspace/db";
 import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
 import { generateId, generateReferralCode } from "../lib/id";
+import { generateAndAssignReferralCode } from "../lib/referral-code";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { validateCPF, cleanCPF } from "../lib/cpf";
 import { checkPlanLimit } from "../lib/planLimits";
@@ -534,26 +535,14 @@ router.post("/clients/:clientId/referral/generate", async (req, res, next: NextF
     const baseCode = generateReferralCode(client.name ?? "REF", me.tenantId);
     const namePart = baseCode.replace(/\d+$/, "");
     const year = new Date().getFullYear();
-    let code = baseCode;
 
-    // Unlimited loop until a unique code is found within this tenant
-    let attempt = 0;
-    while (true) {
-      const candidate = attempt === 0 ? code : `${namePart}${year}${attempt}`;
-      const [existing] = await db.select({ id: clientsTable.id })
-        .from(clientsTable)
-        .where(and(
-          eq(clientsTable.tenantId, me.tenantId),
-          eq(clientsTable.referralCode, candidate),
-        )).limit(1);
-      if (!existing) { code = candidate; break; }
-      attempt++;
-    }
-
-    const generatedAt = new Date();
-    await db.update(clientsTable)
-      .set({ referralCode: code, referralCodeGeneratedAt: generatedAt })
-      .where(eq(clientsTable.id, client.id));
+    const code = await generateAndAssignReferralCode(
+      client.id,
+      me.tenantId,
+      baseCode,
+      namePart,
+      year,
+    );
 
     res.json({ code });
   } catch (err) {
