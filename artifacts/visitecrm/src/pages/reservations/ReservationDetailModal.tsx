@@ -7,9 +7,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, DollarSign, Tag, Mail, RefreshCcw, Check, XCircle, Clock } from "lucide-react";
+import { CheckCircle, DollarSign, Tag, Mail, RefreshCcw, Check, XCircle, Clock, Send } from "lucide-react";
 import { STATUS_COLORS, STATUS_LABELS, METHOD_LABELS, fmt } from "./constants";
 import { ReservationPassengersTab } from "./ReservationPassengersTab";
+import { Button } from "@/components/ui/button";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -32,6 +33,7 @@ export function ReservationDetailModal({ reservationId, open, onClose }: {
   const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
   const [loadingEmailLogs, setLoadingEmailLogs] = useState(false);
   const [emailLogsError, setEmailLogsError] = useState<string | null>(null);
+  const [resendingIds, setResendingIds] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState("details");
 
   const { data, isLoading } = useGetReservation(reservationId, {
@@ -64,6 +66,23 @@ export function ReservationDetailModal({ reservationId, open, onClose }: {
       setLoadingEmailLogs(false);
     }
   }, [reservationId]);
+
+  const resendEmail = useCallback(async (emailLogId: string) => {
+    setResendingIds(prev => new Set(prev).add(emailLogId));
+    try {
+      await fetch(`${BASE}/api/email-logs/${encodeURIComponent(emailLogId)}/resend`, {
+        method: "POST",
+        credentials: "include",
+      });
+      await fetchEmailLogs();
+    } finally {
+      setResendingIds(prev => {
+        const next = new Set(prev);
+        next.delete(emailLogId);
+        return next;
+      });
+    }
+  }, [fetchEmailLogs]);
 
   useEffect(() => {
     if (open && activeTab === "emails") {
@@ -279,6 +298,22 @@ export function ReservationDetailModal({ reservationId, open, onClose }: {
                               <RefreshCcw className="w-3 h-3 mr-1" />
                               Auto-reenviado
                             </Badge>
+                          )}
+                          {log.status === "failed" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 px-2 text-xs"
+                              disabled={resendingIds.has(log.id)}
+                              onClick={() => resendEmail(log.id)}
+                            >
+                              {resendingIds.has(log.id) ? (
+                                <RefreshCcw className="w-3 h-3 mr-1 animate-spin" />
+                              ) : (
+                                <Send className="w-3 h-3 mr-1" />
+                              )}
+                              {resendingIds.has(log.id) ? "Enviando..." : "Reenviar"}
+                            </Button>
                           )}
                         </div>
                       </div>
