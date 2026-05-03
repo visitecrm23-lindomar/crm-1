@@ -6,7 +6,7 @@ import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { CreatePaymentBody, UpdatePaymentBody, CreateExpenseBody, UpdateExpenseBody } from "@workspace/api-zod";
 import { writeClientActivity } from "../lib/activities";
-import { loyaltyAwardPoints } from "../lib/loyalty-helpers";
+import { loyaltyAwardPoints, loyaltyAwardPointsForReservation } from "../lib/loyalty-helpers";
 import { roundMoney } from "../lib/pricing";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { ADMIN_ROLES, MANAGEMENT_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
@@ -426,12 +426,14 @@ router.post("/payments", async (req, res, next: NextFunction): Promise<void> => 
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message))); return; }
 
     let reservationClientId: string | null = null;
+    let reservationTotalValue: string | null = null;
     if (parsed.data.reservationId) {
       const [reservation] = await db.select().from(reservationsTable)
         .where(and(eq(reservationsTable.id, parsed.data.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
         .limit(1);
       if (!reservation) { next(new NotFoundError("Reservation not found or not in tenant", "RESERVATION_NOT_FOUND")); return; }
       reservationClientId = reservation.clientId;
+      reservationTotalValue = reservation.totalValue;
     }
     if (parsed.data.clientId) {
       const [client] = await db.select().from(clientsTable)
@@ -481,10 +483,27 @@ router.post("/payments", async (req, res, next: NextFunction): Promise<void> => 
       await syncReservationPaymentStatus(parsed.data.reservationId, me.tenantId);
       await syncReservationCommission(parsed.data.reservationId, me.tenantId);
     }
+    const effectiveClientId = parsed.data.clientId ?? reservationClientId;
+    if (explicitStatus === PAYMENT_STATUS.PAID && parsed.data.type === PAYMENT_TYPE.RECEIVABLE && effectiveClientId) {
+      if (parsed.data.reservationId && reservationTotalValue) {
+        loyaltyAwardPointsForReservation({
+          clientId: effectiveClientId,
+          reservationId: parsed.data.reservationId,
+          amount: reservationTotalValue,
+          tenantId: me.tenantId,
+        }).catch((err) => req.log.error({ err }, "Error awarding loyalty points on payment creation"));
+      } else {
+        loyaltyAwardPoints({
+          clientId: effectiveClientId,
+          paymentId: id,
+          amount: parsed.data.amount / installments,
+          tenantId: me.tenantId,
+        }).catch((err) => req.log.error({ err }, "Error awarding loyalty points on payment creation"));
+      }
+    }
     res.status(201).json(formatPayment(payment));
     CalendarSyncService.syncPayment(id)
       .catch((err) => req.log.warn({ err, context: "payment.create", paymentId: id, reservationId: parsed.data.reservationId }, "Calendar sync falhou — continuando"));
-    const effectiveClientId = parsed.data.clientId ?? reservationClientId;
     if (effectiveClientId && parsed.data.reservationId && explicitStatus === PAYMENT_STATUS.PAID) {
       const amountFormatted = Number(parsed.data.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
       writeClientActivity(effectiveClientId, "payment", `Pagamento de ${amountFormatted} recebido`, me.id, { amount: parsed.data.amount, reservationId: parsed.data.reservationId })
@@ -558,13 +577,28 @@ router.patch("/payments/:id", async (req, res, next: NextFunction): Promise<void
       await syncReservationPaymentStatus(payment.reservationId, me.tenantId);
       await syncReservationCommission(payment.reservationId, me.tenantId);
     }
-    if (payment.status === PAYMENT_STATUS.PAID && payment.type === PAYMENT_TYPE.RECEIVABLE && payment.clientId) {
-      await loyaltyAwardPoints({
-        clientId: payment.clientId,
-        paymentId: payment.id,
-        amount: payment.amount,
-        tenantId: me.tenantId,
-      });
+    if (payment.status === PAYMENT_STATUS.PAID && payment.type === PAYMENT_TYPE.RECEIVABLE) {
+      if (payment.reservationId) {
+        const [res] = await db.select({ clientId: reservationsTable.clientId, totalValue: reservationsTable.totalValue })
+          .from(reservationsTable)
+          .where(and(eq(reservationsTable.id, payment.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
+          .limit(1);
+        if (res) {
+          await loyaltyAwardPointsForReservation({
+            clientId: res.clientId,
+            reservationId: payment.reservationId,
+            amount: res.totalValue,
+            tenantId: me.tenantId,
+          });
+        }
+      } else if (payment.clientId) {
+        await loyaltyAwardPoints({
+          clientId: payment.clientId,
+          paymentId: payment.id,
+          amount: payment.amount,
+          tenantId: me.tenantId,
+        });
+      }
     }
     res.json(formatPayment(payment));
     CalendarSyncService.syncPayment(req.params.id)
