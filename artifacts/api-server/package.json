@@ -11,7 +11,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@clerk/express": "^2.0.8",
+    "@clerk/express": "^2.1.12",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "@types/node-cron": "^3.0.11",
     "@types/pdfkit": "^0.17.6",
