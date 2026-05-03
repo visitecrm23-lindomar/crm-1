@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { clientPortalApi, type ClientPortalProfile } from "@/lib/clientPortalApi";
+import { clientPortalApi, type ClientPortalProfile, type ClientLoyalty } from "@/lib/clientPortalApi";
 import { useGetMe } from "@workspace/api-client-react";
 import { RESERVATION_STATUS } from "@workspace/permissions";
 import { useSignIn } from "@clerk/react";
@@ -31,6 +31,14 @@ import {
   ShieldCheck,
   Mail,
   KeyRound,
+  LayoutDashboard,
+  Star,
+  DollarSign,
+  Plane,
+  Users,
+  Coins,
+  ArrowRight,
+  AlertCircle,
 } from "lucide-react";
 import { formatCurrency as fmtCurrencyLib, formatDateShort } from "@/lib/utils";
 
@@ -60,7 +68,19 @@ function StatusIcon({ status }: { status: string }) {
 const fmtDate = (dateStr: string | null) => formatDateShort(dateStr) ?? "A confirmar";
 const fmtCurrency = fmtCurrencyLib;
 
-function ReservationCard({ r }: { r: ClientPortalProfile["reservations"][number] }) {
+function daysUntil(dateStr: string | null): number | null {
+  if (!dateStr) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr + "T00:00:00");
+  const diff = Math.round((target.getTime() - today.getTime()) / 86400000);
+  return diff;
+}
+
+function ReservationCard({ r, compact = false }: { r: ClientPortalProfile["reservations"][number]; compact?: boolean }) {
+  const days = daysUntil(r.tripDepartureDate);
+  const isImminent = days !== null && days >= 0 && days <= 30;
+
   return (
     <Card className="overflow-hidden">
       <CardContent className="p-0">
@@ -77,27 +97,54 @@ function ReservationCard({ r }: { r: ClientPortalProfile["reservations"][number]
                   {r.tripDestination}
                 </div>
               </div>
-              <StatusBadge status={r.status} />
+              <div className="flex items-center gap-2 flex-wrap">
+                {isImminent && days! > 0 && (
+                  <Badge variant="outline" className="text-blue-600 border-blue-300 bg-blue-50 text-xs">
+                    {days} dia{days !== 1 ? "s" : ""}
+                  </Badge>
+                )}
+                {days === 0 && (
+                  <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50 text-xs">
+                    Hoje!
+                  </Badge>
+                )}
+                <StatusBadge status={r.status} />
+              </div>
             </div>
 
-            <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-sm">
-              <div>
-                <p className="text-muted-foreground text-xs">Partida</p>
-                <p className="font-medium">{fmtDate(r.tripDepartureDate)}</p>
-              </div>
-              {r.tripReturnDate && (
+            {!compact && (
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-sm">
                 <div>
-                  <p className="text-muted-foreground text-xs">Retorno</p>
-                  <p className="font-medium">{fmtDate(r.tripReturnDate)}</p>
+                  <p className="text-muted-foreground text-xs">Partida</p>
+                  <p className="font-medium">{fmtDate(r.tripDepartureDate)}</p>
                 </div>
-              )}
-              <div>
-                <p className="text-muted-foreground text-xs">Total</p>
-                <p className="font-medium">{fmtCurrency(r.totalValue)}</p>
+                {r.tripReturnDate && (
+                  <div>
+                    <p className="text-muted-foreground text-xs">Retorno</p>
+                    <p className="font-medium">{fmtDate(r.tripReturnDate)}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-muted-foreground text-xs">Total</p>
+                  <p className="font-medium">{fmtCurrency(r.totalValue)}</p>
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="mt-3 flex flex-wrap items-center gap-3">
+            {compact && (
+              <div className="mt-2 flex gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground text-xs">Partida</p>
+                  <p className="font-medium">{fmtDate(r.tripDepartureDate)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Total</p>
+                  <p className="font-medium">{fmtCurrency(r.totalValue)}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               {r.reservationNumber && (
                 <div className="flex items-center gap-1.5 text-xs bg-muted rounded px-2 py-1">
                   <CalendarCheck className="w-3 h-3 text-muted-foreground" />
@@ -108,11 +155,188 @@ function ReservationCard({ r }: { r: ClientPortalProfile["reservations"][number]
                 <QrCode className="w-3 h-3 text-muted-foreground" />
                 <span className="font-mono">{r.voucherCode}</span>
               </div>
+              {r.seatsCount > 0 && (
+                <div className="flex items-center gap-1.5 text-xs bg-muted rounded px-2 py-1">
+                  <Users className="w-3 h-3 text-muted-foreground" />
+                  <span>{r.seatsCount} passageiro{r.seatsCount !== 1 ? "s" : ""}</span>
+                </div>
+              )}
+              {r.balance > 0 && (
+                <div className="flex items-center gap-1.5 text-xs bg-orange-50 border border-orange-200 text-orange-700 rounded px-2 py-1">
+                  <AlertCircle className="w-3 h-3" />
+                  <span>Saldo pendente: {fmtCurrency(r.balance)}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function InicioTab({
+  profile,
+  primaryColor,
+  onTabChange,
+}: {
+  profile: ClientPortalProfile;
+  primaryColor: string;
+  onTabChange: (tab: string) => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const displayName = profile.client?.name ?? profile.user?.name ?? "Viajante";
+  const firstName = displayName.split(" ")[0];
+
+  const upcoming = profile.reservations.filter(
+    (r) =>
+      r.status !== RESERVATION_STATUS.COMPLETED &&
+      r.status !== RESERVATION_STATUS.CANCELLED &&
+      (!r.tripDepartureDate || r.tripDepartureDate >= today),
+  );
+
+  const nextTrip = upcoming[0] ?? null;
+  const days = nextTrip ? daysUntil(nextTrip.tripDepartureDate) : null;
+
+  const totalReferrals = profile.referral.totalReferrals;
+  const loyaltyPoints = profile.loyalty?.availablePoints ?? null;
+
+  const kpis = [
+    {
+      icon: <Plane className="w-5 h-5" />,
+      label: "Próxima Viagem",
+      value: nextTrip
+        ? fmtDate(nextTrip.tripDepartureDate)
+        : "—",
+      sub: nextTrip
+        ? nextTrip.tripName
+        : "Nenhuma viagem agendada",
+      color: "text-blue-600",
+      bg: "bg-blue-50",
+      onClick: () => onTabChange("reservas"),
+    },
+    {
+      icon: <DollarSign className="w-5 h-5" />,
+      label: "Total Gasto",
+      value: fmtCurrency(profile.stats?.totalSpent ?? 0),
+      sub: `em ${profile.reservations.filter(r => r.status === RESERVATION_STATUS.CONFIRMED || r.status === RESERVATION_STATUS.COMPLETED).length} reserva(s)`,
+      color: "text-green-600",
+      bg: "bg-green-50",
+      onClick: () => onTabChange("reservas"),
+    },
+    {
+      icon: <Coins className="w-5 h-5" />,
+      label: "Pontos de Fidelidade",
+      value: loyaltyPoints !== null ? loyaltyPoints.toLocaleString("pt-BR") : "—",
+      sub: loyaltyPoints !== null ? "pontos disponíveis" : "Sem programa ativo",
+      color: "text-amber-600",
+      bg: "bg-amber-50",
+      onClick: () => loyaltyPoints !== null && onTabChange("fidelidade"),
+    },
+    {
+      icon: <Share2 className="w-5 h-5" />,
+      label: "Indicações",
+      value: totalReferrals.toString(),
+      sub: `${profile.referral.completedReferrals} confirmada(s)`,
+      color: "text-purple-600",
+      bg: "bg-purple-50",
+      onClick: () => onTabChange("indicacoes"),
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div
+        className="rounded-2xl p-6 text-white"
+        style={{ background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}cc)` }}
+      >
+        <p className="text-white/80 text-sm mb-1">Bem-vindo(a) de volta,</p>
+        <h2 className="text-2xl font-bold">{firstName}!</h2>
+        {nextTrip && days !== null && days >= 0 && (
+          <p className="text-white/90 text-sm mt-2">
+            {days === 0
+              ? "Sua próxima viagem é hoje!"
+              : days === 1
+              ? "Sua próxima viagem é amanhã!"
+              : `Sua próxima viagem está chegando em ${days} dias.`}
+          </p>
+        )}
+        {!nextTrip && (
+          <p className="text-white/80 text-sm mt-2">
+            {profile.tenant?.slug
+              ? "Explore nossos pacotes e planeje sua próxima aventura."
+              : "Nenhuma viagem agendada no momento."}
+          </p>
+        )}
+        {!nextTrip && profile.tenant?.slug && (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mt-3"
+            onClick={() => (window.location.href = `/loja/${profile.tenant!.slug}/produtos`)}
+          >
+            Ver Pacotes
+            <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+          </Button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {kpis.map((k) => (
+          <Card
+            key={k.label}
+            className="cursor-pointer hover:shadow-md transition-shadow"
+            onClick={k.onClick}
+          >
+            <CardContent className="p-4">
+              <div className={`w-9 h-9 rounded-lg ${k.bg} ${k.color} flex items-center justify-center mb-3`}>
+                {k.icon}
+              </div>
+              <p className="text-xs text-muted-foreground mb-0.5">{k.label}</p>
+              <p className="text-xl font-bold leading-tight">{k.value}</p>
+              <p className="text-xs text-muted-foreground mt-0.5 truncate">{k.sub}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {nextTrip && (
+        <div>
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+            Próxima Viagem
+          </h3>
+          <ReservationCard r={nextTrip} compact={false} />
+        </div>
+      )}
+
+      {upcoming.length > 1 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Outras viagens agendadas
+            </h3>
+            <Button variant="ghost" size="sm" className="text-xs gap-1" onClick={() => onTabChange("reservas")}>
+              Ver todas
+              <ArrowRight className="w-3 h-3" />
+            </Button>
+          </div>
+          <div className="space-y-3">
+            {upcoming.slice(1, 3).map((r) => (
+              <ReservationCard key={r.id} r={r} compact />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {profile.reservations.length === 0 && (
+        <div className="text-center py-8">
+          <CalendarCheck className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
+          <p className="text-muted-foreground text-sm">
+            Suas reservas aparecerão aqui após a compra de um pacote.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -579,6 +803,163 @@ function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
   );
 }
 
+const TIER_CONFIG: Record<string, { label: string; color: string; bg: string; min: number; max: number }> = {
+  bronze: { label: "Bronze", color: "text-amber-700", bg: "bg-amber-100", min: 0, max: 500 },
+  prata:  { label: "Prata",  color: "text-slate-500", bg: "bg-slate-100", min: 500, max: 2000 },
+  ouro:   { label: "Ouro",   color: "text-yellow-500", bg: "bg-yellow-50", min: 2000, max: 2000 },
+  silver: { label: "Prata",  color: "text-slate-500", bg: "bg-slate-100", min: 500, max: 2000 },
+  gold:   { label: "Ouro",   color: "text-yellow-500", bg: "bg-yellow-50", min: 2000, max: 2000 },
+};
+
+function tierLabel(tier: string): string {
+  return TIER_CONFIG[tier.toLowerCase()]?.label ?? tier;
+}
+
+function TierBadge({ tier }: { tier: string }) {
+  const cfg = TIER_CONFIG[tier.toLowerCase()];
+  if (!cfg) return <Badge variant="outline">{tier}</Badge>;
+  return (
+    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-sm font-semibold ${cfg.bg} ${cfg.color}`}>
+      <Star className="w-3.5 h-3.5" />
+      {cfg.label}
+    </span>
+  );
+}
+
+const TRANSACTION_TYPE_MAP: Record<string, { label: string; sign: "+" | "-"; color: string }> = {
+  earn:    { label: "Ganho",   sign: "+", color: "text-green-600" },
+  redeem:  { label: "Resgate", sign: "-", color: "text-red-600" },
+  refund:  { label: "Estorno", sign: "+", color: "text-blue-600" },
+  expire:  { label: "Expirado",sign: "-", color: "text-orange-500" },
+  adjust:  { label: "Ajuste",  sign: "+", color: "text-slate-500" },
+};
+
+function FidelidadeTab({ loyalty, primaryColor }: { loyalty: ClientLoyalty | null; primaryColor: string }) {
+  if (!loyalty) {
+    return (
+      <div className="text-center py-16">
+        <Coins className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
+        <h3 className="font-semibold text-lg mb-1">Programa de fidelidade não ativo</h3>
+        <p className="text-muted-foreground text-sm max-w-sm mx-auto">
+          Esta agência ainda não possui um programa de fidelidade. Fique atento às novidades!
+        </p>
+      </div>
+    );
+  }
+
+  const tier = loyalty.tier.toLowerCase();
+  const tierCfg = TIER_CONFIG[tier] ?? TIER_CONFIG["bronze"];
+  const nextTierName = tier === "bronze" ? "Prata" : tier === "silver" || tier === "prata" ? "Ouro" : null;
+  const progress = nextTierName
+    ? Math.min(
+        ((loyalty.totalPoints - tierCfg.min) / (tierCfg.max - tierCfg.min)) * 100,
+        100,
+      )
+    : 100;
+  const pointsToNext = nextTierName ? Math.max(tierCfg.max - loyalty.totalPoints, 0) : 0;
+
+  const equivalentValue = (loyalty.availablePoints * loyalty.realPerPoint).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+
+  return (
+    <div className="space-y-4">
+      <div
+        className="rounded-2xl p-6 text-white"
+        style={{ background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}cc)` }}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-white/80 text-sm mb-1">Pontos disponíveis</p>
+            <p className="text-4xl font-extrabold leading-none">
+              {loyalty.availablePoints.toLocaleString("pt-BR")}
+            </p>
+            <p className="text-white/70 text-sm mt-1">≈ {equivalentValue} em valor</p>
+          </div>
+          <TierBadge tier={loyalty.tier} />
+        </div>
+
+        <div className="mt-4">
+          <div className="flex justify-between text-white/80 text-xs mb-1.5">
+            <span>{tierLabel(loyalty.tier)}</span>
+            {nextTierName && <span>{nextTierName}</span>}
+          </div>
+          <div className="h-2 rounded-full bg-white/20 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-white/80 transition-all duration-700"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          {nextTierName && pointsToNext > 0 && (
+            <p className="text-white/70 text-xs mt-1.5">
+              Faltam {pointsToNext.toLocaleString("pt-BR")} pontos para {nextTierName}
+            </p>
+          )}
+          {!nextTierName && (
+            <p className="text-white/70 text-xs mt-1.5">Você está no nível máximo!</p>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Card>
+          <CardContent className="pt-4 pb-3 text-center">
+            <p className="text-xs text-muted-foreground mb-1">Pontos acumulados</p>
+            <p className="text-xl font-bold">{loyalty.totalPoints.toLocaleString("pt-BR")}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 text-center">
+            <p className="text-xs text-muted-foreground mb-1">Acúmulo</p>
+            <p className="text-xl font-bold">{loyalty.pointsPerReal} pts/R$</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 text-center">
+            <p className="text-xs text-muted-foreground mb-1">Mínimo para resgate</p>
+            <p className="text-xl font-bold">{loyalty.minRedeemPoints.toLocaleString("pt-BR")} pts</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Extrato de pontos</CardTitle>
+          <CardDescription>{loyalty.programName}</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {loyalty.recentTransactions.length === 0 ? (
+            <div className="text-center py-10">
+              <Coins className="w-10 h-10 mx-auto mb-3 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">Nenhuma transação registrada ainda.</p>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {loyalty.recentTransactions.map((t) => {
+                const type = TRANSACTION_TYPE_MAP[t.type] ?? { label: t.type, sign: "+" as const, color: "text-slate-500" };
+                return (
+                  <div key={t.id} className="flex items-center justify-between px-4 py-3 hover:bg-muted/40 transition-colors">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{t.description}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {type.label} · {new Date(t.createdAt).toLocaleDateString("pt-BR")}
+                      </p>
+                    </div>
+                    <div className={`text-sm font-bold ml-4 shrink-0 ${type.color}`}>
+                      {type.sign}{Math.abs(t.points).toLocaleString("pt-BR")} pts
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function PerfilPage() {
   const [, navigate] = useLocation();
   const { data: me } = useGetMe();
@@ -587,7 +968,9 @@ export default function PerfilPage() {
   const [error, setError] = useState<string | null>(null);
 
   const params = new URLSearchParams(window.location.search);
-  const defaultTab = params.get("tab") ?? "reservas";
+  const defaultTab = params.get("tab") ?? "inicio";
+
+  const [activeTab, setActiveTab] = useState(defaultTab);
 
   useEffect(() => {
     clientPortalApi
@@ -618,38 +1001,53 @@ export default function PerfilPage() {
     );
   }
 
-  const displayName = profile.client?.name ?? profile.user?.name ?? me?.name ?? "Viajante";
   const primaryColor = profile.tenant?.primaryColor ?? "#3B82F6";
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Olá, {displayName.split(" ")[0]}!</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">
-          Gerencie suas reservas, dados e programa de indicações.
-        </p>
-      </div>
-
-      <Tabs defaultValue={defaultTab}>
-        <TabsList className="mb-6 w-full sm:w-auto">
-          <TabsTrigger value="reservas" className="flex items-center gap-2">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="mb-6 w-full sm:w-auto flex-wrap h-auto gap-1">
+          <TabsTrigger value="inicio" className="flex items-center gap-1.5">
+            <LayoutDashboard className="w-4 h-4" />
+            Início
+          </TabsTrigger>
+          <TabsTrigger value="reservas" className="flex items-center gap-1.5">
             <CalendarCheck className="w-4 h-4" />
-            Minhas Reservas
+            Reservas
             {profile.reservations.length > 0 && (
-              <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">
+              <Badge variant="secondary" className="ml-0.5 text-xs px-1.5 py-0">
                 {profile.reservations.length}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="dados" className="flex items-center gap-2">
+          <TabsTrigger value="dados" className="flex items-center gap-1.5">
             <User className="w-4 h-4" />
             Meus Dados
           </TabsTrigger>
-          <TabsTrigger value="indicacoes" className="flex items-center gap-2">
+          <TabsTrigger value="indicacoes" className="flex items-center gap-1.5">
             <Share2 className="w-4 h-4" />
             Indicações
           </TabsTrigger>
+          {profile.loyalty !== null && (
+            <TabsTrigger value="fidelidade" className="flex items-center gap-1.5">
+              <Star className="w-4 h-4" />
+              Fidelidade
+              {(profile.loyalty?.availablePoints ?? 0) > 0 && (
+                <Badge variant="secondary" className="ml-0.5 text-xs px-1.5 py-0">
+                  {(profile.loyalty?.availablePoints ?? 0).toLocaleString("pt-BR")}
+                </Badge>
+              )}
+            </TabsTrigger>
+          )}
         </TabsList>
+
+        <TabsContent value="inicio">
+          <InicioTab
+            profile={profile}
+            primaryColor={primaryColor}
+            onTabChange={setActiveTab}
+          />
+        </TabsContent>
 
         <TabsContent value="reservas">
           <ReservasTab profile={profile} />
@@ -666,6 +1064,10 @@ export default function PerfilPage() {
 
         <TabsContent value="indicacoes">
           <IndicacoesTab profile={profile} />
+        </TabsContent>
+
+        <TabsContent value="fidelidade">
+          <FidelidadeTab loyalty={profile.loyalty} primaryColor={primaryColor} />
         </TabsContent>
       </Tabs>
     </div>

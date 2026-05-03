@@ -7,12 +7,15 @@ import {
   usersTable,
   referralsTable,
   tenantsTable,
+  loyaltyProgramsTable,
+  loyaltyMembersTable,
+  loyaltyTransactionsTable,
 } from "@workspace/db";
-import { eq, and, desc, asc, sql } from "drizzle-orm";
+import { eq, and, desc, asc, sql, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
-import { ROLES, REFERRAL_STATUS } from "@workspace/permissions";
+import { ROLES, REFERRAL_STATUS, RESERVATION_STATUS } from "@workspace/permissions";
 
 const router = Router();
 
@@ -87,6 +90,8 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
       pendingReferrals: 0,
       totalEarnings: "0.00",
     };
+    let stats = { totalSpent: 0 };
+    let loyalty: unknown = null;
 
     if (client) {
       const rows = await db
@@ -100,6 +105,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
           paymentMethod: reservationsTable.paymentMethod,
           storeOrderId: reservationsTable.storeOrderId,
           createdAt: reservationsTable.createdAt,
+          seats: reservationsTable.seats,
           tripName: tripsTable.name,
           tripDestination: tripsTable.destination,
           tripDepartureDate: tripsTable.departureDate,
@@ -116,18 +122,40 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
         )
         .orderBy(asc(tripsTable.departureDate), desc(reservationsTable.createdAt));
 
-      reservations = rows.map((r) => ({
-        ...r,
-        totalValue: Number(r.totalValue),
-        paidValue: Number(r.paidValue),
-        tripDepartureDate: r.tripDepartureDate
-          ? (r.tripDepartureDate as unknown as Date).toISOString().slice(0, 10)
-          : null,
-        tripReturnDate: r.tripReturnDate
-          ? (r.tripReturnDate as unknown as Date).toISOString().slice(0, 10)
-          : null,
-        createdAt: r.createdAt.toISOString(),
-      }));
+      reservations = rows.map((r) => {
+        const total = Number(r.totalValue);
+        const paid = Number(r.paidValue);
+        return {
+          ...r,
+          totalValue: total,
+          paidValue: paid,
+          balance: Math.max(total - paid, 0),
+          seatsCount: Array.isArray(r.seats) ? r.seats.length : 0,
+          seats: undefined,
+          tripDepartureDate: r.tripDepartureDate
+            ? (r.tripDepartureDate as unknown as Date).toISOString().slice(0, 10)
+            : null,
+          tripReturnDate: r.tripReturnDate
+            ? (r.tripReturnDate as unknown as Date).toISOString().slice(0, 10)
+            : null,
+          createdAt: r.createdAt.toISOString(),
+        };
+      });
+
+      const totalSpentRows = await db
+        .select({ total: sql<string>`COALESCE(SUM(paid_value), '0')` })
+        .from(reservationsTable)
+        .where(
+          and(
+            eq(reservationsTable.clientId, client.id),
+            eq(reservationsTable.tenantId, me.tenantId),
+            inArray(reservationsTable.status, [
+              RESERVATION_STATUS.CONFIRMED,
+              RESERVATION_STATUS.COMPLETED,
+            ]),
+          ),
+        );
+      stats = { totalSpent: Number(totalSpentRows[0]?.total ?? 0) };
 
       const refRows = await db
         .select({
@@ -165,6 +193,67 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
         pendingReferrals,
         totalEarnings: totalEarnings.toFixed(2),
       };
+
+      const [loyaltyProgram] = await db
+        .select()
+        .from(loyaltyProgramsTable)
+        .where(
+          and(
+            eq(loyaltyProgramsTable.tenantId, me.tenantId),
+            eq(loyaltyProgramsTable.isActive, true),
+          ),
+        )
+        .limit(1);
+
+      if (loyaltyProgram) {
+        const [member] = await db
+          .select()
+          .from(loyaltyMembersTable)
+          .where(
+            and(
+              eq(loyaltyMembersTable.tenantId, me.tenantId),
+              eq(loyaltyMembersTable.clientId, client.id),
+            ),
+          )
+          .limit(1);
+
+        if (member) {
+          const transactions = await db
+            .select()
+            .from(loyaltyTransactionsTable)
+            .where(eq(loyaltyTransactionsTable.memberId, member.id))
+            .orderBy(desc(loyaltyTransactionsTable.createdAt))
+            .limit(20);
+
+          loyalty = {
+            availablePoints: member.availablePoints,
+            totalPoints: member.totalPoints,
+            tier: member.tier,
+            programName: loyaltyProgram.name,
+            pointsPerReal: Number(loyaltyProgram.pointsPerReal),
+            realPerPoint: Number(loyaltyProgram.realPerPoint),
+            minRedeemPoints: loyaltyProgram.minRedeemPoints,
+            recentTransactions: transactions.map((t) => ({
+              id: t.id,
+              type: t.type,
+              points: t.points,
+              description: t.description,
+              createdAt: t.createdAt.toISOString(),
+            })),
+          };
+        } else {
+          loyalty = {
+            availablePoints: 0,
+            totalPoints: 0,
+            tier: "bronze",
+            programName: loyaltyProgram.name,
+            pointsPerReal: Number(loyaltyProgram.pointsPerReal),
+            realPerPoint: Number(loyaltyProgram.realPerPoint),
+            minRedeemPoints: loyaltyProgram.minRedeemPoints,
+            recentTransactions: [],
+          };
+        }
+      }
     }
 
     res.json({
@@ -204,6 +293,8 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
         : null,
       reservations,
       referral: referralStats,
+      stats,
+      loyalty,
     });
   } catch (err) {
     next(err);

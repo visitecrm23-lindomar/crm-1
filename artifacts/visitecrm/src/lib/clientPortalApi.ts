@@ -7,6 +7,8 @@ export interface ClientPortalReservation {
   voucherCode: string;
   totalValue: number;
   paidValue: number;
+  balance: number;
+  seatsCount: number;
   paymentMethod: string | null;
   storeOrderId: string | null;
   createdAt: string;
@@ -15,6 +17,25 @@ export interface ClientPortalReservation {
   tripDepartureDate: string | null;
   tripReturnDate: string | null;
   tripType: string;
+}
+
+export interface ClientLoyaltyTransaction {
+  id: string;
+  type: string;
+  points: number;
+  description: string;
+  createdAt: string;
+}
+
+export interface ClientLoyalty {
+  availablePoints: number;
+  totalPoints: number;
+  tier: string;
+  programName: string;
+  pointsPerReal: number;
+  realPerPoint: number;
+  minRedeemPoints: number;
+  recentTransactions: ClientLoyaltyTransaction[];
 }
 
 export interface ClientPortalProfile {
@@ -52,6 +73,10 @@ export interface ClientPortalProfile {
     pendingReferrals: number;
     totalEarnings: string;
   };
+  stats: {
+    totalSpent: number;
+  };
+  loyalty: ClientLoyalty | null;
 }
 
 async function apiReq<T>(method: string, path: string, body?: unknown): Promise<T> {
