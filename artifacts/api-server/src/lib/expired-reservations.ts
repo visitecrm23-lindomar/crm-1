@@ -17,6 +17,8 @@ export async function runExpiredReservationsCron(): Promise<void> {
   // keeping the database consistent and allowing the next cron run to retry.
   await db.transaction(async (tx) => {
     // Cancel all expired pending reservations atomically and get the affected rows.
+    // Reservations that already have at least one associated payment are skipped so
+    // that paid-but-slow reservations are never incorrectly cancelled by the TTL cron.
     const result = await tx.execute(
       sql`
         UPDATE reservations
@@ -28,6 +30,10 @@ export async function runExpiredReservationsCron(): Promise<void> {
           status     = 'pending'
           AND expires_at IS NOT NULL
           AND expires_at < ${now}
+          AND NOT EXISTS (
+            SELECT 1 FROM payments
+            WHERE payments.reservation_id = reservations.id
+          )
         RETURNING id, trip_id, seats
       `,
     );

@@ -55,7 +55,12 @@ async function syncReservationPaymentStatus(reservationId: string, tenantId: str
   if (paidValue >= totalValue) {
     updates.status = "confirmed";
     if (!reservation.confirmedAt) updates.confirmedAt = new Date();
+    updates.expiresAt = null;
   } else if (reservation.status === "confirmed") {
+    // Partial payment reversal: demote back to pending.
+    // expiresAt is intentionally left null — there is no meaningful TTL to
+    // restore at this point, and automatically releasing seats after a reversal
+    // could cause data loss. Staff should handle seat release manually.
     updates.status = "pending";
   }
 
