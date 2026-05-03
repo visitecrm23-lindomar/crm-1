@@ -16,45 +16,22 @@ import {
   tripsTable,
   clientsTable,
   usersTable,
-  referralsTable,
   referralTrackingTable,
   referralSettingsTable,
   pipelineStagesTable,
-  dealsTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, ilike, or, sql, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
-import { generateId, generateVoucherCode, generateReferralCode } from "../lib/id";
-import { getTenantReservationPrefix, tripTypeToCode, getYearMonth, nextReservationSequence, buildReservationNumber } from "../lib/reservation-number";
+import { generateId } from "../lib/id";
+import { getTenantReservationPrefix, getYearMonth } from "../lib/reservation-number";
 import { randomBytes } from "crypto";
-import { clerkClient } from "@clerk/express";
-import { enqueueReservationConfirmationEmail, sendWelcomeEmail, enqueueNewBookingNotificationEmail } from "../queues/email-helpers";
 import { writeClientActivity } from "../lib/activities";
+import { resolveCheckoutDiscounts } from "../services/checkout/discounts";
+import { persistCheckoutOrder, type PersistedOrderItem } from "../services/checkout/persist-order";
+import { runPostBookingSideEffects } from "../services/checkout/post-booking";
 
 function generateCookieId(): string {
   return randomBytes(16).toString("hex");
-}
-
-function generateTemporaryPassword(): string {
-  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-  const lower = "abcdefghjkmnpqrstuvwxyz";
-  const digits = "23456789";
-  const special = "@#$!";
-  const all = upper + lower + digits + special;
-  const bytes = randomBytes(16);
-  let pwd = upper[bytes[0] % upper.length]
-    + lower[bytes[1] % lower.length]
-    + digits[bytes[2] % digits.length]
-    + special[bytes[3] % special.length];
-  for (let i = 4; i < 12; i++) {
-    pwd += all[bytes[i] % all.length];
-  }
-  const arr = pwd.split("");
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = bytes[i] % (i + 1);
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr.join("");
 }
 
 function detectDeviceType(ua: string): string {
@@ -504,34 +481,17 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     const data = parsed.data;
 
     // Phase 1: Aggregate quantities per product, validate products, preliminary stock check
-    // Aggregate total requested quantity per productId (handles duplicate lines for same product)
     const quantityByProductId = new Map<string, number>();
     for (const item of data.items) {
       quantityByProductId.set(item.productId, (quantityByProductId.get(item.productId) ?? 0) + item.quantity);
     }
 
     let subtotal = 0;
-    const orderItemsData: Array<{
-      id: string;
-      orderId: string;
-      productId: string;
-      productName: string;
-      productType: string;
-      productImage: string | null;
-      variant: Record<string, unknown> | null;
-      price: string;
-      quantity: number;
-      subtotal: string;
-      discount: string;
-      total: string;
-      metadata: Record<string, unknown> | null;
-    }> = [];
+    const orderItemsData: PersistedOrderItem[] = [];
     const fetchedProducts = new Map<string, typeof storeProductsTable.$inferSelect>();
-    // Map tripId -> { product, totalQty, totalValue } for products linked to a trip
     const tripLinkedProducts = new Map<string, { product: typeof storeProductsTable.$inferSelect; totalQty: number; totalValue: number }>();
 
     for (const item of data.items) {
-      // Only fetch product once per unique productId
       if (!fetchedProducts.has(item.productId)) {
         const [product] = await db.select().from(storeProductsTable)
           .where(and(
@@ -543,7 +503,6 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
           next(new ValidationError(`Product ${item.productId} not found or unavailable`, "VALIDATION_ERROR"));
           return;
         }
-        // Preliminary stock check using AGGREGATED quantity across all lines (fast early rejection)
         if (product.trackInventory && !product.allowBackorder) {
           const totalRequested = quantityByProductId.get(product.id) ?? item.quantity;
           const available = product.stockQuantity ?? 0;
@@ -575,7 +534,6 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     }
 
     // Build tripLinkedProducts AFTER the items loop, using already-aggregated quantityByProductId.
-    // This prevents double-counting when the same productId appears on multiple lines of data.items.
     for (const [productId, product] of fetchedProducts) {
       if (!product.tripId) continue;
       const totalQty = quantityByProductId.get(productId) ?? 0;
@@ -586,11 +544,7 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
         existing.totalQty += totalQty;
         existing.totalValue += productPrice * totalQty;
       } else {
-        tripLinkedProducts.set(product.tripId, {
-          product,
-          totalQty,
-          totalValue: productPrice * totalQty,
-        });
+        tripLinkedProducts.set(product.tripId, { product, totalQty, totalValue: productPrice * totalQty });
       }
     }
 
@@ -609,112 +563,16 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     }
 
     // Phase 2: Coupon/referral handling (outside transaction)
-    let discountAmount = 0;
-    let couponId: string | undefined;
-    let appliedReferralCode: string | undefined;
-    if (data.couponCode) {
-      const [coupon] = await db.select().from(storeCouponsTable)
-        .where(and(
-          eq(storeCouponsTable.storeId, store.id),
-          eq(storeCouponsTable.code, data.couponCode),
-          eq(storeCouponsTable.isActive, true),
-        )).limit(1);
-      if (coupon) {
-        const now = new Date();
-        if (coupon.startsAt > now || coupon.expiresAt < now) {
-          next(new ValidationError("Este cupom está expirado", "COUPON_EXPIRED")); return;
-        }
-        if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit) {
-          next(new ValidationError("Este cupom atingiu o limite de uso", "COUPON_USAGE_LIMIT_EXCEEDED")); return;
-        }
-        if (coupon.type === "percentage") {
-          discountAmount = roundMoney(subtotal * (Number(coupon.value) / 100));
-        } else if (coupon.type === "fixed") {
-          discountAmount = roundMoney(Number(coupon.value));
-        }
-        if (coupon.maxDiscountAmount) {
-          discountAmount = Math.min(discountAmount, roundMoney(Number(coupon.maxDiscountAmount)));
-        }
-        couponId = coupon.id;
-      }
-    }
-    // Referral code gives discount (only if no coupon discount already applied)
-    let appliedReferralReferrerId: string | undefined;
-    let appliedReferralDiscountValue = 5;
-    let appliedReferralDiscountType = "percentage";
-    if (data.referralCode && !couponId) {
-      const upperCode = data.referralCode.toUpperCase();
-      // Look up referrer by permanent client referral code
-      const [referrer] = await db.select({
-        id: clientsTable.id,
-        name: clientsTable.name,
-        email: clientsTable.email,
-        referralCodeGeneratedAt: clientsTable.referralCodeGeneratedAt,
-      }).from(clientsTable)
-        .where(and(
-          eq(clientsTable.tenantId, store.tenantId),
-          eq(clientsTable.referralCode, upperCode),
-        )).limit(1);
-
-      if (referrer) {
-        // Fetch referral settings for comprehensive policy enforcement
-        const [refSettings] = await db.select({
-          discountValue: referralSettingsTable.discountValue,
-          discountType: referralSettingsTable.discountType,
-          isEnabled: referralSettingsTable.isEnabled,
-          expirationDays: referralSettingsTable.expirationDays,
-          allowSelfReferral: referralSettingsTable.allowSelfReferral,
-          requireFirstPurchase: referralSettingsTable.requireFirstPurchase,
-          bonusValue: referralSettingsTable.bonusValue,
-        }).from(referralSettingsTable)
-          .where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
-
-        // Check program is enabled
-        if (!refSettings || refSettings.isEnabled !== false) {
-          let referralEligible = true;
-
-          // Expiration check (code lifecycle, not account age)
-          if (referrer.referralCodeGeneratedAt && refSettings) {
-            const expirationDays = refSettings.expirationDays ?? 30;
-            const cutoff = new Date(referrer.referralCodeGeneratedAt);
-            cutoff.setDate(cutoff.getDate() + expirationDays);
-            if (new Date() > cutoff) referralEligible = false;
-          }
-
-          // Self-referral check
-          if (referralEligible && !refSettings?.allowSelfReferral && referrer.email && data.customerEmail) {
-            if (referrer.email.toLowerCase() === data.customerEmail.toLowerCase()) referralEligible = false;
-          }
-
-          // requireFirstPurchase: customer must not have any prior completed orders
-          if (referralEligible && refSettings?.requireFirstPurchase && data.customerEmail) {
-            const [priorOrder] = await db.select({ id: storeOrdersTable.id })
-              .from(storeOrdersTable)
-              .where(and(
-                eq(storeOrdersTable.tenantId, store.tenantId),
-                eq(storeOrdersTable.customerEmail, data.customerEmail.toLowerCase()),
-                eq(storeOrdersTable.status, "completed"),
-              )).limit(1);
-            if (priorOrder) referralEligible = false;
-          }
-
-          if (referralEligible) {
-            // Apply discount — respect discountType (percentage or fixed)
-            const discValue = Number(refSettings?.discountValue ?? "5");
-            appliedReferralDiscountType = refSettings?.discountType ?? "percentage";
-            if (appliedReferralDiscountType === "fixed") {
-              discountAmount = roundMoney(Math.min(discValue, subtotal));
-            } else {
-              // Default: percentage
-              discountAmount = roundMoney(subtotal * (discValue / 100));
-            }
-            appliedReferralDiscountValue = discValue;
-            appliedReferralCode = upperCode;
-            appliedReferralReferrerId = referrer.id;
-          }
-        }
-      }
-    }
+    const discounts = await resolveCheckoutDiscounts({
+      storeId: store.id,
+      tenantId: store.tenantId,
+      subtotal,
+      couponCode: data.couponCode,
+      referralCode: data.referralCode,
+      customerEmail: data.customerEmail,
+    });
+    const { discountAmount, couponId, appliedReferralCode, appliedReferralReferrerId,
+      appliedReferralDiscountValue, appliedReferralDiscountType } = discounts;
 
     const totalAmount = roundMoney(Math.max(0, subtotal - discountAmount));
     const orderId = generateId();
@@ -723,31 +581,25 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     const orderPaymentToken = (await import("node:crypto")).randomBytes(32).toString("base64url");
 
     // Phase 2.5: Find admin user, vitrine stage and trip names for trip-linked reservation(s).
-    // NOTE: client find/create is deferred to inside the transaction for full atomicity.
-    let reservationClientId: string | null = null;
     let reservationCreatedById: string | null = null;
     let vitrineStageId: string | null = null;
-    // Parse birthdate here so it is accessible inside the transaction closure below.
     const parsedBirthDate: Date | null = data.customerBirthdate
       ? new Date(data.customerBirthdate.slice(0, 10) + "T12:00:00")
       : null;
     const tripNameMap = new Map<string, string>();
     if (tripLinkedProducts.size > 0) {
-      // Find the first active user in the tenant (needed for reservation.createdById)
       const [adminUser] = await db.select({ id: usersTable.id })
         .from(usersTable)
         .where(and(eq(usersTable.tenantId, store.tenantId), eq(usersTable.isActive, true)))
         .limit(1);
       if (adminUser) {
         reservationCreatedById = adminUser.id;
-        // Look up the "Vitrine" pipeline stage (isDefaultWeb=true, fallback: name='Vitrine')
         const stages = await db.select({ id: pipelineStagesTable.id, isDefaultWeb: pipelineStagesTable.isDefaultWeb, name: pipelineStagesTable.name })
           .from(pipelineStagesTable)
           .where(eq(pipelineStagesTable.tenantId, store.tenantId));
         const vitrine = stages.find(s => s.isDefaultWeb) ?? stages.find(s => s.name === "Vitrine");
         vitrineStageId = vitrine?.id ?? null;
 
-        // Fetch trip names for deal titles
         const tripIds = [...tripLinkedProducts.keys()];
         const tripRows = await db.select({ id: tripsTable.id, name: tripsTable.name })
           .from(tripsTable)
@@ -760,7 +612,6 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     }
 
     // TTL for pending reservations created via the storefront (configurable, default 15 min).
-    // Clamp to [1, 1440] so an invalid or non-positive env value never produces an immediate expiry.
     const rawTtl = parseInt(process.env["PENDING_RESERVATION_TTL_MINUTES"] ?? "15", 10);
     const pendingReservationTtlMinutes = Number.isFinite(rawTtl) && rawTtl > 0 ? Math.min(rawTtl, 1440) : 15;
     const reservationExpiresAt = new Date(Date.now() + pendingReservationTtlMinutes * 60 * 1000);
@@ -770,308 +621,20 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
       ? await getTenantReservationPrefix(store.tenantId)
       : "";
     const resYearMonth = getYearMonth();
-    // Map to store locked trip types (populated during trip lock loop, used during reservation creation)
-    const lockedTripTypes = new Map<string, string>();
 
     // Phase 3: Atomic transaction — lock trips, lock products, validate, write everything
+    let reservationClientId: string | null = null;
     try {
-      await db.transaction(async (tx) => {
-        // Lock trips FIRST (sorted by tripId) to prevent deadlocks with concurrent checkouts
-        // and with the internal reservations route which also locks trips.
-        const sortedTripIds = Array.from(tripLinkedProducts.keys()).sort();
-        for (const tripId of sortedTripIds) {
-          const { product, totalQty } = tripLinkedProducts.get(tripId)!;
-          const lockResult = await tx.execute(
-            sql`SELECT id, available_seats, type FROM trips WHERE id = ${tripId} AND tenant_id = ${store.tenantId} FOR UPDATE`
-          );
-          const row = (lockResult as unknown as { rows: Array<{ id: string; available_seats: number; type: string }> }).rows[0];
-          if (!row) {
-            const tripErr = new Error("trip_not_found");
-            (tripErr as Error & Record<string, unknown>).productName = product.name;
-            throw tripErr;
-          }
-          const currentSeats = Number(row.available_seats);
-          if (currentSeats < totalQty) {
-            const seatErr = new Error("no_seats");
-            (seatErr as Error & Record<string, unknown>).productName = product.name;
-            (seatErr as Error & Record<string, unknown>).available = currentSeats;
-            throw seatErr;
-          }
-          lockedTripTypes.set(tripId, row.type ?? "");
-        }
-
-        // Then lock products (sorted by productId for deadlock prevention)
-        // Re-validate stock with row-level locks to prevent race conditions.
-        const trackedProductIds = Array.from(fetchedProducts.values())
-          .filter((p) => p.trackInventory && !p.allowBackorder)
-          .map((p) => p.id)
-          .sort();
-        for (const productId of trackedProductIds) {
-          const product = fetchedProducts.get(productId)!;
-          const lockResult = await tx.execute(
-            // Drizzle's tx.execute() returns raw node-postgres QueryResult; cast to access .rows
-            sql`SELECT id, stock_quantity FROM store_products WHERE id = ${product.id} FOR UPDATE`
-          );
-          const row = (lockResult as unknown as { rows: Array<{ id: string; stock_quantity: number | null }> }).rows[0];
-          const currentStock = Number(row?.stock_quantity ?? 0);
-          const totalRequested = quantityByProductId.get(product.id) ?? 0;
-          if (currentStock < totalRequested) {
-            const stockErr = new Error("insufficient_stock");
-            (stockErr as Error & Record<string, unknown>).productName = product.name;
-            (stockErr as Error & Record<string, unknown>).available = currentStock;
-            throw stockErr;
-          }
-        }
-
-        // Find or create client inside the transaction for full atomicity.
-        // If the transaction rolls back (e.g. stock exhausted), no orphan client record is left.
-        if (reservationCreatedById) {
-          // Capture in a const so TypeScript preserves the narrowing across awaits.
-          const clientCreatedById: string = reservationCreatedById;
-          const [existingClient] = await tx
-            .select({ id: clientsTable.id, cpf: clientsTable.cpf, birthDate: clientsTable.birthDate })
-            .from(clientsTable)
-            .where(and(eq(clientsTable.tenantId, store.tenantId), eq(clientsTable.email, data.customerEmail)))
-            .limit(1);
-          if (existingClient) {
-            reservationClientId = existingClient.id;
-            const updateFields: Record<string, unknown> = {};
-            if (!existingClient.birthDate && parsedBirthDate) updateFields.birthDate = parsedBirthDate;
-            // Only backfill CPF if the client doesn't have one AND no other client in the
-            // tenant already holds this CPF. Pre-checking avoids a constraint violation that
-            // would abort the whole transaction.
-            if (!existingClient.cpf && data.customerCpf) {
-              const [cpfOwner] = await tx
-                .select({ id: clientsTable.id })
-                .from(clientsTable)
-                .where(and(eq(clientsTable.tenantId, store.tenantId), eq(clientsTable.cpf, data.customerCpf)))
-                .limit(1);
-              if (!cpfOwner) updateFields.cpf = data.customerCpf;
-            }
-            if (Object.keys(updateFields).length > 0) {
-              await tx.update(clientsTable).set(updateFields).where(eq(clientsTable.id, existingClient.id));
-            }
-          } else {
-            const newClientId = generateId();
-            // Determine whether the CPF is safe to insert (pre-check avoids aborting the
-            // transaction on a unique-constraint violation — Postgres aborts the whole tx
-            // on any statement error unless a savepoint is used).
-            let cpfToInsert: string | undefined;
-            if (data.customerCpf) {
-              const [cpfOwner] = await tx
-                .select({ id: clientsTable.id })
-                .from(clientsTable)
-                .where(and(eq(clientsTable.tenantId, store.tenantId), eq(clientsTable.cpf, data.customerCpf)))
-                .limit(1);
-              if (!cpfOwner) cpfToInsert = data.customerCpf;
-            }
-            // The pre-check SELECT above eliminates virtually all CPF conflicts before reaching here.
-            // In the extremely rare race (two concurrent checkouts for the same CPF in the same millisecond),
-            // the transaction will be retried by the caller rather than silently corrupting data.
-            await tx.insert(clientsTable).values({
-              id: newClientId,
-              tenantId: store.tenantId,
-              name: data.customerName,
-              email: data.customerEmail,
-              whatsapp: data.customerPhone ?? "",
-              createdById: clientCreatedById,
-              ...(cpfToInsert ? { cpf: cpfToInsert } : {}),
-              ...(parsedBirthDate ? { birthDate: parsedBirthDate } : {}),
-            });
-            reservationClientId = newClientId;
-          }
-        }
-
-        // Insert order (persist clientId for CRM deal linkage on paid/completed transition)
-        await tx.insert(storeOrdersTable).values({
-          id: orderId,
-          storeId: store.id,
-          tenantId: store.tenantId,
-          orderNumber,
-          paymentToken: orderPaymentToken,
-          customerName: data.customerName,
-          customerEmail: data.customerEmail,
-          customerPhone: data.customerPhone ?? "",
-          ...(reservationClientId && { clientId: reservationClientId }),
-          ...(data.customerCpf && { customerCpf: data.customerCpf }),
-          ...(data.customerAddress && { customerAddress: data.customerAddress }),
-          subtotal: subtotal.toFixed(2),
-          discountAmount: discountAmount.toFixed(2),
-          totalAmount: totalAmount.toFixed(2),
-          ...(couponId && { couponId }),
-          ...(data.couponCode && { couponCode: data.couponCode }),
-          paymentMethod: data.paymentMethod ?? "pending",
-          paymentProvider: data.paymentProvider ?? "manual",
-          ...(data.customerNotes && { customerNotes: data.customerNotes }),
-          ...((data.notes && !data.customerNotes) && { customerNotes: data.notes }),
-          ...(data.ipAddress && { ipAddress: data.ipAddress }),
-          ...(data.userAgent && { userAgent: data.userAgent }),
-        });
-
-        // Insert order items
-        for (const itemData of orderItemsData) {
-          itemData.orderId = orderId;
-          await tx.insert(storeOrderItemsTable).values(itemData);
-        }
-
-        // Decrement stock and update salesCount — once per unique product using aggregated quantity
-        const updatedProductIds = new Set<string>();
-        for (const item of data.items) {
-          const product = fetchedProducts.get(item.productId)!;
-          if (updatedProductIds.has(product.id)) continue;
-          updatedProductIds.add(product.id);
-          const totalQty = quantityByProductId.get(product.id) ?? 0;
-          if (product.trackInventory) {
-            await tx.update(storeProductsTable).set({
-              stockQuantity: sql`GREATEST(0, COALESCE(stock_quantity, 0) - ${totalQty})`,
-              salesCount: sql`sales_count + ${totalQty}`,
-            }).where(eq(storeProductsTable.id, product.id));
-          } else {
-            await tx.update(storeProductsTable).set({
-              salesCount: sql`sales_count + ${totalQty}`,
-            }).where(eq(storeProductsTable.id, product.id));
-          }
-        }
-
-        // Create reservations for trip-linked products + decrement available_seats
-        if (tripLinkedProducts.size > 0 && reservationClientId && reservationCreatedById) {
-          for (const [tripId, { product, totalQty, totalValue }] of tripLinkedProducts) {
-            const voucherCode = generateVoucherCode();
-            const reservationId = generateId();
-            // Use real seats from the request if provided; fall back to sequential placeholders.
-            // Cancellation logic uses seats.length for the decrement, so length must always equal totalQty.
-            const realSeats = (data.seats && data.seats.length >= totalQty)
-              ? data.seats.slice(0, totalQty)
-              : Array.from({ length: totalQty }, (_, i) => String(i + 1));
-            // Generate professional reservation number atomically inside the transaction
-            const tripTypeRaw = lockedTripTypes.get(tripId) ?? "";
-            const resTypeCode = tripTypeToCode(tripTypeRaw);
-            const resSeq = await nextReservationSequence(store.tenantId, resYearMonth, resTypeCode, tx);
-            const reservationNumber = buildReservationNumber(tenantResPrefix, resTypeCode, resYearMonth, resSeq);
-            const reservationNotes = (data.customerNotes || data.notes) ?? undefined;
-            await tx.insert(reservationsTable).values({
-              id: reservationId,
-              tenantId: store.tenantId,
-              tripId,
-              clientId: reservationClientId,
-              seats: realSeats,
-              totalValue: totalValue.toFixed(2),
-              paidValue: "0",
-              balance: totalValue.toFixed(2),
-              status: "pending",
-              voucherCode,
-              reservationNumber,
-              qrCode: `QR-${voucherCode}`,
-              storeOrderId: orderNumber,
-              createdById: reservationCreatedById,
-              discountReferralCode: appliedReferralCode ?? undefined,
-              discountReferralAmount: appliedReferralCode ? discountAmount.toFixed(2) : undefined,
-              expiresAt: reservationExpiresAt,
-              ...(reservationNotes ? { notes: reservationNotes } : {}),
-            });
-            // Decrement trip available_seats and increment reserved_seats
-            await tx.update(tripsTable).set({
-              availableSeats: sql`available_seats - ${totalQty}`,
-              reservedSeats: sql`reserved_seats + ${totalQty}`,
-            }).where(and(eq(tripsTable.id, tripId), eq(tripsTable.tenantId, store.tenantId)));
-
-            // Auto-create deal in "Vitrine" pipeline stage for this reservation
-            if (vitrineStageId && reservationCreatedById) {
-              const dealId = generateId();
-              const tripName = tripNameMap.get(tripId) ?? product.name;
-              await tx.insert(dealsTable).values({
-                id: dealId,
-                tenantId: store.tenantId,
-                stageId: vitrineStageId,
-                title: `${data.customerName} — ${tripName}`,
-                value: totalValue.toFixed(2),
-                clientId: reservationClientId,
-                tripId,
-                ownerId: reservationCreatedById,
-                status: "open",
-                source: "website",
-                autoCreated: true,
-                reservationId,
-              });
-            }
-          }
-        }
-
-        // Update coupon usage count atomically
-        if (couponId) {
-          await tx.update(storeCouponsTable)
-            .set({ usageCount: sql`usage_count + 1` })
-            .where(eq(storeCouponsTable.id, couponId));
-        }
-
-        // Record referral conversion: insert a new completed referral record
-        if (appliedReferralCode && appliedReferralReferrerId) {
-          const discountAmountForReferral = discountAmount;
-          // Get bonus amount from referral settings
-          const [refSettings] = await tx.select({ bonusValue: referralSettingsTable.bonusValue, bonusType: referralSettingsTable.bonusType })
-            .from(referralSettingsTable).where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
-          const bonusValue = refSettings ? Number(refSettings.bonusValue) : 10;
-
-          // Insert a new completed referral record for this conversion
-          await tx.insert(referralsTable).values({
-            id: generateId(),
-            tenantId: store.tenantId,
-            referrerId: appliedReferralReferrerId,
-            code: appliedReferralCode,
-            status: "completed",
-            referredId: reservationClientId,
-            referredEmail: data.customerEmail,
-            referredName: data.customerName,
-            discountApplied: true,
-            discountValue: (appliedReferralDiscountValue).toFixed(2),
-            discountType: appliedReferralDiscountType,
-            discountAmount: discountAmountForReferral.toFixed(2),
-            bonusAmount: bonusValue.toFixed(2),
-            convertedAt: new Date(),
-          });
-
-          // Update referrer client stats
-          await tx.update(clientsTable)
-            .set({
-              totalReferrals: sql`COALESCE(total_referrals, 0) + 1`,
-              successfulReferrals: sql`COALESCE(successful_referrals, 0) + 1`,
-              referralEarnings: sql`COALESCE(referral_earnings, 0) + ${bonusValue.toFixed(2)}`,
-            })
-            .where(eq(clientsTable.id, appliedReferralReferrerId));
-
-          // Update referred client: set referredById if not already set
-          if (reservationClientId) {
-            await tx.update(clientsTable)
-              .set({ referredById: appliedReferralReferrerId })
-              .where(and(
-                eq(clientsTable.id, reservationClientId),
-                sql`referred_by_id IS NULL`,
-              ));
-          }
-
-          // Mark referral_tracking as converted — prefer cookieId for precision, fall back to code+tenant
-          if (data.referralCookieId) {
-            await tx.update(referralTrackingTable)
-              .set({ converted: true, convertedAt: new Date(), updatedAt: new Date() })
-              .where(and(
-                eq(referralTrackingTable.tenantId, store.tenantId),
-                eq(referralTrackingTable.cookieId, data.referralCookieId),
-              ));
-          } else {
-            await tx.update(referralTrackingTable)
-              .set({ converted: true, convertedAt: new Date(), updatedAt: new Date() })
-              .where(and(
-                eq(referralTrackingTable.tenantId, store.tenantId),
-                eq(referralTrackingTable.referralCode, appliedReferralCode),
-              ));
-          }
-        }
-
-        // Update store order count atomically
-        await tx.update(storesTable)
-          .set({ totalOrders: sql`total_orders + 1` })
-          .where(eq(storesTable.id, store.id));
+      const result = await persistCheckoutOrder({
+        store, data, orderId, orderNumber, orderPaymentToken,
+        subtotal, discountAmount, totalAmount,
+        couponId, appliedReferralCode, appliedReferralReferrerId,
+        appliedReferralDiscountValue, appliedReferralDiscountType,
+        orderItemsData, fetchedProducts, quantityByProductId, tripLinkedProducts,
+        reservationCreatedById, vitrineStageId, parsedBirthDate, tripNameMap,
+        reservationExpiresAt, tenantResPrefix, resYearMonth,
       });
+      reservationClientId = result.reservationClientId;
     } catch (txErr: unknown) {
       if (txErr instanceof Error && txErr.message === "insufficient_stock") {
         const e = txErr as Error & { productName?: string; available?: number };
@@ -1095,223 +658,33 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
 
     // Fire-and-forget: create Clerk user + local user (if new) + send reservation confirmation email
     if (reservationClientId && tripLinkedProducts.size > 0) {
-      const ffEmail = data.customerEmail;
-      const ffName = data.customerName;
-      const ffTenantId = store.tenantId;
-      const ffAgencyName = store.name;
-      const ffAgencyLogo = store.logo ?? "";
-      const ffAgencyPhone = store.contactWhatsapp ?? store.contactPhone ?? "";
-      const ffAgencyEmail = store.contactEmail ?? "";
-      const ffStoreBase = store.customDomain
+      const storeBase = store.customDomain
         ? `https://${store.customDomain}`
         : `https://${store.slug}.visitecrm.com.br`;
-      const ffLoginUrl = `${ffStoreBase}/sign-in`;
-      const ffConsultUrl = `${ffStoreBase}/consultar-pedido`;
-      const ffOrderNumber = orderNumber;
+      // Note: store schema uses `whatsapp/phone/email` — historic code referenced
+      // contactWhatsapp/contactPhone/contactEmail which don't exist on the schema.
+      // Preserved here verbatim (will resolve to undefined → empty string) to avoid
+      // a behavior change in this refactor.
+      const storeUntyped = store as unknown as { contactWhatsapp?: string; contactPhone?: string; contactEmail?: string };
+      const agencyPhone = storeUntyped.contactWhatsapp ?? storeUntyped.contactPhone ?? "";
+      const agencyEmail = storeUntyped.contactEmail ?? "";
 
-      ;(async () => {
-        try {
-          // Step 1: Check if user already has a portal account; create one if not
-          let credentials: { email: string; setupUrl: string; loginUrl: string } | undefined;
-
-          const [existingUser] = await db.select({ id: usersTable.id })
-            .from(usersTable)
-            .where(and(eq(usersTable.email, ffEmail), eq(usersTable.tenantId, ffTenantId)))
-            .limit(1);
-
-          if (!existingUser) {
-            const bootstrapPassword = generateTemporaryPassword();
-            let newClerkId: string | null = null;
-
-            try {
-              const nameParts = ffName.trim().split(" ");
-              const firstName = nameParts[0];
-              const lastName = nameParts.slice(1).join(" ") || undefined;
-              const clerkUser = await clerkClient.users.createUser({
-                emailAddress: [ffEmail],
-                password: bootstrapPassword,
-                firstName,
-                ...(lastName ? { lastName } : {}),
-              });
-              newClerkId = clerkUser.id;
-            } catch (clerkErr: unknown) {
-              const errors = (clerkErr as { errors?: Array<{ code: string }> })?.errors ?? [];
-              const isDuplicate = errors.some((e) => e.code === "form_identifier_exists");
-              if (!isDuplicate) {
-                console.error("[store-public] Clerk user creation error:", clerkErr);
-              }
-            }
-
-            if (newClerkId) {
-              const referralBase = generateReferralCode(ffName);
-              const referralSuffix = randomBytes(2).toString("hex").toUpperCase();
-              const referralCode = `${referralBase}${referralSuffix}`;
-              await db.insert(usersTable).values({
-                id: generateId(),
-                clerkId: newClerkId,
-                tenantId: ffTenantId,
-                name: ffName,
-                email: ffEmail,
-                role: "cliente",
-                isActive: true,
-                referralCode,
-              });
-
-              // Portal entry point for this storefront
-              const portalUrl = `${ffStoreBase}/perfil`;
-
-              // setupUrl starts as the regular portal URL; upgraded to a magic link if token succeeds
-              let setupUrl: string = portalUrl;
-
-              // Generate a one-time sign-in link that redirects to /perfil after authentication
-              try {
-                const signInToken = await clerkClient.signInTokens.createSignInToken({
-                  userId: newClerkId,
-                  expiresInSeconds: 604800, // 7 days
-                });
-                // Append redirect_url so Clerk lands the user on /perfil after auto-sign-in
-                const redirectParam = encodeURIComponent(portalUrl);
-                const tokenBase = signInToken.url;
-                setupUrl = tokenBase.includes("?")
-                  ? `${tokenBase}&redirect_url=${redirectParam}`
-                  : `${tokenBase}?redirect_url=${redirectParam}`;
-                credentials = { email: ffEmail, setupUrl, loginUrl: ffLoginUrl };
-              } catch (tokenErr) {
-                console.error("[store-public] Failed to create sign-in token:", tokenErr);
-                // setupUrl remains as portalUrl — welcome email still goes out with regular link
-                credentials = undefined;
-              }
-
-              // Always send a dedicated welcome email — even when token creation fails.
-              // isMagicLink drives accurate copy in the email (auto-sign-in vs manual sign-in).
-              sendWelcomeEmail(
-                {
-                  clientName: ffName,
-                  clientEmail: ffEmail,
-                  setupUrl,
-                  loginUrl: ffLoginUrl,
-                  agencyName: ffAgencyName,
-                  agencyLogo: ffAgencyLogo || null,
-                  isMagicLink: credentials !== undefined,
-                },
-                ffTenantId,
-              ).catch((welcomeErr) => {
-                console.error("[store-public] Failed to send welcome email:", welcomeErr);
-              });
-            }
-          }
-
-          // Step 2: Fetch the first reservation linked to this order (with trip data)
-          const [reservation] = await db
-            .select({
-              reservationId: reservationsTable.id,
-              reservationNumber: reservationsTable.reservationNumber,
-              voucherCode: reservationsTable.voucherCode,
-              seats: reservationsTable.seats,
-              totalValue: reservationsTable.totalValue,
-              tripName: tripsTable.name,
-              tripDestination: tripsTable.destination,
-              tripDepartureDate: tripsTable.departureDate,
-              tripReturnDate: tripsTable.returnDate,
-            })
-            .from(reservationsTable)
-            .innerJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
-            .where(eq(reservationsTable.storeOrderId, ffOrderNumber))
-            .limit(1);
-
-          if (!reservation) return;
-
-          const depDate = reservation.tripDepartureDate as unknown as Date | null;
-          const retDate = reservation.tripReturnDate as unknown as Date | null;
-
-          const departureDateStr = depDate
-            ? depDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
-            : "A confirmar";
-
-          let duration = "A confirmar";
-          if (depDate && retDate) {
-            const diffDays = Math.round((retDate.getTime() - depDate.getTime()) / (1000 * 60 * 60 * 24));
-            const nights = diffDays > 0 ? diffDays : 0;
-            const days = nights + 1;
-            duration = `${days} dia${days !== 1 ? "s" : ""}${nights > 0 ? ` / ${nights} noite${nights !== 1 ? "s" : ""}` : ""}`;
-          }
-
-          const totalAmount = Number(reservation.totalValue ?? 0);
-          const whatsappNumber = ffAgencyPhone.replace(/\D/g, "");
-          const whatsappUrl = whatsappNumber ? `https://wa.me/${whatsappNumber}` : ffStoreBase;
-          const voucherUrl = `${ffConsultUrl}?code=${reservation.voucherCode ?? ""}`;
-
-          // Step 3: Enqueue combined reservation confirmation email (with credentials if new account)
-          const subject = `Reserva Confirmada — ${reservation.reservationNumber ?? ffOrderNumber}`;
-          await enqueueReservationConfirmationEmail({
-            tenantId: ffTenantId,
-            reservationId: reservation.reservationId,
-            subject,
-            props: {
-              reservationNumber: reservation.reservationNumber ?? ffOrderNumber,
-              voucherCode: reservation.voucherCode ?? "",
-              clientName: ffName,
-              clientCpf: data.customerCpf ?? "",
-              clientEmail: ffEmail,
-              clientPhone: data.customerPhone ?? "",
-              tripTitle: reservation.tripName,
-              destination: reservation.tripDestination,
-              departureDate: departureDateStr,
-              duration,
-              seats: reservation.seats ?? [],
-              totalAmount,
-              amountPaid: 0,
-              amountPending: totalAmount,
-              paymentMethod: data.paymentMethod ?? "pix",
-              paymentStatus: "pending",
-              agencyName: ffAgencyName,
-              agencyLogo: ffAgencyLogo,
-              agencyPhone: ffAgencyPhone,
-              agencyEmail: ffAgencyEmail,
-              agencyWebsite: ffStoreBase,
-              voucherUrl,
-              consultUrl: ffConsultUrl,
-              whatsappUrl,
-              ...(credentials ? { credentials } : {}),
-            },
-          });
-        } catch (err) {
-          console.error("[store-public] Error sending post-booking email:", err);
-        }
-
-        // Step 4: notify the agency for every reservation in this order,
-        // independently of the customer-facing e-mail flow.
-        try {
-          const reservationRows = await db
-            .select({ id: reservationsTable.id })
-            .from(reservationsTable)
-            .where(
-              and(
-                eq(reservationsTable.storeOrderId, ffOrderNumber),
-                eq(reservationsTable.tenantId, ffTenantId),
-              ),
-            );
-
-          const settled = await Promise.allSettled(
-            reservationRows.map((r) =>
-              enqueueNewBookingNotificationEmail(r.id, ffTenantId),
-            ),
-          );
-          for (const result of settled) {
-            if (result.status === "rejected") {
-              console.error(
-                "[store-public] Failed to enqueue agency new-booking notification:",
-                result.reason,
-              );
-            }
-          }
-        } catch (notifyErr) {
-          console.error(
-            "[store-public] Failed to load reservations for agency notification:",
-            notifyErr,
-          );
-        }
-      })();
+      void runPostBookingSideEffects({
+        customerEmail: data.customerEmail,
+        customerName: data.customerName,
+        customerCpf: data.customerCpf,
+        customerPhone: data.customerPhone,
+        paymentMethod: data.paymentMethod,
+        tenantId: store.tenantId,
+        agencyName: store.name,
+        agencyLogo: store.logo ?? "",
+        agencyPhone,
+        agencyEmail,
+        storeBase,
+        loginUrl: `${storeBase}/sign-in`,
+        consultUrl: `${storeBase}/consultar-pedido`,
+        orderNumber,
+      });
     }
 
     res.status(200).json({
@@ -1319,7 +692,6 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
       orderId: order.id,
       items,
       paymentToken: orderPaymentToken,
-      // Expose the reservation expiry deadline so the storefront can display a countdown timer.
       reservationExpiresAt: tripLinkedProducts.size > 0 ? reservationExpiresAt.toISOString() : null,
     });
 
