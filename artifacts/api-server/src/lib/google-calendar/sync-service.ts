@@ -13,6 +13,7 @@ import { format, addHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { GoogleCalendarService, refreshTokenIfNeeded } from "./calendar-service";
 import { generateId } from "../id";
+import { logger } from "../logger";
 import { RESERVATION_STATUS, PAYMENT_STATUS, TRIP_STATUS } from "@workspace/permissions";
 
 async function getCalendarService(userId: string): Promise<GoogleCalendarService | null> {
@@ -58,7 +59,7 @@ async function upsertCalendarEvent(
         syncedAt: new Date(),
       }).where(eq(calendarEventsTable.id, existing.id));
     } else {
-      console.warn("[upsertCalendarEvent] Google updateEvent failed, skipping DB update for", existing.googleEventId);
+      logger.warn({ googleEventId: existing.googleEventId }, "calendar-sync: upsertCalendarEvent updateEvent failed; skipping DB update");
     }
   } else {
     const googleEvent = await service.createEvent(eventData);
@@ -247,7 +248,7 @@ export class CalendarSyncService {
         }
       }
     } catch (err) {
-      console.error("[CalendarSyncService] syncTrip error:", err);
+      logger.error({ err }, "calendar-sync: syncTrip failed");
     }
   }
 
@@ -366,7 +367,7 @@ export class CalendarSyncService {
         { tenantId: trip.tenantId, userId: actorUserId, tripId, eventType: "trip" }
       );
     } catch (err) {
-      console.error("[CalendarSyncService] syncTripForUser error:", err);
+      logger.error({ err }, "calendar-sync: syncTripForUser failed");
     }
   }
 
@@ -386,7 +387,7 @@ export class CalendarSyncService {
         await db.delete(calendarEventsTable).where(eq(calendarEventsTable.id, ev.id));
       }
     } catch (err) {
-      console.error("[CalendarSyncService] deleteEventsForTrip error:", err);
+      logger.error({ err }, "calendar-sync: deleteEventsForTrip failed");
     }
   }
 
@@ -406,7 +407,7 @@ export class CalendarSyncService {
         await db.delete(calendarEventsTable).where(eq(calendarEventsTable.id, ev.id));
       }
     } catch (err) {
-      console.error("[CalendarSyncService] deleteEventsForPayment error:", err);
+      logger.error({ err }, "calendar-sync: deleteEventsForPayment failed");
     }
   }
 
@@ -502,7 +503,7 @@ export class CalendarSyncService {
         }
       }
     } catch (err) {
-      console.error("[CalendarSyncService] syncPayment error:", err);
+      logger.error({ err }, "calendar-sync: syncPayment failed");
     }
   }
 
@@ -566,7 +567,7 @@ export class CalendarSyncService {
         { tenantId: payment.tenantId, userId: actorUserId, paymentId, eventType: "payment" }
       );
     } catch (err) {
-      console.error("[CalendarSyncService] syncPaymentForUser error:", err);
+      logger.error({ err }, "calendar-sync: syncPaymentForUser failed");
     }
   }
 
@@ -655,7 +656,7 @@ export class CalendarSyncService {
         }
       }
     } catch (err) {
-      console.error("[CalendarSyncService] syncBirthday error:", err);
+      logger.error({ err }, "calendar-sync: syncBirthday failed");
     }
   }
 
@@ -716,7 +717,7 @@ export class CalendarSyncService {
         { tenantId: client.tenantId, userId: actorUserId, clientId, eventType: "birthday" }
       );
     } catch (err) {
-      console.error("[CalendarSyncService] syncBirthdayForUser error:", err);
+      logger.error({ err }, "calendar-sync: syncBirthdayForUser failed");
     }
   }
 

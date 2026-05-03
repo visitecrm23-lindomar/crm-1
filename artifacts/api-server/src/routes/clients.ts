@@ -235,7 +235,9 @@ router.post("/clients", async (req, res, next: NextFunction): Promise<void> => {
     res.status(statusCode).json(formatClient(upserted, { isNew, message }));
 
     if (upserted.birthDate) {
-      CalendarSyncService.syncBirthday(upserted.id).catch(() => {});
+      CalendarSyncService.syncBirthday(upserted.id).catch((err) => {
+        req.log.warn({ err, clientId: upserted.id, context: "clients.upsert" }, "Calendar sync falhou — continuando");
+      });
     }
   } catch (err) {
     next(err);
@@ -339,7 +341,9 @@ router.patch("/clients/:id", async (req, res, next: NextFunction): Promise<void>
     res.json(formatClient(client));
 
     if (parsed.data.birthDate !== undefined) {
-      CalendarSyncService.syncBirthday(client.id).catch(() => {});
+      CalendarSyncService.syncBirthday(client.id).catch((err) => {
+        req.log.warn({ err, clientId: client.id, context: "clients.update" }, "Calendar sync falhou — continuando");
+      });
     }
   } catch (err) {
     next(err);

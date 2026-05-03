@@ -3,6 +3,29 @@ import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { logger } from "../logger";
+
+export const CALENDAR_STATUS_CONNECTED = "connected";
+export const CALENDAR_STATUS_INVALID = "invalid";
+
+function isInvalidGrantError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const anyErr = err as { code?: number | string; response?: { status?: number; data?: { error?: string } }; message?: string };
+  const status = anyErr.response?.status ?? (typeof anyErr.code === "number" ? anyErr.code : undefined);
+  const errorCode = anyErr.response?.data?.error;
+  if (errorCode === "invalid_grant") return true;
+  if (status === 401 && (anyErr.message?.includes("invalid_grant") || errorCode === "invalid_grant")) return true;
+  if (typeof anyErr.message === "string" && anyErr.message.includes("invalid_grant")) return true;
+  return false;
+}
+
+async function markCalendarConnectionInvalid(userId: string, reason: string): Promise<void> {
+  await db.update(usersTable).set({
+    googleCalendarStatus: CALENDAR_STATUS_INVALID,
+    googleCalendarEnabled: false,
+  }).where(eq(usersTable.id, userId));
+  logger.warn({ userId, reason }, "google-calendar: connection marked invalid (user must reconnect)");
+}
 
 const GOOGLE_CLIENT_ID = process.env["GOOGLE_CLIENT_ID"] ?? "";
 const GOOGLE_CLIENT_SECRET = process.env["GOOGLE_CLIENT_SECRET"] ?? "";
@@ -116,10 +139,16 @@ export async function refreshTokenIfNeeded(userId: string): Promise<string | nul
     await db.update(usersTable).set({
       googleAccessToken: credentials.access_token,
       googleTokenExpiry: credentials.expiry_date ? new Date(credentials.expiry_date) : null,
+      googleCalendarStatus: CALENDAR_STATUS_CONNECTED,
     }).where(eq(usersTable.id, userId));
 
     return credentials.access_token;
-  } catch {
+  } catch (err) {
+    if (isInvalidGrantError(err)) {
+      await markCalendarConnectionInvalid(userId, "refresh token rejected (invalid_grant)");
+    } else {
+      logger.error({ err, userId }, "google-calendar: refreshTokenIfNeeded failed");
+    }
     return null;
   }
 }
@@ -169,7 +198,7 @@ export class GoogleCalendarService {
       });
       return { id: response.data.id! };
     } catch (err) {
-      console.error("[GoogleCalendarService] createEvent error:", err);
+      logger.error({ err }, "google-calendar: createEvent failed");
       return null;
     }
   }
@@ -197,7 +226,7 @@ export class GoogleCalendarService {
       });
       return true;
     } catch (err) {
-      console.error("[GoogleCalendarService] updateEvent error:", err);
+      logger.error({ err }, "google-calendar: updateEvent failed");
       return false;
     }
   }
@@ -211,7 +240,7 @@ export class GoogleCalendarService {
       });
       return true;
     } catch (err) {
-      console.error("[GoogleCalendarService] deleteEvent error:", err);
+      logger.error({ err }, "google-calendar: deleteEvent failed");
       return false;
     }
   }
@@ -230,7 +259,7 @@ export class GoogleCalendarService {
         .filter((e) => e.id && e.summary)
         .map((e) => ({ id: e.id!, summary: e.summary! }));
     } catch (err) {
-      console.error("[GoogleCalendarService] listEvents error:", err);
+      logger.error({ err }, "google-calendar: listEvents failed");
       return [];
     }
   }

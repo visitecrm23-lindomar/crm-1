@@ -292,7 +292,9 @@ router.post("/trips", async (req, res, next: NextFunction): Promise<void> => {
       .limit(1);
     if (!trip) { next(new AppError("Failed to create trip", 500, "TRIP_CREATE_FAILED")); return; }
     res.status(201).json(formatTrip(trip));
-    CalendarSyncService.syncTrip(id).catch(() => {});
+    CalendarSyncService.syncTrip(id).catch((err) => {
+      req.log.warn({ err, tripId: id, context: "trips.create" }, "Calendar sync falhou — continuando");
+    });
   } catch (err) {
     next(err);
   }
@@ -453,7 +455,9 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
       await deleteOrphanedFile(oldCoverImage, parsed.data.coverImage, req.log);
     }
     res.json(formatTrip(trip));
-    CalendarSyncService.syncTrip(req.params.id).catch(() => {});
+    CalendarSyncService.syncTrip(req.params.id).catch((err) => {
+      req.log.warn({ err, tripId: req.params.id, context: "trips.update" }, "Calendar sync falhou — continuando");
+    });
   } catch (err) {
     next(err);
   }
@@ -474,7 +478,9 @@ router.delete("/trips/:id", async (req, res, next: NextFunction): Promise<void> 
       await deleteOrphanedFile(existing.coverImage, null, req.log);
     }
     res.json({ success: true });
-    CalendarSyncService.deleteEventsForTrip(req.params.id).catch(() => {});
+    CalendarSyncService.deleteEventsForTrip(req.params.id).catch((err) => {
+      req.log.warn({ err, tripId: req.params.id, context: "trips.delete" }, "Calendar cleanup falhou — continuando");
+    });
   } catch (err) {
     next(err);
   }

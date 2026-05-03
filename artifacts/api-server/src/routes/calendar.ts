@@ -81,10 +81,10 @@ router.get("/calendar/callback", async (req, res): Promise<void> => {
     // Respond first, then fire-and-forget initial sync for this user only
     res.redirect(`${FRONTEND_URL}/configuracoes?gcal=success&tab=integrations`);
     CalendarSyncService.syncAllForUser(userId).catch((err) => {
-      console.error("[calendar/callback] Initial syncAllForUser error:", err);
+      req.log.warn({ err, userId, context: "calendar/callback" }, "Initial syncAllForUser failed — continuing");
     });
   } catch (err) {
-    console.error("[calendar/callback] Error:", err);
+    req.log.error({ err }, "calendar/callback failed");
     res.redirect(`${FRONTEND_URL}/configuracoes?gcal=error&tab=integrations`);
   }
 });
