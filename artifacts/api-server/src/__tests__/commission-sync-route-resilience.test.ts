@@ -1,3 +1,4 @@
+import pino from "pino";
 import { ROLES } from "@workspace/permissions";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
@@ -199,7 +200,7 @@ function stubLogger(
   next: express.NextFunction,
 ) {
   const noop = () => {};
-  req.log = { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop } as any;
+  req.log = pino({ level: "silent" }) as unknown as typeof req.log;
   next();
 }
 

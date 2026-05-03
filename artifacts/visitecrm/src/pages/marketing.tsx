@@ -90,29 +90,29 @@ export default function Marketing() {
   const deleteCoupon = useDeleteCoupon();
 
   const { data: bdToday, isLoading: loadingToday, refetch: refetchToday } = useGetBirthdayToday({
-    query: { enabled: tab === "birthdays" } as any,
+    query: { enabled: tab === "birthdays", queryKey: [] as readonly unknown[] },
   });
   const { data: bdUpcoming7, isLoading: loadingUpcoming7 } = useGetBirthdayUpcoming(
     { days: 7 },
-    { query: { enabled: tab === "birthdays" && birthdaySubTab === "upcoming7" } as any }
+    { query: { enabled: tab === "birthdays" && birthdaySubTab === "upcoming7", queryKey: [] as readonly unknown[] } }
   );
   const { data: bdUpcoming30, isLoading: loadingUpcoming30 } = useGetBirthdayUpcoming(
     { days: 30 },
-    { query: { enabled: tab === "birthdays" && birthdaySubTab === "upcoming30" } as any }
+    { query: { enabled: tab === "birthdays" && birthdaySubTab === "upcoming30", queryKey: [] as readonly unknown[] } }
   );
   const { data: bdHistory, isLoading: loadingHistory } = useGetBirthdayHistory(
     { year: new Date().getFullYear() },
-    { query: { enabled: tab === "birthdays" && birthdaySubTab === "history" } as any }
+    { query: { enabled: tab === "birthdays" && birthdaySubTab === "history", queryKey: [] as readonly unknown[] } }
   );
   const { data: bdStats } = useGetBirthdayStats({
-    query: { enabled: tab === "birthdays" } as any,
+    query: { enabled: tab === "birthdays", queryKey: [] as readonly unknown[] },
   });
   const { data: bdSettings, isLoading: loadingSettings } = useGetBirthdaySettings({
-    query: { enabled: tab === "birthdays" && birthdaySubTab === "settings", refetchOnWindowFocus: false } as any,
+    query: { enabled: tab === "birthdays" && birthdaySubTab === "settings", refetchOnWindowFocus: false, queryKey: [] as readonly unknown[] },
   });
 
   const { data: allClientsData } = useListClients({ limit: 1000, page: 1 }, {
-    query: { enabled: manualSendOpen } as any,
+    query: { enabled: manualSendOpen, queryKey: [] as readonly unknown[] },
   });
 
   const filteredClients = useMemo(() => {

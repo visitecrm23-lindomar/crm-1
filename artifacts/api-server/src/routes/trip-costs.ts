@@ -5,11 +5,12 @@ import { eq, and } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { ADMIN_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
+import { EXPENSE_STATUS } from "@workspace/permissions";
 
 const router = Router();
 
 const CATEGORIES = new Set(["Transporte", "Hospedagem", "Alimentação", "Guia", "Marketing", "Seguro", "Taxas", "Outros"]);
-const STATUSES = new Set(["pending", "paid", "overdue"]);
+const STATUSES = new Set<string>([EXPENSE_STATUS.PENDING, EXPENSE_STATUS.PAID, EXPENSE_STATUS.OVERDUE]);
 
 function formatCost(c: typeof tripCostsTable.$inferSelect) {
   return {
@@ -52,8 +53,8 @@ router.get("/trips/:id/costs", async (req, res): Promise<void> => {
     }).from(tripsTable).where(eq(tripsTable.id, req.params.id)).limit(1);
 
     const totalRealCosts = costs.reduce((s, c) => s + Number(c.amount), 0);
-    const totalPaidCosts = costs.filter(c => c.status === "paid").reduce((s, c) => s + Number(c.amount), 0);
-    const totalPendingCosts = costs.filter(c => c.status !== "paid").reduce((s, c) => s + Number(c.amount), 0);
+    const totalPaidCosts = costs.filter(c => c.status === EXPENSE_STATUS.PAID).reduce((s, c) => s + Number(c.amount), 0);
+    const totalPendingCosts = costs.filter(c => c.status !== EXPENSE_STATUS.PAID).reduce((s, c) => s + Number(c.amount), 0);
 
     const priceAdult = Number(tripRow?.priceAdult ?? 0);
     const confirmedSeats = tripRow?.confirmedSeats ?? 0;
@@ -118,9 +119,9 @@ router.post("/trips/:id/costs", async (req, res): Promise<void> => {
       description: String(description),
       supplierName: supplierName ? String(supplierName) : null,
       amount: String(Number(amount)),
-      status: STATUSES.has(status) ? String(status) : "pending",
+      status: STATUSES.has(String(status)) ? String(status) : EXPENSE_STATUS.PENDING,
       dueDate: dueDate ? new Date(dueDate) : null,
-      paidAt: paidAt ? new Date(paidAt) : (status === "paid" ? new Date() : null),
+      paidAt: paidAt ? new Date(paidAt) : (status === EXPENSE_STATUS.PAID ? new Date() : null),
       notes: notes ? String(notes) : null,
     });
 
@@ -164,7 +165,7 @@ router.put("/trips/:id/costs/:costId", async (req, res): Promise<void> => {
     if (status != null && STATUSES.has(String(status))) updates.status = String(status);
     if (dueDate !== undefined) updates.dueDate = dueDate ? new Date(dueDate) : null;
     if (paidAt !== undefined) updates.paidAt = paidAt ? new Date(paidAt) : null;
-    else if (status === "paid" && !existing.paidAt) updates.paidAt = new Date();
+    else if (status === EXPENSE_STATUS.PAID && !existing.paidAt) updates.paidAt = new Date();
     if (notes !== undefined) updates.notes = notes ? String(notes) : null;
 
     await db.update(tripCostsTable).set(updates)

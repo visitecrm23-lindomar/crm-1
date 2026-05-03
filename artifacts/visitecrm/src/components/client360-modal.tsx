@@ -96,7 +96,7 @@ function ClientHistoryTab({ clientId, isOpen }: { clientId: string; isOpen: bool
   const [showForm, setShowForm] = useState(false);
 
   const { data: activities, isLoading, refetch } = useListClientActivities(clientId, {
-    query: { enabled: isOpen && !!clientId } as any,
+    query: { enabled: isOpen && !!clientId, queryKey: [] as readonly unknown[] },
   });
 
   const { mutate: createActivity, isPending } = useCreateClientActivity({
@@ -295,7 +295,7 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
 }
 
 function ClientReferralTab({ clientId }: { clientId: string }) {
-  const { data, refetch } = useGetClientReferral(clientId, { query: { enabled: !!clientId } as any });
+  const { data, refetch } = useGetClientReferral(clientId, { query: { enabled: !!clientId, queryKey: [] as readonly unknown[] } });
   const generate = useGenerateClientReferralCode();
   const { data: me } = useGetMe();
   const { toast } = useToast();
@@ -438,29 +438,29 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
   const id = clientId ?? "";
 
   const { data: client, isLoading: loadingClient } = useGetClient(id, {
-    query: { enabled: open && !!id } as any,
+    query: { enabled: open && !!id, queryKey: [] as readonly unknown[] },
   });
 
   const { data: reservations } = useListReservations(
     { clientId: id, limit: 20 },
-    { query: { enabled: open && !!id } as any }
+    { query: { enabled: open && !!id, queryKey: [] as readonly unknown[] } }
   );
 
   const { data: payments } = useListPayments(
     { clientId: id, limit: 20 },
-    { query: { enabled: open && !!id } as any }
+    { query: { enabled: open && !!id, queryKey: [] as readonly unknown[] } }
   );
 
   const { data: loyaltyInfo } = useGetClientLoyalty(id, {
-    query: { enabled: open && !!id } as any,
+    query: { enabled: open && !!id, queryKey: [] as readonly unknown[] },
   });
 
   const { data: loyaltyMembers } = useListLoyaltyMembers({
-    query: { enabled: open && !!id } as any,
+    query: { enabled: open && !!id, queryKey: [] as readonly unknown[] },
   });
 
   const { data: loyaltyTransactions } = useListLoyaltyTransactions({
-    query: { enabled: open && !!id && !!loyaltyInfo?.memberId } as any,
+    query: { enabled: open && !!id && !!loyaltyInfo?.memberId, queryKey: [] as readonly unknown[] },
   });
 
   const member = useMemo(() => {

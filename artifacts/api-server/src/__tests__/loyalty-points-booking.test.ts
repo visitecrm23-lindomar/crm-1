@@ -1,3 +1,4 @@
+import pino from "pino";
 /**
  * POST /reservations — loyalty points deduction (real DB integration)
  *
@@ -95,7 +96,7 @@ function buildApp() {
   app.use(express.json());
   app.use((req: express.Request & { log?: unknown; id?: string }, _res, next) => {
     const noop = () => {};
-    req.log = { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop } as any;
+    req.log = pino({ level: "silent" }) as unknown as typeof req.log;
     req.id = "test-req";
     next();
   });

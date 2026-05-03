@@ -1040,7 +1040,7 @@ router.get("/public/store/:slug/reviews", async (req, res, next: NextFunction): 
       eq(storeReviewsTable.storeId, store.id),
       eq(storeReviewsTable.status, "approved"),
     ];
-    if (featured === "true") conditions.push(eq((storeReviewsTable as any).isFeatured, true));
+    if (featured === "true") conditions.push(eq(storeReviewsTable.isFeatured, true));
     const reviews = await db.select().from(storeReviewsTable)
       .where(and(...conditions))
       .orderBy(desc(storeReviewsTable.createdAt))

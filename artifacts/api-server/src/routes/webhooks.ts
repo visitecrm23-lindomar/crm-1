@@ -7,6 +7,7 @@ import { generateId } from "../lib/id";
 import { logger } from "../lib/logger";
 import { syncReservationPaymentStatus, paymentExistsForGatewayTx, type DbExecutor } from "../lib/reservation-payments";
 import { decryptOrPassthrough } from "../lib/crypto";
+import { PAYMENT_STATUS, RESERVATION_STATUS, STORE_ORDER_STATUS, STORE_PAYMENT_STATUS } from "@workspace/permissions";
 
 const router = Router();
 
@@ -349,7 +350,7 @@ async function handleMpPayment(store: StoreScope, paymentId: string, payment: Mp
     ? payment.external_reference.trim()
     : "";
 
-  if (payment.status === "approved") {
+  if (payment.status === PAYMENT_STATUS.APPROVED) {
     await db.transaction(async (tx) => {
       const tx2 = tx as unknown as DbExecutor;
       const orderId = await resolveOrderForMp(tx2, store, paymentId, externalRef);
@@ -373,7 +374,7 @@ async function handleMpPayment(store: StoreScope, paymentId: string, payment: Mp
       if (!orderId) return;
       await markOrderFailed(tx2, store, paymentId, "mercadopago");
     });
-  } else if (payment.status === "cancelled" || payment.status === "refunded" || payment.status === "charged_back") {
+  } else if (payment.status === PAYMENT_STATUS.CANCELLED || payment.status === PAYMENT_STATUS.REFUNDED || payment.status === PAYMENT_STATUS.CHARGED_BACK) {
     await db.transaction(async (tx) => {
       const tx2 = tx as unknown as DbExecutor;
       const orderId = await resolveOrderForMp(tx2, store, paymentId, externalRef);
@@ -494,10 +495,10 @@ async function applyGatewayPayment(tx: DbExecutor, args: ApplyArgs): Promise<voi
     return;
   }
 
-  if (order.paymentStatus !== "paid") {
+  if (order.paymentStatus !== STORE_PAYMENT_STATUS.PAID) {
     await tx
       .update(storeOrdersTable)
-      .set({ paymentStatus: "paid", paidAt, status: "confirmed", confirmedAt: paidAt })
+      .set({ paymentStatus: STORE_PAYMENT_STATUS.PAID, paidAt, status: STORE_ORDER_STATUS.CONFIRMED, confirmedAt: paidAt })
       .where(eq(storeOrdersTable.id, order.id));
   }
 
@@ -549,7 +550,7 @@ async function applyGatewayPayment(tx: DbExecutor, args: ApplyArgs): Promise<voi
       totalInstallments: reservations.length,
       dueDate: paidAt,
       paidAt,
-      status: "paid",
+      status: PAYMENT_STATUS.PAID,
       gateway,
       transactionId,
       description: `Pagamento ${gateway} confirmado via webhook`,
@@ -587,7 +588,7 @@ async function markOrderFailed(
     )
     .limit(1);
   if (!order) return;
-  if (order.paymentStatus === "paid") {
+  if (order.paymentStatus === STORE_PAYMENT_STATUS.PAID) {
     logger.warn(
       { paymentIntentId, gateway },
       "[webhooks] Failed event arrived after payment was marked paid; ignoring",
@@ -596,7 +597,7 @@ async function markOrderFailed(
   }
   await tx
     .update(storeOrdersTable)
-    .set({ paymentStatus: "failed" })
+    .set({ paymentStatus: STORE_PAYMENT_STATUS.FAILED })
     .where(eq(storeOrdersTable.id, order.id));
 
   // Cascade to linked reservations: a payment failure should leave them in
@@ -613,12 +614,12 @@ async function markOrderFailed(
     );
 
   const failableIds = reservations
-    .filter((r) => r.status !== "cancelled" && r.status !== "completed")
+    .filter((r) => r.status !== RESERVATION_STATUS.CANCELLED && r.status !== RESERVATION_STATUS.COMPLETED)
     .map((r) => r.id);
   if (failableIds.length > 0) {
     await tx
       .update(reservationsTable)
-      .set({ status: "failed" })
+      .set({ status: RESERVATION_STATUS.FAILED })
       .where(
         and(
           eq(reservationsTable.tenantId, order.tenantId),
@@ -659,14 +660,14 @@ async function markOrderRefunded(
   const now = new Date();
   await tx
     .update(storeOrdersTable)
-    .set({ paymentStatus: "refunded", refundedAt: now, status: "cancelled", cancelledAt: now })
+    .set({ paymentStatus: STORE_PAYMENT_STATUS.REFUNDED, refundedAt: now, status: STORE_ORDER_STATUS.CANCELLED, cancelledAt: now })
     .where(eq(storeOrdersTable.id, order.id));
 
   // Demote previously-paid Payment rows to refunded so any subsequent
   // recomputation of reservation balances reflects the reversal.
   await tx
     .update(paymentsTable)
-    .set({ status: "refunded" })
+    .set({ status: PAYMENT_STATUS.REFUNDED })
     .where(
       and(
         eq(paymentsTable.tenantId, order.tenantId),
@@ -689,12 +690,12 @@ async function markOrderRefunded(
     );
 
   const cancellableIds = reservations
-    .filter((r) => r.status !== "cancelled" && r.status !== "completed")
+    .filter((r) => r.status !== RESERVATION_STATUS.CANCELLED && r.status !== RESERVATION_STATUS.COMPLETED)
     .map((r) => r.id);
   if (cancellableIds.length > 0) {
     await tx
       .update(reservationsTable)
-      .set({ status: "cancelled", cancelledAt: now })
+      .set({ status: RESERVATION_STATUS.CANCELLED, cancelledAt: now })
       .where(
         and(
           eq(reservationsTable.tenantId, order.tenantId),

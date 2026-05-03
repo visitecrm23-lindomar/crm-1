@@ -6,6 +6,7 @@ import {
   useListTrips,
 } from "@workspace/api-client-react";
 import type { Reservation } from "@workspace/api-client-react";
+import { RESERVATION_STATUS, STORE_PAYMENT_STATUS } from "@workspace/permissions";
 import { VoucherModal } from "./reservations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,9 +62,9 @@ const PAYMENT_STATUS_LABELS: Record<string, string> = {
 };
 
 function paymentStatus(r: Reservation): string {
-  if (r.balance <= 0) return "paid";
+  if (r.balance <= 0) return STORE_PAYMENT_STATUS.PAID;
   if (r.paidValue > 0) return "partial";
-  return "pending";
+  return STORE_PAYMENT_STATUS.PENDING;
 }
 
 function VoucherCard({ reservation, onDownload }: { reservation: Reservation; onDownload?: (r: Reservation) => void }) {
@@ -132,7 +133,7 @@ function VoucherCard({ reservation, onDownload }: { reservation: Reservation; on
               <div>
                 <p className="text-xs text-muted-foreground">Pagamento</p>
                 <Badge
-                  variant={pStatus === "paid" ? "default" : pStatus === "partial" ? "secondary" : "outline"}
+                  variant={pStatus === STORE_PAYMENT_STATUS.PAID ? "default" : pStatus === "partial" ? "secondary" : "outline"}
                   className="text-xs"
                 >
                   {PAYMENT_STATUS_LABELS[pStatus] ?? pStatus}
@@ -221,7 +222,7 @@ function BulkCheckIn() {
     : reservations.filter((r) => r.trip.id === selectedTripId || r.trip.name === (trips.find(t => t.id === selectedTripId)?.name ?? ""));
 
   const checkedIn = tripReservations.filter((r) => !!r.checkedInAt);
-  const pending = tripReservations.filter((r) => !r.checkedInAt && r.status === "confirmed");
+  const pending = tripReservations.filter((r) => !r.checkedInAt && r.status === RESERVATION_STATUS.CONFIRMED);
 
   const [processing, setProcessing] = useState(false);
 
@@ -311,7 +312,7 @@ function BulkCheckIn() {
                     <TableCell className="text-sm">{r.seats.join(", ") || "—"}</TableCell>
                     <TableCell>
                       <Badge
-                        variant={r.status === "confirmed" ? "default" : r.status === "cancelled" ? "destructive" : "secondary"}
+                        variant={r.status === RESERVATION_STATUS.CONFIRMED ? "default" : r.status === RESERVATION_STATUS.CANCELLED ? "destructive" : "secondary"}
                         className="text-xs"
                       >
                         {STATUS_LABELS[r.status] ?? r.status}
@@ -348,7 +349,7 @@ function BulkCheckIn() {
 
 function VoucherGenerator({ onDownload }: { onDownload?: (r: Reservation) => void }) {
   const { toast } = useToast();
-  const { data: reservationsData } = useListReservations({ limit: 500, status: "confirmed" });
+  const { data: reservationsData } = useListReservations({ limit: 500, status: RESERVATION_STATUS.CONFIRMED });
   const reservations = reservationsData?.data ?? [];
   const [search, setSearch] = useState("");
   const [generated, setGenerated] = useState<Set<string>>(new Set());
@@ -557,9 +558,9 @@ export default function Vouchers() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Todos os status</SelectItem>
-                <SelectItem value="confirmed">Confirmado</SelectItem>
-                <SelectItem value="pending">Pendente</SelectItem>
-                <SelectItem value="cancelled">Cancelado</SelectItem>
+                <SelectItem value={RESERVATION_STATUS.CONFIRMED}>Confirmado</SelectItem>
+                <SelectItem value={RESERVATION_STATUS.PENDING}>Pendente</SelectItem>
+                <SelectItem value={RESERVATION_STATUS.CANCELLED}>Cancelado</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -614,9 +615,9 @@ export default function Vouchers() {
                         <TableCell>
                           <Badge
                             variant={
-                              r.status === "confirmed"
+                              r.status === RESERVATION_STATUS.CONFIRMED
                                 ? "default"
-                                : r.status === "cancelled"
+                                : r.status === RESERVATION_STATUS.CANCELLED
                                 ? "destructive"
                                 : "secondary"
                             }

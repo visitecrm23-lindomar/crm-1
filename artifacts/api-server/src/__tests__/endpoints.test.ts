@@ -1,3 +1,4 @@
+import pino from "pino";
 /**
  * Endpoint-level tests: reservation creation (POST /reservations) and
  * store order lookup email validation (GET /public/store/:slug/orders/:orderNumber).
@@ -162,7 +163,7 @@ function stubLogger(
   next: express.NextFunction,
 ) {
   const noop = () => {};
-  req.log = { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop } as any;
+  req.log = pino({ level: "silent" }) as unknown as typeof req.log;
   next();
 }
 

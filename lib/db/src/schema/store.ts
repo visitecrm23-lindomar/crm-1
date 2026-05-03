@@ -357,6 +357,8 @@ export const storeReviewsTable = pgTable("store_reviews", {
 
   status: text("status").notNull().default("pending"),
 
+  isFeatured: boolean("is_featured").notNull().default(false),
+
   reply: text("reply"),
   repliedAt: timestamp("replied_at", { withTimezone: true }),
 

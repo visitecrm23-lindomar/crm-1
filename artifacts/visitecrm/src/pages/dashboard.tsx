@@ -8,6 +8,7 @@ import {
 } from "@workspace/api-client-react";
 import type { Reservation, PaymentListResponse } from "@workspace/api-client-react";
 import { GetDashboardChartsPeriod } from "@workspace/api-client-react";
+import { PAYMENT_STATUS, PAYMENT_TYPE, ROLES } from "@workspace/permissions";
 import { VoucherModal } from "./reservations";
 import { ReservationCardVisual } from "@/components/reservation-card-visual";
 import {
@@ -165,7 +166,7 @@ function AgencyDashboard() {
   const { data: funnel, isLoading: loadingFunnel } = useGetDashboardFunnel();
   const { data: upcomingTrips, isLoading: loadingTrips } = useGetDashboardUpcomingTrips();
   const { data: paymentSummary, isLoading: loadingPaySummary } = useGetPaymentsSummary();
-  const { data: pendingPaymentsList, isLoading: loadingPendingPayments } = useListPayments({ status: "pending", limit: 5, type: "receivable" });
+  const { data: pendingPaymentsList, isLoading: loadingPendingPayments } = useListPayments({ status: PAYMENT_STATUS.PENDING, limit: 5, type: PAYMENT_TYPE.RECEIVABLE });
   const { data: topCustomers, isLoading: loadingTopCustomers } = useGetDashboardTopCustomers();
 
   const npsLabel = summary?.averageNps != null ? `${summary.averageNps.toFixed(1)} / 10` : "—";
@@ -1183,7 +1184,7 @@ function AgencyDashboard() {
 function ClientDashboard() {
   const { data: summary, isLoading } = useGetDashboardSummary();
   const { data: upcomingTrips, isLoading: loadingTrips } = useGetDashboardUpcomingTrips();
-  const { data: pendingPayments, isLoading: loadingPayments } = useListPayments({ status: "pending", limit: 5 });
+  const { data: pendingPayments, isLoading: loadingPayments } = useListPayments({ status: PAYMENT_STATUS.PENDING, limit: 5 });
   const { data: me } = useGetMe();
   const [voucherOpen, setVoucherOpen] = useState(false);
   const [voucherAutoDownload, setVoucherAutoDownload] = useState(false);
@@ -1336,7 +1337,7 @@ export default function Dashboard() {
   const { data: me } = useGetMe();
   const role = me?.role;
 
-  if (role === "cliente") return <ClientDashboard />;
-  if (role === "vendedor") return <Redirect to="/meu-painel" />;
+  if (role === ROLES.CLIENT) return <ClientDashboard />;
+  if (role === ROLES.SALES) return <Redirect to="/meu-painel" />;
   return <AgencyDashboard />;
 }

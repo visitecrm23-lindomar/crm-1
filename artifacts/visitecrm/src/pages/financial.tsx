@@ -17,6 +17,7 @@ import {
   useListClients,
 } from "@workspace/api-client-react";
 import type { CommissionRule } from "@workspace/api-client-react";
+import { PAYMENT_STATUS, PAYMENT_TYPE, EXPENSE_STATUS, COMMISSION_STATUS } from "@workspace/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -188,7 +189,7 @@ export default function Financial() {
     status: statusFilter || undefined,
     limit: 50,
   });
-  const { data: allReceivedPayments } = useListPayments({ type: "receivable", status: "paid", limit: 500 });
+  const { data: allReceivedPayments } = useListPayments({ type: PAYMENT_TYPE.RECEIVABLE, status: PAYMENT_STATUS.PAID, limit: 500 });
   const { data: allExpensesData } = useListExpenses({ limit: 500 });
   const { data: expensesData, isLoading: loadingExpenses, refetch: refetchExpenses } = useListExpenses({ limit: 50 });
   const { data: commissionsData, isLoading: loadingCommissions, refetch: refetchCommissions } = useListCommissions();
@@ -208,7 +209,7 @@ export default function Financial() {
   );
 
   const totalExpensesSum = useMemo(() =>
-    (allExpensesData?.data ?? []).filter(e => e.status === "paid").reduce((s, e) => s + Number(e.amount), 0),
+    (allExpensesData?.data ?? []).filter(e => e.status === EXPENSE_STATUS.PAID).reduce((s, e) => s + Number(e.amount), 0),
     [allExpensesData]
   );
 
@@ -218,7 +219,7 @@ export default function Financial() {
   );
 
   const pendingExpensesSum = useMemo(() =>
-    (allExpensesData?.data ?? []).filter(e => e.status === "pending").reduce((s, e) => s + Number(e.amount), 0),
+    (allExpensesData?.data ?? []).filter(e => e.status === EXPENSE_STATUS.PENDING).reduce((s, e) => s + Number(e.amount), 0),
     [allExpensesData]
   );
 
@@ -275,7 +276,7 @@ export default function Financial() {
   };
 
   const handleMarkPaid = async (paymentId: string) => {
-    await updatePayment.mutateAsync({ id: paymentId, data: { status: "paid", paidAt: new Date().toISOString() } });
+    await updatePayment.mutateAsync({ id: paymentId, data: { status: PAYMENT_STATUS.PAID, paidAt: new Date().toISOString() } });
     refetchPayments();
     refetchSummary();
   };
@@ -283,18 +284,18 @@ export default function Financial() {
   const handleMarkExpensePaid = async (expenseId: string) => {
     await updateExpense.mutateAsync({
       id: expenseId,
-      data: { status: "paid", paymentDate: new Date().toISOString().split("T")[0] }
+      data: { status: PAYMENT_STATUS.PAID, paymentDate: new Date().toISOString().split("T")[0] }
     });
     refetchExpenses();
   };
 
   const handleApproveCommission = async (id: string) => {
-    await updateCommission.mutateAsync({ id, data: { status: "approved" } });
+    await updateCommission.mutateAsync({ id, data: { status: COMMISSION_STATUS.APPROVED } });
     refetchCommissions();
   };
 
   const handlePayCommission = async (id: string) => {
-    await updateCommission.mutateAsync({ id, data: { status: "paid", paidAt: new Date().toISOString() } });
+    await updateCommission.mutateAsync({ id, data: { status: PAYMENT_STATUS.PAID, paidAt: new Date().toISOString() } });
     refetchCommissions();
   };
 
@@ -326,8 +327,8 @@ export default function Financial() {
   const commissions = Array.isArray(commissionsData) ? commissionsData : [];
   const commissionKpis = useMemo(() => {
     const total = commissions.reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
-    const paid = commissions.filter(c => c.status === "paid").reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
-    const pending = commissions.filter(c => c.status === "pending").reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
+    const paid = commissions.filter(c => c.status === COMMISSION_STATUS.PAID).reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
+    const pending = commissions.filter(c => c.status === COMMISSION_STATUS.PENDING).reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
     return { total, paid, pending };
   }, [commissions]);
 
@@ -505,8 +506,8 @@ export default function Financial() {
                 <SelectTrigger className="w-[130px] h-8 text-sm"><SelectValue placeholder="Status" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="pending">Pendente</SelectItem>
-                  <SelectItem value="paid">Pago</SelectItem>
+                  <SelectItem value={EXPENSE_STATUS.PENDING}>Pendente</SelectItem>
+                  <SelectItem value={EXPENSE_STATUS.PAID}>Pago</SelectItem>
                   <SelectItem value="overdue">Vencido</SelectItem>
                 </SelectContent>
               </Select>
@@ -575,7 +576,7 @@ export default function Financial() {
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      {p.status === "pending" && (
+                      {p.status === PAYMENT_STATUS.PENDING && (
                         <Button size="sm" variant="outline" onClick={() => handleMarkPaid(p.id)}>
                           <CheckCircle className="w-4 h-4 mr-1" /> Recebido
                         </Button>
@@ -620,7 +621,7 @@ export default function Financial() {
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      {p.status === "pending" && (
+                      {p.status === PAYMENT_STATUS.PENDING && (
                         <Button size="sm" variant="outline" onClick={() => handleMarkPaid(p.id)}>
                           <CheckCircle className="w-4 h-4 mr-1" /> Pago
                         </Button>
@@ -672,7 +673,7 @@ export default function Financial() {
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      {e.status !== "paid" && (
+                      {e.status !== EXPENSE_STATUS.PAID && (
                         <Button size="sm" variant="outline" onClick={() => handleMarkExpensePaid(e.id)}>
                           <CheckCircle className="w-4 h-4 mr-1" /> Pago
                         </Button>
@@ -738,12 +739,12 @@ export default function Financial() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        {c.status === "pending" && (
+                        {c.status === COMMISSION_STATUS.PENDING && (
                           <Button size="sm" variant="outline" onClick={() => handleApproveCommission(c.id)}>
                             Aprovar
                           </Button>
                         )}
-                        {c.status === "approved" && (
+                        {c.status === COMMISSION_STATUS.APPROVED && (
                           <Button size="sm" onClick={() => handlePayCommission(c.id)}>
                             <DollarSign className="w-4 h-4 mr-1" /> Pagar
                           </Button>

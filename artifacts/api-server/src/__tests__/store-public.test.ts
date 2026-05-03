@@ -1,3 +1,4 @@
+import pino from "pino";
 /**
  * HTTP integration tests for POST /api/public/store/:slug/orders
  *
@@ -16,7 +17,7 @@ import request from "supertest";
 
 const { mockLimit, mockWhere, mockFrom, mockSelect, mockTransaction } = vi.hoisted(() => {
   const mockLimit = vi.fn();
-  const mockWhere = vi.fn(() => ({ limit: mockLimit }));
+  const mockWhere: ReturnType<typeof vi.fn> = vi.fn(() => ({ limit: mockLimit }));
   const mockFrom = vi.fn(() => ({ where: mockWhere, limit: mockLimit }));
   const mockSelect = vi.fn(() => ({ from: mockFrom }));
   const mockTransaction = vi.fn();
@@ -128,7 +129,7 @@ function stubLogger(
   next: express.NextFunction,
 ) {
   const noop = () => {};
-  req.log = { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop } as any;
+  req.log = pino({ level: "silent" }) as unknown as typeof req.log;
   next();
 }
 
@@ -494,8 +495,8 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
       .mockReturnValueOnce({ limit: mockLimit }) // 3 — trip seat check
       .mockReturnValueOnce({ limit: mockLimit }) // 4 — admin user
       .mockReturnValueOnce({ limit: mockLimit }) // 5 — existing client
-      .mockResolvedValueOnce([] as any)                  // 6 — stages (no .limit())
-      .mockResolvedValueOnce([] as any);                 // 7 — trip names (no .limit())
+      .mockResolvedValueOnce([])                  // 6 — stages (no .limit())
+      .mockResolvedValueOnce([]);                 // 7 — trip names (no .limit())
 
     mockLimit
       .mockResolvedValueOnce([FAKE_STORE])                                        // getActiveStore
