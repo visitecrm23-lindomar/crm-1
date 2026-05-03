@@ -8,6 +8,15 @@ import { runExpiredReservationsCron } from "../lib/expired-reservations";
 import type { ReminderJobData } from "../queues/index";
 import { RESERVATION_STATUS, PAYMENT_STATUS } from "@workspace/permissions";
 
+function escapeHtml(str: string | null | undefined): string {
+  return (str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 // ────────────────────────────────────────────────────────────
 // D-1 Boarding reminder
 // ────────────────────────────────────────────────────────────
@@ -72,7 +81,7 @@ async function processBoardingReminders(): Promise<void> {
         ? points
             .map(
               (p) =>
-                `<li><strong>${p.name}</strong>${p.time ? ` — ${p.time}` : ""}${p.address ? `<br><small>${p.address}</small>` : ""}</li>`,
+                `<li><strong>${escapeHtml(p.name)}</strong>${p.time ? ` — ${escapeHtml(p.time)}` : ""}${p.address ? `<br><small>${escapeHtml(p.address)}</small>` : ""}</li>`,
             )
             .join("")
         : "<li>Consulte a agência para informações de embarque</li>";
@@ -83,15 +92,15 @@ async function processBoardingReminders(): Promise<void> {
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333">
   <h2 style="color:#2563EB">🚌 Lembrete de Embarque — Amanhã!</h2>
-  <p>Olá, <strong>${row.clientName}</strong>!</p>
-  <p>Sua viagem para <strong>${row.tripDestination ?? row.tripName}</strong> está marcada para <strong>amanhã, ${depDate}</strong>.</p>
+  <p>Olá, <strong>${escapeHtml(row.clientName)}</strong>!</p>
+  <p>Sua viagem para <strong>${escapeHtml(row.tripDestination ?? row.tripName)}</strong> está marcada para <strong>amanhã, ${depDate}</strong>.</p>
   <h3 style="color:#374151">Pontos de Embarque:</h3>
   <ul style="line-height:1.8">${boardingHtml}</ul>
   <p>Não esqueça de levar seu documento de identidade e o voucher de reserva.</p>
   <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
   <p style="font-size:13px;color:#6b7280">
-    <strong>${row.agencyName}</strong><br>
-    Reserva Nº ${row.reservationNumber ?? row.voucherCode}
+    <strong>${escapeHtml(row.agencyName)}</strong><br>
+    Reserva Nº ${escapeHtml(row.reservationNumber ?? row.voucherCode)}
   </p>
 </body>
 </html>`;
@@ -214,8 +223,8 @@ async function processPaymentReminders(): Promise<void> {
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333">
   <h2 style="color:#DC2626">💰 Pagamento Vencendo em 3 Dias</h2>
-  <p>Olá, <strong>${row.clientName}</strong>!</p>
-  <p>Você tem uma parcela da reserva da viagem para <strong>${row.tripDestination ?? row.tripName}</strong>${depDate ? ` (partindo em ${depDate})` : ""} com vencimento em <strong>${dueStr}</strong>.</p>
+  <p>Olá, <strong>${escapeHtml(row.clientName)}</strong>!</p>
+  <p>Você tem uma parcela da reserva da viagem para <strong>${escapeHtml(row.tripDestination ?? row.tripName)}</strong>${depDate ? ` (partindo em ${depDate})` : ""} com vencimento em <strong>${dueStr}</strong>.</p>
   <table style="width:100%;border-collapse:collapse;margin:16px 0">
     <tr style="background:#fef2f2">
       <td style="padding:10px;border:1px solid #e5e7eb">Valor desta Parcela</td>
@@ -237,8 +246,8 @@ async function processPaymentReminders(): Promise<void> {
   <p>Entre em contato com ${contactLink} para efetuar o pagamento antes do vencimento e garantir sua vaga.</p>
   <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
   <p style="font-size:13px;color:#6b7280">
-    <strong>${row.agencyName}</strong><br>
-    Reserva Nº ${row.reservationNumber ?? row.voucherCode}
+    <strong>${escapeHtml(row.agencyName)}</strong><br>
+    Reserva Nº ${escapeHtml(row.reservationNumber ?? row.voucherCode)}
   </p>
 </body>
 </html>`;
