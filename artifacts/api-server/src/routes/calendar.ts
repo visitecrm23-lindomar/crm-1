@@ -70,6 +70,7 @@ router.get("/calendar/callback", async (req, res): Promise<void> => {
       googleAccessToken: tokens.access_token ?? null,
       googleTokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
       googleCalendarEnabled: true,
+      googleCalendarStatus: "connected",
     };
     // Only overwrite refresh_token when Google returns a new one — on reconnect flows
     // Google omits refresh_token and we must keep the previously stored value.
@@ -106,6 +107,7 @@ router.post("/calendar/disconnect", async (req, res): Promise<void> => {
       googleRefreshToken: null,
       googleTokenExpiry: null,
       googleCalendarEnabled: false,
+      googleCalendarStatus: "disconnected",
     }).where(eq(usersTable.id, me.id));
 
     await db.delete(calendarEventsTable).where(eq(calendarEventsTable.userId, me.id));
@@ -125,10 +127,16 @@ router.get("/calendar/status", async (req, res): Promise<void> => {
     const [user] = await db.select({
       googleCalendarEnabled: usersTable.googleCalendarEnabled,
       googleTokenExpiry: usersTable.googleTokenExpiry,
+      googleCalendarStatus: usersTable.googleCalendarStatus,
     }).from(usersTable).where(eq(usersTable.id, me.id)).limit(1);
 
     if (!user?.googleCalendarEnabled) {
-      res.json({ connected: false, eventsCount: 0, lastSync: null });
+      res.json({
+        connected: false,
+        status: user?.googleCalendarStatus ?? "disconnected",
+        eventsCount: 0,
+        lastSync: null,
+      });
       return;
     }
 
@@ -142,6 +150,7 @@ router.get("/calendar/status", async (req, res): Promise<void> => {
 
     res.json({
       connected: true,
+      status: user.googleCalendarStatus,
       tokenValid: user.googleTokenExpiry ? user.googleTokenExpiry > new Date() : true,
       eventsCount: Number(eventsCountResult?.count ?? 0),
       lastSync: lastSyncResult?.lastSync?.toISOString() ?? null,

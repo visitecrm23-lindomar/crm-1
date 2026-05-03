@@ -19,7 +19,7 @@ import { RESERVATION_STATUS, PAYMENT_STATUS, TRIP_STATUS } from "@workspace/perm
 async function getCalendarService(userId: string): Promise<GoogleCalendarService | null> {
   const token = await refreshTokenIfNeeded(userId);
   if (!token) return null;
-  return new GoogleCalendarService(token);
+  return new GoogleCalendarService(token, userId);
 }
 
 function fmtDate(d: Date | null | undefined): string {
@@ -47,8 +47,17 @@ async function upsertCalendarEvent(
   const [existing] = await db.select().from(calendarEventsTable)
     .where(and(...filter)).limit(1);
 
+  const logCtx = {
+    userId: record.userId,
+    tripId: record.tripId,
+    paymentId: record.paymentId,
+    clientId: record.clientId,
+    eventType: record.eventType,
+    tenantId: record.tenantId,
+  };
+
   if (existing) {
-    const updated = await service.updateEvent(existing.googleEventId, eventData);
+    const updated = await service.updateEvent(existing.googleEventId, eventData, logCtx);
     if (updated) {
       await db.update(calendarEventsTable).set({
         title: eventData.summary,
@@ -59,11 +68,14 @@ async function upsertCalendarEvent(
         syncedAt: new Date(),
       }).where(eq(calendarEventsTable.id, existing.id));
     } else {
-      logger.warn({ googleEventId: existing.googleEventId }, "calendar-sync: upsertCalendarEvent updateEvent failed; skipping DB update");
+      logger.warn({ ...logCtx, googleEventId: existing.googleEventId }, "calendar-sync: updateEvent failed; DB record kept for retry");
     }
   } else {
-    const googleEvent = await service.createEvent(eventData);
-    if (!googleEvent) return;
+    const googleEvent = await service.createEvent(eventData, logCtx);
+    if (!googleEvent) {
+      logger.warn(logCtx, "calendar-sync: createEvent failed; no DB record persisted");
+      return;
+    }
     await db.insert(calendarEventsTable).values({
       id: generateId(),
       tenantId: record.tenantId,

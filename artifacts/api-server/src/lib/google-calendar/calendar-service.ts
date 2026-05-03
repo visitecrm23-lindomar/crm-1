@@ -8,18 +8,18 @@ import { logger } from "../logger";
 export const CALENDAR_STATUS_CONNECTED = "connected";
 export const CALENDAR_STATUS_INVALID = "invalid";
 
-function isInvalidGrantError(err: unknown): boolean {
+export function isInvalidGrantError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   const anyErr = err as { code?: number | string; response?: { status?: number; data?: { error?: string } }; message?: string };
   const status = anyErr.response?.status ?? (typeof anyErr.code === "number" ? anyErr.code : undefined);
   const errorCode = anyErr.response?.data?.error;
-  if (errorCode === "invalid_grant") return true;
-  if (status === 401 && (anyErr.message?.includes("invalid_grant") || errorCode === "invalid_grant")) return true;
-  if (typeof anyErr.message === "string" && anyErr.message.includes("invalid_grant")) return true;
+  if (errorCode === "invalid_grant" || errorCode === "invalid_token") return true;
+  if (status === 401) return true;
+  if (typeof anyErr.message === "string" && (anyErr.message.includes("invalid_grant") || anyErr.message.includes("invalid_token"))) return true;
   return false;
 }
 
-async function markCalendarConnectionInvalid(userId: string, reason: string): Promise<void> {
+export async function markCalendarConnectionInvalid(userId: string, reason: string): Promise<void> {
   await db.update(usersTable).set({
     googleCalendarStatus: CALENDAR_STATUS_INVALID,
     googleCalendarEnabled: false,
@@ -165,14 +165,24 @@ export interface CalendarEventData {
 
 export class GoogleCalendarService {
   private calendar;
+  readonly userId: string;
 
-  constructor(accessToken: string) {
+  constructor(accessToken: string, userId: string) {
     const auth = createOAuth2Client();
     auth.setCredentials({ access_token: accessToken });
     this.calendar = google.calendar({ version: "v3", auth });
+    this.userId = userId;
   }
 
-  async createEvent(data: CalendarEventData): Promise<{ id: string } | null> {
+  private async handleApiError(err: unknown, op: string, ctx: Record<string, unknown> = {}): Promise<void> {
+    if (isInvalidGrantError(err)) {
+      await markCalendarConnectionInvalid(this.userId, `${op} returned invalid credentials`);
+    } else {
+      logger.error({ err, userId: this.userId, ...ctx }, `google-calendar: ${op} failed`);
+    }
+  }
+
+  async createEvent(data: CalendarEventData, ctx: Record<string, unknown> = {}): Promise<{ id: string } | null> {
     try {
       const end = data.endDateTime ?? data.startDateTime;
       const event = {
@@ -198,12 +208,12 @@ export class GoogleCalendarService {
       });
       return { id: response.data.id! };
     } catch (err) {
-      logger.error({ err }, "google-calendar: createEvent failed");
+      await this.handleApiError(err, "createEvent", ctx);
       return null;
     }
   }
 
-  async updateEvent(eventId: string, data: Partial<CalendarEventData>): Promise<boolean> {
+  async updateEvent(eventId: string, data: Partial<CalendarEventData>, ctx: Record<string, unknown> = {}): Promise<boolean> {
     try {
       const patch: Record<string, unknown> = {};
       if (data.summary) patch.summary = data.summary;
@@ -226,12 +236,12 @@ export class GoogleCalendarService {
       });
       return true;
     } catch (err) {
-      logger.error({ err }, "google-calendar: updateEvent failed");
+      await this.handleApiError(err, "updateEvent", { ...ctx, eventId });
       return false;
     }
   }
 
-  async deleteEvent(eventId: string): Promise<boolean> {
+  async deleteEvent(eventId: string, ctx: Record<string, unknown> = {}): Promise<boolean> {
     try {
       await this.calendar.events.delete({
         calendarId: "primary",
@@ -240,7 +250,7 @@ export class GoogleCalendarService {
       });
       return true;
     } catch (err) {
-      logger.error({ err }, "google-calendar: deleteEvent failed");
+      await this.handleApiError(err, "deleteEvent", { ...ctx, eventId });
       return false;
     }
   }
@@ -259,7 +269,7 @@ export class GoogleCalendarService {
         .filter((e) => e.id && e.summary)
         .map((e) => ({ id: e.id!, summary: e.summary! }));
     } catch (err) {
-      logger.error({ err }, "google-calendar: listEvents failed");
+      await this.handleApiError(err, "listEvents");
       return [];
     }
   }
