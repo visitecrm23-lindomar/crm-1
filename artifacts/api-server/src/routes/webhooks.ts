@@ -334,9 +334,27 @@ router.post("/webhooks/mercadopago/:storeSlug", async (req, res, next: NextFunct
 });
 
 async function handleMpPayment(store: StoreScope, paymentId: string, payment: MpPayment): Promise<void> {
+  // MercadoPago payments carry an `external_reference` we set to the
+  // store's `orderNumber` when the payment is created. The order may not
+  // yet have its `paymentIntentId` attached (the storefront might create
+  // the MP payment server-side with no callback to attach the id back to
+  // the order, or the attach call may simply have raced the webhook), so
+  // resolveOrderForMp first tries paymentIntentId, then external_reference,
+  // and finally writes paymentIntentId back to the order so subsequent
+  // events match on the fast path.
+  const externalRef = typeof payment.external_reference === "string"
+    ? payment.external_reference.trim()
+    : "";
+
   if (payment.status === "approved") {
     await db.transaction(async (tx) => {
-      await applyGatewayPayment(tx as unknown as DbExecutor, {
+      const tx2 = tx as unknown as DbExecutor;
+      const orderId = await resolveOrderForMp(tx2, store, paymentId, externalRef);
+      if (!orderId) {
+        logger.info({ paymentId, externalRef, slug: store.slug }, "[webhooks/mercadopago] No matching order");
+        return;
+      }
+      await applyGatewayPayment(tx2, {
         store,
         gateway: "mercadopago",
         transactionId: String(payment.id),
@@ -347,13 +365,80 @@ async function handleMpPayment(store: StoreScope, paymentId: string, payment: Mp
     });
   } else if (payment.status === "rejected") {
     await db.transaction(async (tx) => {
-      await markOrderFailed(tx as unknown as DbExecutor, store, paymentId, "mercadopago");
+      const tx2 = tx as unknown as DbExecutor;
+      const orderId = await resolveOrderForMp(tx2, store, paymentId, externalRef);
+      if (!orderId) return;
+      await markOrderFailed(tx2, store, paymentId, "mercadopago");
     });
   } else if (payment.status === "cancelled" || payment.status === "refunded" || payment.status === "charged_back") {
     await db.transaction(async (tx) => {
-      await markOrderRefunded(tx as unknown as DbExecutor, store, paymentId, "mercadopago");
+      const tx2 = tx as unknown as DbExecutor;
+      const orderId = await resolveOrderForMp(tx2, store, paymentId, externalRef);
+      if (!orderId) return;
+      await markOrderRefunded(tx2, store, paymentId, "mercadopago");
     });
   }
+}
+
+/**
+ * Locate the store_order corresponding to an incoming MercadoPago payment.
+ * Tries `paymentIntentId == paymentId` first; falls back to
+ * `orderNumber == external_reference` (set when the MP payment/preference
+ * was created). When the fallback hits, we backfill `paymentIntentId` on
+ * the order so future events for the same payment short-circuit.
+ *
+ * Returns the order id when found, or null. All lookups are tenant + store
+ * scoped to prevent cross-tenant matches.
+ */
+async function resolveOrderForMp(
+  tx: DbExecutor,
+  store: StoreScope,
+  paymentId: string,
+  externalRef: string,
+): Promise<string | null> {
+  const [byPi] = await tx
+    .select({ id: storeOrdersTable.id })
+    .from(storeOrdersTable)
+    .where(
+      and(
+        eq(storeOrdersTable.tenantId, store.tenantId),
+        eq(storeOrdersTable.storeId, store.storeId),
+        eq(storeOrdersTable.paymentIntentId, paymentId),
+      ),
+    )
+    .limit(1);
+  if (byPi) return byPi.id;
+
+  if (!externalRef) return null;
+
+  const [byRef] = await tx
+    .select({ id: storeOrdersTable.id, paymentIntentId: storeOrdersTable.paymentIntentId })
+    .from(storeOrdersTable)
+    .where(
+      and(
+        eq(storeOrdersTable.tenantId, store.tenantId),
+        eq(storeOrdersTable.storeId, store.storeId),
+        eq(storeOrdersTable.orderNumber, externalRef),
+      ),
+    )
+    .limit(1);
+  if (!byRef) return null;
+
+  // Backfill paymentIntentId so subsequent webhooks hit the fast path.
+  // Only set when missing; never overwrite a different value.
+  if (!byRef.paymentIntentId) {
+    await tx
+      .update(storeOrdersTable)
+      .set({ paymentIntentId: paymentId })
+      .where(eq(storeOrdersTable.id, byRef.id));
+  } else if (byRef.paymentIntentId !== paymentId) {
+    logger.warn(
+      { orderId: byRef.id, existing: byRef.paymentIntentId, incoming: paymentId },
+      "[webhooks/mercadopago] external_reference matched order but paymentIntentId differs — refusing to overwrite",
+    );
+    return null;
+  }
+  return byRef.id;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

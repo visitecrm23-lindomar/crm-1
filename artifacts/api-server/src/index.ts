@@ -36,12 +36,28 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-if (!process.env["STRIPE_WEBHOOK_SECRET"]) {
-  logger.warn("⚠️  STRIPE_WEBHOOK_SECRET is not set. POST /api/webhooks/stripe/:storeSlug will reject events with 400.");
-}
-
-if (!process.env["MP_WEBHOOK_SECRET"]) {
-  logger.warn("⚠️  MP_WEBHOOK_SECRET is not set. POST /api/webhooks/mercadopago/:storeSlug will reject events with 400.");
+// Webhook secret validation. In production both are mandatory (the API
+// will refuse to boot without them so storefronts cannot ship a paid
+// reservation flow that silently no-ops). In dev/test we only warn so
+// engineers can still iterate on unrelated areas without provisioning
+// secrets.
+{
+  const isProd = process.env["NODE_ENV"] === "production";
+  const missing: string[] = [];
+  if (!process.env["STRIPE_WEBHOOK_SECRET"]) missing.push("STRIPE_WEBHOOK_SECRET");
+  if (!process.env["MP_WEBHOOK_SECRET"]) missing.push("MP_WEBHOOK_SECRET");
+  if (missing.length > 0) {
+    if (isProd) {
+      throw new Error(
+        `Required webhook secrets are missing in production: ${missing.join(", ")}. ` +
+          `These are needed to validate Stripe / MercadoPago webhook signatures and auto-confirm paid reservations.`,
+      );
+    }
+    logger.warn(
+      { missing },
+      "⚠️  Webhook secrets are not set; /api/webhooks/* endpoints will reject events with 400 until they are configured.",
+    );
+  }
 }
 
 const __serverDir = path.dirname(fileURLToPath(import.meta.url));

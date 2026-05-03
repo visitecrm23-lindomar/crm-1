@@ -235,6 +235,11 @@ export const storeOrdersTable = pgTable("store_orders", {
 
   paymentIntentId: text("payment_intent_id"),
   paymentChargeId: text("payment_charge_id"),
+  // One-shot token returned in the order POST response. Required by
+  // /public/store/:slug/orders/:orderNumber/payment-intent so attackers who
+  // only know orderNumber/email can't poison the order with a bogus
+  // gateway reference. See migration 0012.
+  paymentToken: text("payment_token"),
 
   installments: integer("installments").notNull().default(1),
   installmentAmount: numeric("installment_amount", { precision: 10, scale: 2 }),

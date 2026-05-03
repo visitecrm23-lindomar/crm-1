@@ -719,6 +719,10 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     const totalAmount = roundMoney(Math.max(0, subtotal - discountAmount));
     const orderId = generateId();
     const orderNumber = `#${new Date().getFullYear()}-${String(Math.floor(Math.random() * 99999)).padStart(5, "0")}`;
+    // Cryptographically random one-shot token (returned to the client, then
+    // required to attach a gateway paymentIntentId). 32 bytes → 256 bits of
+    // entropy, far above brute-force reach.
+    const orderPaymentToken = (await import("node:crypto")).randomBytes(32).toString("base64url");
 
     // Phase 2.5: Find admin user, vitrine stage and trip names for trip-linked reservation(s).
     // NOTE: client find/create is deferred to inside the transaction for full atomicity.
@@ -886,6 +890,9 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
           storeId: store.id,
           tenantId: store.tenantId,
           orderNumber,
+          // 32-byte URL-safe token returned in the response and required to
+          // attach a gateway paymentIntentId via the public endpoint.
+          paymentToken: orderPaymentToken,
           customerName: data.customerName,
           customerEmail: data.customerEmail,
           customerPhone: data.customerPhone ?? "",
@@ -1282,6 +1289,9 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
       ...order,
       orderId: order.id,
       items,
+      // One-shot token the storefront must POST back when attaching the
+      // gateway paymentIntentId. Never log or expose it elsewhere.
+      paymentToken: orderPaymentToken,
       // Expose the reservation expiry deadline so the storefront can display a countdown timer.
       reservationExpiresAt: tripLinkedProducts.size > 0 ? reservationExpiresAt.toISOString() : null,
     });
@@ -1326,17 +1336,17 @@ router.post("/public/store/:slug/orders/:orderNumber/payment-intent", async (req
     const store = await getActiveStore(req.params.slug);
     if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
 
-    const body = (req.body ?? {}) as { paymentIntentId?: unknown; customerEmail?: unknown; paymentChargeId?: unknown };
+    const body = (req.body ?? {}) as { paymentIntentId?: unknown; paymentToken?: unknown; paymentChargeId?: unknown };
     const paymentIntentId = typeof body.paymentIntentId === "string" ? body.paymentIntentId.trim() : "";
-    const customerEmail = normalizeOrderEmail(body.customerEmail);
+    const paymentToken = typeof body.paymentToken === "string" ? body.paymentToken.trim() : "";
     const paymentChargeId = typeof body.paymentChargeId === "string" ? body.paymentChargeId.trim() : null;
 
     if (!paymentIntentId) {
       next(new ValidationError("paymentIntentId is required", "VALIDATION_ERROR"));
       return;
     }
-    if (!customerEmail) {
-      next(new ValidationError("customerEmail is required", "VALIDATION_ERROR"));
+    if (!paymentToken) {
+      next(new ValidationError("paymentToken is required", "VALIDATION_ERROR"));
       return;
     }
 
@@ -1344,17 +1354,28 @@ router.post("/public/store/:slug/orders/:orderNumber/payment-intent", async (req
       .select({
         id: storeOrdersTable.id,
         existingPaymentIntentId: storeOrdersTable.paymentIntentId,
+        storedPaymentToken: storeOrdersTable.paymentToken,
       })
       .from(storeOrdersTable)
       .where(and(
         eq(storeOrdersTable.tenantId, store.tenantId),
         eq(storeOrdersTable.storeId, store.id),
         eq(storeOrdersTable.orderNumber, req.params.orderNumber),
-        eq(storeOrdersTable.customerEmail, customerEmail),
       ))
       .limit(1);
 
     if (!order) { next(new NotFoundError("Order not found", "NOT_FOUND")); return; }
+
+    // Constant-time token compare — falls back to false if the order has
+    // no stored token (legacy rows from before migration 0012).
+    const stored = order.storedPaymentToken ?? "";
+    const a = Buffer.from(paymentToken);
+    const b = Buffer.from(stored);
+    const tokenMatches = a.length === b.length && a.length > 0 && (await import("node:crypto")).timingSafeEqual(a, b);
+    if (!tokenMatches) {
+      next(new ValidationError("Invalid payment token", "INVALID_TOKEN"));
+      return;
+    }
 
     if (order.existingPaymentIntentId && order.existingPaymentIntentId !== paymentIntentId) {
       next(new ValidationError("Order already has a different paymentIntentId", "ALREADY_SET"));
