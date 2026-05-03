@@ -52,6 +52,7 @@ export function decryptCredential(value: string): string {
     throw new Error("Malformed encrypted credential");
   }
   const decipher = createDecipheriv("aes-256-gcm", getKey(), iv);
+  decipher.setAuthTagLength(TAG_BYTES);
   decipher.setAuthTag(tag);
   const dec = Buffer.concat([decipher.update(enc), decipher.final()]);
   return dec.toString("utf8");
