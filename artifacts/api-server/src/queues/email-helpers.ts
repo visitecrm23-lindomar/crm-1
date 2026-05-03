@@ -45,11 +45,17 @@ export async function enqueueReservationConfirmationEmail(opts: EnqueueEmailOpts
       });
       logger.info({ emailLogId, reservationId }, "[email-queue] Email job enqueued");
     } catch (enqueueErr) {
-      logger.error({ emailLogId, err: enqueueErr }, "[email-queue] Failed to enqueue — marking log as failed");
+      logger.warn({ emailLogId, err: enqueueErr }, "[email-queue] Failed to enqueue — falling back to direct send");
+      const result = await sendReservationConfirmationEmail(props);
       await db
         .update(emailLogsTable)
-        .set({ status: "failed", errorMessage: "Queue enqueue failed" })
+        .set({
+          status: result.success ? "sent" : "failed",
+          messageId: result.messageId ?? null,
+          errorMessage: result.error ?? null,
+        })
         .where(eq(emailLogsTable.id, emailLogId));
+      logger.info({ emailLogId, reservationId, success: result.success }, "[email-queue] Fallback direct send result");
     }
   } else {
     // No Redis — send directly and log the outcome immediately
@@ -108,11 +114,17 @@ export async function enqueueReservationCancellationEmail(
       });
       logger.info({ emailLogId, reservationId }, "[email-queue] Cancellation email job enqueued");
     } catch (enqueueErr) {
-      logger.error({ emailLogId, err: enqueueErr }, "[email-queue] Failed to enqueue cancellation — marking log as failed");
+      logger.warn({ emailLogId, err: enqueueErr }, "[email-queue] Failed to enqueue cancellation — falling back to direct send");
+      const result = await sendReservationCancellationEmail(props);
       await db
         .update(emailLogsTable)
-        .set({ status: "failed", errorMessage: "Queue enqueue failed" })
+        .set({
+          status: result.success ? "sent" : "failed",
+          messageId: result.messageId ?? null,
+          errorMessage: result.error ?? null,
+        })
         .where(eq(emailLogsTable.id, emailLogId));
+      logger.info({ emailLogId, reservationId, success: result.success }, "[email-queue] Fallback direct send result (cancellation)");
     }
   } else {
     const result = await sendReservationCancellationEmail(props);
@@ -246,14 +258,23 @@ export async function enqueueNewBookingNotificationEmail(
         "[email-queue] New-booking notification enqueued",
       );
     } catch (enqueueErr) {
-      logger.error(
+      logger.warn(
         { emailLogId, err: enqueueErr },
-        "[email-queue] Failed to enqueue new-booking notification — marking log as failed",
+        "[email-queue] Failed to enqueue new-booking notification — falling back to direct send",
       );
+      const result = await sendNewBookingNotificationEmail(props, { to: recipients, cc });
       await db
         .update(emailLogsTable)
-        .set({ status: "failed", errorMessage: "Queue enqueue failed" })
+        .set({
+          status: result.success ? "sent" : "failed",
+          messageId: result.messageId ?? null,
+          errorMessage: result.error ?? null,
+        })
         .where(eq(emailLogsTable.id, emailLogId));
+      logger.info(
+        { emailLogId, reservationId, success: result.success },
+        "[email-queue] Fallback direct send result (new-booking notification)",
+      );
     }
   } else {
     const result = await sendNewBookingNotificationEmail(props, { to: recipients, cc });
