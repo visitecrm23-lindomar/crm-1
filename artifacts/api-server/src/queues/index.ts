@@ -33,16 +33,23 @@ export interface PdfJobData {
   userAgent: string | null;
 }
 
+export interface CommissionSyncJobData {
+  reservationId: string;
+  tenantId: string;
+}
+
 const QUEUES = {
   EMAIL: "emails",
   REMINDERS: "reminders",
   PDF: "pdfs",
+  COMMISSION_SYNC: "commission-sync",
 } as const;
 
 let _emailQueue: Queue<ReservationEmailJobData> | null = null;
 let _cancellationEmailQueue: Queue<CancellationEmailJobData> | null = null;
 let _reminderQueue: Queue<ReminderJobData> | null = null;
 let _pdfQueue: Queue<PdfJobData> | null = null;
+let _commissionSyncQueue: Queue<CommissionSyncJobData> | null = null;
 
 export function getEmailQueue(): Queue<ReservationEmailJobData> | null {
   const conn = getRedisConnection();
@@ -116,15 +123,35 @@ export function getPdfQueue(): Queue<PdfJobData> | null {
   return _pdfQueue;
 }
 
+export function getCommissionSyncQueue(): Queue<CommissionSyncJobData> | null {
+  const conn = getRedisConnection();
+  if (!conn) return null;
+
+  if (!_commissionSyncQueue) {
+    _commissionSyncQueue = new Queue<CommissionSyncJobData>(QUEUES.COMMISSION_SYNC, {
+      connection: conn,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 10_000 },
+        removeOnComplete: { count: 200 },
+        removeOnFail: { count: 100 },
+      },
+    });
+  }
+  return _commissionSyncQueue;
+}
+
 export async function closeQueues(): Promise<void> {
   await Promise.all([
     _emailQueue?.close().catch(() => {}),
     _cancellationEmailQueue?.close().catch(() => {}),
     _reminderQueue?.close().catch(() => {}),
     _pdfQueue?.close().catch(() => {}),
+    _commissionSyncQueue?.close().catch(() => {}),
   ]);
   _emailQueue = null;
   _cancellationEmailQueue = null;
   _reminderQueue = null;
   _pdfQueue = null;
+  _commissionSyncQueue = null;
 }

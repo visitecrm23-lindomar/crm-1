@@ -10,8 +10,8 @@ import { CreateReservationBody, UpdateReservationBody, CreatePassengerBody, Upda
 import { z } from "zod/v4";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { writeClientActivity } from "../lib/activities";
-import { syncReservationCommission } from "./payments";
 import { enqueueReservationConfirmationEmail, enqueueReservationCancellationEmail } from "../queues/email-helpers";
+import { enqueueCommissionSync } from "../queues/commission-sync-helper";
 import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 import { broadcastSeatUpdate } from "../lib/realtime";
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
@@ -632,8 +632,8 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
     res.status(201).json(formatted);
     broadcastSeatUpdate(reservation.tripId, me.tenantId).catch(() => {});
     CalendarSyncService.syncTrip(reservation.tripId).catch(() => {});
-    syncReservationCommission(id, me.tenantId)
-      .catch((err) => req.log.error({ err }, "Error syncing commission after reservation creation"));
+    enqueueCommissionSync(id, me.tenantId)
+      .catch((err) => req.log.error({ err }, "Error enqueuing commission sync after reservation creation"));
     if (reservation.clientId) {
       syncClientDeal(reservation.clientId, me.tenantId, reservation.tripId, Number(reservation.totalValue), me.id)
         .catch((err) => req.log.error({ err }, "Error syncing deal after reservation creation"));
@@ -1038,8 +1038,8 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
         .catch((err) => req.log.error({ err }, "Error writing cancellation activity"));
     }
     if (!isBeingCancelled) {
-      syncReservationCommission(req.params.id, me.tenantId)
-        .catch((err) => req.log.error({ err }, "Error syncing commission after reservation update"));
+      enqueueCommissionSync(req.params.id, me.tenantId)
+        .catch((err) => req.log.error({ err }, "Error enqueuing commission sync after reservation update"));
     }
     const formatted = await formatReservation(reservation);
     res.json(formatted);

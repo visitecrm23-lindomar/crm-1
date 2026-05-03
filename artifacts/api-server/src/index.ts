@@ -9,6 +9,7 @@ import { getReminderQueue, closeQueues } from "./queues/index";
 import { startEmailWorker, stopEmailWorker } from "./workers/email.worker";
 import { startReminderWorker, stopReminderWorker } from "./workers/reminder.worker";
 import { startPdfWorker, stopPdfWorker } from "./workers/pdf.worker";
+import { startCommissionSyncWorker, stopCommissionSyncWorker } from "./workers/commission-sync.worker";
 
 process.on("unhandledRejection", (reason: unknown) => {
   logger.error({ err: reason }, "Unhandled promise rejection — process kept alive");
@@ -510,6 +511,10 @@ async function runMigrations() {
     `);
 
     await client.query(`
+      ALTER TABLE reservations ADD COLUMN IF NOT EXISTS commission_sync_status text;
+    `);
+
+    await client.query(`
       DO $$
       BEGIN
         IF EXISTS (
@@ -574,6 +579,7 @@ runMigrations()
       startEmailWorker();
       startReminderWorker();
       startPdfWorker();
+      startCommissionSyncWorker();
 
       // Register repeatable reminder jobs (idempotent — BullMQ de-dups by key)
       const reminderQueue = getReminderQueue();
@@ -621,7 +627,7 @@ runMigrations()
     // ── Graceful shutdown ──
     const shutdown = async (signal: string) => {
       logger.info({ signal }, "Shutdown signal received");
-      await Promise.all([stopEmailWorker(), stopReminderWorker(), stopPdfWorker(), closeQueues()]);
+      await Promise.all([stopEmailWorker(), stopReminderWorker(), stopPdfWorker(), stopCommissionSyncWorker(), closeQueues()]);
       process.exit(0);
     };
     process.on("SIGTERM", () => void shutdown("SIGTERM"));
