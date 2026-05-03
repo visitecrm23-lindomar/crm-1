@@ -37,11 +37,11 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 if (!process.env["STRIPE_WEBHOOK_SECRET"]) {
-  logger.warn("⚠️  STRIPE_WEBHOOK_SECRET is not set. POST /api/webhooks/store/stripe and SaaS billing webhook will reject events.");
+  logger.warn("⚠️  STRIPE_WEBHOOK_SECRET is not set. POST /api/webhooks/stripe/:storeSlug will reject events with 400.");
 }
 
 if (!process.env["MP_WEBHOOK_SECRET"]) {
-  logger.warn("⚠️  MP_WEBHOOK_SECRET is not set. POST /api/webhooks/store/mercadopago will reject all events with 503.");
+  logger.warn("⚠️  MP_WEBHOOK_SECRET is not set. POST /api/webhooks/mercadopago/:storeSlug will reject events with 400.");
 }
 
 const __serverDir = path.dirname(fileURLToPath(import.meta.url));

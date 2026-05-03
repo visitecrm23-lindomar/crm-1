@@ -2,10 +2,10 @@ import { Router, type Request, type NextFunction } from "express";
 import crypto from "node:crypto";
 import { db } from "@workspace/db";
 import { storeOrdersTable, reservationsTable, paymentsTable, storesTable } from "@workspace/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { logger } from "../lib/logger";
-import { syncReservationPaymentStatus, paymentExistsForGatewayTx } from "../lib/reservation-payments";
+import { syncReservationPaymentStatus, paymentExistsForGatewayTx, type DbExecutor } from "../lib/reservation-payments";
 
 const router = Router();
 
@@ -23,6 +23,34 @@ function timingSafeEqualHex(a: string, b: string): boolean {
   } catch {
     return false;
   }
+}
+
+interface StoreScope {
+  storeId: string;
+  tenantId: string;
+  slug: string;
+  mpAccessToken: string | null;
+}
+
+/**
+ * Resolves the store referenced in the webhook URL. Webhook routes are
+ * slug-scoped (`/webhooks/<provider>/:storeSlug`) so the handler can pick
+ * the right tenant + provider credentials before processing the event,
+ * even when multiple stores share the same gateway account.
+ */
+async function resolveStore(slug: string): Promise<StoreScope | null> {
+  if (!slug) return null;
+  const [store] = await db
+    .select({
+      storeId: storesTable.id,
+      tenantId: storesTable.tenantId,
+      slug: storesTable.slug,
+      mpAccessToken: storesTable.mpAccessToken,
+    })
+    .from(storesTable)
+    .where(eq(storesTable.slug, slug))
+    .limit(1);
+  return store ?? null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -68,12 +96,18 @@ interface StripeEvent {
   data: { object: Record<string, unknown> };
 }
 
-router.post("/webhooks/store/stripe", async (req, res, next: NextFunction): Promise<void> => {
+router.post("/webhooks/stripe/:storeSlug", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const secret = process.env["STRIPE_WEBHOOK_SECRET"];
     if (!secret) {
-      logger.warn("[webhooks/store/stripe] STRIPE_WEBHOOK_SECRET not configured — rejecting");
-      res.status(503).json({ error: "Webhook not configured" });
+      logger.warn("[webhooks/stripe] STRIPE_WEBHOOK_SECRET not configured — rejecting");
+      res.status(400).json({ error: "Webhook not configured" });
+      return;
+    }
+
+    const store = await resolveStore(req.params["storeSlug"] ?? "");
+    if (!store) {
+      res.status(400).json({ error: "Unknown store" });
       return;
     }
 
@@ -85,7 +119,10 @@ router.post("/webhooks/store/stripe", async (req, res, next: NextFunction): Prom
 
     const sigHeader = req.header("stripe-signature");
     if (!verifyStripeSignature(rawBody, sigHeader, secret)) {
-      logger.warn({ sigHeader: sigHeader ? "present" : "missing" }, "[webhooks/store/stripe] Invalid signature");
+      logger.warn(
+        { sigHeader: sigHeader ? "present" : "missing", slug: store.slug },
+        "[webhooks/stripe] Invalid signature",
+      );
       res.status(400).json({ error: "Invalid signature" });
       return;
     }
@@ -96,33 +133,40 @@ router.post("/webhooks/store/stripe", async (req, res, next: NextFunction): Prom
       return;
     }
 
-    // Acknowledge receipt fast; processing errors are logged but the event is
-    // still acked (Stripe will not retry on 2xx). For unhandled types we just
-    // return 200 with no work.
-    await handleStripeEvent(event).catch((err) => {
-      logger.error({ err, eventId: event.id, eventType: event.type }, "[webhooks/store/stripe] Processing error");
-    });
-
-    res.status(200).json({ received: true });
+    // Process synchronously inside a DB transaction so the order update,
+    // payment inserts and reservation re-sync either all succeed or none
+    // do. Returning a non-2xx on processing failure asks Stripe to retry.
+    try {
+      await handleStripeEvent(event, store);
+      res.status(200).json({ received: true });
+    } catch (err) {
+      logger.error(
+        { err, eventId: event.id, eventType: event.type, slug: store.slug },
+        "[webhooks/stripe] Processing failure — returning 500 so Stripe retries",
+      );
+      res.status(500).json({ error: "Processing failure" });
+    }
   } catch (err) {
     next(err);
   }
 });
 
-async function handleStripeEvent(event: StripeEvent): Promise<void> {
+async function handleStripeEvent(event: StripeEvent, store: StoreScope): Promise<void> {
   const obj = event.data?.object ?? {};
 
   if (event.type === "payment_intent.succeeded") {
     const paymentIntentId = String(obj["id"] ?? "");
     const amountReceived = Number(obj["amount_received"] ?? obj["amount"] ?? 0) / 100;
     if (!paymentIntentId || amountReceived <= 0) return;
-    await applyGatewayPayment({
-      gateway: "stripe",
-      transactionId: paymentIntentId,
-      paymentIntentId,
-      amount: amountReceived,
-      status: "paid",
-      paidAt: new Date(),
+    await db.transaction(async (tx) => {
+      await applyGatewayPayment(tx as unknown as DbExecutor, {
+        store,
+        gateway: "stripe",
+        transactionId: paymentIntentId,
+        paymentIntentId,
+        amount: amountReceived,
+        paidAt: new Date(),
+      });
     });
     return;
   }
@@ -130,14 +174,18 @@ async function handleStripeEvent(event: StripeEvent): Promise<void> {
   if (event.type === "payment_intent.payment_failed") {
     const paymentIntentId = String(obj["id"] ?? "");
     if (!paymentIntentId) return;
-    await markOrderFailed(paymentIntentId, "stripe");
+    await db.transaction(async (tx) => {
+      await markOrderFailed(tx as unknown as DbExecutor, store, paymentIntentId, "stripe");
+    });
     return;
   }
 
   if (event.type === "charge.refunded") {
     const paymentIntentId = String(obj["payment_intent"] ?? "");
     if (!paymentIntentId) return;
-    await markOrderRefunded(paymentIntentId, "stripe");
+    await db.transaction(async (tx) => {
+      await markOrderRefunded(tx as unknown as DbExecutor, store, paymentIntentId, "stripe");
+    });
     return;
   }
 }
@@ -145,14 +193,6 @@ async function handleStripeEvent(event: StripeEvent): Promise<void> {
 // ─────────────────────────────────────────────────────────────────────────────
 // MercadoPago webhook
 // ─────────────────────────────────────────────────────────────────────────────
-//
-// MP signs notifications with HMAC-SHA256 over a manifest of the form:
-//   `id:<dataId>;request-id:<x-request-id>;ts:<ts>;`
-// using the per-application secret. The signature arrives in the
-// `x-signature` header (`ts=<ts>,v1=<hex>`) with `x-request-id` in another
-// header. The webhook payload itself is intentionally minimal — we must
-// fetch the actual payment from MP's REST API using the per-store access
-// token to learn its status and amount.
 
 interface MpSignatureParts {
   ts: string;
@@ -183,11 +223,9 @@ function verifyMpSignature(
 ): boolean {
   const parsed = parseMpSignature(header);
   if (!parsed) return false;
-  // Reject signatures whose timestamp is too far from now to limit replay
-  // windows. MP signs `ts` in milliseconds (per their docs), but some
-  // examples use seconds — accept either by normalising.
   const tsRaw = Number(parsed.ts);
   if (!Number.isFinite(tsRaw)) return false;
+  // MP signs `ts` in milliseconds (per their docs); accept seconds too for safety.
   const tsSec = tsRaw > 1e12 ? Math.floor(tsRaw / 1000) : tsRaw;
   const nowSec = Math.floor(Date.now() / 1000);
   if (Math.abs(nowSec - tsSec) > MP_TOLERANCE_SECONDS) return false;
@@ -221,12 +259,18 @@ async function fetchMpPayment(paymentId: string, accessToken: string): Promise<M
   }
 }
 
-router.post("/webhooks/store/mercadopago", async (req, res, next: NextFunction): Promise<void> => {
+router.post("/webhooks/mercadopago/:storeSlug", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const secret = process.env["MP_WEBHOOK_SECRET"];
     if (!secret) {
-      logger.warn("[webhooks/store/mercadopago] MP_WEBHOOK_SECRET not configured — rejecting");
-      res.status(503).json({ error: "Webhook not configured" });
+      logger.warn("[webhooks/mercadopago] MP_WEBHOOK_SECRET not configured — rejecting");
+      res.status(400).json({ error: "Webhook not configured" });
+      return;
+    }
+
+    const store = await resolveStore(req.params["storeSlug"] ?? "");
+    if (!store) {
+      res.status(400).json({ error: "Unknown store" });
       return;
     }
 
@@ -244,7 +288,10 @@ router.post("/webhooks/store/mercadopago", async (req, res, next: NextFunction):
     const xRequestId = req.header("x-request-id") ?? "";
     const sigHeader = req.header("x-signature");
     if (!verifyMpSignature(dataId, xRequestId, sigHeader, secret)) {
-      logger.warn({ sigHeader: sigHeader ? "present" : "missing" }, "[webhooks/mercadopago] Invalid signature");
+      logger.warn(
+        { sigHeader: sigHeader ? "present" : "missing", slug: store.slug },
+        "[webhooks/mercadopago] Invalid signature",
+      );
       res.status(400).json({ error: "Invalid signature" });
       return;
     }
@@ -255,116 +302,119 @@ router.post("/webhooks/store/mercadopago", async (req, res, next: NextFunction):
       return;
     }
 
-    handleMpPayment(dataId).catch((err) => {
-      logger.error({ err, dataId }, "[webhooks/mercadopago] Processing error");
-    });
+    if (!store.mpAccessToken) {
+      logger.warn(
+        { slug: store.slug, dataId },
+        "[webhooks/mercadopago] Store has no MP access token configured",
+      );
+      res.status(400).json({ error: "Store missing MP access token" });
+      return;
+    }
 
-    res.status(200).json({ received: true });
+    const payment = await fetchMpPayment(dataId, store.mpAccessToken);
+    if (!payment) {
+      // MP API failure — ask the provider to retry.
+      res.status(502).json({ error: "Could not fetch payment from MercadoPago" });
+      return;
+    }
+
+    try {
+      await handleMpPayment(store, dataId, payment);
+      res.status(200).json({ received: true });
+    } catch (err) {
+      logger.error(
+        { err, dataId, slug: store.slug },
+        "[webhooks/mercadopago] Processing failure — returning 500 so MP retries",
+      );
+      res.status(500).json({ error: "Processing failure" });
+    }
   } catch (err) {
     next(err);
   }
 });
 
-async function handleMpPayment(paymentId: string): Promise<void> {
-  // Find the order this MP payment refers to so we can use the right store's
-  // access token to fetch the payment details.
-  const [order] = await db
-    .select({
-      id: storeOrdersTable.id,
-      storeId: storeOrdersTable.storeId,
-      tenantId: storeOrdersTable.tenantId,
-    })
-    .from(storeOrdersTable)
-    .where(eq(storeOrdersTable.paymentIntentId, paymentId))
-    .limit(1);
-
-  if (!order) {
-    logger.info({ paymentId }, "[webhooks/mercadopago] No matching order");
-    return;
-  }
-
-  const [store] = await db
-    .select({ mpAccessToken: storesTable.mpAccessToken })
-    .from(storesTable)
-    .where(eq(storesTable.id, order.storeId))
-    .limit(1);
-
-  const accessToken = store?.mpAccessToken;
-  if (!accessToken) {
-    logger.warn({ paymentId, storeId: order.storeId }, "[webhooks/mercadopago] Store has no MP access token");
-    return;
-  }
-
-  const payment = await fetchMpPayment(paymentId, accessToken);
-  if (!payment) return;
-
+async function handleMpPayment(store: StoreScope, paymentId: string, payment: MpPayment): Promise<void> {
   if (payment.status === "approved") {
-    await applyGatewayPayment({
-      gateway: "mercadopago",
-      transactionId: String(payment.id),
-      paymentIntentId: paymentId,
-      amount: Number(payment.transaction_amount ?? 0),
-      status: "paid",
-      paidAt: payment.date_approved ? new Date(payment.date_approved) : new Date(),
+    await db.transaction(async (tx) => {
+      await applyGatewayPayment(tx as unknown as DbExecutor, {
+        store,
+        gateway: "mercadopago",
+        transactionId: String(payment.id),
+        paymentIntentId: paymentId,
+        amount: Number(payment.transaction_amount ?? 0),
+        paidAt: payment.date_approved ? new Date(payment.date_approved) : new Date(),
+      });
     });
   } else if (payment.status === "rejected") {
-    await markOrderFailed(paymentId, "mercadopago");
+    await db.transaction(async (tx) => {
+      await markOrderFailed(tx as unknown as DbExecutor, store, paymentId, "mercadopago");
+    });
   } else if (payment.status === "cancelled" || payment.status === "refunded" || payment.status === "charged_back") {
-    await markOrderRefunded(paymentId, "mercadopago");
+    await db.transaction(async (tx) => {
+      await markOrderRefunded(tx as unknown as DbExecutor, store, paymentId, "mercadopago");
+    });
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Shared helpers
+// Shared helpers (all take a tx so the whole webhook event is atomic)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ApplyArgs {
+  store: StoreScope;
   gateway: "stripe" | "mercadopago";
   transactionId: string;
   paymentIntentId: string;
   amount: number;
-  status: "paid";
   paidAt: Date;
 }
 
-async function applyGatewayPayment(args: ApplyArgs): Promise<void> {
-  const { gateway, transactionId, paymentIntentId, amount, paidAt } = args;
+async function applyGatewayPayment(tx: DbExecutor, args: ApplyArgs): Promise<void> {
+  const { store, gateway, transactionId, paymentIntentId, amount, paidAt } = args;
   if (amount <= 0) return;
 
-  const [order] = await db
+  // Look up the order scoped to this store/tenant so we never accidentally
+  // apply a payment from one tenant's gateway to another tenant's order.
+  const [order] = await tx
     .select({
       id: storeOrdersTable.id,
       orderNumber: storeOrdersTable.orderNumber,
       tenantId: storeOrdersTable.tenantId,
+      storeId: storeOrdersTable.storeId,
       clientId: storeOrdersTable.clientId,
       paymentMethod: storeOrdersTable.paymentMethod,
       paymentStatus: storeOrdersTable.paymentStatus,
     })
     .from(storeOrdersTable)
-    .where(eq(storeOrdersTable.paymentIntentId, paymentIntentId))
+    .where(
+      and(
+        eq(storeOrdersTable.tenantId, store.tenantId),
+        eq(storeOrdersTable.storeId, store.storeId),
+        eq(storeOrdersTable.paymentIntentId, paymentIntentId),
+      ),
+    )
     .limit(1);
 
   if (!order) {
-    logger.info({ paymentIntentId, gateway }, "[webhooks] No matching order for paymentIntentId");
+    logger.info({ paymentIntentId, gateway, slug: store.slug }, "[webhooks] No matching order for paymentIntentId");
     return;
   }
 
   // Idempotency: if we already recorded this exact gateway transaction, stop.
-  if (await paymentExistsForGatewayTx(order.tenantId, gateway, transactionId)) {
+  if (await paymentExistsForGatewayTx(order.tenantId, gateway, transactionId, tx)) {
     logger.info({ paymentIntentId, gateway, transactionId }, "[webhooks] Duplicate event ignored");
     return;
   }
 
-  // Mark the order paid
   if (order.paymentStatus !== "paid") {
-    await db
+    await tx
       .update(storeOrdersTable)
       .set({ paymentStatus: "paid", paidAt, status: "confirmed", confirmedAt: paidAt })
       .where(eq(storeOrdersTable.id, order.id));
   }
 
   // Find the reservations linked to this order via storeOrderId == orderNumber
-  const reservations = await db
+  const reservations = await tx
     .select({ id: reservationsTable.id, totalValue: reservationsTable.totalValue })
     .from(reservationsTable)
     .where(
@@ -399,7 +449,7 @@ async function applyGatewayPayment(args: ApplyArgs): Promise<void> {
 
     if (share <= 0) continue;
 
-    await db.insert(paymentsTable).values({
+    await tx.insert(paymentsTable).values({
       id: generateId(),
       tenantId: order.tenantId,
       reservationId: r.id,
@@ -419,7 +469,7 @@ async function applyGatewayPayment(args: ApplyArgs): Promise<void> {
       description: `Pagamento ${gateway} confirmado via webhook`,
     });
 
-    await syncReservationPaymentStatus(r.id, order.tenantId);
+    await syncReservationPaymentStatus(r.id, order.tenantId, tx);
   }
 
   logger.info(
@@ -428,46 +478,107 @@ async function applyGatewayPayment(args: ApplyArgs): Promise<void> {
   );
 }
 
-async function markOrderFailed(paymentIntentId: string, gateway: string): Promise<void> {
-  const [order] = await db
-    .select({ id: storeOrdersTable.id, paymentStatus: storeOrdersTable.paymentStatus })
+async function markOrderFailed(
+  tx: DbExecutor,
+  store: StoreScope,
+  paymentIntentId: string,
+  gateway: string,
+): Promise<void> {
+  const [order] = await tx
+    .select({
+      id: storeOrdersTable.id,
+      tenantId: storeOrdersTable.tenantId,
+      orderNumber: storeOrdersTable.orderNumber,
+      paymentStatus: storeOrdersTable.paymentStatus,
+    })
     .from(storeOrdersTable)
-    .where(eq(storeOrdersTable.paymentIntentId, paymentIntentId))
+    .where(
+      and(
+        eq(storeOrdersTable.tenantId, store.tenantId),
+        eq(storeOrdersTable.storeId, store.storeId),
+        eq(storeOrdersTable.paymentIntentId, paymentIntentId),
+      ),
+    )
     .limit(1);
   if (!order) return;
   if (order.paymentStatus === "paid") {
-    logger.warn({ paymentIntentId, gateway }, "[webhooks] Failed event arrived after payment was marked paid; ignoring");
+    logger.warn(
+      { paymentIntentId, gateway },
+      "[webhooks] Failed event arrived after payment was marked paid; ignoring",
+    );
     return;
   }
-  await db
+  await tx
     .update(storeOrdersTable)
     .set({ paymentStatus: "failed" })
     .where(eq(storeOrdersTable.id, order.id));
-  logger.info({ orderId: order.id, gateway }, "[webhooks] Order marked failed");
+
+  // Cascade to linked reservations: a payment failure should leave them in
+  // `failed` so staff/customers can see the rejection without manual review.
+  // Terminal-state reservations (cancelled/completed) are left alone.
+  const reservations = await tx
+    .select({ id: reservationsTable.id, status: reservationsTable.status })
+    .from(reservationsTable)
+    .where(
+      and(
+        eq(reservationsTable.tenantId, order.tenantId),
+        eq(reservationsTable.storeOrderId, order.orderNumber),
+      ),
+    );
+
+  const failableIds = reservations
+    .filter((r) => r.status !== "cancelled" && r.status !== "completed")
+    .map((r) => r.id);
+  if (failableIds.length > 0) {
+    await tx
+      .update(reservationsTable)
+      .set({ status: "failed" })
+      .where(
+        and(
+          eq(reservationsTable.tenantId, order.tenantId),
+          inArray(reservationsTable.id, failableIds),
+        ),
+      );
+  }
+
+  logger.info(
+    { orderId: order.id, gateway, reservationsFailed: failableIds.length },
+    "[webhooks] Order marked failed and reservations cascaded",
+  );
 }
 
-async function markOrderRefunded(paymentIntentId: string, gateway: string): Promise<void> {
-  const [order] = await db
+async function markOrderRefunded(
+  tx: DbExecutor,
+  store: StoreScope,
+  paymentIntentId: string,
+  gateway: string,
+): Promise<void> {
+  const [order] = await tx
     .select({
       id: storeOrdersTable.id,
       tenantId: storeOrdersTable.tenantId,
       orderNumber: storeOrdersTable.orderNumber,
     })
     .from(storeOrdersTable)
-    .where(eq(storeOrdersTable.paymentIntentId, paymentIntentId))
+    .where(
+      and(
+        eq(storeOrdersTable.tenantId, store.tenantId),
+        eq(storeOrdersTable.storeId, store.storeId),
+        eq(storeOrdersTable.paymentIntentId, paymentIntentId),
+      ),
+    )
     .limit(1);
   if (!order) return;
 
   const now = new Date();
-  await db
+  await tx
     .update(storeOrdersTable)
     .set({ paymentStatus: "refunded", refundedAt: now, status: "cancelled", cancelledAt: now })
     .where(eq(storeOrdersTable.id, order.id));
 
-  // Reverse paid payments tied to this order (mark them refunded so the
-  // reservation balance recomputation demotes the reservation back to
-  // pending). We don't delete history.
-  await db
+  // Demote previously-paid Payment rows to refunded so any subsequent
+  // recomputation of reservation balances reflects the reversal.
+  await tx
     .update(paymentsTable)
     .set({ status: "refunded" })
     .where(
@@ -478,8 +589,11 @@ async function markOrderRefunded(paymentIntentId: string, gateway: string): Prom
       ),
     );
 
-  const reservations = await db
-    .select({ id: reservationsTable.id })
+  // Cascade reservations to `cancelled` (refunds are irreversible from the
+  // CRM perspective). We then re-sync paid totals so balance/paidValue
+  // reflect the demoted Payment rows.
+  const reservations = await tx
+    .select({ id: reservationsTable.id, status: reservationsTable.status })
     .from(reservationsTable)
     .where(
       and(
@@ -488,11 +602,29 @@ async function markOrderRefunded(paymentIntentId: string, gateway: string): Prom
       ),
     );
 
-  for (const r of reservations) {
-    await syncReservationPaymentStatus(r.id, order.tenantId);
+  const cancellableIds = reservations
+    .filter((r) => r.status !== "cancelled" && r.status !== "completed")
+    .map((r) => r.id);
+  if (cancellableIds.length > 0) {
+    await tx
+      .update(reservationsTable)
+      .set({ status: "cancelled", cancelledAt: now })
+      .where(
+        and(
+          eq(reservationsTable.tenantId, order.tenantId),
+          inArray(reservationsTable.id, cancellableIds),
+        ),
+      );
   }
 
-  logger.info({ orderId: order.id, gateway, reservations: reservations.length }, "[webhooks] Order refunded and reservations resynced");
+  for (const r of reservations) {
+    await syncReservationPaymentStatus(r.id, order.tenantId, tx);
+  }
+
+  logger.info(
+    { orderId: order.id, gateway, reservationsCancelled: cancellableIds.length },
+    "[webhooks] Order refunded, reservations cancelled and resynced",
+  );
 }
 
 export default router;

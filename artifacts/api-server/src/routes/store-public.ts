@@ -1308,6 +1308,73 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
   }
 });
 
+/**
+ * Attach a payment-gateway reference (Stripe paymentIntentId or MercadoPago
+ * payment id) to an existing order. The storefront calls this immediately
+ * after creating the gateway intent client-side and BEFORE redirecting the
+ * customer to the gateway, so that the webhook handlers can later look the
+ * order up by its provider id when payment succeeds/fails.
+ *
+ * The endpoint is public (storefront-facing) but is gated by:
+ *   - matching customerEmail (proves the caller owns the order)
+ *   - one-shot semantics: once paymentIntentId is set, it cannot be changed
+ *     (prevents an attacker from re-pointing someone else's gateway tx at
+ *      this order).
+ */
+router.post("/public/store/:slug/orders/:orderNumber/payment-intent", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const store = await getActiveStore(req.params.slug);
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
+
+    const body = (req.body ?? {}) as { paymentIntentId?: unknown; customerEmail?: unknown; paymentChargeId?: unknown };
+    const paymentIntentId = typeof body.paymentIntentId === "string" ? body.paymentIntentId.trim() : "";
+    const customerEmail = normalizeOrderEmail(body.customerEmail);
+    const paymentChargeId = typeof body.paymentChargeId === "string" ? body.paymentChargeId.trim() : null;
+
+    if (!paymentIntentId) {
+      next(new ValidationError("paymentIntentId is required", "VALIDATION_ERROR"));
+      return;
+    }
+    if (!customerEmail) {
+      next(new ValidationError("customerEmail is required", "VALIDATION_ERROR"));
+      return;
+    }
+
+    const [order] = await db
+      .select({
+        id: storeOrdersTable.id,
+        existingPaymentIntentId: storeOrdersTable.paymentIntentId,
+      })
+      .from(storeOrdersTable)
+      .where(and(
+        eq(storeOrdersTable.tenantId, store.tenantId),
+        eq(storeOrdersTable.storeId, store.id),
+        eq(storeOrdersTable.orderNumber, req.params.orderNumber),
+        eq(storeOrdersTable.customerEmail, customerEmail),
+      ))
+      .limit(1);
+
+    if (!order) { next(new NotFoundError("Order not found", "NOT_FOUND")); return; }
+
+    if (order.existingPaymentIntentId && order.existingPaymentIntentId !== paymentIntentId) {
+      next(new ValidationError("Order already has a different paymentIntentId", "ALREADY_SET"));
+      return;
+    }
+
+    await db
+      .update(storeOrdersTable)
+      .set({
+        paymentIntentId,
+        ...(paymentChargeId ? { paymentChargeId } : {}),
+      })
+      .where(eq(storeOrdersTable.id, order.id));
+
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/public/store/:slug/orders/:orderNumber", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
