@@ -7,6 +7,7 @@ import {
   useListTripCosts, useCreateTripCost, useUpdateTripCost, useDeleteTripCost,
 } from "@workspace/api-client-react";
 import type { TripCost, LayoutCell } from "@workspace/api-client-react";
+import { EXPENSE_STATUS } from "@workspace/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -394,7 +395,7 @@ export function TripCostsTab({ tripId }: { tripId: string }) {
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className={`font-bold text-sm ${cost.status === "paid" ? "text-green-700" : cost.status === "overdue" ? "text-red-600" : ""}`}>
+                    <p className={`font-bold text-sm ${cost.status === EXPENSE_STATUS.PAID ? "text-green-700" : cost.status === EXPENSE_STATUS.OVERDUE ? "text-red-600" : ""}`}>
                       {formatCurrency(cost.amount)}
                     </p>
                   </div>

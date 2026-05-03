@@ -7,6 +7,7 @@ import {
   useConfirmInvoicePayment,
   type InvoiceWithTenant,
 } from "@workspace/api-client-react";
+import { INVOICE_STATUS } from "@workspace/permissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -197,7 +198,7 @@ function PixViewModal({ invoice, onClose, onConfirm, isConfirming }: PixViewModa
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Fechar</Button>
-          {invoice.status !== "paid" && (
+          {invoice.status !== INVOICE_STATUS.PAID && (
             <Button onClick={onConfirm} disabled={isConfirming} className="bg-green-600 hover:bg-green-700 text-white">
               {isConfirming ? "Confirmando..." : "Confirmar Pagamento"}
             </Button>
@@ -227,10 +228,10 @@ export default function AdminBilling() {
     Object.keys(params).length > 0 ? params as Parameters<typeof useListAdminInvoices>[0] : undefined
   );
 
-  const totalPaid = invoices.filter(i => i.status === "paid").reduce((s, i) => s + Number(i.amount), 0);
-  const totalPending = invoices.filter(i => i.status === "pending").reduce((s, i) => s + Number(i.amount), 0);
-  const countOverdue = invoices.filter(i => i.status === "overdue").length;
-  const countPending = invoices.filter(i => i.status === "pending").length;
+  const totalPaid = invoices.filter(i => i.status === INVOICE_STATUS.PAID).reduce((s, i) => s + Number(i.amount), 0);
+  const totalPending = invoices.filter(i => i.status === INVOICE_STATUS.PENDING).reduce((s, i) => s + Number(i.amount), 0);
+  const countOverdue = invoices.filter(i => i.status === INVOICE_STATUS.OVERDUE).length;
+  const countPending = invoices.filter(i => i.status === INVOICE_STATUS.PENDING).length;
 
   async function handleMarkPaid(id: string) {
     try {
@@ -389,7 +390,7 @@ export default function AdminBilling() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {invoice.pixCode && invoice.status !== "paid" && (
+                          {invoice.pixCode && invoice.status !== INVOICE_STATUS.PAID && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -400,7 +401,7 @@ export default function AdminBilling() {
                               PIX
                             </Button>
                           )}
-                          {invoice.status !== "paid" && invoice.status !== "cancelled" && (
+                          {invoice.status !== INVOICE_STATUS.PAID && invoice.status !== INVOICE_STATUS.CANCELLED && (
                             <Button
                               variant="ghost"
                               size="sm"

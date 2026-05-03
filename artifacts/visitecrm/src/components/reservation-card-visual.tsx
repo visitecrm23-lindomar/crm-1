@@ -10,6 +10,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { Reservation } from "@workspace/api-client-react";
+import { RESERVATION_STATUS } from "@workspace/permissions";
 import { formatCurrency as fmtCurrency } from "@/lib/utils";
 
 interface ReservationCardVisualProps {
@@ -45,14 +46,14 @@ function getTypeName(typeCode: string) {
 }
 
 function getStatusColor(status: string) {
-  if (status === "confirmed") return "bg-green-500";
-  if (status === "cancelled") return "bg-red-500";
+  if (status === RESERVATION_STATUS.CONFIRMED) return "bg-green-500";
+  if (status === RESERVATION_STATUS.CANCELLED) return "bg-red-500";
   return "bg-yellow-400";
 }
 
 function getStatusLabel(status: string) {
-  if (status === "confirmed") return "Confirmada";
-  if (status === "cancelled") return "Cancelada";
+  if (status === RESERVATION_STATUS.CONFIRMED) return "Confirmada";
+  if (status === RESERVATION_STATUS.CANCELLED) return "Cancelada";
   return "Pendente";
 }
 

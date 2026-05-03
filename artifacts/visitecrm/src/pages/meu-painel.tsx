@@ -13,6 +13,7 @@ import {
   useListClients,
 } from "@workspace/api-client-react";
 import type { Commission } from "@workspace/api-client-react";
+import { COMMISSION_STATUS, DEAL_STATUS, GOAL_STATUS } from "@workspace/permissions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -82,7 +83,7 @@ export default function MeuPainel() {
   const pendingCommission = useMemo(
     () =>
       myCommissions
-        .filter((c) => c.status === "pending")
+        .filter((c) => c.status === COMMISSION_STATUS.PENDING)
         .reduce((sum, c) => sum + parseFloat(c.commissionAmount ?? "0"), 0),
     [myCommissions]
   );
@@ -90,7 +91,7 @@ export default function MeuPainel() {
   const paidCommission = useMemo(
     () =>
       myCommissions
-        .filter((c) => c.status === "paid")
+        .filter((c) => c.status === COMMISSION_STATUS.PAID)
         .reduce((sum, c) => sum + parseFloat(c.commissionAmount ?? "0"), 0),
     [myCommissions]
   );
@@ -108,8 +109,8 @@ export default function MeuPainel() {
     [reservations, myCommissions]
   );
 
-  const wonDeals = myDeals.filter((d) => d.status === "won").length;
-  const closedDeals = myDeals.filter((d) => d.status === "won" || d.status === "lost").length;
+  const wonDeals = myDeals.filter((d) => d.status === DEAL_STATUS.WON).length;
+  const closedDeals = myDeals.filter((d) => d.status === DEAL_STATUS.WON || d.status === DEAL_STATUS.LOST).length;
   const conversionRate = closedDeals > 0 ? Math.round((wonDeals / closedDeals) * 100) : 0;
 
   const month = currentMonth();
@@ -117,7 +118,7 @@ export default function MeuPainel() {
   const monthlyRevenue = monthlyCommissions.reduce((s, c) => s + parseFloat(c.baseAmount ?? "0"), 0);
   const monthlyCommissionTotal = monthlyCommissions.reduce((s, c) => s + parseFloat(c.commissionAmount ?? "0"), 0);
 
-  const activeGoal = goals.find((g) => g.status === "active");
+  const activeGoal = goals.find((g) => g.status === GOAL_STATUS.ACTIVE);
   const monthlyGoal = activeGoal?.goalAmount ?? me?.monthlyGoal ?? 0;
   const goalPct = monthlyGoal > 0 ? Math.min(100, (monthlyRevenue / monthlyGoal) * 100) : 0;
 
@@ -523,14 +524,14 @@ export default function MeuPainel() {
                     </TableCell>
                     <TableCell>
                       <Badge
-                        variant={c.status === "paid" || c.status === "approved" ? "default" : "secondary"}
-                        className={`text-xs ${c.status === "approved" ? "bg-blue-600" : ""}`}
+                        variant={c.status === COMMISSION_STATUS.PAID || c.status === COMMISSION_STATUS.APPROVED ? "default" : "secondary"}
+                        className={`text-xs ${c.status === COMMISSION_STATUS.APPROVED ? "bg-blue-600" : ""}`}
                       >
-                        {c.status === "paid"
+                        {c.status === COMMISSION_STATUS.PAID
                           ? "Pago"
-                          : c.status === "approved"
+                          : c.status === COMMISSION_STATUS.APPROVED
                           ? "Aprovado"
-                          : c.status === "pending"
+                          : c.status === COMMISSION_STATUS.PENDING
                           ? "Pendente"
                           : c.status}
                       </Badge>

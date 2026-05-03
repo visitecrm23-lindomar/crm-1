@@ -7,6 +7,7 @@ import {
   useListTrips,
 } from "@workspace/api-client-react";
 import type { Vehicle, CreateVehicleBody, UpdateVehicleBody } from "@workspace/api-client-react";
+import { RESERVATION_STATUS } from "@workspace/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -285,9 +286,9 @@ function VehicleDetailModal({
                         <TableCell>
                           <Badge
                             variant={
-                              t.status === "confirmed"
+                              t.status === RESERVATION_STATUS.CONFIRMED
                                 ? "default"
-                                : t.status === "cancelled"
+                                : t.status === RESERVATION_STATUS.CANCELLED
                                 ? "destructive"
                                 : "secondary"
                             }

@@ -45,6 +45,13 @@ export const COMMISSION_STATUS = {
 } as const;
 export type CommissionStatus = (typeof COMMISSION_STATUS)[keyof typeof COMMISSION_STATUS];
 
+export const GOAL_STATUS = {
+  ACTIVE: "active",
+  COMPLETED: "completed",
+  CANCELLED: "cancelled",
+} as const;
+export type GoalStatus = (typeof GOAL_STATUS)[keyof typeof GOAL_STATUS];
+
 export const DEAL_STATUS = {
   OPEN: "open",
   WON: "won",

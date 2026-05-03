@@ -6,6 +6,7 @@ import {
   useListTrips,
   useListSuppliers,
 } from "@workspace/api-client-react";
+import { EXPENSE_STATUS } from "@workspace/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -100,10 +101,10 @@ export default function Expenses() {
       all = allFull.filter(e => e.dueDate && new Date(e.dueDate) >= cutoff);
     }
     const total = all.reduce((s, e) => s + parseFloat(String(e.amount)), 0);
-    const paid = all.filter(e => e.status === "paid").reduce((s, e) => s + parseFloat(String(e.amount)), 0);
-    const pending = all.filter(e => e.status === "pending").reduce((s, e) => s + parseFloat(String(e.amount)), 0);
-    const overdue = all.filter(e => e.status === "overdue").reduce((s, e) => s + parseFloat(String(e.amount)), 0);
-    const paidThisMonth = allFull.filter(e => e.status === "paid" && e.paymentDate && new Date(e.paymentDate).getMonth() === now.getMonth() && new Date(e.paymentDate).getFullYear() === now.getFullYear()).reduce((s, e) => s + parseFloat(String(e.amount)), 0);
+    const paid = all.filter(e => e.status === EXPENSE_STATUS.PAID).reduce((s, e) => s + parseFloat(String(e.amount)), 0);
+    const pending = all.filter(e => e.status === EXPENSE_STATUS.PENDING).reduce((s, e) => s + parseFloat(String(e.amount)), 0);
+    const overdue = all.filter(e => e.status === EXPENSE_STATUS.OVERDUE).reduce((s, e) => s + parseFloat(String(e.amount)), 0);
+    const paidThisMonth = allFull.filter(e => e.status === EXPENSE_STATUS.PAID && e.paymentDate && new Date(e.paymentDate).getMonth() === now.getMonth() && new Date(e.paymentDate).getFullYear() === now.getFullYear()).reduce((s, e) => s + parseFloat(String(e.amount)), 0);
     return { total, paid, pending, overdue, paidThisMonth };
   }, [allExpensesForKpi, periodFilter]);
 
@@ -333,7 +334,7 @@ export default function Expenses() {
                   </span>
                 </TableCell>
                 <TableCell className="text-right">
-                  {e.status !== "paid" && (
+                  {e.status !== EXPENSE_STATUS.PAID && (
                     <Button size="sm" variant="outline" onClick={() => handleMarkPaid(e.id)}>
                       <CheckCircle className="w-4 h-4 mr-1" /> Pago
                     </Button>

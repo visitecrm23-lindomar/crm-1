@@ -11,6 +11,7 @@ import {
   useRetryCommissionSync,
 } from "@workspace/api-client-react";
 import type { CommissionRule } from "@workspace/api-client-react";
+import { COMMISSION_STATUS } from "@workspace/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,9 +57,9 @@ export default function Commissions() {
   const kpis = useMemo(() => {
     const all = Array.isArray(commissionsRaw) ? commissionsRaw : [];
     const total = all.reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
-    const paid = all.filter(c => c.status === "paid").reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
-    const pending = all.filter(c => c.status === "pending").reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
-    const approved = all.filter(c => c.status === "approved").reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
+    const paid = all.filter(c => c.status === COMMISSION_STATUS.PAID).reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
+    const pending = all.filter(c => c.status === COMMISSION_STATUS.PENDING).reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
+    const approved = all.filter(c => c.status === COMMISSION_STATUS.APPROVED).reduce((s, c) => s + parseFloat(c.commissionAmount), 0);
     const pendingOrApproved = pending + approved;
     const count = all.length;
     return { total, paid, pending, approved, pendingOrApproved, count };
@@ -176,7 +177,7 @@ export default function Commissions() {
               <div>
                 <p className="text-sm text-muted-foreground">Número de Comissões</p>
                 <p className="text-xl font-bold text-purple-600">{kpis.count}</p>
-                <p className="text-xs text-muted-foreground">{loadingCommissions ? "—" : `${(Array.isArray(commissionsRaw) ? commissionsRaw : []).filter(c => c.status === "paid").length} pagas`}</p>
+                <p className="text-xs text-muted-foreground">{loadingCommissions ? "—" : `${(Array.isArray(commissionsRaw) ? commissionsRaw : []).filter(c => c.status === COMMISSION_STATUS.PAID).length} pagas`}</p>
               </div>
             </div>
           </CardContent>
@@ -311,12 +312,12 @@ export default function Commissions() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        {c.status === "pending" && (
+                        {c.status === COMMISSION_STATUS.PENDING && (
                           <Button size="sm" variant="outline" onClick={() => handleApprove(c.id)}>
                             Aprovar
                           </Button>
                         )}
-                        {c.status === "approved" && (
+                        {c.status === COMMISSION_STATUS.APPROVED && (
                           <Button size="sm" onClick={() => handlePay(c.id)}>
                             <DollarSign className="w-4 h-4 mr-1" /> Pagar
                           </Button>
