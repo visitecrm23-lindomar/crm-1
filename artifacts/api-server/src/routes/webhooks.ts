@@ -183,6 +183,15 @@ async function handleStripeEvent(event: StripeEvent, store: StoreScope): Promise
   if (event.type === "charge.refunded") {
     const paymentIntentId = String(obj["payment_intent"] ?? "");
     if (!paymentIntentId) return;
+    // Only treat as a full refund/cancellation when the entire charge was
+    // refunded. Partial refunds are recorded in financial views via the
+    // existing payments rows but must not cancel the reservation.
+    const amount = Number(obj["amount"] ?? 0);
+    const amountRefunded = Number(obj["amount_refunded"] ?? 0);
+    if (amount > 0 && amountRefunded < amount) {
+      logger.info({ paymentIntentId, amount, amountRefunded }, "[webhooks/stripe] Partial refund — order/reservation untouched");
+      return;
+    }
     await db.transaction(async (tx) => {
       await markOrderRefunded(tx as unknown as DbExecutor, store, paymentIntentId, "stripe");
     });

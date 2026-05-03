@@ -32,10 +32,12 @@ export async function syncReservationPaymentStatus(
     .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)))
     .limit(1);
   if (!reservation) return;
+  // Only 'cancelled' and 'completed' are truly terminal. 'failed' is left
+  // recoverable so a later successful retry on the same PaymentIntent can
+  // promote the reservation back to 'confirmed'.
   if (
     reservation.status === "cancelled" ||
-    reservation.status === "completed" ||
-    reservation.status === "failed"
+    reservation.status === "completed"
   ) {
     // Even when status is terminal, refresh paidValue/balance so refunds
     // appear in financial views.
