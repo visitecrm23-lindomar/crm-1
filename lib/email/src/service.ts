@@ -42,7 +42,7 @@ export async function sendReservationCancellationEmail(
     }
 
     const { data, error } = await resend.emails.send({
-      from: `${props.agencyName} <reservas@visitecrm.com.br>`,
+      from: `${props.agencyName} <reservas@resend.visitecrm.com>`,
       to: [props.clientEmail],
       subject: `Reserva Cancelada — ${props.reservationNumber}`,
       react: React.createElement(ReservationCancellationEmail, props),
@@ -71,7 +71,7 @@ export async function sendReservationConfirmationEmail(
     }
 
     const { data, error } = await resend.emails.send({
-      from: `${props.agencyName} <reservas@visitecrm.com.br>`,
+      from: `${props.agencyName} <reservas@resend.visitecrm.com>`,
       to: [props.clientEmail],
       subject: `Reserva Confirmada — ${props.reservationNumber}`,
       react: React.createElement(ReservationConfirmationEmail, props),
@@ -114,7 +114,7 @@ export async function sendManifestEmail(opts: SendManifestEmailOptions): Promise
       : undefined;
 
     const { data, error } = await resend.emails.send({
-      from: `${opts.agencyName} <reservas@visitecrm.com.br>`,
+      from: `${opts.agencyName} <reservas@resend.visitecrm.com>`,
       to: [opts.to],
       subject,
       html: opts.htmlContent,
@@ -168,7 +168,7 @@ export async function sendBirthdayEmail(
     };
 
     const { data, error } = await resend.emails.send({
-      from: `${fromName} <reservas@visitecrm.com.br>`,
+      from: `${fromName} <reservas@resend.visitecrm.com>`,
       to: [props.clientEmail],
       subject,
       react: React.createElement(BirthdayEmail, emailProps),
@@ -202,7 +202,7 @@ export async function sendReminderHtmlEmail(opts: SendReminderEmailOptions): Pro
     }
 
     const { data, error } = await resend.emails.send({
-      from: `${opts.fromName} <reservas@visitecrm.com.br>`,
+      from: `${opts.fromName} <reservas@resend.visitecrm.com>`,
       to: [opts.to],
       subject: opts.subject,
       html: opts.html,
@@ -244,7 +244,7 @@ export async function sendNewBookingNotificationEmail(
     const cc = (opts.cc ?? []).filter((e) => !!e && !recipients.includes(e));
 
     const { data, error } = await resend.emails.send({
-      from: `${props.agencyName} <reservas@visitecrm.com.br>`,
+      from: `${props.agencyName} <reservas@resend.visitecrm.com>`,
       to: recipients,
       ...(cc.length > 0 ? { cc } : {}),
       subject: `Nova reserva — ${props.reservationNumber} (${props.destination})`,
@@ -274,7 +274,7 @@ export async function sendWelcomeCredentialsEmail(
     }
 
     const { data, error } = await resend.emails.send({
-      from: `${props.agencyName} <reservas@visitecrm.com.br>`,
+      from: `${props.agencyName} <reservas@resend.visitecrm.com>`,
       to: [props.clientEmail],
       subject: `Bem-vindo(a)! Acesse sua Área do Cliente — ${props.agencyName}`,
       react: React.createElement(WelcomeCredentialsEmail, props),
