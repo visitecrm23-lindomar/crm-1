@@ -113,6 +113,13 @@
       "when": 1746230000000,
       "tag": "0015_add_email_auto_retry_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1746320000000,
+      "tag": "0016_add_retries_exhausted_at",
+      "breakpoints": true
     }
   ]
 }

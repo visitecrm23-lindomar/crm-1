@@ -5,7 +5,6 @@ import { eq, and, lt, lte, gte, gt, sql, isNotNull, notLike, inArray } from "dri
 import { requireAuth } from "../lib/tenant";
 import { AGENCY_STAFF_ROLES } from '../lib/tenant';
 import { PAYMENT_STATUS, PAYMENT_TYPE, DEAL_STATUS, TRIP_STATUS } from "@workspace/permissions";
-import { MAX_AUTO_RETRY_ATTEMPTS } from "../lib/email-retry-constants";
 
 const router = Router();
 
@@ -40,8 +39,6 @@ router.get("/alerts", async (req, res): Promise<void> => {
 
     const todayMonth = now.getMonth() + 1;
     const todayDay = now.getDate();
-
-    const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
     const [
       receivableDueTodayRows,
@@ -135,16 +132,18 @@ router.get("/alerts", async (req, res): Promise<void> => {
         sql`extract(day from ${clientsTable.birthDate}) = ${todayDay}`,
       )),
 
-      // 8. E-mails com tentativas esgotadas nas últimas 24h
-      // Exclude: cancellations, agency notifications, and the staff alert emails themselves
+      // 8. E-mails com tentativas esgotadas — query via retriesExhaustedAt flag (persists beyond 24h)
+      // Fetches all rows that have been stamped as exhausted so we can check resolution state.
       db.select({
         reservationId: emailLogsTable.reservationId,
+        retriesExhaustedAt: emailLogsTable.retriesExhaustedAt,
         status: emailLogsTable.status,
         isAutoRetry: emailLogsTable.isAutoRetry,
+        createdAt: emailLogsTable.createdAt,
       }).from(emailLogsTable).where(and(
         eq(emailLogsTable.tenantId, tenantId),
         isNotNull(emailLogsTable.reservationId),
-        gte(emailLogsTable.createdAt, last24h),
+        isNotNull(emailLogsTable.retriesExhaustedAt),
         notLike(emailLogsTable.subject, "Reserva Cancelada%"),
         notLike(emailLogsTable.subject, "Nova reserva%"),
         notLike(emailLogsTable.subject, "Alerta: Falha no e-mail de confirmação%"),
@@ -249,19 +248,65 @@ router.get("/alerts", async (req, res): Promise<void> => {
       });
     }
 
-    // 8. E-mails com tentativas esgotadas — agrupar por reservationId
+    // 8. E-mails com tentativas esgotadas — usar flag retriesExhaustedAt (sem janela de 24h)
     {
-      const byReservation = new Map<string, { autoRetryFailed: number; hasSent: boolean }>();
+      // Step 1: Collect the latest retriesExhaustedAt per reservationId.
+      // Using the latest (max) timestamp handles cases where a reservation
+      // somehow accumulates more than one exhaustion cycle correctly.
+      const exhaustionByReservation = new Map<string, Date>();
       for (const log of exhaustedEmailLogs) {
         const rid = log.reservationId!;
-        if (!byReservation.has(rid)) byReservation.set(rid, { autoRetryFailed: 0, hasSent: false });
-        const r = byReservation.get(rid)!;
-        if (log.status === "sent") r.hasSent = true;
-        if (log.isAutoRetry && log.status === "failed") r.autoRetryFailed++;
+        const exhaustedAt = log.retriesExhaustedAt!;
+        const existing = exhaustionByReservation.get(rid);
+        if (!existing || exhaustedAt > existing) {
+          exhaustionByReservation.set(rid, exhaustedAt);
+        }
       }
-      const exhaustedReservationIds = [...byReservation.entries()]
-        .filter(([, r]) => !r.hasSent && r.autoRetryFailed >= MAX_AUTO_RETRY_ATTEMPTS)
-        .map(([rid]) => rid);
+
+      // Step 2: For the exhausted reservationIds, check ALL email_logs (not just
+      // exhausted ones) for a successful non-auto-retry send after the exhaustion
+      // timestamp. Manual resend rows have retriesExhaustedAt = null, so they
+      // would have been excluded from the initial query — this second query
+      // captures them correctly.
+      const resolvedIds = new Set<string>();
+      if (exhaustionByReservation.size > 0) {
+        const allExhaustedIds = [...exhaustionByReservation.keys()];
+        // Only count rows that look like customer-facing booking confirmations.
+        // Staff-alert rows (subject "Alerta: Falha no e-mail de confirmação…")
+        // share the same reservationId and isAutoRetry=false, but must NOT be
+        // treated as a successful customer resend — exclude them along with
+        // cancellation and agency-notification emails.
+        const manualResends = await db
+          .select({
+            reservationId: emailLogsTable.reservationId,
+            createdAt: emailLogsTable.createdAt,
+          })
+          .from(emailLogsTable)
+          .where(
+            and(
+              eq(emailLogsTable.tenantId, tenantId),
+              inArray(emailLogsTable.reservationId, allExhaustedIds),
+              eq(emailLogsTable.status, "sent"),
+              eq(emailLogsTable.isAutoRetry, false),
+              notLike(emailLogsTable.subject, "Alerta: Falha no e-mail de confirmação%"),
+              notLike(emailLogsTable.subject, "Reserva Cancelada%"),
+              notLike(emailLogsTable.subject, "Nova reserva%"),
+            ),
+          );
+
+        for (const resend of manualResends) {
+          const rid = resend.reservationId!;
+          const sentAt = resend.createdAt;
+          const exhaustedAt = exhaustionByReservation.get(rid)!;
+          if (sentAt >= exhaustedAt) {
+            resolvedIds.add(rid);
+          }
+        }
+      }
+
+      const exhaustedReservationIds = [...exhaustionByReservation.keys()].filter(
+        (rid) => !resolvedIds.has(rid),
+      );
       const exhaustedCount = exhaustedReservationIds.length;
 
       if (exhaustedCount > 0) {

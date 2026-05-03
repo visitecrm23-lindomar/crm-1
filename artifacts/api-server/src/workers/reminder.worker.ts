@@ -588,6 +588,18 @@ export async function retryFailedBookingEmails(): Promise<void> {
         { reservationId, attemptsInWindow, autoRetriesDone, limit: MAX_AUTO_RETRY_ATTEMPTS },
         "[email-retry] Skipping — max auto-retry limit reached for this reservation",
       );
+      // Stamp retriesExhaustedAt on all rows for this reservation that don't
+      // already have it, so the staff alert persists beyond the 24-hour window.
+      await db
+        .update(emailLogsTable)
+        .set({ retriesExhaustedAt: new Date() })
+        .where(
+          and(
+            eq(emailLogsTable.tenantId, log.tenantId),
+            eq(emailLogsTable.reservationId, reservationId),
+            isNull(emailLogsTable.retriesExhaustedAt),
+          ),
+        );
       // Notify agency staff that manual intervention is needed. The helper
       // deduplicates internally so it only sends one alert per reservation.
       await notifyStaffOfExhaustedRetries(reservationId, log.tenantId);
