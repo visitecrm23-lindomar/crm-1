@@ -5754,6 +5754,81 @@ export const useValidateReservationCoupon = <
 };
 
 /**
+ * @summary Retry commission sync for a reservation
+ */
+export const getRetryCommissionSyncUrl = (id: string) => {
+  return `/api/reservations/${id}/retry-commission-sync`;
+};
+
+export const retryCommissionSync = async (
+  id: string,
+  options?: RequestInit,
+): Promise<{ success: boolean }> => {
+  return customFetch<{ success: boolean }>(getRetryCommissionSyncUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRetryCommissionSyncMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof retryCommissionSync>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof retryCommissionSync>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["retryCommissionSync"];
+  const { mutation: mutationOptions, request: requestOptions } = options ?? {};
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof retryCommissionSync>>,
+    { id: string }
+  > = ({ id }) => {
+    return retryCommissionSync(id, requestOptions);
+  };
+
+  return { mutationKey, mutationFn, ...mutationOptions };
+};
+
+export type RetryCommissionSyncMutationResult = NonNullable<
+  Awaited<ReturnType<typeof retryCommissionSync>>
+>;
+export type RetryCommissionSyncMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Retry commission sync for a reservation
+ */
+export const useRetryCommissionSync = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof retryCommissionSync>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof retryCommissionSync>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getRetryCommissionSyncMutationOptions(options));
+};
+
+/**
  * @summary Get a reservation
  */
 export const getGetReservationUrl = (id: string) => {

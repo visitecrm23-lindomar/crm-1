@@ -1352,6 +1352,10 @@ paths:
           in: query
           schema:
             type: ["string", "null"]
+        - name: commissionSyncStatus
+          in: query
+          schema:
+            type: ["string", "null"]
         - name: page
           in: query
           schema:
@@ -1449,6 +1453,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Reservation"
+
+  /reservations/{id}/retry-commission-sync:
+    post:
+      operationId: retryCommissionSync
+      tags: [reservations]
+      summary: Retry commission sync for a reservation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Retry triggered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required: [success]
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
 
   /reservations/{id}/check-in:
     post:
@@ -5687,6 +5718,8 @@ components:
           type: ["number", "null"]
         commissionAmount:
           type: ["number", "null"]
+        commissionSyncStatus:
+          type: ["string", "null"]
         sellerId:
           type: ["string", "null"]
         status:

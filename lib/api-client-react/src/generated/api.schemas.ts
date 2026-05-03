@@ -857,6 +857,8 @@ export interface Reservation {
   /** @nullable */
   commissionAmount?: number | null;
   /** @nullable */
+  commissionSyncStatus?: string | null;
+  /** @nullable */
   sellerId?: string | null;
   status: string;
   voucherCode: string;
@@ -3280,6 +3282,10 @@ export type ListReservationsParams = {
    * @nullable
    */
   dateTo?: string | null;
+  /**
+   * @nullable
+   */
+  commissionSyncStatus?: string | null;
   page?: number;
   limit?: number;
 };

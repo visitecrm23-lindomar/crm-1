@@ -79,6 +79,7 @@ async function formatReservation(r: typeof reservationsTable.$inferSelect) {
     installments: r.installments,
     commissionPercentage: r.commissionPercentage ? Number(r.commissionPercentage) : null,
     commissionAmount: r.commissionAmount ? Number(r.commissionAmount) : null,
+    commissionSyncStatus: r.commissionSyncStatus ?? null,
     sellerId: r.sellerId ?? null,
     status: r.status,
     voucherCode: r.voucherCode,
@@ -232,7 +233,7 @@ router.get("/reservations", async (req, res, next: NextFunction): Promise<void> 
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    const { tripId, clientId, status, search, createdById, dateFrom, dateTo, page = "1", limit = "20" } = req.query as Record<string, string>;
+    const { tripId, clientId, status, search, createdById, dateFrom, dateTo, commissionSyncStatus, page = "1", limit = "20" } = req.query as Record<string, string>;
     const pageNum = parseInt(page) || 1;
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (pageNum - 1) * limitNum;
@@ -244,6 +245,7 @@ router.get("/reservations", async (req, res, next: NextFunction): Promise<void> 
     const conditions: ReturnType<typeof eq>[] = [eq(reservationsTable.tenantId, me.tenantId)];
     if (tripId) conditions.push(eq(reservationsTable.tripId, tripId));
     if (status) conditions.push(eq(reservationsTable.status, status));
+    if (commissionSyncStatus) conditions.push(eq(reservationsTable.commissionSyncStatus, commissionSyncStatus));
     if (createdById) conditions.push(eq(reservationsTable.createdById, createdById));
     if (dateFrom) conditions.push(sql`${reservationsTable.createdAt} >= ${dateFrom}::timestamptz` as ReturnType<typeof eq>);
     if (dateTo) conditions.push(sql`${reservationsTable.createdAt} <= (${dateTo}::date + interval '1 day - 1 millisecond')` as ReturnType<typeof eq>);
@@ -1312,6 +1314,25 @@ router.delete("/reservations/:reservationId/passengers/:id/check-in", async (req
       .limit(1);
     if (!passenger) { next(new NotFoundError("Reservation not found", "NOT_FOUND")); return; }
     res.json(formatPassenger(passenger));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/reservations/:id/retry-commission-sync", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+
+    const [reservation] = await db.select()
+      .from(reservationsTable)
+      .where(and(eq(reservationsTable.id, req.params.id), eq(reservationsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!reservation) { next(new NotFoundError("Reservation not found", "NOT_FOUND")); return; }
+
+    await enqueueCommissionSync(reservation.id, me.tenantId);
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }

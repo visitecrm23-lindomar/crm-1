@@ -7,6 +7,8 @@ import {
   useUpdateCommissionRule,
   useDeleteCommissionRule,
   useListTrips,
+  useListReservations,
+  useRetryCommissionSync,
 } from "@workspace/api-client-react";
 import type { CommissionRule } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -17,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Pencil, Trash2, DollarSign, CheckCircle, Clock } from "lucide-react";
+import { Plus, Pencil, Trash2, DollarSign, CheckCircle, Clock, AlertTriangle, RefreshCw } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { COMMISSION_STATUS_LABELS as STATUS_LABELS, COMMISSION_STATUS_COLORS as STATUS_COLORS } from "@/lib/labels";
 
@@ -31,16 +33,19 @@ export default function Commissions() {
   const [ruleDisplayType, setRuleDisplayType] = useState("percentage");
   const [appliesTo, setAppliesTo] = useState("all");
   const [selectedTripId, setSelectedTripId] = useState("");
+  const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
 
   const ruleType = ruleDisplayType === "tiered" ? "percentage" : ruleDisplayType as "percentage" | "fixed";
 
   const { data: commissionsRaw, isLoading: loadingCommissions, refetch: refetchCommissions } = useListCommissions();
   const { data: rulesData, isLoading: loadingRules, refetch: refetchRules } = useListCommissionRules();
   const { data: tripsData } = useListTrips({ limit: 100 });
+  const { data: failedSyncData, isLoading: loadingFailedSync, refetch: refetchFailedSync } = useListReservations({ commissionSyncStatus: "failed", limit: 100 });
   const updateCommission = useUpdateCommission();
   const createRule = useCreateCommissionRule();
   const updateRule = useUpdateCommissionRule();
   const deleteRule = useDeleteCommissionRule();
+  const retrySync = useRetryCommissionSync();
 
   const commissions = useMemo(() => {
     const all = Array.isArray(commissionsRaw) ? commissionsRaw : [];
@@ -59,6 +64,8 @@ export default function Commissions() {
     return { total, paid, pending, approved, pendingOrApproved, count };
   }, [commissionsRaw]);
 
+  const failedSyncReservations = useMemo(() => failedSyncData?.data ?? [], [failedSyncData]);
+
   const handleApprove = async (id: string) => {
     await updateCommission.mutateAsync({ id, data: { status: "approved" } });
     refetchCommissions();
@@ -67,6 +74,20 @@ export default function Commissions() {
   const handlePay = async (id: string) => {
     await updateCommission.mutateAsync({ id, data: { status: "paid", paidAt: new Date().toISOString() } });
     refetchCommissions();
+  };
+
+  const handleRetrySync = async (id: string) => {
+    setRetryingIds(prev => new Set(prev).add(id));
+    try {
+      await retrySync.mutateAsync({ id });
+      refetchFailedSync();
+    } finally {
+      setRetryingIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
   };
 
   const handleSaveRule = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -161,6 +182,73 @@ export default function Commissions() {
           </CardContent>
         </Card>
       </div>
+
+      {(loadingFailedSync || failedSyncReservations.length > 0) && (
+        <Card className="border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-950/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-orange-700 dark:text-orange-400 text-base">
+              <AlertTriangle className="w-5 h-5" />
+              Sincronização de Comissão com Falha
+              {!loadingFailedSync && (
+                <span className="ml-1 inline-flex items-center justify-center rounded-full bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200 text-xs font-semibold px-2 py-0.5">
+                  {failedSyncReservations.length}
+                </span>
+              )}
+            </CardTitle>
+            <p className="text-sm text-orange-600 dark:text-orange-400">
+              As reservas abaixo falharam ao sincronizar o registro de comissão. Use "Retentar" para acionar uma nova sincronização.
+            </p>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="rounded-md border border-orange-200 dark:border-orange-800 overflow-hidden bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Reserva</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Viagem</TableHead>
+                    <TableHead>Valor Total</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loadingFailedSync ? (
+                    Array.from({ length: 3 }).map((_, i) => (
+                      <TableRow key={i}>{Array.from({ length: 6 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
+                    ))
+                  ) : failedSyncReservations.map(r => (
+                    <TableRow key={r.id}>
+                      <TableCell className="font-mono text-sm">{r.reservationNumber ?? r.id.slice(0, 10) + "…"}</TableCell>
+                      <TableCell className="text-sm">{r.client?.name ?? "—"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{r.trip?.name ?? "—"}</TableCell>
+                      <TableCell className="text-sm font-medium">{fmt(r.totalValue)}</TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
+                          <AlertTriangle className="w-3 h-3" />
+                          Falhou
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-900/30"
+                          disabled={retryingIds.has(r.id)}
+                          onClick={() => handleRetrySync(r.id)}
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${retryingIds.has(r.id) ? "animate-spin" : ""}`} />
+                          {retryingIds.has(r.id) ? "Retentando…" : "Retentar"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs value={tab} onValueChange={setTab}>
         <div className="flex items-center justify-between">
