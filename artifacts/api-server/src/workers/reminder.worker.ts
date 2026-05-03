@@ -1,12 +1,12 @@
 import { Worker } from "bullmq";
-import { db, reservationsTable, tripsTable, clientsTable, tenantsTable, paymentsTable, emailLogsTable } from "@workspace/db";
-import { eq, and, gt, sql, gte, lt, isNull, isNotNull, notLike } from "drizzle-orm";
+import { db, reservationsTable, tripsTable, clientsTable, tenantsTable, paymentsTable, emailLogsTable, storesTable, usersTable } from "@workspace/db";
+import { eq, and, gt, sql, gte, lt, isNull, isNotNull, notLike, like, inArray } from "drizzle-orm";
 import { sendReminderHtmlEmail, sendReservationConfirmationEmail } from "@workspace/email";
 import { getRedisConnection } from "../lib/redis";
 import { logger } from "../lib/logger";
 import { runExpiredReservationsCron } from "../lib/expired-reservations";
 import type { ReminderJobData } from "../queues/index";
-import { RESERVATION_STATUS, PAYMENT_STATUS } from "@workspace/permissions";
+import { RESERVATION_STATUS, PAYMENT_STATUS, ROLES } from "@workspace/permissions";
 import { buildEmailPropsFromReservation } from "../queues/email-helpers";
 import { generateId } from "../lib/id";
 import { MAX_AUTO_RETRY_ATTEMPTS } from "../lib/email-retry-constants";
@@ -285,6 +285,212 @@ async function processPaymentReminders(): Promise<void> {
 }
 
 // ────────────────────────────────────────────────────────────
+// Staff alert when booking email retries are exhausted
+// ────────────────────────────────────────────────────────────
+
+const EXHAUSTED_ALERT_SUBJECT_PREFIX = "Alerta: Falha no e-mail de confirmação";
+
+/**
+ * Sends a one-time staff alert email when all auto-retries for a booking
+ * confirmation email have been exhausted. Deduplicates by checking whether
+ * an alert with the same subject prefix already exists in email_logs for
+ * this reservation.
+ */
+async function notifyStaffOfExhaustedRetries(
+  reservationId: string,
+  tenantId: string,
+): Promise<void> {
+  // Dedup: skip only if a successful alert was already sent for this reservation.
+  // If a prior attempt failed, we allow another attempt so the alert is not silently lost.
+  const existingSuccessful = await db
+    .select({ id: emailLogsTable.id })
+    .from(emailLogsTable)
+    .where(
+      and(
+        eq(emailLogsTable.tenantId, tenantId),
+        eq(emailLogsTable.reservationId, reservationId),
+        like(emailLogsTable.subject, `${EXHAUSTED_ALERT_SUBJECT_PREFIX}%`),
+        eq(emailLogsTable.status, "sent"),
+      ),
+    )
+    .limit(1);
+
+  if (existingSuccessful.length > 0) {
+    logger.debug(
+      { reservationId },
+      "[email-retry] Staff alert already successfully sent for this reservation — skipping",
+    );
+    return;
+  }
+
+  // Fetch reservation details for the alert body
+  const [row] = await db
+    .select({
+      reservationNumber: reservationsTable.reservationNumber,
+      voucherCode: reservationsTable.voucherCode,
+      clientName: clientsTable.name,
+      clientEmail: clientsTable.email,
+      tripName: tripsTable.name,
+      tripDestination: tripsTable.destination,
+      agencyName: tenantsTable.name,
+    })
+    .from(reservationsTable)
+    .innerJoin(clientsTable, eq(reservationsTable.clientId, clientsTable.id))
+    .innerJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
+    .innerJoin(tenantsTable, eq(reservationsTable.tenantId, tenantsTable.id))
+    .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)))
+    .limit(1);
+
+  if (!row) {
+    logger.warn({ reservationId }, "[email-retry] Cannot fetch reservation for staff alert — skipping");
+    return;
+  }
+
+  // Resolve alert recipients: store email + agency admins/managers
+  const [store] = await db
+    .select({ email: storesTable.email })
+    .from(storesTable)
+    .where(eq(storesTable.tenantId, tenantId))
+    .limit(1);
+
+  const staffUsers = await db
+    .select({ email: usersTable.email })
+    .from(usersTable)
+    .where(
+      and(
+        eq(usersTable.tenantId, tenantId),
+        eq(usersTable.isActive, true),
+        inArray(usersTable.role, [ROLES.AGENCY_ADMIN, ROLES.AGENCY_MANAGER]),
+      ),
+    );
+
+  const recipientSet = new Set<string>();
+  if (store?.email) recipientSet.add(store.email);
+  for (const u of staffUsers) {
+    if (u.email) recipientSet.add(u.email);
+  }
+
+  if (recipientSet.size === 0) {
+    logger.warn(
+      { reservationId, tenantId },
+      "[email-retry] No staff recipients found — cannot send exhausted-retry alert",
+    );
+    return;
+  }
+
+  const reservationRef = row.reservationNumber ?? row.voucherCode ?? reservationId;
+  const destination = row.tripDestination ?? row.tripName ?? "N/A";
+  const subject = `${EXHAUSTED_ALERT_SUBJECT_PREFIX} — Reserva #${reservationRef}`;
+
+  const frontendBase = (process.env["FRONTEND_URL"] ?? "https://app.visitecrm.com.br").replace(/\/$/, "");
+  const reservationUrl = `${frontendBase}/reservations/${reservationId}`;
+
+  const html = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333">
+  <h2 style="color:#DC2626">⚠️ Falha no Envio de E-mail de Confirmação</h2>
+  <p>O e-mail de confirmação de reserva abaixo falhou em todas as ${MAX_AUTO_RETRY_ATTEMPTS} tentativas automáticas e necessita de <strong>intervenção manual</strong>.</p>
+  <table style="width:100%;border-collapse:collapse;margin:16px 0">
+    <tr style="background:#fef2f2">
+      <td style="padding:10px;border:1px solid #e5e7eb;font-weight:600">Reserva Nº</td>
+      <td style="padding:10px;border:1px solid #e5e7eb">${escapeHtml(reservationRef)}</td>
+    </tr>
+    <tr style="background:#f9fafb">
+      <td style="padding:10px;border:1px solid #e5e7eb;font-weight:600">Cliente</td>
+      <td style="padding:10px;border:1px solid #e5e7eb">${escapeHtml(row.clientName)}</td>
+    </tr>
+    <tr>
+      <td style="padding:10px;border:1px solid #e5e7eb;font-weight:600">E-mail do Cliente</td>
+      <td style="padding:10px;border:1px solid #e5e7eb">${escapeHtml(row.clientEmail)}</td>
+    </tr>
+    <tr style="background:#f9fafb">
+      <td style="padding:10px;border:1px solid #e5e7eb;font-weight:600">Viagem</td>
+      <td style="padding:10px;border:1px solid #e5e7eb">${escapeHtml(destination)}</td>
+    </tr>
+  </table>
+  <p>
+    <a href="${reservationUrl}" style="display:inline-block;background:#2563EB;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600">
+      Ver Reserva no CRM
+    </a>
+  </p>
+  <p style="font-size:13px;color:#6b7280">Acesse o <strong>Log de E-mails</strong> para reenviar manualmente o e-mail de confirmação ao cliente.</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+  <p style="font-size:12px;color:#9ca3af">${escapeHtml(row.agencyName)} — Alerta automático do sistema VisiteCRM</p>
+</body>
+</html>`;
+
+  const emailLogId = generateId();
+
+  // Log the alert email before sending so we can update the status after
+  await db.insert(emailLogsTable).values({
+    id: emailLogId,
+    tenantId,
+    reservationId,
+    recipient: [...recipientSet][0],
+    subject,
+    status: "queued",
+    isAutoRetry: false,
+  });
+
+  const recipients = [...recipientSet];
+
+  // Send to all recipients and track aggregate outcome:
+  // - overallSuccess=true as soon as at least one recipient receives the alert.
+  // - firstMessageId: captured from the first successful send for logging.
+  // - lastError: error from the last failed send, used only if all sends fail.
+  let overallSuccess = false;
+  let firstMessageId: string | undefined;
+  let lastError: string | undefined;
+
+  for (const recipient of recipients) {
+    const result = await sendReminderHtmlEmail({
+      to: recipient,
+      subject,
+      html,
+      fromName: row.agencyName,
+    });
+    if (result.success) {
+      overallSuccess = true;
+      if (!firstMessageId) firstMessageId = result.messageId;
+      logger.info(
+        { reservationId, recipient },
+        "[email-retry] Exhausted-retry staff alert delivered to recipient",
+      );
+    } else {
+      lastError = result.error;
+      logger.error(
+        { reservationId, recipient, error: result.error },
+        "[email-retry] Failed to deliver exhausted-retry staff alert to recipient",
+      );
+    }
+  }
+
+  // Mark the log row as "sent" if at least one recipient received it.
+  await db
+    .update(emailLogsTable)
+    .set({
+      status: overallSuccess ? "sent" : "failed",
+      messageId: firstMessageId ?? null,
+      errorMessage: overallSuccess ? null : (lastError ?? null),
+    })
+    .where(eq(emailLogsTable.id, emailLogId));
+
+  if (overallSuccess) {
+    logger.info(
+      { reservationId, recipients, reservationRef },
+      "[email-retry] Exhausted-retry staff alert sent",
+    );
+  } else {
+    logger.error(
+      { reservationId, recipients, reservationRef },
+      "[email-retry] Exhausted-retry staff alert failed for all recipients",
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────
 // Auto-retry failed booking confirmation emails
 // ────────────────────────────────────────────────────────────
 
@@ -382,6 +588,9 @@ export async function retryFailedBookingEmails(): Promise<void> {
         { reservationId, attemptsInWindow, autoRetriesDone, limit: MAX_AUTO_RETRY_ATTEMPTS },
         "[email-retry] Skipping — max auto-retry limit reached for this reservation",
       );
+      // Notify agency staff that manual intervention is needed. The helper
+      // deduplicates internally so it only sends one alert per reservation.
+      await notifyStaffOfExhaustedRetries(reservationId, log.tenantId);
       skipped++;
       continue;
     }

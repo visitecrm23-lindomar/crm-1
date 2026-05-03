@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { paymentsTable, tripsTable, dealsTable, clientsTable, emailLogsTable } from "@workspace/db";
-import { eq, and, lt, lte, gte, gt, sql, isNotNull, notLike } from "drizzle-orm";
+import { paymentsTable, tripsTable, dealsTable, clientsTable, emailLogsTable, reservationsTable } from "@workspace/db";
+import { eq, and, lt, lte, gte, gt, sql, isNotNull, notLike, inArray } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 import { AGENCY_STAFF_ROLES } from '../lib/tenant';
 import { PAYMENT_STATUS, PAYMENT_TYPE, DEAL_STATUS, TRIP_STATUS } from "@workspace/permissions";
@@ -136,6 +136,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
       )),
 
       // 8. E-mails com tentativas esgotadas nas últimas 24h
+      // Exclude: cancellations, agency notifications, and the staff alert emails themselves
       db.select({
         reservationId: emailLogsTable.reservationId,
         status: emailLogsTable.status,
@@ -146,6 +147,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
         gte(emailLogsTable.createdAt, last24h),
         notLike(emailLogsTable.subject, "Reserva Cancelada%"),
         notLike(emailLogsTable.subject, "Nova reserva%"),
+        notLike(emailLogsTable.subject, "Alerta: Falha no e-mail de confirmação%"),
       )),
     ]);
 
@@ -257,16 +259,45 @@ router.get("/alerts", async (req, res): Promise<void> => {
         if (log.status === "sent") r.hasSent = true;
         if (log.isAutoRetry && log.status === "failed") r.autoRetryFailed++;
       }
-      const exhaustedCount = [...byReservation.values()].filter(
-        (r) => !r.hasSent && r.autoRetryFailed >= MAX_AUTO_RETRY_ATTEMPTS,
-      ).length;
+      const exhaustedReservationIds = [...byReservation.entries()]
+        .filter(([, r]) => !r.hasSent && r.autoRetryFailed >= MAX_AUTO_RETRY_ATTEMPTS)
+        .map(([rid]) => rid);
+      const exhaustedCount = exhaustedReservationIds.length;
+
       if (exhaustedCount > 0) {
+        // Fetch reservation details to include in the alert description
+        let description = "Intervenção manual necessária — acesse o Log de E-mails";
+        try {
+          const details = await db
+            .select({
+              reservationId: reservationsTable.id,
+              reservationNumber: reservationsTable.reservationNumber,
+              voucherCode: reservationsTable.voucherCode,
+              clientEmail: clientsTable.email,
+            })
+            .from(reservationsTable)
+            .innerJoin(clientsTable, eq(reservationsTable.clientId, clientsTable.id))
+            .where(inArray(reservationsTable.id, exhaustedReservationIds));
+
+          if (details.length > 0) {
+            const MAX_SHOWN = 3;
+            const shown = details.slice(0, MAX_SHOWN).map((d) => {
+              const ref = d.reservationNumber ?? d.voucherCode ?? d.reservationId;
+              return `#${ref} (${d.clientEmail ?? "sem e-mail"})`;
+            });
+            const remainder = details.length - shown.length;
+            description = shown.join(", ") + (remainder > 0 ? ` e mais ${remainder}` : "");
+          }
+        } catch {
+          // Non-fatal — fall back to generic description
+        }
+
         alerts.push({
           id: "email-retry-exhausted",
           type: "critical",
           category: "E-mails",
-          title: `${exhaustedCount} e-mail(s) com tentativas esgotadas`,
-          description: "Intervenção manual necessária — acesse o Log de E-mails",
+          title: `${exhaustedCount} e-mail(s) de confirmação com tentativas esgotadas`,
+          description,
           actionHref: "/communication?tab=email-logs",
           count: exhaustedCount,
         });
