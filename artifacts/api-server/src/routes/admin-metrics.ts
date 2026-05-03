@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, tenantsTable, usersTable, clientsTable, tripsTable, auditLogsTable, reservationsTable, plansTable } from "@workspace/db";
+import { db, tenantsTable, usersTable, clientsTable, tripsTable, auditLogsTable, reservationsTable, plansTable, emailLogsTable } from "@workspace/db";
 import { eq, desc, and, count, sql } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 
@@ -276,6 +276,31 @@ router.get("/admin/audit-logs", async (req, res): Promise<void> => {
     res.json(logs);
   } catch (err) {
     req.log.error({ err }, "Error listing audit logs");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/admin/email-jobs/failed-count", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== "superadmin") { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const [row] = await db
+      .select({ count: count() })
+      .from(emailLogsTable)
+      .where(eq(emailLogsTable.status, "failed"));
+
+    const recent = await db
+      .select()
+      .from(emailLogsTable)
+      .where(eq(emailLogsTable.status, "failed"))
+      .orderBy(desc(emailLogsTable.createdAt))
+      .limit(20);
+
+    res.json({ failedCount: row?.count ?? 0, recent });
+  } catch (err) {
+    req.log.error({ err }, "Error fetching failed email count");
     res.status(500).json({ error: "Internal server error" });
   }
 });
