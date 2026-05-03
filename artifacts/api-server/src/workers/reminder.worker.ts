@@ -9,6 +9,7 @@ import type { ReminderJobData } from "../queues/index";
 import { RESERVATION_STATUS, PAYMENT_STATUS } from "@workspace/permissions";
 import { buildEmailPropsFromReservation } from "../queues/email-helpers";
 import { generateId } from "../lib/id";
+import { MAX_AUTO_RETRY_ATTEMPTS } from "../lib/email-retry-constants";
 
 function escapeHtml(str: string | null | undefined): string {
   return (str ?? "")
@@ -286,8 +287,6 @@ async function processPaymentReminders(): Promise<void> {
 // ────────────────────────────────────────────────────────────
 // Auto-retry failed booking confirmation emails
 // ────────────────────────────────────────────────────────────
-
-const MAX_AUTO_RETRY_ATTEMPTS = 3;
 
 export async function retryFailedBookingEmails(): Promise<void> {
   const now = new Date();

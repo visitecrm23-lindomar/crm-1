@@ -49,6 +49,7 @@ import {
   WholeWord,
   RefreshCcw,
   Mail,
+  AlertTriangle,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
@@ -122,6 +123,25 @@ export default function Communication() {
   const [loadingEmailLogs, setLoadingEmailLogs] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [filterAutoRetry, setFilterAutoRetry] = useState<"all" | "auto" | "manual">("all");
+
+  const MAX_AUTO_RETRY_ATTEMPTS = 3;
+
+  const exhaustedReservationIds = useMemo(() => {
+    const byReservation = new Map<string, { autoRetryFailed: number; hasSent: boolean }>();
+    for (const log of emailLogs) {
+      if (!log.reservationId) continue;
+      const rid = log.reservationId;
+      if (!byReservation.has(rid)) byReservation.set(rid, { autoRetryFailed: 0, hasSent: false });
+      const r = byReservation.get(rid)!;
+      if (log.status === "sent") r.hasSent = true;
+      if (log.isAutoRetry && log.status === "failed") r.autoRetryFailed++;
+    }
+    const exhausted = new Set<string>();
+    for (const [rid, r] of byReservation.entries()) {
+      if (!r.hasSent && r.autoRetryFailed >= MAX_AUTO_RETRY_ATTEMPTS) exhausted.add(rid);
+    }
+    return exhausted;
+  }, [emailLogs]);
 
   const fetchEmailLogs = useCallback(async () => {
     setLoadingEmailLogs(true);
@@ -855,6 +875,12 @@ export default function Communication() {
                             <Badge className="text-xs bg-purple-50 text-purple-700 border-purple-200" variant="outline">
                               <RefreshCcw className="w-3 h-3 mr-1" />
                               Auto-reenviado
+                            </Badge>
+                          )}
+                          {log.reservationId && exhaustedReservationIds.has(log.reservationId) && (
+                            <Badge className="text-xs bg-orange-50 text-orange-700 border-orange-300" variant="outline">
+                              <AlertTriangle className="w-3 h-3 mr-1" />
+                              Tentativas esgotadas
                             </Badge>
                           )}
                         </div>

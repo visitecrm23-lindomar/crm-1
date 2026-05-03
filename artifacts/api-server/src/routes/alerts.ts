@@ -1,10 +1,11 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { paymentsTable, tripsTable, dealsTable, clientsTable } from "@workspace/db";
-import { eq, and, lt, lte, gte, gt, sql } from "drizzle-orm";
+import { paymentsTable, tripsTable, dealsTable, clientsTable, emailLogsTable } from "@workspace/db";
+import { eq, and, lt, lte, gte, gt, sql, isNotNull, notLike } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 import { AGENCY_STAFF_ROLES } from '../lib/tenant';
 import { PAYMENT_STATUS, PAYMENT_TYPE, DEAL_STATUS, TRIP_STATUS } from "@workspace/permissions";
+import { MAX_AUTO_RETRY_ATTEMPTS } from "../lib/email-retry-constants";
 
 const router = Router();
 
@@ -40,6 +41,8 @@ router.get("/alerts", async (req, res): Promise<void> => {
     const todayMonth = now.getMonth() + 1;
     const todayDay = now.getDate();
 
+    const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
     const [
       receivableDueTodayRows,
       overdueReceivableRows,
@@ -48,6 +51,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
       lowOccupancyTripsRows,
       staleLeadsRows,
       birthdaysRows,
+      exhaustedEmailLogs,
     ] = await Promise.all([
       // 1. Contas a receber vencendo hoje
       db.select({
@@ -129,6 +133,19 @@ router.get("/alerts", async (req, res): Promise<void> => {
         eq(clientsTable.status, "active"),
         sql`extract(month from ${clientsTable.birthDate}) = ${todayMonth}`,
         sql`extract(day from ${clientsTable.birthDate}) = ${todayDay}`,
+      )),
+
+      // 8. E-mails com tentativas esgotadas nas últimas 24h
+      db.select({
+        reservationId: emailLogsTable.reservationId,
+        status: emailLogsTable.status,
+        isAutoRetry: emailLogsTable.isAutoRetry,
+      }).from(emailLogsTable).where(and(
+        eq(emailLogsTable.tenantId, tenantId),
+        isNotNull(emailLogsTable.reservationId),
+        gte(emailLogsTable.createdAt, last24h),
+        notLike(emailLogsTable.subject, "Reserva Cancelada%"),
+        notLike(emailLogsTable.subject, "Nova reserva%"),
       )),
     ]);
 
@@ -228,6 +245,32 @@ router.get("/alerts", async (req, res): Promise<void> => {
         actionHref: "/clients?filter=birthday",
         count: birthdayCount,
       });
+    }
+
+    // 8. E-mails com tentativas esgotadas — agrupar por reservationId
+    {
+      const byReservation = new Map<string, { autoRetryFailed: number; hasSent: boolean }>();
+      for (const log of exhaustedEmailLogs) {
+        const rid = log.reservationId!;
+        if (!byReservation.has(rid)) byReservation.set(rid, { autoRetryFailed: 0, hasSent: false });
+        const r = byReservation.get(rid)!;
+        if (log.status === "sent") r.hasSent = true;
+        if (log.isAutoRetry && log.status === "failed") r.autoRetryFailed++;
+      }
+      const exhaustedCount = [...byReservation.values()].filter(
+        (r) => !r.hasSent && r.autoRetryFailed >= MAX_AUTO_RETRY_ATTEMPTS,
+      ).length;
+      if (exhaustedCount > 0) {
+        alerts.push({
+          id: "email-retry-exhausted",
+          type: "critical",
+          category: "E-mails",
+          title: `${exhaustedCount} e-mail(s) com tentativas esgotadas`,
+          description: "Intervenção manual necessária — acesse o Log de E-mails",
+          actionHref: "/communication?tab=email-logs",
+          count: exhaustedCount,
+        });
+      }
     }
 
     res.json({ alerts, count: alerts.length });
