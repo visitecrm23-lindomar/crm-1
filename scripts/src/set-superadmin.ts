@@ -37,7 +37,7 @@ async function main() {
   console.log(`  ID: ${user.id}`);
 }
 
-main().catch((err) => {
-  console.error("Error:", err);
+main().catch(() => {
+  console.error("Error: Failed to update user role. Check the database connection and try again.");
   process.exit(1);
 });
