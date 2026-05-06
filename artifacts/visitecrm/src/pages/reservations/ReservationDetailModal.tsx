@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useGetReservation, useListPayments } from "@workspace/api-client-react";
 import { PAYMENT_STATUS } from "@workspace/permissions";
+import { useToast } from "@/hooks/use-toast";
 import { Client360Modal } from "@/components/client360-modal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -67,14 +68,23 @@ export function ReservationDetailModal({ reservationId, open, onClose }: {
     }
   }, [reservationId]);
 
+  const { toast } = useToast();
+
   const resendEmail = useCallback(async (emailLogId: string) => {
     setResendingIds(prev => new Set(prev).add(emailLogId));
     try {
-      await fetch(`${BASE}/api/email-logs/${encodeURIComponent(emailLogId)}/resend`, {
+      const res = await fetch(`${BASE}/api/email-logs/${encodeURIComponent(emailLogId)}/resend`, {
         method: "POST",
         credentials: "include",
       });
+      if (res.ok) {
+        toast({ title: "E-mail reenviado", description: "O e-mail de confirmação foi reenviado com sucesso." });
+      } else {
+        toast({ title: "Falha ao reenviar", description: "Não foi possível reenviar o e-mail. Tente novamente.", variant: "destructive" });
+      }
       await fetchEmailLogs();
+    } catch {
+      toast({ title: "Falha ao reenviar", description: "Erro de conexão. Verifique sua rede e tente novamente.", variant: "destructive" });
     } finally {
       setResendingIds(prev => {
         const next = new Set(prev);
@@ -82,7 +92,7 @@ export function ReservationDetailModal({ reservationId, open, onClose }: {
         return next;
       });
     }
-  }, [fetchEmailLogs]);
+  }, [fetchEmailLogs, toast]);
 
   useEffect(() => {
     if (open && activeTab === "emails") {

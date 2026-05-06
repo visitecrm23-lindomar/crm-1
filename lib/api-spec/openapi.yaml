@@ -1380,6 +1380,10 @@ paths:
           in: query
           schema:
             type: ["string", "null"]
+        - name: hasAutoRetry
+          in: query
+          schema:
+            type: ["boolean", "null"]
         - name: page
           in: query
           schema:

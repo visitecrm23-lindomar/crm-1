@@ -356,4 +356,31 @@ router.get("/alerts", async (req, res): Promise<void> => {
   }
 });
 
+router.post("/alerts/email-retry-exhausted/resolve", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    if (!(AGENCY_STAFF_ROLES as readonly string[]).includes(me.role)) {
+      res.status(403).json({ error: "Sem permissão" });
+      return;
+    }
+
+    await db
+      .update(emailLogsTable)
+      .set({ retriesExhaustedAt: null })
+      .where(
+        and(
+          eq(emailLogsTable.tenantId, me.tenantId),
+          isNotNull(emailLogsTable.retriesExhaustedAt),
+        ),
+      );
+
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Error resolving exhausted email alerts");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default router;

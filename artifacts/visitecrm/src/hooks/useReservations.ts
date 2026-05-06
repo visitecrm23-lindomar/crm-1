@@ -21,6 +21,7 @@ export function useReservations(options?: UseReservationsOptions) {
   const [sellerFilter, setSellerFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [hasAutoRetryFilter, setHasAutoRetryFilter] = useState(false);
   const [page, setPage] = useState(1);
 
   const PAGE_SIZE = 20;
@@ -32,6 +33,7 @@ export function useReservations(options?: UseReservationsOptions) {
     createdById: sellerFilter || undefined,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
+    hasAutoRetry: hasAutoRetryFilter || undefined,
     page,
     limit: PAGE_SIZE,
   });
@@ -88,6 +90,7 @@ export function useReservations(options?: UseReservationsOptions) {
     sellerFilter, setSellerFilter,
     dateFrom, setDateFrom,
     dateTo, setDateTo,
+    hasAutoRetryFilter, setHasAutoRetryFilter,
     page, setPage,
     refetch, refetchStats,
     handleCheckin, handleCancel,

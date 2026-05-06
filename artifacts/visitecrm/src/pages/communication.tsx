@@ -828,6 +828,8 @@ export default function Communication() {
                       ? "Auto-reenviados"
                       : f === "manual"
                       ? "Manuais / Originais"
+                      : exhaustedReservationIds.size > 0
+                      ? `Esgotadas (${exhaustedReservationIds.size})`
                       : "Esgotadas"}
                   </button>
                 ))}

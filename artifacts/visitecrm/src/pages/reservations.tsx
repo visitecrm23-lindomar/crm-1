@@ -62,6 +62,7 @@ export default function Reservations() {
     search, setSearch, statusFilter, setStatusFilter,
     tripFilter, setTripFilter, sellerFilter, setSellerFilter,
     dateFrom, setDateFrom, dateTo, setDateTo,
+    hasAutoRetryFilter, setHasAutoRetryFilter,
     page, setPage, refetch, refetchStats,
     handleCheckin, handleCancel,
   } = useReservations();
@@ -90,6 +91,7 @@ export default function Reservations() {
         search={search} setSearch={setSearch} statusFilter={statusFilter} setStatusFilter={setStatusFilter}
         tripFilter={tripFilter} setTripFilter={setTripFilter} sellerFilter={sellerFilter} setSellerFilter={setSellerFilter}
         dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo}
+        hasAutoRetryFilter={hasAutoRetryFilter} setHasAutoRetryFilter={setHasAutoRetryFilter}
         page={page} setPage={setPage} total={total} totalPages={totalPages}
         onViewDetail={id => setDetailId(id)} onEdit={id => setEditId(id)}
         onPayment={r => setPaymentRes(r)} onVoucher={r => setVoucherRes(r)}

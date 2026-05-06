@@ -31,6 +31,8 @@ interface ReservationsTableProps {
   setDateFrom: (v: string) => void;
   dateTo: string;
   setDateTo: (v: string) => void;
+  hasAutoRetryFilter: boolean;
+  setHasAutoRetryFilter: (v: boolean) => void;
   page: number;
   setPage: (v: number | ((p: number) => number)) => void;
   total: number;
@@ -49,6 +51,7 @@ export function ReservationsTable({
   search, setSearch, statusFilter, setStatusFilter,
   tripFilter, setTripFilter, sellerFilter, setSellerFilter,
   dateFrom, setDateFrom, dateTo, setDateTo,
+  hasAutoRetryFilter, setHasAutoRetryFilter,
   page, setPage, total, totalPages,
   onViewDetail, onEdit, onPayment, onVoucher, onCheckin, onCancel, setClient360Id,
 }: ReservationsTableProps) {
@@ -92,8 +95,17 @@ export function ReservationsTable({
           <span className="text-muted-foreground text-xs">até</span>
           <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} className="w-36" />
         </div>
-        {(search || statusFilter || tripFilter || sellerFilter || dateFrom || dateTo) && (
-          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setStatusFilter(""); setTripFilter(""); setSellerFilter(""); setDateFrom(""); setDateTo(""); setPage(1); }}>
+        <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs text-muted-foreground hover:text-foreground">
+          <input
+            type="checkbox"
+            checked={hasAutoRetryFilter}
+            onChange={e => { setHasAutoRetryFilter(e.target.checked); setPage(1); }}
+            className="rounded border-border"
+          />
+          E-mail auto-reenviado
+        </label>
+        {(search || statusFilter || tripFilter || sellerFilter || dateFrom || dateTo || hasAutoRetryFilter) && (
+          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setStatusFilter(""); setTripFilter(""); setSellerFilter(""); setDateFrom(""); setDateTo(""); setHasAutoRetryFilter(false); setPage(1); }}>
             Limpar filtros
           </Button>
         )}

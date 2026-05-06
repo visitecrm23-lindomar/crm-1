@@ -442,3 +442,137 @@ describe("retryFailedBookingEmails", () => {
     expect(mockSendReservationConfirmationEmail).toHaveBeenCalledTimes(1);
   });
 });
+
+// ─── notifyStaffOfExhaustedRetries (via exhaustion path) ──────────────────────
+//
+// These tests (#116 / #117) exercise the staff-alert helper by triggering the
+// exhaustion branch inside retryFailedBookingEmails (autoRetriesDone >= 3).
+// Each test sets up the db.select call sequence expected by the full call chain:
+//   1. failed logs fetch
+//   2. window logs (3 auto-retries → exhaustion triggered)
+//   3. dedup check (existing successful staff alert?)
+//   4. reservation + client + trip + tenant details
+//   5. store email
+//   6. agency staff users
+
+describe("notifyStaffOfExhaustedRetries (via exhaustion path)", () => {
+  const reservationRow = {
+    reservationNumber: "001",
+    voucherCode: "V001",
+    clientName: "Ana Lima",
+    clientEmail: "ana@example.com",
+    tripName: "Gramado 2025",
+    tripDestination: "Gramado",
+    agencyName: "Agência Sol",
+  };
+
+  const threeAutoRetries = [
+    { status: "failed", isAutoRetry: true },
+    { status: "failed", isAutoRetry: true },
+    { status: "failed", isAutoRetry: true },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupInsertMock();
+    setupUpdateMock();
+    mockGenerateId.mockReturnValue("alert-log-id");
+  });
+
+  // #116 — sends the staff alert email when retries are exhausted
+
+  it("sends a staff alert email to store and admin recipients when retries are exhausted", async () => {
+    setupSelectQueue([
+      [failedLog],
+      threeAutoRetries,
+      [],                              // dedup: no existing sent staff alert
+      [reservationRow],               // reservation details
+      [{ email: "store@agency.com" }], // store email
+      [{ email: "admin@agency.com" }], // staff users
+    ]);
+
+    mockSendReminderHtmlEmail.mockResolvedValue({ success: true, messageId: "alert-mid" });
+
+    await retryFailedBookingEmails();
+
+    expect(mockSendReminderHtmlEmail).toHaveBeenCalledTimes(2);
+    expect(mockSendReminderHtmlEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: "store@agency.com" }),
+    );
+    expect(mockSendReminderHtmlEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: "admin@agency.com" }),
+    );
+  });
+
+  it("inserts an email log row for the staff alert before sending", async () => {
+    setupSelectQueue([
+      [failedLog],
+      threeAutoRetries,
+      [],
+      [reservationRow],
+      [{ email: "store@agency.com" }],
+      [],
+    ]);
+
+    mockSendReminderHtmlEmail.mockResolvedValue({ success: true, messageId: "mid" });
+
+    await retryFailedBookingEmails();
+
+    const insertValues = mockDbInsert.mock.calls[0];
+    expect(insertValues).toBeDefined();
+  });
+
+  // #117 — deduplication: send-once behavior
+
+  it("does NOT send a staff alert if a successful alert was already sent for this reservation", async () => {
+    setupSelectQueue([
+      [failedLog],
+      threeAutoRetries,
+      [{ id: "existing-alert-log" }],  // dedup: existing sent staff alert
+    ]);
+
+    await retryFailedBookingEmails();
+
+    expect(mockSendReminderHtmlEmail).not.toHaveBeenCalled();
+    expect(mockLogDebug).toHaveBeenCalledWith(
+      expect.objectContaining({ reservationId: RESERVATION_ID }),
+      expect.stringContaining("Staff alert already successfully sent"),
+    );
+  });
+
+  it("does NOT send a staff alert when no email recipients are configured", async () => {
+    setupSelectQueue([
+      [failedLog],
+      threeAutoRetries,
+      [],              // dedup: no existing alert
+      [reservationRow],
+      [],              // no store email
+      [],              // no staff users
+    ]);
+
+    await retryFailedBookingEmails();
+
+    expect(mockSendReminderHtmlEmail).not.toHaveBeenCalled();
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ reservationId: RESERVATION_ID }),
+      expect.stringContaining("No staff recipients"),
+    );
+  });
+
+  it("skips the staff alert when reservation details cannot be fetched", async () => {
+    setupSelectQueue([
+      [failedLog],
+      threeAutoRetries,
+      [],   // dedup: no existing alert
+      [],   // reservation details not found
+    ]);
+
+    await retryFailedBookingEmails();
+
+    expect(mockSendReminderHtmlEmail).not.toHaveBeenCalled();
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ reservationId: RESERVATION_ID }),
+      expect.stringContaining("Cannot fetch reservation for staff alert"),
+    );
+  });
+});

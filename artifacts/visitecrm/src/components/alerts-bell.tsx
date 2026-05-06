@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Bell, AlertTriangle, Info, XCircle, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,8 +22,10 @@ interface AlertsResponse {
   count: number;
 }
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
 async function fetchAlerts(): Promise<AlertsResponse> {
-  const res = await fetch("/api/alerts", { credentials: "include" });
+  const res = await fetch(`${BASE}/api/alerts`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch alerts");
   return res.json();
 }
@@ -51,7 +53,9 @@ const TYPE_CONFIG = {
 
 export function AlertsBell({ userRole }: { userRole?: string }) {
   const [open, setOpen] = useState(false);
+  const [isResolving, setIsResolving] = useState(false);
   const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
   const canSeeAlerts = userRole === ROLES.AGENCY_ADMIN || userRole === ROLES.SALES;
 
   const { data } = useQuery<AlertsResponse>({
@@ -61,6 +65,20 @@ export function AlertsBell({ userRole }: { userRole?: string }) {
     enabled: canSeeAlerts,
     staleTime: 60_000,
   });
+
+  const handleResolveExhausted = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsResolving(true);
+    try {
+      await fetch(`${BASE}/api/alerts/email-retry-exhausted/resolve`, {
+        method: "POST",
+        credentials: "include",
+      });
+      await queryClient.invalidateQueries({ queryKey: ["alerts"] });
+    } finally {
+      setIsResolving(false);
+    }
+  };
 
   if (!canSeeAlerts) return null;
 
@@ -111,6 +129,38 @@ export function AlertsBell({ userRole }: { userRole?: string }) {
             alerts.map((alert) => {
               const cfg = TYPE_CONFIG[alert.type];
               const Icon = cfg.Icon;
+
+              if (alert.id === "email-retry-exhausted") {
+                return (
+                  <div key={alert.id} className="flex items-start gap-3 px-4 py-3">
+                    <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${cfg.className}`} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium leading-snug">{alert.title}</p>
+                        <span className="text-[10px] text-muted-foreground shrink-0">{alert.category}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-snug mt-0.5">{alert.description}</p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <button
+                          className="text-xs text-primary hover:underline"
+                          onClick={() => { setOpen(false); navigate(alert.actionHref); }}
+                        >
+                          Ver log de e-mails →
+                        </button>
+                        <span className="text-muted-foreground text-xs">·</span>
+                        <button
+                          className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                          onClick={handleResolveExhausted}
+                          disabled={isResolving}
+                        >
+                          {isResolving ? "Resolvendo…" : "Marcar como resolvido"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <button
                   key={alert.id}

@@ -86,7 +86,7 @@ The platform includes a multi-tenant e-commerce solution with both an admin pane
 - **Run backend only**: `pnpm --filter @workspace/api-server run test`
 - **Run frontend only**: `pnpm --filter @workspace/visitecrm run test`
 
-### Backend tests (`artifacts/api-server`) — 72 tests total
+### Backend tests (`artifacts/api-server`) — 77 tests total
 - Config: `vitest.config.ts` — `environment: "node"`, includes `src/**/*.test.ts`
 - `src/__tests__/errors.test.ts` — 15 tests covering all typed error classes (`AppError`, `NotFoundError`, `ConflictError`, `ForbiddenError`, `ValidationError`)
 - `src/__tests__/lib.test.ts` — 22 tests covering pure utility functions:
@@ -102,6 +102,11 @@ The platform includes a multi-tenant e-commerce solution with both an admin pane
 - `src/__tests__/endpoints.test.ts` — 12 endpoint-level tests via supertest (real route handlers, mocked DB/Clerk/queues):
   - `POST /api/reservations`: required-field validation (400), client-not-found (400), partial-payment balance computation, fully-paid (balance=0), overpaid (balance clamped to 0), response body shape
   - `GET /api/public/store/:slug/orders/:orderNumber`: absent/empty/whitespace email → 400 VALIDATION_ERROR, valid email with order-not-found → 404, store-not-found → 404, case-insensitive email normalization
+- `src/workers/reminder.worker.test.ts` — 17 tests (12 original + 5 for `notifyStaffOfExhaustedRetries`):
+  - Staff alert sent to store + admin recipients on exhaustion
+  - Dedup: second staff alert not sent if one already succeeded
+  - No-recipients guard (skips, logs warn)
+  - Missing reservation details guard (skips, logs warn)
 
 ### Frontend tests (`artifacts/visitecrm`) — 51 tests total
 - Config: `vitest.config.ts` — `environment: "jsdom"`, `@` alias resolved to `src/`, includes `src/**/*.test.ts`

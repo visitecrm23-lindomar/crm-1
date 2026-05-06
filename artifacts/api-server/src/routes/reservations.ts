@@ -240,7 +240,7 @@ router.get("/reservations", async (req, res, next: NextFunction): Promise<void> 
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    const { tripId, clientId, status, search, createdById, dateFrom, dateTo, commissionSyncStatus, page = "1", limit = "20" } = req.query as Record<string, string>;
+    const { tripId, clientId, status, search, createdById, dateFrom, dateTo, commissionSyncStatus, hasAutoRetry, page = "1", limit = "20" } = req.query as Record<string, string>;
     const pageNum = parseInt(page) || 1;
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (pageNum - 1) * limitNum;
@@ -254,6 +254,11 @@ router.get("/reservations", async (req, res, next: NextFunction): Promise<void> 
     if (status) conditions.push(eq(reservationsTable.status, parseReservationStatus(status)));
     if (commissionSyncStatus) conditions.push(eq(reservationsTable.commissionSyncStatus, commissionSyncStatus));
     if (createdById) conditions.push(eq(reservationsTable.createdById, createdById));
+    if (hasAutoRetry === "true") {
+      conditions.push(
+        sql`EXISTS (SELECT 1 FROM ${emailLogsTable} WHERE ${emailLogsTable.reservationId} = ${reservationsTable.id} AND ${emailLogsTable.isAutoRetry} = true)` as ReturnType<typeof eq>,
+      );
+    }
     if (dateFrom) conditions.push(sql`${reservationsTable.createdAt} >= ${dateFrom}::timestamptz` as ReturnType<typeof eq>);
     if (dateTo) conditions.push(sql`${reservationsTable.createdAt} <= (${dateTo}::date + interval '1 day - 1 millisecond')` as ReturnType<typeof eq>);
     if (search) {
