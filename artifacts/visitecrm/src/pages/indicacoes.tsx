@@ -647,8 +647,8 @@ export default function Indicacoes() {
                         <TableCell className="whitespace-nowrap">
                           {r.expiresAt ? (() => {
                             const daysLeft = Math.ceil((new Date(r.expiresAt).getTime() - Date.now()) / 86400000);
-                            if (daysLeft <= 0) return <span className="text-xs text-destructive font-medium">Expirado</span>;
-                            if (daysLeft <= 3) return <span className="text-xs text-amber-600 font-medium flex items-center gap-1"><Clock className="w-3 h-3" />{fmtDate(r.expiresAt)}</span>;
+                            if (daysLeft <= 0) return <Badge variant="destructive" className="text-xs">Expirado</Badge>;
+                            if (daysLeft <= 3) return <Badge variant="outline" className="text-xs text-amber-600 border-amber-400 gap-1"><Clock className="w-3 h-3" />{fmtDate(r.expiresAt)}</Badge>;
                             return <span className="text-xs text-muted-foreground">{fmtDate(r.expiresAt)}</span>;
                           })() : <span className="text-xs text-muted-foreground">—</span>}
                         </TableCell>
