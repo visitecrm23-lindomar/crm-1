@@ -605,6 +605,8 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
 
     const [existing] = await db.select({ id: referralSettingsTable.id })
       .from(referralSettingsTable).where(eq(referralSettingsTable.tenantId, me.tenantId)).limit(1);
+
+    let savedSettings: typeof referralSettingsTable.$inferSelect | undefined;
     if (!existing) {
       const id = generateId();
       await db.insert(referralSettingsTable).values({
@@ -627,16 +629,29 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
         expiryWarning7DaysEnabled: (updates.expiryWarning7DaysEnabled as boolean | undefined) ?? true,
         expiryWarning1DayEnabled: (updates.expiryWarning1DayEnabled as boolean | undefined) ?? true,
       });
-      const [settings] = await db.select().from(referralSettingsTable)
+      [savedSettings] = await db.select().from(referralSettingsTable)
         .where(eq(referralSettingsTable.id, id)).limit(1);
-      res.json(settings);
     } else {
       await db.update(referralSettingsTable).set(updates as Partial<typeof referralSettingsTable.$inferInsert>)
         .where(eq(referralSettingsTable.tenantId, me.tenantId));
-      const [settings] = await db.select().from(referralSettingsTable)
+      [savedSettings] = await db.select().from(referralSettingsTable)
         .where(eq(referralSettingsTable.tenantId, me.tenantId)).limit(1);
-      res.json(settings);
     }
+
+    if (parsed.data.expirationDays != null) {
+      const newDays = parsed.data.expirationDays;
+      await db.update(referralsTable)
+        .set({
+          expiresAt: sql`${referralsTable.createdAt} + (${newDays}::integer * interval '1 day')`,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(referralsTable.tenantId, me.tenantId),
+          eq(referralsTable.status, REFERRAL_STATUS.PENDING),
+        ));
+    }
+
+    res.json(savedSettings);
   } catch (err) {
     req.log.error({ err }, "Error updating referral settings");
     res.status(500).json({ error: "Internal server error" });
