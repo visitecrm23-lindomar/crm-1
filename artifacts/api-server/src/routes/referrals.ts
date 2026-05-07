@@ -247,7 +247,11 @@ router.post("/referrals/:id/pay-bonus", async (req, res): Promise<void> => {
     const now = new Date();
     await db.update(referralsTable)
       .set({ bonusPaid: true, bonusPaidAt: now, updatedAt: now })
-      .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)));
+      .where(and(
+        eq(referralsTable.id, req.params.id),
+        eq(referralsTable.tenantId, me.tenantId),
+        eq(referralsTable.bonusPaid, false),
+      ));
 
     const referrerEmail = row.referrerClientEmail ?? row.referrerEmail;
     const referrerName = row.referrerClientName ?? row.referrerName ?? "Indicador";

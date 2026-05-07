@@ -54,13 +54,14 @@ import {
   Wallet,
 } from "lucide-react";
 
-import { formatCurrency as _fmtCurrencyLib, formatDate as _formatDate } from "@/lib/utils";
+import { formatCurrency as _fmtCurrencyLib, formatDate as _formatDate, formatDateTime as _formatDateTime } from "@/lib/utils";
 function fmtCurrency(v: string | number | null | undefined) {
   if (v == null) return "R$ 0,00";
   const n = typeof v === "string" ? parseFloat(v) : v;
   return _fmtCurrencyLib(isNaN(n) ? 0 : n);
 }
 const fmtDate = (v: string | null | undefined) => v ? _formatDate(v) : "—";
+const fmtDateTime = (v: string | null | undefined) => v ? _formatDateTime(v) : "—";
 
 function fmtWhatsapp(w: string | null | undefined) {
   if (!w) return null;
@@ -387,46 +388,56 @@ export default function Indicacoes() {
                     <TableHead className="text-center">Convertidas</TableHead>
                     <TableHead className="text-right">Bônus total</TableHead>
                     <TableHead className="text-right">Já pago</TableHead>
+                    <TableHead className="text-right">A pagar</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {ranked.map((r, i) => (
-                    <TableRow key={r.code + i}>
-                      <TableCell className="py-2">{rankIcon(i)}</TableCell>
-                      <TableCell className="py-2">
-                        <p className="font-medium leading-tight">{r.name}</p>
-                        {r.email && (
-                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                            <Mail className="w-2.5 h-2.5" />
-                            {r.email}
-                          </p>
-                        )}
-                        {r.whatsapp && (
-                          <a
-                            href={`https://wa.me/55${fmtWhatsapp(r.whatsapp)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-green-600 flex items-center gap-1 mt-0.5 hover:underline"
-                          >
-                            <MessageCircle className="w-2.5 h-2.5" />
-                            {r.whatsapp}
-                          </a>
-                        )}
-                      </TableCell>
-                      <TableCell className="font-mono text-primary py-2">{r.code}</TableCell>
-                      <TableCell className="text-center py-2">{r.total}</TableCell>
-                      <TableCell className="text-center py-2">
-                        <Badge variant={r.conversions > 0 ? "default" : "secondary"}>{r.conversions}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right py-2 text-green-600 font-medium">{fmtCurrency(r.earnings)}</TableCell>
-                      <TableCell className="text-right py-2">
-                        {r.paidEarnings > 0
-                          ? <span className="text-green-700 font-medium">{fmtCurrency(r.paidEarnings)}</span>
-                          : <span className="text-muted-foreground text-xs">—</span>
-                        }
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {ranked.map((r, i) => {
+                    const pendingEarnings = r.earnings - r.paidEarnings;
+                    return (
+                      <TableRow key={r.code + i}>
+                        <TableCell className="py-2">{rankIcon(i)}</TableCell>
+                        <TableCell className="py-2">
+                          <p className="font-medium leading-tight">{r.name}</p>
+                          {r.email && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                              <Mail className="w-2.5 h-2.5" />
+                              {r.email}
+                            </p>
+                          )}
+                          {r.whatsapp && (
+                            <a
+                              href={`https://wa.me/55${fmtWhatsapp(r.whatsapp)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-green-600 flex items-center gap-1 mt-0.5 hover:underline"
+                            >
+                              <MessageCircle className="w-2.5 h-2.5" />
+                              {r.whatsapp}
+                            </a>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-mono text-primary py-2">{r.code}</TableCell>
+                        <TableCell className="text-center py-2">{r.total}</TableCell>
+                        <TableCell className="text-center py-2">
+                          <Badge variant={r.conversions > 0 ? "default" : "secondary"}>{r.conversions}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right py-2 text-green-600 font-medium">{fmtCurrency(r.earnings)}</TableCell>
+                        <TableCell className="text-right py-2">
+                          {r.paidEarnings > 0
+                            ? <span className="text-green-700 font-medium">{fmtCurrency(r.paidEarnings)}</span>
+                            : <span className="text-muted-foreground text-xs">—</span>
+                          }
+                        </TableCell>
+                        <TableCell className="text-right py-2">
+                          {pendingEarnings > 0
+                            ? <span className="text-amber-600 font-medium">{fmtCurrency(pendingEarnings)}</span>
+                            : <span className="text-muted-foreground text-xs">—</span>
+                          }
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -703,12 +714,24 @@ export default function Indicacoes() {
                   {selectedReferral.bonusPaid ? (
                     <p className="text-xs text-green-700 flex items-center gap-1">
                       <Check className="w-3 h-3" />
-                      Pago {selectedReferral.bonusPaidAt ? `em ${fmtDate(selectedReferral.bonusPaidAt)}` : ""}
+                      Pago {selectedReferral.bonusPaidAt ? `em ${fmtDateTime(selectedReferral.bonusPaidAt)}` : ""}
                     </p>
                   ) : (
                     <p className="text-xs text-amber-600">Pendente</p>
                   )}
                 </div>
+                {(() => {
+                  const allByReferrer = referrals.filter(r => r.referrerId === selectedReferral.referrerId && r.status === REFERRAL_STATUS.COMPLETED);
+                  const totalBonus = allByReferrer.reduce((s, r) => s + (parseFloat(String(r.bonusAmount ?? "0")) || 0), 0);
+                  if (allByReferrer.length < 2) return null;
+                  return (
+                    <div>
+                      <p className="text-muted-foreground">Total acumulado (indicador)</p>
+                      <p className="font-semibold text-green-600">{fmtCurrency(totalBonus)}</p>
+                      <p className="text-xs text-muted-foreground">{allByReferrer.length} conversões</p>
+                    </div>
+                  );
+                })()}
                 <div>
                   <p className="text-muted-foreground">Visitas</p>
                   <p>{selectedReferral.visitsCount ?? 0}</p>
