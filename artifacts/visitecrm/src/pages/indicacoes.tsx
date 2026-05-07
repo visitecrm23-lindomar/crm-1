@@ -6,6 +6,7 @@ import {
   useGetReferralSettings,
   useUpdateReferralSettings,
   usePayReferralBonus,
+  useResendExpiryWarning,
 } from "@workspace/api-client-react";
 import type { Referral, ReferralSettings, ReferralTierConfig } from "@workspace/api-client-react";
 import { REFERRAL_STATUS } from "@workspace/permissions";
@@ -128,6 +129,7 @@ export default function Indicacoes() {
   const updateReferral = useUpdateReferral();
   const updateSettings = useUpdateReferralSettings();
   const payBonus = usePayReferralBonus();
+  const resendWarning = useResendExpiryWarning();
 
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -947,6 +949,56 @@ export default function Indicacoes() {
             </div>
           )}
           <DialogFooter>
+            {selectedReferral && selectedReferral.expiresAt && (() => {
+              const daysLeft = Math.ceil((new Date(selectedReferral.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+              if (daysLeft <= 0) return null;
+              return (
+                <>
+                  <Button
+                    variant="outline"
+                    className="border-amber-400 text-amber-700 hover:bg-amber-50"
+                    disabled={resendWarning.isPending}
+                    onClick={() => {
+                      resendWarning.mutate(
+                        { id: selectedReferral.id, window: 7 },
+                        {
+                          onSuccess: (updated) => {
+                            setSelectedReferral((prev) => prev ? { ...prev, ...updated } : prev);
+                            refetch();
+                            toast({ title: "Aviso D-7 reenviado com sucesso" });
+                          },
+                          onError: () => toast({ title: "Erro ao reenviar aviso D-7", variant: "destructive" }),
+                        },
+                      );
+                    }}
+                  >
+                    <Mail className="w-4 h-4 mr-2" />
+                    Reenviar D-7
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-amber-400 text-amber-700 hover:bg-amber-50"
+                    disabled={resendWarning.isPending}
+                    onClick={() => {
+                      resendWarning.mutate(
+                        { id: selectedReferral.id, window: 1 },
+                        {
+                          onSuccess: (updated) => {
+                            setSelectedReferral((prev) => prev ? { ...prev, ...updated } : prev);
+                            refetch();
+                            toast({ title: "Aviso D-1 reenviado com sucesso" });
+                          },
+                          onError: () => toast({ title: "Erro ao reenviar aviso D-1", variant: "destructive" }),
+                        },
+                      );
+                    }}
+                  >
+                    <Mail className="w-4 h-4 mr-2" />
+                    Reenviar D-1
+                  </Button>
+                </>
+              );
+            })()}
             {selectedReferral && selectedReferral.status === REFERRAL_STATUS.COMPLETED && !selectedReferral.bonusPaid && (
               <Button
                 onClick={() => { setDetailModalOpen(false); openPayBonusDialog(selectedReferral); }}

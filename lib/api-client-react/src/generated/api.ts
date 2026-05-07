@@ -14587,6 +14587,87 @@ export const usePayReferralBonus = <
 };
 
 /**
+ * @summary Resend a pre-expiry warning email for a referral (D-7 or D-1)
+ */
+export const getResendExpiryWarningUrl = (id: string, window: 7 | 1) => {
+  return `/api/referrals/${id}/resend-expiry-warning?window=${window}`;
+};
+
+export const resendExpiryWarning = async (
+  id: string,
+  window: 7 | 1,
+  options?: RequestInit,
+): Promise<Referral> => {
+  return customFetch<Referral>(getResendExpiryWarningUrl(id, window), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+  });
+};
+
+export const getResendExpiryWarningMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendExpiryWarning>>,
+    TError,
+    { id: string; window: 7 | 1 },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resendExpiryWarning>>,
+  TError,
+  { id: string; window: 7 | 1 },
+  TContext
+> => {
+  const mutationKey = ["resendExpiryWarning"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resendExpiryWarning>>,
+    { id: string; window: 7 | 1 }
+  > = (props) => {
+    const { id, window } = props ?? {};
+    return resendExpiryWarning(id, window, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResendExpiryWarningMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resendExpiryWarning>>
+>;
+export type ResendExpiryWarningMutationError = ErrorType<unknown>;
+
+export const useResendExpiryWarning = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendExpiryWarning>>,
+    TError,
+    { id: string; window: 7 | 1 },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resendExpiryWarning>>,
+  TError,
+  { id: string; window: 7 | 1 },
+  TContext
+> => {
+  return useMutation(getResendExpiryWarningMutationOptions(options));
+};
+
+/**
  * @summary List coupons
  */
 export const getListCouponsUrl = () => {

@@ -6,7 +6,7 @@ import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { REFERRAL_STATUS } from "@workspace/permissions";
-import { enqueueReferralBonusPaidEmail } from "../queues/email-helpers";
+import { enqueueReferralBonusPaidEmail, dispatchReferralExpiringSoonEmail } from "../queues/email-helpers";
 import { dispatchWhatsAppReferralBonusPaid } from "../queues/whatsapp-helpers";
 import { DEFAULT_TIERS as DEFAULT_TIERS_CONFIG, computeReferralTier } from "../lib/referral-tiers";
 import type { ReferralTier } from "../lib/referral-tiers";
@@ -408,6 +408,85 @@ router.post("/referrals/:id/pay-bonus", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Error paying referral bonus");
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/referrals/:id/resend-expiry-warning", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const windowParam = req.query.window;
+    if (windowParam !== "7" && windowParam !== "1") {
+      res.status(400).json({ error: "Parâmetro 'window' inválido — use '7' ou '1'" });
+      return;
+    }
+    const windowNum = parseInt(windowParam, 10) as 7 | 1;
+
+    const [row] = await db.select({
+      ...getTableColumns(referralsTable),
+    }).from(referralsTable)
+      .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
+      .limit(1);
+
+    if (!row) { res.status(404).json({ error: "Indicação não encontrada" }); return; }
+    if (!row.expiresAt) {
+      res.status(422).json({ error: "Esta indicação não tem data de expiração" });
+      return;
+    }
+    if (!row.referrerId) {
+      res.status(422).json({ error: "Indicação sem indicador registrado" });
+      return;
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(row.expiresAt);
+    if (expiresAt <= now) {
+      res.status(422).json({ error: "A indicação já expirou" });
+      return;
+    }
+
+    const msLeft = expiresAt.getTime() - now.getTime();
+    const daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
+
+    await dispatchReferralExpiringSoonEmail(row.referrerId, me.tenantId, row.code, expiresAt, daysLeft);
+
+    const sentNow = new Date();
+    const sentUpdate = windowNum === 7
+      ? { expiryWarning7SentAt: sentNow, updatedAt: sentNow }
+      : { expiryWarning1SentAt: sentNow, updatedAt: sentNow };
+
+    await db.update(referralsTable)
+      .set(sentUpdate)
+      .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)));
+
+    const [updated] = await db.select({
+      ...getTableColumns(referralsTable),
+      referrerClientName: clientsTable.name,
+      referrerClientEmail: clientsTable.email,
+      referrerClientWhatsapp: clientsTable.whatsapp,
+      referrerClientPhone: clientsTable.phone,
+    }).from(referralsTable)
+      .leftJoin(clientsTable, and(
+        eq(referralsTable.referrerId, clientsTable.id),
+        eq(clientsTable.tenantId, me.tenantId),
+      ))
+      .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
+      .limit(1);
+
+    if (!updated) { res.status(404).json({ error: "Not found" }); return; }
+    const { referrerClientName, referrerClientEmail, referrerClientWhatsapp, referrerClientPhone, ...rest } = updated;
+    res.json({
+      ...rest,
+      referrerName: referrerClientName ?? rest.referrerName,
+      referrerEmail: referrerClientEmail ?? rest.referrerEmail,
+      referrerPhone: referrerClientPhone ?? rest.referrerPhone,
+      referrerWhatsapp: referrerClientWhatsapp ?? null,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error resending expiry warning email");
+    res.status(500).json({ error: "Falha ao reenviar o aviso de expiração" });
   }
 });
 
