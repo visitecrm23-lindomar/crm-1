@@ -127,6 +127,13 @@
       "when": 1746580000000,
       "tag": "0017_add_email_logs_partial_index",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1778120000000,
+      "tag": "0018_add_referral_tiers_config",
+      "breakpoints": true
     }
   ]
 }

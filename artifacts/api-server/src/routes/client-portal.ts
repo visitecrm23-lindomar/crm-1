@@ -606,6 +606,21 @@ router.get("/client/me/referrals", async (req, res, next: NextFunction): Promise
       )
       .orderBy(desc(referralsTable.createdAt));
 
+    const completedCount = rows.filter(
+      (r) => r.status === REFERRAL_STATUS.COMPLETED || r.status === REFERRAL_STATUS.CONVERTED,
+    ).length;
+
+    const [refSettings] = await db
+      .select({ tiersConfig: referralSettingsTable.tiersConfig })
+      .from(referralSettingsTable)
+      .where(eq(referralSettingsTable.tenantId, me.tenantId))
+      .limit(1);
+
+    const { tier: currentTier, nextTier, progress: tierProgress } = computeReferralTier(
+      completedCount,
+      refSettings?.tiersConfig ?? null,
+    );
+
     res.json({
       data: rows.map((r) => ({
         id: r.id,
@@ -619,6 +634,14 @@ router.get("/client/me/referrals", async (req, res, next: NextFunction): Promise
         createdAt: (r.createdAt as unknown as Date).toISOString(),
         expiresAt: r.expiresAt ? (r.expiresAt as unknown as Date).toISOString() : null,
       })),
+      tier: {
+        currentTierLevel: currentTier.level,
+        currentTierLabel: currentTier.label,
+        currentTierMultiplier: currentTier.bonusMultiplier,
+        tierProgress,
+        nextTierMin: nextTier?.minReferrals ?? null,
+        nextTierLabel: nextTier?.label ?? null,
+      },
     });
   } catch (err) {
     next(err);

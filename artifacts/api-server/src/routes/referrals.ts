@@ -7,7 +7,7 @@ import { requireAuth } from "../lib/tenant";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { REFERRAL_STATUS } from "@workspace/permissions";
 import { enqueueReferralBonusPaidEmail } from "../queues/email-helpers";
-import { DEFAULT_TIERS as DEFAULT_TIERS_CONFIG } from "../lib/referral-tiers";
+import { DEFAULT_TIERS as DEFAULT_TIERS_CONFIG, computeReferralTier } from "../lib/referral-tiers";
 import type { ReferralTier } from "../lib/referral-tiers";
 
 const router = Router();
@@ -86,6 +86,29 @@ router.get("/referrals/stats", async (req, res): Promise<void> => {
 
     const conversionRate = total > 0 ? Math.round((stats.completed / total) * 100) : 0;
 
+    const [refSettings] = await db
+      .select({ tiersConfig: referralSettingsTable.tiersConfig })
+      .from(referralSettingsTable)
+      .where(eq(referralSettingsTable.tenantId, me.tenantId))
+      .limit(1);
+
+    const tiersConfig = refSettings?.tiersConfig ?? DEFAULT_TIERS_CONFIG;
+
+    const tierDistRows = await db
+      .select({
+        referrerId: referralsTable.referrerId,
+        conversions: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.status} = ${REFERRAL_STATUS.COMPLETED})`,
+      })
+      .from(referralsTable)
+      .where(eq(referralsTable.tenantId, me.tenantId))
+      .groupBy(referralsTable.referrerId);
+
+    const tierDistribution: Record<string, number> = {};
+    for (const row of tierDistRows) {
+      const { tier } = computeReferralTier(Number(row.conversions), tiersConfig);
+      tierDistribution[tier.level] = (tierDistribution[tier.level] ?? 0) + 1;
+    }
+
     res.json({
       total,
       pending: stats.pending,
@@ -94,6 +117,8 @@ router.get("/referrals/stats", async (req, res): Promise<void> => {
       conversionRate,
       totalBonusPaid: Number(earningsRow?.total ?? 0),
       totalDiscountGiven: Number(discountRow?.total ?? 0),
+      tiersConfig,
+      tierDistribution,
     });
   } catch (err) {
     req.log.error({ err }, "Error fetching referral stats");
