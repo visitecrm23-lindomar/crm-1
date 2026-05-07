@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, referralsTable, clientsTable, referralSettingsTable, referralTrackingTable, tenantsTable } from "@workspace/db";
-import { eq, and, desc, sql, count, ilike, or, getTableColumns } from "drizzle-orm";
+import { eq, and, desc, sql, count, ilike, or, inArray, getTableColumns } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
@@ -198,13 +198,44 @@ router.get("/referrals", async (req, res): Promise<void> => {
       .limit(limit)
       .offset(offset);
 
-    const referrals = rows.map(({ referrerClientName, referrerClientEmail, referrerClientWhatsapp, referrerClientPhone, ...r }) => ({
-      ...r,
-      referrerName: referrerClientName ?? r.referrerName,
-      referrerEmail: referrerClientEmail ?? r.referrerEmail,
-      referrerPhone: referrerClientPhone ?? r.referrerPhone,
-      referrerWhatsapp: referrerClientWhatsapp ?? null,
-    }));
+    // Backfill lastVisit and visitsCount from referral_tracking for referrals
+    // that predate the forward-sync logic (historical data reconciliation).
+    const codes = [...new Set(rows.map((r) => r.code))];
+    const trackingMap = new Map<string, { lastVisit: Date | null; visitsCount: number }>();
+    if (codes.length > 0) {
+      const trackingAgg = await db
+        .select({
+          referralCode: referralTrackingTable.referralCode,
+          lastVisit: sql<string | null>`MAX(${referralTrackingTable.lastVisit})`,
+          visitsCount: sql<number>`SUM(${referralTrackingTable.visitsCount})`,
+        })
+        .from(referralTrackingTable)
+        .where(and(
+          eq(referralTrackingTable.tenantId, me.tenantId),
+          inArray(referralTrackingTable.referralCode, codes),
+        ))
+        .groupBy(referralTrackingTable.referralCode);
+      for (const t of trackingAgg) {
+        trackingMap.set(t.referralCode, {
+          lastVisit: t.lastVisit ? new Date(t.lastVisit) : null,
+          visitsCount: Number(t.visitsCount) || 0,
+        });
+      }
+    }
+
+    const referrals = rows.map(({ referrerClientName, referrerClientEmail, referrerClientWhatsapp, referrerClientPhone, ...r }) => {
+      const tracking = trackingMap.get(r.code);
+      return {
+        ...r,
+        referrerName: referrerClientName ?? r.referrerName,
+        referrerEmail: referrerClientEmail ?? r.referrerEmail,
+        referrerPhone: referrerClientPhone ?? r.referrerPhone,
+        referrerWhatsapp: referrerClientWhatsapp ?? null,
+        // Use tracking aggregate as fallback when forward-sync hasn't run yet
+        lastVisit: r.lastVisit ?? tracking?.lastVisit ?? null,
+        visitsCount: Math.max(r.visitsCount ?? 0, tracking?.visitsCount ?? 0),
+      };
+    });
 
     res.json({
       data: referrals,

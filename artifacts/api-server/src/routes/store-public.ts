@@ -922,11 +922,15 @@ router.post("/public/store/:slug/referral/track", async (req, res, next: NextFun
     // Only accept server-issued cookie IDs (those that exist in DB for this tenant)
     // Never trust client-provided IDs that don't match an existing record
     let cookieId: string;
-    let existingRecord: { id: string; pagesVisited: unknown } | undefined;
+    let existingRecord: { id: string; pagesVisited: unknown; referralCode: string } | undefined;
 
     if (parsed.data.serverCookieId) {
       // Verify the provided ID is actually server-issued (exists in DB for this tenant)
-      const [found] = await db.select({ id: referralTrackingTable.id, pagesVisited: referralTrackingTable.pagesVisited })
+      const [found] = await db.select({
+        id: referralTrackingTable.id,
+        pagesVisited: referralTrackingTable.pagesVisited,
+        referralCode: referralTrackingTable.referralCode,
+      })
         .from(referralTrackingTable)
         .where(and(
           eq(referralTrackingTable.tenantId, store.tenantId),
@@ -978,7 +982,10 @@ router.post("/public/store/:slug/referral/track", async (req, res, next: NextFun
       });
     }
 
-    // Sync lastVisit and visitsCount back to the referrals table so the admin panel shows live data
+    // Sync lastVisit and visitsCount back to the referrals table so the admin panel shows live data.
+    // Use the tracking record's original referralCode (not the request's code) to prevent
+    // misattribution when a returning visitor's cookie is tied to a different code.
+    const syncCode = existingRecord ? existingRecord.referralCode : code;
     await db.update(referralsTable)
       .set({
         lastVisit: now,
@@ -987,7 +994,7 @@ router.post("/public/store/:slug/referral/track", async (req, res, next: NextFun
       })
       .where(and(
         eq(referralsTable.tenantId, store.tenantId),
-        eq(referralsTable.code, code),
+        eq(referralsTable.code, syncCode),
       ));
 
     // Always return the server-issued cookie ID in header for client persistence
