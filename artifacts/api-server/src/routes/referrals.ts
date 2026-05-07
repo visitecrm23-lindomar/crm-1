@@ -104,10 +104,24 @@ router.get("/referrals/stats", async (req, res): Promise<void> => {
       .groupBy(referralsTable.referrerId);
 
     const tierDistribution: Record<string, number> = {};
+    let topTierLevel = tiersConfig[0]?.level ?? "bronze";
+    let topTierMinReferrals = -1;
     for (const row of tierDistRows) {
       const { tier } = computeReferralTier(Number(row.conversions), tiersConfig);
       tierDistribution[tier.level] = (tierDistribution[tier.level] ?? 0) + 1;
+      if (tier.minReferrals > topTierMinReferrals) {
+        topTierLevel = tier.level;
+        topTierMinReferrals = tier.minReferrals;
+      }
     }
+
+    const topTierConfig = tiersConfig.find((t) => t.level === topTierLevel);
+    const sortedTiers = [...tiersConfig].sort((a, b) => a.minReferrals - b.minReferrals);
+    const topTierIdx = sortedTiers.findIndex((t) => t.level === topTierLevel);
+    const nextTierForTop = sortedTiers[topTierIdx + 1] ?? null;
+    const totalReferrers = tierDistRows.length;
+    const topTierCount = tierDistribution[topTierLevel] ?? 0;
+    const tierProgress = totalReferrers > 0 ? Math.round((topTierCount / totalReferrers) * 100) : 0;
 
     res.json({
       total,
@@ -119,6 +133,15 @@ router.get("/referrals/stats", async (req, res): Promise<void> => {
       totalDiscountGiven: Number(discountRow?.total ?? 0),
       tiersConfig,
       tierDistribution,
+      currentTier: {
+        level: topTierConfig?.level ?? "bronze",
+        label: topTierConfig?.label ?? "Bronze",
+        bonusMultiplier: topTierConfig?.bonusMultiplier ?? 1,
+        minReferrals: topTierConfig?.minReferrals ?? 0,
+        nextTierLabel: nextTierForTop?.label ?? null,
+        nextTierMin: nextTierForTop?.minReferrals ?? null,
+      },
+      tierProgress,
     });
   } catch (err) {
     req.log.error({ err }, "Error fetching referral stats");

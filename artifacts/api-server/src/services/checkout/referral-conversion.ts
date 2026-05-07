@@ -48,7 +48,7 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
     .limit(1);
 
   const currentCompleted = referrer?.successfulReferrals ?? 0;
-  const { tier } = computeReferralTier(currentCompleted + 1, refSettings?.tiersConfig ?? null);
+  const { tier } = computeReferralTier(currentCompleted, refSettings?.tiersConfig ?? null);
   const bonusAmount = Math.round(baseBonusValue * tier.bonusMultiplier * 100) / 100;
 
   await tx.insert(referralsTable).values({
