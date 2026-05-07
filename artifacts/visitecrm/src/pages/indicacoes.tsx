@@ -914,7 +914,7 @@ export default function Indicacoes() {
                 {selectedReferral.expiresAt && (
                   <>
                     <div>
-                      <p className="text-muted-foreground">Aviso D-7</p>
+                      <p className="text-muted-foreground">Aviso D-7 enviado em</p>
                       {selectedReferral.expiryWarning7SentAt ? (
                         <p className="text-xs text-amber-700 flex items-center gap-1">
                           <Check className="w-3 h-3" />
@@ -925,7 +925,7 @@ export default function Indicacoes() {
                       )}
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Aviso D-1</p>
+                      <p className="text-muted-foreground">Aviso D-1 enviado em</p>
                       {selectedReferral.expiryWarning1SentAt ? (
                         <p className="text-xs text-amber-700 flex items-center gap-1">
                           <Check className="w-3 h-3" />
