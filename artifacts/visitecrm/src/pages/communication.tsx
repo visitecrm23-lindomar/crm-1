@@ -122,7 +122,9 @@ export default function Communication() {
   const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
   const [loadingEmailLogs, setLoadingEmailLogs] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
-  const [filterAutoRetry, setFilterAutoRetry] = useState<"all" | "auto" | "manual" | "exhausted">("all");
+  const [filterAutoRetry, setFilterAutoRetry] = useState<"all" | "auto" | "manual" | "exhausted" | "indicacoes">("all");
+
+  const REFERRAL_EMAIL_RE = /bônus de indicação|indicação foi confirmada|indicação expirou|⏰|vence em \d+ dia/i;
 
   const MAX_AUTO_RETRY_ATTEMPTS = 3;
 
@@ -807,8 +809,8 @@ export default function Communication() {
               <p className="text-sm text-muted-foreground">
                 Histórico de e-mails transacionais enviados pelo sistema.
               </p>
-              <div className="flex items-center gap-1">
-                {(["all", "auto", "manual", "exhausted"] as const).map((f) => (
+              <div className="flex items-center gap-1 flex-wrap">
+                {(["all", "indicacoes", "auto", "manual", "exhausted"] as const).map((f) => (
                   <button
                     key={f}
                     onClick={() => setFilterAutoRetry(f)}
@@ -816,14 +818,20 @@ export default function Communication() {
                       filterAutoRetry === f
                         ? f === "exhausted"
                           ? "bg-orange-500 text-white border-orange-500"
+                          : f === "indicacoes"
+                          ? "bg-amber-500 text-white border-amber-500"
                           : "bg-primary text-primary-foreground border-primary"
                         : f === "exhausted"
                         ? "bg-background border-orange-300 text-orange-700 hover:bg-orange-50"
+                        : f === "indicacoes"
+                        ? "bg-background border-amber-300 text-amber-700 hover:bg-amber-50"
                         : "bg-background border-border hover:bg-muted"
                     }`}
                   >
                     {f === "all"
                       ? "Todos"
+                      : f === "indicacoes"
+                      ? "Indicações"
                       : f === "auto"
                       ? "Auto-reenviados"
                       : f === "manual"
@@ -868,6 +876,8 @@ export default function Communication() {
                   .filter((log) =>
                     filterAutoRetry === "all"
                       ? true
+                      : filterAutoRetry === "indicacoes"
+                      ? REFERRAL_EMAIL_RE.test(log.subject ?? "")
                       : filterAutoRetry === "auto"
                       ? log.isAutoRetry
                       : filterAutoRetry === "exhausted"
