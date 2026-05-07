@@ -750,6 +750,7 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
     const parsed = z.object({
       code: z.string().min(1),
       customerEmail: z.string().optional(),
+      cookieId: z.string().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const code = parsed.data.code.toUpperCase();
@@ -824,12 +825,13 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
     const referrerName = referrer.name ?? "um amigo";
 
     const validatorIp = getClientIp(req);
-    if (validatorIp) {
+    const validatorCookieId = parsed.data.cookieId;
+    if (validatorIp && validatorCookieId) {
       db.update(referralTrackingTable)
         .set({ ipAddress: validatorIp, updatedAt: new Date() })
         .where(and(
           eq(referralTrackingTable.tenantId, store.tenantId),
-          eq(referralTrackingTable.referralCode, code),
+          eq(referralTrackingTable.cookieId, validatorCookieId),
         ))
         .catch(() => undefined);
     }
