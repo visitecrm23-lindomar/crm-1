@@ -844,7 +844,7 @@ function ReferralStatusBadge({ status }: { status: string }) {
 
 function ReferralRow({ r, primaryColor }: { r: ClientReferral; primaryColor: string }) {
   const displayName = r.referredName ?? r.referredEmail ?? "Pessoa indicada";
-  const dateLabel = r.status === "completed" && r.convertedAt
+  const dateLabel = (r.status === "completed" || r.status === "converted") && r.convertedAt
     ? `Convertida em ${new Date(r.convertedAt).toLocaleDateString("pt-BR")}`
     : r.status === "expired" && r.expiresAt
     ? `Expirou em ${new Date(r.expiresAt).toLocaleDateString("pt-BR")}`
