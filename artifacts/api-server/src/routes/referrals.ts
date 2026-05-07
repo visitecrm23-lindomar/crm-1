@@ -426,7 +426,12 @@ router.post("/referrals/:id/resend-expiry-warning", async (req, res): Promise<vo
 
     const [row] = await db.select({
       ...getTableColumns(referralsTable),
+      referrerClientEmail: clientsTable.email,
     }).from(referralsTable)
+      .leftJoin(clientsTable, and(
+        eq(referralsTable.referrerId, clientsTable.id),
+        eq(clientsTable.tenantId, me.tenantId),
+      ))
       .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
       .limit(1);
 
@@ -437,6 +442,12 @@ router.post("/referrals/:id/resend-expiry-warning", async (req, res): Promise<vo
     }
     if (!row.referrerId) {
       res.status(422).json({ error: "Indicação sem indicador registrado" });
+      return;
+    }
+
+    const resolvedReferrerEmail = row.referrerClientEmail ?? row.referrerEmail;
+    if (!resolvedReferrerEmail) {
+      res.status(422).json({ error: "O indicador não tem e-mail cadastrado — aviso não pode ser enviado" });
       return;
     }
 
