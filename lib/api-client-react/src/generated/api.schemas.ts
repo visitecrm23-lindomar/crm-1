@@ -2311,7 +2311,6 @@ export interface ReferralStats {
   pending: number;
   completed: number;
   expired: number;
-  expiringSoon: number;
   conversionRate: number;
   totalBonusPaid: number;
   totalDiscountGiven: number;

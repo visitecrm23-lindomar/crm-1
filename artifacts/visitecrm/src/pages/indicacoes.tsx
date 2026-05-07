@@ -230,8 +230,21 @@ export default function Indicacoes() {
 
   const suspiciousCount = referrals.filter((r) => r.fraudFlag).length;
 
+  // Compute expiring-soon count from loaded referrals using expiresAt
+  const now = Date.now();
+  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+  const expiringSoonCount = referrals.filter((r) => {
+    if (r.status !== REFERRAL_STATUS.PENDING || !r.expiresAt) return false;
+    const exp = new Date(r.expiresAt).getTime();
+    return exp > now && exp <= now + sevenDaysMs;
+  }).length;
+
   const filtered = referrals.filter((r) => {
     if (fraudFilter) return r.fraudFlag === true;
+    if (statusFilter === "expiringSoon") {
+      const exp = r.expiresAt ? new Date(r.expiresAt).getTime() : null;
+      return r.status === REFERRAL_STATUS.PENDING && exp !== null && exp > now && exp <= now + sevenDaysMs;
+    }
     const matchStatus = statusFilter === "all" || r.status === statusFilter;
     const matchBonus = bonusFilter === "all" || (bonusFilter === "unpaid" && !r.bonusPaid);
     const q = searchQuery.toLowerCase();
@@ -280,13 +293,13 @@ export default function Indicacoes() {
         </div>
       </div>
 
-      {/* Expiring soon alert */}
-      {(stats?.expiringSoon ?? 0) > 0 && (
+      {/* Expiring soon alert — count derived from loaded referrals using expiresAt */}
+      {expiringSoonCount > 0 && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
           <Clock className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-amber-800">
-              {stats!.expiringSoon} {stats!.expiringSoon === 1 ? "código de indicação expira" : "códigos de indicação expiram"} nos próximos 7 dias
+              {expiringSoonCount} {expiringSoonCount === 1 ? "código de indicação expira" : "códigos de indicação expiram"} nos próximos 7 dias
             </p>
             <p className="text-xs text-amber-700 mt-0.5">
               Entre em contato com os clientes antes que percam o benefício.
@@ -296,9 +309,9 @@ export default function Indicacoes() {
             size="sm"
             variant="outline"
             className="shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100"
-            onClick={() => setStatusFilter(REFERRAL_STATUS.PENDING)}
+            onClick={() => setStatusFilter("expiringSoon")}
           >
-            Ver pendentes
+            Ver que expiram em breve
           </Button>
         </div>
       )}
