@@ -1,6 +1,6 @@
 export interface FraudDetectionInput {
   conversionIp: string | null;
-  trackerIp: string | null;
+  referrerIp: string | null;
   firstVisit: Date | null;
   conversionAt: Date;
   referredEmail: string;
@@ -22,13 +22,24 @@ function normalizeEmail(email: string): string {
   return `${localWithoutAlias}@${domain}`;
 }
 
+/**
+ * Analyse a referral conversion for fraud signals.
+ *
+ * Rules (non-blocking — result is for manual review only):
+ * 1. Same IP  — referrer's most-recently-known IP matches the buyer's IP,
+ *    suggesting the referrer is using their own device/network to self-refer.
+ * 2. Quick conversion — less than 60 s between the first tracked visit and
+ *    the purchase, typical of scripted/automated abuse.
+ * 3. Email alias — both emails normalise to the same address when the
+ *    +alias suffix is stripped.
+ */
 export function detectReferralFraud(input: FraudDetectionInput): FraudDetectionResult {
   const reasons: string[] = [];
 
   if (
     input.conversionIp &&
-    input.trackerIp &&
-    input.conversionIp === input.trackerIp
+    input.referrerIp &&
+    input.conversionIp === input.referrerIp
   ) {
     reasons.push("Mesmo IP do indicador e indicado");
   }

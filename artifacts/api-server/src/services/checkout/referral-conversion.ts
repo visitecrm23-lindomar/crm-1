@@ -3,8 +3,9 @@ import {
   referralsTable,
   referralSettingsTable,
   referralTrackingTable,
+  storeOrdersTable,
 } from "@workspace/db";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { generateId } from "../../lib/id";
 import type { Tx } from "./tx";
 import { REFERRAL_STATUS } from "@workspace/permissions";
@@ -82,14 +83,25 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
     ? and(eq(referralTrackingTable.tenantId, tenantId), eq(referralTrackingTable.cookieId, referralCookieId))
     : and(eq(referralTrackingTable.tenantId, tenantId), eq(referralTrackingTable.referralCode, referralCode));
 
-  const [trackingRow] = await tx.select({
-    ipAddress: referralTrackingTable.ipAddress,
-    firstVisit: referralTrackingTable.firstVisit,
-  }).from(referralTrackingTable).where(trackingWhere!).limit(1);
+  const [trackingRow] = await tx
+    .select({ firstVisit: referralTrackingTable.firstVisit })
+    .from(referralTrackingTable)
+    .where(trackingWhere!)
+    .limit(1);
+
+  const [lastReferrerOrder] = await tx
+    .select({ ipAddress: storeOrdersTable.ipAddress })
+    .from(storeOrdersTable)
+    .where(and(
+      eq(storeOrdersTable.tenantId, tenantId),
+      eq(storeOrdersTable.clientId, referrerId),
+    ))
+    .orderBy(desc(storeOrdersTable.createdAt))
+    .limit(1);
 
   const fraud = detectReferralFraud({
     conversionIp: conversionIp ?? null,
-    trackerIp: trackingRow?.ipAddress ?? null,
+    referrerIp: lastReferrerOrder?.ipAddress ?? null,
     firstVisit: trackingRow?.firstVisit ?? null,
     conversionAt,
     referredEmail: customerEmail,

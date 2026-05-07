@@ -480,7 +480,7 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     }
     const parsed = CreateOrderBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
-    const data = parsed.data;
+    const data = { ...parsed.data, ipAddress: getClientIp(req) ?? parsed.data.ipAddress };
 
     const { subtotal, orderItemsData, fetchedProducts, quantityByProductId, tripLinkedProducts } =
       await prepareCheckoutItems({ storeId: store.id, tenantId: store.tenantId, items: data.items });
@@ -822,6 +822,18 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
       : 5;
 
     const referrerName = referrer.name ?? "um amigo";
+
+    const validatorIp = getClientIp(req);
+    if (validatorIp) {
+      db.update(referralTrackingTable)
+        .set({ ipAddress: validatorIp, updatedAt: new Date() })
+        .where(and(
+          eq(referralTrackingTable.tenantId, store.tenantId),
+          eq(referralTrackingTable.referralCode, code),
+        ))
+        .catch(() => undefined);
+    }
+
     res.json({
       valid: true,
       code,
