@@ -87,6 +87,18 @@ router.get("/referrals/stats", async (req, res): Promise<void> => {
 
     const conversionRate = total > 0 ? Math.round((stats.completed / total) * 100) : 0;
 
+    const sevenDaysFromNow = new Date();
+    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+    const [expiringSoonRow] = await db.select({ cnt: count() }).from(referralsTable)
+      .where(and(
+        eq(referralsTable.tenantId, me.tenantId),
+        eq(referralsTable.status, REFERRAL_STATUS.PENDING),
+        sql`${referralsTable.expiresAt} IS NOT NULL`,
+        sql`${referralsTable.expiresAt} > NOW()`,
+        sql`${referralsTable.expiresAt} <= ${sevenDaysFromNow.toISOString()}`,
+      ));
+    const expiringSoon = Number(expiringSoonRow?.cnt ?? 0);
+
     const [refSettings] = await db
       .select({ tiersConfig: referralSettingsTable.tiersConfig })
       .from(referralSettingsTable)
@@ -129,6 +141,7 @@ router.get("/referrals/stats", async (req, res): Promise<void> => {
       pending: stats.pending,
       completed: stats.completed,
       expired: stats.expired,
+      expiringSoon,
       conversionRate,
       totalBonusPaid: Number(earningsRow?.total ?? 0),
       totalDiscountGiven: Number(discountRow?.total ?? 0),

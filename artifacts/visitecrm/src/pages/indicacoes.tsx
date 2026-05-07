@@ -280,6 +280,29 @@ export default function Indicacoes() {
         </div>
       </div>
 
+      {/* Expiring soon alert */}
+      {(stats?.expiringSoon ?? 0) > 0 && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+          <Clock className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-800">
+              {stats!.expiringSoon} {stats!.expiringSoon === 1 ? "código de indicação expira" : "códigos de indicação expiram"} nos próximos 7 dias
+            </p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Entre em contato com os clientes antes que percam o benefício.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100"
+            onClick={() => setStatusFilter(REFERRAL_STATUS.PENDING)}
+          >
+            Ver pendentes
+          </Button>
+        </div>
+      )}
+
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
