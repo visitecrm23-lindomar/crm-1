@@ -26,82 +26,48 @@ import request from "supertest";
 import { ROLES } from "@workspace/permissions";
 
 // ---------------------------------------------------------------------------
-// Hoisted: shared mutable state and mock factories (must precede vi.mock calls)
+// Hoisted: shared mock state — must exist before vi.mock factories run.
+// Only genuinely shared objects live here (send-email spy, captured updates,
+// and the db.update chain whose references must be stable across modules).
 // ---------------------------------------------------------------------------
 
-const { mockSendEmail, capturedUpdates, restoreUpdateMock } = vi.hoisted(() => {
-  const mockSendEmail = vi.fn();
+const { mockSendEmail, capturedUpdates, updateMocks } = vi.hoisted(() => {
   const capturedUpdates: Array<{ set: Record<string, unknown> }> = [];
 
-  // Build the update chain mock imperatively so we can restore it in beforeEach.
-  const mockWhere = vi.fn().mockResolvedValue([]);
-  const mockSet = vi.fn().mockImplementation((setArg: Record<string, unknown>) => {
+  const updateWhere = vi.fn().mockResolvedValue([]);
+  const updateSet = vi.fn().mockImplementation((setArg: Record<string, unknown>) => {
     capturedUpdates.push({ set: setArg });
-    return { where: mockWhere };
+    return { where: updateWhere };
   });
-  const mockUpdate = vi.fn().mockImplementation(() => ({ set: mockSet }));
-
-  function restoreUpdateMock() {
-    mockWhere.mockResolvedValue([]);
-    mockSet.mockImplementation((setArg: Record<string, unknown>) => {
-      capturedUpdates.push({ set: setArg });
-      return { where: mockWhere };
-    });
-    mockUpdate.mockImplementation(() => ({ set: mockSet }));
-  }
+  const update = vi.fn().mockImplementation(() => ({ set: updateSet }));
 
   return {
-    mockSendEmail,
+    mockSendEmail: vi.fn(),
     capturedUpdates,
-    restoreUpdateMock,
-    // Expose individual mocks via the hoisted scope so the vi.mock factory can reference them.
-    _mockUpdate: mockUpdate,
+    updateMocks: { update, set: updateSet, where: updateWhere },
   };
 });
 
 // ---------------------------------------------------------------------------
-// Module mocks — all resolved relative to src/__tests__/ when the module
-// system resolves them, so bare-package names work as-is.
+// Module mocks
 // ---------------------------------------------------------------------------
 
 vi.mock("@workspace/email", () => ({
   sendReminderHtmlEmail: mockSendEmail,
 }));
 
-// The vi.hoisted return value is in scope here through the destructuring above.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const _hoisted = (globalThis as any).__vitest_hoisted__;
-void _hoisted; // suppress unused warning
-
-vi.mock("@workspace/db", async () => {
-  // We can't reference the hoisted _mockUpdate directly due to vitest's
-  // module isolation, so we reconstruct the update chain here with a thin
-  // wrapper that delegates to capturedUpdates.
-  const updateWhere = vi.fn().mockResolvedValue([]);
-  const updateSet = vi.fn().mockImplementation((setArg: Record<string, unknown>) => {
-    capturedUpdates.push({ set: setArg });
-    return { where: updateWhere };
-  });
-  const dbUpdate = vi.fn().mockImplementation(() => ({ set: updateSet }));
-
-  // Export helpers so beforeEach can restore them.
-  (globalThis as Record<string, unknown>).__mockDbUpdate__ = dbUpdate;
-  (globalThis as Record<string, unknown>).__mockUpdateSet__ = updateSet;
-  (globalThis as Record<string, unknown>).__mockUpdateWhere__ = updateWhere;
-
-  return {
-    db: {
-      select: vi.fn(),
-      update: dbUpdate,
-      insert: vi.fn(() => ({ values: vi.fn().mockResolvedValue([]) })),
-    },
-    referralsTable: { id: "id", tenantId: "tenant_id", bonusPaid: "bonus_paid" },
-    clientsTable: { id: "id", tenantId: "tenant_id" },
-    tenantsTable: { id: "id" },
-    referralSettingsTable: {},
-    referralTrackingTable: {},
-  };
-});
+vi.mock("@workspace/db", () => ({
+  db: {
+    select: vi.fn(),
+    update: updateMocks.update,
+    insert: vi.fn(() => ({ values: vi.fn().mockResolvedValue([]) })),
+  },
+  referralsTable: { id: "id", tenantId: "tenant_id", bonusPaid: "bonus_paid" },
+  clientsTable: { id: "id", tenantId: "tenant_id" },
+  tenantsTable: { id: "id" },
+  referralSettingsTable: {},
+  referralTrackingTable: {},
+}));
 
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn(() => "eq"),
@@ -121,7 +87,7 @@ vi.mock("@clerk/express", () => ({
   clerkMiddleware: () => (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
-// ADMIN_ROLES must include the actual role string used by ROLES.AGENCY_ADMIN ("agencia")
+// ADMIN_ROLES must contain the actual string values used by ROLES.AGENCY_ADMIN ("agencia")
 vi.mock("../lib/tenant.js", () => ({
   requireAuth: vi.fn(),
   ADMIN_ROLES: [ROLES.AGENCY_ADMIN, ROLES.SUPER_ADMIN],
@@ -137,43 +103,36 @@ vi.mock("../lib/id.js", () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Import router and shared mock handles AFTER vi.mock declarations
+// Import router and mock handles AFTER vi.mock declarations
 // ---------------------------------------------------------------------------
 
 import { requireAuth } from "../lib/tenant.js";
 import { db } from "@workspace/db";
 import referralsRouter from "../routes/referrals.js";
 
-// Convenience accessor for the db.select mock (typed)
-const mockDbSelect = () => db.select as ReturnType<typeof vi.fn>;
-
 // ---------------------------------------------------------------------------
 // Chain builder — wraps a fixed data array in a fully-chainable thenable.
-// Supports: .from() .leftJoin() .where() .orderBy() .limit() .offset()
 //
-// Every method returns a new makeChain(data) so that any sequence of chained
-// calls (including .limit(n).offset(n)) stays chainable. The object is also
-// thenable so `await chain.from().leftJoin().where()` works without a terminal.
+// Every method returns a fresh makeChain(data) so any sequence of calls
+// (including .limit(n).offset(n)) stays chainable and correctly awaitable.
+// The object is also thenable so `await chain.from().where()` works without
+// a terminal call.
 // ---------------------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function makeChain(data: unknown[]): any {
   const chain: Record<string, unknown> = {
-    // Thenable so `await chain` (or any intermediate) resolves to data.
     then: (
       resolve: (v: unknown[]) => unknown,
       reject?: (e: unknown) => unknown,
     ) => Promise.resolve(data).then(resolve, reject),
   };
-
-  // Every method returns a fresh chain — keeps the full sequence chainable.
   chain.from = vi.fn().mockImplementation(() => makeChain(data));
   chain.where = vi.fn().mockImplementation(() => makeChain(data));
   chain.leftJoin = vi.fn().mockImplementation(() => makeChain(data));
   chain.orderBy = vi.fn().mockImplementation(() => makeChain(data));
   chain.limit = vi.fn().mockImplementation(() => makeChain(data));
   chain.offset = vi.fn().mockImplementation(() => makeChain(data));
-
   return chain;
 }
 
@@ -184,7 +143,6 @@ function makeChain(data: unknown[]): any {
 function buildApp() {
   const app = express();
   app.use(express.json());
-  // Attach a no-op pino-compatible logger (route handlers call req.log.error/warn)
   app.use(
     (
       req: express.Request & { log?: Record<string, unknown> },
@@ -209,7 +167,7 @@ function buildApp() {
 const FAKE_ADMIN = {
   id: "user-001",
   tenantId: "tenant-001",
-  role: ROLES.AGENCY_ADMIN,   // "agencia"
+  role: ROLES.AGENCY_ADMIN,
   name: "Admin Teste",
   email: "admin@agencia.com",
 };
@@ -256,8 +214,9 @@ function makeReferral(overrides: Record<string, unknown> = {}) {
 }
 
 /**
- * makeReferral + the extra columns that come from the LEFT JOIN with clientsTable/tenantsTable.
- * Overrides are applied LAST so any field (including join columns) can be overridden per-test.
+ * Row returned by the initial fetch in pay-bonus (joins clientsTable +
+ * tenantsTable). Overrides are applied last to allow per-test customisation
+ * of any field, including the JOIN columns.
  */
 function makeJoinedRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -272,14 +231,18 @@ function makeJoinedRow(overrides: Record<string, unknown> = {}) {
 }
 
 /**
- * Row returned by the re-fetch after bonus update — same as makeJoinedRow but
- * without `tenantName`, matching what the route's second SELECT actually fetches
- * (it joins only clientsTable, not tenantsTable on the re-fetch).
+ * Row returned by the re-fetch after the bonus update. The route's re-fetch
+ * only joins clientsTable (not tenantsTable), so tenantName is absent.
  */
 function makeRefetchRow(overrides: Record<string, unknown> = {}) {
-  const { tenantName: _omit, ...row } = makeJoinedRow(overrides);
-  void _omit;
-  return row;
+  return {
+    ...makeReferral(),
+    referrerClientName: "Maria Live",
+    referrerClientEmail: "maria@live.com",
+    referrerClientWhatsapp: "11988887777",
+    referrerClientPhone: "11999990001",
+    ...overrides,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -290,21 +253,15 @@ beforeEach(() => {
   vi.clearAllMocks();
   capturedUpdates.length = 0;
 
-  // vi.clearAllMocks() wipes implementations — restore the db.update chain.
-  const dbUpdate = (globalThis as Record<string, unknown>).__mockDbUpdate__ as ReturnType<typeof vi.fn>;
-  const updateSet = (globalThis as Record<string, unknown>).__mockUpdateSet__ as ReturnType<typeof vi.fn>;
-  const updateWhere = (globalThis as Record<string, unknown>).__mockUpdateWhere__ as ReturnType<typeof vi.fn>;
-
-  updateWhere.mockResolvedValue([]);
-  updateSet.mockImplementation((setArg: Record<string, unknown>) => {
+  // vi.clearAllMocks() clears implementations — restore the update chain.
+  updateMocks.where.mockResolvedValue([]);
+  updateMocks.set.mockImplementation((setArg: Record<string, unknown>) => {
     capturedUpdates.push({ set: setArg });
-    return { where: updateWhere };
+    return { where: updateMocks.where };
   });
-  dbUpdate.mockImplementation(() => ({ set: updateSet }));
+  updateMocks.update.mockImplementation(() => ({ set: updateMocks.set }));
 
-  // Default email mock
   mockSendEmail.mockResolvedValue({ success: true, messageId: "msg-001" });
-  restoreUpdateMock();
 });
 
 // ===========================================================================
@@ -315,13 +272,10 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
   it("marks bonusPaid=true and records bonusPaidAt for a completed, unpaid referral", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
 
-    const row = makeJoinedRow();
-    // Re-fetch after update: route only joins clientsTable (no tenant), so no tenantName
-    const updated = makeRefetchRow({ bonusPaid: true, bonusPaidAt: new Date() });
-
-    mockDbSelect()
-      .mockImplementationOnce(() => makeChain([row]))      // fetch before update
-      .mockImplementationOnce(() => makeChain([updated])); // re-fetch after update
+    const mockSelect = db.select as ReturnType<typeof vi.fn>;
+    mockSelect
+      .mockImplementationOnce(() => makeChain([makeJoinedRow()]))
+      .mockImplementationOnce(() => makeChain([makeRefetchRow({ bonusPaid: true, bonusPaidAt: new Date() })]));
 
     const res = await request(buildApp()).post("/api/referrals/ref-001/pay-bonus").send();
 
@@ -335,8 +289,8 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
   it("returns 422 when bonus has already been paid (double-payment guard)", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
 
-    const alreadyPaid = makeJoinedRow({ bonusPaid: true, bonusPaidAt: new Date() });
-    mockDbSelect().mockImplementationOnce(() => makeChain([alreadyPaid]));
+    (db.select as ReturnType<typeof vi.fn>)
+      .mockImplementationOnce(() => makeChain([makeJoinedRow({ bonusPaid: true, bonusPaidAt: new Date() })]));
 
     const res = await request(buildApp()).post("/api/referrals/ref-001/pay-bonus").send();
 
@@ -349,8 +303,8 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
   it("returns 422 when referral status is not 'completed'", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
 
-    const pending = makeJoinedRow({ status: "pending", bonusPaid: false });
-    mockDbSelect().mockImplementationOnce(() => makeChain([pending]));
+    (db.select as ReturnType<typeof vi.fn>)
+      .mockImplementationOnce(() => makeChain([makeJoinedRow({ status: "pending", bonusPaid: false })]));
 
     const res = await request(buildApp()).post("/api/referrals/ref-001/pay-bonus").send();
 
@@ -362,11 +316,9 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
   it("calls sendReminderHtmlEmail using the live JOIN email (clientsTable) as recipient", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
 
-    const row = makeJoinedRow(); // live email: "maria@live.com", stored: "maria@stored.com"
-    const updated = makeRefetchRow({ bonusPaid: true });
-    mockDbSelect()
-      .mockImplementationOnce(() => makeChain([row]))
-      .mockImplementationOnce(() => makeChain([updated]));
+    (db.select as ReturnType<typeof vi.fn>)
+      .mockImplementationOnce(() => makeChain([makeJoinedRow()]))
+      .mockImplementationOnce(() => makeChain([makeRefetchRow({ bonusPaid: true })]));
 
     await request(buildApp()).post("/api/referrals/ref-001/pay-bonus").send();
 
@@ -375,24 +327,20 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
     // Must use the LIVE email from clientsTable, not the stored snapshot
     expect(args.to).toBe("maria@live.com");
     expect(args.fromName).toBe("Agência Teste");
-    // HTML must include the bonus amount
     expect(args.html).toContain("50,00");
   });
 
   it("skips email when both live and stored referrerEmail are null", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
 
-    const row = makeJoinedRow({ referrerEmail: null, referrerClientEmail: null });
-    const updated = makeRefetchRow({ bonusPaid: true, referrerEmail: null, referrerClientEmail: null });
-    mockDbSelect()
-      .mockImplementationOnce(() => makeChain([row]))
-      .mockImplementationOnce(() => makeChain([updated]));
+    (db.select as ReturnType<typeof vi.fn>)
+      .mockImplementationOnce(() => makeChain([makeJoinedRow({ referrerEmail: null, referrerClientEmail: null })]))
+      .mockImplementationOnce(() => makeChain([makeRefetchRow({ bonusPaid: true, referrerEmail: null, referrerClientEmail: null })]));
 
     const res = await request(buildApp()).post("/api/referrals/ref-001/pay-bonus").send();
 
     expect(res.status).toBe(200);
     expect(mockSendEmail).not.toHaveBeenCalled();
-    // DB update must still happen
     expect(capturedUpdates).toHaveLength(1);
     expect(capturedUpdates[0].set.bonusPaid).toBe(true);
   });
@@ -401,11 +349,9 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
     mockSendEmail.mockRejectedValueOnce(new Error("SMTP connection refused"));
 
-    const row = makeJoinedRow();
-    const updated = makeRefetchRow({ bonusPaid: true });
-    mockDbSelect()
-      .mockImplementationOnce(() => makeChain([row]))
-      .mockImplementationOnce(() => makeChain([updated]));
+    (db.select as ReturnType<typeof vi.fn>)
+      .mockImplementationOnce(() => makeChain([makeJoinedRow()]))
+      .mockImplementationOnce(() => makeChain([makeRefetchRow({ bonusPaid: true })]));
 
     const res = await request(buildApp()).post("/api/referrals/ref-001/pay-bonus").send();
 
@@ -417,7 +363,8 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
   it("returns 404 when the referral does not exist", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
 
-    mockDbSelect().mockImplementationOnce(() => makeChain([])); // empty result
+    (db.select as ReturnType<typeof vi.fn>)
+      .mockImplementationOnce(() => makeChain([]));
 
     const res = await request(buildApp()).post("/api/referrals/nonexistent/pay-bonus").send();
 
@@ -439,12 +386,9 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
   it("response merges live JOIN data and strips internal JOIN columns", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
 
-    const row = makeJoinedRow();
-    // Re-fetch only joins clientsTable — no tenantName in result
-    const updated = makeRefetchRow({ bonusPaid: true });
-    mockDbSelect()
-      .mockImplementationOnce(() => makeChain([row]))
-      .mockImplementationOnce(() => makeChain([updated]));
+    (db.select as ReturnType<typeof vi.fn>)
+      .mockImplementationOnce(() => makeChain([makeJoinedRow()]))
+      .mockImplementationOnce(() => makeChain([makeRefetchRow({ bonusPaid: true })]));
 
     const res = await request(buildApp()).post("/api/referrals/ref-001/pay-bonus").send();
 
@@ -463,7 +407,7 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
 });
 
 // ===========================================================================
-// GET /api/referrals — JOIN enrichment
+// GET /api/referrals — clientsTable JOIN enrichment
 // ===========================================================================
 
 describe("GET /api/referrals — clientsTable JOIN enrichment", () => {
@@ -478,14 +422,14 @@ describe("GET /api/referrals — clientsTable JOIN enrichment", () => {
       referrerClientPhone: "11988880000",
     };
 
-    mockDbSelect()
-      .mockImplementationOnce(() => makeChain([{ total: "1" }])) // count
-      .mockImplementationOnce(() => makeChain([enrichedRow]));    // data
+    (db.select as ReturnType<typeof vi.fn>)
+      .mockImplementationOnce(() => makeChain([{ total: "1" }]))
+      .mockImplementationOnce(() => makeChain([enrichedRow]));
 
     const res = await request(buildApp()).get("/api/referrals").send();
 
     expect(res.status).toBe(200);
-    const items: Record<string, unknown>[] = res.body.data ?? res.body;
+    const items = (res.body.data ?? res.body) as Record<string, unknown>[];
     expect(Array.isArray(items)).toBe(true);
     const item = items[0];
 
@@ -507,15 +451,14 @@ describe("GET /api/referrals — clientsTable JOIN enrichment", () => {
       referrerClientPhone: null,
     };
 
-    mockDbSelect()
+    (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([{ total: "1" }]))
       .mockImplementationOnce(() => makeChain([enrichedRow]));
 
     const res = await request(buildApp()).get("/api/referrals").send();
 
     expect(res.status).toBe(200);
-    const item = (res.body.data ?? res.body)[0] as Record<string, unknown>;
-    // Live data from JOIN must override the stored snapshot
+    const item = ((res.body.data ?? res.body) as Record<string, unknown>[])[0];
     expect(item.referrerEmail).toBe("novo@live.com");
     expect(item.referrerName).toBe("Nome Novo");
   });
@@ -535,14 +478,14 @@ describe("GET /api/referrals — clientsTable JOIN enrichment", () => {
       referrerClientPhone: null,
     };
 
-    mockDbSelect()
+    (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([{ total: "1" }]))
       .mockImplementationOnce(() => makeChain([noJoinRow]));
 
     const res = await request(buildApp()).get("/api/referrals").send();
 
     expect(res.status).toBe(200);
-    const item = (res.body.data ?? res.body)[0] as Record<string, unknown>;
+    const item = ((res.body.data ?? res.body) as Record<string, unknown>[])[0];
     expect(item.referrerName).toBe("Fallback Armazenado");
     expect(item.referrerEmail).toBe("stored@fallback.com");
     expect(item.referrerPhone).toBe("11911112222");
@@ -552,7 +495,7 @@ describe("GET /api/referrals — clientsTable JOIN enrichment", () => {
   it("returns correct pagination metadata from the count query", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
 
-    mockDbSelect()
+    (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([{ total: "42" }]))
       .mockImplementationOnce(() => makeChain([]));
 
