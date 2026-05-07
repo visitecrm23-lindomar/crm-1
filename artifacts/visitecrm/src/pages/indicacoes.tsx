@@ -911,6 +911,32 @@ export default function Indicacoes() {
                   <p className="text-muted-foreground">Expira em</p>
                   <p>{fmtDate(selectedReferral.expiresAt)}</p>
                 </div>
+                {selectedReferral.expiresAt && (
+                  <>
+                    <div>
+                      <p className="text-muted-foreground">Aviso D-7</p>
+                      {selectedReferral.expiryWarning7SentAt ? (
+                        <p className="text-xs text-amber-700 flex items-center gap-1">
+                          <Check className="w-3 h-3" />
+                          {fmtDateTime(selectedReferral.expiryWarning7SentAt)}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Não enviado</p>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Aviso D-1</p>
+                      {selectedReferral.expiryWarning1SentAt ? (
+                        <p className="text-xs text-amber-700 flex items-center gap-1">
+                          <Check className="w-3 h-3" />
+                          {fmtDateTime(selectedReferral.expiryWarning1SentAt)}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Não enviado</p>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
               {selectedReferral.notes && (
                 <div>

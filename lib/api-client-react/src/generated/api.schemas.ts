@@ -2286,6 +2286,10 @@ export interface Referral {
   fraudReason?: string | null;
   /** @nullable */
   convertedAt?: string | null;
+  /** @nullable */
+  expiryWarning7SentAt?: string | null;
+  /** @nullable */
+  expiryWarning1SentAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
