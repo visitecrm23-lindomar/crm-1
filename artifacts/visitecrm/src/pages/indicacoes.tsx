@@ -564,6 +564,7 @@ export default function Indicacoes() {
                       <TableHead>Visitas</TableHead>
                       <TableHead>Última visita</TableHead>
                       <TableHead>Expira em</TableHead>
+                      <TableHead>Criado em</TableHead>
                       <TableHead>Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -643,7 +644,7 @@ export default function Indicacoes() {
                             : `${r.discountValue}%`}
                         </TableCell>
                         <TableCell>{r.visitsCount ?? 0}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.lastVisit)}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{fmtDateTime(r.lastVisit)}</TableCell>
                         <TableCell className="whitespace-nowrap">
                           {r.expiresAt ? (() => {
                             const daysLeft = Math.ceil((new Date(r.expiresAt).getTime() - Date.now()) / 86400000);
@@ -652,6 +653,7 @@ export default function Indicacoes() {
                             return <span className="text-xs text-muted-foreground">{fmtDate(r.expiresAt)}</span>;
                           })() : <span className="text-xs text-muted-foreground">—</span>}
                         </TableCell>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.createdAt)}</TableCell>
                         <TableCell>
                           <div className="flex gap-1">
                             <Button size="sm" variant="ghost" onClick={() => openDetail(r)} title="Ver detalhes">
