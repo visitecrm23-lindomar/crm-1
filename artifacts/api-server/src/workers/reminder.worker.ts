@@ -689,9 +689,12 @@ async function processExpiredReferralNotifications(): Promise<void> {
 
   for (const referral of pendingExpired) {
     try {
-      // Persist the status transition first — this is the idempotency guard.
-      // If the process crashes after this point the referral won't be re-notified.
-      await db
+      // Persist the status transition first and check it actually affected a row.
+      // The WHERE status='pending' guard means a concurrent convert/expire wins:
+      // if the row was already converted (or expired) since our SELECT, the
+      // UPDATE returns no rows and we skip the email — preventing false "expired"
+      // notifications on converted referrals.
+      const updated = await db
         .update(referralsTable)
         .set({ status: "expired", updatedAt: now })
         .where(
@@ -699,7 +702,14 @@ async function processExpiredReferralNotifications(): Promise<void> {
             eq(referralsTable.id, referral.id),
             eq(referralsTable.status, "pending"),
           ),
-        );
+        )
+        .returning({ id: referralsTable.id });
+
+      if (updated.length === 0) {
+        // Row was concurrently converted or already expired — skip notification.
+        logger.info({ referralId: referral.id }, "[expiry-referral] Skipping — concurrent status change detected");
+        continue;
+      }
       transitioned++;
 
       await dispatchReferralExpiredEmail(referral.referrerId, referral.tenantId);
