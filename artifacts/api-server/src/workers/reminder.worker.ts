@@ -664,60 +664,54 @@ export async function retryFailedBookingEmails(): Promise<void> {
 
 async function processExpiredReferralNotifications(): Promise<void> {
   const now = new Date();
-  const dedupeWindow = new Date(now.getTime() - 48 * 60 * 60 * 1000);
 
-  const expiredReferrals = await db
+  // Only pending referrals whose expiry time has passed — status="pending" is
+  // the one-time gate: once transitioned to "expired" they won't match again.
+  const pendingExpired = await db
     .select({
+      id: referralsTable.id,
       referrerId: referralsTable.referrerId,
       tenantId: referralsTable.tenantId,
-      referrerEmail: referralsTable.referrerEmail,
     })
     .from(referralsTable)
     .where(
       and(
         eq(referralsTable.isActive, true),
+        eq(referralsTable.status, "pending"),
         lte(referralsTable.expiresAt, now),
-        not(eq(referralsTable.status, "converted")),
         isNotNull(referralsTable.referrerEmail),
-        not(
-          exists(
-            db
-              .select({ id: emailLogsTable.id })
-              .from(emailLogsTable)
-              .where(
-                and(
-                  eq(emailLogsTable.tenantId, referralsTable.tenantId),
-                  eq(emailLogsTable.recipient, sql`${referralsTable.referrerEmail}`),
-                  like(emailLogsTable.subject, "%expirou%"),
-                  gte(emailLogsTable.createdAt, dedupeWindow),
-                ),
-              ),
-          ),
-        ),
       ),
     );
 
-  const seen = new Set<string>();
-  let notified = 0, skipped = 0, errors = 0;
+  let transitioned = 0, notified = 0, errors = 0;
 
-  for (const referral of expiredReferrals) {
-    const key = `${referral.tenantId}:${referral.referrerId}`;
-    if (seen.has(key)) { skipped++; continue; }
-    seen.add(key);
-
+  for (const referral of pendingExpired) {
     try {
+      // Persist the status transition first — this is the idempotency guard.
+      // If the process crashes after this point the referral won't be re-notified.
+      await db
+        .update(referralsTable)
+        .set({ status: "expired", updatedAt: now })
+        .where(
+          and(
+            eq(referralsTable.id, referral.id),
+            eq(referralsTable.status, "pending"),
+          ),
+        );
+      transitioned++;
+
       await dispatchReferralExpiredEmail(referral.referrerId, referral.tenantId);
       notified++;
     } catch (err) {
       errors++;
       logger.error(
-        { err, referrerId: referral.referrerId, tenantId: referral.tenantId },
-        "[expiry-referral] Failed to dispatch expired referral email",
+        { err, referralId: referral.id, referrerId: referral.referrerId, tenantId: referral.tenantId },
+        "[expiry-referral] Failed to transition/notify expired referral",
       );
     }
   }
 
-  logger.info({ notified, skipped, errors }, "[expiry-referral] Expired referral notification run complete");
+  logger.info({ transitioned, notified, errors, total: pendingExpired.length }, "[expiry-referral] Expired referral notification run complete");
 }
 
 // ────────────────────────────────────────────────────────────
