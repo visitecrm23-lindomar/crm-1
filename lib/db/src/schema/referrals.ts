@@ -1,4 +1,5 @@
 import { pgTable, text, timestamp, numeric, boolean, integer, json, jsonb } from "drizzle-orm/pg-core";
+
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -44,6 +45,8 @@ export const referralsTable = pgTable("referrals", {
   isActive: boolean("is_active").notNull().default(true),
   reservationId: text("reservation_id"),
   notes: text("notes"),
+  fraudFlag: boolean("fraud_flag").notNull().default(false),
+  fraudReason: text("fraud_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

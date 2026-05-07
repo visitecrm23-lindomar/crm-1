@@ -53,6 +53,7 @@ import {
   Phone,
   Wallet,
   Star,
+  ShieldAlert,
 } from "lucide-react";
 
 const DEFAULT_TIERS: ReferralTierConfig[] = [
@@ -136,6 +137,7 @@ export default function Indicacoes() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [bonusFilter, setBonusFilter] = useState<"all" | "unpaid">("all");
+  const [fraudFilter, setFraudFilter] = useState(false);
 
   const [localSettings, setLocalSettings] = useState<Partial<ReferralSettings>>({});
 
@@ -218,7 +220,10 @@ export default function Indicacoes() {
     setDetailModalOpen(true);
   }
 
+  const suspiciousCount = referrals.filter((r) => r.fraudFlag).length;
+
   const filtered = referrals.filter((r) => {
+    if (fraudFilter) return r.fraudFlag === true;
     const matchStatus = statusFilter === "all" || r.status === statusFilter;
     const matchBonus = bonusFilter === "all" || (bonusFilter === "unpaid" && !r.bonusPaid);
     const q = searchQuery.toLowerCase();
@@ -493,12 +498,12 @@ export default function Indicacoes() {
       <Tabs defaultValue="all">
         <div className="flex items-center gap-3 mb-3 flex-wrap">
           <TabsList>
-            <TabsTrigger value="all" onClick={() => { setStatusFilter("all"); setBonusFilter("all"); }}>Todas</TabsTrigger>
-            <TabsTrigger value="pending" onClick={() => { setStatusFilter("pending"); setBonusFilter("all"); }}>Pendentes</TabsTrigger>
-            <TabsTrigger value="completed" onClick={() => { setStatusFilter("completed"); setBonusFilter("all"); }}>
+            <TabsTrigger value="all" onClick={() => { setStatusFilter("all"); setBonusFilter("all"); setFraudFilter(false); }}>Todas</TabsTrigger>
+            <TabsTrigger value="pending" onClick={() => { setStatusFilter("pending"); setBonusFilter("all"); setFraudFilter(false); }}>Pendentes</TabsTrigger>
+            <TabsTrigger value="completed" onClick={() => { setStatusFilter("completed"); setBonusFilter("all"); setFraudFilter(false); }}>
               Convertidas
             </TabsTrigger>
-            <TabsTrigger value="completed-unpaid" onClick={() => { setStatusFilter("completed"); setBonusFilter("unpaid"); }}>
+            <TabsTrigger value="completed-unpaid" onClick={() => { setStatusFilter("completed"); setBonusFilter("unpaid"); setFraudFilter(false); }}>
               Bônus pendente
               {pendingBonusCount > 0 && (
                 <Badge variant="destructive" className="ml-1.5 px-1.5 py-0 text-xs h-4">
@@ -506,24 +511,34 @@ export default function Indicacoes() {
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="expired" onClick={() => { setStatusFilter("expired"); setBonusFilter("all"); }}>Expiradas</TabsTrigger>
+            <TabsTrigger value="expired" onClick={() => { setStatusFilter("expired"); setBonusFilter("all"); setFraudFilter(false); }}>Expiradas</TabsTrigger>
+            <TabsTrigger value="suspicious" onClick={() => { setFraudFilter(true); }}>
+              <ShieldAlert className="w-3.5 h-3.5 mr-1" />
+              Suspeitas
+              {suspiciousCount > 0 && (
+                <Badge variant="destructive" className="ml-1.5 px-1.5 py-0 text-xs h-4">
+                  {suspiciousCount}
+                </Badge>
+              )}
+            </TabsTrigger>
           </TabsList>
           <Input
             placeholder="Buscar por código, nome, e-mail ou WhatsApp..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="max-w-xs"
+            disabled={fraudFilter}
           />
           <span className="text-sm text-muted-foreground ml-auto">{filtered.length} indicações</span>
         </div>
 
-        {["all", "pending", "completed", "completed-unpaid", "expired"].map((tabVal) => (
+        {["all", "pending", "completed", "completed-unpaid", "expired", "suspicious"].map((tabVal) => (
           <TabsContent key={tabVal} value={tabVal}>
             {filtered.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center text-muted-foreground">
                   <BarChart3 className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  Nenhuma indicação encontrada
+                  {tabVal === "suspicious" ? "Nenhuma indicação suspeita encontrada" : "Nenhuma indicação encontrada"}
                 </CardContent>
               </Card>
             ) : (
@@ -535,6 +550,7 @@ export default function Indicacoes() {
                       <TableHead>Quem indicou</TableHead>
                       <TableHead>Indicado</TableHead>
                       <TableHead>Status</TableHead>
+                      {tabVal === "suspicious" && <TableHead className="text-red-600">Motivo</TableHead>}
                       <TableHead>Bônus</TableHead>
                       <TableHead>Desconto</TableHead>
                       <TableHead>Visitas</TableHead>
@@ -587,6 +603,14 @@ export default function Indicacoes() {
                           <StatusBadge status={r.status} />
                           {!r.isActive && <Badge variant="outline" className="ml-1 text-xs">inativo</Badge>}
                         </TableCell>
+                        {tabVal === "suspicious" && (
+                          <TableCell>
+                            <div className="flex items-start gap-1 text-red-600">
+                              <ShieldAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                              <span className="text-xs leading-snug">{r.fraudReason ?? "—"}</span>
+                            </div>
+                          </TableCell>
+                        )}
                         <TableCell>
                           {r.status === REFERRAL_STATUS.COMPLETED ? (
                             <div>

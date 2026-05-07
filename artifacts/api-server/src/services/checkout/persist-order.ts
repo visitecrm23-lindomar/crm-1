@@ -265,6 +265,7 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
         discountValue: args.appliedReferralDiscountValue,
         discountType: args.appliedReferralDiscountType,
         referralCookieId: args.data.referralCookieId,
+        conversionIp: args.data.ipAddress ?? null,
       });
     }
 

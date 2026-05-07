@@ -4,11 +4,13 @@ import {
   referralSettingsTable,
   referralTrackingTable,
 } from "@workspace/db";
+import { storeOrdersTable } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
 import { generateId } from "../../lib/id";
 import type { Tx } from "./tx";
 import { REFERRAL_STATUS } from "@workspace/permissions";
 import { computeReferralTier } from "../../lib/referral-tiers";
+import { detectReferralFraud } from "../../lib/referral-fraud";
 
 export interface RecordReferralArgs {
   tenantId: string;
@@ -21,12 +23,14 @@ export interface RecordReferralArgs {
   discountValue: number;
   discountType: string;
   referralCookieId?: string;
+  conversionIp?: string | null;
 }
 
 export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs): Promise<void> {
   const {
     tenantId, referrerId, referralCode, referredClientId,
-    customerEmail, customerName, discountAmount, discountValue, discountType, referralCookieId,
+    customerEmail, customerName, discountAmount, discountValue, discountType,
+    referralCookieId, conversionIp,
   } = args;
 
   const [refSettings] = await tx
@@ -42,7 +46,10 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
   const baseBonusValue = refSettings ? Number(refSettings.bonusValue) : 10;
 
   const [referrer] = await tx
-    .select({ successfulReferrals: clientsTable.successfulReferrals })
+    .select({
+      successfulReferrals: clientsTable.successfulReferrals,
+      email: clientsTable.email,
+    })
     .from(clientsTable)
     .where(eq(clientsTable.id, referrerId))
     .limit(1);
@@ -51,8 +58,11 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
   const { tier } = computeReferralTier(currentCompleted, refSettings?.tiersConfig ?? null);
   const bonusAmount = Math.round(baseBonusValue * tier.bonusMultiplier * 100) / 100;
 
+  const referralId = generateId();
+  const conversionAt = new Date();
+
   await tx.insert(referralsTable).values({
-    id: generateId(),
+    id: referralId,
     tenantId,
     referrerId,
     code: referralCode,
@@ -65,8 +75,49 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
     discountType,
     discountAmount: discountAmount.toFixed(2),
     bonusAmount: bonusAmount.toFixed(2),
-    convertedAt: new Date(),
+    convertedAt: conversionAt,
+    ipAddress: conversionIp ?? null,
   });
+
+  const trackingWhere = referralCookieId
+    ? and(eq(referralTrackingTable.tenantId, tenantId), eq(referralTrackingTable.cookieId, referralCookieId))
+    : and(eq(referralTrackingTable.tenantId, tenantId), eq(referralTrackingTable.referralCode, referralCode));
+
+  const [trackingRow] = await tx.select({
+    ipAddress: referralTrackingTable.ipAddress,
+    firstVisit: referralTrackingTable.firstVisit,
+  }).from(referralTrackingTable).where(trackingWhere!).limit(1);
+
+  let referrerIp: string | null = null;
+  if (conversionIp && referrer?.email) {
+    const [referrerOrder] = await tx.select({ id: storeOrdersTable.id })
+      .from(storeOrdersTable)
+      .where(
+        and(
+          eq(storeOrdersTable.tenantId, tenantId),
+          eq(storeOrdersTable.customerEmail, referrer.email),
+          eq(storeOrdersTable.ipAddress, conversionIp),
+        ),
+      ).limit(1);
+    if (referrerOrder) {
+      referrerIp = conversionIp;
+    }
+  }
+
+  const fraud = detectReferralFraud({
+    conversionIp: conversionIp ?? null,
+    referrerIp,
+    firstVisit: trackingRow?.firstVisit ?? null,
+    conversionAt,
+    referredEmail: customerEmail,
+    referrerEmail: referrer?.email ?? null,
+  });
+
+  if (fraud.flagged) {
+    await tx.update(referralsTable)
+      .set({ fraudFlag: true, fraudReason: fraud.reason, updatedAt: new Date() })
+      .where(eq(referralsTable.id, referralId));
+  }
 
   await tx.update(clientsTable)
     .set({
@@ -84,14 +135,14 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
 
   if (referralCookieId) {
     await tx.update(referralTrackingTable)
-      .set({ converted: true, convertedAt: new Date(), updatedAt: new Date() })
+      .set({ converted: true, convertedAt: conversionAt, updatedAt: new Date() })
       .where(and(
         eq(referralTrackingTable.tenantId, tenantId),
         eq(referralTrackingTable.cookieId, referralCookieId),
       ));
   } else {
     await tx.update(referralTrackingTable)
-      .set({ converted: true, convertedAt: new Date(), updatedAt: new Date() })
+      .set({ converted: true, convertedAt: conversionAt, updatedAt: new Date() })
       .where(and(
         eq(referralTrackingTable.tenantId, tenantId),
         eq(referralTrackingTable.referralCode, referralCode),

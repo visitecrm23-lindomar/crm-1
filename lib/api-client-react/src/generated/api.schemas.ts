@@ -2281,6 +2281,9 @@ export interface Referral {
   reservationId?: string | null;
   /** @nullable */
   notes?: string | null;
+  fraudFlag: boolean;
+  /** @nullable */
+  fraudReason?: string | null;
   /** @nullable */
   convertedAt?: string | null;
   createdAt: string;
