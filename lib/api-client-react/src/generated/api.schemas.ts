@@ -2313,6 +2313,13 @@ export interface ReferralStats {
   totalDiscountGiven: number;
 }
 
+export interface ReferralTierConfig {
+  level: string;
+  label: string;
+  minReferrals: number;
+  bonusMultiplier: number;
+}
+
 export interface ReferralSettings {
   id: string;
   tenantId: string;
@@ -2326,6 +2333,7 @@ export interface ReferralSettings {
   requireFirstPurchase: boolean;
   /** @nullable */
   shareMessage?: string | null;
+  tiersConfig: ReferralTierConfig[];
   createdAt: string;
   updatedAt: string;
 }
@@ -2340,6 +2348,7 @@ export interface UpdateReferralSettingsBody {
   allowSelfReferral?: boolean;
   requireFirstPurchase?: boolean;
   shareMessage?: string;
+  tiersConfig?: ReferralTierConfig[];
 }
 
 export interface ClientReferralInfo {

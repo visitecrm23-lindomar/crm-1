@@ -1,4 +1,5 @@
 import { Router, type NextFunction } from "express";
+import { computeReferralTier } from "../lib/referral-tiers";
 import { db } from "@workspace/db";
 import {
   clientsTable,
@@ -94,6 +95,12 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
       pendingReferrals: number;
       totalEarnings: string;
       shareMessage: string | null;
+      currentTierLevel: string;
+      currentTierLabel: string;
+      currentTierMultiplier: number;
+      tierProgress: number;
+      nextTierMin: number | null;
+      nextTierLabel: string | null;
     } = {
       code: client?.referralCode ?? user?.referralCode ?? null,
       totalReferrals: 0,
@@ -101,6 +108,12 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
       pendingReferrals: 0,
       totalEarnings: "0.00",
       shareMessage: null,
+      currentTierLevel: "bronze",
+      currentTierLabel: "Bronze",
+      currentTierMultiplier: 1,
+      tierProgress: 0,
+      nextTierMin: 5,
+      nextTierLabel: "Prata",
     };
     let stats = { totalSpent: 0 };
     let loyalty: unknown = null;
@@ -199,10 +212,18 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
       }
 
       const [refSettings] = await db
-        .select({ shareMessage: referralSettingsTable.shareMessage })
+        .select({
+          shareMessage: referralSettingsTable.shareMessage,
+          tiersConfig: referralSettingsTable.tiersConfig,
+        })
         .from(referralSettingsTable)
         .where(eq(referralSettingsTable.tenantId, me.tenantId))
         .limit(1);
+
+      const { tier: currentTier, nextTier, progress: tierProgress } = computeReferralTier(
+        completedReferrals,
+        refSettings?.tiersConfig ?? null,
+      );
 
       referralStats = {
         code: client.referralCode ?? user?.referralCode ?? null,
@@ -211,6 +232,12 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
         pendingReferrals,
         totalEarnings: totalEarnings.toFixed(2),
         shareMessage: refSettings?.shareMessage ?? null,
+        currentTierLevel: currentTier.level,
+        currentTierLabel: currentTier.label,
+        currentTierMultiplier: currentTier.bonusMultiplier,
+        tierProgress,
+        nextTierMin: nextTier?.minReferrals ?? null,
+        nextTierLabel: nextTier?.label ?? null,
       };
 
       const [loyaltyProgram] = await db

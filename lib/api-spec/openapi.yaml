@@ -7937,6 +7937,19 @@ components:
           type: number
       required: [total, pending, completed, expired, conversionRate, totalBonusPaid, totalDiscountGiven]
 
+    ReferralTierConfig:
+      type: object
+      properties:
+        level:
+          type: string
+        label:
+          type: string
+        minReferrals:
+          type: integer
+        bonusMultiplier:
+          type: number
+      required: [level, label, minReferrals, bonusMultiplier]
+
     ReferralSettings:
       type: object
       properties:
@@ -7962,11 +7975,15 @@ components:
           type: boolean
         shareMessage:
           type: ["string", "null"]
+        tiersConfig:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReferralTierConfig"
         createdAt:
           type: string
         updatedAt:
           type: string
-      required: [id, tenantId, isEnabled, discountType, discountValue, bonusType, bonusValue, expirationDays, allowSelfReferral, requireFirstPurchase, createdAt, updatedAt]
+      required: [id, tenantId, isEnabled, discountType, discountValue, bonusType, bonusValue, expirationDays, allowSelfReferral, requireFirstPurchase, tiersConfig, createdAt, updatedAt]
 
     UpdateReferralSettingsBody:
       type: object
@@ -7989,6 +8006,10 @@ components:
           type: boolean
         shareMessage:
           type: string
+        tiersConfig:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReferralTierConfig"
 
     ClientReferralInfo:
       type: object

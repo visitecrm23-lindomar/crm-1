@@ -8,6 +8,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { generateId } from "../../lib/id";
 import type { Tx } from "./tx";
 import { REFERRAL_STATUS } from "@workspace/permissions";
+import { computeReferralTier } from "../../lib/referral-tiers";
 
 export interface RecordReferralArgs {
   tenantId: string;
@@ -29,11 +30,26 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
   } = args;
 
   const [refSettings] = await tx
-    .select({ bonusValue: referralSettingsTable.bonusValue, bonusType: referralSettingsTable.bonusType })
+    .select({
+      bonusValue: referralSettingsTable.bonusValue,
+      bonusType: referralSettingsTable.bonusType,
+      tiersConfig: referralSettingsTable.tiersConfig,
+    })
     .from(referralSettingsTable)
     .where(eq(referralSettingsTable.tenantId, tenantId))
     .limit(1);
-  const bonusValue = refSettings ? Number(refSettings.bonusValue) : 10;
+
+  const baseBonusValue = refSettings ? Number(refSettings.bonusValue) : 10;
+
+  const [referrer] = await tx
+    .select({ successfulReferrals: clientsTable.successfulReferrals })
+    .from(clientsTable)
+    .where(eq(clientsTable.id, referrerId))
+    .limit(1);
+
+  const currentCompleted = referrer?.successfulReferrals ?? 0;
+  const { tier } = computeReferralTier(currentCompleted, refSettings?.tiersConfig ?? null);
+  const bonusAmount = Math.round(baseBonusValue * tier.bonusMultiplier * 100) / 100;
 
   await tx.insert(referralsTable).values({
     id: generateId(),
@@ -48,7 +64,7 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
     discountValue: discountValue.toFixed(2),
     discountType,
     discountAmount: discountAmount.toFixed(2),
-    bonusAmount: bonusValue.toFixed(2),
+    bonusAmount: bonusAmount.toFixed(2),
     convertedAt: new Date(),
   });
 
@@ -56,7 +72,7 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
     .set({
       totalReferrals: sql`COALESCE(total_referrals, 0) + 1`,
       successfulReferrals: sql`COALESCE(successful_referrals, 0) + 1`,
-      referralEarnings: sql`COALESCE(referral_earnings, 0) + ${bonusValue.toFixed(2)}`,
+      referralEarnings: sql`COALESCE(referral_earnings, 0) + ${bonusAmount.toFixed(2)}`,
     })
     .where(eq(clientsTable.id, referrerId));
 

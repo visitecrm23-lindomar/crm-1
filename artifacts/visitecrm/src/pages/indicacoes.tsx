@@ -7,7 +7,7 @@ import {
   useUpdateReferralSettings,
   usePayReferralBonus,
 } from "@workspace/api-client-react";
-import type { Referral, ReferralSettings } from "@workspace/api-client-react";
+import type { Referral, ReferralSettings, ReferralTierConfig } from "@workspace/api-client-react";
 import { REFERRAL_STATUS } from "@workspace/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,7 +52,43 @@ import {
   Mail,
   Phone,
   Wallet,
+  Star,
 } from "lucide-react";
+
+const DEFAULT_TIERS: ReferralTierConfig[] = [
+  { level: "bronze",  label: "Bronze",   minReferrals: 0,  bonusMultiplier: 1.0 },
+  { level: "silver",  label: "Prata",    minReferrals: 5,  bonusMultiplier: 1.25 },
+  { level: "gold",    label: "Ouro",     minReferrals: 15, bonusMultiplier: 1.5 },
+  { level: "diamond", label: "Diamante", minReferrals: 30, bonusMultiplier: 2.0 },
+];
+
+const TIER_VISUAL: Record<string, { bg: string; color: string }> = {
+  bronze:  { bg: "bg-amber-100",  color: "text-amber-700" },
+  silver:  { bg: "bg-slate-100",  color: "text-slate-600" },
+  gold:    { bg: "bg-yellow-100", color: "text-yellow-700" },
+  diamond: { bg: "bg-cyan-100",   color: "text-cyan-700" },
+};
+
+function computeAdminTier(conversions: number, tiersConfig?: ReferralTierConfig[] | null): ReferralTierConfig {
+  const tiers = tiersConfig && tiersConfig.length > 0
+    ? [...tiersConfig].sort((a, b) => a.minReferrals - b.minReferrals)
+    : DEFAULT_TIERS;
+  let current = tiers[0];
+  for (const t of tiers) {
+    if (conversions >= t.minReferrals) current = t;
+  }
+  return current;
+}
+
+function ReferralTierBadge({ level, label }: { level: string; label: string }) {
+  const visual = TIER_VISUAL[level] ?? { bg: "bg-gray-100", color: "text-gray-600" };
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${visual.bg} ${visual.color}`}>
+      <Star className="w-3 h-3" />
+      {label}
+    </span>
+  );
+}
 
 import { formatCurrency as _fmtCurrencyLib, formatDate as _formatDate, formatDateTime as _formatDateTime } from "@/lib/utils";
 function fmtCurrency(v: string | number | null | undefined) {
@@ -114,6 +150,7 @@ export default function Indicacoes() {
       allowSelfReferral: settings?.allowSelfReferral ?? false,
       requireFirstPurchase: settings?.requireFirstPurchase ?? true,
       shareMessage: settings?.shareMessage ?? "",
+      tiersConfig: settings?.tiersConfig ?? DEFAULT_TIERS,
     });
     setSettingsModalOpen(true);
   }
@@ -131,6 +168,7 @@ export default function Indicacoes() {
           allowSelfReferral: localSettings.allowSelfReferral,
           requireFirstPurchase: localSettings.requireFirstPurchase,
           shareMessage: localSettings.shareMessage as string | undefined,
+          tiersConfig: localSettings.tiersConfig as ReferralTierConfig[] | undefined,
         },
       });
       toast({ title: "Configurações salvas com sucesso" });
@@ -398,7 +436,13 @@ export default function Indicacoes() {
                       <TableRow key={r.code + i}>
                         <TableCell className="py-2">{rankIcon(i)}</TableCell>
                         <TableCell className="py-2">
-                          <p className="font-medium leading-tight">{r.name}</p>
+                          <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                            <p className="font-medium leading-tight">{r.name}</p>
+                            {(() => {
+                              const t = computeAdminTier(r.conversions, settings?.tiersConfig);
+                              return <ReferralTierBadge level={t.level} label={t.label} />;
+                            })()}
+                          </div>
                           {r.email && (
                             <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                               <Mail className="w-2.5 h-2.5" />
@@ -780,7 +824,7 @@ export default function Indicacoes() {
 
       {/* Settings Modal */}
       <Dialog open={settingsModalOpen} onOpenChange={setSettingsModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Configurações do Programa de Indicações</DialogTitle>
           </DialogHeader>
@@ -890,6 +934,79 @@ export default function Indicacoes() {
                 onChange={(e) => setLocalSettings((s) => ({ ...s, shareMessage: e.target.value }))}
                 placeholder="Use meu código e ganhe desconto na sua viagem!"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                <Star className="w-3.5 h-3.5" />
+                Níveis de Gamificação
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Configure os limiares de indicações convertidas e o multiplicador de bônus de cada nível.
+              </p>
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground">Nível</th>
+                      <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground">Mín. convert.</th>
+                      <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground">Multiplicador</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {(localSettings.tiersConfig ?? DEFAULT_TIERS).map((tier, idx) => {
+                      const visual = TIER_VISUAL[tier.level] ?? { bg: "bg-gray-100", color: "text-gray-600" };
+                      return (
+                        <tr key={tier.level}>
+                          <td className="px-3 py-2">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${visual.bg} ${visual.color}`}>
+                              <Star className="w-3 h-3" />
+                              {tier.label}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <Input
+                              type="number"
+                              min={0}
+                              value={tier.minReferrals}
+                              disabled={idx === 0}
+                              className="h-7 w-20 text-xs"
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value) || 0;
+                                setLocalSettings((s) => {
+                                  const tiers = [...(s.tiersConfig ?? DEFAULT_TIERS)];
+                                  tiers[idx] = { ...tiers[idx], minReferrals: val };
+                                  return { ...s, tiersConfig: tiers };
+                                });
+                              }}
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                min={0.1}
+                                step={0.05}
+                                value={tier.bonusMultiplier}
+                                className="h-7 w-20 text-xs"
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 1;
+                                  setLocalSettings((s) => {
+                                    const tiers = [...(s.tiersConfig ?? DEFAULT_TIERS)];
+                                    tiers[idx] = { ...tiers[idx], bonusMultiplier: val };
+                                    return { ...s, tiersConfig: tiers };
+                                  });
+                                }}
+                              />
+                              <span className="text-xs text-muted-foreground">×</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
           <DialogFooter>

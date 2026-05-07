@@ -1,6 +1,13 @@
-import { pgTable, text, timestamp, numeric, boolean, integer, json } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, numeric, boolean, integer, json, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+
+export interface ReferralTierConfig {
+  level: string;
+  label: string;
+  minReferrals: number;
+  bonusMultiplier: number;
+}
 
 export const referralsTable = pgTable("referrals", {
   id: text("id").primaryKey(),
@@ -87,6 +94,7 @@ export const referralSettingsTable = pgTable("referral_settings", {
   allowSelfReferral: boolean("allow_self_referral").notNull().default(false),
   requireFirstPurchase: boolean("require_first_purchase").notNull().default(true),
   shareMessage: text("share_message"),
+  tiersConfig: jsonb("tiers_config").$type<ReferralTierConfig[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

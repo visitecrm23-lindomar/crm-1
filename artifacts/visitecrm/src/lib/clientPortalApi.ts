@@ -86,6 +86,12 @@ export interface ClientPortalProfile {
     pendingReferrals: number;
     totalEarnings: string;
     shareMessage: string | null;
+    currentTierLevel: string;
+    currentTierLabel: string;
+    currentTierMultiplier: number;
+    tierProgress: number;
+    nextTierMin: number | null;
+    nextTierLabel: string | null;
   };
   stats: {
     totalSpent: number;

@@ -1021,6 +1021,68 @@ function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
         </Card>
       )}
 
+      {/* Tier Card */}
+      {(() => {
+        const tierLevel = referral.currentTierLevel ?? "bronze";
+        const tierLabel = referral.currentTierLabel ?? "Bronze";
+        const multiplier = referral.currentTierMultiplier ?? 1;
+        const progress = referral.tierProgress ?? 0;
+        const nextMin = referral.nextTierMin;
+        const nextLabel = referral.nextTierLabel;
+        const TIER_COLORS: Record<string, { bg: string; text: string; badge: string; badgeText: string }> = {
+          bronze:  { bg: "from-amber-600 to-amber-500",    text: "text-amber-900",  badge: "bg-amber-100",  badgeText: "text-amber-700" },
+          silver:  { bg: "from-slate-500 to-slate-400",    text: "text-slate-900",  badge: "bg-slate-100",  badgeText: "text-slate-600" },
+          gold:    { bg: "from-yellow-500 to-yellow-400",  text: "text-yellow-900", badge: "bg-yellow-100", badgeText: "text-yellow-700" },
+          diamond: { bg: "from-cyan-500 to-cyan-400",      text: "text-cyan-900",   badge: "bg-cyan-100",   badgeText: "text-cyan-700" },
+        };
+        const tc = TIER_COLORS[tierLevel] ?? TIER_COLORS.bronze;
+        const completed = referral.completedReferrals;
+        return (
+          <Card>
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Seu nível de indicador</p>
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold ${tc.badge} ${tc.badgeText}`}>
+                    <Star className="w-3.5 h-3.5" />
+                    {tierLabel}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground mb-0.5">Multiplicador de bônus</p>
+                  <span className="text-xl font-extrabold" style={{ color: primaryColor }}>
+                    {multiplier}×
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
+                  <span>{tierLabel} ({completed} conv.)</span>
+                  {nextLabel ? <span>{nextLabel} ({nextMin} conv.)</span> : <span>Nível máximo!</span>}
+                </div>
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className={`h-full rounded-full bg-gradient-to-r ${tc.bg} transition-all duration-700`}
+                    style={{ width: `${nextLabel ? progress : 100}%` }}
+                  />
+                </div>
+                {nextLabel && nextMin != null && (
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    Faltam {Math.max(nextMin - completed, 0)} indicações confirmadas para {nextLabel}
+                  </p>
+                )}
+                {!nextLabel && (
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    Parabéns! Você está no nível máximo.
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card>
           <CardContent className="pt-4 pb-3 text-center">

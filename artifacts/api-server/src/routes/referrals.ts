@@ -7,6 +7,8 @@ import { requireAuth } from "../lib/tenant";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { REFERRAL_STATUS } from "@workspace/permissions";
 import { enqueueReferralBonusPaidEmail } from "../queues/email-helpers";
+import { DEFAULT_TIERS as DEFAULT_TIERS_CONFIG } from "../lib/referral-tiers";
+import type { ReferralTier } from "../lib/referral-tiers";
 
 const router = Router();
 
@@ -328,9 +330,14 @@ router.get("/referral-settings", async (req, res): Promise<void> => {
         allowSelfReferral: false,
         requireFirstPurchase: true,
         shareMessage: "Use meu código de indicação e ganhe desconto na sua viagem!",
+        tiersConfig: DEFAULT_TIERS_CONFIG,
       };
       await db.insert(referralSettingsTable).values(defaults);
       res.json(defaults);
+      return;
+    }
+    if (!settings.tiersConfig) {
+      res.json({ ...settings, tiersConfig: DEFAULT_TIERS_CONFIG });
       return;
     }
     res.json(settings);
@@ -345,6 +352,12 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    const TierSchema = z.object({
+      level: z.string(),
+      label: z.string(),
+      minReferrals: z.number().int().nonnegative(),
+      bonusMultiplier: z.number().positive(),
+    });
     const parsed = z.object({
       isEnabled: z.boolean().optional(),
       discountType: z.string().optional(),
@@ -355,6 +368,7 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
       allowSelfReferral: z.boolean().optional(),
       requireFirstPurchase: z.boolean().optional(),
       shareMessage: z.string().optional(),
+      tiersConfig: z.array(TierSchema).optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -368,6 +382,7 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
     if (parsed.data.allowSelfReferral != null) updates.allowSelfReferral = parsed.data.allowSelfReferral;
     if (parsed.data.requireFirstPurchase != null) updates.requireFirstPurchase = parsed.data.requireFirstPurchase;
     if (parsed.data.shareMessage !== undefined) updates.shareMessage = parsed.data.shareMessage;
+    if (parsed.data.tiersConfig !== undefined) updates.tiersConfig = parsed.data.tiersConfig as ReferralTier[];
 
     const [existing] = await db.select({ id: referralSettingsTable.id })
       .from(referralSettingsTable).where(eq(referralSettingsTable.tenantId, me.tenantId)).limit(1);
