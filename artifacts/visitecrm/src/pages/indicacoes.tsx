@@ -950,9 +950,9 @@ export default function Indicacoes() {
           )}
           <DialogFooter>
             {selectedReferral && selectedReferral.expiresAt && (() => {
-              const daysLeft = Math.ceil((new Date(selectedReferral.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-              const showD7 = daysLeft >= 7;
-              const showD1 = daysLeft >= 1;
+              const msLeft = new Date(selectedReferral.expiresAt).getTime() - Date.now();
+              const showD7 = msLeft >= 7 * 24 * 60 * 60 * 1000;
+              const showD1 = msLeft >= 1 * 24 * 60 * 60 * 1000;
               if (!showD7 && !showD1) return null;
               return (
                 <>
