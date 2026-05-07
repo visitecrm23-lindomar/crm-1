@@ -38,6 +38,7 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
       bonusValue: referralSettingsTable.bonusValue,
       bonusType: referralSettingsTable.bonusType,
       tiersConfig: referralSettingsTable.tiersConfig,
+      expirationDays: referralSettingsTable.expirationDays,
     })
     .from(referralSettingsTable)
     .where(eq(referralSettingsTable.tenantId, tenantId))
@@ -61,6 +62,10 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
   const referralId = generateId();
   const conversionAt = new Date();
 
+  const expirationDays = refSettings?.expirationDays ?? 30;
+  const expiresAt = new Date(conversionAt);
+  expiresAt.setDate(expiresAt.getDate() + expirationDays);
+
   await tx.insert(referralsTable).values({
     id: referralId,
     tenantId,
@@ -76,6 +81,7 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
     discountAmount: discountAmount.toFixed(2),
     bonusAmount: bonusAmount.toFixed(2),
     convertedAt: conversionAt,
+    expiresAt,
     ipAddress: conversionIp ?? null,
   });
 

@@ -562,7 +562,8 @@ export default function Indicacoes() {
                       <TableHead>Bônus</TableHead>
                       <TableHead>Desconto</TableHead>
                       <TableHead>Visitas</TableHead>
-                      <TableHead>Criado em</TableHead>
+                      <TableHead>Última visita</TableHead>
+                      <TableHead>Expira em</TableHead>
                       <TableHead>Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -642,7 +643,15 @@ export default function Indicacoes() {
                             : `${r.discountValue}%`}
                         </TableCell>
                         <TableCell>{r.visitsCount ?? 0}</TableCell>
-                        <TableCell>{fmtDate(r.createdAt)}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.lastVisit)}</TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {r.expiresAt ? (() => {
+                            const daysLeft = Math.ceil((new Date(r.expiresAt).getTime() - Date.now()) / 86400000);
+                            if (daysLeft <= 0) return <span className="text-xs text-destructive font-medium">Expirado</span>;
+                            if (daysLeft <= 3) return <span className="text-xs text-amber-600 font-medium flex items-center gap-1"><Clock className="w-3 h-3" />{fmtDate(r.expiresAt)}</span>;
+                            return <span className="text-xs text-muted-foreground">{fmtDate(r.expiresAt)}</span>;
+                          })() : <span className="text-xs text-muted-foreground">—</span>}
+                        </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
                             <Button size="sm" variant="ghost" onClick={() => openDetail(r)} title="Ver detalhes">

@@ -18,6 +18,7 @@ import {
   clientsTable,
   referralTrackingTable,
   referralSettingsTable,
+  referralsTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, ilike, or, sql, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -944,14 +945,15 @@ router.post("/public/store/:slug/referral/track", async (req, res, next: NextFun
       cookieId = generateCookieId();
     }
 
+    const now = new Date();
     if (existingRecord) {
       const pages = Array.isArray(existingRecord.pagesVisited) ? existingRecord.pagesVisited as string[] : [];
       if (parsed.data.landingPage) pages.push(parsed.data.landingPage);
       await db.update(referralTrackingTable).set({
-        lastVisit: new Date(),
+        lastVisit: now,
         visitsCount: sql`visits_count + 1`,
         pagesVisited: pages,
-        updatedAt: new Date(),
+        updatedAt: now,
       }).where(and(
         eq(referralTrackingTable.tenantId, store.tenantId),
         eq(referralTrackingTable.cookieId, cookieId),
@@ -975,6 +977,18 @@ router.post("/public/store/:slug/referral/track", async (req, res, next: NextFun
         utmTerm: parsed.data.utmTerm,
       });
     }
+
+    // Sync lastVisit and visitsCount back to the referrals table so the admin panel shows live data
+    await db.update(referralsTable)
+      .set({
+        lastVisit: now,
+        visitsCount: sql`visits_count + 1`,
+        updatedAt: now,
+      })
+      .where(and(
+        eq(referralsTable.tenantId, store.tenantId),
+        eq(referralsTable.code, code),
+      ));
 
     // Always return the server-issued cookie ID in header for client persistence
     res.setHeader("X-Referral-Cookie-Id", cookieId);

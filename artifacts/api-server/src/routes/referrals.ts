@@ -223,7 +223,17 @@ router.post("/referrals", async (req, res): Promise<void> => {
     const parsed = CreateReferralBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const id = generateId();
-    await db.insert(referralsTable).values({ id, tenantId: me.tenantId, ...parsed.data });
+
+    const [refSettings] = await db
+      .select({ expirationDays: referralSettingsTable.expirationDays })
+      .from(referralSettingsTable)
+      .where(eq(referralSettingsTable.tenantId, me.tenantId))
+      .limit(1);
+    const expirationDays = refSettings?.expirationDays ?? 30;
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + expirationDays);
+
+    await db.insert(referralsTable).values({ id, tenantId: me.tenantId, expiresAt, ...parsed.data });
     const [referral] = await db.select().from(referralsTable).where(eq(referralsTable.id, id)).limit(1);
     res.status(201).json(referral);
   } catch (err) {
