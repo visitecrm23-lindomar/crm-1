@@ -472,6 +472,10 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
         requireFirstPurchase: (updates.requireFirstPurchase as boolean | undefined) ?? true,
         shareMessage: (updates.shareMessage as string | undefined) ?? null,
         tiersConfig: (updates.tiersConfig as ReferralTier[] | undefined) ?? DEFAULT_TIERS_CONFIG,
+        whatsappEnabled: (updates.whatsappEnabled as boolean | undefined) ?? false,
+        whatsappPhoneNumber: (updates.whatsappPhoneNumber as string | undefined) ?? null,
+        whatsappConvertedMessage: (updates.whatsappConvertedMessage as string | undefined) ?? null,
+        whatsappBonusPaidMessage: (updates.whatsappBonusPaidMessage as string | undefined) ?? null,
       });
       const [settings] = await db.select().from(referralSettingsTable)
         .where(eq(referralSettingsTable.id, id)).limit(1);
