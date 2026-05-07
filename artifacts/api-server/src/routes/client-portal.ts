@@ -191,9 +191,9 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
 
       for (const row of refRows) {
         totalReferrals += Number(row.cnt);
-        if (row.status === REFERRAL_STATUS.COMPLETED) {
-          completedReferrals = Number(row.cnt);
-          totalEarnings = Number(row.total);
+        if (row.status === REFERRAL_STATUS.COMPLETED || row.status === REFERRAL_STATUS.CONVERTED) {
+          completedReferrals += Number(row.cnt);
+          totalEarnings += Number(row.total);
         }
         if (row.status === REFERRAL_STATUS.PENDING) pendingReferrals = Number(row.cnt);
       }
