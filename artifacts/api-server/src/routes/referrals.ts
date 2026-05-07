@@ -6,7 +6,7 @@ import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { REFERRAL_STATUS } from "@workspace/permissions";
-import { sendReminderHtmlEmail } from "@workspace/email";
+import { enqueueReferralBonusPaidEmail } from "../queues/email-helpers";
 
 const router = Router();
 
@@ -225,6 +225,7 @@ router.post("/referrals/:id/pay-bonus", async (req, res): Promise<void> => {
       referrerClientWhatsapp: clientsTable.whatsapp,
       referrerClientPhone: clientsTable.phone,
       tenantName: tenantsTable.name,
+      tenantLogo: tenantsTable.logoUrl,
     }).from(referralsTable)
       .leftJoin(clientsTable, and(
         eq(referralsTable.referrerId, clientsTable.id),
@@ -261,28 +262,20 @@ router.post("/referrals/:id/pay-bonus", async (req, res): Promise<void> => {
 
     if (referrerEmail) {
       try {
-        await sendReminderHtmlEmail({
-          to: referrerEmail,
-          subject: "Seu bônus de indicação foi pago!",
-          fromName: agencyName,
-          html: `
-            <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
-              <h2 style="color:#1a1a2e;margin-bottom:8px">Bônus de Indicação Pago!</h2>
-              <p>Olá, <strong>${referrerName}</strong>!</p>
-              <p>A <strong>${agencyName}</strong> confirmou o pagamento do seu bônus de indicação.</p>
-              <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:20px;margin:20px 0;text-align:center">
-                <p style="margin:0;font-size:2rem;font-weight:bold;color:#16a34a">
-                  R$ ${bonusValue.toFixed(2).replace(".", ",")}
-                </p>
-                <p style="margin:6px 0 0;color:#15803d;font-size:0.9rem">Pago em ${paidDateStr}</p>
-              </div>
-              <p>Obrigado por continuar indicando nossos serviços! Continue compartilhando seu código e ganhe mais bônus.</p>
-              <p style="color:#6b7280;font-size:0.875rem;margin-top:24px">${agencyName}</p>
-            </div>
-          `,
-        });
+        const agencyLogoUrl = row.tenantLogo ?? null;
+        await enqueueReferralBonusPaidEmail(
+          {
+            referrerName,
+            referrerEmail,
+            bonusAmount: bonusValue,
+            paidDate: paidDateStr,
+            agencyName,
+            agencyLogo: agencyLogoUrl,
+          },
+          me.tenantId,
+        );
       } catch (emailErr) {
-        req.log.warn({ emailErr }, "Failed to send bonus payment email — bonus still marked as paid");
+        req.log.warn({ emailErr }, "Failed to enqueue bonus payment email — bonus still marked as paid");
       }
     }
 

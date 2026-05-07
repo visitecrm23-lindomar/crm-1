@@ -1,4 +1,5 @@
 import { db } from "@workspace/db";
+import { dispatchReferralConvertedEmail } from "../../queues/email-helpers";
 import {
   storesTable,
   storeProductsTable,
@@ -271,6 +272,16 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
       .set({ totalOrders: sql`total_orders + 1` })
       .where(eq(storesTable.id, args.store.id));
   });
+
+  if (args.appliedReferralCode && args.appliedReferralReferrerId) {
+    dispatchReferralConvertedEmail(
+      args.appliedReferralReferrerId,
+      args.data.customerName,
+      args.store.tenantId,
+    ).catch((err) => {
+      console.error("[checkout/persist-order] Failed to dispatch referral-converted email:", err);
+    });
+  }
 
   return { reservationClientId };
 }

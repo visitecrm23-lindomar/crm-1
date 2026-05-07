@@ -5,6 +5,9 @@ import { ReservationCancellationEmail, type ReservationCancellationEmailProps } 
 import { BirthdayEmail, type BirthdayEmailProps } from './templates/birthday';
 import { WelcomeCredentialsEmail, type WelcomeCredentialsEmailProps } from './templates/welcome-credentials';
 import { NewBookingNotificationEmail, type NewBookingNotificationEmailProps } from './templates/new-booking-notification';
+import { ReferralBonusPaidEmail, type ReferralBonusPaidEmailProps } from './templates/referral-bonus-paid';
+import { ReferralConvertedEmail, type ReferralConvertedEmailProps } from './templates/referral-converted';
+import { ReferralExpiredEmail, type ReferralExpiredEmailProps } from './templates/referral-expired';
 
 export type { ReservationCancellationEmailProps };
 
@@ -289,6 +292,95 @@ export async function sendWelcomeCredentialsEmail(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[email] Unexpected error sending welcome credentials email:', message);
+    return { success: false, error: message };
+  }
+}
+
+export type { ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps };
+
+export async function sendReferralBonusPaidEmail(
+  props: ReferralBonusPaidEmailProps
+): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const { data, error } = await resend.emails.send({
+      from: `${props.agencyName} <reservas@resend.visitecrm.com>`,
+      to: [props.referrerEmail],
+      subject: `Seu bônus de indicação foi pago! — ${props.agencyName}`,
+      react: React.createElement(ReferralBonusPaidEmail, props),
+    });
+
+    if (error) {
+      console.error('[email] Failed to send referral bonus paid email:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Unexpected error sending referral bonus paid email:', message);
+    return { success: false, error: message };
+  }
+}
+
+export async function sendReferralConvertedEmail(
+  props: ReferralConvertedEmailProps
+): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const { data, error } = await resend.emails.send({
+      from: `${props.agencyName} <reservas@resend.visitecrm.com>`,
+      to: [props.referrerEmail],
+      subject: `Sua indicação foi confirmada! — ${props.agencyName}`,
+      react: React.createElement(ReferralConvertedEmail, props),
+    });
+
+    if (error) {
+      console.error('[email] Failed to send referral converted email:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Unexpected error sending referral converted email:', message);
+    return { success: false, error: message };
+  }
+}
+
+export async function sendReferralExpiredEmail(
+  props: ReferralExpiredEmailProps
+): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const { data, error } = await resend.emails.send({
+      from: `${props.agencyName} <reservas@resend.visitecrm.com>`,
+      to: [props.referrerEmail],
+      subject: `Sua indicação expirou — compartilhe novamente! — ${props.agencyName}`,
+      react: React.createElement(ReferralExpiredEmail, props),
+    });
+
+    if (error) {
+      console.error('[email] Failed to send referral expired email:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Unexpected error sending referral expired email:', message);
     return { success: false, error: message };
   }
 }

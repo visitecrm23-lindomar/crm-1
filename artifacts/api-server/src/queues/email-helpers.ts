@@ -1,11 +1,11 @@
-import { db, emailLogsTable, reservationsTable, tripsTable, clientsTable, tenantsTable, storesTable, usersTable } from "@workspace/db";
+import { db, emailLogsTable, reservationsTable, tripsTable, clientsTable, referralSettingsTable, tenantsTable, storesTable, usersTable } from "@workspace/db";
 import { eq, and, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { getEmailQueue, getCancellationEmailQueue, getNewBookingNotificationEmailQueue } from "./index";
-import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail } from "@workspace/email";
+import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail } from "@workspace/email";
 import { ROLES } from "@workspace/permissions";
 import { logger } from "../lib/logger";
-import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps } from "@workspace/email";
+import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps } from "@workspace/email";
 
 interface EnqueueEmailOpts {
   tenantId: string;
@@ -509,6 +509,236 @@ export async function sendWelcomeEmail(
   logger.info(
     { emailLogId, recipient: props.clientEmail, success: result.success },
     "[email-queue] Welcome email sent",
+  );
+}
+
+// ── Referral: bônus pago ──────────────────────────────────────────────────────
+
+export async function enqueueReferralBonusPaidEmail(
+  props: ReferralBonusPaidEmailProps,
+  tenantId: string,
+): Promise<void> {
+  const emailLogId = generateId();
+  const subject = `Seu bônus de indicação foi pago! — ${props.agencyName}`;
+  const queue = getEmailQueue();
+
+  if (queue) {
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId: null,
+      recipient: props.referrerEmail,
+      subject,
+      status: "queued",
+    });
+
+    try {
+      await queue.add("referral-bonus-paid", { ...props, emailLogId, tenantId } as any);
+      logger.info({ emailLogId, referrerEmail: props.referrerEmail }, "[email-queue] Referral bonus-paid email enqueued");
+    } catch (enqueueErr) {
+      logger.warn({ emailLogId, err: enqueueErr }, "[email-queue] Failed to enqueue referral bonus-paid — falling back to direct send");
+      const result = await sendReferralBonusPaidEmail(props);
+      await db
+        .update(emailLogsTable)
+        .set({
+          status: result.success ? "sent" : "failed",
+          messageId: result.messageId ?? null,
+          errorMessage: result.error ?? null,
+        })
+        .where(eq(emailLogsTable.id, emailLogId));
+    }
+  } else {
+    const result = await sendReferralBonusPaidEmail(props);
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId: null,
+      recipient: props.referrerEmail,
+      subject,
+      status: result.success ? "sent" : "failed",
+      messageId: result.messageId ?? null,
+      errorMessage: result.error ?? null,
+    });
+    logger.info({ emailLogId, referrerEmail: props.referrerEmail, success: result.success }, "[email-queue] Referral bonus-paid email sent directly");
+  }
+}
+
+// ── Referral: indicação confirmada ────────────────────────────────────────────
+
+export async function enqueueReferralConvertedEmail(
+  props: ReferralConvertedEmailProps,
+  tenantId: string,
+): Promise<void> {
+  const emailLogId = generateId();
+  const subject = `Sua indicação foi confirmada! — ${props.agencyName}`;
+  const queue = getEmailQueue();
+
+  if (queue) {
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId: null,
+      recipient: props.referrerEmail,
+      subject,
+      status: "queued",
+    });
+
+    try {
+      await queue.add("referral-converted", { ...props, emailLogId, tenantId } as any);
+      logger.info({ emailLogId, referrerEmail: props.referrerEmail }, "[email-queue] Referral converted email enqueued");
+    } catch (enqueueErr) {
+      logger.warn({ emailLogId, err: enqueueErr }, "[email-queue] Failed to enqueue referral converted — falling back to direct send");
+      const result = await sendReferralConvertedEmail(props);
+      await db
+        .update(emailLogsTable)
+        .set({
+          status: result.success ? "sent" : "failed",
+          messageId: result.messageId ?? null,
+          errorMessage: result.error ?? null,
+        })
+        .where(eq(emailLogsTable.id, emailLogId));
+    }
+  } else {
+    const result = await sendReferralConvertedEmail(props);
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId: null,
+      recipient: props.referrerEmail,
+      subject,
+      status: result.success ? "sent" : "failed",
+      messageId: result.messageId ?? null,
+      errorMessage: result.error ?? null,
+    });
+    logger.info({ emailLogId, referrerEmail: props.referrerEmail, success: result.success }, "[email-queue] Referral converted email sent directly");
+  }
+}
+
+// ── Referral: indicação expirada ──────────────────────────────────────────────
+
+export async function enqueueReferralExpiredEmail(
+  props: ReferralExpiredEmailProps,
+  tenantId: string,
+): Promise<void> {
+  const emailLogId = generateId();
+  const subject = `Sua indicação expirou — compartilhe novamente! — ${props.agencyName}`;
+  const queue = getEmailQueue();
+
+  if (queue) {
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId: null,
+      recipient: props.referrerEmail,
+      subject,
+      status: "queued",
+    });
+
+    try {
+      await queue.add("referral-expired", { ...props, emailLogId, tenantId } as any);
+      logger.info({ emailLogId, referrerEmail: props.referrerEmail }, "[email-queue] Referral expired email enqueued");
+    } catch (enqueueErr) {
+      logger.warn({ emailLogId, err: enqueueErr }, "[email-queue] Failed to enqueue referral expired — falling back to direct send");
+      const result = await sendReferralExpiredEmail(props);
+      await db
+        .update(emailLogsTable)
+        .set({
+          status: result.success ? "sent" : "failed",
+          messageId: result.messageId ?? null,
+          errorMessage: result.error ?? null,
+        })
+        .where(eq(emailLogsTable.id, emailLogId));
+    }
+  } else {
+    const result = await sendReferralExpiredEmail(props);
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId: null,
+      recipient: props.referrerEmail,
+      subject,
+      status: result.success ? "sent" : "failed",
+      messageId: result.messageId ?? null,
+      errorMessage: result.error ?? null,
+    });
+    logger.info({ emailLogId, referrerEmail: props.referrerEmail, success: result.success }, "[email-queue] Referral expired email sent directly");
+  }
+}
+
+// ── High-level: look up referrer data and dispatch converted email ─────────────
+
+export async function dispatchReferralConvertedEmail(
+  referrerId: string,
+  referredName: string,
+  tenantId: string,
+): Promise<void> {
+  const [referrer] = await db
+    .select({ name: clientsTable.name, email: clientsTable.email })
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, referrerId), eq(clientsTable.tenantId, tenantId)))
+    .limit(1);
+
+  if (!referrer?.email) {
+    logger.warn({ referrerId, tenantId }, "[email-queue] Referral converted: referrer has no email — skipping");
+    return;
+  }
+
+  const [tenant] = await db
+    .select({ name: tenantsTable.name, logoUrl: tenantsTable.logoUrl })
+    .from(tenantsTable)
+    .where(eq(tenantsTable.id, tenantId))
+    .limit(1);
+
+  const [settings] = await db
+    .select({ bonusValue: referralSettingsTable.bonusValue })
+    .from(referralSettingsTable)
+    .where(eq(referralSettingsTable.tenantId, tenantId))
+    .limit(1);
+
+  await enqueueReferralConvertedEmail(
+    {
+      referrerName: referrer.name ?? referrer.email,
+      referrerEmail: referrer.email,
+      referredName,
+      bonusAmount: settings ? Number(settings.bonusValue) : 0,
+      agencyName: tenant?.name ?? "Agência",
+      agencyLogo: tenant?.logoUrl ?? null,
+    },
+    tenantId,
+  );
+}
+
+// ── High-level: look up referrer data and dispatch expired email ───────────────
+
+export async function dispatchReferralExpiredEmail(
+  referrerId: string,
+  tenantId: string,
+): Promise<void> {
+  const [referrer] = await db
+    .select({ name: clientsTable.name, email: clientsTable.email })
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, referrerId), eq(clientsTable.tenantId, tenantId)))
+    .limit(1);
+
+  if (!referrer?.email) {
+    logger.warn({ referrerId, tenantId }, "[email-queue] Referral expired: referrer has no email — skipping");
+    return;
+  }
+
+  const [tenant] = await db
+    .select({ name: tenantsTable.name, logoUrl: tenantsTable.logoUrl })
+    .from(tenantsTable)
+    .where(eq(tenantsTable.id, tenantId))
+    .limit(1);
+
+  await enqueueReferralExpiredEmail(
+    {
+      referrerName: referrer.name ?? referrer.email,
+      referrerEmail: referrer.email,
+      agencyName: tenant?.name ?? "Agência",
+      agencyLogo: tenant?.logoUrl ?? null,
+    },
+    tenantId,
   );
 }
 

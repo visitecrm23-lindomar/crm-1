@@ -2,11 +2,14 @@ export { ReservationConfirmationEmail } from './templates/reservation-confirmati
 export type { ReservationConfirmationEmailProps } from './templates/reservation-confirmation';
 export { ReservationCancellationEmail } from './templates/reservation-cancellation';
 export type { ReservationCancellationEmailProps } from './templates/reservation-cancellation';
-export { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail, sendManifestEmail, sendWelcomeCredentialsEmail, sendReminderHtmlEmail, sendNewBookingNotificationEmail } from './service';
+export { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail, sendManifestEmail, sendWelcomeCredentialsEmail, sendReminderHtmlEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail } from './service';
 export { NewBookingNotificationEmail } from './templates/new-booking-notification';
 export type { NewBookingNotificationEmailProps } from './templates/new-booking-notification';
-export type { SendEmailResult, SendManifestEmailOptions, SendReminderEmailOptions, ReservationCancellationEmailProps as CancellationEmailProps } from './service';
+export type { SendEmailResult, SendManifestEmailOptions, SendReminderEmailOptions, ReservationCancellationEmailProps as CancellationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps } from './service';
 export { BirthdayEmail } from './templates/birthday';
 export type { BirthdayEmailProps } from './templates/birthday';
 export { WelcomeCredentialsEmail } from './templates/welcome-credentials';
 export type { WelcomeCredentialsEmailProps } from './templates/welcome-credentials';
+export { ReferralBonusPaidEmail } from './templates/referral-bonus-paid';
+export { ReferralConvertedEmail } from './templates/referral-converted';
+export { ReferralExpiredEmail } from './templates/referral-expired';
