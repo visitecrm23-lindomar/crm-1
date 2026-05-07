@@ -150,27 +150,31 @@ const mockDbSelect = () => db.select as ReturnType<typeof vi.fn>;
 // ---------------------------------------------------------------------------
 // Chain builder — wraps a fixed data array in a fully-chainable thenable.
 // Supports: .from() .leftJoin() .where() .orderBy() .limit() .offset()
+//
+// Every method returns a new makeChain(data) so that any sequence of chained
+// calls (including .limit(n).offset(n)) stays chainable. The object is also
+// thenable so `await chain.from().leftJoin().where()` works without a terminal.
 // ---------------------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function makeChain(data: unknown[]): any {
-  const p: Record<string, unknown> & { then: Promise<unknown[]>["then"] } = {
+  const chain: Record<string, unknown> = {
+    // Thenable so `await chain` (or any intermediate) resolves to data.
     then: (
       resolve: (v: unknown[]) => unknown,
       reject?: (e: unknown) => unknown,
     ) => Promise.resolve(data).then(resolve, reject),
-  } as never;
+  };
 
-  // All chain methods return themselves or a new chain with the same data.
-  p.from = vi.fn().mockImplementation(() => makeChain(data));
-  p.where = vi.fn().mockImplementation(() => makeChain(data));
-  p.leftJoin = vi.fn().mockImplementation(() => makeChain(data));
-  p.orderBy = vi.fn().mockImplementation(() => makeChain(data));
-  p.offset = vi.fn().mockImplementation(() => makeChain(data));
-  // .limit(n) is the common terminal: return a real promise so `await` works.
-  p.limit = vi.fn().mockResolvedValue(data);
+  // Every method returns a fresh chain — keeps the full sequence chainable.
+  chain.from = vi.fn().mockImplementation(() => makeChain(data));
+  chain.where = vi.fn().mockImplementation(() => makeChain(data));
+  chain.leftJoin = vi.fn().mockImplementation(() => makeChain(data));
+  chain.orderBy = vi.fn().mockImplementation(() => makeChain(data));
+  chain.limit = vi.fn().mockImplementation(() => makeChain(data));
+  chain.offset = vi.fn().mockImplementation(() => makeChain(data));
 
-  return p;
+  return chain;
 }
 
 // ---------------------------------------------------------------------------
@@ -251,16 +255,31 @@ function makeReferral(overrides: Record<string, unknown> = {}) {
   };
 }
 
-/** makeReferral + the extra columns that come from the LEFT JOIN with clientsTable/tenantsTable */
+/**
+ * makeReferral + the extra columns that come from the LEFT JOIN with clientsTable/tenantsTable.
+ * Overrides are applied LAST so any field (including join columns) can be overridden per-test.
+ */
 function makeJoinedRow(overrides: Record<string, unknown> = {}) {
   return {
-    ...makeReferral(overrides),
+    ...makeReferral(),
     referrerClientName: "Maria Live",
     referrerClientEmail: "maria@live.com",
     referrerClientWhatsapp: "11988887777",
     referrerClientPhone: "11999990001",
     tenantName: "Agência Teste",
+    ...overrides,
   };
+}
+
+/**
+ * Row returned by the re-fetch after bonus update — same as makeJoinedRow but
+ * without `tenantName`, matching what the route's second SELECT actually fetches
+ * (it joins only clientsTable, not tenantsTable on the re-fetch).
+ */
+function makeRefetchRow(overrides: Record<string, unknown> = {}) {
+  const { tenantName: _omit, ...row } = makeJoinedRow(overrides);
+  void _omit;
+  return row;
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +316,8 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
 
     const row = makeJoinedRow();
-    const updated = makeJoinedRow({ bonusPaid: true, bonusPaidAt: new Date() });
+    // Re-fetch after update: route only joins clientsTable (no tenant), so no tenantName
+    const updated = makeRefetchRow({ bonusPaid: true, bonusPaidAt: new Date() });
 
     mockDbSelect()
       .mockImplementationOnce(() => makeChain([row]))      // fetch before update
@@ -343,7 +363,7 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
 
     const row = makeJoinedRow(); // live email: "maria@live.com", stored: "maria@stored.com"
-    const updated = makeJoinedRow({ bonusPaid: true });
+    const updated = makeRefetchRow({ bonusPaid: true });
     mockDbSelect()
       .mockImplementationOnce(() => makeChain([row]))
       .mockImplementationOnce(() => makeChain([updated]));
@@ -363,7 +383,7 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
 
     const row = makeJoinedRow({ referrerEmail: null, referrerClientEmail: null });
-    const updated = makeJoinedRow({ bonusPaid: true, referrerEmail: null, referrerClientEmail: null });
+    const updated = makeRefetchRow({ bonusPaid: true, referrerEmail: null, referrerClientEmail: null });
     mockDbSelect()
       .mockImplementationOnce(() => makeChain([row]))
       .mockImplementationOnce(() => makeChain([updated]));
@@ -382,7 +402,7 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
     mockSendEmail.mockRejectedValueOnce(new Error("SMTP connection refused"));
 
     const row = makeJoinedRow();
-    const updated = makeJoinedRow({ bonusPaid: true });
+    const updated = makeRefetchRow({ bonusPaid: true });
     mockDbSelect()
       .mockImplementationOnce(() => makeChain([row]))
       .mockImplementationOnce(() => makeChain([updated]));
@@ -420,7 +440,8 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
 
     const row = makeJoinedRow();
-    const updated = makeJoinedRow({ bonusPaid: true });
+    // Re-fetch only joins clientsTable — no tenantName in result
+    const updated = makeRefetchRow({ bonusPaid: true });
     mockDbSelect()
       .mockImplementationOnce(() => makeChain([row]))
       .mockImplementationOnce(() => makeChain([updated]));
