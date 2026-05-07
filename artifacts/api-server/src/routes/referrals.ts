@@ -603,53 +603,63 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
     if (parsed.data.expiryWarning7DaysEnabled != null) updates.expiryWarning7DaysEnabled = parsed.data.expiryWarning7DaysEnabled;
     if (parsed.data.expiryWarning1DayEnabled != null) updates.expiryWarning1DayEnabled = parsed.data.expiryWarning1DayEnabled;
 
-    const [existing] = await db.select({ id: referralSettingsTable.id })
-      .from(referralSettingsTable).where(eq(referralSettingsTable.tenantId, me.tenantId)).limit(1);
+    const [existing] = await db.select({
+      id: referralSettingsTable.id,
+      expirationDays: referralSettingsTable.expirationDays,
+    }).from(referralSettingsTable).where(eq(referralSettingsTable.tenantId, me.tenantId)).limit(1);
 
-    let savedSettings: typeof referralSettingsTable.$inferSelect | undefined;
-    if (!existing) {
-      const id = generateId();
-      await db.insert(referralSettingsTable).values({
-        id,
-        tenantId: me.tenantId,
-        isEnabled: (updates.isEnabled as boolean | undefined) ?? true,
-        discountType: (updates.discountType as string | undefined) ?? "percentage",
-        discountValue: (updates.discountValue as string | undefined) ?? "5.00",
-        bonusType: (updates.bonusType as string | undefined) ?? "credit",
-        bonusValue: (updates.bonusValue as string | undefined) ?? "10.00",
-        expirationDays: (updates.expirationDays as number | undefined) ?? 30,
-        allowSelfReferral: (updates.allowSelfReferral as boolean | undefined) ?? false,
-        requireFirstPurchase: (updates.requireFirstPurchase as boolean | undefined) ?? true,
-        shareMessage: (updates.shareMessage as string | undefined) ?? null,
-        tiersConfig: (updates.tiersConfig as ReferralTier[] | undefined) ?? DEFAULT_TIERS_CONFIG,
-        whatsappEnabled: (updates.whatsappEnabled as boolean | undefined) ?? false,
-        whatsappPhoneNumber: (updates.whatsappPhoneNumber as string | undefined) ?? null,
-        whatsappConvertedMessage: (updates.whatsappConvertedMessage as string | undefined) ?? null,
-        whatsappBonusPaidMessage: (updates.whatsappBonusPaidMessage as string | undefined) ?? null,
-        expiryWarning7DaysEnabled: (updates.expiryWarning7DaysEnabled as boolean | undefined) ?? true,
-        expiryWarning1DayEnabled: (updates.expiryWarning1DayEnabled as boolean | undefined) ?? true,
-      });
-      [savedSettings] = await db.select().from(referralSettingsTable)
-        .where(eq(referralSettingsTable.id, id)).limit(1);
-    } else {
-      await db.update(referralSettingsTable).set(updates as Partial<typeof referralSettingsTable.$inferInsert>)
-        .where(eq(referralSettingsTable.tenantId, me.tenantId));
-      [savedSettings] = await db.select().from(referralSettingsTable)
-        .where(eq(referralSettingsTable.tenantId, me.tenantId)).limit(1);
-    }
+    const expirationDaysChanged = parsed.data.expirationDays != null && (
+      !existing || parsed.data.expirationDays !== existing.expirationDays
+    );
 
-    if (parsed.data.expirationDays != null) {
-      const newDays = parsed.data.expirationDays;
-      await db.update(referralsTable)
-        .set({
-          expiresAt: sql`${referralsTable.createdAt} + (${newDays}::integer * interval '1 day')`,
-          updatedAt: new Date(),
-        })
-        .where(and(
-          eq(referralsTable.tenantId, me.tenantId),
-          eq(referralsTable.status, REFERRAL_STATUS.PENDING),
-        ));
-    }
+    const savedSettings = await db.transaction(async (tx) => {
+      let result: typeof referralSettingsTable.$inferSelect | undefined;
+      if (!existing) {
+        const id = generateId();
+        await tx.insert(referralSettingsTable).values({
+          id,
+          tenantId: me.tenantId,
+          isEnabled: (updates.isEnabled as boolean | undefined) ?? true,
+          discountType: (updates.discountType as string | undefined) ?? "percentage",
+          discountValue: (updates.discountValue as string | undefined) ?? "5.00",
+          bonusType: (updates.bonusType as string | undefined) ?? "credit",
+          bonusValue: (updates.bonusValue as string | undefined) ?? "10.00",
+          expirationDays: (updates.expirationDays as number | undefined) ?? 30,
+          allowSelfReferral: (updates.allowSelfReferral as boolean | undefined) ?? false,
+          requireFirstPurchase: (updates.requireFirstPurchase as boolean | undefined) ?? true,
+          shareMessage: (updates.shareMessage as string | undefined) ?? null,
+          tiersConfig: (updates.tiersConfig as ReferralTier[] | undefined) ?? DEFAULT_TIERS_CONFIG,
+          whatsappEnabled: (updates.whatsappEnabled as boolean | undefined) ?? false,
+          whatsappPhoneNumber: (updates.whatsappPhoneNumber as string | undefined) ?? null,
+          whatsappConvertedMessage: (updates.whatsappConvertedMessage as string | undefined) ?? null,
+          whatsappBonusPaidMessage: (updates.whatsappBonusPaidMessage as string | undefined) ?? null,
+          expiryWarning7DaysEnabled: (updates.expiryWarning7DaysEnabled as boolean | undefined) ?? true,
+          expiryWarning1DayEnabled: (updates.expiryWarning1DayEnabled as boolean | undefined) ?? true,
+        });
+        [result] = await tx.select().from(referralSettingsTable)
+          .where(eq(referralSettingsTable.id, id)).limit(1);
+      } else {
+        await tx.update(referralSettingsTable).set(updates as Partial<typeof referralSettingsTable.$inferInsert>)
+          .where(eq(referralSettingsTable.tenantId, me.tenantId));
+        [result] = await tx.select().from(referralSettingsTable)
+          .where(eq(referralSettingsTable.tenantId, me.tenantId)).limit(1);
+      }
+
+      if (expirationDaysChanged) {
+        const newDays = parsed.data.expirationDays!;
+        await tx.update(referralsTable)
+          .set({
+            expiresAt: sql`${referralsTable.createdAt} + (${newDays}::integer * interval '1 day')`,
+            updatedAt: new Date(),
+          })
+          .where(and(
+            eq(referralsTable.tenantId, me.tenantId),
+            eq(referralsTable.status, REFERRAL_STATUS.PENDING),
+          ));
+      }
+
+      return result;
+    });
 
     res.json(savedSettings);
   } catch (err) {
