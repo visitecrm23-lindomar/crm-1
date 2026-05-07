@@ -34,6 +34,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   Users,
@@ -55,6 +56,8 @@ import {
   Wallet,
   Star,
   ShieldAlert,
+  Download,
+  CheckSquare2,
 } from "lucide-react";
 
 const DEFAULT_TIERS: ReferralTierConfig[] = [
@@ -140,6 +143,9 @@ export default function Indicacoes() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [bonusFilter, setBonusFilter] = useState<"all" | "unpaid">("all");
   const [fraudFilter, setFraudFilter] = useState(false);
+  const [selectedBonusIds, setSelectedBonusIds] = useState<Set<string>>(new Set());
+  const [bulkPayDialogOpen, setBulkPayDialogOpen] = useState(false);
+  const [bulkPaying, setBulkPaying] = useState(false);
 
   const [localSettings, setLocalSettings] = useState<Partial<ReferralSettings>>({});
 
@@ -234,6 +240,29 @@ export default function Indicacoes() {
     setDetailModalOpen(true);
   }
 
+  async function confirmBulkPay() {
+    setBulkPaying(true);
+    let successCount = 0;
+    let failCount = 0;
+    for (const id of selectedBonusIds) {
+      try {
+        await payBonus.mutateAsync({ id });
+        successCount++;
+      } catch {
+        failCount++;
+      }
+    }
+    setBulkPaying(false);
+    setBulkPayDialogOpen(false);
+    setSelectedBonusIds(new Set());
+    refetch();
+    if (failCount === 0) {
+      toast({ title: `${successCount} bônus ${successCount === 1 ? "marcado" : "marcados"} como pago${successCount === 1 ? "" : "s"}!` });
+    } else {
+      toast({ title: `${successCount} pagos, ${failCount} com erro`, variant: "destructive" });
+    }
+  }
+
   const suspiciousCount = referrals.filter((r) => r.fraudFlag).length;
 
   // Compute expiring-soon count from loaded referrals using expiresAt
@@ -270,6 +299,70 @@ export default function Indicacoes() {
 
   const pendingBonusCount = referrals.filter(r => r.status === REFERRAL_STATUS.COMPLETED && !r.bonusPaid).length;
 
+  type RankEntry = {
+    name: string; email: string | null; whatsapp: string | null;
+    code: string; total: number; conversions: number; earnings: number; paidEarnings: number;
+  };
+  const rankMap = new Map<string, RankEntry>();
+  for (const r of referrals) {
+    const key = r.referrerId;
+    const ex = rankMap.get(key);
+    const bonus = parseFloat(String(r.bonusAmount ?? "0")) || 0;
+    const isPaid = r.bonusPaid;
+    if (ex) {
+      ex.total += 1;
+      if (r.status === REFERRAL_STATUS.COMPLETED) {
+        ex.conversions += 1; ex.earnings += bonus;
+        if (isPaid) ex.paidEarnings += bonus;
+      }
+    } else {
+      rankMap.set(key, {
+        name: r.referrerName ?? r.referrerId.slice(0, 8),
+        email: r.referrerEmail ?? null,
+        whatsapp: (r as EnrichedReferral).referrerWhatsapp ?? null,
+        code: r.code, total: 1,
+        conversions: r.status === REFERRAL_STATUS.COMPLETED ? 1 : 0,
+        earnings: r.status === REFERRAL_STATUS.COMPLETED ? bonus : 0,
+        paidEarnings: r.status === REFERRAL_STATUS.COMPLETED && isPaid ? bonus : 0,
+      });
+    }
+  }
+  const ranked = Array.from(rankMap.values())
+    .sort((a, b) => b.conversions - a.conversions || b.total - a.total)
+    .slice(0, 10);
+
+  function exportRankingCsv() {
+    const headers = ["#", "Nome", "Código", "E-mail", "WhatsApp", "Indicações", "Convertidas", "Bônus Total (R$)", "Já Pago (R$)", "A Pagar (R$)"];
+    const rows = ranked.map((r, i) => [
+      i + 1, r.name, r.code, r.email ?? "", r.whatsapp ?? "",
+      r.total, r.conversions,
+      r.earnings.toFixed(2), r.paidEarnings.toFixed(2), (r.earnings - r.paidEarnings).toFixed(2),
+    ]);
+    const csv = [headers, ...rows]
+      .map(row => row.map(c => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ranking-indicadores-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const rankIcon = (i: number) => {
+    if (i === 0) return <Trophy className="w-4 h-4 text-yellow-500" />;
+    if (i === 1) return <Medal className="w-4 h-4 text-gray-400" />;
+    if (i === 2) return <Medal className="w-4 h-4 text-orange-400" />;
+    return <span className="text-xs font-bold text-muted-foreground w-4 text-center">{i + 1}</span>;
+  };
+
+  const pendingBonusReferrals = filtered.filter(r => r.status === REFERRAL_STATUS.COMPLETED && !r.bonusPaid);
+  const allBonusSelected = pendingBonusReferrals.length > 0 && pendingBonusReferrals.every(r => selectedBonusIds.has(r.id));
+  const selectedBonusTotal = pendingBonusReferrals
+    .filter(r => selectedBonusIds.has(r.id))
+    .reduce((sum, r) => sum + (parseFloat(String(r.bonusAmount ?? "0")) || 0), 0);
+
   // Derive controlled tab value from filter state so the banner CTA is always reflected visually
   const activeTab = fraudFilter
     ? "suspicious"
@@ -282,6 +375,7 @@ export default function Indicacoes() {
     : "all";
 
   function applyTab(tab: string) {
+    setSelectedBonusIds(new Set());
     setFraudFilter(tab === "suspicious");
     setBonusFilter(tab === "completed-unpaid" ? "unpaid" : "all");
     setStatusFilter(
@@ -434,64 +528,22 @@ export default function Indicacoes() {
       </div>
 
       {/* Top Referrers Ranking */}
-      {(() => {
-        type RankEntry = {
-          name: string;
-          email: string | null;
-          whatsapp: string | null;
-          code: string;
-          total: number;
-          conversions: number;
-          earnings: number;
-          paidEarnings: number;
-        };
-        const rankMap = new Map<string, RankEntry>();
-        for (const r of referrals) {
-          const key = r.referrerId;
-          const existing = rankMap.get(key);
-          const bonus = parseFloat(String(r.bonusAmount ?? "0")) || 0;
-          const isPaid = r.bonusPaid;
-          if (existing) {
-            existing.total += 1;
-            if (r.status === REFERRAL_STATUS.COMPLETED) {
-              existing.conversions += 1;
-              existing.earnings += bonus;
-              if (isPaid) existing.paidEarnings += bonus;
-            }
-          } else {
-            rankMap.set(key, {
-              name: r.referrerName ?? r.referrerId.slice(0, 8),
-              email: r.referrerEmail ?? null,
-              whatsapp: (r as EnrichedReferral).referrerWhatsapp ?? null,
-              code: r.code,
-              total: 1,
-              conversions: r.status === REFERRAL_STATUS.COMPLETED ? 1 : 0,
-              earnings: r.status === REFERRAL_STATUS.COMPLETED ? bonus : 0,
-              paidEarnings: r.status === REFERRAL_STATUS.COMPLETED && isPaid ? bonus : 0,
-            });
-          }
-        }
-        const ranked = Array.from(rankMap.values())
-          .sort((a, b) => b.conversions - a.conversions || b.total - a.total)
-          .slice(0, 10);
-
-        if (ranked.length === 0) return null;
-
-        const rankIcon = (i: number) => {
-          if (i === 0) return <Trophy className="w-4 h-4 text-yellow-500" />;
-          if (i === 1) return <Medal className="w-4 h-4 text-gray-400" />;
-          if (i === 2) return <Medal className="w-4 h-4 text-orange-400" />;
-          return <span className="text-xs font-bold text-muted-foreground w-4 text-center">{i + 1}</span>;
-        };
-
-        return (
+      {ranked.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Trophy className="w-4 h-4 text-yellow-500" />
-                Ranking de Top Indicadores
-              </CardTitle>
-              <CardDescription>Clientes que mais geraram conversões</CardDescription>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Trophy className="w-4 h-4 text-yellow-500" />
+                    Ranking de Top Indicadores
+                  </CardTitle>
+                  <CardDescription>Clientes que mais geraram conversões</CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={exportRankingCsv}>
+                  <Download className="w-3.5 h-3.5 mr-1.5" />
+                  Exportar CSV
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               <Table>
@@ -564,8 +616,7 @@ export default function Indicacoes() {
               </Table>
             </CardContent>
           </Card>
-        );
-      })()}
+      )}
 
       {/* Referrals Table */}
       <Tabs value={activeTab} onValueChange={applyTab}>
@@ -609,6 +660,16 @@ export default function Indicacoes() {
             className="max-w-xs"
             disabled={fraudFilter || statusFilter === "expiringSoon"}
           />
+          {activeTab === "completed-unpaid" && selectedBonusIds.size > 0 && (
+            <Button
+              size="sm"
+              className="bg-green-600 hover:bg-green-700 shrink-0"
+              onClick={() => setBulkPayDialogOpen(true)}
+            >
+              <CheckSquare2 className="w-3.5 h-3.5 mr-1.5" />
+              Pagar selecionados ({selectedBonusIds.size})
+            </Button>
+          )}
           <span className="text-sm text-muted-foreground ml-auto">{filtered.length} indicações</span>
         </div>
 
@@ -626,6 +687,20 @@ export default function Indicacoes() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      {tabVal === "completed-unpaid" && (
+                        <TableHead className="w-8">
+                          <Checkbox
+                            checked={allBonusSelected}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedBonusIds(new Set(pendingBonusReferrals.map(r => r.id)));
+                              } else {
+                                setSelectedBonusIds(new Set());
+                              }
+                            }}
+                          />
+                        </TableHead>
+                      )}
                       <TableHead>Código</TableHead>
                       <TableHead>Quem indicou</TableHead>
                       <TableHead>Indicado</TableHead>
@@ -643,6 +718,20 @@ export default function Indicacoes() {
                   <TableBody>
                     {filtered.map((r) => (
                       <TableRow key={r.id}>
+                        {tabVal === "completed-unpaid" && (
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedBonusIds.has(r.id)}
+                              onCheckedChange={(checked) => {
+                                setSelectedBonusIds(prev => {
+                                  const next = new Set(prev);
+                                  if (checked) next.add(r.id); else next.delete(r.id);
+                                  return next;
+                                });
+                              }}
+                            />
+                          </TableCell>
+                        )}
                         <TableCell className="font-mono font-semibold text-primary">{r.code}</TableCell>
                         <TableCell>
                           <div>
@@ -758,6 +847,37 @@ export default function Indicacoes() {
           </TabsContent>
         ))}
       </Tabs>
+
+      {/* Bulk Pay Confirmation Dialog */}
+      <Dialog open={bulkPayDialogOpen} onOpenChange={setBulkPayDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pagar bônus em lote</DialogTitle>
+            <DialogDescription>
+              Isso marcará os bônus selecionados como pagos e enviará e-mails de confirmação a cada indicador.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-muted rounded-lg p-4 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Indicações selecionadas</span>
+              <span className="font-medium">{selectedBonusIds.size}</span>
+            </div>
+            <div className="flex justify-between border-t pt-2">
+              <span className="text-muted-foreground">Total a pagar</span>
+              <span className="font-bold text-green-600 text-base">{fmtCurrency(selectedBonusTotal)}</span>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkPayDialogOpen(false)} disabled={bulkPaying}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmBulkPay} disabled={bulkPaying} className="bg-green-600 hover:bg-green-700">
+              <CheckSquare2 className="w-4 h-4 mr-2" />
+              {bulkPaying ? "Processando..." : `Confirmar ${selectedBonusIds.size} pagamento${selectedBonusIds.size !== 1 ? "s" : ""}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Pay Bonus Confirmation Dialog */}
       <Dialog open={payBonusDialogOpen} onOpenChange={setPayBonusDialogOpen}>
