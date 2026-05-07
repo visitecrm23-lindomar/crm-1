@@ -866,7 +866,7 @@ function ReferralRow({ r, primaryColor }: { r: ClientReferral; primaryColor: str
           <ReferralStatusBadge status={r.status} />
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">{dateLabel}</p>
-        {r.status === "completed" && bonusValue > 0 && (
+        {(r.status === "completed" || r.status === "converted") && bonusValue > 0 && (
           <p className={`text-xs mt-1 font-medium ${r.bonusPaid ? "text-green-600" : "text-orange-500"}`}>
             {r.bonusPaid
               ? `✓ Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} pago em ${new Date(r.bonusPaidAt!).toLocaleDateString("pt-BR")}`
@@ -906,11 +906,12 @@ function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
       .finally(() => setLoadingReferrals(false));
   }, []);
 
+  const isConverted = (status: string) => status === "completed" || status === "converted";
   const pendingBonus = (referrals ?? [])
-    .filter((r) => r.status === "completed" && !r.bonusPaid)
+    .filter((r) => isConverted(r.status) && !r.bonusPaid)
     .reduce((sum, r) => sum + parseFloat(r.bonusAmount), 0);
   const paidBonus = (referrals ?? [])
-    .filter((r) => r.status === "completed" && r.bonusPaid)
+    .filter((r) => isConverted(r.status) && r.bonusPaid)
     .reduce((sum, r) => sum + parseFloat(r.bonusAmount), 0);
 
   function copyCode() {
