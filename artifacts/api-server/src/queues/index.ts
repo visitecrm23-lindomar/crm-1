@@ -1,6 +1,6 @@
 import { Queue } from "bullmq";
 import { getRedisConnection } from "../lib/redis";
-import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, BirthdayEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps } from "@workspace/email";
+import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, BirthdayEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps } from "@workspace/email";
 
 export interface ReservationEmailJobData extends ReservationConfirmationEmailProps {
   emailLogId: string;
@@ -44,8 +44,13 @@ export interface ReferralExpiredEmailJobData extends ReferralExpiredEmailProps {
   tenantId: string;
 }
 
+export interface ReferralExpiringSoonEmailJobData extends ReferralExpiringSoonEmailProps {
+  emailLogId: string;
+  tenantId: string;
+}
+
 export interface ReminderJobData {
-  type: "boarding_reminder" | "payment_reminder" | "expired_reservations_cleanup" | "failed_email_retry" | "referral_expiry_notification";
+  type: "boarding_reminder" | "payment_reminder" | "expired_reservations_cleanup" | "failed_email_retry" | "referral_expiry_notification" | "referral_expiry_warning";
 }
 
 export interface PdfManifestJobData {
@@ -109,7 +114,7 @@ const QUEUES = {
   WHATSAPP: "whatsapp-notifications",
 } as const;
 
-export type ReferralEmailJobData = ReferralBonusPaidEmailJobData | ReferralConvertedEmailJobData | ReferralExpiredEmailJobData;
+export type ReferralEmailJobData = ReferralBonusPaidEmailJobData | ReferralConvertedEmailJobData | ReferralExpiredEmailJobData | ReferralExpiringSoonEmailJobData;
 
 let _emailQueue: Queue<ReservationEmailJobData> | null = null;
 let _cancellationEmailQueue: Queue<CancellationEmailJobData> | null = null;

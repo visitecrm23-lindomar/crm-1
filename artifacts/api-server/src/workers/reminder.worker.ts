@@ -1,8 +1,8 @@
 import { Worker } from "bullmq";
-import { db, reservationsTable, tripsTable, clientsTable, tenantsTable, paymentsTable, emailLogsTable, storesTable, usersTable, referralsTable } from "@workspace/db";
+import { db, reservationsTable, tripsTable, clientsTable, tenantsTable, paymentsTable, emailLogsTable, storesTable, usersTable, referralsTable, referralSettingsTable } from "@workspace/db";
 import { eq, and, gt, sql, gte, lt, lte, isNull, isNotNull, notLike, like, inArray, not, exists } from "drizzle-orm";
 import { sendReminderHtmlEmail, sendReservationConfirmationEmail } from "@workspace/email";
-import { dispatchReferralExpiredEmail } from "../queues/email-helpers";
+import { dispatchReferralExpiredEmail, dispatchReferralExpiringSoonEmail } from "../queues/email-helpers";
 import { getRedisConnection } from "../lib/redis";
 import { logger } from "../lib/logger";
 import { runExpiredReservationsCron } from "../lib/expired-reservations";
@@ -727,6 +727,139 @@ async function processExpiredReferralNotifications(): Promise<void> {
 }
 
 // ────────────────────────────────────────────────────────────
+// Pre-expiry referral notifications (7 days and 1 day before)
+// ────────────────────────────────────────────────────────────
+
+async function processExpiringSoonReferralNotifications(): Promise<void> {
+  const now = new Date();
+
+  // 7-day window: expiresAt is between now+6d and now+8d (centred on 7 days out)
+  const sevenDayWindowStart = new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000);
+  const sevenDayWindowEnd   = new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000);
+
+  // 1-day window: expiresAt is between now+0h and now+48h (covers today through tomorrow)
+  const oneDayWindowEnd = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
+  // Build a unique subject prefix per (referralCode, daysLeft) pair so we can
+  // detect already-sent warnings without adding a new DB column.
+  // Subject pattern written by enqueueReferralExpiringSoonEmail:
+  //   "⏰ Seu código {CODE} vence em {N} dia(s) — {AGENCY}"
+  // We dedup by checking for a "sent" email in the last 2 days whose subject
+  // contains the window-specific pattern.
+
+  // Fetch all tenants that have referrals enabled
+  const enabledTenants = await db
+    .select({ tenantId: referralSettingsTable.tenantId })
+    .from(referralSettingsTable)
+    .where(eq(referralSettingsTable.isEnabled, true));
+
+  if (enabledTenants.length === 0) {
+    logger.info("[expiry-warning] No tenants with referrals enabled — skipping");
+    return;
+  }
+
+  const enabledTenantIds = enabledTenants.map((r) => r.tenantId);
+
+  // Query expiring-soon pending referrals for enabled tenants
+  const expiringSoon = await db
+    .select({
+      id: referralsTable.id,
+      referrerId: referralsTable.referrerId,
+      tenantId: referralsTable.tenantId,
+      code: referralsTable.code,
+      expiresAt: referralsTable.expiresAt,
+    })
+    .from(referralsTable)
+    .where(
+      and(
+        eq(referralsTable.isActive, true),
+        eq(referralsTable.status, "pending"),
+        inArray(referralsTable.tenantId, enabledTenantIds),
+        isNotNull(referralsTable.expiresAt),
+        // Either in 7-day window OR in 1-day window
+        sql`(
+          (${referralsTable.expiresAt} >= ${sevenDayWindowStart} AND ${referralsTable.expiresAt} < ${sevenDayWindowEnd})
+          OR
+          (${referralsTable.expiresAt} > ${now} AND ${referralsTable.expiresAt} < ${oneDayWindowEnd})
+        )`,
+      ),
+    );
+
+  let notified = 0, skippedNoEmail = 0, skippedAlreadySent = 0, errors = 0;
+
+  // Dedup window: do not resend if a warning was already sent in the last 2 days
+  const dedupCutoff = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+
+  for (const referral of expiringSoon) {
+    try {
+      if (!referral.expiresAt) continue;
+
+      const msUntilExpiry = referral.expiresAt.getTime() - now.getTime();
+      const daysLeft = Math.ceil(msUntilExpiry / (24 * 60 * 60 * 1000));
+      // Clamp to 7 or 1 for the window labels used in dedup
+      const windowLabel = daysLeft >= 6 ? 7 : 1;
+      const windowPattern = `vence em ${windowLabel === 1 ? "1 dia" : "7 dias"}`;
+      const codePattern = referral.code;
+
+      // Fetch referrer email for dedup check
+      const [referrer] = await db
+        .select({ email: clientsTable.email })
+        .from(clientsTable)
+        .where(and(eq(clientsTable.id, referral.referrerId), eq(clientsTable.tenantId, referral.tenantId)))
+        .limit(1);
+
+      if (!referrer?.email) {
+        skippedNoEmail++;
+        logger.info({ referralId: referral.id }, "[expiry-warning] Skipping — referrer has no email");
+        continue;
+      }
+
+      // Dedup: skip if a successful warning for this exact code+window was sent recently
+      const [existingLog] = await db
+        .select({ id: emailLogsTable.id })
+        .from(emailLogsTable)
+        .where(
+          and(
+            eq(emailLogsTable.tenantId, referral.tenantId),
+            eq(emailLogsTable.recipient, referrer.email),
+            eq(emailLogsTable.status, "sent"),
+            like(emailLogsTable.subject, `%${codePattern}%`),
+            like(emailLogsTable.subject, `%${windowPattern}%`),
+            gte(emailLogsTable.createdAt, dedupCutoff),
+          ),
+        )
+        .limit(1);
+
+      if (existingLog) {
+        skippedAlreadySent++;
+        logger.info({ referralId: referral.id, code: referral.code, windowLabel }, "[expiry-warning] Skipping — already sent recently");
+        continue;
+      }
+
+      await dispatchReferralExpiringSoonEmail(
+        referral.referrerId,
+        referral.tenantId,
+        referral.code,
+        referral.expiresAt,
+        windowLabel,
+      );
+      notified++;
+    } catch (err) {
+      errors++;
+      logger.error(
+        { err, referralId: referral.id, referrerId: referral.referrerId, tenantId: referral.tenantId },
+        "[expiry-warning] Failed to dispatch pre-expiry notification",
+      );
+    }
+  }
+
+  logger.info(
+    { notified, skippedNoEmail, skippedAlreadySent, errors, total: expiringSoon.length },
+    "[expiry-warning] Pre-expiry referral notification run complete",
+  );
+}
+
+// ────────────────────────────────────────────────────────────
 // Worker bootstrap
 // ────────────────────────────────────────────────────────────
 
@@ -754,6 +887,8 @@ export function startReminderWorker(): Worker<ReminderJobData> | null {
         await retryFailedBookingEmails();
       } else if (job.data.type === "referral_expiry_notification") {
         await processExpiredReferralNotifications();
+      } else if (job.data.type === "referral_expiry_warning") {
+        await processExpiringSoonReferralNotifications();
       } else {
         logger.warn({ type: job.data.type }, "[reminder-worker] Unknown reminder type");
       }

@@ -8,6 +8,7 @@ import { NewBookingNotificationEmail, type NewBookingNotificationEmailProps } fr
 import { ReferralBonusPaidEmail, type ReferralBonusPaidEmailProps } from './templates/referral-bonus-paid';
 import { ReferralConvertedEmail, type ReferralConvertedEmailProps } from './templates/referral-converted';
 import { ReferralExpiredEmail, type ReferralExpiredEmailProps } from './templates/referral-expired';
+import { ReferralExpiringSoonEmail, type ReferralExpiringSoonEmailProps } from './templates/referral-expiring-soon';
 
 export type { ReservationCancellationEmailProps };
 
@@ -381,6 +382,38 @@ export async function sendReferralExpiredEmail(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[email] Unexpected error sending referral expired email:', message);
+    return { success: false, error: message };
+  }
+}
+
+export async function sendReferralExpiringSoonEmail(
+  props: ReferralExpiringSoonEmailProps
+): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const daysLabel = props.daysLeft <= 1 ? '1 dia' : `${props.daysLeft} dias`;
+    const subject = `⏰ Seu código ${props.referralCode} vence em ${daysLabel} — ${props.agencyName}`;
+
+    const { data, error } = await resend.emails.send({
+      from: `${props.agencyName} <reservas@resend.visitecrm.com>`,
+      to: [props.referrerEmail],
+      subject,
+      react: React.createElement(ReferralExpiringSoonEmail, props),
+    });
+
+    if (error) {
+      console.error('[email] Failed to send referral expiring soon email:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Unexpected error sending referral expiring soon email:', message);
     return { success: false, error: message };
   }
 }

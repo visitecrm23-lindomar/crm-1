@@ -2,11 +2,11 @@ import { db, emailLogsTable, reservationsTable, tripsTable, clientsTable, referr
 import { eq, and, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { getEmailQueue, getCancellationEmailQueue, getNewBookingNotificationEmailQueue, getReferralEmailQueue } from "./index";
-import type { ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData } from "./index";
-import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail } from "@workspace/email";
+import type { ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData } from "./index";
+import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail } from "@workspace/email";
 import { ROLES } from "@workspace/permissions";
 import { logger } from "../lib/logger";
-import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps } from "@workspace/email";
+import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps } from "@workspace/email";
 
 interface EnqueueEmailOpts {
   tenantId: string;
@@ -739,6 +739,106 @@ export async function dispatchReferralExpiredEmail(
     {
       referrerName: referrer.name ?? referrer.email,
       referrerEmail: referrer.email,
+      agencyName: tenant?.name ?? "Agência",
+      agencyLogo: tenant?.logoUrl ?? null,
+    },
+    tenantId,
+  );
+}
+
+// ── Referral: código expirando em breve ───────────────────────────────────────
+
+export async function enqueueReferralExpiringSoonEmail(
+  props: ReferralExpiringSoonEmailProps,
+  tenantId: string,
+): Promise<void> {
+  const emailLogId = generateId();
+  const daysLabel = props.daysLeft <= 1 ? "1 dia" : `${props.daysLeft} dias`;
+  const subject = `⏰ Seu código ${props.referralCode} vence em ${daysLabel} — ${props.agencyName}`;
+  const queue = getReferralEmailQueue();
+
+  if (queue) {
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId: null,
+      recipient: props.referrerEmail,
+      subject,
+      status: "queued",
+    });
+
+    try {
+      const jobData: ReferralExpiringSoonEmailJobData = { ...props, emailLogId, tenantId };
+      await queue.add("referral-expiring-soon", jobData);
+      logger.info({ emailLogId, referrerEmail: props.referrerEmail, daysLeft: props.daysLeft }, "[email-queue] Referral expiring-soon email enqueued");
+    } catch (enqueueErr) {
+      logger.warn({ emailLogId, err: enqueueErr }, "[email-queue] Failed to enqueue referral expiring-soon — falling back to direct send");
+      const result = await sendReferralExpiringSoonEmail(props);
+      await db
+        .update(emailLogsTable)
+        .set({
+          status: result.success ? "sent" : "failed",
+          messageId: result.messageId ?? null,
+          errorMessage: result.error ?? null,
+        })
+        .where(eq(emailLogsTable.id, emailLogId));
+    }
+  } else {
+    const result = await sendReferralExpiringSoonEmail(props);
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId: null,
+      recipient: props.referrerEmail,
+      subject,
+      status: result.success ? "sent" : "failed",
+      messageId: result.messageId ?? null,
+      errorMessage: result.error ?? null,
+    });
+    logger.info({ emailLogId, referrerEmail: props.referrerEmail, daysLeft: props.daysLeft, success: result.success }, "[email-queue] Referral expiring-soon email sent directly");
+  }
+}
+
+// ── High-level: look up referrer data and dispatch expiring-soon email ─────────
+
+export async function dispatchReferralExpiringSoonEmail(
+  referrerId: string,
+  tenantId: string,
+  referralCode: string,
+  expiresAt: Date,
+  daysLeft: number,
+): Promise<void> {
+  const [referrer] = await db
+    .select({ name: clientsTable.name, email: clientsTable.email })
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, referrerId), eq(clientsTable.tenantId, tenantId)))
+    .limit(1);
+
+  if (!referrer?.email) {
+    logger.warn({ referrerId, tenantId }, "[email-queue] Referral expiring-soon: referrer has no email — skipping");
+    return;
+  }
+
+  const [tenant] = await db
+    .select({ name: tenantsTable.name, logoUrl: tenantsTable.logoUrl })
+    .from(tenantsTable)
+    .where(eq(tenantsTable.id, tenantId))
+    .limit(1);
+
+  const formattedDate = expiresAt.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "America/Sao_Paulo",
+  });
+
+  await enqueueReferralExpiringSoonEmail(
+    {
+      referrerName: referrer.name ?? referrer.email,
+      referrerEmail: referrer.email,
+      referralCode,
+      expiresAt: formattedDate,
+      daysLeft,
       agencyName: tenant?.name ?? "Agência",
       agencyLogo: tenant?.logoUrl ?? null,
     },

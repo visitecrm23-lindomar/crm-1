@@ -1,13 +1,13 @@
 import { Worker } from "bullmq";
 import { db, emailLogsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail } from "@workspace/email";
+import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail } from "@workspace/email";
 import { getRedisConnection } from "../lib/redis";
 import { logger } from "../lib/logger";
-import type { ReservationEmailJobData, CancellationEmailJobData, BirthdayEmailJobData, NewBookingNotificationEmailJobData, ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData } from "../queues/index";
+import type { ReservationEmailJobData, CancellationEmailJobData, BirthdayEmailJobData, NewBookingNotificationEmailJobData, ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData } from "../queues/index";
 import type { SendEmailResult } from "@workspace/email";
 
-type EmailJobData = ReservationEmailJobData | CancellationEmailJobData | BirthdayEmailJobData | NewBookingNotificationEmailJobData | ReferralBonusPaidEmailJobData | ReferralConvertedEmailJobData | ReferralExpiredEmailJobData;
+type EmailJobData = ReservationEmailJobData | CancellationEmailJobData | BirthdayEmailJobData | NewBookingNotificationEmailJobData | ReferralBonusPaidEmailJobData | ReferralConvertedEmailJobData | ReferralExpiredEmailJobData | ReferralExpiringSoonEmailJobData;
 
 let _worker: Worker<EmailJobData> | null = null;
 
@@ -85,6 +85,16 @@ export function startEmailWorker(): Worker<EmailJobData> | null {
         const { emailLogId: _e, tenantId: _t, ...expiredProps } = job.data as ReferralExpiredEmailJobData;
         result = await sendReferralExpiredEmail(expiredProps);
         const { emailLogId } = job.data as ReferralExpiredEmailJobData;
+        if (result.success) {
+          await db
+            .update(emailLogsTable)
+            .set({ status: "sent", messageId: result.messageId ?? null })
+            .where(eq(emailLogsTable.id, emailLogId));
+        }
+      } else if (job.name === "referral-expiring-soon") {
+        const { emailLogId: _e, tenantId: _t, ...expiringSoonProps } = job.data as ReferralExpiringSoonEmailJobData;
+        result = await sendReferralExpiringSoonEmail(expiringSoonProps);
+        const { emailLogId } = job.data as ReferralExpiringSoonEmailJobData;
         if (result.success) {
           await db
             .update(emailLogsTable)
