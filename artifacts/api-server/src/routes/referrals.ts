@@ -477,6 +477,8 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
       whatsappPhoneNumber: z.string().optional(),
       whatsappConvertedMessage: z.string().optional(),
       whatsappBonusPaidMessage: z.string().optional(),
+      expiryWarning7DaysEnabled: z.boolean().optional(),
+      expiryWarning1DayEnabled: z.boolean().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -495,6 +497,8 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
     if (parsed.data.whatsappPhoneNumber !== undefined) updates.whatsappPhoneNumber = parsed.data.whatsappPhoneNumber;
     if (parsed.data.whatsappConvertedMessage !== undefined) updates.whatsappConvertedMessage = parsed.data.whatsappConvertedMessage;
     if (parsed.data.whatsappBonusPaidMessage !== undefined) updates.whatsappBonusPaidMessage = parsed.data.whatsappBonusPaidMessage;
+    if (parsed.data.expiryWarning7DaysEnabled != null) updates.expiryWarning7DaysEnabled = parsed.data.expiryWarning7DaysEnabled;
+    if (parsed.data.expiryWarning1DayEnabled != null) updates.expiryWarning1DayEnabled = parsed.data.expiryWarning1DayEnabled;
 
     const [existing] = await db.select({ id: referralSettingsTable.id })
       .from(referralSettingsTable).where(eq(referralSettingsTable.tenantId, me.tenantId)).limit(1);
@@ -517,6 +521,8 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
         whatsappPhoneNumber: (updates.whatsappPhoneNumber as string | undefined) ?? null,
         whatsappConvertedMessage: (updates.whatsappConvertedMessage as string | undefined) ?? null,
         whatsappBonusPaidMessage: (updates.whatsappBonusPaidMessage as string | undefined) ?? null,
+        expiryWarning7DaysEnabled: (updates.expiryWarning7DaysEnabled as boolean | undefined) ?? true,
+        expiryWarning1DayEnabled: (updates.expiryWarning1DayEnabled as boolean | undefined) ?? true,
       });
       const [settings] = await db.select().from(referralSettingsTable)
         .where(eq(referralSettingsTable.id, id)).limit(1);

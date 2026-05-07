@@ -47,6 +47,8 @@ export const referralsTable = pgTable("referrals", {
   notes: text("notes"),
   fraudFlag: boolean("fraud_flag").notNull().default(false),
   fraudReason: text("fraud_reason"),
+  expiryWarning7SentAt: timestamp("expiry_warning_7_sent_at", { withTimezone: true }),
+  expiryWarning1SentAt: timestamp("expiry_warning_1_sent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -102,6 +104,8 @@ export const referralSettingsTable = pgTable("referral_settings", {
   whatsappPhoneNumber: text("whatsapp_phone_number"),
   whatsappConvertedMessage: text("whatsapp_converted_message"),
   whatsappBonusPaidMessage: text("whatsapp_bonus_paid_message"),
+  expiryWarning7DaysEnabled: boolean("expiry_warning_7_days_enabled").notNull().default(true),
+  expiryWarning1DayEnabled: boolean("expiry_warning_1_day_enabled").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

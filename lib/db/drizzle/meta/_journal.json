@@ -155,6 +155,20 @@
       "when": 1778400000000,
       "tag": "0021_add_referral_whatsapp_phone",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1778500000000,
+      "tag": "0022_add_referral_expiry_warning_sent_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1778600000000,
+      "tag": "0023_add_referral_expiry_warning_toggles",
+      "breakpoints": true
     }
   ]
 }

@@ -157,6 +157,8 @@ export default function Indicacoes() {
       whatsappPhoneNumber: settings?.whatsappPhoneNumber ?? "",
       whatsappConvertedMessage: settings?.whatsappConvertedMessage ?? "",
       whatsappBonusPaidMessage: settings?.whatsappBonusPaidMessage ?? "",
+      expiryWarning7DaysEnabled: settings?.expiryWarning7DaysEnabled ?? true,
+      expiryWarning1DayEnabled: settings?.expiryWarning1DayEnabled ?? true,
     });
     setSettingsModalOpen(true);
   }
@@ -179,6 +181,8 @@ export default function Indicacoes() {
           whatsappPhoneNumber: localSettings.whatsappPhoneNumber as string | undefined,
           whatsappConvertedMessage: localSettings.whatsappConvertedMessage as string | undefined,
           whatsappBonusPaidMessage: localSettings.whatsappBonusPaidMessage as string | undefined,
+          expiryWarning7DaysEnabled: localSettings.expiryWarning7DaysEnabled,
+          expiryWarning1DayEnabled: localSettings.expiryWarning1DayEnabled,
         },
       });
       toast({ title: "Configurações salvas com sucesso" });
@@ -1043,6 +1047,33 @@ export default function Indicacoes() {
                 onChange={(e) => setLocalSettings((s) => ({ ...s, shareMessage: e.target.value }))}
                 placeholder="Use meu código e ganhe desconto na sua viagem!"
               />
+            </div>
+
+            <div className="space-y-3 border rounded-lg p-3 bg-amber-50/50">
+              <Label className="flex items-center gap-1.5 font-semibold text-amber-800">
+                <span className="text-base">⏰</span>
+                Avisos de vencimento por e-mail
+              </Label>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-normal">Aviso 7 dias antes</Label>
+                  <p className="text-xs text-muted-foreground">Envia e-mail quando faltam 7 dias para o código vencer</p>
+                </div>
+                <Switch
+                  checked={localSettings.expiryWarning7DaysEnabled ?? true}
+                  onCheckedChange={(v) => setLocalSettings((s) => ({ ...s, expiryWarning7DaysEnabled: v }))}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-normal">Aviso 1 dia antes</Label>
+                  <p className="text-xs text-muted-foreground">Envia e-mail quando falta 1 dia para o código vencer</p>
+                </div>
+                <Switch
+                  checked={localSettings.expiryWarning1DayEnabled ?? true}
+                  onCheckedChange={(v) => setLocalSettings((s) => ({ ...s, expiryWarning1DayEnabled: v }))}
+                />
+              </div>
             </div>
 
             <div className="space-y-3 border rounded-lg p-3 bg-green-50/50">

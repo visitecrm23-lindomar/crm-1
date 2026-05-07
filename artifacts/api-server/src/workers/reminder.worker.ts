@@ -735,9 +735,13 @@ async function processExpiringSoonReferralNotifications(): Promise<void> {
   // PostgreSQL's AT TIME ZONE handles DST automatically.
   const tz = process.env["REMINDER_TZ"] ?? "America/Sao_Paulo";
 
-  // Fetch all tenants that have referrals enabled
+  // Fetch all tenants that have referrals enabled, along with their per-window toggle flags.
   const enabledTenants = await db
-    .select({ tenantId: referralSettingsTable.tenantId })
+    .select({
+      tenantId: referralSettingsTable.tenantId,
+      warning7: referralSettingsTable.expiryWarning7DaysEnabled,
+      warning1: referralSettingsTable.expiryWarning1DayEnabled,
+    })
     .from(referralSettingsTable)
     .where(eq(referralSettingsTable.isEnabled, true));
 
@@ -748,9 +752,15 @@ async function processExpiringSoonReferralNotifications(): Promise<void> {
 
   const enabledTenantIds = enabledTenants.map((r) => r.tenantId);
 
+  // Map for O(1) per-window toggle lookup in the processing loop.
+  const tenantWarnings = new Map(
+    enabledTenants.map((r) => [r.tenantId, { w7: r.warning7, w1: r.warning1 }]),
+  );
+
   // Query pending referrals expiring EXACTLY today+7 days OR today+1 day in the
   // configured timezone. PostgreSQL's AT TIME ZONE + ::date casting handles
   // DST-safe calendar-day comparison — no rolling ±hour windows.
+  // Also select the per-referral sent-at columns for structured dedup (task #151).
   const expiringSoon = await db
     .select({
       id: referralsTable.id,
@@ -758,6 +768,8 @@ async function processExpiringSoonReferralNotifications(): Promise<void> {
       tenantId: referralsTable.tenantId,
       code: referralsTable.code,
       expiresAt: referralsTable.expiresAt,
+      expiryWarning7SentAt: referralsTable.expiryWarning7SentAt,
+      expiryWarning1SentAt: referralsTable.expiryWarning1SentAt,
       windowLabel: sql<number>`CASE
         WHEN (${referralsTable.expiresAt} AT TIME ZONE ${tz})::date = (NOW() AT TIME ZONE ${tz})::date + INTERVAL '7 days' THEN 7
         ELSE 1
@@ -778,22 +790,40 @@ async function processExpiringSoonReferralNotifications(): Promise<void> {
       ),
     );
 
-  let notified = 0, skippedNoEmail = 0, skippedAlreadySent = 0, errors = 0;
-
-  // Dedup: do not resend if a warning for this exact code+window was sent in the last 2 days.
-  // The subject pattern is: "⏰ Seu código {CODE} vence em {N} dia(s) — {AGENCY}"
-  const now = new Date();
-  const dedupCutoff = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+  let notified = 0, skippedNoEmail = 0, skippedAlreadySent = 0, skippedDisabled = 0, errors = 0;
 
   for (const referral of expiringSoon) {
     try {
       if (!referral.expiresAt) continue;
 
       const windowLabel = referral.windowLabel as 1 | 7;
-      const windowPattern = `vence em ${windowLabel === 1 ? "1 dia" : "7 dias"}`;
-      const codePattern = referral.code;
 
-      // Fetch referrer email for dedup check
+      // Task #149: respect per-tenant per-window toggle flags.
+      const tenantConf = tenantWarnings.get(referral.tenantId);
+      if (!tenantConf) continue;
+      if (windowLabel === 7 && !tenantConf.w7) {
+        skippedDisabled++;
+        logger.info({ referralId: referral.id }, "[expiry-warning] Skipping — 7-day warning disabled for tenant");
+        continue;
+      }
+      if (windowLabel === 1 && !tenantConf.w1) {
+        skippedDisabled++;
+        logger.info({ referralId: referral.id }, "[expiry-warning] Skipping — 1-day warning disabled for tenant");
+        continue;
+      }
+
+      // Task #151: structured dedup via DB column instead of email_logs LIKE.
+      const alreadySent = windowLabel === 7
+        ? referral.expiryWarning7SentAt != null
+        : referral.expiryWarning1SentAt != null;
+
+      if (alreadySent) {
+        skippedAlreadySent++;
+        logger.info({ referralId: referral.id, code: referral.code, windowLabel }, "[expiry-warning] Skipping — already sent (column)");
+        continue;
+      }
+
+      // Fetch referrer email (needed by dispatchReferralExpiringSoonEmail).
       const [referrer] = await db
         .select({ email: clientsTable.email })
         .from(clientsTable)
@@ -806,28 +836,6 @@ async function processExpiringSoonReferralNotifications(): Promise<void> {
         continue;
       }
 
-      // Dedup: skip if a successful warning for this exact code+window was sent recently
-      const [existingLog] = await db
-        .select({ id: emailLogsTable.id })
-        .from(emailLogsTable)
-        .where(
-          and(
-            eq(emailLogsTable.tenantId, referral.tenantId),
-            eq(emailLogsTable.recipient, referrer.email),
-            eq(emailLogsTable.status, "sent"),
-            like(emailLogsTable.subject, `%${codePattern}%`),
-            like(emailLogsTable.subject, `%${windowPattern}%`),
-            gte(emailLogsTable.createdAt, dedupCutoff),
-          ),
-        )
-        .limit(1);
-
-      if (existingLog) {
-        skippedAlreadySent++;
-        logger.info({ referralId: referral.id, code: referral.code, windowLabel }, "[expiry-warning] Skipping — already sent recently");
-        continue;
-      }
-
       await dispatchReferralExpiringSoonEmail(
         referral.referrerId,
         referral.tenantId,
@@ -835,6 +843,17 @@ async function processExpiringSoonReferralNotifications(): Promise<void> {
         referral.expiresAt,
         windowLabel,
       );
+
+      // Task #151: mark the warning as sent on the referral row.
+      await db
+        .update(referralsTable)
+        .set(
+          windowLabel === 7
+            ? { expiryWarning7SentAt: new Date() }
+            : { expiryWarning1SentAt: new Date() },
+        )
+        .where(eq(referralsTable.id, referral.id));
+
       notified++;
     } catch (err) {
       errors++;
@@ -846,7 +865,7 @@ async function processExpiringSoonReferralNotifications(): Promise<void> {
   }
 
   logger.info(
-    { notified, skippedNoEmail, skippedAlreadySent, errors, total: expiringSoon.length },
+    { notified, skippedNoEmail, skippedAlreadySent, skippedDisabled, errors, total: expiringSoon.length },
     "[expiry-warning] Pre-expiry referral notification run complete",
   );
 }
