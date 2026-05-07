@@ -445,8 +445,7 @@ router.post("/referrals/:id/resend-expiry-warning", async (req, res): Promise<vo
       return;
     }
 
-    const resolvedReferrerEmail = row.referrerClientEmail ?? row.referrerEmail;
-    if (!resolvedReferrerEmail) {
+    if (!row.referrerClientEmail) {
       res.status(422).json({ error: "O indicador não tem e-mail cadastrado — aviso não pode ser enviado" });
       return;
     }
