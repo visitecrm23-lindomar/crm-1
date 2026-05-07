@@ -1,6 +1,6 @@
 export interface FraudDetectionInput {
   conversionIp: string | null;
-  referrerIp: string | null;
+  trackerIp: string | null;
   firstVisit: Date | null;
   conversionAt: Date;
   referredEmail: string;
@@ -27,8 +27,8 @@ export function detectReferralFraud(input: FraudDetectionInput): FraudDetectionR
 
   if (
     input.conversionIp &&
-    input.referrerIp &&
-    input.conversionIp === input.referrerIp
+    input.trackerIp &&
+    input.conversionIp === input.trackerIp
   ) {
     reasons.push("Mesmo IP do indicador e indicado");
   }

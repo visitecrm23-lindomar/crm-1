@@ -25,6 +25,7 @@ import { generateId } from "../lib/id";
 import { getTenantReservationPrefix, getYearMonth } from "../lib/reservation-number";
 import { randomBytes } from "crypto";
 import { writeClientActivity } from "../lib/activities";
+import { getClientIp } from "../lib/get-client-ip";
 import { resolveCheckoutDiscounts } from "../services/checkout/discounts";
 import { prepareCheckoutItems } from "../services/checkout/items";
 import { loadReservationContext } from "../services/checkout/reservation-context";
@@ -901,8 +902,7 @@ router.post("/public/store/:slug/referral/track", async (req, res, next: NextFun
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const code = parsed.data.code.toUpperCase();
     const userAgent = req.headers["user-agent"] ?? "";
-    const ipAddress = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
-      ?? req.socket?.remoteAddress ?? "";
+    const ipAddress = getClientIp(req) ?? "";
 
     // Only accept server-issued cookie IDs (those that exist in DB for this tenant)
     // Never trust client-provided IDs that don't match an existing record

@@ -4,7 +4,6 @@ import {
   referralSettingsTable,
   referralTrackingTable,
 } from "@workspace/db";
-import { storeOrdersTable } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
 import { generateId } from "../../lib/id";
 import type { Tx } from "./tx";
@@ -88,25 +87,9 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
     firstVisit: referralTrackingTable.firstVisit,
   }).from(referralTrackingTable).where(trackingWhere!).limit(1);
 
-  let referrerIp: string | null = null;
-  if (conversionIp && referrer?.email) {
-    const [referrerOrder] = await tx.select({ id: storeOrdersTable.id })
-      .from(storeOrdersTable)
-      .where(
-        and(
-          eq(storeOrdersTable.tenantId, tenantId),
-          eq(storeOrdersTable.customerEmail, referrer.email),
-          eq(storeOrdersTable.ipAddress, conversionIp),
-        ),
-      ).limit(1);
-    if (referrerOrder) {
-      referrerIp = conversionIp;
-    }
-  }
-
   const fraud = detectReferralFraud({
     conversionIp: conversionIp ?? null,
-    referrerIp,
+    trackerIp: trackingRow?.ipAddress ?? null,
     firstVisit: trackingRow?.firstVisit ?? null,
     conversionAt,
     referredEmail: customerEmail,
@@ -133,16 +116,23 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
       .where(and(eq(clientsTable.id, referredClientId), sql`referred_by_id IS NULL`));
   }
 
+  const conversionUpdate = {
+    converted: true,
+    convertedAt: conversionAt,
+    updatedAt: new Date(),
+    ...(conversionIp ? { ipAddress: conversionIp } : {}),
+  };
+
   if (referralCookieId) {
     await tx.update(referralTrackingTable)
-      .set({ converted: true, convertedAt: conversionAt, updatedAt: new Date() })
+      .set(conversionUpdate)
       .where(and(
         eq(referralTrackingTable.tenantId, tenantId),
         eq(referralTrackingTable.cookieId, referralCookieId),
       ));
   } else {
     await tx.update(referralTrackingTable)
-      .set({ converted: true, convertedAt: conversionAt, updatedAt: new Date() })
+      .set(conversionUpdate)
       .where(and(
         eq(referralTrackingTable.tenantId, tenantId),
         eq(referralTrackingTable.referralCode, referralCode),
