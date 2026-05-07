@@ -825,12 +825,23 @@ export async function dispatchReferralExpiringSoonEmail(
     .where(eq(tenantsTable.id, tenantId))
     .limit(1);
 
+  const [settings] = await db
+    .select({ shareMessage: referralSettingsTable.shareMessage })
+    .from(referralSettingsTable)
+    .where(eq(referralSettingsTable.tenantId, tenantId))
+    .limit(1);
+
   const formattedDate = expiresAt.toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     timeZone: "America/Sao_Paulo",
   });
+
+  const agencyName = tenant?.name ?? "Agência";
+  const defaultShareMessage = settings?.shareMessage
+    ?? `Olá! Use meu código ${referralCode} na ${agencyName} e ganhe desconto especial na sua próxima viagem! 🌴✈️`;
+  const shareUrl = `https://wa.me/?text=${encodeURIComponent(defaultShareMessage)}`;
 
   await enqueueReferralExpiringSoonEmail(
     {
@@ -839,8 +850,9 @@ export async function dispatchReferralExpiringSoonEmail(
       referralCode,
       expiresAt: formattedDate,
       daysLeft,
-      agencyName: tenant?.name ?? "Agência",
+      agencyName,
       agencyLogo: tenant?.logoUrl ?? null,
+      shareUrl,
     },
     tenantId,
   );

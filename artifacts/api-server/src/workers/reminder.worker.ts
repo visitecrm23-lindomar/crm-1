@@ -731,21 +731,9 @@ async function processExpiredReferralNotifications(): Promise<void> {
 // ────────────────────────────────────────────────────────────
 
 async function processExpiringSoonReferralNotifications(): Promise<void> {
-  const now = new Date();
-
-  // 7-day window: expiresAt is between now+6d and now+8d (centred on 7 days out)
-  const sevenDayWindowStart = new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000);
-  const sevenDayWindowEnd   = new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000);
-
-  // 1-day window: expiresAt is between now+0h and now+48h (covers today through tomorrow)
-  const oneDayWindowEnd = new Date(now.getTime() + 48 * 60 * 60 * 1000);
-
-  // Build a unique subject prefix per (referralCode, daysLeft) pair so we can
-  // detect already-sent warnings without adding a new DB column.
-  // Subject pattern written by enqueueReferralExpiringSoonEmail:
-  //   "⏰ Seu código {CODE} vence em {N} dia(s) — {AGENCY}"
-  // We dedup by checking for a "sent" email in the last 2 days whose subject
-  // contains the window-specific pattern.
+  // Use the same timezone as the reminder cron (America/Sao_Paulo by default).
+  // PostgreSQL's AT TIME ZONE handles DST automatically.
+  const tz = process.env["REMINDER_TZ"] ?? "America/Sao_Paulo";
 
   // Fetch all tenants that have referrals enabled
   const enabledTenants = await db
@@ -760,7 +748,9 @@ async function processExpiringSoonReferralNotifications(): Promise<void> {
 
   const enabledTenantIds = enabledTenants.map((r) => r.tenantId);
 
-  // Query expiring-soon pending referrals for enabled tenants
+  // Query pending referrals expiring EXACTLY today+7 days OR today+1 day in the
+  // configured timezone. PostgreSQL's AT TIME ZONE + ::date casting handles
+  // DST-safe calendar-day comparison — no rolling ±hour windows.
   const expiringSoon = await db
     .select({
       id: referralsTable.id,
@@ -768,6 +758,10 @@ async function processExpiringSoonReferralNotifications(): Promise<void> {
       tenantId: referralsTable.tenantId,
       code: referralsTable.code,
       expiresAt: referralsTable.expiresAt,
+      windowLabel: sql<number>`CASE
+        WHEN (${referralsTable.expiresAt} AT TIME ZONE ${tz})::date = (NOW() AT TIME ZONE ${tz})::date + INTERVAL '7 days' THEN 7
+        ELSE 1
+      END`,
     })
     .from(referralsTable)
     .where(
@@ -776,28 +770,26 @@ async function processExpiringSoonReferralNotifications(): Promise<void> {
         eq(referralsTable.status, "pending"),
         inArray(referralsTable.tenantId, enabledTenantIds),
         isNotNull(referralsTable.expiresAt),
-        // Either in 7-day window OR in 1-day window
         sql`(
-          (${referralsTable.expiresAt} >= ${sevenDayWindowStart} AND ${referralsTable.expiresAt} < ${sevenDayWindowEnd})
+          (${referralsTable.expiresAt} AT TIME ZONE ${tz})::date = (NOW() AT TIME ZONE ${tz})::date + INTERVAL '7 days'
           OR
-          (${referralsTable.expiresAt} > ${now} AND ${referralsTable.expiresAt} < ${oneDayWindowEnd})
+          (${referralsTable.expiresAt} AT TIME ZONE ${tz})::date = (NOW() AT TIME ZONE ${tz})::date + INTERVAL '1 day'
         )`,
       ),
     );
 
   let notified = 0, skippedNoEmail = 0, skippedAlreadySent = 0, errors = 0;
 
-  // Dedup window: do not resend if a warning was already sent in the last 2 days
+  // Dedup: do not resend if a warning for this exact code+window was sent in the last 2 days.
+  // The subject pattern is: "⏰ Seu código {CODE} vence em {N} dia(s) — {AGENCY}"
+  const now = new Date();
   const dedupCutoff = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
 
   for (const referral of expiringSoon) {
     try {
       if (!referral.expiresAt) continue;
 
-      const msUntilExpiry = referral.expiresAt.getTime() - now.getTime();
-      const daysLeft = Math.ceil(msUntilExpiry / (24 * 60 * 60 * 1000));
-      // Clamp to 7 or 1 for the window labels used in dedup
-      const windowLabel = daysLeft >= 6 ? 7 : 1;
+      const windowLabel = referral.windowLabel as 1 | 7;
       const windowPattern = `vence em ${windowLabel === 1 ? "1 dia" : "7 dias"}`;
       const codePattern = referral.code;
 

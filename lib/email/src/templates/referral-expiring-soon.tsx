@@ -9,6 +9,7 @@ import {
   Text,
   Hr,
   Img,
+  Button,
 } from '@react-email/components'
 
 export interface ReferralExpiringSoonEmailProps {
@@ -19,6 +20,7 @@ export interface ReferralExpiringSoonEmailProps {
   daysLeft: number
   agencyName: string
   agencyLogo?: string | null
+  shareUrl?: string | null
 }
 
 export function ReferralExpiringSoonEmail({
@@ -28,6 +30,7 @@ export function ReferralExpiringSoonEmail({
   daysLeft,
   agencyName,
   agencyLogo,
+  shareUrl,
 }: ReferralExpiringSoonEmailProps) {
   const firstName = referrerName.split(' ')[0]
   const urgency = daysLeft <= 1 ? 'último dia' : `${daysLeft} dias`
@@ -97,10 +100,19 @@ export function ReferralExpiringSoonEmail({
 
           <Hr style={divider} />
 
-          <Section style={section}>
-            <Text style={bodyText}>
-              Acesse sua Área do Cliente para compartilhar o código diretamente ou copie o código acima e envie para quem você quiser!
+          <Section style={ctaSection}>
+            <Text style={ctaText}>
+              Compartilhe agora pelo WhatsApp com um clique!
             </Text>
+            {shareUrl ? (
+              <Button href={shareUrl} style={ctaButton}>
+                📲 Compartilhar no WhatsApp
+              </Button>
+            ) : (
+              <Text style={bodyText}>
+                Copie o código acima e envie para quem você quiser!
+              </Text>
+            )}
           </Section>
 
           {/* FOOTER */}
@@ -167,6 +179,28 @@ const headerSubtitle: React.CSSProperties = {
 
 const section: React.CSSProperties = {
   padding: '32px 24px',
+}
+
+const ctaSection: React.CSSProperties = {
+  padding: '24px 24px 32px',
+  textAlign: 'center',
+}
+
+const ctaText: React.CSSProperties = {
+  fontSize: '15px',
+  color: '#4b5563',
+  margin: '0 0 16px',
+}
+
+const ctaButton: React.CSSProperties = {
+  backgroundColor: '#25d366',
+  color: '#ffffff',
+  fontSize: '16px',
+  fontWeight: 'bold',
+  textDecoration: 'none',
+  padding: '14px 32px',
+  borderRadius: '8px',
+  display: 'inline-block',
 }
 
 const sectionTitle: React.CSSProperties = {
