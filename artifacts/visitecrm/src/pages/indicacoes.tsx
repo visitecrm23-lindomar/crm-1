@@ -976,7 +976,7 @@ export default function Indicacoes() {
                       }}
                     >
                       <Mail className="w-4 h-4 mr-2" />
-                      Reenviar D-7
+                      Reenviar aviso D-7
                     </Button>
                   )}
                   {showD1 && (
@@ -999,7 +999,7 @@ export default function Indicacoes() {
                       }}
                     >
                       <Mail className="w-4 h-4 mr-2" />
-                      Reenviar D-1
+                      Reenviar aviso D-1
                     </Button>
                   )}
                 </>

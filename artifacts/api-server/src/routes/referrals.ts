@@ -447,6 +447,15 @@ router.post("/referrals/:id/resend-expiry-warning", async (req, res): Promise<vo
       return;
     }
 
+    const msLeft = expiresAt.getTime() - now.getTime();
+    const windowMs = windowNum * 24 * 60 * 60 * 1000;
+    if (msLeft < windowMs) {
+      res.status(422).json({
+        error: `A janela D-${windowNum} já passou — restam menos de ${windowNum} dia(s) para a expiração`,
+      });
+      return;
+    }
+
     const clearUpdate = windowNum === 7
       ? { expiryWarning7SentAt: null, updatedAt: now }
       : { expiryWarning1SentAt: null, updatedAt: now };
