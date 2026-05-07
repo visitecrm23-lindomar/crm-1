@@ -7,8 +7,10 @@ import {
   useUpdateReferralSettings,
   usePayReferralBonus,
   useResendExpiryWarning,
+  useGetReferralAnalytics,
+  getReferralExportUrl,
 } from "@workspace/api-client-react";
-import type { Referral, ReferralSettings, ReferralTierConfig } from "@workspace/api-client-react";
+import type { Referral, ReferralSettings, ReferralTierConfig, ReferralAnalyticsPeriod } from "@workspace/api-client-react";
 import { REFERRAL_STATUS } from "@workspace/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -133,6 +135,9 @@ export default function Indicacoes() {
   const updateSettings = useUpdateReferralSettings();
   const payBonus = usePayReferralBonus();
   const resendWarning = useResendExpiryWarning();
+
+  const [analyticsPeriod, setAnalyticsPeriod] = useState<ReferralAnalyticsPeriod>(90);
+  const { data: analyticsData } = useGetReferralAnalytics(analyticsPeriod);
 
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -527,6 +532,153 @@ export default function Indicacoes() {
         </Card>
       </div>
 
+      {/* Analytics Section */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-primary" />
+              Desempenho do Programa
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {[
+                { value: 30, label: "30 dias" },
+                { value: 90, label: "90 dias" },
+                { value: 180, label: "180 dias" },
+              ].map(({ value, label }) => (
+                <Button
+                  key={value}
+                  size="sm"
+                  variant={analyticsPeriod === value ? "default" : "outline"}
+                  onClick={() => setAnalyticsPeriod(value as ReferralAnalyticsPeriod)}
+                  className="text-xs h-7 px-3"
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Conversion rate delta card */}
+          {analyticsData && (
+            <div className="flex flex-wrap gap-4">
+              <div className="flex-1 min-w-[160px] rounded-lg border bg-muted/30 px-4 py-3">
+                <p className="text-xs text-muted-foreground mb-1">Taxa de conversão (período)</p>
+                <p className="text-2xl font-bold text-primary">{analyticsData.conversionRate}%</p>
+                {(() => {
+                  const delta = analyticsData.conversionRate - analyticsData.prevConversionRate;
+                  if (analyticsData.prevConversionRate === 0) return null;
+                  return (
+                    <p className={`text-xs mt-0.5 font-medium ${delta >= 0 ? "text-green-600" : "text-red-500"}`}>
+                      {delta >= 0 ? "+" : ""}{delta}pp vs. período anterior
+                    </p>
+                  );
+                })()}
+              </div>
+              <div className="flex-1 min-w-[160px] rounded-lg border bg-muted/30 px-4 py-3">
+                <p className="text-xs text-muted-foreground mb-1">Indicações criadas (período)</p>
+                <p className="text-2xl font-bold">{analyticsData.funnel.created}</p>
+              </div>
+              <div className="flex-1 min-w-[160px] rounded-lg border bg-muted/30 px-4 py-3">
+                <p className="text-xs text-muted-foreground mb-1">Convertidas (período)</p>
+                <p className="text-2xl font-bold text-green-600">{analyticsData.funnel.converted}</p>
+              </div>
+              <div className="flex-1 min-w-[160px] rounded-lg border bg-muted/30 px-4 py-3">
+                <p className="text-xs text-muted-foreground mb-1">Bônus pagos (período)</p>
+                <p className="text-2xl font-bold text-violet-600">{analyticsData.funnel.bonusPaid}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Trend chart */}
+          {analyticsData && analyticsData.series.length > 0 ? (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Indicações criadas vs. convertidas por semana</p>
+              {(() => {
+                const data = analyticsData.series;
+                const maxVal = Math.max(...data.map(d => Math.max(d.created, d.converted)), 1);
+                const pts = data.map((d, i) => {
+                  const x = data.length === 1 ? 50 : (i / (data.length - 1)) * 100;
+                  const y = 100 - (d.created / maxVal) * 90;
+                  return `${x.toFixed(1)},${y.toFixed(1)}`;
+                }).join(" ");
+                const convPts = data.map((d, i) => {
+                  const x = data.length === 1 ? 50 : (i / (data.length - 1)) * 100;
+                  const y = 100 - (d.converted / maxVal) * 90;
+                  return `${x.toFixed(1)},${y.toFixed(1)}`;
+                }).join(" ");
+                return (
+                  <div>
+                    <svg viewBox="0 0 100 110" className="w-full h-36" preserveAspectRatio="none">
+                      <polyline points={pts} fill="none" stroke="hsl(var(--primary))" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+                      <polyline points={convPts} fill="none" stroke="#10B981" strokeWidth="1.5" strokeDasharray="3,2" vectorEffect="non-scaling-stroke" />
+                      {data.map((d, i) => {
+                        const x = data.length === 1 ? 50 : (i / (data.length - 1)) * 100;
+                        const y = 100 - (d.created / maxVal) * 90;
+                        return <circle key={i} cx={x.toFixed(1)} cy={y.toFixed(1)} r="1.5" fill="hsl(var(--primary))" vectorEffect="non-scaling-stroke" />;
+                      })}
+                    </svg>
+                    <div className="flex justify-between mt-1">
+                      {data.filter((_, i) => i % Math.max(1, Math.floor(data.length / 6)) === 0).map((d, i) => (
+                        <span key={i} className="text-[10px] text-muted-foreground">
+                          {new Date(d.week + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-3 h-0.5 bg-primary inline-block" />
+                        Criadas
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-3 h-0.5 bg-emerald-500 inline-block" style={{ backgroundImage: "repeating-linear-gradient(90deg, currentColor 0, currentColor 4px, transparent 4px, transparent 6px)" }} />
+                        Convertidas
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          ) : (
+            <div className="h-36 flex items-center justify-center text-muted-foreground text-sm">
+              Sem dados de indicações no período selecionado
+            </div>
+          )}
+
+          {/* Funnel */}
+          {analyticsData && analyticsData.funnel.created > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-3">Funil de conversão</p>
+              <div className="space-y-2">
+                {[
+                  { label: "Criadas", count: analyticsData.funnel.created, color: "#3B82F6" },
+                  { label: "Visitadas", count: analyticsData.funnel.visited, color: "#8B5CF6" },
+                  { label: "Convertidas", count: analyticsData.funnel.converted, color: "#10B981" },
+                  { label: "Bônus pago", count: analyticsData.funnel.bonusPaid, color: "#F59E0B" },
+                ].map((step) => {
+                  const pct = analyticsData.funnel.created > 0 ? Math.round((step.count / analyticsData.funnel.created) * 100) : 0;
+                  return (
+                    <div key={step.label} className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground w-24 shrink-0">{step.label}</span>
+                      <div className="flex-1 bg-muted rounded-full h-5 overflow-hidden">
+                        <div
+                          className="h-5 rounded-full flex items-center justify-end pr-2 transition-all duration-500"
+                          style={{ width: `${Math.max(pct, 3)}%`, backgroundColor: step.color }}
+                        >
+                          <span className="text-[10px] font-semibold text-white">{step.count}</span>
+                        </div>
+                      </div>
+                      <span className="text-xs font-medium w-10 text-right">{pct}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Top Referrers Ranking */}
       {ranked.length > 0 && (
           <Card>
@@ -671,6 +823,24 @@ export default function Indicacoes() {
             </Button>
           )}
           <span className="text-sm text-muted-foreground ml-auto">{filtered.length} indicações</span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="shrink-0"
+            onClick={() => {
+              const url = getReferralExportUrl(
+                statusFilter !== "all" ? statusFilter : undefined,
+                searchQuery || undefined,
+              );
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = "";
+              a.click();
+            }}
+          >
+            <Download className="w-3.5 h-3.5 mr-1.5" />
+            Exportar CSV
+          </Button>
         </div>
 
         {["all", "pending", "expiringSoon", "completed", "completed-unpaid", "expired", "suspicious"].map((tabVal) => (

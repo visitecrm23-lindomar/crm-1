@@ -514,6 +514,151 @@ router.post("/referrals/:id/resend-expiry-warning", async (req, res): Promise<vo
   }
 });
 
+router.get("/referrals/analytics", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    const period = parseInt((req.query.period as string) || "90", 10);
+    if (![30, 90, 180].includes(period)) {
+      res.status(400).json({ error: "period must be 30, 90, or 180" });
+      return;
+    }
+
+    const now = new Date();
+    const since = new Date(now.getTime() - period * 24 * 60 * 60 * 1000);
+    const prevSince = new Date(since.getTime() - period * 24 * 60 * 60 * 1000);
+
+    const seriesRows = await db.select({
+      week: sql<string>`date_trunc('week', ${referralsTable.createdAt})::date::text`,
+      created: count(),
+      converted: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.status} = ${REFERRAL_STATUS.COMPLETED})`,
+    }).from(referralsTable)
+      .where(and(
+        eq(referralsTable.tenantId, me.tenantId),
+        sql`${referralsTable.createdAt} >= ${since}`,
+      ))
+      .groupBy(sql`date_trunc('week', ${referralsTable.createdAt})`)
+      .orderBy(sql`date_trunc('week', ${referralsTable.createdAt})`);
+
+    const [funnelRow] = await db.select({
+      created: count(),
+      visited: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.visitsCount} > 0)`,
+      converted: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.status} = ${REFERRAL_STATUS.COMPLETED})`,
+      bonusPaid: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.bonusPaid} = true)`,
+    }).from(referralsTable)
+      .where(and(
+        eq(referralsTable.tenantId, me.tenantId),
+        sql`${referralsTable.createdAt} >= ${since}`,
+      ));
+
+    const [prevRow] = await db.select({
+      created: count(),
+      converted: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.status} = ${REFERRAL_STATUS.COMPLETED})`,
+    }).from(referralsTable)
+      .where(and(
+        eq(referralsTable.tenantId, me.tenantId),
+        sql`${referralsTable.createdAt} >= ${prevSince}`,
+        sql`${referralsTable.createdAt} < ${since}`,
+      ));
+
+    const created = Number(funnelRow?.created ?? 0);
+    const converted = Number(funnelRow?.converted ?? 0);
+    const conversionRate = created > 0 ? Math.round((converted / created) * 100) : 0;
+    const prevCreated = Number(prevRow?.created ?? 0);
+    const prevConverted = Number(prevRow?.converted ?? 0);
+    const prevConversionRate = prevCreated > 0 ? Math.round((prevConverted / prevCreated) * 100) : 0;
+
+    res.json({
+      series: seriesRows.map(r => ({
+        week: r.week,
+        created: Number(r.created),
+        converted: Number(r.converted),
+      })),
+      funnel: {
+        created,
+        visited: Number(funnelRow?.visited ?? 0),
+        converted,
+        bonusPaid: Number(funnelRow?.bonusPaid ?? 0),
+      },
+      conversionRate,
+      prevConversionRate,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error fetching referral analytics");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/referrals/export", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const status = req.query.status as string | undefined;
+    const search = req.query.search as string | undefined;
+
+    const conditions = [eq(referralsTable.tenantId, me.tenantId)];
+    if (status && status !== "all") conditions.push(eq(referralsTable.status, status));
+    if (search) {
+      conditions.push(or(
+        ilike(referralsTable.code, `%${search}%`),
+        ilike(referralsTable.referrerName, `%${search}%`),
+        ilike(referralsTable.referredEmail, `%${search}%`),
+        ilike(referralsTable.referredName, `%${search}%`),
+        ilike(clientsTable.name, `%${search}%`),
+        ilike(clientsTable.email, `%${search}%`),
+      )!);
+    }
+
+    const rows = await db.select({
+      ...getTableColumns(referralsTable),
+      referrerClientName: clientsTable.name,
+      referrerClientEmail: clientsTable.email,
+    }).from(referralsTable)
+      .leftJoin(clientsTable, and(
+        eq(referralsTable.referrerId, clientsTable.id),
+        eq(clientsTable.tenantId, me.tenantId),
+      ))
+      .where(and(...conditions))
+      .orderBy(desc(referralsTable.createdAt))
+      .limit(5000);
+
+    const headers = [
+      "Código", "Indicador", "E-mail Indicador", "Indicado", "E-mail Indicado",
+      "Status", "Bônus (R$)", "Bônus Pago", "Visitas",
+      "Criado em", "Convertido em", "Expira em",
+    ];
+    const csvRows = rows.map(r => [
+      r.code,
+      r.referrerClientName ?? r.referrerName ?? "",
+      r.referrerClientEmail ?? r.referrerEmail ?? "",
+      r.referredName ?? "",
+      r.referredEmail ?? "",
+      r.status,
+      r.bonusAmount ? parseFloat(String(r.bonusAmount)).toFixed(2) : "0.00",
+      r.bonusPaid ? "Sim" : "Não",
+      String(r.visitsCount ?? 0),
+      r.createdAt ? new Date(r.createdAt).toLocaleDateString("pt-BR") : "",
+      r.convertedAt ? new Date(r.convertedAt).toLocaleDateString("pt-BR") : "",
+      r.expiresAt ? new Date(r.expiresAt).toLocaleDateString("pt-BR") : "",
+    ]);
+
+    const csv = [headers, ...csvRows]
+      .map(row => row.map(c => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const filename = `indicacoes-${new Date().toISOString().slice(0, 10)}.csv`;
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send("\uFEFF" + csv);
+  } catch (err) {
+    req.log.error({ err }, "Error exporting referrals CSV");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/referral-settings", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
