@@ -154,6 +154,7 @@ export default function Indicacoes() {
       shareMessage: settings?.shareMessage ?? "",
       tiersConfig: settings?.tiersConfig ?? DEFAULT_TIERS,
       whatsappEnabled: settings?.whatsappEnabled ?? false,
+      whatsappPhoneNumber: settings?.whatsappPhoneNumber ?? "",
       whatsappConvertedMessage: settings?.whatsappConvertedMessage ?? "",
       whatsappBonusPaidMessage: settings?.whatsappBonusPaidMessage ?? "",
     });
@@ -175,6 +176,7 @@ export default function Indicacoes() {
           shareMessage: localSettings.shareMessage as string | undefined,
           tiersConfig: localSettings.tiersConfig as ReferralTierConfig[] | undefined,
           whatsappEnabled: localSettings.whatsappEnabled,
+          whatsappPhoneNumber: localSettings.whatsappPhoneNumber as string | undefined,
           whatsappConvertedMessage: localSettings.whatsappConvertedMessage as string | undefined,
           whatsappBonusPaidMessage: localSettings.whatsappBonusPaidMessage as string | undefined,
         },
@@ -979,6 +981,15 @@ export default function Indicacoes() {
               </div>
               {localSettings.whatsappEnabled && (
                 <>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Número WhatsApp Business da agência</Label>
+                    <Input
+                      value={localSettings.whatsappPhoneNumber as string ?? ""}
+                      onChange={(e) => setLocalSettings((s) => ({ ...s, whatsappPhoneNumber: e.target.value }))}
+                      placeholder="5511999999999 (código do país + DDD + número)"
+                    />
+                    <p className="text-[11px] text-muted-foreground">Número configurado na sua instância Z-API. Apenas para referência — as mensagens são enviadas via Z-API.</p>
+                  </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Mensagem — conversão confirmada</Label>
                     <textarea

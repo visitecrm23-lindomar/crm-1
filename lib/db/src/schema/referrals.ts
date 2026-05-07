@@ -99,6 +99,7 @@ export const referralSettingsTable = pgTable("referral_settings", {
   shareMessage: text("share_message"),
   tiersConfig: jsonb("tiers_config").$type<ReferralTierConfig[]>(),
   whatsappEnabled: boolean("whatsapp_enabled").notNull().default(false),
+  whatsappPhoneNumber: text("whatsapp_phone_number"),
   whatsappConvertedMessage: text("whatsapp_converted_message"),
   whatsappBonusPaidMessage: text("whatsapp_bonus_paid_message"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

@@ -390,6 +390,10 @@ router.get("/referral-settings", async (req, res): Promise<void> => {
         requireFirstPurchase: true,
         shareMessage: "Use meu código de indicação e ganhe desconto na sua viagem!",
         tiersConfig: DEFAULT_TIERS_CONFIG,
+        whatsappEnabled: false,
+        whatsappPhoneNumber: null,
+        whatsappConvertedMessage: null,
+        whatsappBonusPaidMessage: null,
       };
       await db.insert(referralSettingsTable).values(defaults);
       res.json(defaults);
@@ -429,6 +433,7 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
       shareMessage: z.string().optional(),
       tiersConfig: z.array(TierSchema).optional(),
       whatsappEnabled: z.boolean().optional(),
+      whatsappPhoneNumber: z.string().optional(),
       whatsappConvertedMessage: z.string().optional(),
       whatsappBonusPaidMessage: z.string().optional(),
     }).safeParse(req.body);
@@ -446,6 +451,7 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
     if (parsed.data.shareMessage !== undefined) updates.shareMessage = parsed.data.shareMessage;
     if (parsed.data.tiersConfig !== undefined) updates.tiersConfig = parsed.data.tiersConfig as ReferralTier[];
     if (parsed.data.whatsappEnabled != null) updates.whatsappEnabled = parsed.data.whatsappEnabled;
+    if (parsed.data.whatsappPhoneNumber !== undefined) updates.whatsappPhoneNumber = parsed.data.whatsappPhoneNumber;
     if (parsed.data.whatsappConvertedMessage !== undefined) updates.whatsappConvertedMessage = parsed.data.whatsappConvertedMessage;
     if (parsed.data.whatsappBonusPaidMessage !== undefined) updates.whatsappBonusPaidMessage = parsed.data.whatsappBonusPaidMessage;
 
