@@ -95,11 +95,18 @@ export interface CommissionSyncJobData {
   tenantId: string;
 }
 
+export interface WhatsAppNotificationJobData {
+  phone: string;
+  message: string;
+  tenantId: string;
+}
+
 const QUEUES = {
   EMAIL: "emails",
   REMINDERS: "reminders",
   PDF: "pdfs",
   COMMISSION_SYNC: "commission-sync",
+  WHATSAPP: "whatsapp-notifications",
 } as const;
 
 export type ReferralEmailJobData = ReferralBonusPaidEmailJobData | ReferralConvertedEmailJobData | ReferralExpiredEmailJobData;
@@ -257,6 +264,26 @@ export function getCommissionSyncQueue(): Queue<CommissionSyncJobData> | null {
   return _commissionSyncQueue;
 }
 
+let _whatsAppQueue: Queue<WhatsAppNotificationJobData> | null = null;
+
+export function getWhatsAppQueue(): Queue<WhatsAppNotificationJobData> | null {
+  const conn = getRedisConnection();
+  if (!conn) return null;
+
+  if (!_whatsAppQueue) {
+    _whatsAppQueue = new Queue<WhatsAppNotificationJobData>(QUEUES.WHATSAPP, {
+      connection: conn,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 30_000 },
+        removeOnComplete: { count: 500 },
+        removeOnFail: { count: 200 },
+      },
+    });
+  }
+  return _whatsAppQueue;
+}
+
 export async function closeQueues(): Promise<void> {
   await Promise.all([
     _emailQueue?.close().catch(() => {}),
@@ -267,6 +294,7 @@ export async function closeQueues(): Promise<void> {
     _reminderQueue?.close().catch(() => {}),
     _pdfQueue?.close().catch(() => {}),
     _commissionSyncQueue?.close().catch(() => {}),
+    _whatsAppQueue?.close().catch(() => {}),
   ]);
   _emailQueue = null;
   _cancellationEmailQueue = null;
@@ -275,4 +303,5 @@ export async function closeQueues(): Promise<void> {
   _reminderQueue = null;
   _pdfQueue = null;
   _commissionSyncQueue = null;
+  _whatsAppQueue = null;
 }

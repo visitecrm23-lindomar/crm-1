@@ -1,5 +1,6 @@
 import { db } from "@workspace/db";
 import { dispatchReferralConvertedEmail } from "../../queues/email-helpers";
+import { dispatchWhatsAppReferralConverted } from "../../queues/whatsapp-helpers";
 import {
   storesTable,
   storeProductsTable,
@@ -268,7 +269,6 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
         conversionIp: args.data.ipAddress ?? null,
       });
     }
-
     await tx.update(storesTable)
       .set({ totalOrders: sql`total_orders + 1` })
       .where(eq(storesTable.id, args.store.id));
@@ -281,6 +281,15 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
       args.store.tenantId,
     ).catch((err) => {
       console.error("[checkout/persist-order] Failed to dispatch referral-converted email:", err);
+    });
+
+    dispatchWhatsAppReferralConverted({
+      referrerId: args.appliedReferralReferrerId,
+      referredName: args.data.customerName,
+      referralCode: args.appliedReferralCode,
+      tenantId: args.store.tenantId,
+    }).catch((err) => {
+      console.error("[checkout/persist-order] Failed to dispatch referral WhatsApp:", err);
     });
   }
 

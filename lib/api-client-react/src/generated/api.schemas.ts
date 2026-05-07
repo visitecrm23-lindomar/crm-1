@@ -2337,6 +2337,11 @@ export interface ReferralSettings {
   /** @nullable */
   shareMessage?: string | null;
   tiersConfig: ReferralTierConfig[];
+  whatsappEnabled: boolean;
+  /** @nullable */
+  whatsappConvertedMessage?: string | null;
+  /** @nullable */
+  whatsappBonusPaidMessage?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -2352,6 +2357,9 @@ export interface UpdateReferralSettingsBody {
   requireFirstPurchase?: boolean;
   shareMessage?: string;
   tiersConfig?: ReferralTierConfig[];
+  whatsappEnabled?: boolean;
+  whatsappConvertedMessage?: string;
+  whatsappBonusPaidMessage?: string;
 }
 
 export interface ClientReferralInfo {

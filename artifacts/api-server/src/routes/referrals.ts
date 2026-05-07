@@ -7,6 +7,7 @@ import { requireAuth } from "../lib/tenant";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { REFERRAL_STATUS } from "@workspace/permissions";
 import { enqueueReferralBonusPaidEmail } from "../queues/email-helpers";
+import { dispatchWhatsAppReferralBonusPaid } from "../queues/whatsapp-helpers";
 import { DEFAULT_TIERS as DEFAULT_TIERS_CONFIG, computeReferralTier } from "../lib/referral-tiers";
 import type { ReferralTier } from "../lib/referral-tiers";
 
@@ -329,6 +330,16 @@ router.post("/referrals/:id/pay-bonus", async (req, res): Promise<void> => {
       }
     }
 
+    dispatchWhatsAppReferralBonusPaid({
+      referrerId: row.referrerId,
+      referrerPhone: row.referrerClientWhatsapp ?? row.referrerClientPhone ?? null,
+      bonusAmount: bonusValue,
+      tenantId: me.tenantId,
+      tenantName: agencyName,
+    }).catch((err) => {
+      req.log.warn({ err }, "Failed to dispatch WhatsApp bonus-paid notification");
+    });
+
     const [updated] = await db.select({
       ...getTableColumns(referralsTable),
       referrerClientName: clientsTable.name,
@@ -417,6 +428,9 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
       requireFirstPurchase: z.boolean().optional(),
       shareMessage: z.string().optional(),
       tiersConfig: z.array(TierSchema).optional(),
+      whatsappEnabled: z.boolean().optional(),
+      whatsappConvertedMessage: z.string().optional(),
+      whatsappBonusPaidMessage: z.string().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -431,6 +445,9 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
     if (parsed.data.requireFirstPurchase != null) updates.requireFirstPurchase = parsed.data.requireFirstPurchase;
     if (parsed.data.shareMessage !== undefined) updates.shareMessage = parsed.data.shareMessage;
     if (parsed.data.tiersConfig !== undefined) updates.tiersConfig = parsed.data.tiersConfig as ReferralTier[];
+    if (parsed.data.whatsappEnabled != null) updates.whatsappEnabled = parsed.data.whatsappEnabled;
+    if (parsed.data.whatsappConvertedMessage !== undefined) updates.whatsappConvertedMessage = parsed.data.whatsappConvertedMessage;
+    if (parsed.data.whatsappBonusPaidMessage !== undefined) updates.whatsappBonusPaidMessage = parsed.data.whatsappBonusPaidMessage;
 
     const [existing] = await db.select({ id: referralSettingsTable.id })
       .from(referralSettingsTable).where(eq(referralSettingsTable.tenantId, me.tenantId)).limit(1);

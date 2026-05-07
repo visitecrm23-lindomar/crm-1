@@ -13,6 +13,7 @@ import { startEmailWorker, stopEmailWorker } from "./workers/email.worker";
 import { startReminderWorker, stopReminderWorker, retryFailedBookingEmails } from "./workers/reminder.worker";
 import { startPdfWorker, stopPdfWorker } from "./workers/pdf.worker";
 import { startCommissionSyncWorker, stopCommissionSyncWorker } from "./workers/commission-sync.worker";
+import { startWhatsAppWorker, stopWhatsAppWorker } from "./workers/whatsapp.worker";
 
 process.on("unhandledRejection", (reason: unknown) => {
   logger.error({ err: reason }, "Unhandled promise rejection — process kept alive");
@@ -124,6 +125,7 @@ applyMigrations()
       startReminderWorker();
       startPdfWorker();
       startCommissionSyncWorker();
+      startWhatsAppWorker();
       logger.info("[queue] BullMQ workers started");
 
       // Register repeatable reminder jobs (idempotent — BullMQ de-dups by key)
@@ -194,7 +196,7 @@ applyMigrations()
     // ── Graceful shutdown ──
     const shutdown = async (signal: string) => {
       logger.info({ signal }, "Shutdown signal received");
-      await Promise.all([stopEmailWorker(), stopReminderWorker(), stopPdfWorker(), stopCommissionSyncWorker(), closeQueues()]);
+      await Promise.all([stopEmailWorker(), stopReminderWorker(), stopPdfWorker(), stopCommissionSyncWorker(), stopWhatsAppWorker(), closeQueues()]);
       process.exit(0);
     };
     process.on("SIGTERM", () => void shutdown("SIGTERM"));

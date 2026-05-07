@@ -153,6 +153,9 @@ export default function Indicacoes() {
       requireFirstPurchase: settings?.requireFirstPurchase ?? true,
       shareMessage: settings?.shareMessage ?? "",
       tiersConfig: settings?.tiersConfig ?? DEFAULT_TIERS,
+      whatsappEnabled: settings?.whatsappEnabled ?? false,
+      whatsappConvertedMessage: settings?.whatsappConvertedMessage ?? "",
+      whatsappBonusPaidMessage: settings?.whatsappBonusPaidMessage ?? "",
     });
     setSettingsModalOpen(true);
   }
@@ -171,6 +174,9 @@ export default function Indicacoes() {
           requireFirstPurchase: localSettings.requireFirstPurchase,
           shareMessage: localSettings.shareMessage as string | undefined,
           tiersConfig: localSettings.tiersConfig as ReferralTierConfig[] | undefined,
+          whatsappEnabled: localSettings.whatsappEnabled,
+          whatsappConvertedMessage: localSettings.whatsappConvertedMessage as string | undefined,
+          whatsappBonusPaidMessage: localSettings.whatsappBonusPaidMessage as string | undefined,
         },
       });
       toast({ title: "Configurações salvas com sucesso" });
@@ -958,6 +964,43 @@ export default function Indicacoes() {
                 onChange={(e) => setLocalSettings((s) => ({ ...s, shareMessage: e.target.value }))}
                 placeholder="Use meu código e ganhe desconto na sua viagem!"
               />
+            </div>
+
+            <div className="space-y-3 border rounded-lg p-3 bg-green-50/50">
+              <div className="flex items-center justify-between">
+                <Label className="flex items-center gap-1.5 font-semibold text-green-800">
+                  <span className="text-base">📱</span>
+                  Notificações WhatsApp
+                </Label>
+                <Switch
+                  checked={localSettings.whatsappEnabled ?? false}
+                  onCheckedChange={(v) => setLocalSettings((s) => ({ ...s, whatsappEnabled: v }))}
+                />
+              </div>
+              {localSettings.whatsappEnabled && (
+                <>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Mensagem — conversão confirmada</Label>
+                    <textarea
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-y"
+                      value={localSettings.whatsappConvertedMessage as string ?? ""}
+                      onChange={(e) => setLocalSettings((s) => ({ ...s, whatsappConvertedMessage: e.target.value }))}
+                      placeholder="Boa notícia! {{nome}} usou seu código {{codigo}} e comprou com a {{agencia}}. Seu bônus de R$ {{valor}} está sendo processado."
+                    />
+                    <p className="text-[11px] text-muted-foreground">Variáveis: {"{{nome}}"}, {"{{codigo}}"}, {"{{agencia}}"}, {"{{valor}}"}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Mensagem — bônus pago</Label>
+                    <textarea
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-y"
+                      value={localSettings.whatsappBonusPaidMessage as string ?? ""}
+                      onChange={(e) => setLocalSettings((s) => ({ ...s, whatsappBonusPaidMessage: e.target.value }))}
+                      placeholder="Seu bônus de R$ {{valor}} foi pago! Obrigado por indicar clientes para a {{agencia}}."
+                    />
+                    <p className="text-[11px] text-muted-foreground">Variáveis: {"{{valor}}"}, {"{{agencia}}"}</p>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="space-y-2">
