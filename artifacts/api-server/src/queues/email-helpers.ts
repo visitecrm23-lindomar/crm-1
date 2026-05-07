@@ -1,7 +1,8 @@
 import { db, emailLogsTable, reservationsTable, tripsTable, clientsTable, referralSettingsTable, tenantsTable, storesTable, usersTable } from "@workspace/db";
 import { eq, and, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
-import { getEmailQueue, getCancellationEmailQueue, getNewBookingNotificationEmailQueue } from "./index";
+import { getEmailQueue, getCancellationEmailQueue, getNewBookingNotificationEmailQueue, getReferralEmailQueue } from "./index";
+import type { ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData } from "./index";
 import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail } from "@workspace/email";
 import { ROLES } from "@workspace/permissions";
 import { logger } from "../lib/logger";
@@ -520,7 +521,7 @@ export async function enqueueReferralBonusPaidEmail(
 ): Promise<void> {
   const emailLogId = generateId();
   const subject = `Seu bônus de indicação foi pago! — ${props.agencyName}`;
-  const queue = getEmailQueue();
+  const queue = getReferralEmailQueue();
 
   if (queue) {
     await db.insert(emailLogsTable).values({
@@ -533,7 +534,8 @@ export async function enqueueReferralBonusPaidEmail(
     });
 
     try {
-      await queue.add("referral-bonus-paid", { ...props, emailLogId, tenantId } as any);
+      const jobData: ReferralBonusPaidEmailJobData = { ...props, emailLogId, tenantId };
+      await queue.add("referral-bonus-paid", jobData);
       logger.info({ emailLogId, referrerEmail: props.referrerEmail }, "[email-queue] Referral bonus-paid email enqueued");
     } catch (enqueueErr) {
       logger.warn({ emailLogId, err: enqueueErr }, "[email-queue] Failed to enqueue referral bonus-paid — falling back to direct send");
@@ -571,7 +573,7 @@ export async function enqueueReferralConvertedEmail(
 ): Promise<void> {
   const emailLogId = generateId();
   const subject = `Sua indicação foi confirmada! — ${props.agencyName}`;
-  const queue = getEmailQueue();
+  const queue = getReferralEmailQueue();
 
   if (queue) {
     await db.insert(emailLogsTable).values({
@@ -584,7 +586,8 @@ export async function enqueueReferralConvertedEmail(
     });
 
     try {
-      await queue.add("referral-converted", { ...props, emailLogId, tenantId } as any);
+      const jobData: ReferralConvertedEmailJobData = { ...props, emailLogId, tenantId };
+      await queue.add("referral-converted", jobData);
       logger.info({ emailLogId, referrerEmail: props.referrerEmail }, "[email-queue] Referral converted email enqueued");
     } catch (enqueueErr) {
       logger.warn({ emailLogId, err: enqueueErr }, "[email-queue] Failed to enqueue referral converted — falling back to direct send");
@@ -622,7 +625,7 @@ export async function enqueueReferralExpiredEmail(
 ): Promise<void> {
   const emailLogId = generateId();
   const subject = `Sua indicação expirou — compartilhe novamente! — ${props.agencyName}`;
-  const queue = getEmailQueue();
+  const queue = getReferralEmailQueue();
 
   if (queue) {
     await db.insert(emailLogsTable).values({
@@ -635,7 +638,8 @@ export async function enqueueReferralExpiredEmail(
     });
 
     try {
-      await queue.add("referral-expired", { ...props, emailLogId, tenantId } as any);
+      const jobData: ReferralExpiredEmailJobData = { ...props, emailLogId, tenantId };
+      await queue.add("referral-expired", jobData);
       logger.info({ emailLogId, referrerEmail: props.referrerEmail }, "[email-queue] Referral expired email enqueued");
     } catch (enqueueErr) {
       logger.warn({ emailLogId, err: enqueueErr }, "[email-queue] Failed to enqueue referral expired — falling back to direct send");

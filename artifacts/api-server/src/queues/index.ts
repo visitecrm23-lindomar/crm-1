@@ -1,6 +1,6 @@
 import { Queue } from "bullmq";
 import { getRedisConnection } from "../lib/redis";
-import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, BirthdayEmailProps, NewBookingNotificationEmailProps } from "@workspace/email";
+import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, BirthdayEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps } from "@workspace/email";
 
 export interface ReservationEmailJobData extends ReservationConfirmationEmailProps {
   emailLogId: string;
@@ -29,8 +29,23 @@ export interface NewBookingNotificationEmailJobData extends NewBookingNotificati
   cc?: string[];
 }
 
+export interface ReferralBonusPaidEmailJobData extends ReferralBonusPaidEmailProps {
+  emailLogId: string;
+  tenantId: string;
+}
+
+export interface ReferralConvertedEmailJobData extends ReferralConvertedEmailProps {
+  emailLogId: string;
+  tenantId: string;
+}
+
+export interface ReferralExpiredEmailJobData extends ReferralExpiredEmailProps {
+  emailLogId: string;
+  tenantId: string;
+}
+
 export interface ReminderJobData {
-  type: "boarding_reminder" | "payment_reminder" | "expired_reservations_cleanup" | "failed_email_retry";
+  type: "boarding_reminder" | "payment_reminder" | "expired_reservations_cleanup" | "failed_email_retry" | "referral_expiry_notification";
 }
 
 export interface PdfManifestJobData {
@@ -87,10 +102,13 @@ const QUEUES = {
   COMMISSION_SYNC: "commission-sync",
 } as const;
 
+export type ReferralEmailJobData = ReferralBonusPaidEmailJobData | ReferralConvertedEmailJobData | ReferralExpiredEmailJobData;
+
 let _emailQueue: Queue<ReservationEmailJobData> | null = null;
 let _cancellationEmailQueue: Queue<CancellationEmailJobData> | null = null;
 let _birthdayEmailQueue: Queue<BirthdayEmailJobData> | null = null;
 let _newBookingNotificationEmailQueue: Queue<NewBookingNotificationEmailJobData> | null = null;
+let _referralEmailQueue: Queue<ReferralEmailJobData> | null = null;
 let _reminderQueue: Queue<ReminderJobData> | null = null;
 let _pdfQueue: Queue<PdfJobData> | null = null;
 let _commissionSyncQueue: Queue<CommissionSyncJobData> | null = null;
@@ -167,6 +185,24 @@ export function getNewBookingNotificationEmailQueue(): Queue<NewBookingNotificat
   return _newBookingNotificationEmailQueue;
 }
 
+export function getReferralEmailQueue(): Queue<ReferralEmailJobData> | null {
+  const conn = getRedisConnection();
+  if (!conn) return null;
+
+  if (!_referralEmailQueue) {
+    _referralEmailQueue = new Queue<ReferralEmailJobData>(QUEUES.EMAIL, {
+      connection: conn,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 10_000 },
+        removeOnComplete: { count: 500 },
+        removeOnFail: { count: 200 },
+      },
+    });
+  }
+  return _referralEmailQueue;
+}
+
 export function getReminderQueue(): Queue<ReminderJobData> | null {
   const conn = getRedisConnection();
   if (!conn) return null;
@@ -227,6 +263,7 @@ export async function closeQueues(): Promise<void> {
     _cancellationEmailQueue?.close().catch(() => {}),
     _birthdayEmailQueue?.close().catch(() => {}),
     _newBookingNotificationEmailQueue?.close().catch(() => {}),
+    _referralEmailQueue?.close().catch(() => {}),
     _reminderQueue?.close().catch(() => {}),
     _pdfQueue?.close().catch(() => {}),
     _commissionSyncQueue?.close().catch(() => {}),

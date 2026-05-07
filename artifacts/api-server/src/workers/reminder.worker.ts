@@ -1,7 +1,8 @@
 import { Worker } from "bullmq";
-import { db, reservationsTable, tripsTable, clientsTable, tenantsTable, paymentsTable, emailLogsTable, storesTable, usersTable } from "@workspace/db";
-import { eq, and, gt, sql, gte, lt, isNull, isNotNull, notLike, like, inArray } from "drizzle-orm";
+import { db, reservationsTable, tripsTable, clientsTable, tenantsTable, paymentsTable, emailLogsTable, storesTable, usersTable, referralsTable } from "@workspace/db";
+import { eq, and, gt, sql, gte, lt, lte, isNull, isNotNull, notLike, like, inArray, not, exists } from "drizzle-orm";
 import { sendReminderHtmlEmail, sendReservationConfirmationEmail } from "@workspace/email";
+import { dispatchReferralExpiredEmail } from "../queues/email-helpers";
 import { getRedisConnection } from "../lib/redis";
 import { logger } from "../lib/logger";
 import { runExpiredReservationsCron } from "../lib/expired-reservations";
@@ -658,6 +659,68 @@ export async function retryFailedBookingEmails(): Promise<void> {
 }
 
 // ────────────────────────────────────────────────────────────
+// Expired referral notifications
+// ────────────────────────────────────────────────────────────
+
+async function processExpiredReferralNotifications(): Promise<void> {
+  const now = new Date();
+  const dedupeWindow = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+  const expiredReferrals = await db
+    .select({
+      referrerId: referralsTable.referrerId,
+      tenantId: referralsTable.tenantId,
+      referrerEmail: referralsTable.referrerEmail,
+    })
+    .from(referralsTable)
+    .where(
+      and(
+        eq(referralsTable.isActive, true),
+        lte(referralsTable.expiresAt, now),
+        not(eq(referralsTable.status, "converted")),
+        isNotNull(referralsTable.referrerEmail),
+        not(
+          exists(
+            db
+              .select({ id: emailLogsTable.id })
+              .from(emailLogsTable)
+              .where(
+                and(
+                  eq(emailLogsTable.tenantId, referralsTable.tenantId),
+                  eq(emailLogsTable.recipient, sql`${referralsTable.referrerEmail}`),
+                  like(emailLogsTable.subject, "%expirou%"),
+                  gte(emailLogsTable.createdAt, dedupeWindow),
+                ),
+              ),
+          ),
+        ),
+      ),
+    );
+
+  const seen = new Set<string>();
+  let notified = 0, skipped = 0, errors = 0;
+
+  for (const referral of expiredReferrals) {
+    const key = `${referral.tenantId}:${referral.referrerId}`;
+    if (seen.has(key)) { skipped++; continue; }
+    seen.add(key);
+
+    try {
+      await dispatchReferralExpiredEmail(referral.referrerId, referral.tenantId);
+      notified++;
+    } catch (err) {
+      errors++;
+      logger.error(
+        { err, referrerId: referral.referrerId, tenantId: referral.tenantId },
+        "[expiry-referral] Failed to dispatch expired referral email",
+      );
+    }
+  }
+
+  logger.info({ notified, skipped, errors }, "[expiry-referral] Expired referral notification run complete");
+}
+
+// ────────────────────────────────────────────────────────────
 // Worker bootstrap
 // ────────────────────────────────────────────────────────────
 
@@ -683,6 +746,8 @@ export function startReminderWorker(): Worker<ReminderJobData> | null {
         await runExpiredReservationsCron();
       } else if (job.data.type === "failed_email_retry") {
         await retryFailedBookingEmails();
+      } else if (job.data.type === "referral_expiry_notification") {
+        await processExpiredReferralNotifications();
       } else {
         logger.warn({ type: job.data.type }, "[reminder-worker] Unknown reminder type");
       }

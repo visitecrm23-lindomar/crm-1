@@ -162,6 +162,13 @@ applyMigrations()
           { name: "failed_email_retry", data: { type: "failed_email_retry" } },
         ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule failed-email retry"));
 
+        // Expired referral notifications — daily at 09:00 BRT
+        await reminderQueue.upsertJobScheduler(
+          "referral-expiry-notification-daily",
+          { pattern: "0 9 * * *", tz: process.env["REMINDER_TZ"] ?? "America/Sao_Paulo" },
+          { name: "referral_expiry_notification", data: { type: "referral_expiry_notification" } },
+        ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule referral expiry notification"));
+
         logger.info("[reminders] Repeatable reminder jobs registered");
       }
     } else {
