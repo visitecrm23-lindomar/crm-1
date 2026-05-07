@@ -447,10 +447,15 @@ router.post("/referrals/:id/resend-expiry-warning", async (req, res): Promise<vo
       return;
     }
 
-    const msLeft = expiresAt.getTime() - now.getTime();
-    const daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
+    const clearUpdate = windowNum === 7
+      ? { expiryWarning7SentAt: null, updatedAt: now }
+      : { expiryWarning1SentAt: null, updatedAt: now };
 
-    await dispatchReferralExpiringSoonEmail(row.referrerId, me.tenantId, row.code, expiresAt, daysLeft);
+    await db.update(referralsTable)
+      .set(clearUpdate)
+      .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)));
+
+    await dispatchReferralExpiringSoonEmail(row.referrerId, me.tenantId, row.code, expiresAt, windowNum);
 
     const sentNow = new Date();
     const sentUpdate = windowNum === 7

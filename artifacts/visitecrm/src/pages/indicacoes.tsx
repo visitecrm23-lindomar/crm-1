@@ -951,51 +951,57 @@ export default function Indicacoes() {
           <DialogFooter>
             {selectedReferral && selectedReferral.expiresAt && (() => {
               const daysLeft = Math.ceil((new Date(selectedReferral.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-              if (daysLeft <= 0) return null;
+              const showD7 = daysLeft >= 7;
+              const showD1 = daysLeft >= 1;
+              if (!showD7 && !showD1) return null;
               return (
                 <>
-                  <Button
-                    variant="outline"
-                    className="border-amber-400 text-amber-700 hover:bg-amber-50"
-                    disabled={resendWarning.isPending}
-                    onClick={() => {
-                      resendWarning.mutate(
-                        { id: selectedReferral.id, window: 7 },
-                        {
-                          onSuccess: (updated) => {
-                            setSelectedReferral((prev) => prev ? { ...prev, ...updated } : prev);
-                            refetch();
-                            toast({ title: "Aviso D-7 reenviado com sucesso" });
+                  {showD7 && (
+                    <Button
+                      variant="outline"
+                      className="border-amber-400 text-amber-700 hover:bg-amber-50"
+                      disabled={resendWarning.isPending}
+                      onClick={() => {
+                        resendWarning.mutate(
+                          { id: selectedReferral.id, window: 7 },
+                          {
+                            onSuccess: (updated) => {
+                              setSelectedReferral((prev) => prev ? { ...prev, ...updated } : prev);
+                              refetch();
+                              toast({ title: "Aviso D-7 reenviado com sucesso" });
+                            },
+                            onError: () => toast({ title: "Erro ao reenviar aviso D-7", variant: "destructive" }),
                           },
-                          onError: () => toast({ title: "Erro ao reenviar aviso D-7", variant: "destructive" }),
-                        },
-                      );
-                    }}
-                  >
-                    <Mail className="w-4 h-4 mr-2" />
-                    Reenviar D-7
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="border-amber-400 text-amber-700 hover:bg-amber-50"
-                    disabled={resendWarning.isPending}
-                    onClick={() => {
-                      resendWarning.mutate(
-                        { id: selectedReferral.id, window: 1 },
-                        {
-                          onSuccess: (updated) => {
-                            setSelectedReferral((prev) => prev ? { ...prev, ...updated } : prev);
-                            refetch();
-                            toast({ title: "Aviso D-1 reenviado com sucesso" });
+                        );
+                      }}
+                    >
+                      <Mail className="w-4 h-4 mr-2" />
+                      Reenviar D-7
+                    </Button>
+                  )}
+                  {showD1 && (
+                    <Button
+                      variant="outline"
+                      className="border-amber-400 text-amber-700 hover:bg-amber-50"
+                      disabled={resendWarning.isPending}
+                      onClick={() => {
+                        resendWarning.mutate(
+                          { id: selectedReferral.id, window: 1 },
+                          {
+                            onSuccess: (updated) => {
+                              setSelectedReferral((prev) => prev ? { ...prev, ...updated } : prev);
+                              refetch();
+                              toast({ title: "Aviso D-1 reenviado com sucesso" });
+                            },
+                            onError: () => toast({ title: "Erro ao reenviar aviso D-1", variant: "destructive" }),
                           },
-                          onError: () => toast({ title: "Erro ao reenviar aviso D-1", variant: "destructive" }),
-                        },
-                      );
-                    }}
-                  >
-                    <Mail className="w-4 h-4 mr-2" />
-                    Reenviar D-1
-                  </Button>
+                        );
+                      }}
+                    >
+                      <Mail className="w-4 h-4 mr-2" />
+                      Reenviar D-1
+                    </Button>
+                  )}
                 </>
               );
             })()}
