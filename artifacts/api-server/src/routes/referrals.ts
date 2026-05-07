@@ -425,6 +425,7 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
         allowSelfReferral: (updates.allowSelfReferral as boolean | undefined) ?? false,
         requireFirstPurchase: (updates.requireFirstPurchase as boolean | undefined) ?? true,
         shareMessage: (updates.shareMessage as string | undefined) ?? null,
+        tiersConfig: (updates.tiersConfig as ReferralTier[] | undefined) ?? DEFAULT_TIERS_CONFIG,
       });
       const [settings] = await db.select().from(referralSettingsTable)
         .where(eq(referralSettingsTable.id, id)).limit(1);
