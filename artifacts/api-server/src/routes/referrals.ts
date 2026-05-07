@@ -1,11 +1,12 @@
 import { Router } from "express";
-import { db, referralsTable, clientsTable, referralSettingsTable, referralTrackingTable } from "@workspace/db";
-import { eq, and, desc, sql, count, ilike, or } from "drizzle-orm";
+import { db, referralsTable, clientsTable, referralSettingsTable, referralTrackingTable, tenantsTable } from "@workspace/db";
+import { eq, and, desc, sql, count, ilike, or, getTableColumns } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { REFERRAL_STATUS } from "@workspace/permissions";
+import { sendReminderHtmlEmail } from "@workspace/email";
 
 const router = Router();
 
@@ -117,18 +118,42 @@ router.get("/referrals", async (req, res): Promise<void> => {
         ilike(referralsTable.referrerName, `%${search}%`),
         ilike(referralsTable.referredEmail, `%${search}%`),
         ilike(referralsTable.referredName, `%${search}%`),
+        ilike(clientsTable.name, `%${search}%`),
+        ilike(clientsTable.email, `%${search}%`),
       )!);
     }
 
     const [totalRow] = await db.select({ total: count() }).from(referralsTable)
+      .leftJoin(clientsTable, and(
+        eq(referralsTable.referrerId, clientsTable.id),
+        eq(clientsTable.tenantId, me.tenantId),
+      ))
       .where(and(...conditions));
     const total = Number(totalRow?.total ?? 0);
 
-    const referrals = await db.select().from(referralsTable)
+    const rows = await db.select({
+      ...getTableColumns(referralsTable),
+      referrerClientName: clientsTable.name,
+      referrerClientEmail: clientsTable.email,
+      referrerClientWhatsapp: clientsTable.whatsapp,
+      referrerClientPhone: clientsTable.phone,
+    }).from(referralsTable)
+      .leftJoin(clientsTable, and(
+        eq(referralsTable.referrerId, clientsTable.id),
+        eq(clientsTable.tenantId, me.tenantId),
+      ))
       .where(and(...conditions))
       .orderBy(desc(referralsTable.createdAt))
       .limit(limit)
       .offset(offset);
+
+    const referrals = rows.map(({ referrerClientName, referrerClientEmail, referrerClientWhatsapp, referrerClientPhone, ...r }) => ({
+      ...r,
+      referrerName: referrerClientName ?? r.referrerName,
+      referrerEmail: referrerClientEmail ?? r.referrerEmail,
+      referrerPhone: referrerClientPhone ?? r.referrerPhone,
+      referrerWhatsapp: referrerClientWhatsapp ?? null,
+    }));
 
     res.json({
       data: referrals,
@@ -183,6 +208,106 @@ router.patch("/referrals/:id", async (req, res): Promise<void> => {
     res.json(referral);
   } catch (err) {
     req.log.error({ err }, "Error updating referral");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/referrals/:id/pay-bonus", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const [row] = await db.select({
+      ...getTableColumns(referralsTable),
+      referrerClientName: clientsTable.name,
+      referrerClientEmail: clientsTable.email,
+      referrerClientWhatsapp: clientsTable.whatsapp,
+      referrerClientPhone: clientsTable.phone,
+      tenantName: tenantsTable.name,
+    }).from(referralsTable)
+      .leftJoin(clientsTable, and(
+        eq(referralsTable.referrerId, clientsTable.id),
+        eq(clientsTable.tenantId, me.tenantId),
+      ))
+      .leftJoin(tenantsTable, eq(referralsTable.tenantId, tenantsTable.id))
+      .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
+      .limit(1);
+
+    if (!row) { res.status(404).json({ error: "Indicação não encontrada" }); return; }
+    if (row.status !== REFERRAL_STATUS.COMPLETED) {
+      res.status(422).json({ error: "Bônus só pode ser pago em indicações convertidas" });
+      return;
+    }
+    if (row.bonusPaid) {
+      res.status(422).json({ error: "Bônus já foi pago anteriormente" });
+      return;
+    }
+
+    const now = new Date();
+    await db.update(referralsTable)
+      .set({ bonusPaid: true, bonusPaidAt: now, updatedAt: now })
+      .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)));
+
+    const referrerEmail = row.referrerClientEmail ?? row.referrerEmail;
+    const referrerName = row.referrerClientName ?? row.referrerName ?? "Indicador";
+    const agencyName = row.tenantName ?? "Agência";
+    const bonusValue = parseFloat(String(row.bonusAmount ?? "0"));
+    const paidDateStr = now.toLocaleDateString("pt-BR");
+
+    if (referrerEmail) {
+      try {
+        await sendReminderHtmlEmail({
+          to: referrerEmail,
+          subject: "Seu bônus de indicação foi pago!",
+          fromName: agencyName,
+          html: `
+            <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
+              <h2 style="color:#1a1a2e;margin-bottom:8px">Bônus de Indicação Pago!</h2>
+              <p>Olá, <strong>${referrerName}</strong>!</p>
+              <p>A <strong>${agencyName}</strong> confirmou o pagamento do seu bônus de indicação.</p>
+              <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:20px;margin:20px 0;text-align:center">
+                <p style="margin:0;font-size:2rem;font-weight:bold;color:#16a34a">
+                  R$ ${bonusValue.toFixed(2).replace(".", ",")}
+                </p>
+                <p style="margin:6px 0 0;color:#15803d;font-size:0.9rem">Pago em ${paidDateStr}</p>
+              </div>
+              <p>Obrigado por continuar indicando nossos serviços! Continue compartilhando seu código e ganhe mais bônus.</p>
+              <p style="color:#6b7280;font-size:0.875rem;margin-top:24px">${agencyName}</p>
+            </div>
+          `,
+        });
+      } catch (emailErr) {
+        req.log.warn({ emailErr }, "Failed to send bonus payment email — bonus still marked as paid");
+      }
+    }
+
+    const [updated] = await db.select({
+      ...getTableColumns(referralsTable),
+      referrerClientName: clientsTable.name,
+      referrerClientEmail: clientsTable.email,
+      referrerClientWhatsapp: clientsTable.whatsapp,
+      referrerClientPhone: clientsTable.phone,
+    }).from(referralsTable)
+      .leftJoin(clientsTable, and(
+        eq(referralsTable.referrerId, clientsTable.id),
+        eq(clientsTable.tenantId, me.tenantId),
+      ))
+      .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
+      .limit(1);
+
+    if (!updated) { res.status(404).json({ error: "Not found" }); return; }
+
+    const { referrerClientName, referrerClientEmail, referrerClientWhatsapp, referrerClientPhone, ...rest } = updated;
+    res.json({
+      ...rest,
+      referrerName: referrerClientName ?? rest.referrerName,
+      referrerEmail: referrerClientEmail ?? rest.referrerEmail,
+      referrerPhone: referrerClientPhone ?? rest.referrerPhone,
+      referrerWhatsapp: referrerClientWhatsapp ?? null,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error paying referral bonus");
     res.status(500).json({ error: "Internal server error" });
   }
 });

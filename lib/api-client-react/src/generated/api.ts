@@ -14507,6 +14507,86 @@ export const useUpdateReferral = <
 };
 
 /**
+ * @summary Pay referral bonus and send confirmation email
+ */
+export const getPayReferralBonusUrl = (id: string) => {
+  return `/api/referrals/${id}/pay-bonus`;
+};
+
+export const payReferralBonus = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Referral> => {
+  return customFetch<Referral>(getPayReferralBonusUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+  });
+};
+
+export const getPayReferralBonusMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof payReferralBonus>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof payReferralBonus>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["payReferralBonus"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof payReferralBonus>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+    return payReferralBonus(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PayReferralBonusMutationResult = NonNullable<
+  Awaited<ReturnType<typeof payReferralBonus>>
+>;
+export type PayReferralBonusMutationError = ErrorType<unknown>;
+
+export const usePayReferralBonus = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof payReferralBonus>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof payReferralBonus>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getPayReferralBonusMutationOptions(options));
+};
+
+/**
  * @summary List coupons
  */
 export const getListCouponsUrl = () => {

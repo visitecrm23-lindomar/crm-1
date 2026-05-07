@@ -5,6 +5,7 @@ import {
   useGetReferralStats,
   useGetReferralSettings,
   useUpdateReferralSettings,
+  usePayReferralBonus,
 } from "@workspace/api-client-react";
 import type { Referral, ReferralSettings } from "@workspace/api-client-react";
 import { REFERRAL_STATUS } from "@workspace/permissions";
@@ -26,6 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -46,6 +48,10 @@ import {
   Eye,
   Trophy,
   Medal,
+  MessageCircle,
+  Mail,
+  Phone,
+  Wallet,
 } from "lucide-react";
 
 import { formatCurrency as _fmtCurrencyLib, formatDate as _formatDate } from "@/lib/utils";
@@ -55,6 +61,11 @@ function fmtCurrency(v: string | number | null | undefined) {
   return _fmtCurrencyLib(isNaN(n) ? 0 : n);
 }
 const fmtDate = (v: string | null | undefined) => v ? _formatDate(v) : "—";
+
+function fmtWhatsapp(w: string | null | undefined) {
+  if (!w) return null;
+  return w.replace(/\D/g, "");
+}
 
 const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   pending: { label: "Pendente", variant: "secondary" },
@@ -68,22 +79,27 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant={s.variant}>{s.label}</Badge>;
 }
 
+type EnrichedReferral = Referral & { referrerWhatsapp?: string | null };
+
 export default function Indicacoes() {
   const { toast } = useToast();
   const { data: referralsResponse, refetch } = useListReferrals();
-  const referrals = (referralsResponse as { data?: Referral[] } | undefined)?.data ?? (Array.isArray(referralsResponse) ? referralsResponse as Referral[] : []);
+  const referrals = ((referralsResponse as { data?: EnrichedReferral[] } | undefined)?.data ?? (Array.isArray(referralsResponse) ? referralsResponse as EnrichedReferral[] : [])) as EnrichedReferral[];
   const { data: stats } = useGetReferralStats();
   const { data: settings, refetch: refetchSettings } = useGetReferralSettings();
   const updateReferral = useUpdateReferral();
   const updateSettings = useUpdateReferralSettings();
+  const payBonus = usePayReferralBonus();
 
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
-  const [selectedReferral, setSelectedReferral] = useState<Referral | null>(null);
+  const [selectedReferral, setSelectedReferral] = useState<EnrichedReferral | null>(null);
+  const [payBonusDialogOpen, setPayBonusDialogOpen] = useState(false);
+  const [payBonusTarget, setPayBonusTarget] = useState<EnrichedReferral | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [bonusFilter, setBonusFilter] = useState<"all" | "unpaid">("all");
 
-  // Settings form state
   const [localSettings, setLocalSettings] = useState<Partial<ReferralSettings>>({});
 
   function openSettings() {
@@ -124,7 +140,7 @@ export default function Indicacoes() {
     }
   }
 
-  async function handleDeactivate(r: Referral) {
+  async function handleDeactivate(r: EnrichedReferral) {
     try {
       await updateReferral.mutateAsync({
         id: r.id,
@@ -137,40 +153,51 @@ export default function Indicacoes() {
     }
   }
 
-  async function handleMarkPaid(r: Referral) {
+  function openPayBonusDialog(r: EnrichedReferral) {
+    setPayBonusTarget(r);
+    setPayBonusDialogOpen(true);
+  }
+
+  async function confirmPayBonus() {
+    if (!payBonusTarget) return;
     try {
-      await updateReferral.mutateAsync({
-        id: r.id,
-        data: { bonusPaid: true },
-      });
-      toast({ title: "Bônus marcado como pago" });
+      const updated = await payBonus.mutateAsync({ id: payBonusTarget.id });
+      toast({ title: "Bônus marcado como pago! E-mail de confirmação enviado ao indicador." });
       refetch();
-      setDetailModalOpen(false);
+      setPayBonusDialogOpen(false);
+      setPayBonusTarget(null);
+      if (selectedReferral?.id === updated.id) {
+        setSelectedReferral(updated as EnrichedReferral);
+      }
     } catch {
-      toast({ title: "Erro ao atualizar indicação", variant: "destructive" });
+      toast({ title: "Erro ao registrar pagamento de bônus", variant: "destructive" });
     }
   }
 
-  function openDetail(r: Referral) {
+  function openDetail(r: EnrichedReferral) {
     setSelectedReferral(r);
     setDetailModalOpen(true);
   }
 
-  // Filtered referrals
   const filtered = referrals.filter((r) => {
     const matchStatus = statusFilter === "all" || r.status === statusFilter;
+    const matchBonus = bonusFilter === "all" || (bonusFilter === "unpaid" && !r.bonusPaid);
     const q = searchQuery.toLowerCase();
     const matchSearch = !q
       || r.code.toLowerCase().includes(q)
       || (r.referrerName ?? "").toLowerCase().includes(q)
+      || (r.referrerEmail ?? "").toLowerCase().includes(q)
+      || ((r as EnrichedReferral).referrerWhatsapp ?? "").toLowerCase().includes(q)
       || (r.referredEmail ?? "").toLowerCase().includes(q)
       || (r.referredName ?? "").toLowerCase().includes(q);
-    return matchStatus && matchSearch;
+    return matchStatus && matchSearch && matchBonus;
   });
 
   const settingsDiscountPct = settings ? parseFloat(String(settings.discountValue)) : 5;
   const settingsBonusVal = settings ? parseFloat(String(settings.bonusValue)) : 10;
   const isEnabled = settings?.isEnabled ?? true;
+
+  const pendingBonusCount = referrals.filter(r => r.status === REFERRAL_STATUS.COMPLETED && !r.bonusPaid).length;
 
   return (
     <div className="space-y-6">
@@ -179,13 +206,19 @@ export default function Indicacoes() {
         <div>
           <h1 className="text-2xl font-bold">Programa de Indicações</h1>
           <p className="text-sm text-muted-foreground">
-            Gerencie indicações, conversões e configurações do programa
+            Gerencie indicações, conversões e pagamentos de bônus
           </p>
         </div>
         <div className="flex items-center gap-2">
           {!isEnabled && (
             <Badge variant="destructive" className="text-sm px-3 py-1">
               Programa desativado
+            </Badge>
+          )}
+          {pendingBonusCount > 0 && (
+            <Badge variant="outline" className="text-sm px-3 py-1 border-amber-400 text-amber-700 bg-amber-50">
+              <Wallet className="w-3 h-3 mr-1" />
+              {pendingBonusCount} bônus pendente{pendingBonusCount > 1 ? "s" : ""}
             </Badge>
           )}
           <Button variant="outline" onClick={openSettings}>
@@ -285,21 +318,39 @@ export default function Indicacoes() {
 
       {/* Top Referrers Ranking */}
       {(() => {
-        const rankMap = new Map<string, { name: string; code: string; total: number; conversions: number; earnings: number }>();
+        type RankEntry = {
+          name: string;
+          email: string | null;
+          whatsapp: string | null;
+          code: string;
+          total: number;
+          conversions: number;
+          earnings: number;
+          paidEarnings: number;
+        };
+        const rankMap = new Map<string, RankEntry>();
         for (const r of referrals) {
           const key = r.referrerId;
           const existing = rankMap.get(key);
           const bonus = parseFloat(String(r.bonusAmount ?? "0")) || 0;
+          const isPaid = r.bonusPaid;
           if (existing) {
             existing.total += 1;
-            if (r.status === REFERRAL_STATUS.COMPLETED) { existing.conversions += 1; existing.earnings += bonus; }
+            if (r.status === REFERRAL_STATUS.COMPLETED) {
+              existing.conversions += 1;
+              existing.earnings += bonus;
+              if (isPaid) existing.paidEarnings += bonus;
+            }
           } else {
             rankMap.set(key, {
               name: r.referrerName ?? r.referrerId.slice(0, 8),
+              email: r.referrerEmail ?? null,
+              whatsapp: (r as EnrichedReferral).referrerWhatsapp ?? null,
               code: r.code,
               total: 1,
               conversions: r.status === REFERRAL_STATUS.COMPLETED ? 1 : 0,
               earnings: r.status === REFERRAL_STATUS.COMPLETED ? bonus : 0,
+              paidEarnings: r.status === REFERRAL_STATUS.COMPLETED && isPaid ? bonus : 0,
             });
           }
         }
@@ -330,24 +381,50 @@ export default function Indicacoes() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-8">#</TableHead>
-                    <TableHead>Nome</TableHead>
+                    <TableHead>Indicador</TableHead>
                     <TableHead>Código</TableHead>
                     <TableHead className="text-center">Indicações</TableHead>
                     <TableHead className="text-center">Convertidas</TableHead>
-                    <TableHead className="text-right">Bônus ganho</TableHead>
+                    <TableHead className="text-right">Bônus total</TableHead>
+                    <TableHead className="text-right">Já pago</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {ranked.map((r, i) => (
                     <TableRow key={r.code + i}>
                       <TableCell className="py-2">{rankIcon(i)}</TableCell>
-                      <TableCell className="font-medium py-2">{r.name}</TableCell>
+                      <TableCell className="py-2">
+                        <p className="font-medium leading-tight">{r.name}</p>
+                        {r.email && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <Mail className="w-2.5 h-2.5" />
+                            {r.email}
+                          </p>
+                        )}
+                        {r.whatsapp && (
+                          <a
+                            href={`https://wa.me/55${fmtWhatsapp(r.whatsapp)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-green-600 flex items-center gap-1 mt-0.5 hover:underline"
+                          >
+                            <MessageCircle className="w-2.5 h-2.5" />
+                            {r.whatsapp}
+                          </a>
+                        )}
+                      </TableCell>
                       <TableCell className="font-mono text-primary py-2">{r.code}</TableCell>
                       <TableCell className="text-center py-2">{r.total}</TableCell>
                       <TableCell className="text-center py-2">
                         <Badge variant={r.conversions > 0 ? "default" : "secondary"}>{r.conversions}</Badge>
                       </TableCell>
                       <TableCell className="text-right py-2 text-green-600 font-medium">{fmtCurrency(r.earnings)}</TableCell>
+                      <TableCell className="text-right py-2">
+                        {r.paidEarnings > 0
+                          ? <span className="text-green-700 font-medium">{fmtCurrency(r.paidEarnings)}</span>
+                          : <span className="text-muted-foreground text-xs">—</span>
+                        }
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -359,15 +436,25 @@ export default function Indicacoes() {
 
       {/* Referrals Table */}
       <Tabs defaultValue="all">
-        <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-center gap-3 mb-3 flex-wrap">
           <TabsList>
-            <TabsTrigger value="all" onClick={() => setStatusFilter("all")}>Todas</TabsTrigger>
-            <TabsTrigger value="pending" onClick={() => setStatusFilter("pending")}>Pendentes</TabsTrigger>
-            <TabsTrigger value="completed" onClick={() => setStatusFilter("completed")}>Convertidas</TabsTrigger>
-            <TabsTrigger value="expired" onClick={() => setStatusFilter("expired")}>Expiradas</TabsTrigger>
+            <TabsTrigger value="all" onClick={() => { setStatusFilter("all"); setBonusFilter("all"); }}>Todas</TabsTrigger>
+            <TabsTrigger value="pending" onClick={() => { setStatusFilter("pending"); setBonusFilter("all"); }}>Pendentes</TabsTrigger>
+            <TabsTrigger value="completed" onClick={() => { setStatusFilter("completed"); setBonusFilter("all"); }}>
+              Convertidas
+            </TabsTrigger>
+            <TabsTrigger value="completed-unpaid" onClick={() => { setStatusFilter("completed"); setBonusFilter("unpaid"); }}>
+              Bônus pendente
+              {pendingBonusCount > 0 && (
+                <Badge variant="destructive" className="ml-1.5 px-1.5 py-0 text-xs h-4">
+                  {pendingBonusCount}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="expired" onClick={() => { setStatusFilter("expired"); setBonusFilter("all"); }}>Expiradas</TabsTrigger>
           </TabsList>
           <Input
-            placeholder="Buscar por código, nome ou e-mail..."
+            placeholder="Buscar por código, nome, e-mail ou WhatsApp..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="max-w-xs"
@@ -375,74 +462,179 @@ export default function Indicacoes() {
           <span className="text-sm text-muted-foreground ml-auto">{filtered.length} indicações</span>
         </div>
 
-        <TabsContent value={statusFilter}>
-          {filtered.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center text-muted-foreground">
-                <BarChart3 className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                Nenhuma indicação encontrada
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Código</TableHead>
-                    <TableHead>Quem indicou</TableHead>
-                    <TableHead>Indicado</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Desconto</TableHead>
-                    <TableHead>Visitas</TableHead>
-                    <TableHead>Criado em</TableHead>
-                    <TableHead>Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell className="font-mono font-semibold text-primary">{r.code}</TableCell>
-                      <TableCell>{r.referrerName ?? r.referrerId.slice(0, 8)}</TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="text-sm">{r.referredName ?? "—"}</p>
-                          <p className="text-xs text-muted-foreground">{r.referredEmail ?? ""}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={r.status} />
-                        {!r.isActive && <Badge variant="outline" className="ml-1 text-xs">inativo</Badge>}
-                      </TableCell>
-                      <TableCell>
-                        {r.discountApplied
-                          ? fmtCurrency(r.discountAmount)
-                          : `${r.discountValue}%`}
-                      </TableCell>
-                      <TableCell>{r.visitsCount ?? 0}</TableCell>
-                      <TableCell>{fmtDate(r.createdAt)}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button size="sm" variant="ghost" onClick={() => openDetail(r)}>
-                            <Eye className="w-3 h-3" />
-                          </Button>
-                          {r.isActive && r.status === REFERRAL_STATUS.PENDING && (
-                            <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDeactivate(r)}>
-                              <Ban className="w-3 h-3" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
+        {["all", "pending", "completed", "completed-unpaid", "expired"].map((tabVal) => (
+          <TabsContent key={tabVal} value={tabVal}>
+            {filtered.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  <BarChart3 className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  Nenhuma indicação encontrada
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Código</TableHead>
+                      <TableHead>Quem indicou</TableHead>
+                      <TableHead>Indicado</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Bônus</TableHead>
+                      <TableHead>Desconto</TableHead>
+                      <TableHead>Visitas</TableHead>
+                      <TableHead>Criado em</TableHead>
+                      <TableHead>Ações</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Card>
-          )}
-        </TabsContent>
-        <TabsContent value="pending" />
-        <TabsContent value="completed" />
-        <TabsContent value="expired" />
+                  </TableHeader>
+                  <TableBody>
+                    {filtered.map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell className="font-mono font-semibold text-primary">{r.code}</TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-sm leading-tight">
+                              {r.referrerName ?? r.referrerId.slice(0, 8)}
+                            </p>
+                            {r.referrerEmail && (
+                              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                <Mail className="w-2.5 h-2.5 shrink-0" />
+                                {r.referrerEmail}
+                              </p>
+                            )}
+                            {(r as EnrichedReferral).referrerWhatsapp && (
+                              <a
+                                href={`https://wa.me/55${fmtWhatsapp((r as EnrichedReferral).referrerWhatsapp)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-green-600 flex items-center gap-1 mt-0.5 hover:underline"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MessageCircle className="w-2.5 h-2.5 shrink-0" />
+                                {(r as EnrichedReferral).referrerWhatsapp}
+                              </a>
+                            )}
+                            {r.referrerPhone && !(r as EnrichedReferral).referrerWhatsapp && (
+                              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                <Phone className="w-2.5 h-2.5 shrink-0" />
+                                {r.referrerPhone}
+                              </p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="text-sm">{r.referredName ?? "—"}</p>
+                            <p className="text-xs text-muted-foreground">{r.referredEmail ?? ""}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={r.status} />
+                          {!r.isActive && <Badge variant="outline" className="ml-1 text-xs">inativo</Badge>}
+                        </TableCell>
+                        <TableCell>
+                          {r.status === REFERRAL_STATUS.COMPLETED ? (
+                            <div>
+                              <p className="text-sm font-medium text-green-600">{fmtCurrency(r.bonusAmount)}</p>
+                              {r.bonusPaid ? (
+                                <p className="text-xs text-green-700 flex items-center gap-0.5">
+                                  <Check className="w-2.5 h-2.5" />
+                                  Pago {r.bonusPaidAt ? `em ${fmtDate(r.bonusPaidAt)}` : ""}
+                                </p>
+                              ) : (
+                                <p className="text-xs text-amber-600">Pendente</p>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {r.discountApplied
+                            ? fmtCurrency(r.discountAmount)
+                            : `${r.discountValue}%`}
+                        </TableCell>
+                        <TableCell>{r.visitsCount ?? 0}</TableCell>
+                        <TableCell>{fmtDate(r.createdAt)}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button size="sm" variant="ghost" onClick={() => openDetail(r)} title="Ver detalhes">
+                              <Eye className="w-3 h-3" />
+                            </Button>
+                            {r.status === REFERRAL_STATUS.COMPLETED && !r.bonusPaid && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                onClick={() => openPayBonusDialog(r)}
+                                title="Pagar bônus"
+                              >
+                                <Wallet className="w-3 h-3" />
+                              </Button>
+                            )}
+                            {r.isActive && r.status === REFERRAL_STATUS.PENDING && (
+                              <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDeactivate(r)} title="Desativar">
+                                <Ban className="w-3 h-3" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Card>
+            )}
+          </TabsContent>
+        ))}
       </Tabs>
+
+      {/* Pay Bonus Confirmation Dialog */}
+      <Dialog open={payBonusDialogOpen} onOpenChange={setPayBonusDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmar Pagamento de Bônus</DialogTitle>
+            <DialogDescription>
+              Isso marcará o bônus como pago e enviará um e-mail de confirmação ao indicador.
+            </DialogDescription>
+          </DialogHeader>
+          {payBonusTarget && (
+            <div className="space-y-3 py-2">
+              <div className="bg-muted rounded-lg p-4 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Indicador</span>
+                  <span className="font-medium">{payBonusTarget.referrerName ?? payBonusTarget.referrerId.slice(0, 8)}</span>
+                </div>
+                {payBonusTarget.referrerEmail && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">E-mail</span>
+                    <span className="text-sm">{payBonusTarget.referrerEmail}</span>
+                  </div>
+                )}
+                {(payBonusTarget as EnrichedReferral).referrerWhatsapp && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">WhatsApp</span>
+                    <span className="text-sm">{(payBonusTarget as EnrichedReferral).referrerWhatsapp}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t pt-2">
+                  <span className="text-muted-foreground">Valor do bônus</span>
+                  <span className="font-bold text-green-600 text-base">{fmtCurrency(payBonusTarget.bonusAmount)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPayBonusDialogOpen(false)} disabled={payBonus.isPending}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmPayBonus} disabled={payBonus.isPending} className="bg-green-600 hover:bg-green-700">
+              <Check className="w-4 h-4 mr-2" />
+              {payBonus.isPending ? "Processando..." : "Confirmar pagamento"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Detail Modal */}
       <Dialog open={detailModalOpen} onOpenChange={setDetailModalOpen}>
@@ -452,19 +644,49 @@ export default function Indicacoes() {
           </DialogHeader>
           {selectedReferral && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Código</p>
-                  <p className="font-mono font-bold text-primary">{selectedReferral.code}</p>
+              {/* Referrer info block */}
+              <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dados do Indicador</p>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <p className="font-medium text-sm">{selectedReferral.referrerName ?? "—"}</p>
+                    <span className="text-xs text-muted-foreground font-mono ml-auto">{selectedReferral.code}</span>
+                  </div>
+                  {selectedReferral.referrerEmail && (
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <a href={`mailto:${selectedReferral.referrerEmail}`} className="text-sm hover:underline text-blue-600">
+                        {selectedReferral.referrerEmail}
+                      </a>
+                    </div>
+                  )}
+                  {(selectedReferral as EnrichedReferral).referrerWhatsapp && (
+                    <div className="flex items-center gap-2">
+                      <MessageCircle className="w-3.5 h-3.5 text-green-600 shrink-0" />
+                      <a
+                        href={`https://wa.me/55${fmtWhatsapp((selectedReferral as EnrichedReferral).referrerWhatsapp)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-green-600 hover:underline"
+                      >
+                        {(selectedReferral as EnrichedReferral).referrerWhatsapp}
+                      </a>
+                    </div>
+                  )}
+                  {selectedReferral.referrerPhone && !(selectedReferral as EnrichedReferral).referrerWhatsapp && (
+                    <div className="flex items-center gap-2">
+                      <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <p className="text-sm">{selectedReferral.referrerPhone}</p>
+                    </div>
+                  )}
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
                   <p className="text-muted-foreground">Status</p>
                   <StatusBadge status={selectedReferral.status} />
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Quem indicou</p>
-                  <p>{selectedReferral.referrerName ?? "—"}</p>
-                  <p className="text-xs text-muted-foreground">{selectedReferral.referrerEmail ?? ""}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Indicado</p>
@@ -477,8 +699,15 @@ export default function Indicacoes() {
                 </div>
                 <div>
                   <p className="text-muted-foreground">Bônus</p>
-                  <p className="text-green-600">{fmtCurrency(selectedReferral.bonusAmount)}</p>
-                  <p className="text-xs text-muted-foreground">{selectedReferral.bonusPaid ? "Pago" : "Pendente"}</p>
+                  <p className="text-green-600 font-semibold">{fmtCurrency(selectedReferral.bonusAmount)}</p>
+                  {selectedReferral.bonusPaid ? (
+                    <p className="text-xs text-green-700 flex items-center gap-1">
+                      <Check className="w-3 h-3" />
+                      Pago {selectedReferral.bonusPaidAt ? `em ${fmtDate(selectedReferral.bonusPaidAt)}` : ""}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-amber-600">Pendente</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-muted-foreground">Visitas</p>
@@ -513,9 +742,12 @@ export default function Indicacoes() {
           )}
           <DialogFooter>
             {selectedReferral && selectedReferral.status === REFERRAL_STATUS.COMPLETED && !selectedReferral.bonusPaid && (
-              <Button onClick={() => handleMarkPaid(selectedReferral)}>
-                <Check className="w-4 h-4 mr-2" />
-                Marcar bônus como pago
+              <Button
+                onClick={() => { setDetailModalOpen(false); openPayBonusDialog(selectedReferral); }}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Wallet className="w-4 h-4 mr-2" />
+                Pagar Bônus
               </Button>
             )}
             <Button variant="outline" onClick={() => setDetailModalOpen(false)}>Fechar</Button>

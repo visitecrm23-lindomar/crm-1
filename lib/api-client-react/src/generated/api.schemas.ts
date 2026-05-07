@@ -2246,6 +2246,8 @@ export interface Referral {
   referrerEmail?: string | null;
   /** @nullable */
   referrerPhone?: string | null;
+  /** @nullable */
+  referrerWhatsapp?: string | null;
   code: string;
   status: string;
   bonusAmount: string;
