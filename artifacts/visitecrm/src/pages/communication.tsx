@@ -895,10 +895,10 @@ export default function Communication() {
                           <Badge variant="outline" className="text-xs">
                             {log.reservationId ? "Confirmação" : "Transacional"}
                           </Badge>
-                          {!log.reservationId && /vence em \d+ dia|⏰/.test(log.subject ?? "") && (
+                          {!log.reservationId && REFERRAL_EMAIL_RE.test(log.subject ?? "") && /vence em \d+ dia|⏰/.test(log.subject ?? "") && (
                             <Badge className="text-xs bg-amber-50 text-amber-700 border-amber-300" variant="outline">
                               <Clock className="w-3 h-3 mr-1" />
-                              Aviso expiração
+                              Aviso de expiração
                             </Badge>
                           )}
                           {log.isAutoRetry && (
