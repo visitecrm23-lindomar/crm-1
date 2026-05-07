@@ -332,7 +332,7 @@ export default function Indicacoes() {
             size="sm"
             variant="outline"
             className="shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100"
-            onClick={() => { setStatusFilter("expiringSoon"); setFraudFilter(false); setBonusFilter("all"); setSearchQuery(""); }}
+            onClick={() => applyTab("expiringSoon")}
           >
             Ver que expiram em breve
           </Button>
@@ -601,7 +601,7 @@ export default function Indicacoes() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="max-w-xs"
-            disabled={fraudFilter}
+            disabled={fraudFilter || statusFilter === "expiringSoon"}
           />
           <span className="text-sm text-muted-foreground ml-auto">{filtered.length} indicações</span>
         </div>
