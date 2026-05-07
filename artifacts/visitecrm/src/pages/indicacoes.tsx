@@ -309,7 +309,7 @@ export default function Indicacoes() {
             size="sm"
             variant="outline"
             className="shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100"
-            onClick={() => setStatusFilter("expiringSoon")}
+            onClick={() => { setStatusFilter("expiringSoon"); setFraudFilter(false); setBonusFilter("all"); setSearchQuery(""); }}
           >
             Ver que expiram em breve
           </Button>
