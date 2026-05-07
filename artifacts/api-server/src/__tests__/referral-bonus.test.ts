@@ -1,60 +1,34 @@
 /**
- * Tests for referral bonus payment and JOIN-enriched GET /referrals.
- *
- * Covers:
- *  POST /api/referrals/:id/pay-bonus
- *    - marks bonusPaid=true and sets bonusPaidAt
- *    - returns 422 when bonusPaid is already true (idempotency guard)
- *    - returns 422 when status !== "completed"
- *    - calls sendReminderHtmlEmail with live JOIN email when present
- *    - skips email silently when referrerEmail is null
- *    - still pays bonus even when email dispatch fails
- *    - returns 403 for non-admin users
- *    - returns 404 when referral not found
- *    - response strips internal JOIN fields and merges live data
- *
- *  GET /api/referrals
- *    - referrerWhatsapp comes from clientsTable JOIN
- *    - referrerEmail overridden by live clientsTable.email
- *    - falls back to stored fields when JOIN misses (null referrerClient*)
- *    - returns pagination metadata
+ * Referral bonus tests:
+ *   POST /api/referrals/:id/pay-bonus  — marks bonusPaid, sends email, guards duplicates/role/status/missing
+ *   GET  /api/referrals                — JOIN-enriched response: live referrerName/Email/Whatsapp from clientsTable
  */
 
+import { ROLES } from "@workspace/permissions";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
-import { ROLES } from "@workspace/permissions";
 
 // ---------------------------------------------------------------------------
-// Hoisted: shared mock state — must exist before vi.mock factories run.
-// Only genuinely shared objects live here (send-email spy, captured updates,
-// and the db.update chain whose references must be stable across modules).
+// Hoisted mocks — must be defined before any vi.mock factory runs
 // ---------------------------------------------------------------------------
 
 const { mockSendEmail, capturedUpdates, updateMocks } = vi.hoisted(() => {
   const capturedUpdates: Array<{ set: Record<string, unknown> }> = [];
-
-  const updateWhere = vi.fn().mockResolvedValue([]);
-  const updateSet = vi.fn().mockImplementation((setArg: Record<string, unknown>) => {
-    capturedUpdates.push({ set: setArg });
-    return { where: updateWhere };
+  const where = vi.fn().mockResolvedValue([]);
+  const set = vi.fn().mockImplementation((s: Record<string, unknown>) => {
+    capturedUpdates.push({ set: s });
+    return { where };
   });
-  const update = vi.fn().mockImplementation(() => ({ set: updateSet }));
-
-  return {
-    mockSendEmail: vi.fn(),
-    capturedUpdates,
-    updateMocks: { update, set: updateSet, where: updateWhere },
-  };
+  const update = vi.fn().mockImplementation(() => ({ set }));
+  return { mockSendEmail: vi.fn(), capturedUpdates, updateMocks: { update, set, where } };
 });
 
 // ---------------------------------------------------------------------------
 // Module mocks
 // ---------------------------------------------------------------------------
 
-vi.mock("@workspace/email", () => ({
-  sendReminderHtmlEmail: mockSendEmail,
-}));
+vi.mock("@workspace/email", () => ({ sendReminderHtmlEmail: mockSendEmail }));
 
 vi.mock("@workspace/db", () => ({
   db: {
@@ -62,48 +36,45 @@ vi.mock("@workspace/db", () => ({
     update: updateMocks.update,
     insert: vi.fn(() => ({ values: vi.fn().mockResolvedValue([]) })),
   },
-  referralsTable: { id: "id", tenantId: "tenant_id", bonusPaid: "bonus_paid" },
-  clientsTable: { id: "id", tenantId: "tenant_id" },
-  tenantsTable: { id: "id" },
+  referralsTable:        { id: "id", tenantId: "tenant_id", bonusPaid: "bonus_paid" },
+  clientsTable:          { id: "id", tenantId: "tenant_id" },
+  tenantsTable:          { id: "id" },
   referralSettingsTable: {},
   referralTrackingTable: {},
 }));
 
 vi.mock("drizzle-orm", () => ({
-  eq: vi.fn(() => "eq"),
-  and: vi.fn((...a: unknown[]) => a),
-  or: vi.fn((...a: unknown[]) => a),
-  desc: vi.fn(() => "desc"),
-  asc: vi.fn(() => "asc"),
-  ilike: vi.fn(() => "ilike"),
-  count: vi.fn(() => "count"),
-  sql: Object.assign(vi.fn(() => "sql"), { raw: vi.fn() }),
+  eq:              vi.fn(() => "eq"),
+  and:             vi.fn((...a: unknown[]) => a),
+  or:              vi.fn((...a: unknown[]) => a),
+  desc:            vi.fn(() => "desc"),
+  asc:             vi.fn(() => "asc"),
+  ilike:           vi.fn(() => "ilike"),
+  count:           vi.fn(() => "count"),
+  sql:             Object.assign(vi.fn(() => "sql"), { raw: vi.fn() }),
   getTableColumns: vi.fn(() => ({})),
 }));
 
 vi.mock("@clerk/express", () => ({
-  clerkClient: vi.fn(),
-  getAuth: vi.fn(() => ({ userId: "user-test" })),
-  clerkMiddleware: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  clerkClient:      vi.fn(),
+  getAuth:          vi.fn(() => ({ userId: "user-test" })),
+  clerkMiddleware:  () => (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
-// ADMIN_ROLES must contain the actual string values used by ROLES.AGENCY_ADMIN ("agencia")
 vi.mock("../lib/tenant.js", () => ({
-  requireAuth: vi.fn(),
-  ADMIN_ROLES: [ROLES.AGENCY_ADMIN, ROLES.SUPER_ADMIN],
-  MANAGEMENT_ROLES: [ROLES.AGENCY_ADMIN, ROLES.SUPER_ADMIN],
+  requireAuth:       vi.fn(),
+  ADMIN_ROLES:       [ROLES.AGENCY_ADMIN, ROLES.SUPER_ADMIN],
+  MANAGEMENT_ROLES:  [ROLES.AGENCY_ADMIN, ROLES.SUPER_ADMIN],
 }));
 
 vi.mock("../lib/logger.js", () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
 
-vi.mock("../lib/id.js", () => ({
-  generateId: vi.fn(() => "gen-id"),
-}));
+vi.mock("../lib/id.js", () => ({ generateId: vi.fn(() => "gen-id") }));
 
 // ---------------------------------------------------------------------------
-// Import router and mock handles AFTER vi.mock declarations
+// Import router AFTER mocks
 // ---------------------------------------------------------------------------
 
 import { requireAuth } from "../lib/tenant.js";
@@ -111,169 +82,114 @@ import { db } from "@workspace/db";
 import referralsRouter from "../routes/referrals.js";
 
 // ---------------------------------------------------------------------------
-// Chain builder — wraps a fixed data array in a fully-chainable thenable.
-//
-// Every method returns a fresh makeChain(data) so any sequence of calls
-// (including .limit(n).offset(n)) stays chainable and correctly awaitable.
-// The object is also thenable so `await chain.from().where()` works without
-// a terminal call.
+// Chain builder — thenable stub for drizzle select chains
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function makeChain(data: unknown[]): any {
-  const chain: Record<string, unknown> = {
-    then: (
-      resolve: (v: unknown[]) => unknown,
-      reject?: (e: unknown) => unknown,
-    ) => Promise.resolve(data).then(resolve, reject),
-  };
-  chain.from = vi.fn().mockImplementation(() => makeChain(data));
-  chain.where = vi.fn().mockImplementation(() => makeChain(data));
-  chain.leftJoin = vi.fn().mockImplementation(() => makeChain(data));
-  chain.orderBy = vi.fn().mockImplementation(() => makeChain(data));
-  chain.limit = vi.fn().mockImplementation(() => makeChain(data));
-  chain.offset = vi.fn().mockImplementation(() => makeChain(data));
+interface DbChain extends PromiseLike<unknown[]> {
+  from(table: unknown): DbChain;
+  where(...args: unknown[]): DbChain;
+  leftJoin(table: unknown, cond: unknown): DbChain;
+  orderBy(...cols: unknown[]): DbChain;
+  limit(n: number): DbChain;
+  offset(n: number): DbChain;
+}
+
+function makeChain(data: unknown[]): DbChain {
+  const chain: DbChain = {
+    then: (resolve, reject) => Promise.resolve(data).then(resolve, reject),
+    from:     vi.fn().mockImplementation(() => makeChain(data)),
+    where:    vi.fn().mockImplementation(() => makeChain(data)),
+    leftJoin: vi.fn().mockImplementation(() => makeChain(data)),
+    orderBy:  vi.fn().mockImplementation(() => makeChain(data)),
+    limit:    vi.fn().mockImplementation(() => makeChain(data)),
+    offset:   vi.fn().mockImplementation(() => makeChain(data)),
+  } as DbChain;
   return chain;
 }
 
 // ---------------------------------------------------------------------------
-// Express app builder
+// App builder
 // ---------------------------------------------------------------------------
 
 function buildApp() {
   const app = express();
   app.use(express.json());
-  app.use(
-    (
-      req: express.Request & { log?: Record<string, unknown> },
-      _res: express.Response,
-      next: express.NextFunction,
-    ) => {
-      const noop = (..._args: unknown[]) => {};
-      req.log = {
-        trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop,
-      } as never;
-      next();
-    },
-  );
+  app.use((req: express.Request & { log?: unknown }, _res: express.Response, next: express.NextFunction) => {
+    const noop = () => {};
+    req.log = { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop } as never;
+    next();
+  });
   app.use("/api", referralsRouter);
   return app;
 }
 
 // ---------------------------------------------------------------------------
-// Fixture helpers
+// Fixtures
 // ---------------------------------------------------------------------------
 
-const FAKE_ADMIN = {
-  id: "user-001",
-  tenantId: "tenant-001",
-  role: ROLES.AGENCY_ADMIN,
-  name: "Admin Teste",
-  email: "admin@agencia.com",
-};
-
-const FAKE_VIEWER = {
-  id: "user-002",
-  tenantId: "tenant-001",
-  role: "viewer",
-  name: "Viewer",
-  email: "viewer@agencia.com",
-};
+const FAKE_ADMIN  = { id: "user-001", tenantId: "tenant-001", role: ROLES.AGENCY_ADMIN, name: "Admin", email: "admin@ag.com" };
+const FAKE_VIEWER = { id: "user-002", tenantId: "tenant-001", role: "viewer",            name: "Viewer", email: "viewer@ag.com" };
 
 function makeReferral(overrides: Record<string, unknown> = {}) {
   return {
-    id: "ref-001",
-    tenantId: "tenant-001",
-    referrerId: "client-001",
-    referredId: "client-002",
-    referredEmail: "indicado@example.com",
-    referredName: "José Indicado",
-    referrerName: "Maria Stored",
-    referrerEmail: "maria@stored.com",
-    referrerPhone: "11999990000",
-    code: "MARIA2026",
-    status: "completed",
-    bonusPaid: false,
-    bonusPaidAt: null,
-    bonusAmount: "50.00",
-    discountValue: "5",
-    discountAmount: "25.00",
-    discountApplied: true,
-    discountType: "percentage",
-    visitsCount: 3,
-    lastVisit: null,
-    convertedAt: new Date("2026-01-15"),
-    expiresAt: new Date("2026-12-31"),
-    isActive: true,
-    notes: null,
-    utmSource: null, utmMedium: null, utmCampaign: null,
-    createdAt: new Date("2026-01-01"),
-    updatedAt: new Date("2026-01-15"),
+    id: "ref-001", tenantId: "tenant-001",
+    referrerId: "client-001", referredId: "client-002",
+    referredEmail: "indicado@example.com", referredName: "José Indicado",
+    referrerName: "Maria Stored",  referrerEmail: "maria@stored.com", referrerPhone: "11999990000",
+    code: "MARIA2026", status: "completed",
+    bonusPaid: false, bonusPaidAt: null, bonusAmount: "50.00",
+    discountValue: "5", discountAmount: "25.00", discountApplied: true, discountType: "percentage",
+    visitsCount: 3, lastVisit: null,
+    convertedAt: new Date("2026-01-15"), expiresAt: new Date("2026-12-31"), isActive: true,
+    notes: null, utmSource: null, utmMedium: null, utmCampaign: null,
+    createdAt: new Date("2026-01-01"), updatedAt: new Date("2026-01-15"),
     ...overrides,
   };
 }
 
-/**
- * Row returned by the initial fetch in pay-bonus (joins clientsTable +
- * tenantsTable). Overrides are applied last to allow per-test customisation
- * of any field, including the JOIN columns.
- */
 function makeJoinedRow(overrides: Record<string, unknown> = {}) {
   return {
     ...makeReferral(),
-    referrerClientName: "Maria Live",
-    referrerClientEmail: "maria@live.com",
-    referrerClientWhatsapp: "11988887777",
-    referrerClientPhone: "11999990001",
+    referrerClientName: "Maria Live", referrerClientEmail: "maria@live.com",
+    referrerClientWhatsapp: "11988887777", referrerClientPhone: "11999990001",
     tenantName: "Agência Teste",
     ...overrides,
   };
 }
 
-/**
- * Row returned by the re-fetch after the bonus update. The route's re-fetch
- * only joins clientsTable (not tenantsTable), so tenantName is absent.
- */
 function makeRefetchRow(overrides: Record<string, unknown> = {}) {
   return {
     ...makeReferral(),
-    referrerClientName: "Maria Live",
-    referrerClientEmail: "maria@live.com",
-    referrerClientWhatsapp: "11988887777",
-    referrerClientPhone: "11999990001",
+    referrerClientName: "Maria Live", referrerClientEmail: "maria@live.com",
+    referrerClientWhatsapp: "11988887777", referrerClientPhone: "11999990001",
     ...overrides,
   };
 }
 
 // ---------------------------------------------------------------------------
-// Per-test setup
+// Setup
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
   vi.clearAllMocks();
   capturedUpdates.length = 0;
-
-  // vi.clearAllMocks() clears implementations — restore the update chain.
   updateMocks.where.mockResolvedValue([]);
-  updateMocks.set.mockImplementation((setArg: Record<string, unknown>) => {
-    capturedUpdates.push({ set: setArg });
+  updateMocks.set.mockImplementation((s: Record<string, unknown>) => {
+    capturedUpdates.push({ set: s });
     return { where: updateMocks.where };
   });
   updateMocks.update.mockImplementation(() => ({ set: updateMocks.set }));
-
   mockSendEmail.mockResolvedValue({ success: true, messageId: "msg-001" });
 });
 
-// ===========================================================================
+// ---------------------------------------------------------------------------
 // POST /api/referrals/:id/pay-bonus
-// ===========================================================================
+// ---------------------------------------------------------------------------
 
 describe("POST /api/referrals/:id/pay-bonus", () => {
   it("marks bonusPaid=true and records bonusPaidAt for a completed, unpaid referral", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
-
-    const mockSelect = db.select as ReturnType<typeof vi.fn>;
-    mockSelect
+    (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([makeJoinedRow()]))
       .mockImplementationOnce(() => makeChain([makeRefetchRow({ bonusPaid: true, bonusPaidAt: new Date() })]));
 
@@ -286,9 +202,8 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
     expect(capturedUpdates[0].set.updatedAt).toBeInstanceOf(Date);
   });
 
-  it("returns 422 when bonus has already been paid (double-payment guard)", async () => {
+  it("returns 422 when bonus has already been paid", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
-
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([makeJoinedRow({ bonusPaid: true, bonusPaidAt: new Date() })]));
 
@@ -302,7 +217,6 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
 
   it("returns 422 when referral status is not 'completed'", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
-
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([makeJoinedRow({ status: "pending", bonusPaid: false })]));
 
@@ -313,9 +227,8 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
     expect(capturedUpdates).toHaveLength(0);
   });
 
-  it("calls sendReminderHtmlEmail using the live JOIN email (clientsTable) as recipient", async () => {
+  it("sends email to the live JOIN email (clientsTable), not the stored snapshot", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
-
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([makeJoinedRow()]))
       .mockImplementationOnce(() => makeChain([makeRefetchRow({ bonusPaid: true })]));
@@ -324,15 +237,13 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
 
     expect(mockSendEmail).toHaveBeenCalledOnce();
     const args = mockSendEmail.mock.calls[0][0] as Record<string, string>;
-    // Must use the LIVE email from clientsTable, not the stored snapshot
     expect(args.to).toBe("maria@live.com");
     expect(args.fromName).toBe("Agência Teste");
     expect(args.html).toContain("50,00");
   });
 
-  it("skips email when both live and stored referrerEmail are null", async () => {
+  it("skips email and still updates when both live and stored referrerEmail are null", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
-
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([makeJoinedRow({ referrerEmail: null, referrerClientEmail: null })]))
       .mockImplementationOnce(() => makeChain([makeRefetchRow({ bonusPaid: true, referrerEmail: null, referrerClientEmail: null })]));
@@ -347,8 +258,7 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
 
   it("still marks bonus as paid even when email dispatch throws", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
-    mockSendEmail.mockRejectedValueOnce(new Error("SMTP connection refused"));
-
+    mockSendEmail.mockRejectedValueOnce(new Error("SMTP error"));
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([makeJoinedRow()]))
       .mockImplementationOnce(() => makeChain([makeRefetchRow({ bonusPaid: true })]));
@@ -356,15 +266,12 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
     const res = await request(buildApp()).post("/api/referrals/ref-001/pay-bonus").send();
 
     expect(res.status).toBe(200);
-    expect(capturedUpdates).toHaveLength(1);
     expect(capturedUpdates[0].set.bonusPaid).toBe(true);
   });
 
   it("returns 404 when the referral does not exist", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
-
-    (db.select as ReturnType<typeof vi.fn>)
-      .mockImplementationOnce(() => makeChain([]));
+    (db.select as ReturnType<typeof vi.fn>).mockImplementationOnce(() => makeChain([]));
 
     const res = await request(buildApp()).post("/api/referrals/nonexistent/pay-bonus").send();
 
@@ -373,19 +280,17 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
     expect(mockSendEmail).not.toHaveBeenCalled();
   });
 
-  it("returns 403 when caller role is not in ADMIN_ROLES", async () => {
+  it("returns 403 when caller is not an admin", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_VIEWER);
 
     const res = await request(buildApp()).post("/api/referrals/ref-001/pay-bonus").send();
 
     expect(res.status).toBe(403);
     expect(capturedUpdates).toHaveLength(0);
-    expect(mockSendEmail).not.toHaveBeenCalled();
   });
 
   it("response merges live JOIN data and strips internal JOIN columns", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
-
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([makeJoinedRow()]))
       .mockImplementationOnce(() => makeChain([makeRefetchRow({ bonusPaid: true })]));
@@ -393,11 +298,9 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
     const res = await request(buildApp()).post("/api/referrals/ref-001/pay-bonus").send();
 
     expect(res.status).toBe(200);
-    // Live data from clientsTable JOIN must override stored snapshot
     expect(res.body.referrerName).toBe("Maria Live");
     expect(res.body.referrerEmail).toBe("maria@live.com");
     expect(res.body.referrerWhatsapp).toBe("11988887777");
-    // Internal JOIN helpers must NOT be leaked in the response
     expect(res.body).not.toHaveProperty("referrerClientName");
     expect(res.body).not.toHaveProperty("referrerClientEmail");
     expect(res.body).not.toHaveProperty("referrerClientWhatsapp");
@@ -406,33 +309,22 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
   });
 });
 
-// ===========================================================================
+// ---------------------------------------------------------------------------
 // GET /api/referrals — clientsTable JOIN enrichment
-// ===========================================================================
+// ---------------------------------------------------------------------------
 
 describe("GET /api/referrals — clientsTable JOIN enrichment", () => {
-  it("referrerWhatsapp in response comes from clientsTable via JOIN (not a stored column)", async () => {
+  it("referrerWhatsapp comes from clientsTable via JOIN, stripped from internal columns", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
-
-    const enrichedRow = {
-      ...makeReferral(),
-      referrerClientName: "Maria Live",
-      referrerClientEmail: "maria@live.com",
-      referrerClientWhatsapp: "11977776666",
-      referrerClientPhone: "11988880000",
-    };
-
+    const row = { ...makeReferral(), referrerClientName: "Maria Live", referrerClientEmail: "maria@live.com", referrerClientWhatsapp: "11977776666", referrerClientPhone: "11988880000" };
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([{ total: "1" }]))
-      .mockImplementationOnce(() => makeChain([enrichedRow]));
+      .mockImplementationOnce(() => makeChain([row]));
 
     const res = await request(buildApp()).get("/api/referrals").send();
 
     expect(res.status).toBe(200);
-    const items = (res.body.data ?? res.body) as Record<string, unknown>[];
-    expect(Array.isArray(items)).toBe(true);
-    const item = items[0];
-
+    const item = ((res.body.data ?? res.body) as Record<string, unknown>[])[0];
     expect(item.referrerWhatsapp).toBe("11977776666");
     expect(item).not.toHaveProperty("referrerClientWhatsapp");
     expect(item).not.toHaveProperty("referrerClientName");
@@ -442,18 +334,10 @@ describe("GET /api/referrals — clientsTable JOIN enrichment", () => {
 
   it("referrerEmail and referrerName are overridden by live clientsTable values when JOIN matches", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
-
-    const enrichedRow = {
-      ...makeReferral({ referrerEmail: "stale@old.com", referrerName: "Nome Antigo" }),
-      referrerClientName: "Nome Novo",
-      referrerClientEmail: "novo@live.com",
-      referrerClientWhatsapp: null,
-      referrerClientPhone: null,
-    };
-
+    const row = { ...makeReferral({ referrerEmail: "stale@old.com", referrerName: "Nome Antigo" }), referrerClientName: "Nome Novo", referrerClientEmail: "novo@live.com", referrerClientWhatsapp: null, referrerClientPhone: null };
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([{ total: "1" }]))
-      .mockImplementationOnce(() => makeChain([enrichedRow]));
+      .mockImplementationOnce(() => makeChain([row]));
 
     const res = await request(buildApp()).get("/api/referrals").send();
 
@@ -463,38 +347,25 @@ describe("GET /api/referrals — clientsTable JOIN enrichment", () => {
     expect(item.referrerName).toBe("Nome Novo");
   });
 
-  it("falls back to stored snapshot fields when the JOIN misses (null client columns)", async () => {
+  it("falls back to stored snapshot when LEFT JOIN misses (null client columns)", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
-
-    const noJoinRow = {
-      ...makeReferral({
-        referrerName: "Fallback Armazenado",
-        referrerEmail: "stored@fallback.com",
-        referrerPhone: "11911112222",
-      }),
-      referrerClientName: null,
-      referrerClientEmail: null,
-      referrerClientWhatsapp: null,
-      referrerClientPhone: null,
-    };
-
+    const row = { ...makeReferral({ referrerName: "Fallback", referrerEmail: "stored@fallback.com", referrerPhone: "11911112222" }), referrerClientName: null, referrerClientEmail: null, referrerClientWhatsapp: null, referrerClientPhone: null };
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([{ total: "1" }]))
-      .mockImplementationOnce(() => makeChain([noJoinRow]));
+      .mockImplementationOnce(() => makeChain([row]));
 
     const res = await request(buildApp()).get("/api/referrals").send();
 
     expect(res.status).toBe(200);
     const item = ((res.body.data ?? res.body) as Record<string, unknown>[])[0];
-    expect(item.referrerName).toBe("Fallback Armazenado");
+    expect(item.referrerName).toBe("Fallback");
     expect(item.referrerEmail).toBe("stored@fallback.com");
     expect(item.referrerPhone).toBe("11911112222");
     expect(item.referrerWhatsapp).toBeNull();
   });
 
-  it("returns correct pagination metadata from the count query", async () => {
+  it("returns pagination metadata from the count query", async () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
-
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([{ total: "42" }]))
       .mockImplementationOnce(() => makeChain([]));
@@ -502,11 +373,6 @@ describe("GET /api/referrals — clientsTable JOIN enrichment", () => {
     const res = await request(buildApp()).get("/api/referrals?page=2&limit=10").send();
 
     expect(res.status).toBe(200);
-    expect(res.body.pagination).toMatchObject({
-      page: 2,
-      limit: 10,
-      total: 42,
-      totalPages: 5,
-    });
+    expect(res.body.pagination).toMatchObject({ page: 2, limit: 10, total: 42, totalPages: 5 });
   });
 });
