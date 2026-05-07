@@ -264,6 +264,29 @@ export default function Indicacoes() {
 
   const pendingBonusCount = referrals.filter(r => r.status === REFERRAL_STATUS.COMPLETED && !r.bonusPaid).length;
 
+  // Derive controlled tab value from filter state so the banner CTA is always reflected visually
+  const activeTab = fraudFilter
+    ? "suspicious"
+    : statusFilter === "expiringSoon"
+    ? "expiringSoon"
+    : statusFilter === "completed" && bonusFilter === "unpaid"
+    ? "completed-unpaid"
+    : statusFilter === "all" || statusFilter === "pending" || statusFilter === "completed" || statusFilter === "expired"
+    ? statusFilter
+    : "all";
+
+  function applyTab(tab: string) {
+    setFraudFilter(tab === "suspicious");
+    setBonusFilter(tab === "completed-unpaid" ? "unpaid" : "all");
+    setStatusFilter(
+      tab === "suspicious" ? "all"
+      : tab === "completed-unpaid" ? "completed"
+      : tab === "expiringSoon" ? "expiringSoon"
+      : tab
+    );
+    if (tab === "expiringSoon") setSearchQuery("");
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -539,15 +562,22 @@ export default function Indicacoes() {
       })()}
 
       {/* Referrals Table */}
-      <Tabs defaultValue="all">
+      <Tabs value={activeTab} onValueChange={applyTab}>
         <div className="flex items-center gap-3 mb-3 flex-wrap">
           <TabsList>
-            <TabsTrigger value="all" onClick={() => { setStatusFilter("all"); setBonusFilter("all"); setFraudFilter(false); }}>Todas</TabsTrigger>
-            <TabsTrigger value="pending" onClick={() => { setStatusFilter("pending"); setBonusFilter("all"); setFraudFilter(false); }}>Pendentes</TabsTrigger>
-            <TabsTrigger value="completed" onClick={() => { setStatusFilter("completed"); setBonusFilter("all"); setFraudFilter(false); }}>
-              Convertidas
+            <TabsTrigger value="all">Todas</TabsTrigger>
+            <TabsTrigger value="pending">Pendentes</TabsTrigger>
+            <TabsTrigger value="expiringSoon">
+              <Clock className="w-3.5 h-3.5 mr-1 text-amber-500" />
+              Expiram em breve
+              {expiringSoonCount > 0 && (
+                <Badge variant="outline" className="ml-1.5 px-1.5 py-0 text-xs h-4 border-amber-400 text-amber-700">
+                  {expiringSoonCount}
+                </Badge>
+              )}
             </TabsTrigger>
-            <TabsTrigger value="completed-unpaid" onClick={() => { setStatusFilter("completed"); setBonusFilter("unpaid"); setFraudFilter(false); }}>
+            <TabsTrigger value="completed">Convertidas</TabsTrigger>
+            <TabsTrigger value="completed-unpaid">
               Bônus pendente
               {pendingBonusCount > 0 && (
                 <Badge variant="destructive" className="ml-1.5 px-1.5 py-0 text-xs h-4">
@@ -555,8 +585,8 @@ export default function Indicacoes() {
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="expired" onClick={() => { setStatusFilter("expired"); setBonusFilter("all"); setFraudFilter(false); }}>Expiradas</TabsTrigger>
-            <TabsTrigger value="suspicious" onClick={() => { setFraudFilter(true); }}>
+            <TabsTrigger value="expired">Expiradas</TabsTrigger>
+            <TabsTrigger value="suspicious">
               <ShieldAlert className="w-3.5 h-3.5 mr-1" />
               Suspeitas
               {suspiciousCount > 0 && (
@@ -576,7 +606,7 @@ export default function Indicacoes() {
           <span className="text-sm text-muted-foreground ml-auto">{filtered.length} indicações</span>
         </div>
 
-        {["all", "pending", "completed", "completed-unpaid", "expired", "suspicious"].map((tabVal) => (
+        {["all", "pending", "expiringSoon", "completed", "completed-unpaid", "expired", "suspicious"].map((tabVal) => (
           <TabsContent key={tabVal} value={tabVal}>
             {filtered.length === 0 ? (
               <Card>
