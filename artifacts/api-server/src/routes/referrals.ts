@@ -598,9 +598,25 @@ router.get("/referrals/export", async (req, res): Promise<void> => {
 
     const status = req.query.status as string | undefined;
     const search = req.query.search as string | undefined;
+    const bonusPaidParam = req.query.bonusPaid as string | undefined;
+    const fraudFlagParam = req.query.fraudFlag as string | undefined;
+    const expiringSoonParam = req.query.expiringSoon as string | undefined;
 
     const conditions = [eq(referralsTable.tenantId, me.tenantId)];
     if (status && status !== "all") conditions.push(eq(referralsTable.status, status));
+    if (bonusPaidParam === "false") conditions.push(eq(referralsTable.bonusPaid, false));
+    if (fraudFlagParam === "true") conditions.push(eq(referralsTable.fraudFlag, true));
+    if (expiringSoonParam === "true") {
+      const nowDate = new Date();
+      const sevenDays = new Date(nowDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+      conditions.push(
+        and(
+          eq(referralsTable.status, REFERRAL_STATUS.PENDING),
+          sql`${referralsTable.expiresAt} > NOW()`,
+          sql`${referralsTable.expiresAt} <= ${sevenDays}`,
+        )!,
+      );
+    }
     if (search) {
       conditions.push(or(
         ilike(referralsTable.code, `%${search}%`),

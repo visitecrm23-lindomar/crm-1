@@ -444,52 +444,82 @@ export default function Indicacoes() {
         </div>
       )}
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              Total de indicações
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{stats?.total ?? referrals.length}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Check className="w-4 h-4" />
-              Convertidas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-green-600">{stats?.completed ?? 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" />
-              Taxa de conversão
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-primary">{stats?.conversionRate ?? 0}%</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <DollarSign className="w-4 h-4" />
-              Desconto concedido
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{fmtCurrency(stats?.totalDiscountGiven ?? 0)}</p>
-          </CardContent>
-        </Card>
+      {/* Stats Cards — period-scoped */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-muted-foreground">Desempenho no período</p>
+          <div className="flex items-center gap-1.5">
+            {([30, 90, 180] as ReferralAnalyticsPeriod[]).map((v) => (
+              <Button
+                key={v}
+                size="sm"
+                variant={analyticsPeriod === v ? "default" : "outline"}
+                onClick={() => setAnalyticsPeriod(v)}
+                className="text-xs h-6 px-2.5"
+              >
+                {v} dias
+              </Button>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Users className="w-4 h-4" />
+                Indicações
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold">{analyticsData?.funnel.created ?? stats?.total ?? referrals.length}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">nos últimos {analyticsPeriod} dias</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Check className="w-4 h-4" />
+                Convertidas
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold text-green-600">{analyticsData?.funnel.converted ?? stats?.completed ?? 0}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">nos últimos {analyticsPeriod} dias</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <TrendingUp className="w-4 h-4" />
+                Taxa de conversão
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold text-primary">
+                {analyticsData?.conversionRate ?? stats?.conversionRate ?? 0}%
+              </p>
+              {analyticsData && analyticsData.prevConversionRate > 0 && (() => {
+                const delta = analyticsData.conversionRate - analyticsData.prevConversionRate;
+                return (
+                  <p className={`text-xs mt-0.5 font-medium ${delta >= 0 ? "text-green-600" : "text-red-500"}`}>
+                    {delta >= 0 ? "+" : ""}{delta}pp vs. período anterior
+                  </p>
+                );
+              })()}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <DollarSign className="w-4 h-4" />
+                Desconto concedido
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold">{fmtCurrency(stats?.totalDiscountGiven ?? 0)}</p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Program Summary */}
@@ -535,62 +565,12 @@ export default function Indicacoes() {
       {/* Analytics Section */}
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-primary" />
-              Desempenho do Programa
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              {[
-                { value: 30, label: "30 dias" },
-                { value: 90, label: "90 dias" },
-                { value: 180, label: "180 dias" },
-              ].map(({ value, label }) => (
-                <Button
-                  key={value}
-                  size="sm"
-                  variant={analyticsPeriod === value ? "default" : "outline"}
-                  onClick={() => setAnalyticsPeriod(value as ReferralAnalyticsPeriod)}
-                  className="text-xs h-7 px-3"
-                >
-                  {label}
-                </Button>
-              ))}
-            </div>
-          </div>
+          <CardTitle className="text-base flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-primary" />
+            Tendência e Funil de Conversão
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Conversion rate delta card */}
-          {analyticsData && (
-            <div className="flex flex-wrap gap-4">
-              <div className="flex-1 min-w-[160px] rounded-lg border bg-muted/30 px-4 py-3">
-                <p className="text-xs text-muted-foreground mb-1">Taxa de conversão (período)</p>
-                <p className="text-2xl font-bold text-primary">{analyticsData.conversionRate}%</p>
-                {(() => {
-                  const delta = analyticsData.conversionRate - analyticsData.prevConversionRate;
-                  if (analyticsData.prevConversionRate === 0) return null;
-                  return (
-                    <p className={`text-xs mt-0.5 font-medium ${delta >= 0 ? "text-green-600" : "text-red-500"}`}>
-                      {delta >= 0 ? "+" : ""}{delta}pp vs. período anterior
-                    </p>
-                  );
-                })()}
-              </div>
-              <div className="flex-1 min-w-[160px] rounded-lg border bg-muted/30 px-4 py-3">
-                <p className="text-xs text-muted-foreground mb-1">Indicações criadas (período)</p>
-                <p className="text-2xl font-bold">{analyticsData.funnel.created}</p>
-              </div>
-              <div className="flex-1 min-w-[160px] rounded-lg border bg-muted/30 px-4 py-3">
-                <p className="text-xs text-muted-foreground mb-1">Convertidas (período)</p>
-                <p className="text-2xl font-bold text-green-600">{analyticsData.funnel.converted}</p>
-              </div>
-              <div className="flex-1 min-w-[160px] rounded-lg border bg-muted/30 px-4 py-3">
-                <p className="text-xs text-muted-foreground mb-1">Bônus pagos (período)</p>
-                <p className="text-2xl font-bold text-violet-600">{analyticsData.funnel.bonusPaid}</p>
-              </div>
-            </div>
-          )}
-
           {/* Trend chart */}
           {analyticsData && analyticsData.series.length > 0 ? (
             <div>
@@ -828,10 +808,13 @@ export default function Indicacoes() {
             variant="outline"
             className="shrink-0"
             onClick={() => {
-              const url = getReferralExportUrl(
-                statusFilter !== "all" ? statusFilter : undefined,
-                searchQuery || undefined,
-              );
+              const url = getReferralExportUrl({
+                status: statusFilter !== "all" && !fraudFilter && statusFilter !== "expiringSoon" ? statusFilter : undefined,
+                search: searchQuery || undefined,
+                bonusPaid: bonusFilter === "unpaid" ? false : undefined,
+                fraudFlag: fraudFilter ? true : undefined,
+                expiringSoon: statusFilter === "expiringSoon" ? true : undefined,
+              });
               const a = document.createElement("a");
               a.href = url;
               a.download = "";

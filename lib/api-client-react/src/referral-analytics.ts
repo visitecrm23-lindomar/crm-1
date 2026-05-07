@@ -59,10 +59,21 @@ export function useGetReferralAnalytics<
   return { ...query, queryKey };
 }
 
-export const getReferralExportUrl = (status?: string, search?: string) => {
+export interface ReferralExportFilters {
+  status?: string;
+  search?: string;
+  bonusPaid?: boolean;
+  fraudFlag?: boolean;
+  expiringSoon?: boolean;
+}
+
+export const getReferralExportUrl = (filters: ReferralExportFilters = {}) => {
   const params = new URLSearchParams();
-  if (status && status !== "all") params.set("status", status);
-  if (search) params.set("search", search);
+  if (filters.status && filters.status !== "all") params.set("status", filters.status);
+  if (filters.search) params.set("search", filters.search);
+  if (filters.bonusPaid === false) params.set("bonusPaid", "false");
+  if (filters.fraudFlag === true) params.set("fraudFlag", "true");
+  if (filters.expiringSoon === true) params.set("expiringSoon", "true");
   const qs = params.toString();
   return qs ? `/api/referrals/export?${qs}` : `/api/referrals/export`;
 };
