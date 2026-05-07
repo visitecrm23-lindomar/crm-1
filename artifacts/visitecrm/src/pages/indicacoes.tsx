@@ -359,7 +359,7 @@ export default function Indicacoes() {
 
   const pendingBonusReferrals = filtered.filter(r => r.status === REFERRAL_STATUS.COMPLETED && !r.bonusPaid);
   const allBonusSelected = pendingBonusReferrals.length > 0 && pendingBonusReferrals.every(r => selectedBonusIds.has(r.id));
-  const selectedBonusTotal = pendingBonusReferrals
+  const selectedBonusTotal = referrals
     .filter(r => selectedBonusIds.has(r.id))
     .reduce((sum, r) => sum + (parseFloat(String(r.bonusAmount ?? "0")) || 0), 0);
 
@@ -656,7 +656,7 @@ export default function Indicacoes() {
           <Input
             placeholder="Buscar por código, nome, e-mail ou WhatsApp..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => { setSearchQuery(e.target.value); setSelectedBonusIds(new Set()); }}
             className="max-w-xs"
             disabled={fraudFilter || statusFilter === "expiringSoon"}
           />
