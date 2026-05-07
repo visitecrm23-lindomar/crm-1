@@ -667,6 +667,9 @@ async function processExpiredReferralNotifications(): Promise<void> {
 
   // Only pending referrals whose expiry time has passed — status="pending" is
   // the one-time gate: once transitioned to "expired" they won't match again.
+  // NOTE: do NOT filter by referrerEmail here — the status transition applies
+  // to all overdue pending referrals. dispatchReferralExpiredEmail() already
+  // skips gracefully when the referrer client has no email address.
   const pendingExpired = await db
     .select({
       id: referralsTable.id,
@@ -679,7 +682,6 @@ async function processExpiredReferralNotifications(): Promise<void> {
         eq(referralsTable.isActive, true),
         eq(referralsTable.status, "pending"),
         lte(referralsTable.expiresAt, now),
-        isNotNull(referralsTable.referrerEmail),
       ),
     );
 
