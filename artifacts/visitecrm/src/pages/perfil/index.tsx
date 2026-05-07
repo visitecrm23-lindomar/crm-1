@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { clientPortalApi, type ClientPortalProfile, type ClientLoyalty } from "@/lib/clientPortalApi";
+import { clientPortalApi, type ClientPortalProfile, type ClientLoyalty, type ClientReferral } from "@/lib/clientPortalApi";
+import QRCode from "qrcode";
 import { useGetMe } from "@workspace/api-client-react";
 import { RESERVATION_STATUS } from "@workspace/permissions";
 import { useSignIn } from "@clerk/react";
@@ -40,6 +41,8 @@ import {
   ArrowRight,
   AlertCircle,
   Download,
+  MessageCircle,
+  Wallet,
 } from "lucide-react";
 import { formatCurrency as fmtCurrencyLib, formatDateShort } from "@/lib/utils";
 
@@ -822,9 +825,66 @@ function DadosTab({ profile, onUpdated }: { profile: ClientPortalProfile; onUpda
   );
 }
 
+const REFERRAL_STATUS_MAP: Record<string, { label: string; color: string; icon: JSX.Element | null }> = {
+  pending:   { label: "Pendente",   color: "bg-yellow-100 text-yellow-800",  icon: <Clock className="w-3.5 h-3.5" /> },
+  completed: { label: "Confirmada", color: "bg-green-100 text-green-800",    icon: <CheckCircle className="w-3.5 h-3.5" /> },
+  expired:   { label: "Expirada",   color: "bg-slate-100 text-slate-500",    icon: <XCircle className="w-3.5 h-3.5" /> },
+};
+
+function ReferralStatusBadge({ status }: { status: string }) {
+  const cfg = REFERRAL_STATUS_MAP[status] ?? { label: status, color: "bg-slate-100 text-slate-600", icon: null };
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.color}`}>
+      {cfg.icon}
+      {cfg.label}
+    </span>
+  );
+}
+
+function ReferralRow({ r, primaryColor }: { r: ClientReferral; primaryColor: string }) {
+  const displayName = r.referredName ?? r.referredEmail ?? "Pessoa indicada";
+  const dateLabel = r.status === "completed" && r.convertedAt
+    ? `Convertida em ${new Date(r.convertedAt).toLocaleDateString("pt-BR")}`
+    : r.status === "expired" && r.expiresAt
+    ? `Expirou em ${new Date(r.expiresAt).toLocaleDateString("pt-BR")}`
+    : `Indicada em ${new Date(r.createdAt).toLocaleDateString("pt-BR")}`;
+
+  const bonusValue = parseFloat(r.bonusAmount);
+
+  return (
+    <div className="flex items-start gap-3 py-3 border-b last:border-0">
+      <div
+        className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-white text-sm font-bold mt-0.5"
+        style={{ background: `${primaryColor}33`, color: primaryColor }}
+      >
+        {displayName.charAt(0).toUpperCase()}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-medium text-sm truncate">{displayName}</span>
+          <ReferralStatusBadge status={r.status} />
+        </div>
+        <p className="text-xs text-muted-foreground mt-0.5">{dateLabel}</p>
+        {r.status === "completed" && bonusValue > 0 && (
+          <p className={`text-xs mt-1 font-medium ${r.bonusPaid ? "text-green-600" : "text-orange-500"}`}>
+            {r.bonusPaid
+              ? `✓ Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} pago em ${new Date(r.bonusPaidAt!).toLocaleDateString("pt-BR")}`
+              : `⏳ Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} aguardando pagamento`}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [loadingQr, setLoadingQr] = useState(false);
+  const [referrals, setReferrals] = useState<ClientReferral[] | null>(null);
+  const [loadingReferrals, setLoadingReferrals] = useState(true);
+
   const referral = profile.referral;
   const tenant = profile.tenant;
   const code = referral.code;
@@ -832,6 +892,25 @@ function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
     ? `${window.location.origin}/loja/${tenant.slug}/indicacao?code=${code}`
     : null;
   const primaryColor = tenant?.primaryColor ?? "#3B82F6";
+
+  const shareMessage = referral.shareMessage ?? "Use meu código e ganhe desconto na sua viagem!";
+  const whatsappUrl = shareLink
+    ? `https://wa.me/?text=${encodeURIComponent(`${shareMessage}\n\nMeu código: ${code}\n\n${shareLink}`)}`
+    : null;
+
+  useEffect(() => {
+    clientPortalApi.getMyReferrals()
+      .then((r) => setReferrals(r.data))
+      .catch(() => setReferrals([]))
+      .finally(() => setLoadingReferrals(false));
+  }, []);
+
+  const pendingBonus = (referrals ?? [])
+    .filter((r) => r.status === "completed" && !r.bonusPaid)
+    .reduce((sum, r) => sum + parseFloat(r.bonusAmount), 0);
+  const paidBonus = (referrals ?? [])
+    .filter((r) => r.status === "completed" && r.bonusPaid)
+    .reduce((sum, r) => sum + parseFloat(r.bonusAmount), 0);
 
   function copyCode() {
     if (!code) return;
@@ -845,8 +924,28 @@ function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
   function copyLink() {
     if (!shareLink) return;
     navigator.clipboard.writeText(shareLink).then(() => {
+      setCopiedLink(true);
       toast({ title: "Link copiado!" });
+      setTimeout(() => setCopiedLink(false), 2000);
     });
+  }
+
+  async function downloadQr() {
+    if (!shareLink) return;
+    setLoadingQr(true);
+    try {
+      const dataUrl = await QRCode.toDataURL(shareLink, { width: 256, margin: 2 });
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = `qr-indicacao-${code}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch {
+      toast({ title: "Erro ao gerar QR Code", variant: "destructive" });
+    } finally {
+      setLoadingQr(false);
+    }
   }
 
   if (!code) {
@@ -868,7 +967,7 @@ function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
         style={{ background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}cc)` }}
       >
         <p className="text-white/80 text-sm mb-1">Seu código de indicação</p>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 mb-1">
           <span className="text-3xl font-extrabold font-mono tracking-widest">{code}</span>
           <button
             onClick={copyCode}
@@ -878,9 +977,32 @@ function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
             {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
           </button>
         </div>
-        <p className="text-white/70 text-sm mt-2">
+        <p className="text-white/70 text-sm mb-4">
           Compartilhe com amigos e ganhe bônus a cada indicação confirmada.
         </p>
+        <div className="flex flex-wrap gap-2">
+          {whatsappUrl && (
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg text-sm font-medium transition-colors"
+            >
+              <MessageCircle className="w-4 h-4" />
+              WhatsApp
+            </a>
+          )}
+          {shareLink && (
+            <button
+              onClick={downloadQr}
+              disabled={loadingQr}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors disabled:opacity-60"
+            >
+              {loadingQr ? <Loader2 className="w-4 h-4 animate-spin" /> : <QrCode className="w-4 h-4" />}
+              QR Code
+            </button>
+          )}
+        </div>
       </div>
 
       {shareLink && (
@@ -890,41 +1012,82 @@ function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
             <div className="flex gap-2 mt-2">
               <Input value={shareLink} readOnly className="font-mono text-xs bg-muted" />
               <Button variant="outline" size="icon" onClick={copyLink} title="Copiar link">
-                <Copy className="w-4 h-4" />
+                {copiedLink ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
               </Button>
             </div>
           </CardContent>
         </Card>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card>
-          <CardContent className="pt-5 pb-4 text-center">
-            <TrendingUp className="w-6 h-6 mx-auto mb-2" style={{ color: primaryColor }} />
-            <p className="text-2xl font-bold">{referral.totalReferrals}</p>
-            <p className="text-sm text-muted-foreground">Total de indicações</p>
+          <CardContent className="pt-4 pb-3 text-center">
+            <TrendingUp className="w-5 h-5 mx-auto mb-1.5" style={{ color: primaryColor }} />
+            <p className="text-xl font-bold">{referral.totalReferrals}</p>
+            <p className="text-xs text-muted-foreground">Total</p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-5 pb-4 text-center">
-            <CheckCircle className="w-6 h-6 mx-auto mb-2 text-green-500" />
-            <p className="text-2xl font-bold">{referral.completedReferrals}</p>
-            <p className="text-sm text-muted-foreground">Confirmadas</p>
+          <CardContent className="pt-4 pb-3 text-center">
+            <CheckCircle className="w-5 h-5 mx-auto mb-1.5 text-green-500" />
+            <p className="text-xl font-bold">{referral.completedReferrals}</p>
+            <p className="text-xs text-muted-foreground">Confirmadas</p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-5 pb-4 text-center">
-            <Gift className="w-6 h-6 mx-auto mb-2" style={{ color: primaryColor }} />
-            <p className="text-2xl font-bold">
-              {parseFloat(referral.totalEarnings).toLocaleString("pt-BR", {
-                style: "currency",
-                currency: "BRL",
-              })}
+          <CardContent className="pt-4 pb-3 text-center">
+            <Clock className="w-5 h-5 mx-auto mb-1.5 text-orange-400" />
+            <p className="text-xl font-bold text-orange-500">
+              {pendingBonus.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
             </p>
-            <p className="text-sm text-muted-foreground">Bônus ganhos</p>
+            <p className="text-xs text-muted-foreground">Bônus a receber</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 text-center">
+            <Wallet className="w-5 h-5 mx-auto mb-1.5 text-green-500" />
+            <p className="text-xl font-bold text-green-600">
+              {paidBonus.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+            </p>
+            <p className="text-xs text-muted-foreground">Bônus recebido</p>
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Minhas Indicações</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingReferrals ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex gap-3 items-start py-3 border-b last:border-0">
+                  <Skeleton className="w-9 h-9 rounded-full shrink-0" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-48" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : !referrals || referrals.length === 0 ? (
+            <div className="text-center py-10">
+              <Users className="w-10 h-10 mx-auto mb-3 text-muted-foreground/30" />
+              <p className="font-medium text-sm mb-1">Nenhuma indicação ainda</p>
+              <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                Compartilhe seu código acima e acompanhe aqui quando seus amigos se cadastrarem.
+              </p>
+            </div>
+          ) : (
+            <div>
+              {referrals.map((r) => (
+                <ReferralRow key={r.id} r={r} primaryColor={primaryColor} />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

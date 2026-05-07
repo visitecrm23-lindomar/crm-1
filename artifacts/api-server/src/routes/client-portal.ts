@@ -6,6 +6,7 @@ import {
   tripsTable,
   usersTable,
   referralsTable,
+  referralSettingsTable,
   tenantsTable,
   loyaltyProgramsTable,
   loyaltyMembersTable,
@@ -86,12 +87,20 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
     const client = await findClientRecord(me.tenantId, me.id, me.email);
 
     let reservations: unknown[] = [];
-    let referralStats = {
+    let referralStats: {
+      code: string | null;
+      totalReferrals: number;
+      completedReferrals: number;
+      pendingReferrals: number;
+      totalEarnings: string;
+      shareMessage: string | null;
+    } = {
       code: client?.referralCode ?? user?.referralCode ?? null,
       totalReferrals: 0,
       completedReferrals: 0,
       pendingReferrals: 0,
       totalEarnings: "0.00",
+      shareMessage: null,
     };
     let stats = { totalSpent: 0 };
     let loyalty: unknown = null;
@@ -189,12 +198,19 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
         if (row.status === REFERRAL_STATUS.PENDING) pendingReferrals = Number(row.cnt);
       }
 
+      const [refSettings] = await db
+        .select({ shareMessage: referralSettingsTable.shareMessage })
+        .from(referralSettingsTable)
+        .where(eq(referralSettingsTable.tenantId, me.tenantId))
+        .limit(1);
+
       referralStats = {
         code: client.referralCode ?? user?.referralCode ?? null,
         totalReferrals,
         completedReferrals,
         pendingReferrals,
         totalEarnings: totalEarnings.toFixed(2),
+        shareMessage: refSettings?.shareMessage ?? null,
       };
 
       const [loyaltyProgram] = await db
@@ -510,6 +526,72 @@ router.patch("/client/me", async (req, res, next: NextFunction): Promise<void> =
       addressCity: updated.addressCity,
       addressState: updated.addressState,
       referralCode: updated.referralCode ?? null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+function maskEmail(email: string): string {
+  const atIdx = email.indexOf("@");
+  if (atIdx <= 0) return email;
+  const local = email.slice(0, atIdx);
+  const domain = email.slice(atIdx);
+  if (local.length <= 2) return `${local[0]}***${domain}`;
+  return `${local.slice(0, 2)}***${domain}`;
+}
+
+router.get("/client/me/referrals", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    if (me.role !== ROLES.CLIENT) {
+      next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE"));
+      return;
+    }
+
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) {
+      res.json({ data: [] });
+      return;
+    }
+
+    const rows = await db
+      .select({
+        id: referralsTable.id,
+        referredName: referralsTable.referredName,
+        referredEmail: referralsTable.referredEmail,
+        status: referralsTable.status,
+        convertedAt: referralsTable.convertedAt,
+        bonusAmount: referralsTable.bonusAmount,
+        bonusPaid: referralsTable.bonusPaid,
+        bonusPaidAt: referralsTable.bonusPaidAt,
+        createdAt: referralsTable.createdAt,
+        expiresAt: referralsTable.expiresAt,
+      })
+      .from(referralsTable)
+      .where(
+        and(
+          eq(referralsTable.tenantId, me.tenantId),
+          eq(referralsTable.referrerId, client.id),
+        ),
+      )
+      .orderBy(desc(referralsTable.createdAt));
+
+    res.json({
+      data: rows.map((r) => ({
+        id: r.id,
+        referredName: r.referredName ?? null,
+        referredEmail: r.referredEmail ? maskEmail(r.referredEmail) : null,
+        status: r.status,
+        convertedAt: r.convertedAt ? (r.convertedAt as unknown as Date).toISOString() : null,
+        bonusAmount: r.bonusAmount,
+        bonusPaid: r.bonusPaid,
+        bonusPaidAt: r.bonusPaidAt ? (r.bonusPaidAt as unknown as Date).toISOString() : null,
+        createdAt: (r.createdAt as unknown as Date).toISOString(),
+        expiresAt: r.expiresAt ? (r.expiresAt as unknown as Date).toISOString() : null,
+      })),
     });
   } catch (err) {
     next(err);

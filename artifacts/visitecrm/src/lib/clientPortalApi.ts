@@ -38,6 +38,19 @@ export interface ClientLoyalty {
   recentTransactions: ClientLoyaltyTransaction[];
 }
 
+export interface ClientReferral {
+  id: string;
+  referredName: string | null;
+  referredEmail: string | null;
+  status: string;
+  convertedAt: string | null;
+  bonusAmount: string;
+  bonusPaid: boolean;
+  bonusPaidAt: string | null;
+  createdAt: string;
+  expiresAt: string | null;
+}
+
 export interface ClientPortalProfile {
   user: {
     id: string;
@@ -72,6 +85,7 @@ export interface ClientPortalProfile {
     completedReferrals: number;
     pendingReferrals: number;
     totalEarnings: string;
+    shareMessage: string | null;
   };
   stats: {
     totalSpent: number;
@@ -102,4 +116,5 @@ export const clientPortalApi = {
     cpf?: string | null;
     birthDate?: string | null;
   }) => apiReq<ClientPortalProfile["client"]>("PATCH", "/client/me", data),
+  getMyReferrals: () => apiReq<{ data: ClientReferral[] }>("GET", "/client/me/referrals"),
 };
