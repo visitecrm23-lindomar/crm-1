@@ -17,6 +17,7 @@ import {
   UserCircle,
   ChevronDown,
   LogOut,
+  Share2,
 } from "lucide-react";
 
 export default function VitrineLayout({
@@ -134,7 +135,7 @@ export default function VitrineLayout({
                   <ChevronDown className="w-3 h-3" />
                 </button>
                 {profileDropdownOpen && (
-                  <div className="absolute right-0 mt-1 w-40 rounded-lg bg-white shadow-lg overflow-hidden z-50">
+                  <div className="absolute right-0 mt-1 w-48 rounded-lg bg-white shadow-lg overflow-hidden z-50">
                     <a
                       href="/perfil"
                       className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -142,6 +143,14 @@ export default function VitrineLayout({
                     >
                       <UserCircle className="w-4 h-4" />
                       Meu Perfil
+                    </a>
+                    <a
+                      href={`/loja/${slug}/minhas-indicacoes`}
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      onClick={() => setProfileDropdownOpen(false)}
+                    >
+                      <Share2 className="w-4 h-4" />
+                      Minhas Indicações
                     </a>
                     <button
                       onClick={handleSignOut}
@@ -256,6 +265,14 @@ export default function VitrineLayout({
                 >
                   <UserCircle className="w-4 h-4" />
                   Meu Perfil
+                </a>
+                <a
+                  href={`/loja/${slug}/minhas-indicacoes`}
+                  className="flex items-center gap-2 text-white/90 hover:text-white text-sm font-medium py-1"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <Share2 className="w-4 h-4" />
+                  Minhas Indicações
                 </a>
                 <button
                   onClick={handleSignOut}

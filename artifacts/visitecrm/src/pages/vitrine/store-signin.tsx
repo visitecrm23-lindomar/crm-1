@@ -6,6 +6,15 @@ import { PublicStore } from "@/lib/storeApi";
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+function getRedirectTarget(): string {
+  const params = new URLSearchParams(window.location.search);
+  const redirect = params.get("redirect");
+  // Accept only safe relative paths: must start with "/" but not "//" or "/\"
+  // to prevent open-redirect attacks like //evil.com or /\evil.com
+  if (redirect && /^\/[^/\\]/.test(redirect)) return redirect;
+  return "/perfil";
+}
+
 export default function VitrineSignIn({
   store,
 }: {
@@ -14,12 +23,13 @@ export default function VitrineSignIn({
 }) {
   const { isSignedIn } = useUser();
   const [, navigate] = useLocation();
+  const redirectTarget = getRedirectTarget();
 
   useEffect(() => {
     if (isSignedIn) {
-      navigate("/perfil", { replace: true });
+      navigate(redirectTarget, { replace: true });
     }
-  }, [isSignedIn, navigate]);
+  }, [isSignedIn, navigate, redirectTarget]);
 
   return (
     <div className="min-h-[calc(100vh-64px)] flex items-start justify-center pt-10 pb-16 px-4 bg-gray-50">
@@ -55,8 +65,8 @@ export default function VitrineSignIn({
           </p>
           <SignIn
             routing="hash"
-            fallbackRedirectUrl="/perfil"
-            forceRedirectUrl="/perfil"
+            fallbackRedirectUrl={redirectTarget}
+            forceRedirectUrl={redirectTarget}
             signUpUrl={`${basePath}/sign-up`}
             appearance={{
               elements: {

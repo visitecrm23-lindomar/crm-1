@@ -10,6 +10,7 @@ import VitrineCheckout from "./checkout";
 import VitrineOrderTracking from "./order-tracking";
 import ReservationWizard from "./reservation-wizard";
 import ReferralLanding from "./referral-landing";
+import MyReferralPage from "./my-referral";
 import VitrineSignIn from "./store-signin";
 import { Loader2, AlertCircle } from "lucide-react";
 
@@ -226,6 +227,9 @@ function StoreRouter({ slug }: { slug: string }) {
         </Route>
         <Route path={`/loja/${slug}/indicacao`}>
           <ReferralLanding slug={slug} store={store} />
+        </Route>
+        <Route path={`/loja/${slug}/minhas-indicacoes`}>
+          <MyReferralPage slug={slug} store={store} />
         </Route>
         <Route path={`/loja/${slug}/ref/:code`}>
           {(params: Record<string, string>) => (
