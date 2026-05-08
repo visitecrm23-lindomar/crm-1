@@ -1117,6 +1117,16 @@ export default function Indicacoes() {
                 <p className="text-xs text-center text-muted-foreground">
                   Escaneie para acessar o link de indicação
                 </p>
+                <div className="flex justify-center">
+                  <a
+                    href={shareData.qrCodeDataUrl}
+                    download={`qrcode-${shareReferral?.code ?? "referral"}.png`}
+                    className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Baixar QR-code
+                  </a>
+                </div>
               </div>
             </div>
           ) : (
