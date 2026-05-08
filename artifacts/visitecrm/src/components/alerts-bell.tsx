@@ -5,6 +5,7 @@ import { Bell, AlertTriangle, Info, XCircle, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useToast } from "@/hooks/use-toast";
 import { ROLES } from "@workspace/permissions";
 
 interface Alert {
@@ -15,6 +16,7 @@ interface Alert {
   description: string;
   actionHref: string;
   count: number;
+  reservationIds?: string[];
 }
 
 interface AlertsResponse {
@@ -53,9 +55,10 @@ const TYPE_CONFIG = {
 
 export function AlertsBell({ userRole }: { userRole?: string }) {
   const [open, setOpen] = useState(false);
-  const [isResolving, setIsResolving] = useState(false);
+  const [resolvingIds, setResolvingIds] = useState<Set<string>>(new Set());
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const canSeeAlerts = userRole === ROLES.AGENCY_ADMIN || userRole === ROLES.SALES;
 
   const { data } = useQuery<AlertsResponse>({
@@ -66,17 +69,27 @@ export function AlertsBell({ userRole }: { userRole?: string }) {
     staleTime: 60_000,
   });
 
-  const handleResolveExhausted = async (e: React.MouseEvent) => {
+  const handleResolveExhausted = async (e: React.MouseEvent, reservationId: string) => {
     e.stopPropagation();
-    setIsResolving(true);
+    setResolvingIds((prev) => new Set(prev).add(reservationId));
     try {
-      await fetch(`${BASE}/api/alerts/email-retry-exhausted/resolve`, {
+      const res = await fetch(`${BASE}/api/alerts/email-retry-exhausted/${encodeURIComponent(reservationId)}/resolve`, {
         method: "POST",
         credentials: "include",
       });
+      if (!res.ok) {
+        toast({ title: "Erro ao resolver alerta", description: "Não foi possível marcar o alerta como resolvido. Tente novamente.", variant: "destructive" });
+        return;
+      }
       await queryClient.invalidateQueries({ queryKey: ["alerts"] });
+    } catch {
+      toast({ title: "Erro ao resolver alerta", description: "Falha de rede. Verifique sua conexão e tente novamente.", variant: "destructive" });
     } finally {
-      setIsResolving(false);
+      setResolvingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(reservationId);
+        return next;
+      });
     }
   };
 
@@ -131,32 +144,41 @@ export function AlertsBell({ userRole }: { userRole?: string }) {
               const Icon = cfg.Icon;
 
               if (alert.id === "email-retry-exhausted") {
+                const rids = alert.reservationIds ?? [];
                 return (
-                  <div key={alert.id} className="flex items-start gap-3 px-4 py-3">
-                    <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${cfg.className}`} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-medium leading-snug">{alert.title}</p>
-                        <span className="text-[10px] text-muted-foreground shrink-0">{alert.category}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground leading-snug mt-0.5">{alert.description}</p>
-                      <div className="flex items-center gap-2 mt-2">
+                  <div key={alert.id} className="px-4 py-3">
+                    <div className="flex items-start gap-3">
+                      <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${cfg.className}`} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium leading-snug">{alert.title}</p>
+                          <span className="text-[10px] text-muted-foreground shrink-0">{alert.category}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-snug mt-0.5">{alert.description}</p>
                         <button
-                          className="text-xs text-primary hover:underline"
+                          className="text-xs text-primary hover:underline mt-1.5"
                           onClick={() => { setOpen(false); navigate(alert.actionHref); }}
                         >
                           Ver log de e-mails →
                         </button>
-                        <span className="text-muted-foreground text-xs">·</span>
-                        <button
-                          className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
-                          onClick={handleResolveExhausted}
-                          disabled={isResolving}
-                        >
-                          {isResolving ? "Resolvendo…" : "Marcar como resolvido"}
-                        </button>
                       </div>
                     </div>
+                    {rids.length > 0 && (
+                      <div className="mt-2 ml-7 flex flex-col gap-1">
+                        {rids.map((rid) => (
+                          <div key={rid} className="flex items-center justify-between gap-2">
+                            <span className="text-xs text-muted-foreground font-mono truncate">{rid}</span>
+                            <button
+                              className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 shrink-0"
+                              onClick={(e) => handleResolveExhausted(e, rid)}
+                              disabled={resolvingIds.has(rid)}
+                            >
+                              {resolvingIds.has(rid) ? "Resolvendo…" : "Marcar como resolvido"}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               }

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { paymentsTable, tripsTable, dealsTable, clientsTable, emailLogsTable, reservationsTable } from "@workspace/db";
-import { eq, and, lt, lte, gte, gt, sql, isNotNull, notLike, inArray } from "drizzle-orm";
+import { eq, and, lt, lte, gte, gt, sql, isNotNull, isNull, notLike, inArray } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 import { AGENCY_STAFF_ROLES } from '../lib/tenant';
 import { PAYMENT_STATUS, PAYMENT_TYPE, DEAL_STATUS, TRIP_STATUS } from "@workspace/permissions";
@@ -16,6 +16,7 @@ interface Alert {
   description: string;
   actionHref: string;
   count: number;
+  reservationIds?: string[];
 }
 
 router.get("/alerts", async (req, res): Promise<void> => {
@@ -133,6 +134,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
       )),
 
       // 8. E-mails com tentativas esgotadas — query via retriesExhaustedAt flag (persists beyond 24h)
+      // Excludes rows that have been manually resolved via retriesResolvedAt.
       // Fetches all rows that have been stamped as exhausted so we can check resolution state.
       db.select({
         reservationId: emailLogsTable.reservationId,
@@ -144,6 +146,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
         eq(emailLogsTable.tenantId, tenantId),
         isNotNull(emailLogsTable.reservationId),
         isNotNull(emailLogsTable.retriesExhaustedAt),
+        isNull(emailLogsTable.retriesResolvedAt),
         notLike(emailLogsTable.subject, "Reserva Cancelada%"),
         notLike(emailLogsTable.subject, "Nova reserva%"),
         notLike(emailLogsTable.subject, "Alerta: Falha no e-mail de confirmação%"),
@@ -345,6 +348,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
           description,
           actionHref: "/communication?tab=failed-emails",
           count: exhaustedCount,
+          reservationIds: exhaustedReservationIds,
         });
       }
     }
@@ -356,7 +360,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/alerts/email-retry-exhausted/resolve", async (req, res): Promise<void> => {
+router.post("/alerts/email-retry-exhausted/:reservationId/resolve", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -366,13 +370,33 @@ router.post("/alerts/email-retry-exhausted/resolve", async (req, res): Promise<v
       return;
     }
 
+    const { reservationId } = req.params;
+
+    // Verify the reservation belongs to this tenant before updating
+    const [reservation] = await db
+      .select({ id: reservationsTable.id })
+      .from(reservationsTable)
+      .where(and(
+        eq(reservationsTable.id, reservationId),
+        eq(reservationsTable.tenantId, me.tenantId),
+      ))
+      .limit(1);
+
+    if (!reservation) {
+      res.status(404).json({ error: "Reserva não encontrada" });
+      return;
+    }
+
+    const now = new Date();
     await db
       .update(emailLogsTable)
-      .set({ retriesExhaustedAt: null })
+      .set({ retriesResolvedAt: now })
       .where(
         and(
           eq(emailLogsTable.tenantId, me.tenantId),
+          eq(emailLogsTable.reservationId, reservationId),
           isNotNull(emailLogsTable.retriesExhaustedAt),
+          isNull(emailLogsTable.retriesResolvedAt),
         ),
       );
 

@@ -169,6 +169,13 @@
       "when": 1778600000000,
       "tag": "0023_add_referral_expiry_warning_toggles",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1778700000000,
+      "tag": "0024_add_retries_resolved_at",
+      "breakpoints": true
     }
   ]
 }

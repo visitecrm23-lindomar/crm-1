@@ -11,6 +11,7 @@ export const emailLogsTable = pgTable("email_logs", {
   errorMessage: text("error_message"),
   isAutoRetry: boolean("is_auto_retry").notNull().default(false),
   retriesExhaustedAt: timestamp("retries_exhausted_at", { withTimezone: true }),
+  retriesResolvedAt: timestamp("retries_resolved_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
