@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, referralsTable, clientsTable, referralSettingsTable, referralTrackingTable, tenantsTable } from "@workspace/db";
+import { db, referralsTable, clientsTable, referralSettingsTable, referralTrackingTable, tenantsTable, emailLogsTable } from "@workspace/db";
 import { eq, and, desc, sql, count, ilike, or, inArray, getTableColumns } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
@@ -529,6 +529,58 @@ router.post("/referrals/:id/resend-expiry-warning", async (req, res): Promise<vo
   } catch (err) {
     req.log.error({ err }, "Error resending expiry warning email");
     res.status(500).json({ error: "Falha ao reenviar o aviso de expiração" });
+  }
+});
+
+router.get("/referrals/:id/expiry-email-status", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    const [row] = await db.select({
+      code: referralsTable.code,
+      referrerClientEmail: clientsTable.email,
+    }).from(referralsTable)
+      .leftJoin(clientsTable, and(
+        eq(referralsTable.referrerId, clientsTable.id),
+        eq(clientsTable.tenantId, me.tenantId),
+      ))
+      .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
+      .limit(1);
+
+    if (!row) { res.status(404).json({ error: "Indicação não encontrada" }); return; }
+
+    const referrerEmail = row.referrerClientEmail;
+    if (!referrerEmail) {
+      res.json({ d7: null, d1: null });
+      return;
+    }
+
+    const logs = await db.select({
+      id: emailLogsTable.id,
+      subject: emailLogsTable.subject,
+      status: emailLogsTable.status,
+      errorMessage: emailLogsTable.errorMessage,
+      createdAt: emailLogsTable.createdAt,
+    }).from(emailLogsTable)
+      .where(and(
+        eq(emailLogsTable.tenantId, me.tenantId),
+        eq(emailLogsTable.recipient, referrerEmail),
+        ilike(emailLogsTable.subject, `%${row.code}%`),
+      ))
+      .orderBy(desc(emailLogsTable.createdAt))
+      .limit(50);
+
+    const d7Logs = logs.filter((l) => l.subject.includes("7 dias"));
+    const d1Logs = logs.filter((l) => l.subject.includes("1 dia"));
+
+    const toEntry = (log: typeof logs[0] | undefined) =>
+      log ? { status: log.status, errorMessage: log.errorMessage ?? null, sentAt: log.createdAt } : null;
+
+    res.json({ d7: toEntry(d7Logs[0]), d1: toEntry(d1Logs[0]) });
+  } catch (err) {
+    req.log.error({ err }, "Error fetching referral expiry email status");
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

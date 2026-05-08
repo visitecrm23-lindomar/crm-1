@@ -107,6 +107,52 @@ export interface ReferralExportFilters {
   expiringSoon?: boolean;
 }
 
+export interface ReferralExpiryEmailEntry {
+  status: string;
+  errorMessage: string | null;
+  sentAt: string;
+}
+
+export interface ReferralExpiryEmailStatus {
+  d7: ReferralExpiryEmailEntry | null;
+  d1: ReferralExpiryEmailEntry | null;
+}
+
+export const getReferralExpiryEmailStatusUrl = (id: string) =>
+  `/api/referrals/${id}/expiry-email-status`;
+
+export const getReferralExpiryEmailStatus = (id: string, options?: RequestInit) =>
+  customFetch<ReferralExpiryEmailStatus>(getReferralExpiryEmailStatusUrl(id), { ...options, method: "GET" });
+
+export const getReferralExpiryEmailStatusQueryKey = (id: string) =>
+  [`/api/referrals/expiry-email-status`, id] as const;
+
+export function useGetReferralExpiryEmailStatus<
+  TData = ReferralExpiryEmailStatus,
+  TError = ErrorType<unknown>,
+>(
+  id: string | null | undefined,
+  options?: {
+    query?: UseQueryOptions<ReferralExpiryEmailStatus, TError, TData>;
+    request?: RequestInit;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getReferralExpiryEmailStatusQueryKey(id ?? "");
+
+  const queryFn = ({ signal }: { signal?: AbortSignal }) =>
+    getReferralExpiryEmailStatus(id!, { signal, ...requestOptions });
+
+  const query = useQuery({
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  }) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey };
+}
+
 export const getReferralExportUrl = (filters: ReferralExportFilters = {}) => {
   const params = new URLSearchParams();
   if (filters.status && filters.status !== "all") params.set("status", filters.status);

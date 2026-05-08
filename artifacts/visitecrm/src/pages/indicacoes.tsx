@@ -9,6 +9,7 @@ import {
   useResendExpiryWarning,
   useGetReferralAnalytics,
   useGetReferralShare,
+  useGetReferralExpiryEmailStatus,
   getReferralExportUrl,
 } from "@workspace/api-client-react";
 import type { Referral, ReferralSettings, ReferralTierConfig, ReferralAnalyticsPeriod } from "@workspace/api-client-react";
@@ -65,6 +66,8 @@ import {
   Copy,
   QrCode,
   Link2,
+  XCircle,
+  Loader2,
 } from "lucide-react";
 
 const DEFAULT_TIERS: ReferralTierConfig[] = [
@@ -163,6 +166,9 @@ export default function Indicacoes() {
   const shareQueryId = shareModalOpen ? shareReferralId : (detailModalOpen && selectedReferral ? selectedReferral.id : null);
   const { data: shareData, isLoading: shareLoading } = useGetReferralShare(shareQueryId);
   const [detailCopiedLink, setDetailCopiedLink] = useState(false);
+
+  const expiryEmailStatusId = detailModalOpen && selectedReferral ? selectedReferral.id : null;
+  const { data: expiryEmailStatus, refetch: refetchExpiryEmailStatus } = useGetReferralExpiryEmailStatus(expiryEmailStatusId);
 
   const [localSettings, setLocalSettings] = useState<Partial<ReferralSettings>>({});
 
@@ -1306,10 +1312,33 @@ export default function Indicacoes() {
                     <div>
                       <p className="text-muted-foreground">Aviso D-7 enviado em</p>
                       {selectedReferral.expiryWarning7SentAt ? (
-                        <p className="text-xs text-amber-700 flex items-center gap-1">
-                          <Check className="w-3 h-3" />
-                          {fmtDateTime(selectedReferral.expiryWarning7SentAt)}
-                        </p>
+                        <div className="space-y-0.5">
+                          <p className="text-xs text-amber-700 flex items-center gap-1">
+                            <Check className="w-3 h-3" />
+                            {fmtDateTime(selectedReferral.expiryWarning7SentAt)}
+                          </p>
+                          {expiryEmailStatus?.d7 && (() => {
+                            const s = expiryEmailStatus.d7.status;
+                            if (s === "failed") return (
+                              <p className="text-xs text-red-600 flex items-center gap-1 font-medium">
+                                <XCircle className="w-3 h-3" />
+                                Falha na entrega — contate por outro canal
+                              </p>
+                            );
+                            if (s === "sent") return (
+                              <p className="text-xs text-green-600 flex items-center gap-1">
+                                <Check className="w-3 h-3" />
+                                Entregue
+                              </p>
+                            );
+                            return (
+                              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                Aguardando entrega
+                              </p>
+                            );
+                          })()}
+                        </div>
                       ) : (
                         <p className="text-xs text-muted-foreground">Não enviado</p>
                       )}
@@ -1317,10 +1346,33 @@ export default function Indicacoes() {
                     <div>
                       <p className="text-muted-foreground">Aviso D-1 enviado em</p>
                       {selectedReferral.expiryWarning1SentAt ? (
-                        <p className="text-xs text-amber-700 flex items-center gap-1">
-                          <Check className="w-3 h-3" />
-                          {fmtDateTime(selectedReferral.expiryWarning1SentAt)}
-                        </p>
+                        <div className="space-y-0.5">
+                          <p className="text-xs text-amber-700 flex items-center gap-1">
+                            <Check className="w-3 h-3" />
+                            {fmtDateTime(selectedReferral.expiryWarning1SentAt)}
+                          </p>
+                          {expiryEmailStatus?.d1 && (() => {
+                            const s = expiryEmailStatus.d1.status;
+                            if (s === "failed") return (
+                              <p className="text-xs text-red-600 flex items-center gap-1 font-medium">
+                                <XCircle className="w-3 h-3" />
+                                Falha na entrega — contate por outro canal
+                              </p>
+                            );
+                            if (s === "sent") return (
+                              <p className="text-xs text-green-600 flex items-center gap-1">
+                                <Check className="w-3 h-3" />
+                                Entregue
+                              </p>
+                            );
+                            return (
+                              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                Aguardando entrega
+                              </p>
+                            );
+                          })()}
+                        </div>
                       ) : (
                         <p className="text-xs text-muted-foreground">Não enviado</p>
                       )}
@@ -1435,6 +1487,7 @@ export default function Indicacoes() {
                             onSuccess: (updated) => {
                               setSelectedReferral((prev) => prev ? { ...prev, ...updated } : prev);
                               refetch();
+                              refetchExpiryEmailStatus();
                               toast({ title: "Aviso D-7 reenviado com sucesso" });
                             },
                             onError: () => toast({ title: "Erro ao reenviar aviso D-7", variant: "destructive" }),
@@ -1458,6 +1511,7 @@ export default function Indicacoes() {
                             onSuccess: (updated) => {
                               setSelectedReferral((prev) => prev ? { ...prev, ...updated } : prev);
                               refetch();
+                              refetchExpiryEmailStatus();
                               toast({ title: "Aviso D-1 reenviado com sucesso" });
                             },
                             onError: () => toast({ title: "Erro ao reenviar aviso D-1", variant: "destructive" }),
