@@ -965,6 +965,134 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
   });
 
   // -------------------------------------------------------------------------
+  // Edge-case: referrer earnings are already 0 when the reversal runs.
+  // The GREATEST(0, ...) guard in the SQL must keep the value at 0 instead of
+  // going negative. The update should still be issued (the DB handles the clamp).
+  it("reverses referral bonus even when referrer earnings are already 0 (GREATEST guard)", async () => {
+    const app = buildReservationsApp();
+    const existing = makeReservation({
+      discountReferralCode: "REF-ZERO",
+      discountReferralAmount: "10",
+      clientId: "client-001",
+    });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] Reversal 3 — referral record lookup → referral found (bonusAmount = "10.00")
+    //   [1] Reversal 4 — payments lookup (empty)
+    //   [2] Reversal 4 — loyalty member lookup (not found → skip clawback)
+    //   [3] re-fetch updated reservation
+    //
+    // The referrer's referralEarnings is effectively 0 in the DB, but we do not
+    // read that value in application code — the GREATEST guard lives in the SQL
+    // expression itself. So the tx.update for clients is still called; the DB
+    // ensures the floor is 0.
+    const tx = buildTxMock([
+      [{ id: "referral-001", referrerId: "referrer-client-001", bonusAmount: "10.00" }],
+      [], // no payments
+      [], // no loyalty member → skip clawback
+      [cancelled],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+    // trips (seats) + clients (referralEarnings) + referrals (status) + commissions (cancel) + reservations = 5
+    expect(tx.update).toHaveBeenCalledTimes(5);
+  });
+
+  // -------------------------------------------------------------------------
+  // Edge-case: reservation has no seats (seats = []).
+  // The seatsCount > 0 guard skips the trip-seat restore entirely, so
+  // tx.update(tripsTable) is never called for seat restoration.
+  it("skips the trip seat-restore when the reservation has no seats (seatsCount = 0)", async () => {
+    const app = buildReservationsApp();
+    // No seats, no discounts, no clientId → minimal reversal path
+    const existing = makeReservation({ seats: [], clientId: null });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue: only the re-fetch after UPDATE
+    // No reversal selects run (no discounts, no clientId)
+    const tx = buildTxMock([[cancelled]]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+    // commissions cancel + reservations status update = 2 updates
+    // trips is NOT updated because seatsCount === 0
+    expect(tx.update).toHaveBeenCalledTimes(2);
+
+    // Verify that none of the captured updates targeted tripsTable seat columns.
+    // We detect a seat-restore update by the presence of `availableSeats` in its set.
+    const seatRestoreUpdate = capturedUpdates.find(
+      (u) => "availableSeats" in u.set,
+    );
+    expect(seatRestoreUpdate).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // Edge-case: reservation has a coupon code but the tenant has no store record.
+  // The coupon reversal is silently skipped (the outer `if (store)` guard)
+  // and the rest of the cancellation still completes successfully.
+  it("silently skips coupon reversal when the store record does not exist", async () => {
+    const app = buildReservationsApp();
+    const existing = makeReservation({
+      discountCouponCode: "GHOST-COUPON",
+      discountCouponAmount: "30",
+      clientId: null, // no loyalty/referral reversals
+    });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] Reversal 1 — store lookup → [] (no store found → coupon reversal skipped)
+    //   [1] re-fetch updated reservation
+    const tx = buildTxMock([
+      [], // store not found → skip coupon decrement entirely
+      [cancelled],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+    // trips (seats) + commissions (cancel) + reservations (status) = 3 updates
+    // storeCoupons is NOT updated because the store was not found
+    expect(tx.update).toHaveBeenCalledTimes(3);
+
+    // No storeCoupons (usageCount) update should have been captured
+    const couponUpdate = capturedUpdates.find(
+      (u) => "usageCount" in u.set,
+    );
+    expect(couponUpdate).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
   it("calls general CalendarSyncService.syncTrip for non-cancellation reservation PATCHes (regression guard)", async () => {
     const app = buildReservationsApp();
     // A notes-only update: no status change, no cancellation
