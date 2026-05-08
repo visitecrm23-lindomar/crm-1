@@ -65,19 +65,15 @@ if (Number.isNaN(port) || port <= 0) {
   process.env["CREDENTIAL_ENCRYPTION_KEY"] = cleaned;
 }
 
-// Webhook secret validation. In production both are mandatory; dev/test only warns.
+// Webhook secret validation — always a warning, never fatal.
+// The webhook endpoints validate the secret at request time and reject unsigned
+// payloads with a 400; crashing the server here would make deployment impossible
+// for agencies that don't yet have Stripe / MercadoPago configured.
 {
-  const isProd = process.env["NODE_ENV"] === "production";
   const missing: string[] = [];
   if (!process.env["STRIPE_WEBHOOK_SECRET"]) missing.push("STRIPE_WEBHOOK_SECRET");
   if (!process.env["MP_WEBHOOK_SECRET"]) missing.push("MP_WEBHOOK_SECRET");
   if (missing.length > 0) {
-    if (isProd) {
-      throw new Error(
-        `Required webhook secrets are missing in production: ${missing.join(", ")}. ` +
-          `These are needed to validate Stripe / MercadoPago webhook signatures and auto-confirm paid reservations.`,
-      );
-    }
     logger.warn(
       { missing },
       "⚠️  Webhook secrets are not set; /api/webhooks/* endpoints will reject events with 400 until they are configured.",
