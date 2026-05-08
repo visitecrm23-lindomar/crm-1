@@ -751,6 +751,7 @@ export async function dispatchReferralExpiredEmail(
 export async function enqueueReferralExpiringSoonEmail(
   props: ReferralExpiringSoonEmailProps,
   tenantId: string,
+  referralId?: string,
 ): Promise<void> {
   const emailLogId = generateId();
   const daysLabel = props.daysLeft <= 1 ? "1 dia" : `${props.daysLeft} dias`;
@@ -762,6 +763,7 @@ export async function enqueueReferralExpiringSoonEmail(
       id: emailLogId,
       tenantId,
       reservationId: null,
+      referralId: referralId ?? null,
       recipient: props.referrerEmail,
       subject,
       status: "queued",
@@ -789,6 +791,7 @@ export async function enqueueReferralExpiringSoonEmail(
       id: emailLogId,
       tenantId,
       reservationId: null,
+      referralId: referralId ?? null,
       recipient: props.referrerEmail,
       subject,
       status: result.success ? "sent" : "failed",
@@ -807,6 +810,7 @@ export async function dispatchReferralExpiringSoonEmail(
   referralCode: string,
   expiresAt: Date,
   daysLeft: number,
+  referralId?: string,
 ): Promise<void> {
   const [referrer] = await db
     .select({ name: clientsTable.name, email: clientsTable.email })
@@ -855,6 +859,7 @@ export async function dispatchReferralExpiringSoonEmail(
       shareUrl,
     },
     tenantId,
+    referralId,
   );
 }
 

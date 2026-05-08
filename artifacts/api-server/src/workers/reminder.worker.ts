@@ -1,7 +1,7 @@
 import { Worker } from "bullmq";
 import { db, reservationsTable, tripsTable, clientsTable, tenantsTable, paymentsTable, emailLogsTable, storesTable, usersTable, referralsTable, referralSettingsTable } from "@workspace/db";
 import { eq, and, gt, sql, gte, lt, lte, isNull, isNotNull, notLike, like, inArray, not, exists } from "drizzle-orm";
-import { sendReminderHtmlEmail, sendReservationConfirmationEmail } from "@workspace/email";
+import { sendReminderHtmlEmail, sendReservationConfirmationEmail, sendReferralExpiringSoonEmail } from "@workspace/email";
 import { dispatchReferralExpiredEmail, dispatchReferralExpiringSoonEmail } from "../queues/email-helpers";
 import { getRedisConnection, isTransientRedisError } from "../lib/redis";
 import { logger } from "../lib/logger";
@@ -659,6 +659,213 @@ export async function retryFailedBookingEmails(): Promise<void> {
 }
 
 // ────────────────────────────────────────────────────────────
+// Auto-retry failed referral expiry-warning emails
+// ────────────────────────────────────────────────────────────
+
+export async function retryFailedExpiryWarningEmails(): Promise<void> {
+  const now = new Date();
+  const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+
+  // Find failed expiry-warning logs that have a referralId and were created
+  // in the last 2 hours. We use referralId (not reservationId) to group retries.
+  const failedLogs = await db
+    .select({
+      id: emailLogsTable.id,
+      tenantId: emailLogsTable.tenantId,
+      referralId: emailLogsTable.referralId,
+      subject: emailLogsTable.subject,
+      recipient: emailLogsTable.recipient,
+    })
+    .from(emailLogsTable)
+    .where(
+      and(
+        eq(emailLogsTable.status, "failed"),
+        isNotNull(emailLogsTable.referralId),
+        gte(emailLogsTable.createdAt, twoHoursAgo),
+        like(emailLogsTable.subject, "⏰%"),
+      ),
+    );
+
+  if (failedLogs.length === 0) {
+    logger.debug("[expiry-warning-retry] No failed expiry-warning emails in the last 2 hours");
+    return;
+  }
+
+  // Deduplicate by referralId — only one retry attempt per referral per run.
+  const seenReferrals = new Set<string>();
+  const toRetry = failedLogs.filter((log) => {
+    if (!log.referralId || seenReferrals.has(log.referralId)) return false;
+    seenReferrals.add(log.referralId);
+    return true;
+  });
+
+  logger.info({ count: toRetry.length }, "[expiry-warning-retry] Failed expiry-warning emails found — evaluating retries");
+
+  let retried = 0;
+  let skipped = 0;
+  let errors = 0;
+
+  for (const log of toRetry) {
+    const referralId = log.referralId!;
+
+    // Fetch all email_log entries for this referral in the 2-hour window.
+    const windowLogs = await db
+      .select({ status: emailLogsTable.status, isAutoRetry: emailLogsTable.isAutoRetry })
+      .from(emailLogsTable)
+      .where(
+        and(
+          eq(emailLogsTable.referralId, referralId),
+          gte(emailLogsTable.createdAt, twoHoursAgo),
+          like(emailLogsTable.subject, "⏰%"),
+        ),
+      );
+
+    // Skip if any log for this referral was already delivered successfully.
+    const alreadyDelivered = windowLogs.some((l) => l.status === "sent");
+    if (alreadyDelivered) {
+      logger.info(
+        { referralId },
+        "[expiry-warning-retry] Skipping — a successful send already exists for this referral in the window",
+      );
+      skipped++;
+      continue;
+    }
+
+    // Count only auto-retry entries to avoid counting the original failure or
+    // any manual resends against the budget.
+    const autoRetriesDone = windowLogs.filter((l) => l.isAutoRetry).length;
+
+    if (autoRetriesDone >= MAX_AUTO_RETRY_ATTEMPTS) {
+      logger.warn(
+        { referralId, autoRetriesDone, limit: MAX_AUTO_RETRY_ATTEMPTS },
+        "[expiry-warning-retry] Skipping — max auto-retry limit reached for this referral",
+      );
+      // Stamp retriesExhaustedAt so staff can see the exhausted state in email logs.
+      await db
+        .update(emailLogsTable)
+        .set({ retriesExhaustedAt: new Date() })
+        .where(
+          and(
+            eq(emailLogsTable.tenantId, log.tenantId),
+            eq(emailLogsTable.referralId, referralId),
+            isNull(emailLogsTable.retriesExhaustedAt),
+          ),
+        );
+      skipped++;
+      continue;
+    }
+
+    // Rebuild the email props from the referral record.
+    const [referral] = await db
+      .select({
+        referrerId: referralsTable.referrerId,
+        code: referralsTable.code,
+        expiresAt: referralsTable.expiresAt,
+        tenantId: referralsTable.tenantId,
+      })
+      .from(referralsTable)
+      .where(and(eq(referralsTable.id, referralId), eq(referralsTable.tenantId, log.tenantId)))
+      .limit(1);
+
+    if (!referral || !referral.expiresAt) {
+      logger.warn(
+        { referralId },
+        "[expiry-warning-retry] Cannot fetch referral record — skipping",
+      );
+      skipped++;
+      continue;
+    }
+
+    // Recalculate daysLeft from the referral's expiresAt so the body stays accurate.
+    const diffMs = referral.expiresAt.getTime() - now.getTime();
+    const daysLeft = Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+
+    // Rebuild the full email props needed by sendReferralExpiringSoonEmail.
+    const [referrer] = await db
+      .select({ name: clientsTable.name, email: clientsTable.email })
+      .from(clientsTable)
+      .where(and(eq(clientsTable.id, referral.referrerId), eq(clientsTable.tenantId, log.tenantId)))
+      .limit(1);
+
+    if (!referrer?.email) {
+      logger.warn({ referralId }, "[expiry-warning-retry] Referrer has no email — skipping");
+      skipped++;
+      continue;
+    }
+
+    const [tenant] = await db
+      .select({ name: tenantsTable.name, logoUrl: tenantsTable.logoUrl })
+      .from(tenantsTable)
+      .where(eq(tenantsTable.id, log.tenantId))
+      .limit(1);
+
+    const [settings] = await db
+      .select({ shareMessage: referralSettingsTable.shareMessage })
+      .from(referralSettingsTable)
+      .where(eq(referralSettingsTable.tenantId, log.tenantId))
+      .limit(1);
+
+    const agencyName = tenant?.name ?? "Agência";
+    const formattedDate = (referral.expiresAt as unknown as Date).toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      timeZone: "America/Sao_Paulo",
+    });
+    const defaultShareMessage = settings?.shareMessage
+      ?? `Olá! Use meu código ${referral.code} na ${agencyName} e ganhe desconto especial na sua próxima viagem! 🌴✈️`;
+    const shareUrl = `https://wa.me/?text=${encodeURIComponent(defaultShareMessage)}`;
+
+    const newLogId = generateId();
+    await db.insert(emailLogsTable).values({
+      id: newLogId,
+      tenantId: log.tenantId,
+      referralId,
+      recipient: referrer.email,
+      subject: log.subject,
+      status: "queued",
+      isAutoRetry: true,
+    });
+
+    const result = await sendReferralExpiringSoonEmail({
+      referrerName: referrer.name ?? referrer.email,
+      referrerEmail: referrer.email,
+      referralCode: referral.code,
+      expiresAt: formattedDate,
+      daysLeft,
+      agencyName,
+      agencyLogo: tenant?.logoUrl ?? null,
+      shareUrl,
+    });
+
+    await db
+      .update(emailLogsTable)
+      .set({
+        status: result.success ? "sent" : "failed",
+        messageId: result.messageId ?? null,
+        errorMessage: result.error ?? null,
+      })
+      .where(eq(emailLogsTable.id, newLogId));
+
+    if (result.success) {
+      retried++;
+      logger.info(
+        { newLogId, referralId, attempt: windowLogs.length + 1 },
+        "[expiry-warning-retry] Auto-retry sent successfully",
+      );
+    } else {
+      errors++;
+      logger.error(
+        { newLogId, referralId, attempt: windowLogs.length + 1, error: result.error },
+        "[expiry-warning-retry] Auto-retry send failed",
+      );
+    }
+  }
+
+  logger.info({ retried, skipped, errors, total: toRetry.length }, "[expiry-warning-retry] Auto-retry run complete");
+}
+
+// ────────────────────────────────────────────────────────────
 // Expired referral notifications
 // ────────────────────────────────────────────────────────────
 
@@ -842,6 +1049,7 @@ async function processExpiringSoonReferralNotifications(): Promise<void> {
         referral.code,
         referral.expiresAt,
         windowLabel,
+        referral.id,
       );
 
       // Task #151: mark the warning as sent on the referral row.
@@ -900,6 +1108,8 @@ export function startReminderWorker(): Worker<ReminderJobData> | null {
         await processExpiredReferralNotifications();
       } else if (job.data.type === "referral_expiry_warning") {
         await processExpiringSoonReferralNotifications();
+      } else if (job.data.type === "expiry_warning_email_retry") {
+        await retryFailedExpiryWarningEmails();
       } else {
         logger.warn({ type: job.data.type }, "[reminder-worker] Unknown reminder type");
       }

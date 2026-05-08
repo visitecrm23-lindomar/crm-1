@@ -10,7 +10,7 @@ import { runExpiredReservationsCron } from "./lib/expired-reservations";
 import { getRedisConnection } from "./lib/redis";
 import { getReminderQueue, closeQueues } from "./queues/index";
 import { startEmailWorker, stopEmailWorker } from "./workers/email.worker";
-import { startReminderWorker, stopReminderWorker, retryFailedBookingEmails } from "./workers/reminder.worker";
+import { startReminderWorker, stopReminderWorker, retryFailedBookingEmails, retryFailedExpiryWarningEmails } from "./workers/reminder.worker";
 import { startPdfWorker, stopPdfWorker } from "./workers/pdf.worker";
 import { startCommissionSyncWorker, stopCommissionSyncWorker } from "./workers/commission-sync.worker";
 import { startWhatsAppWorker, stopWhatsAppWorker } from "./workers/whatsapp.worker";
@@ -191,6 +191,12 @@ applyMigrations()
             { name: "referral_expiry_warning", data: { type: "referral_expiry_warning" } },
           ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule referral expiry warning"));
 
+          await reminderQueue.upsertJobScheduler(
+            "expiry-warning-email-retry",
+            { pattern: "*/15 * * * *" },
+            { name: "expiry_warning_email_retry", data: { type: "expiry_warning_email_retry" } },
+          ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule expiry-warning email retry"));
+
           logger.info("[reminders] Repeatable reminder jobs registered");
         }
       } else {
@@ -209,6 +215,13 @@ applyMigrations()
           );
         });
         logger.info("[email-retry] node-cron fallback registered (every 15 minutes)");
+
+        cron.schedule("*/15 * * * *", () => {
+          retryFailedExpiryWarningEmails().catch((err) =>
+            logger.error({ err }, "[expiry-warning-retry] node-cron fallback failed"),
+          );
+        });
+        logger.info("[expiry-warning-retry] node-cron fallback registered (every 15 minutes)");
       }
     })();
   });

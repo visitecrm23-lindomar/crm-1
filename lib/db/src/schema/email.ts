@@ -5,6 +5,7 @@ export const emailLogsTable = pgTable("email_logs", {
   id: text("id").primaryKey(),
   tenantId: text("tenant_id").notNull(),
   reservationId: text("reservation_id"),
+  referralId: text("referral_id"),
   recipient: text("recipient").notNull(),
   subject: text("subject").notNull(),
   status: text("status").notNull(),
