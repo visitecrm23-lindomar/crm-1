@@ -68,6 +68,15 @@ interface EmailLog {
   createdAt: string;
 }
 
+interface FailedEmailSummary {
+  emailLogId: string | null;
+  reservationId: string;
+  reservationNumber: string | null;
+  clientName: string;
+  clientEmail: string | null;
+  exhaustedAt: string;
+}
+
 const CHANNELS = [
   { value: "whatsapp", label: "WhatsApp" },
   { value: "email", label: "E-mail" },
@@ -126,6 +135,10 @@ export default function Communication() {
 
   const REFERRAL_EMAIL_RE = /bônus de indicação|indicação foi confirmada|indicação expirou|⏰|vence em \d+ dia/i;
 
+  const [failedSummary, setFailedSummary] = useState<FailedEmailSummary[]>([]);
+  const [loadingFailedSummary, setLoadingFailedSummary] = useState(false);
+  const [failedSummaryError, setFailedSummaryError] = useState<string | null>(null);
+
   const MAX_AUTO_RETRY_ATTEMPTS = 3;
 
   const exhaustedReservationIds = useMemo(() => {
@@ -158,11 +171,40 @@ export default function Communication() {
     }
   }, []);
 
+  const fetchFailedSummary = useCallback(async () => {
+    setLoadingFailedSummary(true);
+    setFailedSummaryError(null);
+    try {
+      const res = await fetch(`${BASE}/api/email-logs/failed-summary`, { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setFailedSummary(data ?? []);
+      } else if (res.status === 403) {
+        setFailedSummaryError("Sem permissão para visualizar e-mails falhos. Entre em contato com um administrador.");
+      } else {
+        const body = await res.json().catch(() => ({}));
+        setFailedSummaryError(body.error ?? "Erro ao carregar e-mails falhos. Tente novamente.");
+      }
+    } catch {
+      setFailedSummaryError("Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.");
+    } finally {
+      setLoadingFailedSummary(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlTab = params.get("tab");
+    if (urlTab) setTab(urlTab);
+  }, []);
+
   useEffect(() => {
     if (tab === "email-logs") {
       fetchEmailLogs();
+    } else if (tab === "failed-emails") {
+      fetchFailedSummary();
     }
-  }, [tab, fetchEmailLogs]);
+  }, [tab, fetchEmailLogs, fetchFailedSummary]);
 
   const handleResend = async (id: string) => {
     setResendingId(id);
@@ -174,6 +216,25 @@ export default function Communication() {
       if (res.ok) {
         toast({ title: "E-mail reenfileirado para reenvio." });
         fetchEmailLogs();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        toast({ title: "Erro ao reenviar", description: body.error ?? "Tente novamente.", variant: "destructive" });
+      }
+    } finally {
+      setResendingId(null);
+    }
+  };
+
+  const handleResendFailed = async (emailLogId: string) => {
+    setResendingId(emailLogId);
+    try {
+      const res = await fetch(`${BASE}/api/email-logs/${emailLogId}/resend`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (res.ok) {
+        toast({ title: "E-mail reenviado com sucesso.", description: "O alerta foi marcado como resolvido." });
+        fetchFailedSummary();
       } else {
         const body = await res.json().catch(() => ({}));
         toast({ title: "Erro ao reenviar", description: body.error ?? "Tente novamente.", variant: "destructive" });
@@ -520,6 +581,15 @@ export default function Communication() {
           <TabsTrigger value="templates">Templates</TabsTrigger>
           <TabsTrigger value="email-logs" className="flex items-center gap-1">
             <Mail className="w-3.5 h-3.5" /> Log de E-mails
+          </TabsTrigger>
+          <TabsTrigger value="failed-emails" className="flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
+            E-mails Falhos
+            {failedSummary.length > 0 && (
+              <span className="ml-1 inline-flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold w-5 h-5">
+                {failedSummary.length}
+              </span>
+            )}
           </TabsTrigger>
         </TabsList>
 
@@ -955,6 +1025,89 @@ export default function Communication() {
                   ))}
               </TableBody>
             </Table>
+          )}
+        </TabsContent>
+
+        <TabsContent value="failed-emails" className="mt-4">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm text-muted-foreground">
+                Reservas cujos e-mails de confirmação esgotaram todas as tentativas automáticas e ainda não foram reenviados com sucesso.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={fetchFailedSummary} disabled={loadingFailedSummary}>
+              <RefreshCcw className={`w-4 h-4 mr-2 ${loadingFailedSummary ? "animate-spin" : ""}`} />
+              Atualizar
+            </Button>
+          </div>
+          {loadingFailedSummary ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : failedSummaryError ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-red-400" />
+              <p className="font-medium text-red-700">{failedSummaryError}</p>
+            </div>
+          ) : failedSummary.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <Mail className="w-12 h-12 mx-auto mb-4 opacity-30" />
+              <p className="font-medium">Nenhum e-mail com falha pendente.</p>
+              <p className="text-xs mt-1">Todos os e-mails de confirmação foram entregues com sucesso.</p>
+            </div>
+          ) : (
+            <>
+              <div className="mb-3 flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-200">
+                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                <p className="text-sm text-red-700">
+                  {failedSummary.length} reserva(s) com e-mail de confirmação não entregue. Use o botão "Reenviar" para tentar novamente.
+                </p>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Reserva</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>E-mail do cliente</TableHead>
+                    <TableHead>Esgotado em</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {failedSummary.map((item) => (
+                    <TableRow key={item.reservationId}>
+                      <TableCell className="font-mono text-sm font-medium">
+                        #{item.reservationNumber ?? item.reservationId.slice(0, 8)}
+                      </TableCell>
+                      <TableCell className="text-sm">{item.clientName}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {item.clientEmail ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                        {new Date(item.exhaustedAt).toLocaleString("pt-BR")}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {item.emailLogId ? (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleResendFailed(item.emailLogId!)}
+                            disabled={resendingId === item.emailLogId}
+                          >
+                            <RefreshCcw className={`w-3.5 h-3.5 mr-1.5 ${resendingId === item.emailLogId ? "animate-spin" : ""}`} />
+                            Reenviar
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Sem log disponível</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </>
           )}
         </TabsContent>
       </Tabs>

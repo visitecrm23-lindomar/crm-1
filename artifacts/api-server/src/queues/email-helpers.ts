@@ -892,8 +892,23 @@ export async function resendEmailLog(
     props,
   });
 
+  // Clear retriesExhaustedAt on all email logs for this reservation so the
+  // exhausted-retry alert is immediately resolved — the staff member's manual
+  // intervention is the resolution event, not the eventual delivery outcome.
+  if (log.reservationId) {
+    await db
+      .update(emailLogsTable)
+      .set({ retriesExhaustedAt: null })
+      .where(
+        and(
+          eq(emailLogsTable.tenantId, tenantId),
+          eq(emailLogsTable.reservationId, log.reservationId),
+        ),
+      );
+  }
+
   // A new email_log row is created per resend attempt so the full send history
   // is preserved and each attempt is independently traceable.
-  logger.info({ emailLogId, reservationId: log.reservationId }, "[email-queue] Resend enqueued");
+  logger.info({ emailLogId, reservationId: log.reservationId }, "[email-queue] Resend enqueued, exhausted-retry alert resolved");
   return { ok: true };
 }

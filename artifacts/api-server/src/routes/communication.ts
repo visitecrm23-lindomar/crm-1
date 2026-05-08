@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { messagesTable, messageTemplatesTable, automationsTable, clientsTable, emailLogsTable } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { messagesTable, messageTemplatesTable, automationsTable, clientsTable, emailLogsTable, reservationsTable } from "@workspace/db";
+import { eq, and, desc, isNotNull, inArray, notLike } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { z } from "zod";
@@ -329,6 +329,124 @@ router.get("/clients-for-messaging", async (req, res): Promise<void> => {
 });
 
 // ── Email Logs ──────────────────────────────────────────────────────────────
+
+router.get("/email-logs/failed-summary", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!MANAGEMENT_ROLES.includes(me.role)) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const exhaustedLogs = await db
+      .select({
+        id: emailLogsTable.id,
+        reservationId: emailLogsTable.reservationId,
+        retriesExhaustedAt: emailLogsTable.retriesExhaustedAt,
+      })
+      .from(emailLogsTable)
+      .where(
+        and(
+          eq(emailLogsTable.tenantId, me.tenantId),
+          isNotNull(emailLogsTable.retriesExhaustedAt),
+          isNotNull(emailLogsTable.reservationId),
+        ),
+      )
+      .orderBy(desc(emailLogsTable.createdAt));
+
+    const byReservation = new Map<string, { exhaustedAt: Date; latestLogId: string }>();
+    for (const log of exhaustedLogs) {
+      const rid = log.reservationId!;
+      const exhaustedAt = log.retriesExhaustedAt!;
+      const existing = byReservation.get(rid);
+      if (!existing || exhaustedAt > existing.exhaustedAt) {
+        byReservation.set(rid, { exhaustedAt, latestLogId: log.id });
+      }
+    }
+
+    if (byReservation.size === 0) {
+      res.json([]);
+      return;
+    }
+
+    const allExhaustedIds = [...byReservation.keys()];
+
+    const manualResends = await db
+      .select({ reservationId: emailLogsTable.reservationId, createdAt: emailLogsTable.createdAt })
+      .from(emailLogsTable)
+      .where(
+        and(
+          eq(emailLogsTable.tenantId, me.tenantId),
+          inArray(emailLogsTable.reservationId, allExhaustedIds),
+          eq(emailLogsTable.status, "sent"),
+          eq(emailLogsTable.isAutoRetry, false),
+          notLike(emailLogsTable.subject, "Alerta: Falha no e-mail de confirmação%"),
+          notLike(emailLogsTable.subject, "Reserva Cancelada%"),
+          notLike(emailLogsTable.subject, "Nova reserva%"),
+        ),
+      );
+
+    const resolvedIds = new Set<string>();
+    for (const resend of manualResends) {
+      const rid = resend.reservationId!;
+      const sentAt = resend.createdAt;
+      const { exhaustedAt } = byReservation.get(rid)!;
+      if (sentAt >= exhaustedAt) resolvedIds.add(rid);
+    }
+
+    const unresolvedIds = allExhaustedIds.filter((rid) => !resolvedIds.has(rid));
+    if (unresolvedIds.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    const latestFailedLogs = await db
+      .select({ id: emailLogsTable.id, reservationId: emailLogsTable.reservationId })
+      .from(emailLogsTable)
+      .where(
+        and(
+          eq(emailLogsTable.tenantId, me.tenantId),
+          inArray(emailLogsTable.reservationId, unresolvedIds),
+          eq(emailLogsTable.status, "failed"),
+        ),
+      )
+      .orderBy(desc(emailLogsTable.createdAt));
+
+    const latestFailedByReservation = new Map<string, string>();
+    for (const log of latestFailedLogs) {
+      if (!latestFailedByReservation.has(log.reservationId!)) {
+        latestFailedByReservation.set(log.reservationId!, log.id);
+      }
+    }
+
+    const details = await db
+      .select({
+        reservationId: reservationsTable.id,
+        reservationNumber: reservationsTable.reservationNumber,
+        voucherCode: reservationsTable.voucherCode,
+        clientName: clientsTable.name,
+        clientEmail: clientsTable.email,
+      })
+      .from(reservationsTable)
+      .innerJoin(clientsTable, eq(reservationsTable.clientId, clientsTable.id))
+      .where(inArray(reservationsTable.id, unresolvedIds));
+
+    const result = details.map((d) => ({
+      emailLogId: latestFailedByReservation.get(d.reservationId) ?? null,
+      reservationId: d.reservationId,
+      reservationNumber: d.reservationNumber ?? d.voucherCode,
+      clientName: d.clientName,
+      clientEmail: d.clientEmail,
+      exhaustedAt: byReservation.get(d.reservationId)!.exhaustedAt.toISOString(),
+    }));
+
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Error fetching failed email summary");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 router.get("/email-logs", async (req, res): Promise<void> => {
   try {

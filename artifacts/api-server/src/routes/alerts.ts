@@ -343,7 +343,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
           category: "E-mails",
           title: `${exhaustedCount} e-mail(s) de confirmação com tentativas esgotadas`,
           description,
-          actionHref: "/communication?tab=email-logs",
+          actionHref: "/communication?tab=failed-emails",
           count: exhaustedCount,
         });
       }
