@@ -1,4 +1,5 @@
 import type { Reservation } from "@workspace/api-client-react";
+import { usePermissions } from "@/hooks/use-permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +57,7 @@ export function ReservationsTable({
   onViewDetail, onEdit, onPayment, onVoucher, onCheckin, onCancel, setClient360Id,
 }: ReservationsTableProps) {
   const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+  const { isCliente } = usePermissions();
 
   return (
     <>
@@ -109,7 +111,7 @@ export function ReservationsTable({
             Limpar filtros
           </Button>
         )}
-        <Button
+        {!isCliente && <Button
           variant="outline"
           size="sm"
           className="ml-auto shrink-0"
@@ -133,7 +135,7 @@ export function ReservationsTable({
         >
           <Download className="w-3.5 h-3.5 mr-1.5" />
           Exportar CSV
-        </Button>
+        </Button>}
       </div>
 
       <div className="bg-card rounded-lg border overflow-hidden">

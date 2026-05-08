@@ -239,7 +239,8 @@ router.get("/reservations/export", async (req, res, next: NextFunction): Promise
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+    // Clients are not permitted to export reservation data
+    if (me.role === ROLES.CLIENT) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const { tripId, clientId, status, search, createdById, dateFrom, dateTo, commissionSyncStatus, hasAutoRetry } = req.query as Record<string, string>;
 
@@ -252,7 +253,6 @@ router.get("/reservations/export", async (req, res, next: NextFunction): Promise
     if (status) conditions.push(eq(reservationsTable.status, parseReservationStatus(status)));
     if (commissionSyncStatus) conditions.push(eq(reservationsTable.commissionSyncStatus, commissionSyncStatus));
     if (createdById) conditions.push(eq(reservationsTable.createdById, createdById));
-    if (clientId) conditions.push(eq(reservationsTable.clientId, clientId));
     if (hasAutoRetry === "true") {
       conditions.push(
         sql`EXISTS (SELECT 1 FROM ${emailLogsTable} WHERE ${emailLogsTable.reservationId} = ${reservationsTable.id} AND ${emailLogsTable.isAutoRetry} = true)` as ReturnType<typeof eq>,
@@ -284,6 +284,50 @@ router.get("/reservations/export", async (req, res, next: NextFunction): Promise
       } else {
         conditions.push(voucherCondition);
       }
+    }
+
+    // Mirror the same row-level scoping as GET /reservations
+    if (me.role === ROLES.SALES) {
+      const sellerClients = await db.select({ id: clientsTable.id })
+        .from(clientsTable)
+        .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.createdById, me.id)));
+      if (!sellerClients.length && !clientId) {
+        // Sales rep has no clients — return empty CSV
+        const BOM = "\uFEFF";
+        const exportDate = new Date().toISOString().slice(0, 10);
+        const exportHeaders = [
+          "Nº Reserva", "Cliente", "E-mail", "WhatsApp", "CPF",
+          "Viagem", "Data de Saída", "Assentos",
+          "Valor Total (R$)", "Pago (R$)", "Saldo (R$)", "Método de Pagamento",
+          "Status", "Origem", "E-mail Auto-reenviado", "Criado em",
+        ];
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="reservas-${exportDate}.csv"`);
+        res.send(BOM + exportHeaders.join(","));
+        return;
+      }
+      const sellerClientIds = sellerClients.map(c => c.id);
+      if (clientId) {
+        if (!sellerClientIds.includes(clientId)) {
+          const BOM = "\uFEFF";
+          const exportDate = new Date().toISOString().slice(0, 10);
+          const exportHeaders = [
+            "Nº Reserva", "Cliente", "E-mail", "WhatsApp", "CPF",
+            "Viagem", "Data de Saída", "Assentos",
+            "Valor Total (R$)", "Pago (R$)", "Saldo (R$)", "Método de Pagamento",
+            "Status", "Origem", "E-mail Auto-reenviado", "Criado em",
+          ];
+          res.setHeader("Content-Type", "text/csv; charset=utf-8");
+          res.setHeader("Content-Disposition", `attachment; filename="reservas-${exportDate}.csv"`);
+          res.send(BOM + exportHeaders.join(","));
+          return;
+        }
+        conditions.push(eq(reservationsTable.clientId, clientId));
+      } else {
+        conditions.push(inArray(reservationsTable.clientId, sellerClientIds));
+      }
+    } else if (clientId) {
+      conditions.push(eq(reservationsTable.clientId, clientId));
     }
 
     const rows = await db
