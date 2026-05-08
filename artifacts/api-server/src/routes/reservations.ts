@@ -235,6 +235,157 @@ router.get("/reservations/stats", async (req, res, next: NextFunction): Promise<
   }
 });
 
+router.get("/reservations/export", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+
+    const { tripId, clientId, status, search, createdById, dateFrom, dateTo, commissionSyncStatus, hasAutoRetry } = req.query as Record<string, string>;
+
+    const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+    if (dateFrom && !ISO_DATE.test(dateFrom)) { next(new ValidationError("dateFrom must be a valid ISO date (YYYY-MM-DD)", "VALIDATION_ERROR")); return; }
+    if (dateTo && !ISO_DATE.test(dateTo)) { next(new ValidationError("dateTo must be a valid ISO date (YYYY-MM-DD)", "VALIDATION_ERROR")); return; }
+
+    const conditions: ReturnType<typeof eq>[] = [eq(reservationsTable.tenantId, me.tenantId)];
+    if (tripId) conditions.push(eq(reservationsTable.tripId, tripId));
+    if (status) conditions.push(eq(reservationsTable.status, parseReservationStatus(status)));
+    if (commissionSyncStatus) conditions.push(eq(reservationsTable.commissionSyncStatus, commissionSyncStatus));
+    if (createdById) conditions.push(eq(reservationsTable.createdById, createdById));
+    if (clientId) conditions.push(eq(reservationsTable.clientId, clientId));
+    if (hasAutoRetry === "true") {
+      conditions.push(
+        sql`EXISTS (SELECT 1 FROM ${emailLogsTable} WHERE ${emailLogsTable.reservationId} = ${reservationsTable.id} AND ${emailLogsTable.isAutoRetry} = true)` as ReturnType<typeof eq>,
+      );
+    }
+    if (dateFrom) conditions.push(sql`${reservationsTable.createdAt} >= ${dateFrom}::timestamptz` as ReturnType<typeof eq>);
+    if (dateTo) conditions.push(sql`${reservationsTable.createdAt} <= (${dateTo}::date + interval '1 day - 1 millisecond')` as ReturnType<typeof eq>);
+    if (search) {
+      const term = `%${search}%`;
+      const matchingClients = await db
+        .select({ id: clientsTable.id })
+        .from(clientsTable)
+        .where(and(
+          eq(clientsTable.tenantId, me.tenantId),
+          or(
+            ilike(clientsTable.name, term),
+            ilike(clientsTable.email, term),
+            ilike(clientsTable.whatsapp, term),
+            ilike(clientsTable.cpf, term),
+          ),
+        ));
+      const matchingClientIds = matchingClients.map(c => c.id);
+      const voucherCondition = or(
+        ilike(reservationsTable.voucherCode, term),
+        ilike(reservationsTable.reservationNumber, term),
+      ) as ReturnType<typeof eq>;
+      if (matchingClientIds.length > 0) {
+        conditions.push(or(voucherCondition, inArray(reservationsTable.clientId, matchingClientIds)) as ReturnType<typeof eq>);
+      } else {
+        conditions.push(voucherCondition);
+      }
+    }
+
+    const rows = await db
+      .select({
+        id: reservationsTable.id,
+        reservationNumber: reservationsTable.reservationNumber,
+        voucherCode: reservationsTable.voucherCode,
+        status: reservationsTable.status,
+        totalValue: reservationsTable.totalValue,
+        paidValue: reservationsTable.paidValue,
+        balance: reservationsTable.balance,
+        paymentMethod: reservationsTable.paymentMethod,
+        seats: reservationsTable.seats,
+        storeOrderId: reservationsTable.storeOrderId,
+        createdAt: reservationsTable.createdAt,
+        clientName: clientsTable.name,
+        clientEmail: clientsTable.email,
+        clientWhatsapp: clientsTable.whatsapp,
+        clientCpf: clientsTable.cpf,
+        tripName: tripsTable.name,
+        tripDepartureDate: tripsTable.departureDate,
+      })
+      .from(reservationsTable)
+      .leftJoin(clientsTable, and(eq(reservationsTable.clientId, clientsTable.id), eq(clientsTable.tenantId, me.tenantId)))
+      .leftJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
+      .where(and(...conditions))
+      .orderBy(desc(reservationsTable.createdAt));
+
+    const autoRetryIds = rows.length > 0
+      ? await db
+          .select({ reservationId: emailLogsTable.reservationId })
+          .from(emailLogsTable)
+          .where(and(
+            inArray(emailLogsTable.reservationId, rows.map(r => r.id)),
+            eq(emailLogsTable.isAutoRetry, true),
+          ))
+          .groupBy(emailLogsTable.reservationId)
+          .then(results => new Set(results.map(r => r.reservationId)))
+      : new Set<string>();
+
+    const STATUS_PT: Record<string, string> = {
+      pending: "Pendente",
+      confirmed: "Confirmada",
+      completed: "Concluída",
+      cancelled: "Cancelada",
+    };
+    const METHOD_PT: Record<string, string> = {
+      pix: "PIX",
+      credit_card: "Cartão de Crédito",
+      debit_card: "Cartão de Débito",
+      cash: "Dinheiro",
+      bank_transfer: "Transferência",
+      boleto: "Boleto",
+    };
+
+    const headers = [
+      "Nº Reserva", "Cliente", "E-mail", "WhatsApp", "CPF",
+      "Viagem", "Data de Saída", "Assentos",
+      "Valor Total (R$)", "Pago (R$)", "Saldo (R$)", "Método de Pagamento",
+      "Status", "Origem", "E-mail Auto-reenviado", "Criado em",
+    ];
+
+    const escapeCell = (v: string | null | undefined) => {
+      if (v == null) return "";
+      const s = String(v);
+      if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+
+    const csvRows = rows.map(r => [
+      escapeCell(r.reservationNumber ?? r.voucherCode),
+      escapeCell(r.clientName),
+      escapeCell(r.clientEmail),
+      escapeCell(r.clientWhatsapp),
+      escapeCell(r.clientCpf),
+      escapeCell(r.tripName),
+      r.tripDepartureDate ? new Date(r.tripDepartureDate).toLocaleDateString("pt-BR") : "",
+      escapeCell((r.seats as string[] | null)?.join(", ")),
+      parseFloat(String(r.totalValue)).toFixed(2),
+      parseFloat(String(r.paidValue)).toFixed(2),
+      parseFloat(String(r.balance)).toFixed(2),
+      escapeCell(METHOD_PT[r.paymentMethod ?? ""] ?? r.paymentMethod),
+      escapeCell(STATUS_PT[r.status] ?? r.status),
+      r.storeOrderId ? "Vitrine" : "Balcão",
+      autoRetryIds.has(r.id) ? "Sim" : "Não",
+      new Date(r.createdAt).toLocaleString("pt-BR"),
+    ].join(","));
+
+    const BOM = "\uFEFF";
+    const csv = BOM + [headers.join(","), ...csvRows].join("\r\n");
+
+    const date = new Date().toISOString().slice(0, 10);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="reservas-${date}.csv"`);
+    res.send(csv);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/reservations", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);

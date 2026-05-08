@@ -8,7 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Search, MoreHorizontal, Eye, DollarSign, QrCode, CheckCircle, XCircle,
-  CalendarCheck, Pencil, Tag, RefreshCcw,
+  CalendarCheck, Pencil, Tag, RefreshCcw, Download,
 } from "lucide-react";
 import { STATUS_COLORS, STATUS_LABELS, METHOD_LABELS } from "./constants";
 import { RESERVATION_STATUS } from "@workspace/permissions";
@@ -109,6 +109,31 @@ export function ReservationsTable({
             Limpar filtros
           </Button>
         )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="ml-auto shrink-0"
+          onClick={() => {
+            const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+            const params = new URLSearchParams();
+            if (statusFilter) params.set("status", statusFilter);
+            if (search) params.set("search", search);
+            if (tripFilter) params.set("tripId", tripFilter);
+            if (sellerFilter) params.set("createdById", sellerFilter);
+            if (dateFrom) params.set("dateFrom", dateFrom);
+            if (dateTo) params.set("dateTo", dateTo);
+            if (hasAutoRetryFilter) params.set("hasAutoRetry", "true");
+            const qs = params.toString();
+            const url = `${BASE}/api/reservations/export${qs ? `?${qs}` : ""}`;
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "";
+            a.click();
+          }}
+        >
+          <Download className="w-3.5 h-3.5 mr-1.5" />
+          Exportar CSV
+        </Button>
       </div>
 
       <div className="bg-card rounded-lg border overflow-hidden">

@@ -19244,3 +19244,4 @@ export const useDeleteTripCost = <
 > => {
   return useMutation(getDeleteTripCostMutationOptions(options));
 };
+
