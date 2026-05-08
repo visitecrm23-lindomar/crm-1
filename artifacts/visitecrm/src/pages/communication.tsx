@@ -135,6 +135,18 @@ export default function Communication() {
 
   const REFERRAL_EMAIL_RE = /bônus de indicação|indicação foi confirmada|indicação expirou|⏰|vence em \d+ dia/i;
 
+  function getEmailTypeLabel(log: { reservationId: string | null; subject?: string | null }): string {
+    const s = log.subject ?? "";
+    if (/bônus de indicação foi pago/i.test(s)) return "Bônus pago";
+    if (/indicação foi confirmada/i.test(s)) return "Indicação convertida";
+    if (/indicação expirou/i.test(s)) return "Indicação expirada";
+    if (/vence em \d+ dia|⏰/i.test(s)) return "Aviso de expiração";
+    if (/bem-vindo|área do cliente/i.test(s)) return "Boas-vindas";
+    if (/^nova reserva/i.test(s)) return "Nova reserva";
+    if (log.reservationId) return "Confirmação";
+    return "Transacional";
+  }
+
   const [failedSummary, setFailedSummary] = useState<FailedEmailSummary[]>([]);
   const [loadingFailedSummary, setLoadingFailedSummary] = useState(false);
   const [failedSummaryError, setFailedSummaryError] = useState<string | null>(null);
@@ -978,7 +990,7 @@ export default function Communication() {
                       <TableCell>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <Badge variant="outline" className="text-xs">
-                            {log.reservationId ? "Confirmação" : "Transacional"}
+                            {getEmailTypeLabel(log)}
                           </Badge>
                           {!log.reservationId && REFERRAL_EMAIL_RE.test(log.subject ?? "") && /vence em \d+ dia|⏰/.test(log.subject ?? "") && (
                             <Badge className="text-xs bg-amber-50 text-amber-700 border-amber-300" variant="outline">
