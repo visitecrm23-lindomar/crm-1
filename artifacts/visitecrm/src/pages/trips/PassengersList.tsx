@@ -178,6 +178,13 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const getPassengerContact = (p: BoardingPassenger) =>
     p.whatsapp ?? p.phone ?? "—";
 
+  const handlePassengersExport = () => {
+    const a = document.createElement("a");
+    a.href = `/api/trips/${tripId}/passengers/export`;
+    a.download = "";
+    a.click();
+  };
+
   const handleCsvExport = () => {
     const activeCols = PASSENGER_COLS.filter(c => visibleCols[c.key]);
     const header = ["Nº", ...activeCols.map(c => c.label), "Telefone Passageiro", "Tipo Doc.", "Nec. Especiais", "Observações"];
@@ -245,6 +252,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={handlePassengersExport} disabled={isLoading || allPassengers.length === 0}><Download className="w-4 h-4 mr-2" />Exportar Passageiros</Button>
           <Button variant="outline" size="sm" onClick={handleCsvExport} disabled={isLoading || allPassengers.length === 0}><Download className="w-4 h-4 mr-2" />CSV</Button>
           <Button variant="outline" size="sm" onClick={handlePdfPrint} disabled={isLoading || allPassengers.length === 0}><Download className="w-4 h-4 mr-2" />Imprimir / PDF</Button>
           <Button variant="outline" size="sm" onClick={() => setShareOpen(true)} disabled={isLoading || allPassengers.length === 0}><Share2 className="w-4 h-4 mr-2" />Compartilhar</Button>

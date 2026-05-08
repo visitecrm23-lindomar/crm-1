@@ -17,7 +17,7 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { z } from "zod";
 import PDFDocument from "pdfkit";
-import { ADMIN_ROLES } from '../lib/tenant';
+import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 import { RESERVATION_STATUS, type TripStatus } from "@workspace/permissions";
 import { parseTripStatus } from "../lib/status-validators";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
@@ -728,6 +728,80 @@ router.get("/trips/:id/boarding-panel", async (req, res, next: NextFunction): Pr
       tourGuideCpf: trip.tourGuideCpf ?? null,
       tourGuideRegistration: trip.tourGuideRegistration ?? null,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/trips/:id/passengers/export", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+
+    const [trip] = await db.select().from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!trip) { next(new NotFoundError("Trip not found", "NOT_FOUND")); return; }
+
+    const reservations = await db.select().from(reservationsTable)
+      .where(and(
+        eq(reservationsTable.tripId, trip.id),
+        eq(reservationsTable.tenantId, me.tenantId),
+        sql`${reservationsTable.status} NOT IN (${RESERVATION_STATUS.CANCELLED}, ${RESERVATION_STATUS.REFUNDED})`,
+      ));
+
+    const boardingPoints: Array<{ id: string; name: string; time?: string }> =
+      Array.isArray(trip.boardingPoints) ? (trip.boardingPoints as Array<{ id: string; name: string; time?: string }>) : [];
+    const bpMap = new Map(boardingPoints.map(bp => [bp.id, bp.name]));
+
+    const AGE_LABELS: Record<string, string> = {
+      adult: "Adulto",
+      child: "Criança",
+      senior: "Idoso",
+      infant: "Bebê",
+    };
+
+    let rows: string[][] = [];
+    if (reservations.length > 0) {
+      const reservationIds = reservations.map(r => r.id);
+      const passengers = await db.select().from(passengersTable)
+        .where(inArray(passengersTable.reservationId, reservationIds));
+
+      const reservationMap = new Map(reservations.map(r => [r.id, r]));
+
+      rows = passengers.map(p => {
+        const reservation = reservationMap.get(p.reservationId);
+        const effectiveBoardingLocationId = p.boardingLocationId ?? reservation?.boardingLocationId ?? null;
+        const boardingName = effectiveBoardingLocationId ? (bpMap.get(effectiveBoardingLocationId) ?? effectiveBoardingLocationId) : "";
+        const birthDateStr = p.birthDate ? p.birthDate.toLocaleDateString("pt-BR") : "";
+        const checkInStr = p.checkedInAt ? "Sim" : "Não";
+        return [
+          p.name,
+          p.cpf ?? "",
+          p.rg ?? "",
+          birthDateStr,
+          AGE_LABELS[p.ageCategory] ?? p.ageCategory,
+          p.seatNumber ?? "",
+          boardingName,
+          checkInStr,
+        ];
+      });
+    }
+
+    const header = ["Passageiro", "CPF", "RG", "Data Nasc.", "Categoria", "Assento", "Local de Embarque", "Check-in"];
+    const csvLines = [header, ...rows].map(r =>
+      r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")
+    );
+    const csvContent = "\uFEFF" + csvLines.join("\n");
+
+    const safeName = trip.name.replace(/[^a-zA-Z0-9\-_]/g, "_");
+    const dateStr = format(new Date(), "yyyy-MM-dd");
+    const filename = `passageiros-${safeName}-${dateStr}.csv`;
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(csvContent);
   } catch (err) {
     next(err);
   }
