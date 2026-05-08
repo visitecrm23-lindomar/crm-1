@@ -161,6 +161,7 @@ export default function Indicacoes() {
   const [bulkPaying, setBulkPaying] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [shareReferralId, setShareReferralId] = useState<string | null>(null);
+  const [shareReferral, setShareReferral] = useState<EnrichedReferral | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
 
   const shareQueryId = shareModalOpen ? shareReferralId : (detailModalOpen && selectedReferral ? selectedReferral.id : null);
@@ -266,8 +267,21 @@ export default function Indicacoes() {
 
   function openShare(r: EnrichedReferral) {
     setShareReferralId(r.id);
+    setShareReferral(r);
     setCopiedLink(false);
     setShareModalOpen(true);
+  }
+
+  function buildWhatsAppShareUrl(phone: string, link: string, message: string) {
+    const num = phone.replace(/\D/g, "");
+    const text = message ? `${message}\n${link}` : link;
+    return `https://wa.me/55${num}?text=${encodeURIComponent(text)}`;
+  }
+
+  function isValidWhatsapp(phone: string | null | undefined): phone is string {
+    if (!phone) return false;
+    const digits = phone.replace(/\D/g, "");
+    return digits.length >= 10;
   }
 
   async function copyLink() {
@@ -1048,7 +1062,7 @@ export default function Indicacoes() {
       </Tabs>
 
       {/* Share Link & QR-Code Dialog */}
-      <Dialog open={shareModalOpen} onOpenChange={(open) => { setShareModalOpen(open); if (!open) setCopiedLink(false); }}>
+      <Dialog open={shareModalOpen} onOpenChange={(open) => { setShareModalOpen(open); if (!open) { setCopiedLink(false); setShareReferral(null); } }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1110,14 +1124,42 @@ export default function Indicacoes() {
               Erro ao gerar o link. Tente novamente.
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={() => setShareModalOpen(false)}>Fechar</Button>
-            {shareData && (
-              <Button onClick={copyLink} className="bg-blue-600 hover:bg-blue-700">
-                {copiedLink ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
-                {copiedLink ? "Copiado!" : "Copiar link"}
-              </Button>
-            )}
+            {shareData && (() => {
+              const referrerPhone = shareReferral?.referrerWhatsapp;
+              const hasWhatsapp = isValidWhatsapp(referrerPhone);
+              const whatsappUrl = hasWhatsapp
+                ? buildWhatsAppShareUrl(referrerPhone, shareData.link, settings?.shareMessage ?? "")
+                : null;
+              return (
+                <>
+                  <Button
+                    variant="outline"
+                    className={hasWhatsapp ? "border-green-500 text-green-700 hover:bg-green-50" : "opacity-50 cursor-not-allowed"}
+                    disabled={!hasWhatsapp}
+                    title={hasWhatsapp ? undefined : "Indicador sem WhatsApp cadastrado"}
+                    asChild={hasWhatsapp}
+                  >
+                    {hasWhatsapp ? (
+                      <a href={whatsappUrl!} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
+                        <MessageCircle className="w-4 h-4" />
+                        Enviar via WhatsApp
+                      </a>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        <MessageCircle className="w-4 h-4" />
+                        Enviar via WhatsApp
+                      </span>
+                    )}
+                  </Button>
+                  <Button onClick={copyLink} className="bg-blue-600 hover:bg-blue-700">
+                    {copiedLink ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
+                    {copiedLink ? "Copiado!" : "Copiar link"}
+                  </Button>
+                </>
+              );
+            })()}
           </DialogFooter>
         </DialogContent>
       </Dialog>
