@@ -272,9 +272,10 @@ export default function Indicacoes() {
     setShareModalOpen(true);
   }
 
-  function buildWhatsAppShareUrl(phone: string, link: string, message: string) {
+  function buildWhatsAppShareUrl(phone: string, link: string, message: string, referrerName?: string | null) {
     const num = phone.replace(/\D/g, "");
-    const text = message ? `${message}\n${link}` : link;
+    const personalizedMessage = message.replace(/\{nome\}/g, referrerName ?? "");
+    const text = personalizedMessage ? `${personalizedMessage}\n${link}` : link;
     return `https://wa.me/55${num}?text=${encodeURIComponent(text)}`;
   }
 
@@ -1140,7 +1141,7 @@ export default function Indicacoes() {
               const referrerPhone = shareReferral?.referrerWhatsapp;
               const hasWhatsapp = isValidWhatsapp(referrerPhone);
               const whatsappUrl = hasWhatsapp
-                ? buildWhatsAppShareUrl(referrerPhone, shareData.link, settings?.shareMessage ?? "")
+                ? buildWhatsAppShareUrl(referrerPhone, shareData.link, settings?.shareMessage ?? "", shareReferral?.referrerName)
                 : null;
               return (
                 <>
@@ -1704,6 +1705,9 @@ export default function Indicacoes() {
                 onChange={(e) => setLocalSettings((s) => ({ ...s, shareMessage: e.target.value }))}
                 placeholder="Use meu código e ganhe desconto na sua viagem!"
               />
+              <p className="text-xs text-muted-foreground">
+                Use <code className="bg-muted px-1 rounded">{"{nome}"}</code> para incluir o nome do indicador na mensagem. Ex.: <em>Olá! {"{nome}"} indicou você — use o link abaixo para ganhar desconto.</em>
+              </p>
             </div>
 
             <div className="space-y-3 border rounded-lg p-3 bg-amber-50/50">
