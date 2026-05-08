@@ -392,7 +392,11 @@ router.get("/reservations/export", async (req, res, next: NextFunction): Promise
 
     const escapeCell = (v: string | null | undefined) => {
       if (v == null) return "";
-      const s = String(v);
+      let s = String(v);
+      // Neutralize CSV formula injection (Excel executes leading =, +, -, @, tab)
+      if (s.length > 0 && /^[=+\-@\t]/.test(s)) {
+        s = `'${s}`;
+      }
       if (s.includes(",") || s.includes('"') || s.includes("\n")) {
         return `"${s.replace(/"/g, '""')}"`;
       }
