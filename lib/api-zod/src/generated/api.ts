@@ -1195,6 +1195,13 @@ export const GetReferralSettingsResponse = zod.object({
   allowSelfReferral: zod.boolean(),
   requireFirstPurchase: zod.boolean(),
   shareMessage: zod.string().nullish(),
+  tiersConfig: zod.array(zod.object({ level: zod.string(), label: zod.string(), minReferrals: zod.number(), bonusMultiplier: zod.number() })),
+  whatsappEnabled: zod.boolean(),
+  whatsappPhoneNumber: zod.string().nullish(),
+  whatsappConvertedMessage: zod.string().nullish(),
+  whatsappBonusPaidMessage: zod.string().nullish(),
+  expiryWarning7DaysEnabled: zod.boolean(),
+  expiryWarning1DayEnabled: zod.boolean(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -1212,6 +1219,13 @@ export const UpdateReferralSettingsBody = zod.object({
   allowSelfReferral: zod.boolean().optional(),
   requireFirstPurchase: zod.boolean().optional(),
   shareMessage: zod.string().optional(),
+  tiersConfig: zod.array(zod.object({ level: zod.string(), label: zod.string(), minReferrals: zod.number(), bonusMultiplier: zod.number() })).optional(),
+  whatsappEnabled: zod.boolean().optional(),
+  whatsappPhoneNumber: zod.string().optional(),
+  whatsappConvertedMessage: zod.string().optional(),
+  whatsappBonusPaidMessage: zod.string().optional(),
+  expiryWarning7DaysEnabled: zod.boolean().optional(),
+  expiryWarning1DayEnabled: zod.boolean().optional(),
 });
 
 export const UpdateReferralSettingsResponse = zod.object({
@@ -1226,6 +1240,13 @@ export const UpdateReferralSettingsResponse = zod.object({
   allowSelfReferral: zod.boolean(),
   requireFirstPurchase: zod.boolean(),
   shareMessage: zod.string().nullish(),
+  tiersConfig: zod.array(zod.object({ level: zod.string(), label: zod.string(), minReferrals: zod.number(), bonusMultiplier: zod.number() })),
+  whatsappEnabled: zod.boolean(),
+  whatsappPhoneNumber: zod.string().nullish(),
+  whatsappConvertedMessage: zod.string().nullish(),
+  whatsappBonusPaidMessage: zod.string().nullish(),
+  expiryWarning7DaysEnabled: zod.boolean(),
+  expiryWarning1DayEnabled: zod.boolean(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });

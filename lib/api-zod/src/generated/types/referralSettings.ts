@@ -6,6 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export interface ReferralTierConfigInline {
+  level: string;
+  label: string;
+  minReferrals: number;
+  bonusMultiplier: number;
+}
+
 export interface ReferralSettings {
   id: string;
   tenantId: string;
@@ -19,6 +26,16 @@ export interface ReferralSettings {
   requireFirstPurchase: boolean;
   /** @nullable */
   shareMessage?: string | null;
+  tiersConfig: ReferralTierConfigInline[];
+  whatsappEnabled: boolean;
+  /** @nullable */
+  whatsappPhoneNumber?: string | null;
+  /** @nullable */
+  whatsappConvertedMessage?: string | null;
+  /** @nullable */
+  whatsappBonusPaidMessage?: string | null;
+  expiryWarning7DaysEnabled: boolean;
+  expiryWarning1DayEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 }

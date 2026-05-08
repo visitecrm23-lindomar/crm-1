@@ -7979,11 +7979,23 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ReferralTierConfig"
+        whatsappEnabled:
+          type: boolean
+        whatsappPhoneNumber:
+          type: ["string", "null"]
+        whatsappConvertedMessage:
+          type: ["string", "null"]
+        whatsappBonusPaidMessage:
+          type: ["string", "null"]
+        expiryWarning7DaysEnabled:
+          type: boolean
+        expiryWarning1DayEnabled:
+          type: boolean
         createdAt:
           type: string
         updatedAt:
           type: string
-      required: [id, tenantId, isEnabled, discountType, discountValue, bonusType, bonusValue, expirationDays, allowSelfReferral, requireFirstPurchase, tiersConfig, createdAt, updatedAt]
+      required: [id, tenantId, isEnabled, discountType, discountValue, bonusType, bonusValue, expirationDays, allowSelfReferral, requireFirstPurchase, tiersConfig, whatsappEnabled, expiryWarning7DaysEnabled, expiryWarning1DayEnabled, createdAt, updatedAt]
 
     UpdateReferralSettingsBody:
       type: object
@@ -8010,6 +8022,18 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ReferralTierConfig"
+        whatsappEnabled:
+          type: boolean
+        whatsappPhoneNumber:
+          type: string
+        whatsappConvertedMessage:
+          type: string
+        whatsappBonusPaidMessage:
+          type: string
+        expiryWarning7DaysEnabled:
+          type: boolean
+        expiryWarning1DayEnabled:
+          type: boolean
 
     ClientReferralInfo:
       type: object

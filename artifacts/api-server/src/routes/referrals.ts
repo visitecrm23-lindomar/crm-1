@@ -739,6 +739,8 @@ router.get("/referral-settings", async (req, res): Promise<void> => {
         whatsappPhoneNumber: null,
         whatsappConvertedMessage: null,
         whatsappBonusPaidMessage: null,
+        expiryWarning7DaysEnabled: true,
+        expiryWarning1DayEnabled: true,
       };
       await db.insert(referralSettingsTable).values(defaults);
       res.json(defaults);
