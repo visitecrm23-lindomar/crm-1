@@ -47,14 +47,15 @@ async function healthHandler(_req: Request, res: Response): Promise<void> {
 
   const bullmqActive = Object.values(workers).every(Boolean);
 
-  // Degraded when Redis is configured but not reachable, or when Redis is
-  // reachable but no workers have started (they should start alongside Redis).
-  const healthy =
-    !redisConfigured ||
-    (redisConnected && bullmqActive);
+  // The startup probe only needs to confirm the HTTP server is up.
+  // Redis disconnects (e.g. Upstash rate-limit) are degraded, not fatal —
+  // returning 503 here would fail the Cloud Run health check and roll back
+  // the deployment every time Redis hits its daily request limit.
+  const degraded =
+    redisConfigured && (!redisConnected || !bullmqActive);
 
   const data = HealthCheckResponse.parse({
-    status: healthy ? "ok" : "degraded",
+    status: degraded ? "degraded" : "ok",
     redis: {
       connected: redisConnected,
       configured: redisConfigured,
@@ -65,7 +66,7 @@ async function healthHandler(_req: Request, res: Response): Promise<void> {
     },
   });
 
-  res.status(healthy ? 200 : 503).json(data);
+  res.status(200).json(data);
 }
 
 router.get("/health", healthHandler);

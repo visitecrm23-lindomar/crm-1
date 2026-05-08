@@ -99,33 +99,34 @@ async function applyMigrations() {
   logger.info("Credential backfill complete");
 }
 
+// ── Graceful shutdown ──
+const shutdown = async (signal: string) => {
+  logger.info({ signal }, "Shutdown signal received");
+  await Promise.all([stopEmailWorker(), stopReminderWorker(), stopPdfWorker(), stopCommissionSyncWorker(), stopWhatsAppWorker(), closeQueues()]);
+  process.exit(0);
+};
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+process.on("SIGINT", () => void shutdown("SIGINT"));
+
+// ── Bind HTTP port IMMEDIATELY so the Cloud Run startup probe gets a 200
+//    from /api/healthz without waiting for migrations or Redis. ──
+app.listen(port, (err) => {
+  if (err) {
+    logger.error({ err }, "Error listening on port");
+    process.exit(1);
+  }
+  logger.info({ port }, "Server listening");
+});
+
+// ── Run migrations + backfill in the background ──
+// applyMigrations() only throws when the credential backfill fails. In that
+// case we abort: half-encrypted credentials are worse than a clean restart.
 applyMigrations()
   .catch((err) => {
-    // applyMigrations only throws when the credential backfill fails (drizzle
-    // errors are caught + logged inside it). Half-encrypted credentials would
-    // be worse than no boot at all, so abort the process.
     logger.error({ err }, "Credential backfill failed — aborting boot");
     process.exit(1);
   })
   .then(() => {
-    // ── Graceful shutdown ──
-    const shutdown = async (signal: string) => {
-      logger.info({ signal }, "Shutdown signal received");
-      await Promise.all([stopEmailWorker(), stopReminderWorker(), stopPdfWorker(), stopCommissionSyncWorker(), stopWhatsAppWorker(), closeQueues()]);
-      process.exit(0);
-    };
-    process.on("SIGTERM", () => void shutdown("SIGTERM"));
-    process.on("SIGINT", () => void shutdown("SIGINT"));
-
-    // ── Bind HTTP port immediately — Redis/worker setup happens in the background ──
-    app.listen(port, (err) => {
-      if (err) {
-        logger.error({ err }, "Error listening on port");
-        process.exit(1);
-      }
-      logger.info({ port }, "Server listening");
-    });
-
     // ── Background: cron + BullMQ workers (non-fatal if Redis is unavailable) ──
     void (async () => {
       // Birthday cron (node-cron, runs in-process, no Redis required)
