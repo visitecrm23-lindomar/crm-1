@@ -245,12 +245,22 @@ export async function processBirthdayForClient(
 
       const birthdayQueue = getBirthdayEmailQueue();
       if (birthdayQueue) {
-        await birthdayQueue.add("birthday-email", {
-          ...birthdayEmailProps,
-          tenantId,
-          ...birthdayEmailOptions,
-        });
-        sentEmail = true;
+        try {
+          await birthdayQueue.add("birthday-email", {
+            ...birthdayEmailProps,
+            tenantId,
+            ...birthdayEmailOptions,
+          });
+          sentEmail = true;
+        } catch (queueErr) {
+          console.warn("[birthday] Queue unavailable (Redis down?), falling back to direct send:", queueErr instanceof Error ? queueErr.message : String(queueErr));
+          const result = await sendBirthdayEmail(birthdayEmailProps, birthdayEmailOptions);
+          if (result.success) {
+            sentEmail = true;
+          } else {
+            emailError = result.error;
+          }
+        }
       } else {
         const result = await sendBirthdayEmail(birthdayEmailProps, birthdayEmailOptions);
         if (result.success) {
