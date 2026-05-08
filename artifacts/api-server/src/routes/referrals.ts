@@ -923,6 +923,8 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
         await tx.update(referralsTable)
           .set({
             expiresAt: sql`${referralsTable.createdAt} + (${newDays}::integer * interval '1 day')`,
+            expiryWarning7SentAt: null,
+            expiryWarning1SentAt: null,
             updatedAt: new Date(),
           })
           .where(and(
