@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type ReactElement } from "react";
 import { useLocation } from "wouter";
 import { useUser } from "@clerk/react";
 import { useGetMe } from "@workspace/api-client-react";
-import { clientPortalApi, type ClientPortalProfile } from "@/lib/clientPortalApi";
+import { clientPortalApi, type ClientPortalProfile, type ClientReferral } from "@/lib/clientPortalApi";
 import { PublicStore } from "@/lib/storeApi";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { ROLES } from "@workspace/permissions";
 import {
@@ -20,6 +21,9 @@ import {
   MessageCircle,
   ExternalLink,
   ChevronRight,
+  Clock,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 
 interface Props {
@@ -33,6 +37,76 @@ const TIER_COLORS: Record<string, { bg: string; text: string; border: string }> 
   gold:   { bg: "bg-yellow-50", text: "text-yellow-700", border: "border-yellow-200" },
   platinum: { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-200" },
 };
+
+const REFERRAL_STATUS_MAP: Record<string, { label: string; color: string; icon: ReactElement | null }> = {
+  pending:   { label: "Pendente",   color: "bg-yellow-100 text-yellow-800",  icon: <Clock className="w-3.5 h-3.5" /> },
+  completed: { label: "Confirmada", color: "bg-green-100 text-green-800",    icon: <CheckCircle className="w-3.5 h-3.5" /> },
+  converted: { label: "Convertida", color: "bg-blue-100 text-blue-800",      icon: <CheckCircle className="w-3.5 h-3.5" /> },
+  expired:   { label: "Expirada",   color: "bg-slate-100 text-slate-500",    icon: <XCircle className="w-3.5 h-3.5" /> },
+};
+
+function ReferralStatusBadge({ status }: { status: string }) {
+  const cfg = REFERRAL_STATUS_MAP[status] ?? { label: status, color: "bg-slate-100 text-slate-600", icon: null };
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.color}`}>
+      {cfg.icon}
+      {cfg.label}
+    </span>
+  );
+}
+
+function maskName(name: string | null): string {
+  if (!name) return "Pessoa indicada";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return `${parts[0].charAt(0).toUpperCase()}${parts[0].slice(1, 3)}***`;
+  return `${parts[0]} ${parts[parts.length - 1].charAt(0).toUpperCase()}.`;
+}
+
+function maskEmail(email: string | null): string {
+  if (!email) return "";
+  const [local, domain] = email.split("@");
+  if (!domain) return email;
+  const visible = local.slice(0, Math.min(3, local.length));
+  return `${visible}***@${domain}`;
+}
+
+function ReferralHistoryRow({ r, primaryColor }: { r: ClientReferral; primaryColor: string }) {
+  const displayName = r.referredName ? maskName(r.referredName) : (r.referredEmail ? maskEmail(r.referredEmail) : "Pessoa indicada");
+  const dateLabel = (r.status === "completed" || r.status === "converted") && r.convertedAt
+    ? `Convertida em ${new Date(r.convertedAt).toLocaleDateString("pt-BR")}`
+    : r.status === "expired" && r.expiresAt
+    ? `Expirou em ${new Date(r.expiresAt).toLocaleDateString("pt-BR")}`
+    : `Indicada em ${new Date(r.createdAt).toLocaleDateString("pt-BR")}`;
+
+  const bonusValue = parseFloat(r.bonusAmount);
+
+  return (
+    <div className="flex items-start gap-3 py-3 border-b last:border-0">
+      <div
+        className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-sm font-bold mt-0.5"
+        style={{ background: `${primaryColor}22`, color: primaryColor }}
+      >
+        {displayName.charAt(0).toUpperCase()}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-medium text-sm truncate">{displayName}</span>
+          <ReferralStatusBadge status={r.status} />
+        </div>
+        <p className="text-xs text-muted-foreground mt-0.5">{dateLabel}</p>
+        {(r.status === "completed" || r.status === "converted") && bonusValue > 0 && (
+          <p className={`text-xs mt-1 font-medium ${r.bonusPaid ? "text-green-600" : "text-orange-500"}`}>
+            {r.bonusPaid
+              ? `✓ Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} pago`
+              : `⏳ Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} a receber`}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const PAGE_SIZE = 5;
 
 function formatCurrency(value: string | number) {
   const n = typeof value === "string" ? parseFloat(value) : value;
@@ -50,6 +124,9 @@ export default function MyReferralPage({ slug, store }: Props) {
   const [loadError, setLoadError] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [referrals, setReferrals] = useState<ClientReferral[] | null>(null);
+  const [loadingReferrals, setLoadingReferrals] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -70,6 +147,21 @@ export default function MyReferralPage({ slug, store }: Props) {
       .then(setProfile)
       .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
+  }, [isSignedIn, meLoading, me?.role]);
+
+  useEffect(() => {
+    if (!isSignedIn || meLoading || (me && me.role !== ROLES.CLIENT)) return;
+    setLoadingReferrals(true);
+    clientPortalApi
+      .getMyReferrals()
+      .then((r) => {
+        const sorted = [...r.data].sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        setReferrals(sorted);
+      })
+      .catch(() => setReferrals([]))
+      .finally(() => setLoadingReferrals(false));
   }, [isSignedIn, meLoading, me?.role]);
 
   const referralCode = profile?.referral?.code ?? null;
@@ -347,6 +439,62 @@ export default function MyReferralPage({ slug, store }: Props) {
         </CardContent>
       </Card>
 
+      {/* Referral history list */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Users className="w-4 h-4" />
+            Histórico de indicações
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingReferrals ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex gap-3 items-start py-3 border-b last:border-0">
+                  <Skeleton className="w-9 h-9 rounded-full shrink-0" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-48" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : !referrals || referrals.length === 0 ? (
+            <div className="text-center py-8">
+              <Users className="w-10 h-10 mx-auto mb-3 text-muted-foreground/30" />
+              <p className="font-medium text-sm mb-1">Nenhuma indicação ainda</p>
+              <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                Compartilhe seu código acima e acompanhe aqui quando seus amigos se cadastrarem.
+              </p>
+            </div>
+          ) : (
+            <div>
+              {referrals.slice(0, visibleCount).map((r) => (
+                <ReferralHistoryRow key={r.id} r={r} primaryColor={primaryColor} />
+              ))}
+              {referrals.length > visibleCount && (
+                <button
+                  className="w-full mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center gap-1"
+                  onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                >
+                  <ChevronRight className="w-3.5 h-3.5 rotate-90" />
+                  Ver mais ({referrals.length - visibleCount} restantes)
+                </button>
+              )}
+              {visibleCount > PAGE_SIZE && (
+                <button
+                  className="w-full mt-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setVisibleCount(PAGE_SIZE)}
+                >
+                  Mostrar menos
+                </button>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* How it works */}
       <Card>
         <CardHeader className="pb-3">
@@ -398,13 +546,6 @@ export default function MyReferralPage({ slug, store }: Props) {
         </CardContent>
       </Card>
 
-      {/* Back link */}
-      <div className="text-center">
-        <Button variant="ghost" size="sm" onClick={() => navigate(`/perfil?tab=indicacoes`)}>
-          Ver histórico completo no meu perfil
-          <ChevronRight className="w-3.5 h-3.5 ml-1" />
-        </Button>
-      </div>
     </div>
   );
 }
