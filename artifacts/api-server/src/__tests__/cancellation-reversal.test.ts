@@ -460,12 +460,14 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     // tx select queue (in execution order):
     //   [0] Reversal 2 — loyalty member lookup
     //   [1] Reversal 2 — idempotency check (no prior "refund" tx → proceed)
-    //   [2] Reversal 4 — payments lookup (empty → no further selects)
-    //   [3] re-fetch updated reservation
+    //   [2] Reversal 4 — payments lookup (empty)
+    //   [3] Reversal 4 — loyalty member lookup (no member found → skip clawback)
+    //   [4] re-fetch updated reservation
     const tx = buildTxMock([
       [{ id: "member-001", availablePoints: 300 }],
       [], // no existing refund tx → proceed with restore
       [], // no payments
+      [], // Reversal 4 loyalty member lookup → not found, skip clawback
       [cancelled],
     ]);
     mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
@@ -504,10 +506,12 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     // tx select queue (in execution order):
     //   [0] Reversal 3 — referral record lookup by reservationId (exact scope)
     //   [1] Reversal 4 — payments lookup (empty)
-    //   [2] re-fetch updated reservation
+    //   [2] Reversal 4 — loyalty member lookup (no member found → skip clawback)
+    //   [3] re-fetch updated reservation
     const tx = buildTxMock([
       [{ id: "referral-001", referrerId: "referrer-client-001", bonusAmount: "10.00" }],
       [], // no payments
+      [], // Reversal 4 loyalty member lookup → not found, skip clawback
       [cancelled],
     ]);
     mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
@@ -545,6 +549,7 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     const tx = buildTxMock([
       [{ id: "referral-001", referrerId: "referrer-client-001", bonusAmount: "10.00" }],
       [], // no payments
+      [], // Reversal 4 loyalty member lookup → not found, skip clawback
       [cancelled],
     ]);
     mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
@@ -603,6 +608,52 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     );
     expect(cancellationTx).toBeDefined();
     expect((cancellationTx as Record<string, unknown>)["points"]).toBe(-35);
+  });
+
+  // -------------------------------------------------------------------------
+  it("claws back confirmation-earned loyalty points even when no payment records exist", async () => {
+    // Scenario: reservation was confirmed (status → confirmed), which triggered
+    // an "earn" loyalty transaction with referenceType="reservation". The client
+    // later cancels without ever having made a payment. Without this fix, those
+    // points would be silently kept.
+    const app = buildReservationsApp();
+    const existing = makeReservation({ clientId: "client-001", status: "confirmed" });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] Reversal 4 — payments lookup (empty — no payment records)
+    //   [1] Reversal 4 — loyalty member lookup → member found
+    //   [2] Reversal 4 — idempotency check (no prior "cancellation" tx → proceed)
+    //   [3] Reversal 4 — earn transactions → 50 pts earned at confirmation
+    //   [4] re-fetch updated reservation
+    const tx = buildTxMock([
+      [],                                                               // no payments
+      [{ id: "member-001", availablePoints: 50, totalPoints: 50 }],   // loyalty member
+      [],                                                               // no prior cancellation tx → proceed
+      [{ points: 50 }],                                                // confirmation-earned points
+      [cancelled],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+
+    // A loyalty transaction of type "cancellation" should have been inserted
+    const cancellationTx = capturedInserts.find(
+      (i) => (i as Record<string, unknown>)["type"] === "cancellation",
+    );
+    expect(cancellationTx).toBeDefined();
+    expect((cancellationTx as Record<string, unknown>)["points"]).toBe(-50);
+    expect((cancellationTx as Record<string, unknown>)["referenceType"]).toBe("reservation");
   });
 
   // -------------------------------------------------------------------------
@@ -690,12 +741,14 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     // tx select queue (in execution order):
     //   [0] Reversal 2 — loyalty member lookup
     //   [1] Reversal 2 — idempotency check → returns existing "refund" tx → SKIP
-    //   [2] Reversal 4 — payments lookup (empty → no further selects)
-    //   [3] re-fetch updated reservation
+    //   [2] Reversal 4 — payments lookup (empty)
+    //   [3] Reversal 4 — loyalty member lookup (no member found → skip clawback)
+    //   [4] re-fetch updated reservation
     const tx = buildTxMock([
       [{ id: "member-001", availablePoints: 300 }],
       [{ id: "refund-tx-001" }], // existing refund tx → loyalty restore is skipped
       [],                         // no payments
+      [],                         // Reversal 4 loyalty member lookup → not found, skip clawback
       [cancelled],
     ]);
     mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
@@ -764,9 +817,10 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     mockLimit.mockResolvedValueOnce([existing]);
 
     // tx select queue (in execution order):
-    //   [0] Reversal 4 — payments lookup (empty → skip loyalty clawback)
-    //   [1] re-fetch updated reservation
-    const tx = buildTxMock([[], [cancelled]]);
+    //   [0] Reversal 4 — payments lookup (empty)
+    //   [1] Reversal 4 — loyalty member lookup (no member found → skip clawback)
+    //   [2] re-fetch updated reservation
+    const tx = buildTxMock([[], [], [cancelled]]);
     mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
 
     mockLimit
@@ -789,8 +843,8 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
 
     mockLimit.mockResolvedValueOnce([existing]);
 
-    // Reversal 4 payments lookup + re-fetch
-    const tx = buildTxMock([[], [refunded]]);
+    // Reversal 4 payments lookup + loyalty member lookup (not found) + re-fetch
+    const tx = buildTxMock([[], [], [refunded]]);
     mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
 
     mockLimit
