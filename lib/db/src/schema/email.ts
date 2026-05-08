@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const emailLogsTable = pgTable("email_logs", {
   id: text("id").primaryKey(),
@@ -13,7 +14,11 @@ export const emailLogsTable = pgTable("email_logs", {
   retriesExhaustedAt: timestamp("retries_exhausted_at", { withTimezone: true }),
   retriesResolvedAt: timestamp("retries_resolved_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index("email_logs_retries_exhausted_idx")
+    .on(table.tenantId, table.reservationId)
+    .where(sql`${table.retriesExhaustedAt} IS NOT NULL`),
+]);
 
 export type EmailLog = typeof emailLogsTable.$inferSelect;
 export type InsertEmailLog = typeof emailLogsTable.$inferInsert;
