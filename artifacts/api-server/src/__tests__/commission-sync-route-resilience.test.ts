@@ -231,6 +231,10 @@ describe("POST /api/reservations — commission sync resilience", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthMock.mockResolvedValue(FAKE_USER as never);
+    mockLimit.mockResolvedValue([]);
+    mockWhere.mockReturnValue({ limit: mockLimit });
+    mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit });
+    mockSelect.mockReturnValue({ from: mockFrom });
     mockTransaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) =>
       callback(buildTxMock()),
     );

@@ -910,89 +910,81 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
           }
         }
 
-        // --- Reversal 4: loyalty points earned from payments or reservation confirmation ---
+        // --- Reversal 4: loyalty points earned from payments on this reservation ---
+        // Query payments first; only look up the loyalty member when there are
+        // actual payments to clawback (avoids a wasted member lookup on fresh
+        // cancellations that never received any payment).
         if (existing.clientId) {
-          const [loyaltyMember] = await tx
-            .select({
-              id: loyaltyMembersTable.id,
-              availablePoints: loyaltyMembersTable.availablePoints,
-              totalPoints: loyaltyMembersTable.totalPoints,
-            })
-            .from(loyaltyMembersTable)
+          const reservationPayments = await tx
+            .select({ id: paymentsTable.id })
+            .from(paymentsTable)
             .where(and(
-              eq(loyaltyMembersTable.tenantId, me.tenantId),
-              eq(loyaltyMembersTable.clientId, existing.clientId),
-            ))
-            .limit(1);
-          if (loyaltyMember) {
-            // Idempotency: skip if a "cancellation" transaction for this reservation already exists
-            // (prevents double-clawback on reopen → re-cancel flows)
-            const [existingClawback] = await tx
-              .select({ id: loyaltyTransactionsTable.id })
-              .from(loyaltyTransactionsTable)
+              eq(paymentsTable.tenantId, me.tenantId),
+              eq(paymentsTable.reservationId, req.params.id),
+            ));
+          if (reservationPayments.length > 0) {
+            const [loyaltyMember] = await tx
+              .select({
+                id: loyaltyMembersTable.id,
+                availablePoints: loyaltyMembersTable.availablePoints,
+                totalPoints: loyaltyMembersTable.totalPoints,
+              })
+              .from(loyaltyMembersTable)
               .where(and(
-                eq(loyaltyTransactionsTable.memberId, loyaltyMember.id),
-                eq(loyaltyTransactionsTable.type, "cancellation"),
-                eq(loyaltyTransactionsTable.referenceId, req.params.id),
+                eq(loyaltyMembersTable.tenantId, me.tenantId),
+                eq(loyaltyMembersTable.clientId, existing.clientId),
               ))
               .limit(1);
-            if (!existingClawback) {
-              // Collect payment-based earn transactions (when loyalty was awarded per payment)
-              const reservationPayments = await tx
-                .select({ id: paymentsTable.id })
-                .from(paymentsTable)
+            if (loyaltyMember) {
+              // Idempotency: skip if a "cancellation" transaction for this reservation already exists
+              // (prevents double-clawback on reopen → re-cancel flows)
+              const [existingClawback] = await tx
+                .select({ id: loyaltyTransactionsTable.id })
+                .from(loyaltyTransactionsTable)
                 .where(and(
-                  eq(paymentsTable.tenantId, me.tenantId),
-                  eq(paymentsTable.reservationId, req.params.id),
-                ));
-              let paymentEarnTx: { points: number }[] = [];
-              if (reservationPayments.length > 0) {
+                  eq(loyaltyTransactionsTable.memberId, loyaltyMember.id),
+                  eq(loyaltyTransactionsTable.type, "cancellation"),
+                  eq(loyaltyTransactionsTable.referenceId, req.params.id),
+                ))
+                .limit(1);
+              if (!existingClawback) {
                 const paymentIds = reservationPayments.map(p => p.id);
-                paymentEarnTx = await tx
+                // Single combined query for payment-based and reservation-based earn transactions
+                const earnTransactions = await tx
                   .select({ points: loyaltyTransactionsTable.points })
                   .from(loyaltyTransactionsTable)
                   .where(and(
                     eq(loyaltyTransactionsTable.tenantId, me.tenantId),
                     eq(loyaltyTransactionsTable.memberId, loyaltyMember.id),
-                    eq(loyaltyTransactionsTable.referenceType, "payment"),
                     eq(loyaltyTransactionsTable.type, "earn"),
-                    inArray(loyaltyTransactionsTable.referenceId, paymentIds),
+                    or(
+                      inArray(loyaltyTransactionsTable.referenceId, paymentIds),
+                      eq(loyaltyTransactionsTable.referenceId, req.params.id),
+                    ),
                   ));
-              }
-              // Collect reservation-based earn transactions (confirmation or payment trigger)
-              const reservationEarnTx = await tx
-                .select({ points: loyaltyTransactionsTable.points })
-                .from(loyaltyTransactionsTable)
-                .where(and(
-                  eq(loyaltyTransactionsTable.tenantId, me.tenantId),
-                  eq(loyaltyTransactionsTable.memberId, loyaltyMember.id),
-                  eq(loyaltyTransactionsTable.referenceType, "reservation"),
-                  eq(loyaltyTransactionsTable.type, "earn"),
-                  eq(loyaltyTransactionsTable.referenceId, req.params.id),
-                ));
-              const earnTransactions = [...paymentEarnTx, ...reservationEarnTx];
-              const totalEarnedPoints = earnTransactions.reduce((sum, t) => sum + t.points, 0);
-              if (totalEarnedPoints > 0) {
-                const newAvailable = Math.max(0, loyaltyMember.availablePoints - totalEarnedPoints);
-                const newTotal = Math.max(0, loyaltyMember.totalPoints - totalEarnedPoints);
-                await tx.update(loyaltyMembersTable)
-                  .set({
-                    availablePoints: newAvailable,
-                    totalPoints: newTotal,
-                    tier: calculateTier(newTotal),
-                    lastActivityAt: new Date(),
-                  })
-                  .where(eq(loyaltyMembersTable.id, loyaltyMember.id));
-                await tx.insert(loyaltyTransactionsTable).values({
-                  id: generateId(),
-                  tenantId: me.tenantId,
-                  memberId: loyaltyMember.id,
-                  type: "cancellation",
-                  points: -totalEarnedPoints,
-                  description: `Estorno de pontos — cancelamento da reserva ${existing.voucherCode}`,
-                  referenceId: req.params.id,
-                  referenceType: "reservation",
-                });
+                const totalEarnedPoints = earnTransactions.reduce((sum, t) => sum + t.points, 0);
+                if (totalEarnedPoints > 0) {
+                  const newAvailable = Math.max(0, loyaltyMember.availablePoints - totalEarnedPoints);
+                  const newTotal = Math.max(0, loyaltyMember.totalPoints - totalEarnedPoints);
+                  await tx.update(loyaltyMembersTable)
+                    .set({
+                      availablePoints: newAvailable,
+                      totalPoints: newTotal,
+                      tier: calculateTier(newTotal),
+                      lastActivityAt: new Date(),
+                    })
+                    .where(eq(loyaltyMembersTable.id, loyaltyMember.id));
+                  await tx.insert(loyaltyTransactionsTable).values({
+                    id: generateId(),
+                    tenantId: me.tenantId,
+                    memberId: loyaltyMember.id,
+                    type: "cancellation",
+                    points: -totalEarnedPoints,
+                    description: `Estorno de pontos — cancelamento da reserva ${existing.voucherCode}`,
+                    referenceId: req.params.id,
+                    referenceType: "reservation",
+                  });
+                }
               }
             }
           }
