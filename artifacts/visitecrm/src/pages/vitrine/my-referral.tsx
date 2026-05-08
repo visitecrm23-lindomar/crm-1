@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { ROLES } from "@workspace/permissions";
+import QRCode from "qrcode";
 import {
   Loader2,
   Copy,
@@ -24,6 +25,7 @@ import {
   Clock,
   CheckCircle,
   XCircle,
+  QrCode,
 } from "lucide-react";
 
 interface Props {
@@ -210,6 +212,19 @@ export default function MyReferralPage({ slug, store }: Props) {
       // dismissed by user
     }
   }, [shareLink, referralCode, store.name]);
+
+  const handleDownloadQR = useCallback(async () => {
+    if (!shareLink || !referralCode) return;
+    try {
+      const dataUrl = await QRCode.toDataURL(shareLink, { width: 512, margin: 2 });
+      const anchor = document.createElement("a");
+      anchor.href = dataUrl;
+      anchor.download = `qrcode-indicacao-${referralCode}.png`;
+      anchor.click();
+    } catch {
+      toast({ title: "Erro ao gerar QR Code", description: "Tente novamente em instantes.", variant: "destructive" });
+    }
+  }, [shareLink, referralCode, toast]);
 
   if (!isLoaded || meLoading || loading) {
     return (
@@ -436,6 +451,16 @@ export default function MyReferralPage({ slug, store }: Props) {
               </Button>
             )}
           </div>
+
+          {/* QR Code download */}
+          <Button
+            variant="outline"
+            className="w-full gap-2"
+            onClick={handleDownloadQR}
+          >
+            <QrCode className="w-4 h-4" />
+            Gerar QR Code
+          </Button>
         </CardContent>
       </Card>
 
