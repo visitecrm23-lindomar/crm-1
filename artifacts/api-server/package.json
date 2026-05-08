@@ -34,12 +34,14 @@
     "jspdf-autotable": "^5.0.7",
     "node-cron": "^4.2.1",
     "pdfkit": "^0.18.0",
+    "qrcode": "^1.5.4",
     "pino": "^9",
     "pino-http": "^10",
     "uploadthing": "^7.7.4",
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/qrcode": "^1.5.6",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",

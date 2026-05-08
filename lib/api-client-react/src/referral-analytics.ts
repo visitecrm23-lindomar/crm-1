@@ -60,6 +60,45 @@ export function useGetReferralAnalytics<
   return { ...query, queryKey };
 }
 
+export interface ReferralShareData {
+  link: string;
+  qrCodeDataUrl: string;
+}
+
+export const getReferralShareUrl = (id: string) => `/api/referrals/${id}/share`;
+
+export const getReferralShare = (id: string, options?: RequestInit) =>
+  customFetch<ReferralShareData>(getReferralShareUrl(id), { ...options, method: "GET" });
+
+export const getReferralShareQueryKey = (id: string) =>
+  [`/api/referrals/share`, id] as const;
+
+export function useGetReferralShare<
+  TData = ReferralShareData,
+  TError = ErrorType<unknown>,
+>(
+  id: string | null | undefined,
+  options?: {
+    query?: UseQueryOptions<ReferralShareData, TError, TData>;
+    request?: RequestInit;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getReferralShareQueryKey(id ?? "");
+
+  const queryFn = ({ signal }: { signal?: AbortSignal }) =>
+    getReferralShare(id!, { signal, ...requestOptions });
+
+  const query = useQuery({
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  }) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey };
+}
+
 export interface ReferralExportFilters {
   status?: string;
   search?: string;

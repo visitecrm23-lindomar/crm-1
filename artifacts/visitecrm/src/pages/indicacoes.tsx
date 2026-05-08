@@ -8,6 +8,7 @@ import {
   usePayReferralBonus,
   useResendExpiryWarning,
   useGetReferralAnalytics,
+  useGetReferralShare,
   getReferralExportUrl,
 } from "@workspace/api-client-react";
 import type { Referral, ReferralSettings, ReferralTierConfig, ReferralAnalyticsPeriod } from "@workspace/api-client-react";
@@ -60,6 +61,10 @@ import {
   ShieldAlert,
   Download,
   CheckSquare2,
+  Share2,
+  Copy,
+  QrCode,
+  Link2,
 } from "lucide-react";
 
 const DEFAULT_TIERS: ReferralTierConfig[] = [
@@ -151,6 +156,13 @@ export default function Indicacoes() {
   const [selectedBonusIds, setSelectedBonusIds] = useState<Set<string>>(new Set());
   const [bulkPayDialogOpen, setBulkPayDialogOpen] = useState(false);
   const [bulkPaying, setBulkPaying] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareReferralId, setShareReferralId] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const shareQueryId = shareModalOpen ? shareReferralId : (detailModalOpen && selectedReferral ? selectedReferral.id : null);
+  const { data: shareData, isLoading: shareLoading } = useGetReferralShare(shareQueryId);
+  const [detailCopiedLink, setDetailCopiedLink] = useState(false);
 
   const [localSettings, setLocalSettings] = useState<Partial<ReferralSettings>>({});
 
@@ -242,7 +254,25 @@ export default function Indicacoes() {
 
   function openDetail(r: EnrichedReferral) {
     setSelectedReferral(r);
+    setDetailCopiedLink(false);
     setDetailModalOpen(true);
+  }
+
+  function openShare(r: EnrichedReferral) {
+    setShareReferralId(r.id);
+    setCopiedLink(false);
+    setShareModalOpen(true);
+  }
+
+  async function copyLink() {
+    if (!shareData?.link) return;
+    try {
+      await navigator.clipboard.writeText(shareData.link);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    } catch {
+      toast({ title: "Não foi possível copiar o link", variant: "destructive" });
+    }
   }
 
   async function confirmBulkPay() {
@@ -974,6 +1004,15 @@ export default function Indicacoes() {
                             <Button size="sm" variant="ghost" onClick={() => openDetail(r)} title="Ver detalhes">
                               <Eye className="w-3 h-3" />
                             </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              onClick={() => openShare(r)}
+                              title="Compartilhar link de indicação"
+                            >
+                              <Share2 className="w-3 h-3" />
+                            </Button>
                             {r.status === REFERRAL_STATUS.COMPLETED && !r.bonusPaid && (
                               <Button
                                 size="sm"
@@ -1001,6 +1040,81 @@ export default function Indicacoes() {
           </TabsContent>
         ))}
       </Tabs>
+
+      {/* Share Link & QR-Code Dialog */}
+      <Dialog open={shareModalOpen} onOpenChange={(open) => { setShareModalOpen(open); if (!open) setCopiedLink(false); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Share2 className="w-4 h-4 text-blue-600" />
+              Compartilhar indicação
+            </DialogTitle>
+            <DialogDescription>
+              Envie o link ou QR-code ao indicador para facilitar o compartilhamento.
+            </DialogDescription>
+          </DialogHeader>
+          {shareLoading ? (
+            <div className="flex items-center justify-center py-10 text-muted-foreground text-sm gap-2">
+              <QrCode className="w-5 h-5 animate-pulse" />
+              Gerando link e QR-code…
+            </div>
+          ) : shareData ? (
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                  <Link2 className="w-3.5 h-3.5" />
+                  Link de indicação
+                </p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={shareData.link}
+                    className="text-xs font-mono bg-muted/50 flex-1 min-w-0"
+                  />
+                  <Button size="sm" variant="outline" onClick={copyLink} className="shrink-0">
+                    {copiedLink ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                </div>
+                {copiedLink && (
+                  <p className="text-xs text-green-600 flex items-center gap-1">
+                    <Check className="w-3 h-3" />
+                    Link copiado!
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                  <QrCode className="w-3.5 h-3.5" />
+                  QR-code
+                </p>
+                <div className="flex justify-center">
+                  <img
+                    src={shareData.qrCodeDataUrl}
+                    alt="QR-code de indicação"
+                    className="w-48 h-48 border rounded-lg p-2 bg-white"
+                  />
+                </div>
+                <p className="text-xs text-center text-muted-foreground">
+                  Escaneie para acessar o link de indicação
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="py-8 text-center text-muted-foreground text-sm">
+              Erro ao gerar o link. Tente novamente.
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShareModalOpen(false)}>Fechar</Button>
+            {shareData && (
+              <Button onClick={copyLink} className="bg-blue-600 hover:bg-blue-700">
+                {copiedLink ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
+                {copiedLink ? "Copiado!" : "Copiar link"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Bulk Pay Confirmation Dialog */}
       <Dialog open={bulkPayDialogOpen} onOpenChange={setBulkPayDialogOpen}>
@@ -1220,6 +1334,85 @@ export default function Indicacoes() {
                   <p className="text-sm">{selectedReferral.notes}</p>
                 </div>
               )}
+
+              {/* Share section in detail modal — link copiável + QR-code */}
+              <div className="border rounded-lg p-4 space-y-3 bg-blue-50/40">
+                <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide flex items-center gap-1.5">
+                  <Share2 className="w-3.5 h-3.5" />
+                  Compartilhar indicação
+                </p>
+                {shareLoading && !shareModalOpen ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                    <QrCode className="w-4 h-4 animate-pulse" />
+                    Gerando link e QR-code…
+                  </div>
+                ) : shareData && !shareModalOpen ? (
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                        <Link2 className="w-3 h-3" />
+                        Link de indicação
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          readOnly
+                          value={shareData.link}
+                          className="text-xs font-mono bg-white/70 flex-1 min-w-0 h-7"
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 shrink-0"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(shareData.link);
+                              setDetailCopiedLink(true);
+                              setTimeout(() => setDetailCopiedLink(false), 2000);
+                            } catch {
+                              toast({ title: "Não foi possível copiar o link", variant: "destructive" });
+                            }
+                          }}
+                        >
+                          {detailCopiedLink ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+                        </Button>
+                      </div>
+                      {detailCopiedLink && (
+                        <p className="text-xs text-green-600 flex items-center gap-1">
+                          <Check className="w-3 h-3" />
+                          Link copiado!
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground flex items-center gap-1 mb-1">
+                          <QrCode className="w-3 h-3" />
+                          QR-code
+                        </p>
+                        <img
+                          src={shareData.qrCodeDataUrl}
+                          alt="QR-code de indicação"
+                          className="w-24 h-24 border rounded-lg p-1 bg-white"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0 pt-5">
+                        <p className="text-xs text-muted-foreground leading-snug">
+                          Envie o link ou mostre o QR-code ao indicador para que ele compartilhe com amigos.
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-2 text-xs h-7 border-blue-300 text-blue-700 hover:bg-blue-100"
+                          onClick={() => openShare(selectedReferral)}
+                        >
+                          <Share2 className="w-3 h-3 mr-1" />
+                          Abrir em tela cheia
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
           )}
           <DialogFooter>

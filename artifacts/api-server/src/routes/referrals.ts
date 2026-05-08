@@ -514,6 +514,37 @@ router.post("/referrals/:id/resend-expiry-warning", async (req, res): Promise<vo
   }
 });
 
+router.get("/referrals/:id/share", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    const [row] = await db
+      .select({
+        code: referralsTable.code,
+        tenantSlug: tenantsTable.slug,
+      })
+      .from(referralsTable)
+      .leftJoin(tenantsTable, eq(referralsTable.tenantId, tenantsTable.id))
+      .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
+      .limit(1);
+
+    if (!row) { res.status(404).json({ error: "Indicação não encontrada" }); return; }
+
+    const frontendBase = (process.env["FRONTEND_URL"] ?? `https://${process.env["REPLIT_DEV_DOMAIN"] ?? "localhost"}`).replace(/\/$/, "");
+    const slug = row.tenantSlug ?? me.tenantId;
+    const link = `${frontendBase}/loja/${slug}/indicacao?code=${row.code}`;
+
+    const QRCode = await import("qrcode");
+    const qrCodeDataUrl = await QRCode.default.toDataURL(link, { margin: 2, width: 256 });
+
+    res.json({ link, qrCodeDataUrl });
+  } catch (err) {
+    req.log.error({ err }, "Error generating referral share link");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/referrals/analytics", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
