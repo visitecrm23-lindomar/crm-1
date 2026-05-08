@@ -1,6 +1,6 @@
 import { Worker } from "bullmq";
 import { sendWhatsAppMessage } from "../lib/whatsapp";
-import { getRedisConnection } from "../lib/redis";
+import { getRedisConnection, isTransientRedisError } from "../lib/redis";
 import { logger } from "../lib/logger";
 import type { WhatsAppNotificationJobData } from "../queues/index";
 
@@ -30,6 +30,14 @@ export function startWhatsAppWorker(): Worker<WhatsAppNotificationJobData> | nul
 
   _worker.on("failed", (job, err) => {
     logger.warn({ jobId: job?.id, err: err.message }, "[whatsapp-worker] Job failed");
+  });
+
+  _worker.on("error", (err) => {
+    if (isTransientRedisError(err)) {
+      logger.warn({ err }, "[whatsapp-worker] Transient worker error (will recover automatically)");
+    } else {
+      logger.error({ err }, "[whatsapp-worker] Worker error");
+    }
   });
 
   return _worker;

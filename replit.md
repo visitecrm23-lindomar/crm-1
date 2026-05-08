@@ -145,4 +145,4 @@ This is required for the billing system, plan selection UI, and tenant onboardin
 - **PostgreSQL**: Primary database.
 - **Google Calendar API**: For event synchronization and management.
 - **Replit DB**: For database hosting in the Replit environment.
-- **Redis (optional)**: Required for BullMQ async job queues. Set `REDIS_URL` env var (Upstash-compatible). When absent, emails are sent synchronously.
+- **Redis (optional)**: Required for BullMQ async job queues. Set `REDIS_URL` env var (Upstash-compatible). When absent, emails are sent synchronously. **Note**: The Upstash free tier has a 500 000 daily request limit. BullMQ's keep-alive polling can exhaust this quickly in active development. Upgrade to a paid Upstash tier or run a local Redis instance (`redis-server`) for sustained dev usage.

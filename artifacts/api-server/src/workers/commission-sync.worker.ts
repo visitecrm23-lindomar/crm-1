@@ -1,5 +1,5 @@
 import { Worker } from "bullmq";
-import { getRedisConnection } from "../lib/redis";
+import { getRedisConnection, isTransientRedisError } from "../lib/redis";
 import { logger } from "../lib/logger";
 import { syncReservationCommission } from "../routes/payments";
 import { markCommissionSyncFailed, clearCommissionSyncStatus } from "../queues/commission-sync-helper";
@@ -44,7 +44,11 @@ export function startCommissionSyncWorker(): Worker<CommissionSyncJobData> | nul
   });
 
   _worker.on("error", (err) => {
-    logger.error({ err }, "[commission-sync-worker] Worker error");
+    if (isTransientRedisError(err)) {
+      logger.warn({ err }, "[commission-sync-worker] Transient worker error (will recover automatically)");
+    } else {
+      logger.error({ err }, "[commission-sync-worker] Worker error");
+    }
   });
 
   logger.info("[commission-sync-worker] Started");

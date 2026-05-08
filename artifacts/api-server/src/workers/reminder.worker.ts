@@ -3,7 +3,7 @@ import { db, reservationsTable, tripsTable, clientsTable, tenantsTable, payments
 import { eq, and, gt, sql, gte, lt, lte, isNull, isNotNull, notLike, like, inArray, not, exists } from "drizzle-orm";
 import { sendReminderHtmlEmail, sendReservationConfirmationEmail } from "@workspace/email";
 import { dispatchReferralExpiredEmail, dispatchReferralExpiringSoonEmail } from "../queues/email-helpers";
-import { getRedisConnection } from "../lib/redis";
+import { getRedisConnection, isTransientRedisError } from "../lib/redis";
 import { logger } from "../lib/logger";
 import { runExpiredReservationsCron } from "../lib/expired-reservations";
 import type { ReminderJobData } from "../queues/index";
@@ -912,7 +912,11 @@ export function startReminderWorker(): Worker<ReminderJobData> | null {
   });
 
   _worker.on("error", (err) => {
-    logger.error({ err }, "[reminder-worker] Worker error");
+    if (isTransientRedisError(err)) {
+      logger.warn({ err }, "[reminder-worker] Transient worker error (will recover automatically)");
+    } else {
+      logger.error({ err }, "[reminder-worker] Worker error");
+    }
   });
 
   logger.info("[reminder-worker] Started");

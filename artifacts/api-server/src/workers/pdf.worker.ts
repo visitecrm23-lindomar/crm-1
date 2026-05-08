@@ -1,5 +1,5 @@
 import { Worker } from "bullmq";
-import { getRedisConnection } from "../lib/redis";
+import { getRedisConnection, isTransientRedisError } from "../lib/redis";
 import { logger } from "../lib/logger";
 import { db, auditLogsTable } from "@workspace/db";
 import { generateId } from "../lib/id";
@@ -80,7 +80,11 @@ export function startPdfWorker(): Worker<PdfJobData> | null {
   });
 
   _worker.on("error", (err) => {
-    logger.error({ err }, "[pdf-worker] Worker error");
+    if (isTransientRedisError(err)) {
+      logger.warn({ err }, "[pdf-worker] Transient worker error (will recover automatically)");
+    } else {
+      logger.error({ err }, "[pdf-worker] Worker error");
+    }
   });
 
   logger.info("[pdf-worker] Started");
