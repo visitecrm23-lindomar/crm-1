@@ -23,6 +23,7 @@ export interface ReferralAnalyticsData {
   funnel: ReferralAnalyticsFunnel;
   conversionRate: number;
   prevConversionRate: number;
+  discountGiven: number;
 }
 
 export const getReferralAnalyticsUrl = (period: ReferralAnalyticsPeriod) =>

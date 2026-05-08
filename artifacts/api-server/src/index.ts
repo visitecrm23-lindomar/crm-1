@@ -111,95 +111,7 @@ applyMigrations()
     logger.error({ err }, "Credential backfill failed — aborting boot");
     process.exit(1);
   })
-  .then(async () => {
-    // ── Birthday cron (node-cron, runs in-process, no Redis required) ──
-    cron.schedule("0 0 * * *", () => {
-      logger.info("[birthday] Daily cron triggered");
-      runBirthdayCron().catch((err) => logger.error({ err }, "[birthday] Cron failed"));
-    }, { timezone: "America/Sao_Paulo" });
-
-    // ── BullMQ: start workers if Redis is available ──
-    const redisConn = getRedisConnection();
-    if (redisConn) {
-      startEmailWorker();
-      startReminderWorker();
-      startPdfWorker();
-      startCommissionSyncWorker();
-      startWhatsAppWorker();
-      logger.info("[queue] BullMQ workers started");
-
-      // Register repeatable reminder jobs (idempotent — BullMQ de-dups by key)
-      const reminderQueue = getReminderQueue();
-      if (reminderQueue) {
-        // Reminders run at 08:00 daily in the America/Sao_Paulo timezone (BRT/BRST).
-        // BullMQ repeat.tz is used to make this explicit and environment-independent.
-        const REMINDER_TZ = process.env["REMINDER_TZ"] ?? "America/Sao_Paulo";
-        const REMINDER_CRON = process.env["REMINDER_CRON"] ?? "0 8 * * *";
-
-        // D-1 boarding reminder
-        await reminderQueue.upsertJobScheduler(
-          "boarding-reminder-daily",
-          { pattern: REMINDER_CRON, tz: REMINDER_TZ },
-          { name: "boarding_reminder", data: { type: "boarding_reminder" } },
-        ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule boarding reminder"));
-
-        // D-3 payment reminder
-        await reminderQueue.upsertJobScheduler(
-          "payment-reminder-daily",
-          { pattern: REMINDER_CRON, tz: REMINDER_TZ },
-          { name: "payment_reminder", data: { type: "payment_reminder" } },
-        ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule payment reminder"));
-
-        // Expired reservations cleanup — every 5 minutes
-        await reminderQueue.upsertJobScheduler(
-          "expired-reservations-cleanup",
-          { pattern: "*/5 * * * *" },
-          { name: "expired_reservations_cleanup", data: { type: "expired_reservations_cleanup" } },
-        ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule expired reservations cleanup"));
-
-        // Failed booking email auto-retry — every 15 minutes
-        await reminderQueue.upsertJobScheduler(
-          "failed-email-retry",
-          { pattern: "*/15 * * * *" },
-          { name: "failed_email_retry", data: { type: "failed_email_retry" } },
-        ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule failed-email retry"));
-
-        // Expired referral notifications — daily at 09:00 BRT
-        await reminderQueue.upsertJobScheduler(
-          "referral-expiry-notification-daily",
-          { pattern: "0 9 * * *", tz: process.env["REMINDER_TZ"] ?? "America/Sao_Paulo" },
-          { name: "referral_expiry_notification", data: { type: "referral_expiry_notification" } },
-        ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule referral expiry notification"));
-
-        // Pre-expiry referral warnings (7 days and 1 day before) — daily at 09:00 BRT
-        await reminderQueue.upsertJobScheduler(
-          "referral-expiry-warning-daily",
-          { pattern: "0 9 * * *", tz: process.env["REMINDER_TZ"] ?? "America/Sao_Paulo" },
-          { name: "referral_expiry_warning", data: { type: "referral_expiry_warning" } },
-        ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule referral expiry warning"));
-
-        logger.info("[reminders] Repeatable reminder jobs registered");
-      }
-    } else {
-      logger.warn("[queue] REDIS_URL not set — BullMQ workers not started, emails sent synchronously");
-
-      // ── Fallback: node-cron for expired reservations cleanup (no Redis required) ──
-      cron.schedule("*/5 * * * *", () => {
-        runExpiredReservationsCron().catch((err) =>
-          logger.error({ err }, "[expired-reservations] Cron failed"),
-        );
-      });
-      logger.info("[expired-reservations] node-cron fallback registered (every 5 minutes)");
-
-      // ── Fallback: node-cron for failed-email auto-retry (no Redis required) ──
-      cron.schedule("*/15 * * * *", () => {
-        retryFailedBookingEmails().catch((err) =>
-          logger.error({ err }, "[email-retry] node-cron fallback failed"),
-        );
-      });
-      logger.info("[email-retry] node-cron fallback registered (every 15 minutes)");
-    }
-
+  .then(() => {
     // ── Graceful shutdown ──
     const shutdown = async (signal: string) => {
       logger.info({ signal }, "Shutdown signal received");
@@ -209,6 +121,7 @@ applyMigrations()
     process.on("SIGTERM", () => void shutdown("SIGTERM"));
     process.on("SIGINT", () => void shutdown("SIGINT"));
 
+    // ── Bind HTTP port immediately — Redis/worker setup happens in the background ──
     app.listen(port, (err) => {
       if (err) {
         logger.error({ err }, "Error listening on port");
@@ -216,4 +129,89 @@ applyMigrations()
       }
       logger.info({ port }, "Server listening");
     });
+
+    // ── Background: cron + BullMQ workers (non-fatal if Redis is unavailable) ──
+    void (async () => {
+      // Birthday cron (node-cron, runs in-process, no Redis required)
+      cron.schedule("0 0 * * *", () => {
+        logger.info("[birthday] Daily cron triggered");
+        runBirthdayCron().catch((err) => logger.error({ err }, "[birthday] Cron failed"));
+      }, { timezone: "America/Sao_Paulo" });
+
+      // BullMQ: start workers if Redis is available
+      const redisConn = getRedisConnection();
+      if (redisConn) {
+        try {
+          startEmailWorker();
+          startReminderWorker();
+          startPdfWorker();
+          startCommissionSyncWorker();
+          startWhatsAppWorker();
+          logger.info("[queue] BullMQ workers started");
+        } catch (err) {
+          logger.error({ err }, "[queue] Failed to start BullMQ workers — continuing without them");
+        }
+
+        // Register repeatable reminder jobs (idempotent — BullMQ de-dups by key)
+        const reminderQueue = getReminderQueue();
+        if (reminderQueue) {
+          const REMINDER_TZ = process.env["REMINDER_TZ"] ?? "America/Sao_Paulo";
+          const REMINDER_CRON = process.env["REMINDER_CRON"] ?? "0 8 * * *";
+
+          await reminderQueue.upsertJobScheduler(
+            "boarding-reminder-daily",
+            { pattern: REMINDER_CRON, tz: REMINDER_TZ },
+            { name: "boarding_reminder", data: { type: "boarding_reminder" } },
+          ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule boarding reminder"));
+
+          await reminderQueue.upsertJobScheduler(
+            "payment-reminder-daily",
+            { pattern: REMINDER_CRON, tz: REMINDER_TZ },
+            { name: "payment_reminder", data: { type: "payment_reminder" } },
+          ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule payment reminder"));
+
+          await reminderQueue.upsertJobScheduler(
+            "expired-reservations-cleanup",
+            { pattern: "*/5 * * * *" },
+            { name: "expired_reservations_cleanup", data: { type: "expired_reservations_cleanup" } },
+          ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule expired reservations cleanup"));
+
+          await reminderQueue.upsertJobScheduler(
+            "failed-email-retry",
+            { pattern: "*/15 * * * *" },
+            { name: "failed_email_retry", data: { type: "failed_email_retry" } },
+          ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule failed-email retry"));
+
+          await reminderQueue.upsertJobScheduler(
+            "referral-expiry-notification-daily",
+            { pattern: "0 9 * * *", tz: process.env["REMINDER_TZ"] ?? "America/Sao_Paulo" },
+            { name: "referral_expiry_notification", data: { type: "referral_expiry_notification" } },
+          ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule referral expiry notification"));
+
+          await reminderQueue.upsertJobScheduler(
+            "referral-expiry-warning-daily",
+            { pattern: "0 9 * * *", tz: process.env["REMINDER_TZ"] ?? "America/Sao_Paulo" },
+            { name: "referral_expiry_warning", data: { type: "referral_expiry_warning" } },
+          ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule referral expiry warning"));
+
+          logger.info("[reminders] Repeatable reminder jobs registered");
+        }
+      } else {
+        logger.warn("[queue] REDIS_URL not set — BullMQ workers not started, emails sent synchronously");
+
+        cron.schedule("*/5 * * * *", () => {
+          runExpiredReservationsCron().catch((err) =>
+            logger.error({ err }, "[expired-reservations] Cron failed"),
+          );
+        });
+        logger.info("[expired-reservations] node-cron fallback registered (every 5 minutes)");
+
+        cron.schedule("*/15 * * * *", () => {
+          retryFailedBookingEmails().catch((err) =>
+            logger.error({ err }, "[email-retry] node-cron fallback failed"),
+          );
+        });
+        logger.info("[email-retry] node-cron fallback registered (every 15 minutes)");
+      }
+    })();
   });

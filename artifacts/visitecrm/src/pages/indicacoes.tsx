@@ -498,7 +498,7 @@ export default function Indicacoes() {
               <p className="text-3xl font-bold text-primary">
                 {analyticsData?.conversionRate ?? stats?.conversionRate ?? 0}%
               </p>
-              {analyticsData && analyticsData.prevConversionRate > 0 && (() => {
+              {analyticsData && (analyticsData.funnel.created > 0 || analyticsData.prevConversionRate > 0) && (() => {
                 const delta = analyticsData.conversionRate - analyticsData.prevConversionRate;
                 return (
                   <p className={`text-xs mt-0.5 font-medium ${delta >= 0 ? "text-green-600" : "text-red-500"}`}>
@@ -516,7 +516,8 @@ export default function Indicacoes() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold">{fmtCurrency(stats?.totalDiscountGiven ?? 0)}</p>
+              <p className="text-3xl font-bold">{fmtCurrency(analyticsData?.discountGiven ?? stats?.totalDiscountGiven ?? 0)}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">nos últimos {analyticsPeriod} dias</p>
             </CardContent>
           </Card>
         </div>

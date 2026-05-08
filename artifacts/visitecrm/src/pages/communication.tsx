@@ -220,6 +220,8 @@ export default function Communication() {
         const body = await res.json().catch(() => ({}));
         toast({ title: "Erro ao reenviar", description: body.error ?? "Tente novamente.", variant: "destructive" });
       }
+    } catch {
+      toast({ title: "Erro de conexão", description: "Não foi possível comunicar com o servidor. Verifique sua conexão e tente novamente.", variant: "destructive" });
     } finally {
       setResendingId(null);
     }
@@ -239,6 +241,8 @@ export default function Communication() {
         const body = await res.json().catch(() => ({}));
         toast({ title: "Erro ao reenviar", description: body.error ?? "Tente novamente.", variant: "destructive" });
       }
+    } catch {
+      toast({ title: "Erro de conexão", description: "Não foi possível comunicar com o servidor. Verifique sua conexão e tente novamente.", variant: "destructive" });
     } finally {
       setResendingId(null);
     }

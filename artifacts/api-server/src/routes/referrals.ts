@@ -562,6 +562,15 @@ router.get("/referrals/analytics", async (req, res): Promise<void> => {
         sql`${referralsTable.createdAt} < ${since}`,
       ));
 
+    const [discountRow] = await db.select({
+      total: sql<number>`COALESCE(SUM(${referralsTable.discountAmount}), 0)`,
+    }).from(referralsTable)
+      .where(and(
+        eq(referralsTable.tenantId, me.tenantId),
+        eq(referralsTable.status, REFERRAL_STATUS.COMPLETED),
+        sql`${referralsTable.createdAt} >= ${since}`,
+      ));
+
     const created = Number(funnelRow?.created ?? 0);
     const converted = Number(funnelRow?.converted ?? 0);
     const conversionRate = created > 0 ? Math.round((converted / created) * 100) : 0;
@@ -583,6 +592,7 @@ router.get("/referrals/analytics", async (req, res): Promise<void> => {
       },
       conversionRate,
       prevConversionRate,
+      discountGiven: Number(discountRow?.total ?? 0),
     });
   } catch (err) {
     req.log.error({ err }, "Error fetching referral analytics");
@@ -638,8 +648,7 @@ router.get("/referrals/export", async (req, res): Promise<void> => {
         eq(clientsTable.tenantId, me.tenantId),
       ))
       .where(and(...conditions))
-      .orderBy(desc(referralsTable.createdAt))
-      .limit(5000);
+      .orderBy(desc(referralsTable.createdAt));
 
     const headers = [
       "Código", "Indicador", "E-mail Indicador", "Indicado", "E-mail Indicado",
