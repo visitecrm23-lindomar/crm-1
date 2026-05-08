@@ -284,14 +284,32 @@ router.patch("/referrals/:id", async (req, res): Promise<void> => {
       convertedAt: z.string().optional(),
       isActive: z.boolean().optional(),
       notes: z.string().optional(),
+      expiresAt: z.string().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const [existing] = await db.select({ expiresAt: referralsTable.expiresAt })
+      .from(referralsTable)
+      .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (parsed.data.status !== undefined) updates.status = parsed.data.status;
     if (parsed.data.bonusPaid != null) updates.bonusPaid = parsed.data.bonusPaid;
     if (parsed.data.convertedAt) updates.convertedAt = new Date(parsed.data.convertedAt);
     if (parsed.data.isActive != null) updates.isActive = parsed.data.isActive;
     if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes;
+    if (parsed.data.expiresAt !== undefined) {
+      const newExpiresAt = new Date(parsed.data.expiresAt);
+      updates.expiresAt = newExpiresAt;
+      const oldTime = existing.expiresAt ? new Date(existing.expiresAt).getTime() : null;
+      if (oldTime !== newExpiresAt.getTime()) {
+        updates.expiryWarning7SentAt = null;
+        updates.expiryWarning1SentAt = null;
+      }
+    }
+
     await db.update(referralsTable).set(updates)
       .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)));
     const [referral] = await db.select().from(referralsTable)
