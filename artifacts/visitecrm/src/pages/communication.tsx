@@ -910,9 +910,20 @@ export default function Communication() {
                       ? "Auto-reenviados"
                       : f === "manual"
                       ? "Manuais / Originais"
-                      : exhaustedReservationIds.size > 0
-                      ? `Esgotadas (${exhaustedReservationIds.size})`
-                      : "Esgotadas"}
+                      : (
+                        <span className="inline-flex items-center gap-1.5">
+                          Esgotadas
+                          {exhaustedReservationIds.size > 0 && (
+                            <span className={`inline-flex items-center justify-center rounded-full text-xs font-bold min-w-[1rem] h-4 px-1 ${
+                              filterAutoRetry === "exhausted"
+                                ? "bg-white text-orange-600"
+                                : "bg-orange-500 text-white"
+                            }`}>
+                              {exhaustedReservationIds.size}
+                            </span>
+                          )}
+                        </span>
+                      )}
                   </button>
                 ))}
               </div>
