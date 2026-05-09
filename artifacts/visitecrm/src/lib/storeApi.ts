@@ -351,6 +351,8 @@ export interface PublicStore {
   termsOfService?: string | null;
   maintenanceMode: boolean;
   maintenanceMessage?: string | null;
+  couponsEnabled?: boolean;
+  referralsEnabled?: boolean;
 }
 
 export interface StoreCategory {

@@ -1740,6 +1740,8 @@ function ApiKeysTab() {
 }
 
 /* ──────────────────── Features Tab ──────────────────── */
+const PLAN_TIER: Record<string, number> = { starter: 0, pro: 1, enterprise: 2 };
+
 function FeaturesTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1756,6 +1758,9 @@ function FeaturesTab() {
   const settings = (fullTenant?.settings ?? {}) as Record<string, unknown>;
   const referralsEnabled = settings.referralsEnabled !== false;
   const couponsEnabled = settings.couponsEnabled !== false;
+
+  const planId = (fullTenant?.planId ?? "starter") as string;
+  const currentTier = PLAN_TIER[planId] ?? 0;
 
   async function handleToggle(key: "referralsEnabled" | "couponsEnabled", value: boolean) {
     if (!tenantId) return;
@@ -1774,12 +1779,16 @@ function FeaturesTab() {
       label: "Programa de Indicação",
       description: "Permite que clientes gerem códigos de indicação e ganhem bônus por conversões",
       enabled: referralsEnabled,
+      minTier: 1,
+      requiredPlanLabel: "Pro",
     },
     {
       key: "couponsEnabled" as const,
       label: "Cupons de Desconto",
       description: "Habilita a criação e uso de cupons de desconto na sua loja",
       enabled: couponsEnabled,
+      minTier: 0,
+      requiredPlanLabel: null,
     },
   ];
 
@@ -1789,19 +1798,42 @@ function FeaturesTab() {
         Ative ou desative módulos do sistema para a sua agência.
       </p>
       <div className="rounded-md border divide-y">
-        {FEATURES.map((f) => (
-          <div key={f.key} className="flex items-center justify-between px-4 py-4 gap-4">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">{f.label}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{f.description}</p>
+        {FEATURES.map((f) => {
+          const locked = currentTier < f.minTier;
+          return (
+            <div key={f.key} className="flex items-center justify-between px-4 py-4 gap-4">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium">{f.label}</p>
+                  {locked && (
+                    <Badge variant="secondary" className="flex items-center gap-1 text-xs">
+                      <Lock className="w-3 h-3" />
+                      Plano {f.requiredPlanLabel}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">{f.description}</p>
+                {locked && (
+                  <button
+                    className="text-xs text-primary underline mt-1"
+                    onClick={() => {
+                      const url = new URL(window.location.href);
+                      url.searchParams.set("tab", "plan");
+                      window.location.href = url.toString();
+                    }}
+                  >
+                    Fazer upgrade para desbloquear
+                  </button>
+                )}
+              </div>
+              <Switch
+                checked={f.enabled}
+                onCheckedChange={(v) => handleToggle(f.key, v)}
+                disabled={updateTenant.isPending || locked}
+              />
             </div>
-            <Switch
-              checked={f.enabled}
-              onCheckedChange={(v) => handleToggle(f.key, v)}
-              disabled={updateTenant.isPending}
-            />
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

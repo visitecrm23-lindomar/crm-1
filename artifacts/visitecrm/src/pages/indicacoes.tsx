@@ -500,6 +500,22 @@ export default function Indicacoes() {
               {pendingBonusCount} bônus pendente{pendingBonusCount > 1 ? "s" : ""}
             </Badge>
           )}
+          <Button
+            variant="outline"
+            onClick={() => {
+              const url = getReferralExportUrl({
+                status: statusFilter !== "all" && !fraudFilter && statusFilter !== "expiringSoon" ? statusFilter : undefined,
+                search: searchQuery || undefined,
+                bonusPaid: bonusFilter === "unpaid" ? false : undefined,
+                fraudFlag: fraudFilter ? true : undefined,
+                expiringSoon: statusFilter === "expiringSoon" ? true : undefined,
+              });
+              window.open(url, "_blank");
+            }}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Exportar CSV
+          </Button>
           <Button variant="outline" onClick={openSettings}>
             <Settings className="w-4 h-4 mr-2" />
             Configurações

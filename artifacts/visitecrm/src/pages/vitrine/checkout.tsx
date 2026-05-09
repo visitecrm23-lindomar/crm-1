@@ -669,6 +669,7 @@ export default function VitrineCheckout({
                 </CardContent>
               </Card>
 
+              {store.couponsEnabled !== false && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
@@ -717,7 +718,9 @@ export default function VitrineCheckout({
                   )}
                 </CardContent>
               </Card>
+              )}
 
+              {store.referralsEnabled !== false && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
@@ -769,6 +772,7 @@ export default function VitrineCheckout({
                   )}
                 </CardContent>
               </Card>
+              )}
 
               <Button
                 className="w-full h-11 text-white font-bold"

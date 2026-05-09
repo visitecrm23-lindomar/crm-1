@@ -135,7 +135,11 @@ export function StepReview({ state, store }: { state: WizardState; store: Public
           </div>
         </div>
 
-        <StepCouponReferral state={state} />
+        <StepCouponReferral
+          state={state}
+          couponsEnabled={store.couponsEnabled !== false}
+          referralsEnabled={store.referralsEnabled !== false}
+        />
       </div>
 
       <div className="lg:col-span-1">

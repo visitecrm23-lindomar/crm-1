@@ -144,6 +144,7 @@ export default function VitrineLayout({
                       <UserCircle className="w-4 h-4" />
                       Meu Perfil
                     </a>
+                    {store.referralsEnabled !== false && (
                     <a
                       href={`/loja/${slug}/minhas-indicacoes`}
                       className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -152,6 +153,7 @@ export default function VitrineLayout({
                       <Share2 className="w-4 h-4" />
                       Minhas Indicações
                     </a>
+                    )}
                     <button
                       onClick={handleSignOut}
                       className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
@@ -266,6 +268,7 @@ export default function VitrineLayout({
                   <UserCircle className="w-4 h-4" />
                   Meu Perfil
                 </a>
+                {store.referralsEnabled !== false && (
                 <a
                   href={`/loja/${slug}/minhas-indicacoes`}
                   className="flex items-center gap-2 text-white/90 hover:text-white text-sm font-medium py-1"
@@ -274,6 +277,7 @@ export default function VitrineLayout({
                   <Share2 className="w-4 h-4" />
                   Minhas Indicações
                 </a>
+                )}
                 <button
                   onClick={handleSignOut}
                   className="flex items-center gap-2 text-red-300 hover:text-red-100 text-sm font-medium py-1 w-full"

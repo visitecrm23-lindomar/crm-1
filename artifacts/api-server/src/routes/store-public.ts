@@ -75,6 +75,15 @@ router.get("/public/store/:slug", async (req, res, next: NextFunction): Promise<
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
+
+    const [tenant] = await db.select({ settings: tenantsTable.settings })
+      .from(tenantsTable)
+      .where(eq(tenantsTable.id, store.tenantId))
+      .limit(1);
+    const tenantSettings = (tenant?.settings ?? {}) as Record<string, unknown>;
+    const couponsEnabled = tenantSettings.couponsEnabled !== false;
+    const referralsEnabled = tenantSettings.referralsEnabled !== false;
+
     const publicData = {
       id: store.id,
       name: store.name,
@@ -125,6 +134,8 @@ router.get("/public/store/:slug", async (req, res, next: NextFunction): Promise<
       privacyUrl: store.privacyUrl,
       maintenanceMode: store.maintenanceMode,
       maintenanceMessage: store.maintenanceMessage,
+      couponsEnabled,
+      referralsEnabled,
     };
     await db.update(storesTable).set({ totalVisits: store.totalVisits + 1 })
       .where(eq(storesTable.id, store.id));
