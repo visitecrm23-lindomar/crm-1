@@ -278,6 +278,18 @@ export default function MyReferralPage({ slug, store }: Props) {
   const ref = profile.referral;
   const tierColors = TIER_COLORS[ref.currentTierLevel] ?? TIER_COLORS.bronze;
 
+  const { paidBonus, pendingBonus } = (referrals ?? []).reduce(
+    (acc, r) => {
+      if (r.status === "completed" || r.status === "converted") {
+        const amount = parseFloat(r.bonusAmount) || 0;
+        if (r.bonusPaid) acc.paidBonus += amount;
+        else acc.pendingBonus += amount;
+      }
+      return acc;
+    },
+    { paidBonus: 0, pendingBonus: 0 },
+  );
+
   const stats = [
     {
       icon: <Users className="w-5 h-5" />,
@@ -479,6 +491,22 @@ export default function MyReferralPage({ slug, store }: Props) {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {!loadingReferrals && referrals && referrals.length > 0 && (paidBonus > 0 || pendingBonus > 0) && (
+            <div className="flex gap-2 flex-wrap mb-4">
+              {paidBonus > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  {formatCurrency(paidBonus)} recebido
+                </span>
+              )}
+              {pendingBonus > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200">
+                  <Clock className="w-3.5 h-3.5" />
+                  {formatCurrency(pendingBonus)} a receber
+                </span>
+              )}
+            </div>
+          )}
           {loadingReferrals ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
