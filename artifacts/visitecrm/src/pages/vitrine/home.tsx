@@ -23,7 +23,7 @@ import {
 function ReferralWelcomeBanner({ slug, primaryColor }: { slug: string; primaryColor: string }) {
   const [visible, setVisible] = useState(false);
   const [referrerName, setReferrerName] = useState<string | null>(null);
-  const [discountPct, setDiscountPct] = useState<number>(5);
+  const [discountLabel, setDiscountLabel] = useState<string>("5%");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -38,7 +38,11 @@ function ReferralWelcomeBanner({ slug, primaryColor }: { slug: string; primaryCo
 
     publicStoreApi.getReferralInfo(slug, refCode).then((info) => {
       if (info?.referrerName) setReferrerName(info.referrerName);
-      if (info?.discountPercent) setDiscountPct(info.discountPercent);
+      if (info) {
+        const type = info.discountType ?? "percentage";
+        const val = type === "fixed" ? (info.discountValue ?? 0) : (info.discountPercent ?? 5);
+        setDiscountLabel(type === "fixed" ? `R$ ${val.toFixed(2).replace(".", ",")}` : `${val}%`);
+      }
     }).catch(() => {});
   }, [slug]);
 
@@ -57,7 +61,7 @@ function ReferralWelcomeBanner({ slug, primaryColor }: { slug: string; primaryCo
             : "Você chegou por indicação! 🎉"}
         </p>
         <p className="text-white/85 text-xs md:text-sm">
-          Ganhe <strong>{discountPct}% de desconto</strong> na sua reserva. O código já está salvo para você!
+          Ganhe <strong>{discountLabel} de desconto</strong> na sua reserva. O código já está salvo para você!
         </p>
       </div>
       <button

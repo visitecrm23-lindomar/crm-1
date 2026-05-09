@@ -295,8 +295,14 @@ export default function VitrineCheckout({
   }
 
   const referralDiscountPct = referralResult?.discountPercent ?? 5;
+  const referralDiscountType = referralResult?.discountType ?? "percentage";
+  const referralDiscountValue = referralResult?.discountValue ?? referralDiscountPct;
   const couponDiscount = couponResult?.valid ? Number(couponResult.discountAmount ?? 0) : 0;
-  const referralDiscount = referralResult?.valid && !couponResult?.valid ? total * (referralDiscountPct / 100) : 0;
+  const referralDiscount = referralResult?.valid && !couponResult?.valid
+    ? (referralDiscountType === "fixed"
+        ? Math.min(referralDiscountValue, total)
+        : total * (referralDiscountPct / 100))
+    : 0;
   const discount = couponDiscount + referralDiscount;
   const finalTotal = Math.max(0, total - discount);
 
@@ -526,7 +532,7 @@ export default function VitrineCheckout({
           )}
           {referralDiscount > 0 && (
             <div className="flex justify-between text-sm text-green-600">
-              <span>Indicação ({referralResult?.code}) −{referralDiscountPct}%</span>
+              <span>Indicação ({referralResult?.code}) −{referralDiscountType === "fixed" ? `R$ ${referralDiscountValue.toFixed(2)}` : `${referralDiscountPct}%`}</span>
               <span>- R$ {referralDiscount.toFixed(2)}</span>
             </div>
           )}

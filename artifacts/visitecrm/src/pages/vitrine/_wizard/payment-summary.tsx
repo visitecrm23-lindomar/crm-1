@@ -44,7 +44,7 @@ export function StepPaymentSummary({
           </div>
           {referralDiscount > 0 && (
             <div className="flex justify-between text-green-600">
-              <span>Desconto Indicação ({referralDiscountPct}%)</span>
+              <span>Desconto Indicação</span>
               <span>− R$ {referralDiscount.toFixed(2)}</span>
             </div>
           )}

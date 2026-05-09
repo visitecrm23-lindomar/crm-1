@@ -110,6 +110,8 @@ export function useWizardState({
   const [referralCode, setReferralCode] = useState(() => localStorage.getItem("referral_code") ?? "");
   const [referralApplied, setReferralApplied] = useState(false);
   const [referralDiscountPct, setReferralDiscountPct] = useState(5);
+  const [referralDiscountType, setReferralDiscountType] = useState<"percentage" | "fixed">("percentage");
+  const [referralDiscountValue, setReferralDiscountValue] = useState(5);
 
   useEffect(() => {
     setLoadingProduct(true);
@@ -142,7 +144,11 @@ export function useWizardState({
           if (res.valid) {
             setReferralCode(savedCode);
             setReferralApplied(true);
-            setReferralDiscountPct(res.discountPercent ?? 5);
+            const rType = (res.discountType ?? "percentage") as "percentage" | "fixed";
+            const rVal = res.discountValue ?? res.discountPercent ?? 5;
+            setReferralDiscountType(rType);
+            setReferralDiscountValue(rVal);
+            setReferralDiscountPct(rType === "percentage" ? rVal : 0);
           }
         })
         .catch(() => {
@@ -160,7 +166,11 @@ export function useWizardState({
   const unitPrice = selectedVariant ? selectedVariant.price : basePrice;
   const subtotal = unitPrice * qty;
   const couponDiscount = couponResult?.valid ? Number(couponResult.discountAmount ?? 0) : 0;
-  const referralDiscount = referralApplied ? subtotal * (referralDiscountPct / 100) : 0;
+  const referralDiscount = referralApplied
+    ? (referralDiscountType === "fixed"
+        ? Math.min(referralDiscountValue, subtotal)
+        : subtotal * (referralDiscountPct / 100))
+    : 0;
   const finalTotal = Math.max(0, subtotal - couponDiscount - referralDiscount);
 
   const showSeatGrid =
@@ -216,7 +226,11 @@ export function useWizardState({
       const res = await publicStoreApi.validateReferral(slug, referralCode.trim().toUpperCase());
       if (res.valid) {
         setReferralApplied(true);
-        setReferralDiscountPct(res.discountPercent ?? 5);
+        const rType = (res.discountType ?? "percentage") as "percentage" | "fixed";
+        const rVal = res.discountValue ?? res.discountPercent ?? 5;
+        setReferralDiscountType(rType);
+        setReferralDiscountValue(rVal);
+        setReferralDiscountPct(rType === "percentage" ? rVal : 0);
         localStorage.setItem("referral_code", referralCode.trim().toUpperCase());
       } else {
         alert(res.error ?? "Código inválido");
@@ -415,6 +429,8 @@ export function useWizardState({
     setReferralCode,
     referralApplied,
     referralDiscountPct,
+    referralDiscountType,
+    referralDiscountValue,
     applyReferral,
     removeReferral,
     basePrice,
