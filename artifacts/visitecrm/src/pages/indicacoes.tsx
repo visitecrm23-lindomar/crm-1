@@ -1530,6 +1530,35 @@ export default function Indicacoes() {
                           Link copiado!
                         </p>
                       )}
+                      {(() => {
+                        const referrerPhone = selectedReferral.referrerWhatsapp;
+                        const hasWhatsapp = isValidWhatsapp(referrerPhone);
+                        const whatsappUrl = hasWhatsapp
+                          ? buildWhatsAppShareUrl(referrerPhone, shareData.link, settings?.shareMessage ?? "", selectedReferral.referrerName)
+                          : null;
+                        return (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={`mt-1 text-xs h-7 ${hasWhatsapp ? "border-green-500 text-green-700 hover:bg-green-50" : "opacity-50 cursor-not-allowed"}`}
+                            disabled={!hasWhatsapp}
+                            title={hasWhatsapp ? undefined : "Indicador sem WhatsApp cadastrado"}
+                            asChild={hasWhatsapp}
+                          >
+                            {hasWhatsapp ? (
+                              <a href={whatsappUrl!} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5">
+                                <MessageCircle className="w-3 h-3" />
+                                Enviar via WhatsApp
+                              </a>
+                            ) : (
+                              <span className="flex items-center gap-1.5">
+                                <MessageCircle className="w-3 h-3" />
+                                Enviar via WhatsApp
+                              </span>
+                            )}
+                          </Button>
+                        );
+                      })()}
                     </div>
                     <div className="flex items-start gap-3">
                       <div>
