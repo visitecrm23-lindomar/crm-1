@@ -124,6 +124,7 @@ const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secon
   completed: { label: "Convertida", variant: "default" },
   expired: { label: "Expirada", variant: "destructive" },
   converted: { label: "Convertida", variant: "default" },
+  reversed: { label: "Revertida", variant: "destructive" },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -131,7 +132,11 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant={s.variant}>{s.label}</Badge>;
 }
 
-type EnrichedReferral = Referral & { referrerWhatsapp?: string | null };
+type EnrichedReferral = Referral & {
+  referrerWhatsapp?: string | null;
+  bonusReleasesAt?: string | null;
+  bonusBlocked?: boolean;
+};
 
 export default function Indicacoes() {
   const { toast } = useToast();
@@ -988,13 +993,26 @@ export default function Indicacoes() {
                           </TableCell>
                         )}
                         <TableCell>
-                          {r.status === REFERRAL_STATUS.COMPLETED ? (
+                          {r.status === REFERRAL_STATUS.REVERSED ? (
+                            <div>
+                              <p className="text-sm font-medium text-red-600 line-through">{fmtCurrency(r.bonusAmount)}</p>
+                              <p className="text-xs text-red-500 flex items-center gap-0.5">
+                                <XCircle className="w-2.5 h-2.5" />
+                                Revertido
+                              </p>
+                            </div>
+                          ) : r.status === REFERRAL_STATUS.COMPLETED ? (
                             <div>
                               <p className="text-sm font-medium text-green-600">{fmtCurrency(r.bonusAmount)}</p>
                               {r.bonusPaid ? (
                                 <p className="text-xs text-green-700 flex items-center gap-0.5">
                                   <Check className="w-2.5 h-2.5" />
                                   Pago {r.bonusPaidAt ? `em ${fmtDate(r.bonusPaidAt)}` : ""}
+                                </p>
+                              ) : (r as EnrichedReferral).bonusBlocked && (r as EnrichedReferral).bonusReleasesAt ? (
+                                <p className="text-xs text-slate-500 flex items-center gap-0.5">
+                                  <Clock className="w-2.5 h-2.5" />
+                                  Disponível em {fmtDate((r as EnrichedReferral).bonusReleasesAt)}
                                 </p>
                               ) : (
                                 <p className="text-xs text-amber-600">Pendente</p>
@@ -1038,9 +1056,17 @@ export default function Indicacoes() {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                                onClick={() => openPayBonusDialog(r)}
-                                title="Pagar bônus"
+                                className={
+                                  (r as EnrichedReferral).bonusBlocked
+                                    ? "text-slate-400 cursor-not-allowed"
+                                    : "text-green-600 hover:text-green-700 hover:bg-green-50"
+                                }
+                                onClick={() => { if (!(r as EnrichedReferral).bonusBlocked) openPayBonusDialog(r); }}
+                                title={
+                                  (r as EnrichedReferral).bonusBlocked && (r as EnrichedReferral).bonusReleasesAt
+                                    ? `Bônus disponível em ${fmtDate((r as EnrichedReferral).bonusReleasesAt)}`
+                                    : "Pagar bônus"
+                                }
                               >
                                 <Wallet className="w-3 h-3" />
                               </Button>
@@ -1316,14 +1342,31 @@ export default function Indicacoes() {
                 </div>
                 <div>
                   <p className="text-muted-foreground">Bônus</p>
-                  <p className="text-green-600 font-semibold">{fmtCurrency(selectedReferral.bonusAmount)}</p>
-                  {selectedReferral.bonusPaid ? (
-                    <p className="text-xs text-green-700 flex items-center gap-1">
-                      <Check className="w-3 h-3" />
-                      Pago {selectedReferral.bonusPaidAt ? `em ${fmtDateTime(selectedReferral.bonusPaidAt)}` : ""}
-                    </p>
+                  {selectedReferral.status === REFERRAL_STATUS.REVERSED ? (
+                    <>
+                      <p className="text-red-500 font-semibold line-through">{fmtCurrency(selectedReferral.bonusAmount)}</p>
+                      <p className="text-xs text-red-500 flex items-center gap-1">
+                        <XCircle className="w-3 h-3" />
+                        Revertido — reserva cancelada
+                      </p>
+                    </>
                   ) : (
-                    <p className="text-xs text-amber-600">Pendente</p>
+                    <>
+                      <p className="text-green-600 font-semibold">{fmtCurrency(selectedReferral.bonusAmount)}</p>
+                      {selectedReferral.bonusPaid ? (
+                        <p className="text-xs text-green-700 flex items-center gap-1">
+                          <Check className="w-3 h-3" />
+                          Pago {selectedReferral.bonusPaidAt ? `em ${fmtDateTime(selectedReferral.bonusPaidAt)}` : ""}
+                        </p>
+                      ) : (selectedReferral as EnrichedReferral).bonusBlocked && (selectedReferral as EnrichedReferral).bonusReleasesAt ? (
+                        <p className="text-xs text-slate-500 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          Disponível em {fmtDate((selectedReferral as EnrichedReferral).bonusReleasesAt)}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-amber-600">Pendente</p>
+                      )}
+                    </>
                   )}
                 </div>
                 {(() => {

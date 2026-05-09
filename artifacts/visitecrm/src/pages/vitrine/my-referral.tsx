@@ -45,6 +45,7 @@ const REFERRAL_STATUS_MAP: Record<string, { label: string; color: string; icon: 
   completed: { label: "Confirmada", color: "bg-green-100 text-green-800",    icon: <CheckCircle className="w-3.5 h-3.5" /> },
   converted: { label: "Convertida", color: "bg-blue-100 text-blue-800",      icon: <CheckCircle className="w-3.5 h-3.5" /> },
   expired:   { label: "Expirada",   color: "bg-slate-100 text-slate-500",    icon: <XCircle className="w-3.5 h-3.5" /> },
+  reversed:  { label: "Revertida",  color: "bg-red-100 text-red-700",        icon: <XCircle className="w-3.5 h-3.5" /> },
 };
 
 function ReferralStatusBadge({ status }: { status: string }) {
@@ -96,11 +97,16 @@ function ReferralHistoryRow({ r, primaryColor }: { r: ClientReferral; primaryCol
           <ReferralStatusBadge status={r.status} />
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">{dateLabel}</p>
+        {r.status === "reversed" && bonusValue > 0 && (
+          <p className="text-xs mt-1 font-medium text-red-500">
+            ✕ Bônus de {bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} revertido
+          </p>
+        )}
         {(r.status === "completed" || r.status === "converted") && bonusValue > 0 && (
           <p className={`text-xs mt-1 font-medium ${r.bonusPaid ? "text-green-600" : "text-orange-500"}`}>
             {r.bonusPaid
               ? `✓ Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} pago`
-              : `⏳ Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} a receber`}
+              : `⏳ Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} aguardando pagamento`}
           </p>
         )}
       </div>

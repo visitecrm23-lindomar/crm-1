@@ -223,17 +223,25 @@ router.get("/referrals", async (req, res): Promise<void> => {
       }
     }
 
+    const BONUS_LOCK_DAYS = 30;
     const referrals = rows.map(({ referrerClientName, referrerClientEmail, referrerClientWhatsapp, referrerClientPhone, ...r }) => {
       const tracking = trackingMap.get(r.code);
+      const bonusReleasesAt = r.convertedAt
+        ? new Date(new Date(r.convertedAt).getTime() + BONUS_LOCK_DAYS * 24 * 60 * 60 * 1000)
+        : null;
+      const bonusBlocked =
+        r.status === REFERRAL_STATUS.REVERSED ||
+        (bonusReleasesAt !== null && new Date() < bonusReleasesAt);
       return {
         ...r,
         referrerName: referrerClientName ?? r.referrerName,
         referrerEmail: referrerClientEmail ?? r.referrerEmail,
         referrerPhone: referrerClientPhone ?? r.referrerPhone,
         referrerWhatsapp: referrerClientWhatsapp ?? null,
-        // Use tracking aggregate as fallback when forward-sync hasn't run yet
         lastVisit: r.lastVisit ?? tracking?.lastVisit ?? null,
         visitsCount: Math.max(r.visitsCount ?? 0, tracking?.visitsCount ?? 0),
+        bonusReleasesAt: bonusReleasesAt?.toISOString() ?? null,
+        bonusBlocked,
       };
     });
 
@@ -346,6 +354,10 @@ router.post("/referrals/:id/pay-bonus", async (req, res): Promise<void> => {
       .limit(1);
 
     if (!row) { res.status(404).json({ error: "Indicação não encontrada" }); return; }
+    if (row.status === REFERRAL_STATUS.REVERSED) {
+      res.status(422).json({ error: "Bônus revertido por cancelamento da reserva" });
+      return;
+    }
     if (row.status !== REFERRAL_STATUS.COMPLETED) {
       res.status(422).json({ error: "Bônus só pode ser pago em indicações convertidas" });
       return;
@@ -353,6 +365,15 @@ router.post("/referrals/:id/pay-bonus", async (req, res): Promise<void> => {
     if (row.bonusPaid) {
       res.status(422).json({ error: "Bônus já foi pago anteriormente" });
       return;
+    }
+    if (row.convertedAt) {
+      const lockUntil = new Date(row.convertedAt);
+      lockUntil.setDate(lockUntil.getDate() + 30);
+      if (new Date() < lockUntil) {
+        const releaseDate = lockUntil.toLocaleDateString("pt-BR");
+        res.status(422).json({ error: `Bônus disponível somente 30 dias após a reserva. Liberação em ${releaseDate}` });
+        return;
+      }
     }
 
     const now = new Date();

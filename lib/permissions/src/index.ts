@@ -74,6 +74,7 @@ export const REFERRAL_STATUS = {
   COMPLETED: "completed",
   CONVERTED: "converted",
   EXPIRED: "expired",
+  REVERSED: "reversed",
 } as const;
 export type ReferralStatus = (typeof REFERRAL_STATUS)[keyof typeof REFERRAL_STATUS];
 

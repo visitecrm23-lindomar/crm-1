@@ -1104,7 +1104,7 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
                 eq(clientsTable.tenantId, me.tenantId),
               ));
             await tx.update(referralsTable)
-              .set({ status: "reversed" })
+              .set({ status: REFERRAL_STATUS.REVERSED, updatedAt: new Date() })
               .where(eq(referralsTable.id, referralRecord.id));
           }
         }
