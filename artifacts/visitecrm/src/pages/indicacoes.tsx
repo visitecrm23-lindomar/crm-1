@@ -290,6 +290,36 @@ export default function Indicacoes() {
     return digits.length >= 10;
   }
 
+  async function shareQrCodeViaWhatsApp(dataUrl: string, code: string, phone: string) {
+    const num = phone.replace(/\D/g, "");
+    const fallbackUrl = `https://wa.me/55${num}`;
+    try {
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], `qrcode-${code}.png`, { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: "QR-code de indicação" });
+      } else {
+        window.open(fallbackUrl, "_blank", "noopener,noreferrer");
+        toast({
+          title: "QR-code baixado automaticamente",
+          description: "Anexe manualmente a imagem na conversa do WhatsApp que foi aberta.",
+        });
+        const a = document.createElement("a");
+        a.href = dataUrl;
+        a.download = `qrcode-${code}.png`;
+        a.click();
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") return;
+      window.open(fallbackUrl, "_blank", "noopener,noreferrer");
+      toast({
+        title: "Não foi possível compartilhar a imagem",
+        description: "O WhatsApp foi aberto. Baixe o QR-code e anexe manualmente.",
+      });
+    }
+  }
+
   async function copyLink() {
     if (!shareData?.link) return;
     try {
@@ -1144,7 +1174,7 @@ export default function Indicacoes() {
                 <p className="text-xs text-center text-muted-foreground">
                   Escaneie para acessar o link de indicação
                 </p>
-                <div className="flex justify-center">
+                <div className="flex justify-center items-center gap-3 flex-wrap">
                   <a
                     href={shareData.qrCodeDataUrl}
                     download={`qrcode-${shareReferral?.code ?? "referral"}.png`}
@@ -1153,6 +1183,16 @@ export default function Indicacoes() {
                     <Download className="w-3.5 h-3.5" />
                     Baixar QR-code
                   </a>
+                  {isValidWhatsapp(shareReferral?.referrerWhatsapp) && (
+                    <button
+                      type="button"
+                      onClick={() => shareQrCodeViaWhatsApp(shareData.qrCodeDataUrl, shareReferral?.code ?? "referral", shareReferral!.referrerWhatsapp!)}
+                      className="inline-flex items-center gap-1.5 text-xs text-green-700 hover:text-green-800 font-medium"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      Enviar QR-code pelo WhatsApp
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1576,6 +1616,16 @@ export default function Indicacoes() {
                         <p className="text-xs text-muted-foreground leading-snug">
                           Envie o link ou mostre o QR-code ao indicador para que ele compartilhe com amigos.
                         </p>
+                        {isValidWhatsapp(selectedReferral.referrerWhatsapp) && (
+                          <button
+                            type="button"
+                            onClick={() => shareQrCodeViaWhatsApp(shareData.qrCodeDataUrl, selectedReferral.code ?? "referral", selectedReferral.referrerWhatsapp!)}
+                            className="mt-2 flex items-center gap-1.5 text-xs text-green-700 hover:text-green-800 font-medium"
+                          >
+                            <MessageCircle className="w-3 h-3" />
+                            Enviar QR-code pelo WhatsApp
+                          </button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
