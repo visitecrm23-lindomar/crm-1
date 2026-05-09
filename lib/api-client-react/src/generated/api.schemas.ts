@@ -1944,6 +1944,8 @@ export type UserProfileTenant = {
   planId: string;
   /** @nullable */
   website?: string | null;
+  /** @nullable */
+  settings?: Record<string, unknown> | null;
 } | null;
 
 export interface UserProfile {
@@ -2148,6 +2150,10 @@ export interface UpdateTenantBody {
   reservationPrefix?: string | null;
   /** @nullable */
   birthdayMessagesEnabled?: boolean | null;
+  /** @nullable */
+  couponsEnabled?: boolean | null;
+  /** @nullable */
+  referralsEnabled?: boolean | null;
 }
 
 export interface BoardingLocation {

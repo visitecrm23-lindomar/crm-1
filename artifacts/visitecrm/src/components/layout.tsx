@@ -182,7 +182,21 @@ export default function Layout({ children }: { children: ReactNode }) {
   const userRole: string | undefined = me?.role;
   const tenantInitial = tenantName.charAt(0).toUpperCase();
 
-  const navItems = userRole === ROLES.SALES ? VENDOR_NAVIGATION : AGENCY_NAVIGATION;
+  const tenantSettings = (me?.tenant?.settings ?? {}) as Record<string, unknown>;
+  const referralsEnabled = tenantSettings.referralsEnabled !== false;
+  const couponsEnabled = tenantSettings.couponsEnabled !== false;
+
+  const agencyNav: NavItem[] = AGENCY_NAVIGATION.map((item) => {
+    if (item.href === "/loja" && item.children) {
+      return {
+        ...item,
+        children: item.children.filter((c) => c.href !== "/loja/cupons" || couponsEnabled),
+      };
+    }
+    return item;
+  }).filter((item) => item.href !== "/indicacoes" || referralsEnabled);
+
+  const navItems = userRole === ROLES.SALES ? VENDOR_NAVIGATION : agencyNav;
 
   // Find current nav item (including children)
   let currentSection: NavItem | undefined;

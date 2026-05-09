@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, tenantsTable, usersTable, plansTable } from "@workspace/db";
+import { db, tenantsTable, usersTable, plansTable, referralSettingsTable } from "@workspace/db";
 import { eq, desc, count } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
@@ -29,6 +29,8 @@ const UpdateTenantBody = z.object({
   website: z.string().nullable().optional(),
   reservationPrefix: z.string().max(5).optional().nullable(),
   birthdayMessagesEnabled: z.boolean().nullable().optional(),
+  couponsEnabled: z.boolean().nullable().optional(),
+  referralsEnabled: z.boolean().nullable().optional(),
 });
 
 router.get("/admin/stats", async (req, res): Promise<void> => {
@@ -151,7 +153,7 @@ router.patch("/tenants/:id", async (req, res): Promise<void> => {
     }
     const parsed = UpdateTenantBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const { birthdayMessagesEnabled, ...rest } = parsed.data;
+    const { birthdayMessagesEnabled, couponsEnabled, referralsEnabled, ...rest } = parsed.data;
     const updateData: Record<string, unknown> = { ...rest };
     if (me.role !== ROLES.SUPER_ADMIN) {
       delete updateData.planId;
@@ -164,12 +166,21 @@ router.patch("/tenants/:id", async (req, res): Promise<void> => {
       updateData.reservationPrefix = (updateData.reservationPrefix as string).trim().toUpperCase().slice(0, 5) || null;
     }
     const [existing] = await db.select({ settings: tenantsTable.settings, logoUrl: tenantsTable.logoUrl }).from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
-    if (birthdayMessagesEnabled !== undefined) {
+    const settingsUpdates: Record<string, unknown> = {};
+    if (birthdayMessagesEnabled !== undefined) settingsUpdates.birthdayMessagesEnabled = birthdayMessagesEnabled ?? true;
+    if (couponsEnabled !== undefined) settingsUpdates.couponsEnabled = couponsEnabled ?? true;
+    if (referralsEnabled !== undefined) settingsUpdates.referralsEnabled = referralsEnabled ?? true;
+    if (Object.keys(settingsUpdates).length > 0) {
       const currentSettings = (existing?.settings ?? {}) as Record<string, unknown>;
-      updateData.settings = { ...currentSettings, birthdayMessagesEnabled: birthdayMessagesEnabled ?? true };
+      updateData.settings = { ...currentSettings, ...settingsUpdates };
     }
     const oldLogoUrl = existing?.logoUrl;
     await db.update(tenantsTable).set(updateData).where(eq(tenantsTable.id, req.params.id));
+    if (referralsEnabled !== undefined) {
+      await db.update(referralSettingsTable)
+        .set({ isEnabled: referralsEnabled ?? true })
+        .where(eq(referralSettingsTable.tenantId, req.params.id));
+    }
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
     if (!tenant) { res.status(404).json({ error: "Not found" }); return; }
     if ("logoUrl" in parsed.data) {

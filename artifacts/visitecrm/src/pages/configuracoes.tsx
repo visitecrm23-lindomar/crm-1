@@ -80,6 +80,7 @@ import {
   RefreshCw,
   Link2,
   Unlink,
+  ToggleLeft,
 } from "lucide-react";
 import { formatCurrencyBRL } from "@/lib/utils";
 import { ROLES, INVOICE_STATUS } from "@workspace/permissions";
@@ -1738,6 +1739,74 @@ function ApiKeysTab() {
   );
 }
 
+/* ──────────────────── Features Tab ──────────────────── */
+function FeaturesTab() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: me } = useGetMe();
+  const tenantId = me?.tenantId ?? null;
+  const { data: fullTenant } = useGetTenant(tenantId ?? "", {
+    query: {
+      queryKey: getGetTenantQueryKey(tenantId ?? ""),
+      enabled: !!tenantId,
+    },
+  });
+  const updateTenant = useUpdateTenant();
+
+  const settings = (fullTenant?.settings ?? {}) as Record<string, unknown>;
+  const referralsEnabled = settings.referralsEnabled !== false;
+  const couponsEnabled = settings.couponsEnabled !== false;
+
+  async function handleToggle(key: "referralsEnabled" | "couponsEnabled", value: boolean) {
+    if (!tenantId) return;
+    try {
+      await updateTenant.mutateAsync({ id: tenantId, data: { [key]: value } });
+      toast({ title: value ? "Funcionalidade ativada" : "Funcionalidade desativada" });
+      await queryClient.invalidateQueries({ queryKey: getGetTenantQueryKey(tenantId) });
+    } catch {
+      toast({ title: "Erro ao salvar configuração", variant: "destructive" });
+    }
+  }
+
+  const FEATURES = [
+    {
+      key: "referralsEnabled" as const,
+      label: "Programa de Indicação",
+      description: "Permite que clientes gerem códigos de indicação e ganhem bônus por conversões",
+      enabled: referralsEnabled,
+    },
+    {
+      key: "couponsEnabled" as const,
+      label: "Cupons de Desconto",
+      description: "Habilita a criação e uso de cupons de desconto na sua loja",
+      enabled: couponsEnabled,
+    },
+  ];
+
+  return (
+    <div className="space-y-4 max-w-lg">
+      <p className="text-sm text-muted-foreground">
+        Ative ou desative módulos do sistema para a sua agência.
+      </p>
+      <div className="rounded-md border divide-y">
+        {FEATURES.map((f) => (
+          <div key={f.key} className="flex items-center justify-between px-4 py-4 gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">{f.label}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{f.description}</p>
+            </div>
+            <Switch
+              checked={f.enabled}
+              onCheckedChange={(v) => handleToggle(f.key, v)}
+              disabled={updateTenant.isPending}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ──────────────────── Main Settings Page ──────────────────── */
 export default function Configuracoes() {
   return (
@@ -1776,6 +1845,10 @@ export default function Configuracoes() {
           <TabsTrigger value="apikeys" className="flex items-center gap-1.5">
             <Key className="w-3.5 h-3.5" />
             Chaves API
+          </TabsTrigger>
+          <TabsTrigger value="features" className="flex items-center gap-1.5">
+            <ToggleLeft className="w-3.5 h-3.5" />
+            Funcionalidades
           </TabsTrigger>
         </TabsList>
 
@@ -1870,6 +1943,20 @@ export default function Configuracoes() {
               </CardHeader>
               <CardContent>
                 <ApiKeysTab />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="features">
+            <Card>
+              <CardHeader>
+                <CardTitle>Funcionalidades</CardTitle>
+                <CardDescription>
+                  Ative ou desative módulos do sistema para a sua agência
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <FeaturesTab />
               </CardContent>
             </Card>
           </TabsContent>

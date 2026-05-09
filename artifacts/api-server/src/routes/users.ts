@@ -44,7 +44,8 @@ router.get("/users/me", async (req, res): Promise<void> => {
         tenant = {
           id: t.id, name: t.name, slug: t.slug, logoUrl: t.logoUrl,
           primaryColor: t.primaryColor, secondaryColor: t.secondaryColor,
-          status: t.status, planId: t.planId,
+          status: t.status, planId: t.planId, website: t.website,
+          settings: t.settings ?? {},
         };
       }
     }

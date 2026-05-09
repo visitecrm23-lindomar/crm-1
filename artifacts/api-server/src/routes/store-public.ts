@@ -19,6 +19,7 @@ import {
   referralTrackingTable,
   referralSettingsTable,
   referralsTable,
+  tenantsTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, ilike, or, sql, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -748,6 +749,10 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
+    const [tenantRowRef] = await db.select({ settings: tenantsTable.settings }).from(tenantsTable).where(eq(tenantsTable.id, store.tenantId)).limit(1);
+    if ((tenantRowRef?.settings as Record<string, unknown> | null)?.referralsEnabled === false) {
+      next(new ValidationError("Programa de indicação inativo", "REFERRAL_PROGRAM_INACTIVE", { valid: false })); return;
+    }
     const parsed = z.object({
       code: z.string().min(1),
       customerEmail: z.string().optional(),
@@ -1010,6 +1015,10 @@ router.post("/public/store/:slug/coupons/validate", async (req, res, next: NextF
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
+    const [tenantRowCpn] = await db.select({ settings: tenantsTable.settings }).from(tenantsTable).where(eq(tenantsTable.id, store.tenantId)).limit(1);
+    if ((tenantRowCpn?.settings as Record<string, unknown> | null)?.couponsEnabled === false) {
+      next(new ValidationError("Cupons de desconto não estão disponíveis", "COUPONS_DISABLED", { valid: false })); return;
+    }
     const parsed = z.object({
       code: z.string().min(1),
       cartTotal: z.number().nonnegative().optional(),
