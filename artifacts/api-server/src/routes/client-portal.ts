@@ -20,7 +20,8 @@ import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { ROLES, REFERRAL_STATUS, RESERVATION_STATUS } from "@workspace/permissions";
 import { generateVoucherPdf } from "../lib/voucher-pdf";
 import { getPdfQueue } from "../queues/index";
-import { generateId } from "../lib/id";
+import { generateId, generateReferralCode } from "../lib/id";
+import { generateAndAssignReferralCode } from "../lib/referral-code";
 
 const router = Router();
 
@@ -102,7 +103,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
       nextTierMin: number | null;
       nextTierLabel: string | null;
     } = {
-      code: client?.referralCode ?? user?.referralCode ?? null,
+      code: client?.referralCode ?? null,
       totalReferrals: 0,
       completedReferrals: 0,
       pendingReferrals: 0,
@@ -119,6 +120,21 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
     let loyalty: unknown = null;
 
     if (client) {
+      // Auto-generate and persist a referral code if the client doesn't have one yet.
+      // This ensures the code shared via the landing page is always findable in
+      // clientsTable by /public/store/:slug/referral/info and /referral/validate.
+      let resolvedReferralCode = client.referralCode;
+      if (!resolvedReferralCode) {
+        try {
+          const year = new Date().getFullYear();
+          const namePart = (client.name ?? "REF").replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 4) || "REF";
+          const baseCode = generateReferralCode(client.name ?? "REF", me.tenantId);
+          resolvedReferralCode = await generateAndAssignReferralCode(client.id, me.tenantId, baseCode, namePart, year);
+        } catch {
+          // Non-critical — the client portal still loads; the share button will be hidden until next visit resolves
+        }
+      }
+
       const rows = await db
         .select({
           id: reservationsTable.id,
@@ -226,7 +242,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
       );
 
       referralStats = {
-        code: client.referralCode ?? user?.referralCode ?? null,
+        code: resolvedReferralCode ?? null,
         totalReferrals,
         completedReferrals,
         pendingReferrals,
