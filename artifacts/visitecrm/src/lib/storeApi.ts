@@ -633,6 +633,7 @@ export interface ReferralValidation {
   code?: string;
   referrerName?: string;
   discountPercent?: number;
+  discountValue?: number;
   discountType?: string;
   description?: string;
   error?: string;

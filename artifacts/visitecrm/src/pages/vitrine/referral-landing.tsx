@@ -122,7 +122,14 @@ export default function ReferralLanding({ slug, store }: Props) {
     );
   }
 
-  const discountPct = referralInfo.discountPercent ?? 5;
+  const discountType = referralInfo.discountType ?? "percentage";
+  const isFixed = discountType === "fixed";
+  const discountAmount = isFixed
+    ? (referralInfo.discountValue ?? 0)
+    : (referralInfo.discountPercent ?? 5);
+  const discountLabel = isFixed
+    ? `R$ ${discountAmount.toFixed(2).replace(".", ",")}`
+    : `${discountAmount}%`;
   const referrerName = referralInfo.referrerName ?? "um amigo";
   const storeHasLogo = !!store.logoUrl;
 
@@ -158,7 +165,7 @@ export default function ReferralLanding({ slug, store }: Props) {
           style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})` }}
         >
           <p className="text-white/80 text-sm uppercase tracking-widest font-medium">Seu desconto exclusivo</p>
-          <p className="text-6xl font-extrabold">{discountPct}%</p>
+          <p className="text-6xl font-extrabold">{discountLabel}</p>
           <p className="text-white/80 text-sm">OFF em qualquer produto</p>
           <div className="mt-3 flex items-center justify-center gap-2">
             <span className="bg-white/20 rounded-full px-4 py-1 text-sm font-mono font-bold tracking-widest">
@@ -177,7 +184,7 @@ export default function ReferralLanding({ slug, store }: Props) {
             {[
               { icon: Tag, text: `Seu código "${code}" já está salvo automaticamente` },
               { icon: Users, text: "Escolha seu produto favorito e finalize a compra" },
-              { icon: Gift, text: `${discountPct}% de desconto aplicado automaticamente no checkout` },
+              { icon: Gift, text: `${discountLabel} de desconto aplicado automaticamente no checkout` },
             ].map(({ icon: Icon, text }, i) => (
               <div key={i} className="flex items-start gap-3">
                 <div
@@ -196,7 +203,7 @@ export default function ReferralLanding({ slug, store }: Props) {
         <div className="grid grid-cols-3 gap-3">
           {[
             { icon: CheckCircle, label: "Seguro e confiável" },
-            { icon: Tag, label: `${discountPct}% OFF garantido` },
+            { icon: Tag, label: `${discountLabel} OFF garantido` },
             { icon: Gift, label: "Sem limites de produtos" },
           ].map(({ icon: Icon, label }, i) => (
             <div key={i} className="bg-white/50 rounded-xl p-3 text-center space-y-2">

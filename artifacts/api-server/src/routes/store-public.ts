@@ -835,11 +835,15 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
       }
     }
 
-    const discountPercent = settings?.discountType === "percentage"
-      ? Number(settings.discountValue)
-      : 5;
+    const discountType = settings?.discountType ?? "percentage";
+    const discountValue = Number(settings?.discountValue ?? 5);
+    const discountPercent = discountType === "percentage" ? discountValue : 0;
 
     const referrerName = referrer.name ?? "um amigo";
+
+    const discountLabel = discountType === "fixed"
+      ? `R$ ${discountValue.toFixed(2).replace(".", ",")}`
+      : `${discountValue}%`;
 
     const validatorIp = getClientIp(req);
     const validatorCookieId = parsed.data.cookieId;
@@ -858,8 +862,9 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
       code,
       referrerName,
       discountPercent,
-      discountType: settings?.discountType ?? "percentage",
-      description: `Desconto de ${discountPercent}% por indicação de ${referrerName}`,
+      discountValue,
+      discountType,
+      description: `Desconto de ${discountLabel} por indicação de ${referrerName}`,
     });
   } catch (err) {
     next(err);
@@ -901,15 +906,16 @@ router.get("/public/store/:slug/referral/info", async (req, res, next: NextFunct
       return;
     }
 
-    const discountPercent = settings?.discountType === "percentage"
-      ? Number(settings.discountValue)
-      : 5;
+    const discountType = settings?.discountType ?? "percentage";
+    const discountValue = Number(settings?.discountValue ?? 5);
+    const discountPercent = discountType === "percentage" ? discountValue : 0;
 
     res.json({
       code,
       referrerName: referrer.name ?? "um amigo",
       discountPercent,
-      discountType: settings?.discountType ?? "percentage",
+      discountValue,
+      discountType,
     });
   } catch (err) {
     next(err);
