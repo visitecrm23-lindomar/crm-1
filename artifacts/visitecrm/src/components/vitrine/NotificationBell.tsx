@@ -80,7 +80,10 @@ export function NotificationBell({ primaryColor = "#2563eb" }: Props) {
             readAt: msg.data.readAt ?? null,
             createdAt: msg.data.createdAt ?? new Date().toISOString(),
           };
-          setNotifications((prev) => [newNotif, ...prev].slice(0, 20));
+          setNotifications((prev) => {
+            if (prev.some((n) => n.id === newNotif.id)) return prev;
+            return [newNotif, ...prev].slice(0, 20);
+          });
           setUnreadCount(msg.data.unreadCount ?? 0);
 
           toast({

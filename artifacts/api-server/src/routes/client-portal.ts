@@ -812,12 +812,19 @@ router.get("/client/notifications/stream", async (req, res, next: NextFunction):
     res.setHeader("X-Accel-Buffering", "no");
     res.flushHeaders();
 
+    // Capture watermark BEFORE init query so no notification can fall through the gap.
+    const streamStartAt = new Date();
+
     addClientSseConnection(client.id, res);
 
     const [notifications, unreadCount] = await Promise.all([
       getRecentNotifications(client.id, 20),
       getUnreadCount(client.id),
     ]);
+
+    // Track IDs already delivered (via init frame or in-process emitToClient)
+    // so the poll loop can skip them and avoid duplicate delivery.
+    const sentIds = new Set<string>(notifications.map((n) => n.id));
 
     const initPayload = JSON.stringify({
       type: "init",
@@ -842,11 +849,13 @@ router.get("/client/notifications/stream", async (req, res, next: NextFunction):
       }
     }, 30_000);
 
-    let lastPolledAt = new Date();
+    // Poll cursor starts at stream-open time (before init query), so we never
+    // skip a row inserted between init query start and completion.
+    let lastPolledAt = streamStartAt;
 
     const pollInterval = setInterval(async () => {
-      // Capture the high-water mark BEFORE querying so any row inserted
-      // during query execution is caught on the next tick, never skipped.
+      // Snapshot the next high-water mark BEFORE querying to avoid losing
+      // rows inserted during query execution on the next cycle.
       const queryTime = new Date();
       try {
         const newRows = await db
@@ -860,17 +869,19 @@ router.get("/client/notifications/stream", async (req, res, next: NextFunction):
           )
           .orderBy(asc(clientNotificationsTable.createdAt));
 
-        // Advance cursor only after a successful query, using the pre-query
-        // timestamp so rows created between snapshot and now are not lost.
+        // Advance cursor only after a successful query.
         lastPolledAt = queryTime;
 
-        if (newRows.length > 0) {
+        // Filter out rows already delivered via init frame or in-process emitToClient.
+        const undelivered = newRows.filter((n) => !sentIds.has(n.id));
+        if (undelivered.length > 0) {
           const [unreadRow] = await db
             .select({ cnt: count() })
             .from(clientNotificationsTable)
             .where(and(eq(clientNotificationsTable.clientId, client.id), isNull(clientNotificationsTable.readAt)));
 
-          for (const n of newRows) {
+          for (const n of undelivered) {
+            sentIds.add(n.id);
             const frame = JSON.stringify({
               type: "notification",
               data: {
@@ -886,7 +897,7 @@ router.get("/client/notifications/stream", async (req, res, next: NextFunction):
           }
         }
       } catch (pollErr) {
-        // Log but do not advance cursor — retry on next tick with same watermark
+        // Do NOT advance cursor on error — retry with same watermark next tick.
         console.warn("[sse-poll] poll error for client", client.id, (pollErr as Error).message);
       }
     }, 15_000);
