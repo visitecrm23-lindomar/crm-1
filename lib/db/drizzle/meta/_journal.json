@@ -211,6 +211,13 @@
       "when": 1747300000000,
       "tag": "0029_add_coupon_reversal_at",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1747400000000,
+      "tag": "0030_add_referral_welcome_email_sent_at",
+      "breakpoints": true
     }
   ]
 }

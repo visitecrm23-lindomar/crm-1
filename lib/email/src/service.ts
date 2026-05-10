@@ -10,6 +10,7 @@ import { ReferralConvertedEmail, type ReferralConvertedEmailProps } from './temp
 import { ReferralExpiredEmail, type ReferralExpiredEmailProps } from './templates/referral-expired';
 import { ReferralExpiringSoonEmail, type ReferralExpiringSoonEmailProps } from './templates/referral-expiring-soon';
 import { ReferralBonusReleasedEmail, type ReferralBonusReleasedEmailProps } from './templates/referral-bonus-released';
+import { ReferralWelcomeEmail, type ReferralWelcomeEmailProps } from './templates/referral-welcome';
 
 export type { ReservationCancellationEmailProps };
 
@@ -467,6 +468,35 @@ export async function sendRedisAlertEmail(opts: SendRedisAlertEmailOptions): Pro
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[email] Unexpected error sending Redis alert email:', message);
+    return { success: false, error: message };
+  }
+}
+
+export async function sendReferralWelcomeEmail(
+  props: ReferralWelcomeEmailProps
+): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const { data, error } = await resend.emails.send({
+      from: `${props.agencyName} <reservas@resend.visitecrm.com>`,
+      to: [props.referrerEmail],
+      subject: `🎁 Seu código de indicação ${props.referralCode} está pronto! — ${props.agencyName}`,
+      react: React.createElement(ReferralWelcomeEmail, props),
+    });
+
+    if (error) {
+      console.error('[email] Failed to send referral welcome email:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Unexpected error sending referral welcome email:', message);
     return { success: false, error: message };
   }
 }

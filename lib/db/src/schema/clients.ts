@@ -54,6 +54,7 @@ export const clientsTable = pgTable("clients", {
   totalReferrals: integer("total_referrals").notNull().default(0),
   successfulReferrals: integer("successful_referrals").notNull().default(0),
   referralEarnings: numeric("referral_earnings", { precision: 10, scale: 2 }).notNull().default("0"),
+  referralWelcomeEmailSentAt: timestamp("referral_welcome_email_sent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
   lastContactAt: timestamp("last_contact_at", { withTimezone: true }),

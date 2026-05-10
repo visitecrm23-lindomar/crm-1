@@ -22,6 +22,7 @@ import { generateVoucherPdf } from "../lib/voucher-pdf";
 import { getPdfQueue } from "../queues/index";
 import { generateId, generateReferralCode } from "../lib/id";
 import { generateAndAssignReferralCode } from "../lib/referral-code";
+import { dispatchReferralWelcomeEmail } from "../queues/email-helpers";
 
 const router = Router();
 
@@ -130,6 +131,19 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
           const namePart = (client.name ?? "REF").replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 4) || "REF";
           const baseCode = generateReferralCode(client.name ?? "REF", me.tenantId);
           resolvedReferralCode = await generateAndAssignReferralCode(client.id, me.tenantId, baseCode, namePart, year);
+
+          if (resolvedReferralCode && tenant?.slug) {
+            dispatchReferralWelcomeEmail({
+              clientId: client.id,
+              referralCode: resolvedReferralCode,
+              tenantId: me.tenantId,
+              tenantSlug: tenant.slug,
+            }).catch((err: unknown) => {
+              // Fire-and-forget — welcome email is non-critical
+              const msg = err instanceof Error ? err.message : String(err);
+              void msg;
+            });
+          }
         } catch {
           // Non-critical — the client portal still loads; the share button will be hidden until next visit resolves
         }

@@ -2,10 +2,10 @@ export { ReservationConfirmationEmail } from './templates/reservation-confirmati
 export type { ReservationConfirmationEmailProps } from './templates/reservation-confirmation';
 export { ReservationCancellationEmail } from './templates/reservation-cancellation';
 export type { ReservationCancellationEmailProps } from './templates/reservation-cancellation';
-export { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail, sendManifestEmail, sendWelcomeCredentialsEmail, sendReminderHtmlEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendRedisAlertEmail } from './service';
+export { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail, sendManifestEmail, sendWelcomeCredentialsEmail, sendReminderHtmlEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendRedisAlertEmail, sendReferralWelcomeEmail } from './service';
 export { NewBookingNotificationEmail } from './templates/new-booking-notification';
 export type { NewBookingNotificationEmailProps } from './templates/new-booking-notification';
-export type { SendEmailResult, SendManifestEmailOptions, SendReminderEmailOptions, ReservationCancellationEmailProps as CancellationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralBonusReleasedEmailProps } from './service';
+export type { SendEmailResult, SendManifestEmailOptions, SendReminderEmailOptions, ReservationCancellationEmailProps as CancellationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralBonusReleasedEmailProps, ReferralWelcomeEmailProps } from './service';
 export { ReferralBonusReleasedEmail } from './templates/referral-bonus-released';
 export type { ReferralBonusReleasedEmailProps as ReferralBonusReleasedEmailTemplateProps } from './templates/referral-bonus-released';
 export { BirthdayEmail } from './templates/birthday';
@@ -17,3 +17,5 @@ export { ReferralConvertedEmail } from './templates/referral-converted';
 export { ReferralExpiredEmail } from './templates/referral-expired';
 export { ReferralExpiringSoonEmail } from './templates/referral-expiring-soon';
 export type { ReferralExpiringSoonEmailProps } from './templates/referral-expiring-soon';
+export { ReferralWelcomeEmail } from './templates/referral-welcome';
+export type { ReferralWelcomeEmailProps as ReferralWelcomeEmailTemplateProps } from './templates/referral-welcome';

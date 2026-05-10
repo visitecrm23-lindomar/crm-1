@@ -3,10 +3,10 @@ import { eq, and, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { getEmailQueue, getCancellationEmailQueue, getNewBookingNotificationEmailQueue, getReferralEmailQueue } from "./index";
 import type { ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData, ReferralBonusReleasedEmailJobData } from "./index";
-import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail } from "@workspace/email";
+import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail } from "@workspace/email";
 import { ROLES } from "@workspace/permissions";
 import { logger } from "../lib/logger";
-import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps } from "@workspace/email";
+import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps, ReferralWelcomeEmailProps } from "@workspace/email";
 
 interface EnqueueEmailOpts {
   tenantId: string;
@@ -957,6 +957,132 @@ export async function dispatchReferralBonusReleasedEmail(
     referralId,
   );
   return true;
+}
+
+// ── Referral: boas-vindas ao código de indicação ─────────────────────────────
+
+export async function enqueueReferralWelcomeEmail(
+  props: ReferralWelcomeEmailProps,
+  tenantId: string,
+): Promise<void> {
+  const emailLogId = generateId();
+  const subject = `🎁 Seu código de indicação ${props.referralCode} está pronto! — ${props.agencyName}`;
+  const queue = getReferralEmailQueue();
+
+  if (queue) {
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId: null,
+      recipient: props.referrerEmail,
+      subject,
+      status: "queued",
+    });
+
+    try {
+      await queue.add("referral-welcome", { ...props, emailLogId, tenantId });
+      logger.info({ emailLogId, referrerEmail: props.referrerEmail }, "[email-queue] Referral welcome email enqueued");
+    } catch (enqueueErr) {
+      logger.warn({ emailLogId, err: enqueueErr }, "[email-queue] Failed to enqueue referral welcome — falling back to direct send");
+      const result = await sendReferralWelcomeEmail(props);
+      await db
+        .update(emailLogsTable)
+        .set({
+          status: result.success ? "sent" : "failed",
+          messageId: result.messageId ?? null,
+          errorMessage: result.error ?? null,
+        })
+        .where(eq(emailLogsTable.id, emailLogId));
+    }
+  } else {
+    const result = await sendReferralWelcomeEmail(props);
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId: null,
+      recipient: props.referrerEmail,
+      subject,
+      status: result.success ? "sent" : "failed",
+      messageId: result.messageId ?? null,
+      errorMessage: result.error ?? null,
+    });
+    logger.info({ emailLogId, referrerEmail: props.referrerEmail, success: result.success }, "[email-queue] Referral welcome email sent directly");
+  }
+}
+
+export async function dispatchReferralWelcomeEmail(opts: {
+  clientId: string;
+  referralCode: string;
+  tenantId: string;
+  tenantSlug: string;
+}): Promise<void> {
+  const { clientId, referralCode, tenantId, tenantSlug } = opts;
+
+  const [client] = await db
+    .select({ name: clientsTable.name, email: clientsTable.email, referralWelcomeEmailSentAt: clientsTable.referralWelcomeEmailSentAt })
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, clientId), eq(clientsTable.tenantId, tenantId)))
+    .limit(1);
+
+  if (!client?.email) {
+    logger.warn({ clientId, tenantId }, "[email-queue] Referral welcome: client has no email — skipping");
+    return;
+  }
+
+  if (client.referralWelcomeEmailSentAt) {
+    logger.info({ clientId, tenantId }, "[email-queue] Referral welcome: already sent — skipping (idempotency)");
+    return;
+  }
+
+  const [tenant] = await db
+    .select({ name: tenantsTable.name, logoUrl: tenantsTable.logoUrl, whatsapp: tenantsTable.whatsapp })
+    .from(tenantsTable)
+    .where(eq(tenantsTable.id, tenantId))
+    .limit(1);
+
+  const [settings] = await db
+    .select({
+      bonusValue: referralSettingsTable.bonusValue,
+      discountValue: referralSettingsTable.discountValue,
+      shareMessage: referralSettingsTable.shareMessage,
+    })
+    .from(referralSettingsTable)
+    .where(eq(referralSettingsTable.tenantId, tenantId))
+    .limit(1);
+
+  const agencyName = tenant?.name ?? "Agência";
+  const bonusValue = settings ? Number(settings.bonusValue) : 0;
+  const discountValue = settings ? Number(settings.discountValue) : 5;
+
+  const frontendBase = (process.env["FRONTEND_URL"] ?? "https://app.visitecrm.com.br").replace(/\/$/, "");
+  const storeBase = frontendBase.replace("app.", `${tenantSlug}.`);
+  const referralLink = `${storeBase}?ref=${referralCode}`;
+
+  const defaultMessage = settings?.shareMessage
+    ?? `Olá! Use meu código ${referralCode} na ${agencyName} e ganhe desconto especial na sua próxima viagem! 🌴✈️`;
+  const whatsappShareUrl = `https://wa.me/?text=${encodeURIComponent(defaultMessage)}`;
+
+  await enqueueReferralWelcomeEmail(
+    {
+      referrerName: client.name ?? client.email,
+      referrerEmail: client.email,
+      referralCode,
+      referralLink,
+      whatsappShareUrl,
+      bonusValue,
+      discountValue,
+      agencyName,
+      agencyLogo: tenant?.logoUrl ?? null,
+    },
+    tenantId,
+  );
+
+  await db
+    .update(clientsTable)
+    .set({ referralWelcomeEmailSentAt: new Date() })
+    .where(and(eq(clientsTable.id, clientId), eq(clientsTable.tenantId, tenantId)));
+
+  logger.info({ clientId, referralCode, tenantId }, "[email-queue] Referral welcome email dispatched and stamp set");
 }
 
 // ── Resend a failed email log ──────────────────────────────────────────────────
