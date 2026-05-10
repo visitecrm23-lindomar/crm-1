@@ -1,7 +1,7 @@
 import { Router, type NextFunction } from "express";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { db } from "@workspace/db";
-import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable, usersTable } from "@workspace/db";
+import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable, usersTable, paymentsTable, dealsTable, storeOrdersTable, storeReviewsTable } from "@workspace/db";
 import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
 import { generateId, generateReferralCode } from "../lib/id";
 import { generateAndAssignReferralCode } from "../lib/referral-code";
@@ -373,21 +373,33 @@ router.delete("/clients/:id", async (req, res, next: NextFunction): Promise<void
       linkedUser = found;
     }
 
+    const [reservation] = await db.select({ id: reservationsTable.id }).from(reservationsTable)
+      .where(eq(reservationsTable.clientId, client.id))
+      .limit(1);
+    if (reservation) {
+      next(new AppError("Cliente possui reservas e não pode ser excluído. Cancele as reservas antes de excluir o cliente.", 409, "CLIENT_HAS_RESERVATIONS"));
+      return;
+    }
+
+    await db.update(paymentsTable).set({ clientId: null }).where(eq(paymentsTable.clientId, client.id));
+    await db.update(dealsTable).set({ clientId: null }).where(eq(dealsTable.clientId, client.id));
+    await db.update(storeOrdersTable).set({ clientId: null }).where(eq(storeOrdersTable.clientId, client.id));
+    await db.update(storeReviewsTable).set({ clientId: null }).where(eq(storeReviewsTable.clientId, client.id));
+
+    await db.delete(clientsTable)
+      .where(and(eq(clientsTable.id, client.id), eq(clientsTable.tenantId, me.tenantId)));
+
     if (linkedUser) {
+      await db.delete(usersTable).where(eq(usersTable.id, linkedUser.id));
       try {
         await clerkClient.users.deleteUser(linkedUser.clerkId);
       } catch (clerkErr: unknown) {
         const status = (clerkErr as { status?: number })?.status;
         if (status !== 404) {
-          next(new AppError(`Failed to delete linked Clerk account: ${(clerkErr as Error).message}`, 502, "CLERK_DELETE_FAILED"));
-          return;
+          req.log.warn({ clerkErr, clerkId: linkedUser.clerkId }, "Clerk deleteUser failed after DB cleanup — Clerk account may still be active");
         }
       }
-      await db.delete(usersTable).where(eq(usersTable.id, linkedUser.id));
     }
-
-    await db.delete(clientsTable)
-      .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)));
 
     res.json({ success: true });
   } catch (err) {
