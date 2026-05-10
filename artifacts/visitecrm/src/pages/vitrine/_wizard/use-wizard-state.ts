@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { publicStoreApi, PublicStore, StoreProduct, CouponValidation } from "@/lib/storeApi";
+import { validateCpf } from "@/lib/utils";
 import { useSeatStream } from "@/hooks/useSeatStream";
 import type { LayoutSeatMap, Step } from "./constants";
 import { CLICKABLE_SEAT_TYPES, STEP_ORDER } from "./constants";
@@ -282,7 +283,7 @@ export function useWizardState({
       !!form.customerName.trim() &&
       !!form.customerEmail.trim() &&
       !!form.customerPhone.trim() &&
-      !!form.customerCpf.trim()
+      validateCpf(form.customerCpf)
     );
   }
 

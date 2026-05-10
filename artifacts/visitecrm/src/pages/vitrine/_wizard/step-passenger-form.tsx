@@ -3,6 +3,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { User, Users, Info, AlertTriangle } from "lucide-react";
 import type { WizardState } from "./use-wizard-state";
+import { validateCpf } from "@/lib/utils";
 
 export function StepPassengerForm({ state }: { state: WizardState }) {
   const { form, set, qty, changeQty, isSoldOut, maxSeats, passengerOptions, product } = state;
@@ -68,7 +69,18 @@ export function StepPassengerForm({ state }: { state: WizardState }) {
               }
               placeholder="000.000.000-00"
               maxLength={14}
+              className={
+                form.customerCpf.length > 0 && !validateCpf(form.customerCpf)
+                  ? "border-red-400 focus-visible:ring-red-400"
+                  : ""
+              }
             />
+            {form.customerCpf.length > 0 && !validateCpf(form.customerCpf) && (
+              <p className="text-xs text-red-500 flex items-center gap-1 mt-0.5">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                CPF inválido
+              </p>
+            )}
           </div>
         </div>
 
