@@ -17,7 +17,7 @@ export interface TripFormData {
   totalCapacity: string; seatLayout: string;
   layoutId: string;
   priceAdult: string; priceChild: string; priceSenior: string;
-  inclusions: string; exclusions: string;
+  inclusions: string[]; exclusions: string[];
   coverImage: string;
   vehicleType: string; vehiclePlate: string; driverName: string; tourGuide: string; tripOrganizer: string;
   driver1Cpf: string; driver1Cnh: string; driver1CnhCategory: string; driver1CnhExpiry: string;
@@ -58,7 +58,9 @@ export const EMPTY_FORM: TripFormData = {
   departureTime: "", returnTime: "",
   totalCapacity: "46", seatLayout: "2x2", layoutId: "",
   priceAdult: "", priceChild: "", priceSenior: "",
-  inclusions: "", exclusions: "", coverImage: "",
+  inclusions: ["Transporte ida e volta", "Café da manhã", "Guia turístico", "Seguro de viagem"],
+  exclusions: ["Despesas pessoais", "Almoço e jantar", "Ingresso para atrações opcionais"],
+  coverImage: "",
   vehicleType: "", vehiclePlate: "", driverName: "", tourGuide: "", tripOrganizer: "", status: "draft",
   driver1Cpf: "", driver1Cnh: "", driver1CnhCategory: "", driver1CnhExpiry: "",
   driver2Name: "", driver2Cpf: "", driver2Cnh: "", driver2CnhCategory: "", driver2CnhExpiry: "",
@@ -87,8 +89,8 @@ export const toTripFormData = (trip: Trip): TripFormData => ({
   priceAdult: String(trip.priceAdult),
   priceChild: trip.priceChild ? String(trip.priceChild) : "",
   priceSenior: trip.priceSenior ? String(trip.priceSenior) : "",
-  inclusions: (trip.inclusions ?? []).join("\n"),
-  exclusions: (trip.exclusions ?? []).join("\n"),
+  inclusions: trip.inclusions ?? [],
+  exclusions: trip.exclusions ?? [],
   coverImage: trip.coverImage ?? "",
   vehicleType: trip.vehicleType ?? "",
   vehiclePlate: trip.vehiclePlate ?? "",

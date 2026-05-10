@@ -110,8 +110,6 @@ export function TripForm({ tripId }: { tripId?: string }) {
       toast({ title: "Preencha os campos obrigatórios: nome, destino, cidade, estado, data de saída e preço adulto", variant: "destructive" });
       return;
     }
-    const inclArr = form.inclusions.split("\n").map(s => s.trim()).filter(Boolean);
-    const exclArr = form.exclusions.split("\n").map(s => s.trim()).filter(Boolean);
     const statusToSave: TripStatus = publish ? TRIP_STATUS.ACTIVE : form.status;
     const itineraryToSave = form.itinerary.filter(d => d.title || d.description);
     const boardingPointsToSave = form.boardingPoints.filter(bp => bp.name);
@@ -130,7 +128,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
             priceAdult: parseFloat(form.priceAdult),
             priceChild: form.priceChild ? parseFloat(form.priceChild) : undefined,
             priceSenior: form.priceSenior ? parseFloat(form.priceSenior) : undefined,
-            inclusions: inclArr, exclusions: exclArr,
+            inclusions: form.inclusions.filter(Boolean), exclusions: form.exclusions.filter(Boolean),
             coverImage: form.coverImage || undefined,
             seatLayout: form.layoutId ? undefined : form.seatLayout,
             layoutId: form.layoutId || null,
@@ -160,7 +158,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
             priceAdult: parseFloat(form.priceAdult),
             priceChild: form.priceChild ? parseFloat(form.priceChild) : undefined,
             priceSenior: form.priceSenior ? parseFloat(form.priceSenior) : undefined,
-            inclusions: inclArr, exclusions: exclArr,
+            inclusions: form.inclusions.filter(Boolean), exclusions: form.exclusions.filter(Boolean),
             coverImage: form.coverImage || undefined,
             seatLayout: form.layoutId ? undefined : form.seatLayout,
             layoutId: form.layoutId || null,
@@ -530,15 +528,83 @@ export function TripForm({ tripId }: { tripId?: string }) {
 
         <TabsContent value="inclusoes" className="space-y-4 mt-6">
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-card border rounded-lg p-6 space-y-3">
-              <div className="flex items-center gap-2"><Check className="w-4 h-4 text-green-600" /><h3 className="font-semibold">O que está incluso</h3></div>
-              <Textarea placeholder={"Transporte ida e volta\nCafé da manhã\nGuia turístico\nSeguro de viagem"} value={form.inclusions} onChange={set("inclusions")} rows={8} className="font-mono text-sm" />
-              <p className="text-xs text-muted-foreground">Um item por linha</p>
+            <div className="bg-card border rounded-lg p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <Check className="w-4 h-4 text-green-600" />
+                <h3 className="font-semibold">O que está incluso</h3>
+              </div>
+              <div className="space-y-2">
+                {form.inclusions.map((item, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Input
+                      value={item}
+                      onChange={e => {
+                        const next = [...form.inclusions];
+                        next[i] = e.target.value;
+                        setForm(prev => ({ ...prev, inclusions: next }));
+                      }}
+                      placeholder="Descrever item..."
+                      className="flex-1"
+                    />
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => setForm(prev => ({ ...prev, inclusions: prev.inclusions.filter((_, j) => j !== i) }))}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full border-dashed"
+                  onClick={() => setForm(prev => ({ ...prev, inclusions: [...prev.inclusions, ""] }))}
+                >
+                  <Plus className="w-4 h-4 mr-1.5" />
+                  Adicionar item
+                </Button>
+              </div>
             </div>
-            <div className="bg-card border rounded-lg p-6 space-y-3">
-              <div className="flex items-center gap-2"><X className="w-4 h-4 text-red-600" /><h3 className="font-semibold">O que não está incluso</h3></div>
-              <Textarea placeholder={"Despesas pessoais\nAlmoço e jantar\nIngresso para atrações opcionais"} value={form.exclusions} onChange={set("exclusions")} rows={8} className="font-mono text-sm" />
-              <p className="text-xs text-muted-foreground">Um item por linha</p>
+            <div className="bg-card border rounded-lg p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <X className="w-4 h-4 text-red-600" />
+                <h3 className="font-semibold">O que não está incluso</h3>
+              </div>
+              <div className="space-y-2">
+                {form.exclusions.map((item, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Input
+                      value={item}
+                      onChange={e => {
+                        const next = [...form.exclusions];
+                        next[i] = e.target.value;
+                        setForm(prev => ({ ...prev, exclusions: next }));
+                      }}
+                      placeholder="Descrever item..."
+                      className="flex-1"
+                    />
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => setForm(prev => ({ ...prev, exclusions: prev.exclusions.filter((_, j) => j !== i) }))}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full border-dashed"
+                  onClick={() => setForm(prev => ({ ...prev, exclusions: [...prev.exclusions, ""] }))}
+                >
+                  <Plus className="w-4 h-4 mr-1.5" />
+                  Adicionar item
+                </Button>
+              </div>
             </div>
           </div>
         </TabsContent>
