@@ -4,7 +4,7 @@ import {
   useListClients, useCreateClient, useUpdateClient,
   useListPipelineStages, useListTrips, useListUsers,
   useCreateDeal, useListPayments, useCreateReservation,
-  useCalculateCommission, useGetMe,
+  useCalculateCommission, useGetMe, useDeleteClient,
 } from "@workspace/api-client-react";
 import type { Client } from "@workspace/api-client-react";
 import { Client360Modal } from "@/components/client360-modal";
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,7 +27,7 @@ import {
 import {
   Plus, Search, Users, TrendingUp, UserCheck, MoreHorizontal,
   MapPin, Download, Upload, ChevronLeft, ChevronRight,
-  X, ArrowUpDown, ArrowUp, ArrowDown, AlertCircle
+  X, ArrowUpDown, ArrowUp, ArrowDown, AlertCircle, Trash2
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -35,7 +36,7 @@ import { SeatMapPicker } from "@/components/SeatMapPicker";
 import { PlanLimitWall, usePlanLimitError } from "@/components/plan-limit-wall";
 
 import { formatCurrency } from "@/lib/utils";
-import { ROLES, PAYMENT_STATUS } from "@workspace/permissions";
+import { ROLES, PAYMENT_STATUS, ADMIN_ROLES } from "@workspace/permissions";
 
 function cleanCPF(cpf: string): string {
   return cpf.replace(/\D/g, "");
@@ -1082,6 +1083,7 @@ export default function Clients() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [editClient, setEditClient] = useState<Client | null>(null);
   const [viewClientId, setViewClientId] = useState<string | null>(null);
+  const [deleteClient, setDeleteClient] = useState<Client | null>(null);
   const [birthdayFilter, setBirthdayFilter] = useState(() => {
     const params = new URLSearchParams(searchStr);
     return params.get("filter") === "birthday";
@@ -1097,6 +1099,8 @@ export default function Clients() {
   const { data: stages } = useListPipelineStages();
   const { data: tripsData } = useListTrips({ limit: 100 });
   const { data: sellers } = useListUsers();
+  const { data: me } = useGetMe();
+  const deleteClientMutation = useDeleteClient();
 
   const { data: clientsData, isLoading, refetch } = useListClients({
     search: search || undefined,
@@ -1162,6 +1166,20 @@ export default function Clients() {
   };
 
   const totalPages = Math.ceil((clientsData?.total ?? 0) / LIMIT);
+
+  const isAdmin = me && ADMIN_ROLES.includes(me.role as string);
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteClient) return;
+    try {
+      await deleteClientMutation.mutateAsync({ id: deleteClient.id });
+      toast({ title: "Cliente excluído com sucesso" });
+      setDeleteClient(null);
+      refetch();
+    } catch {
+      toast({ title: "Erro ao excluir cliente", variant: "destructive" });
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -1431,6 +1449,14 @@ export default function Clients() {
                             <DropdownMenuItem asChild>
                               <a href={`https://wa.me/${client.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer">Abrir WhatsApp</a>
                             </DropdownMenuItem>
+                            {isAdmin && (
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => setDeleteClient(client)}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" /> Excluir cliente
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -1469,6 +1495,31 @@ export default function Clients() {
       />
       <Client360Modal open={!!viewClientId} onClose={() => setViewClientId(null)} clientId={viewClientId} />
       <CsvImportModal open={isImportOpen} onClose={() => setIsImportOpen(false)} onImported={() => refetch()} />
+
+      <AlertDialog open={!!deleteClient} onOpenChange={open => { if (!open) setDeleteClient(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir cliente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <span>Você está prestes a excluir <strong>{deleteClient?.name}</strong>.</span>
+              <span className="block mt-2">
+                Se este cliente tiver uma conta na vitrine, o acesso ao portal também será removido.
+              </span>
+              <span className="block mt-2 text-destructive font-medium">O histórico de reservas e pagamentos é preservado. Esta ação não pode ser desfeita.</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteClientMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              disabled={deleteClientMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteClientMutation.isPending ? "Excluindo..." : "Excluir cliente"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

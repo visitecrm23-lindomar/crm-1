@@ -1,7 +1,7 @@
 import { Router, type NextFunction } from "express";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { db } from "@workspace/db";
-import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable } from "@workspace/db";
+import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable, usersTable } from "@workspace/db";
 import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
 import { generateId, generateReferralCode } from "../lib/id";
 import { generateAndAssignReferralCode } from "../lib/referral-code";
@@ -17,6 +17,7 @@ import {
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { ROLES } from "@workspace/permissions";
+import { clerkClient } from "@clerk/express";
 
 const router = Router();
 
@@ -355,8 +356,33 @@ router.delete("/clients/:id", async (req, res, next: NextFunction): Promise<void
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+
+    const [client] = await db.select().from(clientsTable)
+      .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)))
+      .limit(1);
+
+    if (!client) { next(new NotFoundError("Client not found", "NOT_FOUND")); return; }
+
+    const linkedUserId = client.userId;
+
     await db.delete(clientsTable)
       .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)));
+
+    if (linkedUserId) {
+      const [linkedUser] = await db.select().from(usersTable).where(eq(usersTable.id, linkedUserId)).limit(1);
+      if (linkedUser) {
+        await db.delete(usersTable).where(eq(usersTable.id, linkedUserId));
+        try {
+          await clerkClient.users.deleteUser(linkedUser.clerkId);
+        } catch (clerkErr: unknown) {
+          const status = (clerkErr as { status?: number })?.status;
+          if (status !== 404) {
+            req.log.warn({ clerkErr, clerkId: linkedUser.clerkId }, "Clerk deleteUser failed during client deletion — user DB row already removed");
+          }
+        }
+      }
+    }
+
     res.json({ success: true });
   } catch (err) {
     next(err);
