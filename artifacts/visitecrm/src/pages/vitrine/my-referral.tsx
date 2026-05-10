@@ -135,6 +135,7 @@ export default function MyReferralPage({ slug, store }: Props) {
   const [referrals, setReferrals] = useState<ClientReferral[] | null>(null);
   const [loadingReferrals, setLoadingReferrals] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "confirmed" | "expired">("all");
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -277,6 +278,13 @@ export default function MyReferralPage({ slug, store }: Props) {
 
   const ref = profile.referral;
   const tierColors = TIER_COLORS[ref.currentTierLevel] ?? TIER_COLORS.bronze;
+
+  const filteredReferrals = (referrals ?? []).filter((r) => {
+    if (statusFilter === "pending") return r.status === "pending";
+    if (statusFilter === "confirmed") return r.status === "completed" || r.status === "converted";
+    if (statusFilter === "expired") return r.status === "expired";
+    return true;
+  });
 
   const { paidBonus, pendingBonus } = (referrals ?? []).reduce(
     (acc, r) => {
@@ -492,16 +500,50 @@ export default function MyReferralPage({ slug, store }: Props) {
         </CardHeader>
         <CardContent>
           {!loadingReferrals && referrals && referrals.length > 0 && (
-            <div className="flex gap-2 flex-wrap mb-4">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
-                <CheckCircle className="w-3.5 h-3.5" />
-                {formatCurrency(paidBonus)} recebido
-              </span>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200">
-                <Clock className="w-3.5 h-3.5" />
-                {formatCurrency(pendingBonus)} a receber
-              </span>
-            </div>
+            <>
+              {/* Filter tabs */}
+              <div className="flex gap-1 mb-4 p-1 bg-muted/50 rounded-xl">
+                {(
+                  [
+                    { key: "all",       label: "Todas" },
+                    { key: "pending",   label: "Pendentes" },
+                    { key: "confirmed", label: "Confirmadas" },
+                    { key: "expired",   label: "Expiradas" },
+                  ] as const
+                ).map(({ key, label }) => {
+                  const isActive = statusFilter === key;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => {
+                        setStatusFilter(key);
+                        setVisibleCount(PAGE_SIZE);
+                      }}
+                      className="flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all"
+                      style={
+                        isActive
+                          ? { background: primaryColor, color: "#fff" }
+                          : { background: "transparent", color: "var(--muted-foreground)" }
+                      }
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Bonus summary pills */}
+              <div className="flex gap-2 flex-wrap mb-4">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  {formatCurrency(paidBonus)} recebido
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200">
+                  <Clock className="w-3.5 h-3.5" />
+                  {formatCurrency(pendingBonus)} a receber
+                </span>
+              </div>
+            </>
           )}
           {loadingReferrals ? (
             <div className="space-y-3">
@@ -523,18 +565,26 @@ export default function MyReferralPage({ slug, store }: Props) {
                 Compartilhe seu código acima e acompanhe aqui quando seus amigos se cadastrarem.
               </p>
             </div>
+          ) : filteredReferrals.length === 0 ? (
+            <div className="text-center py-8">
+              <Users className="w-10 h-10 mx-auto mb-3 text-muted-foreground/30" />
+              <p className="font-medium text-sm mb-1">Nenhuma indicação nesta categoria</p>
+              <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                Não há indicações com o status selecionado.
+              </p>
+            </div>
           ) : (
             <div>
-              {referrals.slice(0, visibleCount).map((r) => (
+              {filteredReferrals.slice(0, visibleCount).map((r) => (
                 <ReferralHistoryRow key={r.id} r={r} primaryColor={primaryColor} />
               ))}
-              {referrals.length > visibleCount && (
+              {filteredReferrals.length > visibleCount && (
                 <button
                   className="w-full mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center gap-1"
                   onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
                 >
                   <ChevronRight className="w-3.5 h-3.5 rotate-90" />
-                  Ver mais ({referrals.length - visibleCount} restantes)
+                  Ver mais ({filteredReferrals.length - visibleCount} restantes)
                 </button>
               )}
               {visibleCount > PAGE_SIZE && (
