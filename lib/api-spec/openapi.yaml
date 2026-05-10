@@ -4597,6 +4597,12 @@ components:
       properties:
         status:
           type: string
+        database:
+          type: object
+          properties:
+            connected:
+              type: boolean
+          required: [connected]
         redis:
           type: object
           properties:
@@ -4623,7 +4629,7 @@ components:
                   type: boolean
               required: [email, reminder, pdf, commissionSync]
           required: [active, workers]
-      required: [status, redis, bullmq]
+      required: [status, database, redis, bullmq]
 
     SuccessResponse:
       type: object

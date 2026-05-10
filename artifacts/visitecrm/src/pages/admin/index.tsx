@@ -1,4 +1,4 @@
-import { useGetAdminStats, useGetSystemHealth } from "@workspace/api-client-react";
+import { useGetAdminStats, useGetSystemHealth, getGetSystemHealthQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, Building2, CheckCircle2, Clock, XCircle, TrendingUp } from "lucide-react";
 
@@ -50,7 +50,7 @@ const REDIS_STATUS_CONFIG = {
 export default function AdminDashboard() {
   const { data: stats, isLoading } = useGetAdminStats();
   const { data: systemHealth } = useGetSystemHealth({
-    query: { refetchInterval: 60_000 },
+    query: { queryKey: getGetSystemHealthQueryKey(), refetchInterval: 60_000 },
   });
 
   if (isLoading) {

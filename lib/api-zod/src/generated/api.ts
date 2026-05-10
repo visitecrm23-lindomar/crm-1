@@ -12,6 +12,9 @@ import * as zod from "zod";
  */
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
+  database: zod.object({
+    connected: zod.boolean(),
+  }),
   redis: zod.object({
     connected: zod.boolean(),
     configured: zod.boolean(),
@@ -32,6 +35,9 @@ export const HealthCheckResponse = zod.object({
  */
 export const HealthCheckLegacyResponse = zod.object({
   status: zod.string(),
+  database: zod.object({
+    connected: zod.boolean(),
+  }),
   redis: zod.object({
     connected: zod.boolean(),
     configured: zod.boolean(),

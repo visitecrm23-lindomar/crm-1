@@ -1,5 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { HealthCheckResponse } from "@workspace/api-zod";
+import { db } from "@workspace/db";
+import { sql } from "drizzle-orm";
 import { getRedisConnection } from "../lib/redis";
 import { isEmailWorkerRunning } from "../workers/email.worker";
 import { isReminderWorkerRunning } from "../workers/reminder.worker";
@@ -25,14 +27,24 @@ async function pingWithTimeout(redis: NonNullable<ReturnType<typeof getRedisConn
   });
 }
 
+async function pingDatabase(): Promise<boolean> {
+  try {
+    await db.execute(sql`SELECT 1`);
+    return true;
+  } catch (err) {
+    logger.warn({ err }, "[health] Database ping failed");
+    return false;
+  }
+}
+
 async function healthHandler(_req: Request, res: Response): Promise<void> {
   const redis = getRedisConnection();
   const redisConfigured = redis !== null;
 
-  let redisConnected = false;
-  if (redis) {
-    redisConnected = await pingWithTimeout(redis);
-  }
+  const [redisConnected, dbConnected] = await Promise.all([
+    redis ? pingWithTimeout(redis) : Promise.resolve(false),
+    pingDatabase(),
+  ]);
 
   if (redisConfigured && !redisConnected) {
     logger.warn("[health] Redis is disconnected");
@@ -52,10 +64,13 @@ async function healthHandler(_req: Request, res: Response): Promise<void> {
   // returning 503 here would fail the Cloud Run health check and roll back
   // the deployment every time Redis hits its daily request limit.
   const degraded =
-    redisConfigured && (!redisConnected || !bullmqActive);
+    !dbConnected || (redisConfigured && (!redisConnected || !bullmqActive));
 
   const data = HealthCheckResponse.parse({
     status: degraded ? "degraded" : "ok",
+    database: {
+      connected: dbConnected,
+    },
     redis: {
       connected: redisConnected,
       configured: redisConfigured,

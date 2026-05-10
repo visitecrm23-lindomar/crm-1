@@ -14,7 +14,33 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Trash2, ScanSearch, FileImage, ExternalLink, CheckSquare, Square, History, Clock } from "lucide-react";
+import {
+  Loader2,
+  Trash2,
+  ScanSearch,
+  FileImage,
+  ExternalLink,
+  CheckSquare,
+  Square,
+  History,
+  Clock,
+  Activity,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  RefreshCw,
+  Database,
+  Mail,
+  Bell,
+  FileText,
+  DollarSign,
+} from "lucide-react";
+import {
+  useGetSystemHealth,
+  useHealthCheck,
+  getGetSystemHealthQueryKey,
+  getHealthCheckQueryKey,
+} from "@workspace/api-client-react";
 
 interface OrphanedFile {
   key: string;
@@ -42,6 +68,197 @@ function formatDateTime(date: Date): string {
     day: "2-digit", month: "2-digit", year: "numeric",
     hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
+}
+
+type StatusLevel = "ok" | "degraded" | "unavailable" | "loading" | "unknown";
+
+interface StatusDotProps {
+  status: StatusLevel;
+}
+
+function StatusDot({ status }: StatusDotProps) {
+  if (status === "loading") {
+    return <Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" />;
+  }
+  if (status === "ok") {
+    return <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />;
+  }
+  if (status === "degraded") {
+    return <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />;
+  }
+  if (status === "unavailable") {
+    return <XCircle className="w-4 h-4 text-red-500 shrink-0" />;
+  }
+  return <XCircle className="w-4 h-4 text-muted-foreground shrink-0" />;
+}
+
+interface StatusBadgeProps {
+  status: StatusLevel;
+}
+
+function StatusBadge({ status }: StatusBadgeProps) {
+  if (status === "loading") {
+    return <Badge variant="secondary" className="text-xs">Verificando...</Badge>;
+  }
+  if (status === "ok") {
+    return <Badge variant="secondary" className="text-xs bg-green-100 text-green-700 border-green-200">Operacional</Badge>;
+  }
+  if (status === "degraded") {
+    return <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-700 border-amber-200">Degradado</Badge>;
+  }
+  if (status === "unavailable") {
+    return <Badge variant="destructive" className="text-xs">Indisponível</Badge>;
+  }
+  return <Badge variant="secondary" className="text-xs">Desconhecido</Badge>;
+}
+
+interface HealthRowProps {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  description: string;
+  status: StatusLevel;
+}
+
+function HealthRow({ icon: Icon, label, description, status }: HealthRowProps) {
+  return (
+    <div className="flex items-center gap-3 py-3 border-b last:border-b-0">
+      <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <StatusDot status={status} />
+        <StatusBadge status={status} />
+      </div>
+    </div>
+  );
+}
+
+function SystemHealthSection() {
+  const { data: systemHealth, isLoading: isLoadingSystemHealth, dataUpdatedAt } = useGetSystemHealth({
+    query: { queryKey: getGetSystemHealthQueryKey(), refetchInterval: 60_000 },
+  });
+
+  const { data: healthData, isLoading: isLoadingHealth } = useHealthCheck({
+    query: { queryKey: getHealthCheckQueryKey(), refetchInterval: 60_000 },
+  });
+
+  const isLoading = isLoadingSystemHealth || isLoadingHealth;
+
+  const redisStatus: StatusLevel = isLoading
+    ? "loading"
+    : systemHealth?.redis?.status ?? "unknown";
+
+  const dbStatus: StatusLevel = isLoading
+    ? "loading"
+    : healthData?.database?.connected
+    ? "ok"
+    : "unavailable";
+
+  function workerStatus(running: boolean | undefined): StatusLevel {
+    if (isLoading) return "loading";
+    if (running === undefined) return "unknown";
+    return running ? "ok" : "unavailable";
+  }
+
+  const workers = healthData?.bullmq?.workers;
+  const bullmqAllOk = healthData?.bullmq?.active;
+  const bullmqStatus: StatusLevel = isLoading
+    ? "loading"
+    : bullmqAllOk === undefined
+    ? "unknown"
+    : bullmqAllOk
+    ? "ok"
+    : "degraded";
+
+  const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Activity className="w-4 h-4 text-primary" />
+              Status do Sistema
+            </CardTitle>
+            <CardDescription className="text-xs mt-1">
+              Verificação em tempo real dos componentes da plataforma. Atualiza automaticamente a cada 60 segundos.
+            </CardDescription>
+          </div>
+          {lastUpdated && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+              <RefreshCw className="w-3 h-3" />
+              <span>
+                {lastUpdated.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              </span>
+            </div>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-0 divide-y divide-border -mt-2">
+        <div className="pb-3 border-b">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Infraestrutura</p>
+          <HealthRow
+            icon={Database}
+            label="Banco de Dados"
+            description="Conectividade com o PostgreSQL"
+            status={dbStatus}
+          />
+          <HealthRow
+            icon={Activity}
+            label="Redis / Cache"
+            description={
+              redisStatus === "ok"
+                ? "Conectado e respondendo normalmente"
+                : redisStatus === "degraded"
+                ? "Erros transitórios consecutivos — filas podem estar lentas"
+                : redisStatus === "unavailable"
+                ? "Inacessível — limite diário atingido ou serviço fora do ar"
+                : "Verificando conexão..."
+            }
+            status={redisStatus}
+          />
+        </div>
+
+        <div className="pt-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Workers (BullMQ)</p>
+          <div className="flex items-center justify-between pb-2">
+            <span className="text-xs text-muted-foreground">Status geral dos workers</span>
+            <div className="flex items-center gap-2">
+              <StatusDot status={bullmqStatus} />
+              <StatusBadge status={bullmqStatus} />
+            </div>
+          </div>
+          <HealthRow
+            icon={Mail}
+            label="Worker de E-mail"
+            description="Envio de e-mails transacionais e notificações"
+            status={workerStatus(workers?.email)}
+          />
+          <HealthRow
+            icon={Bell}
+            label="Worker de Lembretes"
+            description="Lembretes automáticos para clientes e agências"
+            status={workerStatus(workers?.reminder)}
+          />
+          <HealthRow
+            icon={FileText}
+            label="Worker de PDF"
+            description="Geração de vouchers e manifesto de passageiros"
+            status={workerStatus(workers?.pdf)}
+          />
+          <HealthRow
+            icon={DollarSign}
+            label="Worker de Comissões"
+            description="Sincronização de comissões e repasses"
+            status={workerStatus(workers?.commissionSync)}
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function AdminMaintenance() {
@@ -145,9 +362,11 @@ export default function AdminMaintenance() {
       <div>
         <h1 className="text-2xl font-bold">Manutenção</h1>
         <p className="text-sm text-muted-foreground">
-          Limpeza de arquivos órfãos no armazenamento de mídia (UploadThing).
+          Status do sistema e limpeza de dados.
         </p>
       </div>
+
+      <SystemHealthSection />
 
       <Card>
         <CardHeader>

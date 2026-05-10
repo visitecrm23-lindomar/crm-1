@@ -5,8 +5,32 @@
  * VisiteCRM API - SaaS CRM for tourism agencies
  * OpenAPI spec version: 0.1.0
  */
+export interface HealthStatusDatabase {
+  connected: boolean;
+}
+
+export interface HealthStatusRedis {
+  connected: boolean;
+  configured: boolean;
+}
+
+export interface HealthStatusWorkers {
+  email: boolean;
+  reminder: boolean;
+  pdf: boolean;
+  commissionSync: boolean;
+}
+
+export interface HealthStatusBullmq {
+  active: boolean;
+  workers: HealthStatusWorkers;
+}
+
 export interface HealthStatus {
   status: string;
+  database: HealthStatusDatabase;
+  redis: HealthStatusRedis;
+  bullmq: HealthStatusBullmq;
 }
 
 export interface SystemHealthRedis {
