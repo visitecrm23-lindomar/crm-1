@@ -27,6 +27,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
   const [tab, setTab] = useState("basico");
   const [form, setForm] = useState<TripFormData>(EMPTY_FORM);
   const [tripLimitError, setTripLimitError] = useState<{ resource: string; current?: number; limit?: number } | null>(null);
+  const [seatConflictError, setSeatConflictError] = useState<string | null>(null);
 
   const { data: existingTrip } = useGetTrip(tripId ?? "", { query: { enabled: !!tripId, queryKey: ["/api/trips", tripId] } });
   const { data: layouts = [] } = useListLayouts({ query: { queryKey: ["layouts"] } });
@@ -88,6 +89,11 @@ export function TripForm({ tripId }: { tripId?: string }) {
     if (!selectedLayout) return;
     setForm(prev => ({ ...prev, totalCapacity: String(selectedLayout.seatCount) }));
   }, [form.layoutId, selectedLayout?.seatCount]);
+
+  useEffect(() => {
+    if (seatConflictError) setSeatConflictError(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.freePassengers]);
 
   const set = (k: keyof TripFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(prev => ({ ...prev, [k]: e.target.value }));
@@ -184,6 +190,11 @@ export function TripForm({ tripId }: { tripId?: string }) {
       const limitInfo = usePlanLimitError(responseData);
       if (limitInfo.isLimitError) {
         setTripLimitError({ resource: limitInfo.resource ?? "trips", current: limitInfo.current, limit: limitInfo.limit });
+        return;
+      }
+      if (responseData["code"] === "SEAT_CONFLICT") {
+        setSeatConflictError((responseData["error"] as string) || "Conflito de assentos com reservas existentes");
+        setTab("precos");
         return;
       }
       const msg = (responseData["error"] as string)
@@ -388,6 +399,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
             tripId={tripId} layoutSeatLabels={layoutSeatLabels}
             isSavingCosts={isSavingCosts} isPending={isPending}
             handleSaveCosts={handleSaveCosts}
+            seatConflictError={seatConflictError}
           />
         </TabsContent>
 

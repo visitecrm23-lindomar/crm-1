@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, X, Check, Loader2, UserCog, MapPin } from "lucide-react";
+import { Plus, X, Check, Loader2, UserCog, MapPin, AlertCircle } from "lucide-react";
 import { formatCurrency } from "./utils";
 import { FIXED_COST_CATEGORIES, VARIABLE_COST_CATEGORIES } from "./constants";
 import type { TripFormData, FreePassenger } from "./types";
@@ -42,6 +42,7 @@ interface TripFormPricesTabProps {
   isSavingCosts: boolean;
   isPending: boolean;
   handleSaveCosts: () => void;
+  seatConflictError?: string | null;
 }
 
 const EMPTY_NEW_FIXED: NewFixed = { category: "", description: "", customDesc: "", value: "" };
@@ -263,7 +264,7 @@ function FreePassengersSection({
   );
 }
 
-export function TripFormPricesTab({ form, setForm, newFixed, setNewFixed, newVariable, setNewVariable, tripId, layoutSeatLabels, isSavingCosts, isPending, handleSaveCosts }: TripFormPricesTabProps) {
+export function TripFormPricesTab({ form, setForm, newFixed, setNewFixed, newVariable, setNewVariable, tripId, layoutSeatLabels, isSavingCosts, isPending, handleSaveCosts, seatConflictError }: TripFormPricesTabProps) {
   const cap = parseInt(form.totalCapacity || "0");
 
   const { data: seatMapData } = useGetTripSeatMap(tripId ?? "", {
@@ -347,6 +348,12 @@ export function TripFormPricesTab({ form, setForm, newFixed, setNewFixed, newVar
           )}
         </div>
         <FreePassengersSection form={form} setForm={setForm} availableSeats={availableSeats} />
+        {seatConflictError && (
+          <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm">
+            <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+            <span className="text-destructive font-medium">{seatConflictError}</span>
+          </div>
+        )}
         {freeCount > 0 && (
           <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm dark:bg-amber-950/20 dark:border-amber-800">
             <span className="text-amber-700 dark:text-amber-400 font-medium">

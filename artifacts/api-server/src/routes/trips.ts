@@ -402,6 +402,28 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
     if (parsed.data.gallery !== undefined) updates.gallery = parsed.data.gallery ?? [];
     if (parsed.data.freePassengers !== undefined) {
       const fp: FreePassenger[] = Array.isArray(parsed.data.freePassengers) ? parsed.data.freePassengers as FreePassenger[] : [];
+      const freeSeatNumbers = fp.filter(p => p.seatNumber).map(p => p.seatNumber as string);
+      if (freeSeatNumbers.length > 0) {
+        const activeReservations = await db.select({ seats: reservationsTable.seats })
+          .from(reservationsTable)
+          .where(and(
+            eq(reservationsTable.tripId, req.params.id),
+            eq(reservationsTable.tenantId, me.tenantId),
+            inArray(reservationsTable.status, [RESERVATION_STATUS.PENDING, RESERVATION_STATUS.CONFIRMED]),
+          ));
+        const reservedSeatSet = new Set(activeReservations.flatMap(r => r.seats));
+        const conflicts = freeSeatNumbers.filter(s => reservedSeatSet.has(s));
+        if (conflicts.length > 0) {
+          const plural = conflicts.length > 1;
+          next(new AppError(
+            `Assento${plural ? "s" : ""} ${conflicts.join(", ")} já ${plural ? "estão reservados" : "está reservado"} por passageiros pagantes`,
+            422,
+            "SEAT_CONFLICT",
+            { conflictingSeats: conflicts },
+          ));
+          return;
+        }
+      }
       updates.freePassengers = fp;
       updates.freeOrganizers = fp.filter(p => p.role === "organizer").length;
       updates.freeGuides = fp.filter(p => p.role === "guide").length;
