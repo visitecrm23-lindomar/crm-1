@@ -1111,6 +1111,7 @@ export interface BoardingPanel {
   tourGuideCpf?: string | null;
   /** @nullable */
   tourGuideRegistration?: string | null;
+  freePassengers: FreePassenger[];
 }
 
 export interface UpdatePassengerBoardingBody {

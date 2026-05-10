@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Search, MapPin, Users, ClipboardList, LogIn, RotateCcw, CheckCircle,
-  UserRound, RefreshCw, MessageSquare, Pencil, Loader2,
+  UserRound, RefreshCw, MessageSquare, Pencil, Loader2, Star,
 } from "lucide-react";
 import { Client360Modal } from "@/components/client360-modal";
 import { PassengerObsModal } from "./PassengerObsModal";
@@ -98,6 +98,7 @@ export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId
 
   const boardingPoints: BoardingPoint[] = panel?.boardingPoints ?? [];
   const passengers = panel?.passengers ?? [];
+  const freePassengers = panel?.freePassengers ?? [];
   const filtered = search
     ? passengers.filter(p =>
         p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -106,6 +107,12 @@ export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId
         p.clientName.toLowerCase().includes(search.toLowerCase())
       )
     : passengers;
+  const filteredFree = search
+    ? freePassengers.filter(fp =>
+        fp.name.toLowerCase().includes(search.toLowerCase()) ||
+        (fp.seatNumber ?? "").toLowerCase().includes(search.toLowerCase())
+      )
+    : freePassengers;
 
   const pct = panel && panel.totalPassengers > 0
     ? Math.round((panel.checkedIn / panel.totalPassengers) * 100)
@@ -184,12 +191,13 @@ export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId
             </div>
 
             <div className="overflow-y-auto flex-1 space-y-1.5 pr-1">
-              {filtered.length === 0 ? (
+              {filtered.length === 0 && filteredFree.length === 0 ? (
                 <div className="text-center py-10 text-muted-foreground">
                   <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm">{passengers.length === 0 ? "Nenhum passageiro cadastrado nesta viagem" : "Nenhum resultado encontrado"}</p>
+                  <p className="text-sm">{passengers.length === 0 && freePassengers.length === 0 ? "Nenhum passageiro cadastrado nesta viagem" : "Nenhum resultado encontrado"}</p>
                 </div>
-              ) : filtered.map(p => {
+              ) : (<>
+              {filtered.map(p => {
                 const isCheckedIn = !!p.checkedInAt;
                 const currentLocationId = p.boardingLocationId ?? "";
                 const isUpdatingThis = updatingLocationId === p.id;
@@ -283,6 +291,37 @@ export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId
                   </div>
                 );
               })}
+              {filteredFree.length > 0 && (
+                <>
+                  <div className="flex items-center gap-2 pt-2 pb-1">
+                    <Star className="w-3.5 h-3.5 text-purple-500" />
+                    <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Gratuidades</span>
+                    <span className="text-xs text-muted-foreground">({filteredFree.length})</span>
+                  </div>
+                  {filteredFree.map(fp => {
+                    const roleLabel = fp.role === "organizer" ? "Organizador" : fp.role === "guide" ? "Guia" : fp.role;
+                    return (
+                      <div key={fp.id} className="p-3 rounded-lg border bg-purple-50 border-purple-200">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {fp.seatNumber && (
+                            <span className="font-mono text-xs bg-gray-100 border border-gray-300 px-2 py-0.5 rounded font-bold">{fp.seatNumber}</span>
+                          )}
+                          <span className="font-medium text-sm">{fp.name}</span>
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold border border-purple-200">
+                            <Star className="w-3 h-3" />
+                            Gratuidade
+                          </span>
+                        </div>
+                        <div className="flex gap-3 mt-0.5 flex-wrap text-xs text-muted-foreground">
+                          {fp.cpf && <span>CPF: {fp.cpf}</span>}
+                          <span>{roleLabel}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+              </>)}
             </div>
           </>
         )}

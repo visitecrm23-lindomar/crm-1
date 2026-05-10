@@ -6194,7 +6194,11 @@ components:
           type: ["string", "null"]
         tourGuideRegistration:
           type: ["string", "null"]
-      required: [tripId, tripName, departureDate, totalPassengers, checkedIn, passengers, tenantName, boardingPoints]
+        freePassengers:
+          type: array
+          items:
+            $ref: "#/components/schemas/FreePassenger"
+      required: [tripId, tripName, departureDate, totalPassengers, checkedIn, passengers, tenantName, boardingPoints, freePassengers]
 
     UpdatePassengerBoardingBody:
       type: object

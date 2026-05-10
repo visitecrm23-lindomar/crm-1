@@ -696,6 +696,7 @@ router.get("/trips/:id/boarding-panel", async (req, res, next: NextFunction): Pr
 
     if (reservations.length === 0) {
       const [tenantEarly] = await db.select({ name: tenantsTable.name, cnpj: tenantsTable.cnpj }).from(tenantsTable).where(eq(tenantsTable.id, me.tenantId)).limit(1);
+      const earlyFreePassengers = Array.isArray(trip.freePassengers) ? (trip.freePassengers as FreePassenger[]) : [];
       res.json({
         tripId: trip.id,
         tripName: trip.name,
@@ -703,6 +704,7 @@ router.get("/trips/:id/boarding-panel", async (req, res, next: NextFunction): Pr
         totalPassengers: 0,
         checkedIn: 0,
         passengers: [],
+        freePassengers: earlyFreePassengers,
         tenantName: tenantEarly?.name ?? "",
         tenantCnpj: tenantEarly?.cnpj ?? null,
         boardingPoints: (trip.boardingPoints ?? []) as Array<{ id: string; name: string; time?: string; address?: string }>,
@@ -766,6 +768,7 @@ router.get("/trips/:id/boarding-panel", async (req, res, next: NextFunction): Pr
     });
 
     const checkedIn = boardingPassengers.filter(p => p.checkedInAt !== null).length;
+    const tripFreePassengers = Array.isArray(trip.freePassengers) ? (trip.freePassengers as FreePassenger[]) : [];
 
     res.json({
       tripId: trip.id,
@@ -774,6 +777,7 @@ router.get("/trips/:id/boarding-panel", async (req, res, next: NextFunction): Pr
       totalPassengers: boardingPassengers.length,
       checkedIn,
       passengers: boardingPassengers,
+      freePassengers: tripFreePassengers,
       tenantName: tenant?.name ?? "",
       tenantCnpj: tenant?.cnpj ?? null,
       boardingPoints: (trip.boardingPoints ?? []) as Array<{ id: string; name: string; time?: string; address?: string }>,
@@ -1078,6 +1082,7 @@ type ManifestPanel = {
   tourGuideRegistration: string | null;
   boardingPoints: Array<{ id: string; name: string; time?: string }>;
   passengers: ManifestPassenger[];
+  freePassengers: FreePassenger[];
   destinationCity?: string;
   destinationState?: string;
 };
@@ -1154,6 +1159,38 @@ function generateManifestHtml(p: ManifestPanel): string {
     .filter(c => categoryCounts[c])
     .map(c => `<span><strong>${catLabel[c] ?? c}:</strong> ${categoryCounts[c]}</span>`)
     .join("&nbsp;&nbsp;|&nbsp;&nbsp;");
+
+  const ROLE_LABEL: Record<string, string> = { organizer: "Organizador", guide: "Guia" };
+  const freeRows = p.freePassengers.map((fp, i) => {
+    const nome = e(fp.name);
+    const cpfStr = e(formatCpfServer(fp.cpf));
+    const role = e(ROLE_LABEL[fp.role] ?? fp.role);
+    const seat = e(fp.seatNumber ?? "—");
+    return `<tr>
+      <td class="num">${String(i + 1).padStart(2, "0")}</td>
+      <td>${nome}</td>
+      <td>${cpfStr}</td>
+      <td>${role}</td>
+      <td class="seat">${seat}</td>
+    </tr>`;
+  }).join("");
+
+  const gratuitySection = p.freePassengers.length > 0 ? `
+<div class="section" style="margin-top:8px;">
+  <div class="section-title">Gratuidades (Organizadores / Guias)</div>
+  <table>
+    <thead>
+      <tr>
+        <th class="num">Nº</th>
+        <th>Nome Completo</th>
+        <th>CPF</th>
+        <th>Função</th>
+        <th class="seat">Assento</th>
+      </tr>
+    </thead>
+    <tbody>${freeRows}</tbody>
+  </table>
+</div>` : "";
 
   const crewRows = [
     driverName || driver1Cpf || driver1Cnh
@@ -1247,6 +1284,7 @@ ${crewRows ? `<div class="section">
   </thead>
   <tbody>${rows}</tbody>
 </table>
+${gratuitySection}
 <div class="totals">
   <strong>Totais por categoria:</strong>&nbsp;&nbsp;${totalsRow || `Total: ${p.passengers.length}`}
 </div>
@@ -1406,6 +1444,56 @@ function generateManifestPdf(p: ManifestPanel): Promise<Buffer> {
     doc.font("Helvetica").text(totalsText || `Total: ${p.passengers.length}`);
     y += 20;
 
+    if (p.freePassengers.length > 0) {
+      if (y + 30 > 800) { doc.addPage(); y = 40; }
+      const ROLE_LABEL_PDF: Record<string, string> = { organizer: "Organizador", guide: "Guia" };
+      doc.rect(36, y, pageWidth, 14).stroke();
+      doc.font("Helvetica-Bold").fontSize(7).fillColor("#555").text("GRATUIDADES (ORGANIZADORES / GUIAS)", 40, y + 3);
+      doc.fillColor("black");
+      y += 14;
+
+      const freeColDefs = [
+        { label: "Nº", w: 20 },
+        { label: "Nome Completo", w: 160 },
+        { label: "CPF", w: 90 },
+        { label: "Função", w: 80 },
+        { label: "Assento", w: 50 },
+      ];
+      const freeTotalW = freeColDefs.reduce((s, c) => s + c.w, 0);
+      const freeScale = pageWidth / freeTotalW;
+      const freeCols = freeColDefs.map(c => ({ ...c, w: c.w * freeScale }));
+
+      doc.rect(36, y, pageWidth, 12).fillAndStroke("#3a3a3a", "#3a3a3a");
+      let fxOff = 40;
+      for (const col of freeCols) {
+        doc.font("Helvetica-Bold").fontSize(7).fillColor("white").text(col.label, fxOff, y + 2, { width: col.w - 2, lineBreak: false });
+        fxOff += col.w;
+      }
+      doc.fillColor("black");
+      y += 12;
+
+      for (let i = 0; i < p.freePassengers.length; i++) {
+        const fp = p.freePassengers[i];
+        if (i % 2 === 0) doc.rect(36, y, pageWidth, 12).fillAndStroke("#f8f8f8", "white");
+        doc.rect(36, y, pageWidth, 12).stroke();
+        fxOff = 40;
+        const rowData = [
+          String(i + 1).padStart(2, "0"),
+          fp.name.slice(0, 30),
+          formatCpfServer(fp.cpf),
+          ROLE_LABEL_PDF[fp.role] ?? fp.role,
+          fp.seatNumber ?? "—",
+        ];
+        for (let ci = 0; ci < freeCols.length; ci++) {
+          doc.font("Helvetica").fontSize(7).fillColor("black").text(rowData[ci], fxOff, y + 2, { width: freeCols[ci].w - 2, lineBreak: false });
+          fxOff += freeCols[ci].w;
+        }
+        y += 12;
+        if (y > 760) { doc.addPage(); y = 40; }
+      }
+      y += 6;
+    }
+
     if (y + 40 > 800) { doc.addPage(); y = 40; }
     const sigW = (pageWidth - 20) / 2;
     doc.moveTo(40, y + 20).lineTo(40 + sigW, y + 20).stroke();
@@ -1502,6 +1590,7 @@ router.post("/trips/:id/manifest/send", async (req, res, next: NextFunction): Pr
       tourGuideRegistration: trip.tourGuideRegistration ?? null,
       boardingPoints: (trip.boardingPoints ?? []) as Array<{ id: string; name: string; time?: string }>,
       passengers: manifestPassengers,
+      freePassengers: Array.isArray(trip.freePassengers) ? (trip.freePassengers as FreePassenger[]) : [],
       destinationCity: trip.destinationCity,
       destinationState: trip.destinationState,
     };
