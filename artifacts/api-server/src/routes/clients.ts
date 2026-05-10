@@ -371,15 +371,16 @@ router.delete("/clients/:id", async (req, res, next: NextFunction): Promise<void
     if (linkedUserId) {
       const [linkedUser] = await db.select().from(usersTable).where(eq(usersTable.id, linkedUserId)).limit(1);
       if (linkedUser) {
-        await db.delete(usersTable).where(eq(usersTable.id, linkedUserId));
         try {
           await clerkClient.users.deleteUser(linkedUser.clerkId);
         } catch (clerkErr: unknown) {
           const status = (clerkErr as { status?: number })?.status;
           if (status !== 404) {
-            req.log.warn({ clerkErr, clerkId: linkedUser.clerkId }, "Clerk deleteUser failed during client deletion — user DB row already removed");
+            next(new AppError(`Failed to delete linked Clerk account: ${(clerkErr as Error).message}`, 502, "CLERK_DELETE_FAILED"));
+            return;
           }
         }
+        await db.delete(usersTable).where(eq(usersTable.id, linkedUserId));
       }
     }
 
