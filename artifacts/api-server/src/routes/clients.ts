@@ -385,20 +385,20 @@ router.delete("/clients/:id", async (req, res, next: NextFunction): Promise<void
       }
     }
 
-    await Promise.all([
-      db.update(reservationsTable).set({ clientId: null }).where(eq(reservationsTable.clientId, client.id)),
-      db.update(paymentsTable).set({ clientId: null }).where(eq(paymentsTable.clientId, client.id)),
-      db.update(dealsTable).set({ clientId: null }).where(eq(dealsTable.clientId, client.id)),
-      db.update(storeOrdersTable).set({ clientId: null }).where(eq(storeOrdersTable.clientId, client.id)),
-      db.update(storeReviewsTable).set({ clientId: null }).where(eq(storeReviewsTable.clientId, client.id)),
-    ]);
-
-    if (linkedUser) {
-      await db.delete(usersTable).where(eq(usersTable.id, linkedUser.id));
-    }
-
-    await db.delete(clientsTable)
-      .where(and(eq(clientsTable.id, client.id), eq(clientsTable.tenantId, me.tenantId)));
+    await db.transaction(async (tx) => {
+      await Promise.all([
+        tx.update(reservationsTable).set({ clientId: sql`NULL` }).where(eq(reservationsTable.clientId, client.id)),
+        tx.update(paymentsTable).set({ clientId: null }).where(eq(paymentsTable.clientId, client.id)),
+        tx.update(dealsTable).set({ clientId: null }).where(eq(dealsTable.clientId, client.id)),
+        tx.update(storeOrdersTable).set({ clientId: null }).where(eq(storeOrdersTable.clientId, client.id)),
+        tx.update(storeReviewsTable).set({ clientId: null }).where(eq(storeReviewsTable.clientId, client.id)),
+      ]);
+      if (linkedUser) {
+        await tx.delete(usersTable).where(eq(usersTable.id, linkedUser.id));
+      }
+      await tx.delete(clientsTable)
+        .where(and(eq(clientsTable.id, client.id), eq(clientsTable.tenantId, me.tenantId)));
+    });
 
     res.json({ success: true });
   } catch (err) {
