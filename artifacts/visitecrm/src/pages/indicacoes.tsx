@@ -277,9 +277,13 @@ export default function Indicacoes() {
     setShareModalOpen(true);
   }
 
-  function buildWhatsAppShareUrl(phone: string, link: string, message: string, referrerName?: string | null) {
+  function buildWhatsAppShareUrl(phone: string, link: string, message: string, referrerName?: string | null, referralCode?: string | null, bonusAmount?: string | number | null) {
     const num = phone.replace(/\D/g, "");
-    const personalizedMessage = message.replace(/\{nome\}/g, referrerName ?? "");
+    const bonusFormatted = bonusAmount != null ? fmtCurrency(bonusAmount) : "";
+    const personalizedMessage = message
+      .replace(/\{nome\}/g, referrerName ?? "")
+      .replace(/\{codigo\}/g, referralCode ?? "")
+      .replace(/\{bonus\}/g, bonusFormatted);
     const text = personalizedMessage ? `${personalizedMessage}\n${link}` : link;
     return `https://wa.me/55${num}?text=${encodeURIComponent(text)}`;
   }
@@ -1223,7 +1227,7 @@ export default function Indicacoes() {
               const referrerPhone = shareReferral?.referrerWhatsapp;
               const hasWhatsapp = isValidWhatsapp(referrerPhone);
               const whatsappUrl = hasWhatsapp
-                ? buildWhatsAppShareUrl(referrerPhone, shareData.link, settings?.shareMessage ?? "", shareReferral?.referrerName)
+                ? buildWhatsAppShareUrl(referrerPhone, shareData.link, settings?.shareMessage ?? "", shareReferral?.referrerName, shareReferral?.code, shareReferral?.bonusAmount)
                 : null;
               return (
                 <>
@@ -1590,7 +1594,7 @@ export default function Indicacoes() {
                         const referrerPhone = selectedReferral.referrerWhatsapp;
                         const hasWhatsapp = isValidWhatsapp(referrerPhone);
                         const whatsappUrl = hasWhatsapp
-                          ? buildWhatsAppShareUrl(referrerPhone, shareData.link, settings?.shareMessage ?? "", selectedReferral.referrerName)
+                          ? buildWhatsAppShareUrl(referrerPhone, shareData.link, settings?.shareMessage ?? "", selectedReferral.referrerName, selectedReferral.code, selectedReferral.bonusAmount)
                           : null;
                         return (
                           <Button
@@ -1844,12 +1848,19 @@ export default function Indicacoes() {
                 placeholder="Use meu código e ganhe desconto na sua viagem!"
               />
               <p className="text-xs text-muted-foreground">
-                Use <code className="bg-muted px-1 rounded">{"{nome}"}</code> para incluir o nome do indicador na mensagem. Ex.: <em>Olá! {"{nome}"} indicou você — use o link abaixo para ganhar desconto.</em>
+                Variáveis disponíveis:{" "}
+                <code className="bg-muted px-1 rounded">{"{nome}"}</code> nome do indicador,{" "}
+                <code className="bg-muted px-1 rounded">{"{codigo}"}</code> código de indicação,{" "}
+                <code className="bg-muted px-1 rounded">{"{bonus}"}</code> valor do bônus.{" "}
+                Ex.: <em>Olá! {"{nome}"} te indicou — use o código {"{codigo}"} e ganhe {"{bonus}"}.</em>
               </p>
               {(localSettings.shareMessage as string)?.trim() && (
                 <p className="text-xs text-muted-foreground bg-muted/50 border rounded px-2 py-1.5">
                   <span className="font-medium text-muted-foreground">Pré-visualização:</span>{" "}
-                  {(localSettings.shareMessage as string).replace(/\{nome\}/g, "João")}
+                  {(localSettings.shareMessage as string)
+                    .replace(/\{nome\}/g, "João")
+                    .replace(/\{codigo\}/g, "JOAO123")
+                    .replace(/\{bonus\}/g, fmtCurrency(settings?.bonusValue ?? 10))}
                 </p>
               )}
             </div>
