@@ -81,6 +81,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
       available: statusList.filter(st => st === "available").length,
       reserved: statusList.filter(st => st === "reserved" || st === "occupied").length,
       confirmed: statusList.filter(st => st === "confirmed").length,
+      free: statusList.filter(st => st === "free").length,
       blocked: statusList.filter(st => st === "blocked").length,
     };
   }, [seats, optimisticSeats]);
@@ -206,15 +207,25 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
                       </div>
                     );
                   }
+                  const isFree = effectiveStatus === "free";
+                  const freePassengerName = isFree ? (seat as Seat & { passengerName?: string }).passengerName : undefined;
+                  const tooltipText = isFree
+                    ? `Assento ${seat.number} — Gratuidade${freePassengerName ? `: ${freePassengerName}` : ""}`
+                    : `Assento ${seat.number} (${seatType ?? "padrão"}) — ${effectiveStatus}`;
                   return (
                     <button
                       key={seat.number}
                       className={cellClass}
                       onClick={() => handleSeatClick(seat)}
-                      title={`Assento ${seat.number} (${seatType ?? "padrão"}) — ${effectiveStatus}`}
+                      title={tooltipText}
                       disabled={effectiveStatus !== "available"}
                     >
-                      {getCellIcon(seatType, seat.number)}
+                      {isFree ? (
+                        <span className="flex flex-col items-center leading-none">
+                          <span className="text-[9px] font-bold opacity-80">G</span>
+                          <span>{seat.number}</span>
+                        </span>
+                      ) : getCellIcon(seatType, seat.number)}
                     </button>
                   );
                 };
@@ -257,6 +268,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
               { label: "Disponíveis", count: seatCounts.available, color: "text-green-600" },
               { label: "Reservados", count: seatCounts.reserved, color: "text-orange-600" },
               { label: "Confirmados", count: seatCounts.confirmed, color: "text-primary" },
+              ...(seatCounts.free > 0 ? [{ label: "Gratuidades", count: seatCounts.free, color: "text-violet-600" }] : []),
               { label: "Bloqueados", count: seatCounts.blocked, color: "text-gray-600" },
               { label: "Total", count: seats.length, color: "text-foreground" },
             ].map(s => (

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, X, Check, Loader2, UserCog, MapPin } from "lucide-react";
 import { formatCurrency } from "./utils";
 import { FIXED_COST_CATEGORIES, VARIABLE_COST_CATEGORIES } from "./constants";
@@ -30,7 +31,44 @@ const EMPTY_NEW_VARIABLE: NewVariable = { category: "", description: "", customD
 
 const EMPTY_FREE_PASSENGER = { name: "", cpf: "", whatsapp: "", seatNumber: "" };
 
-function FreePassengersSection({ form, setForm }: { form: TripFormData; setForm: Dispatch<SetStateAction<TripFormData>> }) {
+function SeatSelect({
+  value,
+  onChange,
+  availableSeats,
+  excludedSeats,
+  currentSeat,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  availableSeats: string[];
+  excludedSeats: string[];
+  currentSeat?: string | null;
+}) {
+  const options = availableSeats.filter(s => s === currentSeat || !excludedSeats.includes(s));
+  return (
+    <Select value={value || "__none__"} onValueChange={v => onChange(v === "__none__" ? "" : v)}>
+      <SelectTrigger>
+        <SelectValue placeholder="Sem assento" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="__none__">Sem assento</SelectItem>
+        {options.map(s => (
+          <SelectItem key={s} value={s}>Assento {s}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function FreePassengersSection({
+  form,
+  setForm,
+  availableSeats,
+}: {
+  form: TripFormData;
+  setForm: Dispatch<SetStateAction<TripFormData>>;
+  availableSeats: string[];
+}) {
   const [addingRole, setAddingRole] = useState<"organizer" | "guide" | null>(null);
   const [newPax, setNewPax] = useState(EMPTY_FREE_PASSENGER);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -76,8 +114,13 @@ function FreePassengersSection({ form, setForm }: { form: TripFormData; setForm:
     setEditingId(null);
   };
 
+  const assignedSeats = form.freePassengers
+    .filter(p => p.seatNumber)
+    .map(p => p.seatNumber as string);
+
   const renderPassenger = (p: FreePassenger) => {
     if (editingId === p.id) {
+      const otherAssigned = assignedSeats.filter(s => s !== p.seatNumber);
       return (
         <div key={p.id} className="border rounded-lg p-3 space-y-2 bg-muted/10">
           <div className="grid grid-cols-2 gap-2">
@@ -87,7 +130,17 @@ function FreePassengersSection({ form, setForm }: { form: TripFormData; setForm:
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Assento</Label>
-              <Input value={editPax.seatNumber} onChange={e => setEditPax(prev => ({ ...prev, seatNumber: e.target.value }))} placeholder="Ex: 1, 2A..." />
+              {availableSeats.length > 0 ? (
+                <SeatSelect
+                  value={editPax.seatNumber}
+                  onChange={v => setEditPax(prev => ({ ...prev, seatNumber: v }))}
+                  availableSeats={availableSeats}
+                  excludedSeats={otherAssigned}
+                  currentSeat={p.seatNumber}
+                />
+              ) : (
+                <Input value={editPax.seatNumber} onChange={e => setEditPax(prev => ({ ...prev, seatNumber: e.target.value }))} placeholder="Ex: 1, 2A..." />
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs">CPF</Label>
@@ -154,7 +207,16 @@ function FreePassengersSection({ form, setForm }: { form: TripFormData; setForm:
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Assento (opcional)</Label>
-              <Input value={newPax.seatNumber} onChange={e => setNewPax(prev => ({ ...prev, seatNumber: e.target.value }))} placeholder="Ex: 1, 2A..." />
+              {availableSeats.length > 0 ? (
+                <SeatSelect
+                  value={newPax.seatNumber}
+                  onChange={v => setNewPax(prev => ({ ...prev, seatNumber: v }))}
+                  availableSeats={availableSeats}
+                  excludedSeats={assignedSeats}
+                />
+              ) : (
+                <Input value={newPax.seatNumber} onChange={e => setNewPax(prev => ({ ...prev, seatNumber: e.target.value }))} placeholder="Ex: 1, 2A..." />
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs">CPF (opcional)</Label>
@@ -185,6 +247,7 @@ function FreePassengersSection({ form, setForm }: { form: TripFormData; setForm:
 
 export function TripFormPricesTab({ form, setForm, newFixed, setNewFixed, newVariable, setNewVariable, tripId, isSavingCosts, isPending, handleSaveCosts }: TripFormPricesTabProps) {
   const cap = parseInt(form.totalCapacity || "0");
+  const availableSeats = cap > 0 ? Array.from({ length: cap }, (_, i) => String(i + 1)) : [];
   const freeCount = form.freePassengers.length;
   const paidCap = Math.max(0, cap - freeCount);
   const grossRevenue = parseFloat(form.priceAdult || "0") * paidCap;
@@ -244,7 +307,7 @@ export function TripFormPricesTab({ form, setForm, newFixed, setNewFixed, newVar
             </Badge>
           )}
         </div>
-        <FreePassengersSection form={form} setForm={setForm} />
+        <FreePassengersSection form={form} setForm={setForm} availableSeats={availableSeats} />
         {freeCount > 0 && (
           <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm dark:bg-amber-950/20 dark:border-amber-800">
             <span className="text-amber-700 dark:text-amber-400 font-medium">
@@ -407,6 +470,8 @@ export function TripFormPricesTab({ form, setForm, newFixed, setNewFixed, newVar
         <h3 className="font-semibold">Resumo Financeiro</h3>
         <div className="grid grid-cols-2 gap-3 text-sm">
           {[
+            { label: "Vagas Disponíveis (capacidade total)", value: `${cap} vagas`, muted: false },
+            ...(freeCount > 0 ? [{ label: `Gratuidades (${freeCount})`, value: `${paidCap} vagas pagantes`, muted: false }] : []),
             { label: "Total Custos Fixos", value: formatCurrency(totalFixed), muted: false },
             { label: `Total Custos Variáveis (${cap} pax)`, value: formatCurrency(totalVariable), muted: false },
             { label: "Custo Operacional Total", value: formatCurrency(totalOperational), muted: false },

@@ -183,6 +183,13 @@
       "when": 1778800000000,
       "tag": "0025_add_email_logs_referral_id",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1747000000000,
+      "tag": "0026_add_free_passengers",
+      "breakpoints": true
     }
   ]
 }
