@@ -117,6 +117,7 @@ export type PublicSeatEntry = {
 export type LayoutSeatMap = {
   tripId: string;
   layout: string;
+  numberingType?: string;
   floors: number;
   totalSeats: number;
   cols: number;

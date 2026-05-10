@@ -24,6 +24,7 @@ export function PublicLayoutSeatPicker({
   selected,
   onToggle,
   pricePerPerson,
+  numberingType,
 }: {
   seats: PublicSeatEntry[];
   totalSeats: number;
@@ -34,7 +35,9 @@ export function PublicLayoutSeatPicker({
   onToggle: (n: string) => void;
   accentColor?: string;
   pricePerPerson?: number;
+  numberingType?: string;
 }) {
+  const isBrazilian = numberingType?.includes("brazilian_standard") ?? false;
   const isMultiFloor = floors > 1;
   const [activeFloor, setActiveFloor] = useState<number>(isMultiFloor ? 2 : 1);
 
@@ -350,11 +353,9 @@ export function PublicLayoutSeatPicker({
               {selectedSeatObjects.map((seat, idx) => {
                 const isVip = seat.type === "vip";
                 const price = pricePerPerson != null ? pricePerPerson * (isVip ? 1.1 : 1) : null;
-                const fMaxCol = Math.max(...seats.map((s) => s.col), 4);
-                const fAisle = Math.ceil(fMaxCol / 2);
-                const isLeft = seat.col <= fAisle;
-                const isWindowSeat = isLeft ? seat.col === 1 : seat.col === fMaxCol;
-                const positionLabel = isWindowSeat ? "🪟 Janela" : "🚶 Corredor";
+                const seatNum = parseInt(seat.number, 10);
+                const isWindowSeat = isBrazilian ? (seatNum % 2 !== 0) : null;
+                const positionLabel = isWindowSeat === true ? "🪟 Janela" : isWindowSeat === false ? "🚶 Corredor" : null;
                 return (
                   <motion.div
                     key={seat.number}
@@ -375,7 +376,9 @@ export function PublicLayoutSeatPicker({
                               ? <><ArrowUp className="w-3 h-3" /> Piso Superior</>
                               : <><ArrowDown className="w-3 h-3" /> Piso Inferior</>
                             : null}
-                          <span className={`${floors > 1 ? "ml-1" : ""} font-medium ${isWindowSeat ? "text-sky-600" : "text-orange-500"}`}>{positionLabel}</span>
+                          {positionLabel && (
+                            <span className={`${floors > 1 ? "ml-1" : ""} font-medium ${isWindowSeat ? "text-sky-600" : "text-orange-500"}`}>{positionLabel}</span>
+                          )}
                           {isVip && <span className="ml-1 text-yellow-600 font-semibold">• VIP</span>}
                         </p>
                       </div>

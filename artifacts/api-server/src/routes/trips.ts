@@ -543,6 +543,15 @@ router.get("/trips/:id/seat-map", async (req, res, next: NextFunction): Promise<
       .limit(1);
     if (!trip) { next(new NotFoundError("Trip not found", "NOT_FOUND")); return; }
 
+    let numberingType = "sequential";
+    if (trip.layoutId) {
+      const [layout] = await db.select({ numberingType: vehicleLayoutsTable.numberingType })
+        .from(vehicleLayoutsTable)
+        .where(and(eq(vehicleLayoutsTable.id, trip.layoutId), eq(vehicleLayoutsTable.tenantId, me.tenantId)))
+        .limit(1);
+      if (layout) numberingType = layout.numberingType;
+    }
+
     const ACTIVE_STATUSES = [RESERVATION_STATUS.PENDING, RESERVATION_STATUS.CONFIRMED];
     const reservations = await db.select().from(reservationsTable)
       .where(and(
@@ -586,6 +595,7 @@ router.get("/trips/:id/seat-map", async (req, res, next: NextFunction): Promise<
     res.json({
       tripId: trip.id,
       layout: trip.seatLayout ?? "2x2",
+      numberingType,
       floors: maxFloor,
       totalSeats: trip.totalCapacity,
       cols: maxCol,

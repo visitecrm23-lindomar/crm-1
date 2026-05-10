@@ -56,6 +56,7 @@ export function StepSeatSelector({ state, store }: { state: WizardState; store: 
               onToggle={toggleLayoutSeat}
               accentColor={store?.accentColor || store?.primaryColor}
               pricePerPerson={unitPrice}
+              numberingType={liveLayoutSeatMap.numberingType}
             />
           ) : (
             <SeatGrid

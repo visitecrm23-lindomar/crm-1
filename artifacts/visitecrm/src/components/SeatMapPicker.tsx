@@ -329,11 +329,28 @@ export function SeatMapPicker({ tripId, selectedSeats, onSeatsChange, maxSeats, 
         ))}
       </div>
 
-      {selectedSeats.length > 0 && (
-        <div className="text-center text-sm font-medium text-primary">
-          {selectedSeats.length} assento{selectedSeats.length !== 1 ? "s" : ""} selecionado{selectedSeats.length !== 1 ? "s" : ""}: {selectedSeats.join(", ")}
-        </div>
-      )}
+      {selectedSeats.length > 0 && (() => {
+        const isBrazilian = (seatMap as { numberingType?: string } | undefined)?.numberingType?.includes("brazilian_standard") ?? false;
+        return (
+          <div className="space-y-1">
+            <p className="text-center text-xs text-muted-foreground font-medium">
+              {selectedSeats.length} assento{selectedSeats.length !== 1 ? "s" : ""} selecionado{selectedSeats.length !== 1 ? "s" : ""}
+            </p>
+            <div className="flex flex-wrap gap-1.5 justify-center">
+              {selectedSeats.map((num) => {
+                const seatNum = parseInt(num, 10);
+                const isWindow = isBrazilian ? seatNum % 2 !== 0 : null;
+                const posLabel = isWindow === true ? "🪟" : isWindow === false ? "🚶" : null;
+                return (
+                  <span key={num} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+                    {num}{posLabel && <span className="text-[10px]">{posLabel}</span>}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
