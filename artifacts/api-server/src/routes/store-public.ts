@@ -568,6 +568,9 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
         const totalAvailable = creditRows.reduce(
           (s, r) => s + (Number(r.bonusAmount) - Number(r.bonusCreditUsedAmount ?? 0)), 0,
         );
+        // Intentional clamp: over-requested credit is silently reduced to available balance.
+        // Frontend pre-validates using the balance from GET /client/me; over-requests only
+        // occur with stale clients or manual API calls — both are safely handled by capping.
         const requestedCredit = Math.min(data.referralCreditUsed, totalAvailable, afterDiscount);
         appliedCreditAmount = roundMoney(requestedCredit);
         // Build greedy spend plan — oldest rows first, partial consumption tracked per-row
@@ -616,7 +619,12 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     try {
       const result = await persistCheckoutOrder({
         store, data, orderId, orderNumber, orderPaymentToken,
-        subtotal, discountAmount: discounts.discountAmount + appliedCreditAmount, totalAmount,
+        subtotal,
+        // Combined discount stored on order record for total-amount accounting
+        discountAmount: discounts.discountAmount + appliedCreditAmount,
+        // Promo-only discount passed separately for reservation analytics accuracy
+        promoDiscountAmount: discounts.discountAmount,
+        totalAmount,
         couponId: discounts.couponId,
         appliedReferralCode: discounts.appliedReferralCode,
         appliedReferralReferrerId: discounts.appliedReferralReferrerId,

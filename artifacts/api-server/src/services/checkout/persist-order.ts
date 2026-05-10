@@ -64,7 +64,10 @@ export interface PersistOrderArgs {
   orderNumber: string;
   orderPaymentToken: string;
   subtotal: number;
+  /** Combined discount (promo coupon/referral code + referral-credit spend) — stored on order record */
   discountAmount: number;
+  /** Promo-only discount (coupon or referral-code) — used for reservation.discountReferralAmount analytics */
+  promoDiscountAmount: number;
   totalAmount: number;
   couponId?: string;
   appliedReferralCode?: string;
@@ -155,7 +158,7 @@ async function writeReservationsAndDeals(
   lockedTripTypes: Map<string, string>,
 ): Promise<void> {
   const {
-    store, data, orderNumber, discountAmount, appliedReferralCode,
+    store, data, orderNumber, promoDiscountAmount, appliedReferralCode,
     tripLinkedProducts, reservationCreatedById, vitrineStageId, tripNameMap,
     reservationExpiresAt, tenantResPrefix, resYearMonth,
   } = args;
@@ -188,7 +191,8 @@ async function writeReservationsAndDeals(
       storeOrderId: orderNumber,
       createdById: reservationCreatedById,
       discountReferralCode: appliedReferralCode ?? undefined,
-      discountReferralAmount: appliedReferralCode ? discountAmount.toFixed(2) : undefined,
+      // Use promo-only discount — credit spend is tracked separately on referral rows
+      discountReferralAmount: appliedReferralCode ? promoDiscountAmount.toFixed(2) : undefined,
       expiresAt: reservationExpiresAt,
       ...(reservationNotes ? { notes: reservationNotes } : {}),
     });
