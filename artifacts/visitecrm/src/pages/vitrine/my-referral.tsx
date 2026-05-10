@@ -158,6 +158,10 @@ export default function MyReferralPage({ slug, store }: Props) {
   const [qrLoading, setQrLoading] = useState(false);
 
   useEffect(() => {
+    if (store.referralsEnabled === false) {
+      navigate(`/loja/${slug}`);
+      return;
+    }
     if (!isLoaded) return;
     if (!isSignedIn) {
       navigate(`/loja/${slug}/entrar?redirect=/loja/${slug}/minhas-indicacoes`);
@@ -167,7 +171,7 @@ export default function MyReferralPage({ slug, store }: Props) {
     if (me && me.role !== ROLES.CLIENT) {
       navigate(`/loja/${slug}`);
     }
-  }, [isLoaded, isSignedIn, me?.role, meLoading, slug, navigate]);
+  }, [isLoaded, isSignedIn, me?.role, meLoading, slug, navigate, store.referralsEnabled]);
 
   useEffect(() => {
     if (!isSignedIn || meLoading || (me && me.role !== ROLES.CLIENT)) return;

@@ -307,7 +307,9 @@ export default function VitrineHome({
 
   return (
     <div>
-      <ReferralWelcomeBanner slug={slug} primaryColor={store.primaryColor ?? "#6366f1"} />
+      {store.referralsEnabled !== false && (
+        <ReferralWelcomeBanner slug={slug} primaryColor={store.primaryColor ?? "#6366f1"} />
+      )}
       {store.bannerUrl ? (
         <div className="relative h-80 md:h-[420px] overflow-hidden">
           <img

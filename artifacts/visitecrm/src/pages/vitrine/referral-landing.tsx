@@ -97,6 +97,23 @@ export default function ReferralLanding({ slug, store }: Props) {
     navigate(`/loja/${slug}/produtos`);
   }
 
+  if (store.referralsEnabled === false) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center text-center px-4 py-16">
+        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+          <Gift className="w-8 h-8 text-muted-foreground" />
+        </div>
+        <h1 className="text-2xl font-bold mb-2">Indicações indisponíveis</h1>
+        <p className="text-muted-foreground mb-6 max-w-sm">
+          O programa de indicações desta loja não está disponível no momento.
+        </p>
+        <Button onClick={goToStore} style={{ background: primaryColor }} className="text-white">
+          Ver a loja
+        </Button>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${primaryColor}15, ${secondaryColor}08)` }}>
