@@ -428,11 +428,11 @@ export function TripForm({ tripId }: { tripId?: string }) {
                       <div className="space-y-1 col-span-2">
                         <Label className="text-xs">Local de Embarque</Label>
                         {boardingLocationsCatalog.length > 0 ? (
-                          <div className="flex gap-2">
+                          <div className="space-y-2">
                             <Select
-                              value={bp.boardingLocationId ?? "__none__"}
+                              value={bp.boardingLocationId ?? ""}
                               onValueChange={val => {
-                                if (val === "__none__") {
+                                if (val === "__adhoc__") {
                                   updateBP({ boardingLocationId: undefined, name: "", address: "" });
                                   return;
                                 }
@@ -446,11 +446,11 @@ export function TripForm({ tripId }: { tripId?: string }) {
                                 });
                               }}
                             >
-                              <SelectTrigger className="flex-1">
+                              <SelectTrigger className="w-full">
                                 <SelectValue placeholder="Selecionar do catálogo..." />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="__none__">— Ponto ad-hoc (preencher manualmente) —</SelectItem>
+                                <SelectItem value="__adhoc__">— Ponto ad-hoc (preencher manualmente) —</SelectItem>
                                 {boardingLocationsCatalog.map(loc => (
                                   <SelectItem key={loc.id} value={loc.id}>
                                     {loc.name} — {loc.city}/{loc.state.toUpperCase()}
@@ -459,10 +459,18 @@ export function TripForm({ tripId }: { tripId?: string }) {
                               </SelectContent>
                             </Select>
                             {selectedLoc && (
-                              <Button size="icon" variant="ghost" className="h-9 w-9 shrink-0" title="Desvincular do catálogo"
-                                onClick={() => updateBP({ boardingLocationId: undefined })}>
-                                <Link2 className="w-3.5 h-3.5 text-teal-600" />
-                              </Button>
+                              <div className="flex items-center gap-2 px-2 py-1 bg-teal-50 border border-teal-200 rounded-md text-xs text-teal-700">
+                                <Link2 className="w-3 h-3 shrink-0" />
+                                <span className="flex-1 truncate font-medium">{selectedLoc.name} — {selectedLoc.city}/{selectedLoc.state.toUpperCase()}</span>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-5 px-1.5 text-xs text-teal-700 hover:text-destructive hover:bg-transparent"
+                                  onClick={() => updateBP({ boardingLocationId: undefined })}
+                                >
+                                  Limpar
+                                </Button>
+                              </div>
                             )}
                           </div>
                         ) : (
