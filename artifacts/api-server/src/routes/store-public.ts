@@ -20,6 +20,7 @@ import {
   referralSettingsTable,
   referralsTable,
   tenantsTable,
+  vehicleLayoutsTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, ilike, or, sql, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -377,6 +378,7 @@ router.get("/public/store/:slug/trips/:tripId/seat-map", async (req, res, next: 
       seatLayout: tripsTable.seatLayout,
       totalCapacity: tripsTable.totalCapacity,
       tenantId: tripsTable.tenantId,
+      layoutId: tripsTable.layoutId,
     }).from(tripsTable)
       .where(and(
         eq(tripsTable.id, req.params.tripId),
@@ -384,6 +386,15 @@ router.get("/public/store/:slug/trips/:tripId/seat-map", async (req, res, next: 
       )).limit(1);
 
     if (!trip) { next(new NotFoundError("Trip not found", "NOT_FOUND")); return; }
+
+    let numberingType = "sequential";
+    if (trip.layoutId) {
+      const [layout] = await db.select({ numberingType: vehicleLayoutsTable.numberingType })
+        .from(vehicleLayoutsTable)
+        .where(and(eq(vehicleLayoutsTable.id, trip.layoutId), eq(vehicleLayoutsTable.tenantId, store.tenantId)))
+        .limit(1);
+      if (layout) numberingType = layout.numberingType;
+    }
 
     const ACTIVE_STATUSES = [RESERVATION_STATUS.PENDING, RESERVATION_STATUS.CONFIRMED];
     const reservations = await db.select({ seats: reservationsTable.seats, status: reservationsTable.status })
@@ -416,6 +427,7 @@ router.get("/public/store/:slug/trips/:tripId/seat-map", async (req, res, next: 
     res.json({
       tripId: trip.id,
       layout: trip.seatLayout ?? "2x2",
+      numberingType,
       floors: maxFloor,
       totalSeats: trip.totalCapacity,
       cols: maxCol,
