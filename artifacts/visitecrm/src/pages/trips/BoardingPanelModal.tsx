@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import {
   useGetTripBoardingPanel, useListReservations, useCheckInPassenger, useUndoCheckInPassenger,
@@ -22,6 +22,13 @@ export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId
   const [search, setSearch] = useState("");
   const [client360Id, setClient360Id] = useState<string | null>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (open) {
+      setSearch("");
+      setBoardingFilter("__all__");
+    }
+  }, [tripId, open]);
 
   const { data: panel, isLoading, refetch } = useGetTripBoardingPanel(tripId, {
     query: { queryKey: ["boarding-panel", tripId], enabled: open && !!tripId },
@@ -96,23 +103,52 @@ export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId
     }
   };
 
+  const [boardingFilter, setBoardingFilter] = useState<string>("__all__");
+
   const boardingPoints: BoardingPoint[] = panel?.boardingPoints ?? [];
   const passengers = panel?.passengers ?? [];
   const freePassengers = panel?.freePassengers ?? [];
-  const filtered = search
-    ? passengers.filter(p =>
-        p.name.toLowerCase().includes(search.toLowerCase()) ||
-        p.seatNumber?.toLowerCase().includes(search.toLowerCase()) ||
-        (p.reservationNumber ?? p.voucherCode).toLowerCase().includes(search.toLowerCase()) ||
-        p.clientName.toLowerCase().includes(search.toLowerCase())
-      )
-    : passengers;
-  const filteredFree = search
-    ? freePassengers.filter(fp =>
-        fp.name.toLowerCase().includes(search.toLowerCase()) ||
-        (fp.seatNumber ?? "").toLowerCase().includes(search.toLowerCase())
-      )
-    : freePassengers;
+
+  const bpMap = useMemo(() => new Map(boardingPoints.map(bp => [bp.id, bp])), [boardingPoints]);
+
+  const filtered = useMemo(() => {
+    let list = passengers;
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        p.seatNumber?.toLowerCase().includes(q) ||
+        (p.reservationNumber ?? p.voucherCode).toLowerCase().includes(q) ||
+        p.clientName.toLowerCase().includes(q)
+      );
+    }
+    if (boardingFilter !== "__all__") {
+      list = list.filter(p =>
+        boardingFilter === "__none__"
+          ? !p.boardingLocationId
+          : p.boardingLocationId === boardingFilter
+      );
+    }
+    return list;
+  }, [passengers, search, boardingFilter]);
+
+  const filteredFree = useMemo(() => {
+    if (!search) return freePassengers;
+    const q = search.toLowerCase();
+    return freePassengers.filter(fp =>
+      fp.name.toLowerCase().includes(q) ||
+      (fp.seatNumber ?? "").toLowerCase().includes(q)
+    );
+  }, [freePassengers, search]);
+
+  const boardingCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of passengers) {
+      const key = p.boardingLocationId ?? "__none__";
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return map;
+  }, [passengers]);
 
   const pct = panel && panel.totalPassengers > 0
     ? Math.round((panel.checkedIn / panel.totalPassengers) * 100)
@@ -180,14 +216,35 @@ export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId
               </div>
             </div>
 
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por nome, assento ou nº de reserva..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="pl-9"
-              />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nome, assento ou nº de reserva..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              {boardingPoints.length > 0 && (
+                <Select value={boardingFilter} onValueChange={setBoardingFilter}>
+                  <SelectTrigger className="w-48 h-10 text-xs shrink-0">
+                    <MapPin className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                    <SelectValue placeholder="Embarque..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">Todos os pontos</SelectItem>
+                    <SelectItem value="__none__">
+                      — Não definido — {boardingCounts.get("__none__") ? `(${boardingCounts.get("__none__")})` : ""}
+                    </SelectItem>
+                    {boardingPoints.map(bp => (
+                      <SelectItem key={bp.id} value={bp.id}>
+                        {bp.name}{bp.time ? ` (${bp.time})` : ""}{boardingCounts.get(bp.id) ? ` · ${boardingCounts.get(bp.id)}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div className="overflow-y-auto flex-1 space-y-1.5 pr-1">
@@ -228,6 +285,13 @@ export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId
                           <span>{p.clientName}</span>
                           {p.cpf && <span>CPF: {p.cpf}</span>}
                           <span className="font-mono opacity-70">{p.reservationNumber ?? p.voucherCode}</span>
+                          {p.boardingLocationId && bpMap.get(p.boardingLocationId) && (
+                            <span className="inline-flex items-center gap-1 text-blue-700 bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5 font-medium">
+                              <MapPin className="w-3 h-3" />
+                              {bpMap.get(p.boardingLocationId)!.name}
+                              {bpMap.get(p.boardingLocationId)!.time ? ` · ${bpMap.get(p.boardingLocationId)!.time}` : ""}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="shrink-0 ml-2 flex items-center gap-1">
