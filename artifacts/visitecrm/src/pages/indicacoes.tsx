@@ -1846,6 +1846,12 @@ export default function Indicacoes() {
               <p className="text-xs text-muted-foreground">
                 Use <code className="bg-muted px-1 rounded">{"{nome}"}</code> para incluir o nome do indicador na mensagem. Ex.: <em>Olá! {"{nome}"} indicou você — use o link abaixo para ganhar desconto.</em>
               </p>
+              {(localSettings.shareMessage as string)?.trim() && (
+                <p className="text-xs text-muted-foreground bg-muted/50 border rounded px-2 py-1.5">
+                  <span className="font-medium text-muted-foreground">Pré-visualização:</span>{" "}
+                  {(localSettings.shareMessage as string).replace(/\{nome\}/g, "João")}
+                </p>
+              )}
             </div>
 
             <div className="space-y-3 border rounded-lg p-3 bg-amber-50/50">
