@@ -593,12 +593,12 @@ export default function MyReferralPage({ slug, store }: Props) {
               <div className="flex gap-1 mb-4 p-1 bg-muted/50 rounded-xl">
                 {(
                   [
-                    { key: "all",       label: "Todas" },
-                    { key: "pending",   label: "Pendentes" },
-                    { key: "confirmed", label: "Confirmadas" },
-                    { key: "expired",   label: "Expiradas" },
+                    { key: "all",       label: "Todas",       count: referrals.length },
+                    { key: "pending",   label: "Pendentes",   count: referrals.filter((r) => r.status === "pending").length },
+                    { key: "confirmed", label: "Confirmadas", count: referrals.filter((r) => r.status === "completed" || r.status === "converted").length },
+                    { key: "expired",   label: "Expiradas",   count: referrals.filter((r) => r.status === "expired").length },
                   ] as const
-                ).map(({ key, label }) => {
+                ).map(({ key, label, count }) => {
                   const isActive = statusFilter === key;
                   return (
                     <button
@@ -614,7 +614,7 @@ export default function MyReferralPage({ slug, store }: Props) {
                         const qs = params.toString();
                         navigate(`/loja/${slug}/minhas-indicacoes${qs ? `?${qs}` : ""}`, { replace: true });
                       }}
-                      className="flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all"
+                      className="flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5"
                       style={
                         isActive
                           ? { background: primaryColor, color: "#fff" }
@@ -622,6 +622,16 @@ export default function MyReferralPage({ slug, store }: Props) {
                       }
                     >
                       {label}
+                      <span
+                        className="inline-flex items-center justify-center rounded-full text-[10px] font-bold leading-none px-1.5 py-0.5 min-w-[18px]"
+                        style={
+                          isActive
+                            ? { background: "rgba(255,255,255,0.25)", color: "#fff" }
+                            : { background: "var(--muted)", color: "var(--muted-foreground)" }
+                        }
+                      >
+                        {count}
+                      </span>
                     </button>
                   );
                 })}
