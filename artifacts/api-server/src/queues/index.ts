@@ -1,6 +1,6 @@
 import { Queue } from "bullmq";
 import { getRedisConnection } from "../lib/redis";
-import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, BirthdayEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps } from "@workspace/email";
+import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, BirthdayEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps, ReferralWelcomeEmailProps } from "@workspace/email";
 
 export interface ReservationEmailJobData extends ReservationConfirmationEmailProps {
   emailLogId: string;
@@ -50,6 +50,11 @@ export interface ReferralExpiringSoonEmailJobData extends ReferralExpiringSoonEm
 }
 
 export interface ReferralBonusReleasedEmailJobData extends ReferralBonusReleasedEmailProps {
+  emailLogId: string;
+  tenantId: string;
+}
+
+export interface ReferralWelcomeEmailJobData extends ReferralWelcomeEmailProps {
   emailLogId: string;
   tenantId: string;
 }
@@ -119,7 +124,7 @@ const QUEUES = {
   WHATSAPP: "whatsapp-notifications",
 } as const;
 
-export type ReferralEmailJobData = ReferralBonusPaidEmailJobData | ReferralConvertedEmailJobData | ReferralExpiredEmailJobData | ReferralExpiringSoonEmailJobData | ReferralBonusReleasedEmailJobData;
+export type ReferralEmailJobData = ReferralBonusPaidEmailJobData | ReferralConvertedEmailJobData | ReferralExpiredEmailJobData | ReferralExpiringSoonEmailJobData | ReferralBonusReleasedEmailJobData | ReferralWelcomeEmailJobData;
 
 let _emailQueue: Queue<ReservationEmailJobData> | null = null;
 let _cancellationEmailQueue: Queue<CancellationEmailJobData> | null = null;

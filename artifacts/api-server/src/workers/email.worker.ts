@@ -1,13 +1,13 @@
 import { Worker } from "bullmq";
 import { db, emailLogsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail } from "@workspace/email";
+import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail } from "@workspace/email";
 import { getRedisConnection, isTransientRedisError, recordTransientRedisError, resetTransientRedisErrors } from "../lib/redis";
 import { logger } from "../lib/logger";
-import type { ReservationEmailJobData, CancellationEmailJobData, BirthdayEmailJobData, NewBookingNotificationEmailJobData, ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData, ReferralBonusReleasedEmailJobData } from "../queues/index";
+import type { ReservationEmailJobData, CancellationEmailJobData, BirthdayEmailJobData, NewBookingNotificationEmailJobData, ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData, ReferralBonusReleasedEmailJobData, ReferralWelcomeEmailJobData } from "../queues/index";
 import type { SendEmailResult } from "@workspace/email";
 
-type EmailJobData = ReservationEmailJobData | CancellationEmailJobData | BirthdayEmailJobData | NewBookingNotificationEmailJobData | ReferralBonusPaidEmailJobData | ReferralConvertedEmailJobData | ReferralExpiredEmailJobData | ReferralExpiringSoonEmailJobData | ReferralBonusReleasedEmailJobData;
+type EmailJobData = ReservationEmailJobData | CancellationEmailJobData | BirthdayEmailJobData | NewBookingNotificationEmailJobData | ReferralBonusPaidEmailJobData | ReferralConvertedEmailJobData | ReferralExpiredEmailJobData | ReferralExpiringSoonEmailJobData | ReferralBonusReleasedEmailJobData | ReferralWelcomeEmailJobData;
 
 let _worker: Worker<EmailJobData> | null = null;
 
@@ -116,6 +116,18 @@ export function startEmailWorker(): Worker<EmailJobData> | null {
             .set({ status: "sent", messageId: result.messageId ?? null })
             .where(eq(emailLogsTable.id, emailLogId));
         }
+      } else if (job.name === "referral-welcome") {
+        const { emailLogId: _e, tenantId: _t, ...welcomeProps } = job.data as ReferralWelcomeEmailJobData;
+        result = await sendReferralWelcomeEmail(welcomeProps);
+        const { emailLogId } = job.data as ReferralWelcomeEmailJobData;
+        await db
+          .update(emailLogsTable)
+          .set({
+            status: result.success ? "sent" : "failed",
+            messageId: result.messageId ?? null,
+            errorMessage: result.error ?? null,
+          })
+          .where(eq(emailLogsTable.id, emailLogId));
       } else {
         const { emailLogId: _e, tenantId: _t, reservationId: _r, ...emailProps } =
           job.data as ReservationEmailJobData;

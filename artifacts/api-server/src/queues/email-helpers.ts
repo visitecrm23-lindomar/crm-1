@@ -1,5 +1,5 @@
 import { db, emailLogsTable, reservationsTable, tripsTable, clientsTable, referralSettingsTable, tenantsTable, storesTable, usersTable } from "@workspace/db";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, isNull } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { getEmailQueue, getCancellationEmailQueue, getNewBookingNotificationEmailQueue, getReferralEmailQueue } from "./index";
 import type { ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData, ReferralBonusReleasedEmailJobData } from "./index";
@@ -1018,37 +1018,51 @@ export async function dispatchReferralWelcomeEmail(opts: {
 }): Promise<void> {
   const { clientId, referralCode, tenantId, tenantSlug } = opts;
 
-  const [client] = await db
-    .select({ name: clientsTable.name, email: clientsTable.email, referralWelcomeEmailSentAt: clientsTable.referralWelcomeEmailSentAt })
-    .from(clientsTable)
-    .where(and(eq(clientsTable.id, clientId), eq(clientsTable.tenantId, tenantId)))
-    .limit(1);
+  // Atomic idempotency claim: stamp the column in a single UPDATE that only
+  // matches rows where it is still NULL. If no row is returned, another
+  // concurrent request already claimed it — bail out without sending.
+  const claimed = await db
+    .update(clientsTable)
+    .set({ referralWelcomeEmailSentAt: new Date() })
+    .where(
+      and(
+        eq(clientsTable.id, clientId),
+        eq(clientsTable.tenantId, tenantId),
+        isNull(clientsTable.referralWelcomeEmailSentAt),
+      ),
+    )
+    .returning({ id: clientsTable.id, name: clientsTable.name, email: clientsTable.email });
 
-  if (!client?.email) {
-    logger.warn({ clientId, tenantId }, "[email-queue] Referral welcome: client has no email — skipping");
-    return;
-  }
-
-  if (client.referralWelcomeEmailSentAt) {
+  if (claimed.length === 0) {
     logger.info({ clientId, tenantId }, "[email-queue] Referral welcome: already sent — skipping (idempotency)");
     return;
   }
 
-  const [tenant] = await db
-    .select({ name: tenantsTable.name, logoUrl: tenantsTable.logoUrl, whatsapp: tenantsTable.whatsapp })
-    .from(tenantsTable)
-    .where(eq(tenantsTable.id, tenantId))
-    .limit(1);
+  const client = claimed[0];
 
-  const [settings] = await db
-    .select({
-      bonusValue: referralSettingsTable.bonusValue,
-      discountValue: referralSettingsTable.discountValue,
-      shareMessage: referralSettingsTable.shareMessage,
-    })
-    .from(referralSettingsTable)
-    .where(eq(referralSettingsTable.tenantId, tenantId))
-    .limit(1);
+  if (!client.email) {
+    logger.warn({ clientId, tenantId }, "[email-queue] Referral welcome: client has no email — skipping");
+    return;
+  }
+
+  const [tenant, settings] = await Promise.all([
+    db
+      .select({ name: tenantsTable.name, logoUrl: tenantsTable.logoUrl })
+      .from(tenantsTable)
+      .where(eq(tenantsTable.id, tenantId))
+      .limit(1)
+      .then((rows) => rows[0]),
+    db
+      .select({
+        bonusValue: referralSettingsTable.bonusValue,
+        discountValue: referralSettingsTable.discountValue,
+        shareMessage: referralSettingsTable.shareMessage,
+      })
+      .from(referralSettingsTable)
+      .where(eq(referralSettingsTable.tenantId, tenantId))
+      .limit(1)
+      .then((rows) => rows[0]),
+  ]);
 
   const agencyName = tenant?.name ?? "Agência";
   const bonusValue = settings ? Number(settings.bonusValue) : 0;
@@ -1077,12 +1091,7 @@ export async function dispatchReferralWelcomeEmail(opts: {
     tenantId,
   );
 
-  await db
-    .update(clientsTable)
-    .set({ referralWelcomeEmailSentAt: new Date() })
-    .where(and(eq(clientsTable.id, clientId), eq(clientsTable.tenantId, tenantId)));
-
-  logger.info({ clientId, referralCode, tenantId }, "[email-queue] Referral welcome email dispatched and stamp set");
+  logger.info({ clientId, referralCode, tenantId }, "[email-queue] Referral welcome email dispatched");
 }
 
 // ── Resend a failed email log ──────────────────────────────────────────────────
