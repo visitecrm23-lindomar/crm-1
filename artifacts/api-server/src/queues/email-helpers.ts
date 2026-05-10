@@ -7,6 +7,7 @@ import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sen
 import { ROLES } from "@workspace/permissions";
 import { logger } from "../lib/logger";
 import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps, ReferralWelcomeEmailProps } from "@workspace/email";
+import { insertClientNotification } from "../lib/client-notifications";
 
 interface EnqueueEmailOpts {
   tenantId: string;
@@ -699,17 +700,27 @@ export async function dispatchReferralConvertedEmail(
     .where(eq(referralSettingsTable.tenantId, tenantId))
     .limit(1);
 
+  const bonusAmount = settings ? Number(settings.bonusValue) : 0;
+
   await enqueueReferralConvertedEmail(
     {
       referrerName: referrer.name ?? referrer.email,
       referrerEmail: referrer.email,
       referredName,
-      bonusAmount: settings ? Number(settings.bonusValue) : 0,
+      bonusAmount,
       agencyName: tenant?.name ?? "Agência",
       agencyLogo: tenant?.logoUrl ?? null,
     },
     tenantId,
   );
+
+  insertClientNotification(referrerId, tenantId, "referral_converted", {
+    referredName,
+    bonusAmount,
+    agencyName: tenant?.name ?? "Agência",
+  }).catch((err: unknown) => {
+    logger.warn({ referrerId, tenantId, err }, "[client-notifications] Failed to insert referral_converted notification");
+  });
 }
 
 // ── High-level: look up referrer data and dispatch expired email ───────────────
@@ -956,6 +967,14 @@ export async function dispatchReferralBonusReleasedEmail(
     tenantId,
     referralId,
   );
+
+  insertClientNotification(referrerId, tenantId, "referral_bonus_released", {
+    bonusAmount,
+    agencyName: tenant?.name ?? "Agência",
+  }).catch((err: unknown) => {
+    logger.warn({ referrerId, tenantId, referralId, err }, "[client-notifications] Failed to insert referral_bonus_released notification");
+  });
+
   return true;
 }
 

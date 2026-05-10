@@ -29,3 +29,4 @@ export * from "./vehicle-layouts";
 export * from "./sales-goals";
 export * from "./calendar";
 export * from "./trip-costs";
+export * from "./notifications";

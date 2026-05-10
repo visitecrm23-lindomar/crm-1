@@ -232,6 +232,13 @@
       "when": 1747600000000,
       "tag": "0032_add_referral_credit_used_amount",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1747700000000,
+      "tag": "0033_add_client_notifications",
+      "breakpoints": true
     }
   ]
 }

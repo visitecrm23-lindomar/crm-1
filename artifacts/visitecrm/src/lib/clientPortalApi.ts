@@ -120,6 +120,29 @@ async function apiReq<T>(method: string, path: string, body?: unknown): Promise<
   return res.json() as Promise<T>;
 }
 
+export type ClientNotificationType =
+  | "referral_converted"
+  | "referral_bonus_released"
+  | "referral_bonus_paid";
+
+export interface ClientNotification {
+  id: string;
+  type: ClientNotificationType;
+  payload: {
+    referredName?: string;
+    referralCode?: string;
+    bonusAmount?: number;
+    agencyName?: string;
+  };
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface ClientNotificationsResponse {
+  data: ClientNotification[];
+  unreadCount: number;
+}
+
 export const clientPortalApi = {
   getProfile: () => apiReq<ClientPortalProfile>("GET", "/client/me"),
   updateProfile: (data: {
@@ -130,4 +153,7 @@ export const clientPortalApi = {
   }) => apiReq<ClientPortalProfile["client"]>("PATCH", "/client/me", data),
   getMyReferrals: () => apiReq<{ data: ClientReferral[] }>("GET", "/client/me/referrals"),
   deleteMyAccount: () => apiReq<void>("DELETE", "/users/me"),
+  getNotifications: () => apiReq<ClientNotificationsResponse>("GET", "/client/notifications"),
+  markAllNotificationsRead: () => apiReq<void>("POST", "/client/notifications/read-all"),
+  getNotificationStreamUrl: () => `${BASE}/api/client/notifications/stream`,
 };

@@ -23,6 +23,8 @@ import { getPdfQueue } from "../queues/index";
 import { generateId, generateReferralCode } from "../lib/id";
 import { generateAndAssignReferralCode } from "../lib/referral-code";
 import { dispatchReferralWelcomeEmail } from "../queues/email-helpers";
+import { addClientSseConnection, removeClientSseConnection } from "../lib/client-sse";
+import { getRecentNotifications, getUnreadCount, markAllRead } from "../lib/client-notifications";
 
 const router = Router();
 
@@ -716,6 +718,132 @@ router.get("/client/me/referrals", async (req, res, next: NextFunction): Promise
         nextTierMin: nextTier?.minReferrals ?? null,
         nextTierLabel: nextTier?.label ?? null,
       },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── GET /client/notifications ─────────────────────────────────────────────────
+
+router.get("/client/notifications", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    if (me.role !== ROLES.CLIENT) {
+      next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE"));
+      return;
+    }
+
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) {
+      res.json({ data: [], unreadCount: 0 });
+      return;
+    }
+
+    const [notifications, unreadCount] = await Promise.all([
+      getRecentNotifications(client.id, 20),
+      getUnreadCount(client.id),
+    ]);
+
+    res.json({
+      data: notifications.map((n) => ({
+        id: n.id,
+        type: n.type,
+        payload: n.payload ?? {},
+        readAt: n.readAt ? (n.readAt as unknown as Date).toISOString() : null,
+        createdAt: (n.createdAt as unknown as Date).toISOString(),
+      })),
+      unreadCount,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── POST /client/notifications/read-all ──────────────────────────────────────
+
+router.post("/client/notifications/read-all", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    if (me.role !== ROLES.CLIENT) {
+      next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE"));
+      return;
+    }
+
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) {
+      res.status(204).end();
+      return;
+    }
+
+    await markAllRead(client.id);
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── GET /client/notifications/stream (SSE) ────────────────────────────────────
+
+router.get("/client/notifications/stream", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    if (me.role !== ROLES.CLIENT) {
+      next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE"));
+      return;
+    }
+
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) {
+      res.status(404).json({ error: "Client record not found" });
+      return;
+    }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    addClientSseConnection(client.id, res);
+
+    const [notifications, unreadCount] = await Promise.all([
+      getRecentNotifications(client.id, 20),
+      getUnreadCount(client.id),
+    ]);
+
+    const initPayload = JSON.stringify({
+      type: "init",
+      data: {
+        notifications: notifications.map((n) => ({
+          id: n.id,
+          type: n.type,
+          payload: n.payload ?? {},
+          readAt: n.readAt ? (n.readAt as unknown as Date).toISOString() : null,
+          createdAt: (n.createdAt as unknown as Date).toISOString(),
+        })),
+        unreadCount,
+      },
+    });
+    res.write(`data: ${initPayload}\n\n`);
+
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(": heartbeat\n\n");
+      } catch {
+        clearInterval(heartbeat);
+      }
+    }, 30_000);
+
+    req.on("close", () => {
+      clearInterval(heartbeat);
+      removeClientSseConnection(client.id, res);
     });
   } catch (err) {
     next(err);

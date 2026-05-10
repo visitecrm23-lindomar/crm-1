@@ -19,6 +19,7 @@ import {
   LogOut,
   Share2,
 } from "lucide-react";
+import { NotificationBell } from "@/components/vitrine/NotificationBell";
 
 export default function VitrineLayout({
   children,
@@ -183,6 +184,10 @@ export default function VitrineLayout({
             >
               <Search className="w-4 h-4" />
             </button>
+
+            {isCliente && (
+              <NotificationBell primaryColor={store.primaryColor} />
+            )}
 
             <button
               onClick={() => setMobileMenuOpen((v) => !v)}
