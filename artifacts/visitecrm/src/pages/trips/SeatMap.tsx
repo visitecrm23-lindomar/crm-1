@@ -86,6 +86,13 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
     };
   }, [seats, optimisticSeats]);
 
+  const freePassengerNames = useMemo(() => {
+    return seats
+      .filter(s => (optimisticSeats[s.number] ?? s.status) === "free")
+      .map(s => ({ number: s.number, name: (s as Seat & { occupantName?: string | null }).occupantName ?? null }))
+      .filter(fp => fp.name);
+  }, [seats, optimisticSeats]);
+
   const getEffectiveStatus = (seat: Seat) => optimisticSeats[seat.number] ?? seat.status;
 
   const handleSeatClick = (seat: Seat) => {
@@ -279,7 +286,6 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
               { label: "Disponíveis", count: seatCounts.available, color: "text-green-600" },
               { label: "Reservados", count: seatCounts.reserved, color: "text-orange-600" },
               { label: "Confirmados", count: seatCounts.confirmed, color: "text-primary" },
-              ...(seatCounts.free > 0 ? [{ label: "Gratuidades", count: seatCounts.free, color: "text-violet-600" }] : []),
               { label: "Bloqueados", count: seatCounts.blocked, color: "text-gray-600" },
               { label: "Total", count: seats.length, color: "text-foreground" },
             ].map(s => (
@@ -288,6 +294,26 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
                 <span className={`font-bold ${s.color}`}>{s.count}</span>
               </div>
             ))}
+            {seatCounts.free > 0 && (
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Gratuidades</span>
+                  <span className="font-bold text-violet-600">{seatCounts.free}</span>
+                </div>
+                {freePassengerNames.length > 0 && (
+                  <div className="pl-2 space-y-0.5">
+                    {freePassengerNames.map(fp => (
+                      <div key={fp.number} className="flex items-center gap-1.5 text-xs text-violet-700">
+                        <span className="w-1.5 h-1.5 rounded-full bg-violet-400 shrink-0" />
+                        <span className="truncate" title={`${fp.name} — Assento ${fp.number}`}>
+                          {fp.name} <span className="text-violet-400">({fp.number})</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="pt-2 border-t">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Ocupação</span>

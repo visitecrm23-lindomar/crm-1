@@ -70,6 +70,10 @@ function getCellTitle(seat: SeatWithType, selected: boolean): string {
   };
   if (seat.type && typeLabel[seat.type]) return typeLabel[seat.type];
   if (selected) return `Assento ${seat.number} — Selecionado`;
+  if (seat.status === "free") {
+    const name = (seat as SeatWithType & { occupantName?: string | null }).occupantName;
+    return `Assento ${seat.number} — Gratuidade${name ? `: ${name}` : ""}`;
+  }
   return `Assento ${seat.number} — ${seat.status}`;
 }
 
