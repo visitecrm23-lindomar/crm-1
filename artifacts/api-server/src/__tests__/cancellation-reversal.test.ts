@@ -445,6 +445,55 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
   });
 
   // -------------------------------------------------------------------------
+  // Edge-case: coupon usageCount is already 0 when the decrement fires.
+  // The SQL GREATEST(0, usage_count - 1) guard prevents it from going negative,
+  // but the UPDATE must still be issued — this test confirms no DB constraint
+  // error surfaces and the response is 200.
+  it("still issues coupon usageCount update (GREATEST guard) when usageCount is already 0", async () => {
+    const app = buildReservationsApp();
+    const existing = makeReservation({
+      discountCouponCode: "PROMO10",
+      discountCouponAmount: "50",
+      clientId: null,
+    });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] Reversal 1 — store lookup (get store.id for this tenant)
+    //   [1] Reversal 1 — coupon lookup → usageCount is already 0 (already decremented)
+    //   [2] re-fetch updated reservation
+    //
+    // The GREATEST guard in the SQL expression ensures the update still fires and
+    // the floor is clamped to 0 — no constraint violation, no application error.
+    const tx = buildTxMock([
+      [{ id: "store-001" }],
+      [{ id: "coupon-001", usageCount: 0 }],
+      [cancelled],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+    // trips (seats) + storeCoupons (usageCount) + commissions (cancel) + reservations (status) = 4
+    expect(tx.update).toHaveBeenCalledTimes(4);
+
+    // The coupon update must have been captured with the usageCount field present
+    const couponUpdate = capturedUpdates.find(
+      (u) => "usageCount" in u.set,
+    );
+    expect(couponUpdate).toBeDefined();
+  });
+
+  // -------------------------------------------------------------------------
   it("restores loyalty points and records a refund transaction when loyalty discount was used", async () => {
     const app = buildReservationsApp();
     // clientId present so reversal 4 runs (payments query → empty)
