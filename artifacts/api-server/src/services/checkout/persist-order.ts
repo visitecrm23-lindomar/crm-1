@@ -279,26 +279,34 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
     if (args.creditSpend && args.creditSpend.length > 0) {
       // Lock rows for update to prevent concurrent double-spend
       const ids = args.creditSpend.map((r) => r.id);
-      await tx.execute(
-        sql`SELECT id FROM referrals WHERE id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) FOR UPDATE`,
+      // Re-read current balances under row lock to catch concurrent modifications
+      const lockedRows = await tx.execute(
+        sql`SELECT id, bonus_amount, COALESCE(bonus_credit_used_amount, 0) AS already_used FROM referrals WHERE id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) FOR UPDATE`,
       );
+      const lockedMap = new Map(
+        (lockedRows.rows as Array<{ id: string; bonus_amount: string; already_used: string }>).map(
+          (r) => [r.id, { bonusAmount: Number(r.bonus_amount), alreadyUsed: Number(r.already_used) }],
+        ),
+      );
+      // Validate that each planned spend is still feasible under lock
+      for (const { id, consumedAmount } of args.creditSpend) {
+        const locked = lockedMap.get(id);
+        if (!locked) throw new Error("insufficient_credit");
+        const stillAvailable = locked.bonusAmount - locked.alreadyUsed;
+        if (stillAvailable < consumedAmount - 0.005) throw new Error("insufficient_credit");
+      }
       const now = new Date();
       for (const { id, consumedAmount } of args.creditSpend) {
+        // Accumulate spend (not overwrite) to support partial and sequential consumption
         await tx
           .update(referralsTable)
           .set({
             bonusCreditUsedAt: now,
             bonusCreditOrderId: args.orderId,
-            bonusCreditUsedAmount: consumedAmount.toFixed(2),
+            bonusCreditUsedAmount: sql`COALESCE(${referralsTable.bonusCreditUsedAmount}, 0) + ${consumedAmount.toFixed(2)}`,
             updatedAt: now,
           })
-          .where(
-            and(
-              eq(referralsTable.id, id),
-              // Guard: only update rows that haven't been fully consumed yet
-              sql`COALESCE(${referralsTable.bonusCreditUsedAmount}, 0) < ${referralsTable.bonusAmount}`,
-            ),
-          );
+          .where(eq(referralsTable.id, id));
       }
     }
   });

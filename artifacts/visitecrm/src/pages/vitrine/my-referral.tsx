@@ -118,7 +118,10 @@ function ReferralHistoryRow({ r, primaryColor }: { r: ClientReferral; primaryCol
               : "text-orange-500"
           }`}>
             {r.bonusCreditUsedAt
-              ? `✓ Crédito de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} usado no checkout`
+              ? (() => {
+                  const usedAmt = r.bonusCreditUsedAmount ? parseFloat(r.bonusCreditUsedAmount) : bonusValue;
+                  return `✓ Crédito de ${usedAmt.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} usado no checkout`;
+                })()
               : r.bonusPaid
               ? `✓ Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} pago`
               : `⏳ Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} aguardando pagamento`}
@@ -394,9 +397,18 @@ export default function MyReferralPage({ slug, store }: Props) {
     (acc, r) => {
       if (r.status === "completed" || r.status === "converted") {
         const amount = parseFloat(r.bonusAmount) || 0;
-        if (r.bonusCreditUsedAt) acc.creditUsedBonus += amount;
-        else if (r.bonusPaid) acc.paidBonus += amount;
-        else acc.pendingBonus += amount;
+        if (r.bonusCreditUsedAt) {
+          // Use actual amount consumed (supports partial rows)
+          const usedAmt = r.bonusCreditUsedAmount ? parseFloat(r.bonusCreditUsedAmount) : amount;
+          acc.creditUsedBonus += usedAmt;
+          // If partially consumed, remaining portion goes to pending
+          const remaining = amount - usedAmt;
+          if (remaining > 0.005 && !r.bonusPaid) acc.pendingBonus += remaining;
+        } else if (r.bonusPaid) {
+          acc.paidBonus += amount;
+        } else {
+          acc.pendingBonus += amount;
+        }
       }
       return acc;
     },

@@ -6,6 +6,7 @@ import { broadcastSeatUpdate } from "../lib/realtime";
 import { RESERVATION_STATUS } from "@workspace/permissions";
 import { AppError, NotFoundError, ValidationError, ConflictError } from "../lib/errors";
 import { normalizeOrderEmail, roundMoney } from "../lib/pricing";
+import { getTenantUser } from "../lib/tenant";
 import {
   storesTable,
   storeProductsTable,
@@ -525,9 +526,15 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     let appliedCreditAmount = 0;
     let creditSpend: Array<{ id: string; consumedAmount: number }> = [];
     if (data.referralCreditUsed && data.referralCreditUsed > 0) {
-      const { userId: clerkUserId } = getAuth(req);
-      if (!clerkUserId) {
+      // Must have a valid Clerk session AND that user's email must match the order's customerEmail
+      const authedUser = await getTenantUser(req);
+      if (!authedUser) {
         next(new ValidationError("Autenticação necessária para usar créditos de indicação", "UNAUTHENTICATED_CREDIT"));
+        return;
+      }
+      // Bind authenticated identity to the order email — prevent IDOR spend
+      if (authedUser.email.toLowerCase() !== data.customerEmail.toLowerCase()) {
+        next(new ValidationError("E-mail da conta não corresponde ao e-mail do pedido", "CREDIT_EMAIL_MISMATCH"));
         return;
       }
       // Verify a client record exists for this email in this store's tenant
@@ -632,6 +639,9 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
         }
         if (txErr.message === "trip_not_found") {
           next(new ValidationError(`Viagem vinculada ao produto "${tagged.productName ?? ""}" não encontrada`, "TRIP_NOT_FOUND")); return;
+        }
+        if (txErr.message === "insufficient_credit") {
+          next(new ConflictError("Crédito de indicação insuficiente ou já utilizado. Tente novamente.", "INSUFFICIENT_CREDIT")); return;
         }
       }
       throw txErr;
