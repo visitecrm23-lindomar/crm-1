@@ -1014,7 +1014,11 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
         // --- Reversal 1: coupon usage_count ---
         // Two-step lookup mirrors creation: find exact coupon ID by code+store,
         // then decrement by ID — symmetric with creation's WHERE id = serverCouponId.
-        if (existing.discountCouponCode) {
+        // Idempotency: if couponReversalAt is already set on the reservation, the
+        // decrement was already applied in a prior cancellation attempt (e.g. the
+        // reservation was reopened by an admin and is being cancelled again). Skip
+        // the decrement to prevent double-counting.
+        if (existing.discountCouponCode && !existing.couponReversalAt) {
           const [store] = await tx.select({ id: storesTable.id })
             .from(storesTable)
             .where(eq(storesTable.tenantId, me.tenantId))
@@ -1031,6 +1035,7 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
               await tx.update(storeCouponsTable)
                 .set({ usageCount: sql`GREATEST(0, usage_count - 1)` })
                 .where(eq(storeCouponsTable.id, coupon.id));
+              updates.couponReversalAt = new Date();
             }
           }
         }

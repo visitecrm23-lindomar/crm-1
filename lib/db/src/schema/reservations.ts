@@ -46,6 +46,7 @@ export const reservationsTable = pgTable("reservations", {
   reservationNumber: text("reservation_number"),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   commissionSyncStatus: text("commission_sync_status"),
+  couponReversalAt: timestamp("coupon_reversal_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

@@ -494,6 +494,54 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
   });
 
   // -------------------------------------------------------------------------
+  // Idempotency guard for Reversal 1: when couponReversalAt is already set on
+  // the reservation (meaning the decrement was applied in a prior cancellation
+  // attempt before the reservation was reopened), the second cancellation must
+  // skip the decrement entirely to prevent double-counting.
+  it("skips coupon usageCount decrement on retry when couponReversalAt is already set (idempotency)", async () => {
+    const app = buildReservationsApp();
+    // Reservation with a coupon that was already decremented in a prior
+    // cancellation (couponReversalAt is non-null). clientId is null so
+    // loyalty/referral reversals do not fire.
+    const existing = makeReservation({
+      discountCouponCode: "PROMO10",
+      discountCouponAmount: "50",
+      clientId: null,
+      couponReversalAt: new Date("2026-04-01T12:00:00Z"),
+    });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] re-fetch updated reservation
+    // No store lookup or coupon lookup — idempotency guard fires before those
+    // queries are issued, so the queue has only the re-fetch entry.
+    const tx = buildTxMock([[cancelled]]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+
+    // trips (seats) + commissions (cancel) + reservations (status) = 3
+    // storeCoupons is NOT updated — idempotency guard prevented the decrement
+    expect(tx.update).toHaveBeenCalledTimes(3);
+
+    // Confirm no usageCount update was captured
+    const couponUpdate = capturedUpdates.find(
+      (u) => "usageCount" in u.set,
+    );
+    expect(couponUpdate).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
   it("restores loyalty points and records a refund transaction when loyalty discount was used", async () => {
     const app = buildReservationsApp();
     // clientId present so reversal 4 runs (payments query → empty)

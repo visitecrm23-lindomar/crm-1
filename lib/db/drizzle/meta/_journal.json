@@ -204,6 +204,13 @@
       "when": 1747200000000,
       "tag": "0028_add_bonus_release_notified_at",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1747300000000,
+      "tag": "0029_add_coupon_reversal_at",
+      "breakpoints": true
     }
   ]
 }
