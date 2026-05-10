@@ -105,6 +105,7 @@ export interface ReferralExportFilters {
   bonusPaid?: boolean;
   fraudFlag?: boolean;
   expiringSoon?: boolean;
+  format?: "csv" | "xlsx" | "json";
 }
 
 export interface ReferralExpiryEmailEntry {
@@ -160,6 +161,7 @@ export const getReferralExportUrl = (filters: ReferralExportFilters = {}) => {
   if (filters.bonusPaid === false) params.set("bonusPaid", "false");
   if (filters.fraudFlag === true) params.set("fraudFlag", "true");
   if (filters.expiringSoon === true) params.set("expiringSoon", "true");
+  if (filters.format && filters.format !== "csv") params.set("format", filters.format);
   const qs = params.toString();
   return qs ? `/api/referrals/export?${qs}` : `/api/referrals/export`;
 };

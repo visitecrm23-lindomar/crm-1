@@ -11,6 +11,7 @@ import {
   useGetReferralShare,
   useGetReferralExpiryEmailStatus,
   getReferralExportUrl,
+  useGetMe,
 } from "@workspace/api-client-react";
 import type { Referral, ReferralSettings, ReferralTierConfig, ReferralAnalyticsPeriod } from "@workspace/api-client-react";
 import { REFERRAL_STATUS } from "@workspace/permissions";
@@ -39,6 +40,12 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import {
   Users,
@@ -68,6 +75,9 @@ import {
   Link2,
   XCircle,
   Loader2,
+  FileSpreadsheet,
+  FileText,
+  ChevronDown,
 } from "lucide-react";
 
 const DEFAULT_TIERS: ReferralTierConfig[] = [
@@ -148,6 +158,7 @@ export default function Indicacoes() {
   const updateSettings = useUpdateReferralSettings();
   const payBonus = usePayReferralBonus();
   const resendWarning = useResendExpiryWarning();
+  const { data: me } = useGetMe();
 
   const [analyticsPeriod, setAnalyticsPeriod] = useState<ReferralAnalyticsPeriod>(90);
   const { data: analyticsData } = useGetReferralAnalytics(analyticsPeriod);
@@ -482,6 +493,143 @@ export default function Indicacoes() {
     if (tab === "expiringSoon") setSearchQuery("");
   }
 
+  function buildExportFilters() {
+    return {
+      status: statusFilter !== "all" && !fraudFilter && statusFilter !== "expiringSoon" ? statusFilter : undefined,
+      search: searchQuery || undefined,
+      bonusPaid: bonusFilter === "unpaid" ? false : undefined,
+      fraudFlag: fraudFilter ? true : undefined,
+      expiringSoon: statusFilter === "expiringSoon" ? true : undefined,
+    };
+  }
+
+  function handleExportCsv() {
+    const url = getReferralExportUrl(buildExportFilters());
+    window.open(url, "_blank");
+  }
+
+  function handleExportExcel() {
+    const url = getReferralExportUrl({ ...buildExportFilters(), format: "xlsx" });
+    window.open(url, "_blank");
+  }
+
+  async function handleExportPdf() {
+    const agencyName = (me as { tenant?: { name?: string } } | undefined)?.tenant?.name ?? "Agência";
+    const agencyLogo = (me as { tenant?: { logoUrl?: string | null } } | undefined)?.tenant?.logoUrl ?? null;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filters = buildExportFilters();
+
+    let exportRows: Array<{
+      code: string; referrerName: string; referrerEmail: string;
+      referredName: string; referredEmail: string; status: string;
+      bonusAmount: string; discountAmount: string; bonusPaid: string;
+      visitsCount: number; lastVisit: string;
+      createdAt: string; convertedAt: string; expiresAt: string;
+      fraudReason: string;
+    }>;
+
+    try {
+      const jsonUrl = getReferralExportUrl({ ...filters, format: "json" });
+      const resp = await fetch(jsonUrl, { credentials: "include" });
+      if (!resp.ok) throw new Error("Falha ao buscar dados");
+      const payload = await resp.json() as { rows: typeof exportRows };
+      exportRows = payload.rows;
+    } catch {
+      toast({ title: "Erro ao gerar PDF", variant: "destructive" });
+      return;
+    }
+
+    const { default: jsPDF } = await import("jspdf");
+    const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const margin = 14;
+    let y = margin;
+
+    if (agencyLogo) {
+      try {
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const i = new Image();
+          i.crossOrigin = "anonymous";
+          i.onload = () => resolve(i);
+          i.onerror = reject;
+          i.src = agencyLogo;
+        });
+        const maxH = 14;
+        const ratio = img.width / img.height;
+        const imgW = Math.min(maxH * ratio, 40);
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        canvas.getContext("2d")!.drawImage(img, 0, 0);
+        const dataUrl = canvas.toDataURL("image/png");
+        pdf.addImage(dataUrl, "PNG", margin, y, imgW, maxH);
+        y += maxH + 4;
+      } catch {
+        // logo failed — continue without it
+      }
+    }
+
+    pdf.setFontSize(14);
+    pdf.setFont("helvetica", "bold");
+    pdf.text(agencyName, margin, y + 4);
+    pdf.setFontSize(10);
+    pdf.setFont("helvetica", "normal");
+    pdf.setTextColor(120, 120, 120);
+    pdf.text(`Relatório de Indicações — ${dateStr}`, margin, y + 10);
+    pdf.setTextColor(0, 0, 0);
+    y += 18;
+
+    const colHeaders = [
+      "Código", "Indicador", "Indicado", "Status",
+      "Bônus (R$)", "Desconto (R$)", "Bônus Pago", "Visitas",
+      "Última visita", "Criado em", "Convertido em", "Expira em", "Motivo",
+    ];
+    const colWidths = [20, 30, 30, 18, 18, 18, 16, 12, 20, 20, 20, 20, 27];
+    const rowHeight = 7;
+
+    function drawTableHeader(yPos: number) {
+      pdf.setFillColor(240, 240, 240);
+      pdf.rect(margin, yPos, pageW - 2 * margin, rowHeight, "F");
+      pdf.setFontSize(8);
+      pdf.setFont("helvetica", "bold");
+      let cx = margin;
+      colHeaders.forEach((h, i) => {
+        pdf.text(h, cx + 1, yPos + rowHeight - 2);
+        cx += colWidths[i];
+      });
+      pdf.setFont("helvetica", "normal");
+      return yPos + rowHeight;
+    }
+
+    y = drawTableHeader(y);
+
+    exportRows.forEach((r, idx) => {
+      if (y + rowHeight > pdf.internal.pageSize.getHeight() - margin) {
+        pdf.addPage();
+        y = drawTableHeader(margin);
+      }
+      if (idx % 2 === 1) {
+        pdf.setFillColor(250, 250, 250);
+        pdf.rect(margin, y, pageW - 2 * margin, rowHeight, "F");
+      }
+      const cells = [
+        r.code, r.referrerName, r.referredName, r.status,
+        r.bonusAmount, r.discountAmount, r.bonusPaid, String(r.visitsCount),
+        r.lastVisit, r.createdAt, r.convertedAt, r.expiresAt, r.fraudReason,
+      ];
+      let cx = margin;
+      cells.forEach((cell, i) => {
+        const maxW = colWidths[i] - 2;
+        const text = pdf.splitTextToSize(String(cell ?? ""), maxW)[0] as string ?? "";
+        pdf.text(text, cx + 1, y + rowHeight - 2);
+        cx += colWidths[i];
+      });
+      y += rowHeight;
+    });
+
+    pdf.save(`indicacoes-${dateStr}.pdf`);
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -504,22 +652,29 @@ export default function Indicacoes() {
               {pendingBonusCount} bônus pendente{pendingBonusCount > 1 ? "s" : ""}
             </Badge>
           )}
-          <Button
-            variant="outline"
-            onClick={() => {
-              const url = getReferralExportUrl({
-                status: statusFilter !== "all" && !fraudFilter && statusFilter !== "expiringSoon" ? statusFilter : undefined,
-                search: searchQuery || undefined,
-                bonusPaid: bonusFilter === "unpaid" ? false : undefined,
-                fraudFlag: fraudFilter ? true : undefined,
-                expiringSoon: statusFilter === "expiringSoon" ? true : undefined,
-              });
-              window.open(url, "_blank");
-            }}
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Exportar CSV
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <Download className="w-4 h-4 mr-2" />
+                Exportar
+                <ChevronDown className="w-3 h-3 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleExportCsv}>
+                <Download className="w-4 h-4 mr-2" />
+                CSV (.csv)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportExcel}>
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Excel (.xlsx)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportPdf}>
+                <FileText className="w-4 h-4 mr-2" />
+                PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="outline" onClick={openSettings}>
             <Settings className="w-4 h-4 mr-2" />
             Configurações
@@ -910,27 +1065,6 @@ export default function Indicacoes() {
             </Button>
           )}
           <span className="text-sm text-muted-foreground ml-auto">{filtered.length} indicações</span>
-          <Button
-            size="sm"
-            variant="outline"
-            className="shrink-0"
-            onClick={() => {
-              const url = getReferralExportUrl({
-                status: statusFilter !== "all" && !fraudFilter && statusFilter !== "expiringSoon" ? statusFilter : undefined,
-                search: searchQuery || undefined,
-                bonusPaid: bonusFilter === "unpaid" ? false : undefined,
-                fraudFlag: fraudFilter ? true : undefined,
-                expiringSoon: statusFilter === "expiringSoon" ? true : undefined,
-              });
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = "";
-              a.click();
-            }}
-          >
-            <Download className="w-3.5 h-3.5 mr-1.5" />
-            Exportar CSV
-          </Button>
         </div>
 
         {["all", "pending", "expiringSoon", "completed", "completed-unpaid", "expired", "suspicious"].map((tabVal) => (

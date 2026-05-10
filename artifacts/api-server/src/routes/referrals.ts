@@ -728,6 +728,12 @@ router.get("/referrals/export", async (req, res): Promise<void> => {
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
 
+    const format = (req.query.format as string | undefined) ?? "csv";
+    if (!["csv", "xlsx", "json"].includes(format)) {
+      res.status(400).json({ error: "format must be csv, xlsx, or json" });
+      return;
+    }
+
     const status = req.query.status as string | undefined;
     const search = req.query.search as string | undefined;
     const bonusPaidParam = req.query.bonusPaid as string | undefined;
@@ -772,36 +778,90 @@ router.get("/referrals/export", async (req, res): Promise<void> => {
       .where(and(...conditions))
       .orderBy(desc(referralsTable.createdAt));
 
+    const STATUS_MAP: Record<string, string> = {
+      pending: "Pendente",
+      completed: "Convertida",
+      expired: "Expirada",
+      converted: "Convertida",
+      reversed: "Revertida",
+    };
+
     const headers = [
       "Código", "Indicador", "E-mail Indicador", "Indicado", "E-mail Indicado",
-      "Status", "Bônus (R$)", "Bônus Pago", "Visitas",
-      "Criado em", "Convertido em", "Expira em",
+      "Status", "Bônus (R$)", "Desconto (R$)", "Bônus Pago", "Visitas", "Última visita",
+      "Criado em", "Convertido em", "Expira em", "Motivo (suspeita)",
     ];
-    const csvRows = rows.map(r => [
+
+    const dataRows = rows.map(r => [
       r.code,
       r.referrerClientName ?? r.referrerName ?? "",
       r.referrerClientEmail ?? r.referrerEmail ?? "",
       r.referredName ?? "",
       r.referredEmail ?? "",
-      r.status,
+      STATUS_MAP[r.status] ?? r.status,
       r.bonusAmount ? parseFloat(String(r.bonusAmount)).toFixed(2) : "0.00",
+      r.discountAmount ? parseFloat(String(r.discountAmount)).toFixed(2) : "0.00",
       r.bonusPaid ? "Sim" : "Não",
       String(r.visitsCount ?? 0),
+      r.lastVisit ? new Date(r.lastVisit).toLocaleDateString("pt-BR") : "",
       r.createdAt ? new Date(r.createdAt).toLocaleDateString("pt-BR") : "",
       r.convertedAt ? new Date(r.convertedAt).toLocaleDateString("pt-BR") : "",
       r.expiresAt ? new Date(r.expiresAt).toLocaleDateString("pt-BR") : "",
+      r.fraudReason ?? "",
     ]);
 
-    const csv = [headers, ...csvRows]
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    if (format === "json") {
+      const jsonData = rows.map(r => ({
+        code: r.code,
+        referrerName: r.referrerClientName ?? r.referrerName ?? "",
+        referrerEmail: r.referrerClientEmail ?? r.referrerEmail ?? "",
+        referredName: r.referredName ?? "",
+        referredEmail: r.referredEmail ?? "",
+        status: STATUS_MAP[r.status] ?? r.status,
+        bonusAmount: r.bonusAmount ? parseFloat(String(r.bonusAmount)).toFixed(2) : "0.00",
+        discountAmount: r.discountAmount ? parseFloat(String(r.discountAmount)).toFixed(2) : "0.00",
+        bonusPaid: r.bonusPaid ? "Sim" : "Não",
+        visitsCount: r.visitsCount ?? 0,
+        lastVisit: r.lastVisit ? new Date(r.lastVisit).toLocaleDateString("pt-BR") : "",
+        createdAt: r.createdAt ? new Date(r.createdAt).toLocaleDateString("pt-BR") : "",
+        convertedAt: r.convertedAt ? new Date(r.convertedAt).toLocaleDateString("pt-BR") : "",
+        expiresAt: r.expiresAt ? new Date(r.expiresAt).toLocaleDateString("pt-BR") : "",
+        fraudReason: r.fraudReason ?? "",
+      }));
+      res.json({ headers, rows: jsonData });
+      return;
+    }
+
+    if (format === "xlsx") {
+      const XLSX = await import("xlsx");
+      const wsData = [headers, ...dataRows];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const colWidths = headers.map((h, i) => ({
+        wch: Math.max(h.length, ...dataRows.map(r => String(r[i] ?? "").length)) + 2,
+      }));
+      ws["!cols"] = colWidths;
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Indicações");
+      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      const filename = `indicacoes-${dateStr}.xlsx`;
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(buf);
+      return;
+    }
+
+    const csv = [headers, ...dataRows]
       .map(row => row.map(c => `"${String(c).replace(/"/g, '""')}"`).join(","))
       .join("\n");
 
-    const filename = `indicacoes-${new Date().toISOString().slice(0, 10)}.csv`;
+    const filename = `indicacoes-${dateStr}.csv`;
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.send("\uFEFF" + csv);
   } catch (err) {
-    req.log.error({ err }, "Error exporting referrals CSV");
+    req.log.error({ err }, "Error exporting referrals");
     res.status(500).json({ error: "Internal server error" });
   }
 });
