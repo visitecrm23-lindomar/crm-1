@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { usersTable, tenantsTable, invitesTable } from "@workspace/db";
-import { eq, and, gt } from "drizzle-orm";
+import { usersTable, tenantsTable, invitesTable, clientsTable } from "@workspace/db";
+import { eq, and, gt, sql } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { checkPlanLimit } from "../lib/planLimits";
@@ -305,6 +305,45 @@ router.patch("/users/:id", async (req, res): Promise<void> => {
     res.json(formatUser(user));
   } catch (err) {
     req.log.error({ err }, "Error updating user");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/users/me", async (req, res): Promise<void> => {
+  try {
+    const { userId: clerkId } = getAuth(req);
+    if (!clerkId) { res.status(401).json({ error: "Not authenticated" }); return; }
+
+    const [user] = await db.select().from(usersTable)
+      .where(eq(usersTable.clerkId, clerkId))
+      .limit(1);
+    if (!user) { res.status(404).json({ error: "Usuário não encontrado" }); return; }
+
+    if (user.role !== ROLES.CLIENT) {
+      res.status(403).json({ error: "Apenas clientes podem excluir a própria conta pelo portal." });
+      return;
+    }
+
+    try {
+      await clerkClient.users.deleteUser(clerkId);
+    } catch (clerkErr: unknown) {
+      const status = (clerkErr as { status?: number })?.status;
+      if (status !== 404) {
+        res.status(502).json({ error: "Não foi possível remover a conta de autenticação. Tente novamente." });
+        return;
+      }
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.update(clientsTable)
+        .set({ userId: sql`NULL` })
+        .where(eq(clientsTable.userId, user.id));
+      await tx.delete(usersTable).where(eq(usersTable.id, user.id));
+    });
+
+    res.status(204).end();
+  } catch (err) {
+    req.log.error({ err }, "Error deleting user account");
     res.status(500).json({ error: "Internal server error" });
   }
 });

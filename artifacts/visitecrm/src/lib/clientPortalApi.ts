@@ -123,4 +123,5 @@ export const clientPortalApi = {
     birthDate?: string | null;
   }) => apiReq<ClientPortalProfile["client"]>("PATCH", "/client/me", data),
   getMyReferrals: () => apiReq<{ data: ClientReferral[] }>("GET", "/client/me/referrals"),
+  deleteMyAccount: () => apiReq<void>("DELETE", "/users/me"),
 };

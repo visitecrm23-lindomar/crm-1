@@ -4,7 +4,19 @@ import { clientPortalApi, type ClientPortalProfile, type ClientLoyalty, type Cli
 import QRCode from "qrcode";
 import { useGetMe } from "@workspace/api-client-react";
 import { RESERVATION_STATUS } from "@workspace/permissions";
-import { useSignIn } from "@clerk/react";
+import { useSignIn, useClerk } from "@clerk/react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Trash2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -543,7 +555,9 @@ type ResetStep = "idle" | "sending" | "code_sent" | "submitting" | "done";
 function SegurancaSection({ email }: { email: string }) {
   const { toast } = useToast();
   const { signIn } = useSignIn();
+  const { signOut } = useClerk();
   const [step, setStep] = useState<ResetStep>("idle");
+  const [deleting, setDeleting] = useState(false);
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -603,6 +617,21 @@ function SegurancaSection({ email }: { email: string }) {
     setPassword("");
     setConfirmPassword("");
     setFieldError(null);
+  }
+
+  async function handleDeleteAccount() {
+    setDeleting(true);
+    try {
+      await clientPortalApi.deleteMyAccount();
+      await signOut();
+    } catch (err) {
+      setDeleting(false);
+      toast({
+        title: "Erro ao excluir conta",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    }
   }
 
   return (
@@ -710,6 +739,48 @@ function SegurancaSection({ email }: { email: string }) {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="flex items-start gap-3">
+          <Trash2 className="w-4 h-4 mt-0.5 text-destructive shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-destructive mb-1">Excluir minha conta</p>
+            <p className="text-sm text-muted-foreground mb-3">
+              Remove permanentemente o seu acesso ao portal. Seus dados de reservas são preservados na agência.
+              Esta ação não pode ser desfeita.
+            </p>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm" disabled={deleting}>
+                  {deleting && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+                  Excluir minha conta
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Excluir conta do portal?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Seu acesso ao portal será removido imediatamente. Você será desconectado e não poderá mais entrar com este e-mail.
+                    Seus históricos de reservas e pagamentos ficam registrados na agência.
+                    Esta ação é permanente e irreversível.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDeleteAccount}
+                    disabled={deleting}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {deleting && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+                    Sim, excluir minha conta
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
       </CardContent>
