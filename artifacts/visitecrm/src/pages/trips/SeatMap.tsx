@@ -208,24 +208,25 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
                     );
                   }
                   const isFree = effectiveStatus === "free";
-                  const freePassengerName = isFree ? (seat as Seat & { passengerName?: string }).passengerName : undefined;
+                  const freePassengerName = isFree ? (seat as Seat & { passengerName?: string | null }).passengerName : undefined;
                   const tooltipText = isFree
                     ? `Assento ${seat.number} — Gratuidade${freePassengerName ? `: ${freePassengerName}` : ""}`
                     : `Assento ${seat.number} (${seatType ?? "padrão"}) — ${effectiveStatus}`;
                   return (
                     <button
                       key={seat.number}
-                      className={cellClass}
+                      className={`${cellClass} relative`}
                       onClick={() => handleSeatClick(seat)}
                       title={tooltipText}
                       disabled={effectiveStatus !== "available"}
                     >
-                      {isFree ? (
-                        <span className="flex flex-col items-center leading-none">
-                          <span className="text-[9px] font-bold opacity-80">G</span>
-                          <span>{seat.number}</span>
-                        </span>
-                      ) : getCellIcon(seatType, seat.number)}
+                      {getCellIcon(seatType, seat.number)}
+                      {isFree && (
+                        <span
+                          className="absolute -top-1.5 -right-1.5 bg-white text-violet-700 text-[8px] font-black leading-none rounded-full w-4 h-4 flex items-center justify-center border border-violet-400 shadow-sm pointer-events-none"
+                          aria-hidden="true"
+                        >G</span>
+                      )}
                     </button>
                   );
                 };

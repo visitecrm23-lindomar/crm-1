@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,23 @@ import { Plus, X, Check, Loader2, UserCog, MapPin } from "lucide-react";
 import { formatCurrency } from "./utils";
 import { FIXED_COST_CATEGORIES, VARIABLE_COST_CATEGORIES } from "./constants";
 import type { TripFormData, FreePassenger } from "./types";
+import { useGetTripSeatMap, getGetTripSeatMapQueryKey } from "@workspace/api-client-react";
+
+function maskCpf(v: string) {
+  const d = v.replace(/\D/g, "").slice(0, 11);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0,3)}.${d.slice(3)}`;
+  if (d.length <= 9) return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6)}`;
+  return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`;
+}
+
+function maskWhatsApp(v: string) {
+  const d = v.replace(/\D/g, "").slice(0, 11);
+  if (d.length === 0) return "";
+  if (d.length <= 2) return `(${d}`;
+  if (d.length <= 7) return `(${d.slice(0,2)}) ${d.slice(2)}`;
+  return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+}
 
 interface NewFixed { category: string; description: string; customDesc: string; value: string }
 interface NewVariable { category: string; description: string; customDesc: string; valuePax: string }
@@ -144,11 +161,11 @@ function FreePassengersSection({
             </div>
             <div className="space-y-1">
               <Label className="text-xs">CPF</Label>
-              <Input value={editPax.cpf} onChange={e => setEditPax(prev => ({ ...prev, cpf: e.target.value }))} placeholder="000.000.000-00" />
+              <Input value={editPax.cpf} onChange={e => setEditPax(prev => ({ ...prev, cpf: maskCpf(e.target.value) }))} placeholder="000.000.000-00" />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">WhatsApp</Label>
-              <Input value={editPax.whatsapp} onChange={e => setEditPax(prev => ({ ...prev, whatsapp: e.target.value }))} placeholder="(11) 99999-9999" />
+              <Input value={editPax.whatsapp} onChange={e => setEditPax(prev => ({ ...prev, whatsapp: maskWhatsApp(e.target.value) }))} placeholder="(11) 99999-9999" />
             </div>
           </div>
           <div className="flex gap-2">
@@ -220,11 +237,11 @@ function FreePassengersSection({
             </div>
             <div className="space-y-1">
               <Label className="text-xs">CPF (opcional)</Label>
-              <Input value={newPax.cpf} onChange={e => setNewPax(prev => ({ ...prev, cpf: e.target.value }))} placeholder="000.000.000-00" />
+              <Input value={newPax.cpf} onChange={e => setNewPax(prev => ({ ...prev, cpf: maskCpf(e.target.value) }))} placeholder="000.000.000-00" />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">WhatsApp (opcional)</Label>
-              <Input value={newPax.whatsapp} onChange={e => setNewPax(prev => ({ ...prev, whatsapp: e.target.value }))} placeholder="(11) 99999-9999" />
+              <Input value={newPax.whatsapp} onChange={e => setNewPax(prev => ({ ...prev, whatsapp: maskWhatsApp(e.target.value) }))} placeholder="(11) 99999-9999" />
             </div>
           </div>
           <div className="flex gap-2">
@@ -247,7 +264,28 @@ function FreePassengersSection({
 
 export function TripFormPricesTab({ form, setForm, newFixed, setNewFixed, newVariable, setNewVariable, tripId, isSavingCosts, isPending, handleSaveCosts }: TripFormPricesTabProps) {
   const cap = parseInt(form.totalCapacity || "0");
-  const availableSeats = cap > 0 ? Array.from({ length: cap }, (_, i) => String(i + 1)) : [];
+
+  const { data: seatMapData } = useGetTripSeatMap(tripId ?? "", {
+    query: { enabled: !!tripId, queryKey: getGetTripSeatMapQueryKey(tripId ?? "") },
+  });
+
+  const availableSeats = useMemo(() => {
+    if (seatMapData?.seats && seatMapData.seats.length > 0) {
+      const freeSeatNumbers = new Set(
+        form.freePassengers.filter(p => p.seatNumber).map(p => p.seatNumber as string)
+      );
+      const seats = seatMapData.seats
+        .filter(s => s.status === "available" || s.status === "free" || freeSeatNumbers.has(s.number))
+        .map(s => s.number)
+        .sort((a, b) => {
+          const na = parseInt(a), nb = parseInt(b);
+          if (!isNaN(na) && !isNaN(nb)) return na - nb;
+          return a.localeCompare(b);
+        });
+      return seats;
+    }
+    return cap > 0 ? Array.from({ length: cap }, (_, i) => String(i + 1)) : [];
+  }, [seatMapData, form.freePassengers, cap]);
   const freeCount = form.freePassengers.length;
   const paidCap = Math.max(0, cap - freeCount);
   const grossRevenue = parseFloat(form.priceAdult || "0") * paidCap;
