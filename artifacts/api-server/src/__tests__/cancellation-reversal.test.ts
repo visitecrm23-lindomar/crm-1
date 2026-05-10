@@ -657,6 +657,54 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
   });
 
   // -------------------------------------------------------------------------
+  it("does NOT double-deduct confirmation-earned points when a reservation is re-cancelled (idempotency)", async () => {
+    // Scenario: reservation was confirmed (earning points via referenceType="reservation"),
+    // then cancelled once (a "cancellation" loyalty tx was written), then re-opened by an
+    // admin and cancelled a second time. The second cancellation must detect the existing
+    // "cancellation" tx and skip the clawback entirely — no extra points deducted.
+    const app = buildReservationsApp();
+    // No payments ever existed; points were earned purely from confirmation.
+    const existing = makeReservation({ clientId: "client-001", status: "confirmed" });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] Reversal 4 — payments lookup (empty — no payment records)
+    //   [1] Reversal 4 — loyalty member lookup → member found
+    //   [2] Reversal 4 — idempotency check → returns existing "cancellation" tx → SKIP
+    //       (earn-transactions query is not called when idempotency fires)
+    //   [3] re-fetch updated reservation
+    const tx = buildTxMock([
+      [],                                                              // no payments
+      [{ id: "member-001", availablePoints: 0, totalPoints: 0 }],    // loyalty member (already clawed back)
+      [{ id: "cancel-tx-001" }],                                      // existing cancellation tx → idempotency fires
+      [cancelled],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+
+    // loyaltyMembers must NOT be updated a second time (idempotency guard fired)
+    // Expected updates: trips (seat restore) + commissions (cancel) + reservations (status) = 3
+    expect(tx.update).toHaveBeenCalledTimes(3);
+
+    // No new "cancellation" loyalty transaction should have been inserted
+    const cancellationTx = capturedInserts.find(
+      (i) => (i as Record<string, unknown>)["type"] === "cancellation",
+    );
+    expect(cancellationTx).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
   it("performs ALL reversals simultaneously when reservation has coupon + loyalty + referral + payments", async () => {
     const app = buildReservationsApp();
     const existing = makeReservation({
