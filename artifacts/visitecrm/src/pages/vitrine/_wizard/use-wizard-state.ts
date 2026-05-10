@@ -282,7 +282,7 @@ export function useWizardState({
       !!form.customerName.trim() &&
       !!form.customerEmail.trim() &&
       !!form.customerPhone.trim() &&
-      !!form.customerBirthdate
+      !!form.customerCpf.trim()
     );
   }
 

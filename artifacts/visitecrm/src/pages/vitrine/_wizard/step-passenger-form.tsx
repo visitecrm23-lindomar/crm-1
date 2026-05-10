@@ -1,7 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { User, Calendar, Users, Info, AlertTriangle } from "lucide-react";
+import { User, Users, Info, AlertTriangle } from "lucide-react";
 import type { WizardState } from "./use-wizard-state";
 
 export function StepPassengerForm({ state }: { state: WizardState }) {
@@ -47,22 +47,6 @@ export function StepPassengerForm({ state }: { state: WizardState }) {
               onChange={(e) => set("customerPhone", e.target.value)}
               placeholder="(11) 99999-9999"
             />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="birthdate">
-              Data de Nascimento <span className="text-red-500">*</span>
-            </Label>
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-              <Input
-                id="birthdate"
-                type="date"
-                value={form.customerBirthdate}
-                onChange={(e) => set("customerBirthdate", e.target.value)}
-                className="pl-10"
-                max={new Date().toISOString().split("T")[0]}
-              />
-            </div>
           </div>
           <div className="space-y-1">
             <Label htmlFor="cpf">
