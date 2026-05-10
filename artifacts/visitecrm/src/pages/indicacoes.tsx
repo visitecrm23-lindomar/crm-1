@@ -305,29 +305,50 @@ export default function Indicacoes() {
     return digits.length >= 10;
   }
 
-  async function shareQrCodeViaWhatsApp(dataUrl: string, code: string, phone: string) {
+  function canShareQrFile(): boolean {
+    try {
+      if (!navigator.canShare) return false;
+      const probe = new File([""], "probe.png", { type: "image/png" });
+      return navigator.canShare({ files: [probe] });
+    } catch {
+      return false;
+    }
+  }
+
+  function buildWhatsAppQrFallbackUrl(phone: string, referralLink?: string): string {
     const num = phone.replace(/\D/g, "");
-    const fallbackUrl = `https://wa.me/55${num}`;
+    const text = referralLink
+      ? encodeURIComponent(`Seu link de indicação: ${referralLink}`)
+      : "";
+    return text ? `https://wa.me/55${num}?text=${text}` : `https://wa.me/55${num}`;
+  }
+
+  function downloadQrCode(dataUrl: string, code: string) {
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `qrcode-${code}.png`;
+    a.click();
+  }
+
+  async function shareQrCodeViaWhatsApp(dataUrl: string, code: string, phone: string, referralLink?: string) {
+    if (!canShareQrFile()) {
+      window.open(buildWhatsAppQrFallbackUrl(phone, referralLink), "_blank", "noopener,noreferrer");
+      downloadQrCode(dataUrl, code);
+      toast({
+        title: "QR-code baixado",
+        description: "O WhatsApp foi aberto com o link de indicação. Anexe o QR-code baixado à conversa.",
+      });
+      return;
+    }
     try {
       const res = await fetch(dataUrl);
       const blob = await res.blob();
       const file = new File([blob], `qrcode-${code}.png`, { type: "image/png" });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: "QR-code de indicação" });
-      } else {
-        window.open(fallbackUrl, "_blank", "noopener,noreferrer");
-        toast({
-          title: "QR-code baixado automaticamente",
-          description: "Anexe manualmente a imagem na conversa do WhatsApp que foi aberta.",
-        });
-        const a = document.createElement("a");
-        a.href = dataUrl;
-        a.download = `qrcode-${code}.png`;
-        a.click();
-      }
+      await navigator.share({ files: [file], title: "QR-code de indicação" });
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") return;
-      window.open(fallbackUrl, "_blank", "noopener,noreferrer");
+      window.open(buildWhatsAppQrFallbackUrl(phone, referralLink), "_blank", "noopener,noreferrer");
+      downloadQrCode(dataUrl, code);
       toast({
         title: "Não foi possível compartilhar a imagem",
         description: "O WhatsApp foi aberto. Baixe o QR-code e anexe manualmente.",
@@ -1340,7 +1361,7 @@ export default function Indicacoes() {
                   {isValidWhatsapp(shareReferral?.referrerWhatsapp) && (
                     <button
                       type="button"
-                      onClick={() => shareQrCodeViaWhatsApp(shareData.qrCodeDataUrl, shareReferral?.code ?? "referral", shareReferral!.referrerWhatsapp!)}
+                      onClick={() => shareQrCodeViaWhatsApp(shareData.qrCodeDataUrl, shareReferral?.code ?? "referral", shareReferral!.referrerWhatsapp!, shareData.link)}
                       className="inline-flex items-center gap-1.5 text-xs text-green-700 hover:text-green-800 font-medium"
                     >
                       <MessageCircle className="w-3.5 h-3.5" />
@@ -1773,7 +1794,7 @@ export default function Indicacoes() {
                         {isValidWhatsapp(selectedReferral.referrerWhatsapp) && (
                           <button
                             type="button"
-                            onClick={() => shareQrCodeViaWhatsApp(shareData.qrCodeDataUrl, selectedReferral.code ?? "referral", selectedReferral.referrerWhatsapp!)}
+                            onClick={() => shareQrCodeViaWhatsApp(shareData.qrCodeDataUrl, selectedReferral.code ?? "referral", selectedReferral.referrerWhatsapp!, shareData.link)}
                             className="mt-2 flex items-center gap-1.5 text-xs text-green-700 hover:text-green-800 font-medium"
                           >
                             <MessageCircle className="w-3 h-3" />
