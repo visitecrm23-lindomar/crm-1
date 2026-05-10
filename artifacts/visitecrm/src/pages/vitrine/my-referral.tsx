@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, type ReactElement } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useUser } from "@clerk/react";
 import { useGetMe } from "@workspace/api-client-react";
 import { clientPortalApi, type ClientPortalProfile, type ClientReferral } from "@/lib/clientPortalApi";
@@ -139,8 +139,19 @@ function formatCurrency(value: string | number) {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+const VALID_STATUS_FILTERS = ["all", "pending", "confirmed", "expired"] as const;
+type StatusFilter = (typeof VALID_STATUS_FILTERS)[number];
+
+function parseStatusFilter(value: string | null): StatusFilter {
+  if (value && (VALID_STATUS_FILTERS as readonly string[]).includes(value)) {
+    return value as StatusFilter;
+  }
+  return "all";
+}
+
 export default function MyReferralPage({ slug, store }: Props) {
   const [, navigate] = useLocation();
+  const search = useSearch();
   const { toast } = useToast();
   const { isSignedIn, isLoaded } = useUser();
   const { data: me, isLoading: meLoading } = useGetMe();
@@ -153,9 +164,16 @@ export default function MyReferralPage({ slug, store }: Props) {
   const [referrals, setReferrals] = useState<ClientReferral[] | null>(null);
   const [loadingReferrals, setLoadingReferrals] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "confirmed" | "expired">("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() =>
+    parseStatusFilter(new URLSearchParams(search).get("status"))
+  );
   const [qrPreviewUrl, setQrPreviewUrl] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
+
+  useEffect(() => {
+    const incoming = parseStatusFilter(new URLSearchParams(search).get("status"));
+    setStatusFilter(incoming);
+  }, [search]);
 
   useEffect(() => {
     if (store.referralsEnabled === false) {
@@ -586,8 +604,15 @@ export default function MyReferralPage({ slug, store }: Props) {
                     <button
                       key={key}
                       onClick={() => {
-                        setStatusFilter(key);
                         setVisibleCount(PAGE_SIZE);
+                        const params = new URLSearchParams(window.location.search);
+                        if (key === "all") {
+                          params.delete("status");
+                        } else {
+                          params.set("status", key);
+                        }
+                        const qs = params.toString();
+                        navigate(`/loja/${slug}/minhas-indicacoes${qs ? `?${qs}` : ""}`, { replace: true });
                       }}
                       className="flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all"
                       style={
