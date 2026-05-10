@@ -43,7 +43,7 @@ interface ReservationsTableProps {
   onPayment: (r: Reservation) => void;
   onVoucher: (r: Reservation) => void;
   onCheckin: (r: Reservation) => void;
-  onCancel: (id: string) => void;
+  onCancel: (id: string, storeOrderId: string | null) => void;
   setClient360Id: (id: string | null) => void;
 }
 
@@ -240,7 +240,7 @@ export function ReservationsTable({
                         {r.balance > 0 && r.status !== RESERVATION_STATUS.CANCELLED && <DropdownMenuItem onClick={() => onPayment(r)}><DollarSign className="w-4 h-4 mr-2" /> Registrar Pagamento</DropdownMenuItem>}
                         <DropdownMenuItem onClick={() => onVoucher(r)}><QrCode className="w-4 h-4 mr-2" /> Ver Voucher</DropdownMenuItem>
                         {r.status !== RESERVATION_STATUS.CANCELLED && r.status !== RESERVATION_STATUS.COMPLETED && <DropdownMenuItem onClick={() => onCheckin(r)}><CheckCircle className="w-4 h-4 mr-2" /> Check-in</DropdownMenuItem>}
-                        {r.status !== RESERVATION_STATUS.CANCELLED && <DropdownMenuItem className="text-destructive" onClick={() => onCancel(r.id)}><XCircle className="w-4 h-4 mr-2" /> Cancelar Reserva</DropdownMenuItem>}
+                        {r.status !== RESERVATION_STATUS.CANCELLED && <DropdownMenuItem className="text-destructive" onClick={() => onCancel(r.id, r.storeOrderId ?? null)}><XCircle className="w-4 h-4 mr-2" /> Cancelar Reserva</DropdownMenuItem>}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

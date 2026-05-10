@@ -4,7 +4,7 @@ import type { Reservation } from "@workspace/api-client-react";
 import { Client360Modal } from "@/components/client360-modal";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, CalendarCheck, CheckCircle, Clock, TrendingDown } from "lucide-react";
+import { Plus, CalendarCheck, CheckCircle, Clock, TrendingDown, AlertTriangle } from "lucide-react";
 import { useReservations } from "@/hooks/useReservations";
 import { fmt } from "./reservations/constants";
 import { StatCard } from "./reservations/StatCard";
@@ -31,7 +31,7 @@ export default function Reservations() {
   const [initialAmount, setInitialAmount] = useState<number | undefined>(undefined);
   const [initialDealId, setInitialDealId] = useState<string | undefined>(undefined);
   const [client360Id, setClient360Id] = useState<string | null>(null);
-  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState<{ id: string; storeOrderId: string | null } | null>(null);
   const [confirmCheckinRes, setConfirmCheckinRes] = useState<Reservation | null>(null);
 
   useEffect(() => {
@@ -95,7 +95,7 @@ export default function Reservations() {
         page={page} setPage={setPage} total={total} totalPages={totalPages}
         onViewDetail={id => setDetailId(id)} onEdit={id => setEditId(id)}
         onPayment={r => setPaymentRes(r)} onVoucher={r => setVoucherRes(r)}
-        onCheckin={r => setConfirmCheckinRes(r)} onCancel={id => setConfirmCancelId(id)}
+        onCheckin={r => setConfirmCheckinRes(r)} onCancel={(id, storeOrderId) => setConfirmCancel({ id, storeOrderId })}
         setClient360Id={setClient360Id}
       />
 
@@ -110,15 +110,21 @@ export default function Reservations() {
       {editId && <EditReservationModal reservationId={editId} open={!!editId} onClose={() => setEditId(null)} onSuccess={() => { refetch(); refetchStats(); setEditId(null); }} />}
       <VoucherModal reservation={voucherRes} open={!!voucherRes} onClose={() => setVoucherRes(null)} />
 
-      <AlertDialog open={!!confirmCancelId} onOpenChange={o => { if (!o) setConfirmCancelId(null); }}>
+      <AlertDialog open={!!confirmCancel} onOpenChange={o => { if (!o) setConfirmCancel(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Cancelar Reserva</AlertDialogTitle>
             <AlertDialogDescription>Tem certeza que deseja cancelar esta reserva? As vagas serão devolvidas para a viagem. Esta ação não pode ser desfeita facilmente.</AlertDialogDescription>
           </AlertDialogHeader>
+          {confirmCancel?.storeOrderId && (
+            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <p>Esta reserva veio de um pedido online. Cancelá-la também encerrará o pedido do cliente na loja.</p>
+            </div>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel>Voltar</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => { if (confirmCancelId) handleCancel(confirmCancelId); setConfirmCancelId(null); }}>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => { if (confirmCancel) handleCancel(confirmCancel.id); setConfirmCancel(null); }}>
               Confirmar Cancelamento
             </AlertDialogAction>
           </AlertDialogFooter>
