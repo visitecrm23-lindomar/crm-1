@@ -38,6 +38,7 @@ interface TripFormPricesTabProps {
   newVariable: NewVariable;
   setNewVariable: Dispatch<SetStateAction<NewVariable>>;
   tripId?: string;
+  layoutSeatLabels?: string[];
   isSavingCosts: boolean;
   isPending: boolean;
   handleSaveCosts: () => void;
@@ -262,7 +263,7 @@ function FreePassengersSection({
   );
 }
 
-export function TripFormPricesTab({ form, setForm, newFixed, setNewFixed, newVariable, setNewVariable, tripId, isSavingCosts, isPending, handleSaveCosts }: TripFormPricesTabProps) {
+export function TripFormPricesTab({ form, setForm, newFixed, setNewFixed, newVariable, setNewVariable, tripId, layoutSeatLabels, isSavingCosts, isPending, handleSaveCosts }: TripFormPricesTabProps) {
   const cap = parseInt(form.totalCapacity || "0");
 
   const { data: seatMapData } = useGetTripSeatMap(tripId ?? "", {
@@ -274,7 +275,7 @@ export function TripFormPricesTab({ form, setForm, newFixed, setNewFixed, newVar
       const freeSeatNumbers = new Set(
         form.freePassengers.filter(p => p.seatNumber).map(p => p.seatNumber as string)
       );
-      const seats = seatMapData.seats
+      return seatMapData.seats
         .filter(s => s.status === "available" || s.status === "free" || freeSeatNumbers.has(s.number))
         .map(s => s.number)
         .sort((a, b) => {
@@ -282,10 +283,10 @@ export function TripFormPricesTab({ form, setForm, newFixed, setNewFixed, newVar
           if (!isNaN(na) && !isNaN(nb)) return na - nb;
           return a.localeCompare(b);
         });
-      return seats;
     }
+    if (layoutSeatLabels && layoutSeatLabels.length > 0) return layoutSeatLabels;
     return cap > 0 ? Array.from({ length: cap }, (_, i) => String(i + 1)) : [];
-  }, [seatMapData, form.freePassengers, cap]);
+  }, [seatMapData, form.freePassengers, cap, layoutSeatLabels]);
   const freeCount = form.freePassengers.length;
   const paidCap = Math.max(0, cap - freeCount);
   const grossRevenue = parseFloat(form.priceAdult || "0") * paidCap;

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useGetTrip, useCreateTrip, useUpdateTrip, useListLayouts } from "@workspace/api-client-react";
@@ -45,6 +45,38 @@ export function TripForm({ tripId }: { tripId?: string }) {
   const [newVariable, setNewVariable] = useState(EMPTY_NEW_VARIABLE);
 
   const selectedLayout = layouts.find(l => l.id === form.layoutId) ?? null;
+
+  const layoutSeatLabels = useMemo(() => {
+    if (!selectedLayout) return undefined;
+    const SEAT_TYPES = new Set(["seat", "vip", "accessible"]);
+    const seatCells = selectedLayout.cells
+      .filter(c => SEAT_TYPES.has(c.type))
+      .sort((a, b) => {
+        if (a.floor !== b.floor) return a.floor - b.floor;
+        if (a.row !== b.row) return a.row - b.row;
+        return a.col - b.col;
+      });
+    if (selectedLayout.numberingType === "by_row") {
+      const labels: string[] = [];
+      const rowGroups = new Map<string, typeof seatCells>();
+      for (const cell of seatCells) {
+        const key = `${cell.floor}-${cell.row}`;
+        if (!rowGroups.has(key)) rowGroups.set(key, []);
+        rowGroups.get(key)!.push(cell);
+      }
+      const isMultiFloor = selectedLayout.floors > 1;
+      for (const [key, group] of rowGroups) {
+        const [floor, row] = key.split("-").map(Number);
+        group.sort((a, b) => a.col - b.col);
+        group.forEach((cell, i) => {
+          const floorPfx = isMultiFloor ? `A${floor}-` : "";
+          labels.push(cell.label ?? `${floorPfx}${row}${String.fromCharCode(65 + i)}`);
+        });
+      }
+      return labels;
+    }
+    return seatCells.map((cell, i) => cell.label ?? String(i + 1));
+  }, [selectedLayout]);
 
   useEffect(() => {
     if (!existingTrip || !tripId) return;
@@ -354,7 +386,8 @@ export function TripForm({ tripId }: { tripId?: string }) {
             form={form} setForm={setForm}
             newFixed={newFixed} setNewFixed={setNewFixed}
             newVariable={newVariable} setNewVariable={setNewVariable}
-            tripId={tripId} isSavingCosts={isSavingCosts} isPending={isPending}
+            tripId={tripId} layoutSeatLabels={layoutSeatLabels}
+            isSavingCosts={isSavingCosts} isPending={isPending}
             handleSaveCosts={handleSaveCosts}
           />
         </TabsContent>

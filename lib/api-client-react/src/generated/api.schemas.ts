@@ -799,7 +799,7 @@ export interface Seat {
   /** Cell type (seat, vip, accessible, wc, stairs, fridge, blocked) */
   type?: string;
   /** @nullable */
-  passengerName?: string | null;
+  occupantName?: string | null;
   /** @nullable */
   reservationId?: string | null;
 }

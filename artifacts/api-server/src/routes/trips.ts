@@ -511,11 +511,11 @@ router.get("/trips/:id/seat-map", async (req, res, next: NextFunction): Promise<
         inArray(reservationsTable.status, ACTIVE_STATUSES),
       ));
 
-    const occupiedSeats: Record<string, { reservationId: string; passengerName: string; seatStatus: string }> = {};
+    const occupiedSeats: Record<string, { reservationId: string; seatStatus: string }> = {};
     for (const r of reservations) {
       const seatStatus = r.status === RESERVATION_STATUS.CONFIRMED ? "confirmed" : "reserved";
       for (const seat of r.seats) {
-        occupiedSeats[seat] = { reservationId: r.id, passengerName: "", seatStatus };
+        occupiedSeats[seat] = { reservationId: r.id, seatStatus };
       }
     }
 
@@ -537,7 +537,7 @@ router.get("/trips/:id/seat-map", async (req, res, next: NextFunction): Promise<
         : freeSeats[num]
           ? "free"
           : (data.type && !["seat", "vip", "accessible"].includes(data.type) ? data.type : "available"),
-      passengerName: occupiedSeats[num]?.passengerName ?? freeSeats[num] ?? null,
+      occupantName: freeSeats[num] ?? null,
       reservationId: occupiedSeats[num]?.reservationId ?? null,
     }));
 
