@@ -1,4 +1,5 @@
 import { Router, type NextFunction } from "express";
+import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
 import { addSeatClient, removeSeatClient, emitSeatUpdate } from "../lib/seat-sse";
 import { broadcastSeatUpdate } from "../lib/realtime";
@@ -520,12 +521,16 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
       customerEmail: data.customerEmail,
     });
 
-    // Resolve referral credit spend
+    // Resolve referral credit spend — requires authenticated Clerk user whose email matches the order
     let appliedCreditAmount = 0;
-    let creditReferralIds: string[] = [];
+    let creditSpend: Array<{ id: string; consumedAmount: number }> = [];
     if (data.referralCreditUsed && data.referralCreditUsed > 0) {
-      const afterDiscount = roundMoney(Math.max(0, subtotal - discounts.discountAmount));
-      // Find the referrer client by email
+      const { userId: clerkUserId } = getAuth(req);
+      if (!clerkUserId) {
+        next(new ValidationError("Autenticação necessária para usar créditos de indicação", "UNAUTHENTICATED_CREDIT"));
+        return;
+      }
+      // Verify a client record exists for this email in this store's tenant
       const [creditClient] = await db
         .select({ id: clientsTable.id })
         .from(clientsTable)
@@ -535,10 +540,13 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
         ))
         .limit(1);
       if (creditClient) {
+        const afterDiscount = roundMoney(Math.max(0, subtotal - discounts.discountAmount));
+        // Select rows with remaining balance (including partially consumed ones)
         const creditRows = await db
           .select({
             id: referralsTable.id,
             bonusAmount: referralsTable.bonusAmount,
+            bonusCreditUsedAmount: referralsTable.bonusCreditUsedAmount,
           })
           .from(referralsTable)
           .where(and(
@@ -546,19 +554,25 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
             eq(referralsTable.referrerId, creditClient.id),
             inArray(referralsTable.status, ["completed", "converted"]),
             eq(referralsTable.bonusPaid, false),
-            sql`${referralsTable.bonusCreditUsedAt} IS NULL`,
+            // Only rows that still have remaining credit
+            sql`${referralsTable.bonusAmount} > COALESCE(${referralsTable.bonusCreditUsedAmount}, 0)`,
           ))
           .orderBy(asc(referralsTable.createdAt));
-        // Calculate how much credit is actually available
-        const totalAvailable = creditRows.reduce((s, r) => s + Number(r.bonusAmount), 0);
+        const totalAvailable = creditRows.reduce(
+          (s, r) => s + (Number(r.bonusAmount) - Number(r.bonusCreditUsedAmount ?? 0)), 0,
+        );
         const requestedCredit = Math.min(data.referralCreditUsed, totalAvailable, afterDiscount);
         appliedCreditAmount = roundMoney(requestedCredit);
-        // Collect row IDs to mark as spent (greedy, oldest-first)
+        // Build greedy spend plan — oldest rows first, partial consumption tracked per-row
         let remaining = appliedCreditAmount;
         for (const row of creditRows) {
           if (remaining <= 0) break;
-          creditReferralIds.push(row.id);
-          remaining -= Number(row.bonusAmount);
+          const available = Number(row.bonusAmount) - Number(row.bonusCreditUsedAmount ?? 0);
+          const consume = roundMoney(Math.min(available, remaining));
+          if (consume > 0) {
+            creditSpend.push({ id: row.id, consumedAmount: consume });
+            remaining = roundMoney(remaining - consume);
+          }
         }
       }
     }
@@ -604,16 +618,9 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
         orderItemsData, fetchedProducts, quantityByProductId, tripLinkedProducts,
         reservationCreatedById, vitrineStageId, parsedBirthDate, tripNameMap,
         reservationExpiresAt, tenantResPrefix, resYearMonth: getYearMonth(),
+        creditSpend: creditSpend.length > 0 ? creditSpend : undefined,
       });
       reservationClientId = result.reservationClientId;
-      // Mark referral credit rows as spent inside the same logical flow
-      if (creditReferralIds.length > 0) {
-        const now = new Date();
-        await db
-          .update(referralsTable)
-          .set({ bonusCreditUsedAt: now, bonusCreditOrderId: orderId, updatedAt: now })
-          .where(inArray(referralsTable.id, creditReferralIds));
-      }
     } catch (txErr: unknown) {
       if (txErr instanceof Error) {
         const tagged = txErr as Error & { productName?: string; available?: number };

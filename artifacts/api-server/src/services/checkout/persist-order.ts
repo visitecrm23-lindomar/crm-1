@@ -10,8 +10,9 @@ import {
   reservationsTable,
   tripsTable,
   dealsTable,
+  referralsTable,
 } from "@workspace/db";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, inArray } from "drizzle-orm";
 import { generateId, generateVoucherCode } from "../../lib/id";
 import {
   tripTypeToCode,
@@ -81,6 +82,8 @@ export interface PersistOrderArgs {
   reservationExpiresAt: Date;
   tenantResPrefix: string;
   resYearMonth: string;
+  /** Referral rows to mark as (partially) consumed for credit spend — processed inside the transaction */
+  creditSpend?: Array<{ id: string; consumedAmount: number }>;
 }
 
 export interface PersistOrderResult {
@@ -272,6 +275,32 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
     await tx.update(storesTable)
       .set({ totalOrders: sql`total_orders + 1` })
       .where(eq(storesTable.id, args.store.id));
+
+    if (args.creditSpend && args.creditSpend.length > 0) {
+      // Lock rows for update to prevent concurrent double-spend
+      const ids = args.creditSpend.map((r) => r.id);
+      await tx.execute(
+        sql`SELECT id FROM referrals WHERE id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) FOR UPDATE`,
+      );
+      const now = new Date();
+      for (const { id, consumedAmount } of args.creditSpend) {
+        await tx
+          .update(referralsTable)
+          .set({
+            bonusCreditUsedAt: now,
+            bonusCreditOrderId: args.orderId,
+            bonusCreditUsedAmount: consumedAmount.toFixed(2),
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(referralsTable.id, id),
+              // Guard: only update rows that haven't been fully consumed yet
+              sql`COALESCE(${referralsTable.bonusCreditUsedAmount}, 0) < ${referralsTable.bonusAmount}`,
+            ),
+          );
+      }
+    }
   });
 
   if (args.appliedReferralCode && args.appliedReferralReferrerId) {

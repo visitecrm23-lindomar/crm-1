@@ -51,6 +51,7 @@ export interface ClientReferral {
   bonusPaidAt: string | null;
   bonusCreditUsedAt: string | null;
   bonusCreditOrderId: string | null;
+  bonusCreditUsedAmount: string | null;
   createdAt: string;
   expiresAt: string | null;
 }

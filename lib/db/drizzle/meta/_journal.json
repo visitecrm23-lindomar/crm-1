@@ -218,6 +218,20 @@
       "when": 1747400000000,
       "tag": "0030_add_referral_welcome_email_sent_at",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1747500000000,
+      "tag": "0031_add_referral_credit_spend",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1747600000000,
+      "tag": "0032_add_referral_credit_used_amount",
+      "breakpoints": true
     }
   ]
 }

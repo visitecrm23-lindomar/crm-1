@@ -252,7 +252,9 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
       }
 
       const [refCreditRow] = await db
-        .select({ balance: sql<string>`COALESCE(SUM(bonus_amount), '0')` })
+        .select({
+          balance: sql<string>`COALESCE(SUM(${referralsTable.bonusAmount} - COALESCE(${referralsTable.bonusCreditUsedAmount}, 0)), '0')`,
+        })
         .from(referralsTable)
         .where(
           and(
@@ -260,10 +262,11 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
             eq(referralsTable.referrerId, client.id),
             inArray(referralsTable.status, [REFERRAL_STATUS.COMPLETED, REFERRAL_STATUS.CONVERTED]),
             eq(referralsTable.bonusPaid, false),
-            sql`${referralsTable.bonusCreditUsedAt} IS NULL`,
+            // Rows that still have remaining credit (not yet fully consumed)
+            sql`${referralsTable.bonusAmount} > COALESCE(${referralsTable.bonusCreditUsedAmount}, 0)`,
           ),
         );
-      const referralCreditBalance = Number(refCreditRow?.balance ?? 0);
+      const referralCreditBalance = Math.max(0, Number(refCreditRow?.balance ?? 0));
 
       const [refSettings] = await db
         .select({
@@ -661,6 +664,7 @@ router.get("/client/me/referrals", async (req, res, next: NextFunction): Promise
         bonusPaidAt: referralsTable.bonusPaidAt,
         bonusCreditUsedAt: referralsTable.bonusCreditUsedAt,
         bonusCreditOrderId: referralsTable.bonusCreditOrderId,
+        bonusCreditUsedAmount: referralsTable.bonusCreditUsedAmount,
         createdAt: referralsTable.createdAt,
         expiresAt: referralsTable.expiresAt,
       })
@@ -700,6 +704,7 @@ router.get("/client/me/referrals", async (req, res, next: NextFunction): Promise
         bonusPaidAt: r.bonusPaidAt ? (r.bonusPaidAt as unknown as Date).toISOString() : null,
         bonusCreditUsedAt: r.bonusCreditUsedAt ? (r.bonusCreditUsedAt as unknown as Date).toISOString() : null,
         bonusCreditOrderId: r.bonusCreditOrderId ?? null,
+        bonusCreditUsedAmount: r.bonusCreditUsedAmount ?? null,
         createdAt: (r.createdAt as unknown as Date).toISOString(),
         expiresAt: r.expiresAt ? (r.expiresAt as unknown as Date).toISOString() : null,
       })),
