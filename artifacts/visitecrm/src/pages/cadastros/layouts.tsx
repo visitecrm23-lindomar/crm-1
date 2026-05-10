@@ -120,7 +120,7 @@ const TEMPLATES: LayoutTemplate[] = [
     rows: 12,
     cols: 4,
     floors: 1,
-    numberingType: "sequential",
+    numberingType: "brazilian_standard",
     vehicleType: "Ônibus",
     busType: "CONVENTIONAL",
     generate: (rows, cols) => {
@@ -168,7 +168,7 @@ const TEMPLATES: LayoutTemplate[] = [
     rows: 10,
     cols: 4,
     floors: 1,
-    numberingType: "sequential",
+    numberingType: "brazilian_standard",
     vehicleType: "Ônibus",
     busType: "LEITO",
     generate: (rows, cols) => {
@@ -188,7 +188,7 @@ const TEMPLATES: LayoutTemplate[] = [
     rows: 12,
     cols: 4,
     floors: 2,
-    numberingType: "by_row_upper_first",
+    numberingType: "brazilian_standard_upper_first",
     vehicleType: "Ônibus",
     busType: "DOUBLE_DECKER",
     generate: (rows, cols) => {
@@ -214,18 +214,16 @@ const TEMPLATES: LayoutTemplate[] = [
     rows: 13,
     cols: 4,
     floors: 1,
-    numberingType: "sequential",
+    numberingType: "brazilian_standard",
     vehicleType: "Ônibus",
     busType: "CONVENTIONAL",
     generate: (rows, cols) => {
       const cells: LayoutCell[] = [];
-      let seatNum = 1;
       for (let r = 1; r <= rows; r++) {
         for (let c = 1; c <= cols; c++) {
           const isLastRow = r === rows;
           const type: CellType = (isLastRow && (c === 1 || c === 2)) ? "wc" : "seat";
-          const label = type === "seat" ? String(seatNum++) : undefined;
-          cells.push({ row: r, col: c, floor: 1, type, ...(label ? { label } : {}) });
+          cells.push({ row: r, col: c, floor: 1, type });
         }
       }
       return cells;
@@ -236,12 +234,11 @@ const TEMPLATES: LayoutTemplate[] = [
     rows: 12,
     cols: 4,
     floors: 1,
-    numberingType: "sequential",
+    numberingType: "brazilian_standard",
     vehicleType: "Ônibus",
     busType: "EXECUTIVE",
     generate: (rows, cols) => {
       const cells: LayoutCell[] = [];
-      let seatNum = 1;
       for (let r = 1; r <= rows; r++) {
         for (let c = 1; c <= cols; c++) {
           const isLastRow = r === rows;
@@ -249,8 +246,7 @@ const TEMPLATES: LayoutTemplate[] = [
           const type: CellType = (isLastRow && (c === 1 || c === 2)) ? "wc"
             : isFirstRow ? "vip"
             : "seat";
-          const label = (type === "seat" || type === "vip") ? String(seatNum++) : undefined;
-          cells.push({ row: r, col: c, floor: 1, type, ...(label ? { label } : {}) });
+          cells.push({ row: r, col: c, floor: 1, type });
         }
       }
       return cells;
@@ -261,15 +257,14 @@ const TEMPLATES: LayoutTemplate[] = [
     rows: 11,
     cols: 4,
     floors: 1,
-    numberingType: "sequential",
+    numberingType: "brazilian_standard",
     vehicleType: "Ônibus",
     busType: "SEMI_LEITO",
     generate: (rows, cols) => {
       const cells: LayoutCell[] = [];
-      let seatNum = 1;
       for (let r = 1; r <= rows; r++) {
         for (let c = 1; c <= cols; c++) {
-          cells.push({ row: r, col: c, floor: 1, type: "seat", label: String(seatNum++) });
+          cells.push({ row: r, col: c, floor: 1, type: "seat" });
         }
       }
       return cells;
@@ -280,26 +275,23 @@ const TEMPLATES: LayoutTemplate[] = [
     rows: 12,
     cols: 4,
     floors: 2,
-    numberingType: "sequential_upper_first",
+    numberingType: "brazilian_standard_upper_first",
     vehicleType: "Ônibus",
     busType: "DOUBLE_DECKER",
     generate: (_rows, _cols) => {
       const cells: LayoutCell[] = [];
-      let seatNum = 1;
       for (let r = 1; r <= 12; r++) {
         for (let c = 1; c <= 4; c++) {
           const isStairs = r === 4 && (c === 3 || c === 4);
           const type: CellType = isStairs ? "stairs" : "seat";
-          const label = type === "seat" ? String(seatNum++) : undefined;
-          cells.push({ row: r, col: c, floor: 2, type, ...(label ? { label } : {}) });
+          cells.push({ row: r, col: c, floor: 2, type });
         }
       }
       for (let r = 1; r <= 4; r++) {
         for (let c = 1; c <= 4; c++) {
           const isWc = r === 4 && (c === 1 || c === 2);
           const type: CellType = isWc ? "wc" : "seat";
-          const label = type === "seat" ? String(seatNum++) : undefined;
-          cells.push({ row: r, col: c, floor: 1, type, ...(label ? { label } : {}) });
+          cells.push({ row: r, col: c, floor: 1, type });
         }
       }
       return cells;
@@ -310,27 +302,24 @@ const TEMPLATES: LayoutTemplate[] = [
     rows: 12,
     cols: 4,
     floors: 2,
-    numberingType: "sequential_upper_first",
+    numberingType: "brazilian_standard_upper_first",
     vehicleType: "Ônibus",
     busType: "DOUBLE_DECKER",
     generate: (_rows, _cols) => {
       const cells: LayoutCell[] = [];
-      let seatNum = 1;
       for (let r = 1; r <= 12; r++) {
         for (let c = 1; c <= 4; c++) {
           const isStairs = r === 4 && (c === 3 || c === 4);
           const isVip = r === 1;
           const type: CellType = isStairs ? "stairs" : isVip ? "vip" : "seat";
-          const label = (type === "seat" || type === "vip") ? String(seatNum++) : undefined;
-          cells.push({ row: r, col: c, floor: 2, type, ...(label ? { label } : {}) });
+          cells.push({ row: r, col: c, floor: 2, type });
         }
       }
       for (let r = 1; r <= 3; r++) {
         for (let c = 1; c <= 3; c++) {
           const isWc = r === 3 && c === 3;
           const type: CellType = isWc ? "wc" : "seat";
-          const label = type === "seat" ? String(seatNum++) : undefined;
-          cells.push({ row: r, col: c, floor: 1, type, ...(label ? { label } : {}) });
+          cells.push({ row: r, col: c, floor: 1, type });
         }
       }
       return cells;
@@ -741,9 +730,11 @@ function LayoutEditorModal({
       if (newFloors > 1) {
         if (f.numberingType === "sequential") newNumberingType = "sequential_upper_first";
         else if (f.numberingType === "by_row") newNumberingType = "by_row_upper_first";
+        else if (f.numberingType === "brazilian_standard") newNumberingType = "brazilian_standard_upper_first";
       } else if (newFloors === 1) {
         if (f.numberingType === "sequential_upper_first") newNumberingType = "sequential";
         else if (f.numberingType === "by_row_upper_first") newNumberingType = "by_row";
+        else if (f.numberingType === "brazilian_standard_upper_first") newNumberingType = "brazilian_standard";
       }
       return { ...f, floors: newFloors, rows: maxRows, cols: maxCols, floorDimensions: newFloorDims, cells: newCells, numberingType: newNumberingType };
     });
@@ -842,6 +833,7 @@ function LayoutEditorModal({
                   <SelectContent>
                     {form.floors > 1 ? (
                       <>
+                        <SelectItem value="brazilian_standard_upper_first">🇧🇷 Padrão Brasileiro — Superior primeiro (ímpar=janela)</SelectItem>
                         <SelectItem value="sequential_upper_first">Sequencial — Superior primeiro (1, 2, 3…)</SelectItem>
                         <SelectItem value="sequential">Sequencial — Inferior primeiro (1, 2, 3…)</SelectItem>
                         <SelectItem value="by_row_upper_first">Por fileira — Superior primeiro (1A, 1B…)</SelectItem>
@@ -849,6 +841,7 @@ function LayoutEditorModal({
                       </>
                     ) : (
                       <>
+                        <SelectItem value="brazilian_standard">🇧🇷 Padrão Brasileiro (ímpar=janela, par=corredor)</SelectItem>
                         <SelectItem value="sequential">Sequencial (1, 2, 3…)</SelectItem>
                         <SelectItem value="by_row">Por fileira (1A, 1B, 2A…)</SelectItem>
                       </>
@@ -1219,7 +1212,9 @@ function LayoutCard({
 
       <div className="flex flex-wrap gap-1">
         {floors > 1 && <Badge variant="outline" className="text-[10px] px-1.5 bg-purple-50 text-purple-700 border-purple-300">🏢 {floors} andares</Badge>}
-        {layout.numberingType?.includes("by_row")
+        {layout.numberingType?.includes("brazilian_standard")
+          ? <Badge variant="outline" className="text-[10px] px-1.5 bg-green-50 text-green-700 border-green-300">🇧🇷 Padrão Brasileiro</Badge>
+          : layout.numberingType?.includes("by_row")
           ? <Badge variant="outline" className="text-[10px] px-1.5">Numeração por fileira</Badge>
           : <Badge variant="outline" className="text-[10px] px-1.5">Numeração sequencial</Badge>}
         {layout.numberingType?.endsWith("_upper_first") && (

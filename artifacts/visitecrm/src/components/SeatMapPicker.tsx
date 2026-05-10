@@ -88,6 +88,19 @@ function SeatGrid({
 
   return (
     <div className="space-y-1.5 max-w-xs mx-auto">
+      <div className="flex items-center justify-center gap-2">
+        <div className="flex gap-1">
+          {Array.from({ length: aisleAfterCol }, (_, i) => (
+            <span key={i} className="w-9 text-center text-[10px] text-muted-foreground">{i === 0 ? "🪟" : "🚶"}</span>
+          ))}
+        </div>
+        <div className="w-4" />
+        <div className="flex gap-1">
+          {Array.from({ length: maxCol - aisleAfterCol }, (_, i) => (
+            <span key={i} className="w-9 text-center text-[10px] text-muted-foreground">{i === maxCol - aisleAfterCol - 1 ? "🪟" : "🚶"}</span>
+          ))}
+        </div>
+      </div>
       {Array.from({ length: maxRow }).map((_, rowIdx) => {
         const rowNum = rowIdx + 1;
         const rowSeats = seats.filter(s => s.row === rowNum);

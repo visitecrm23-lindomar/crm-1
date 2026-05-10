@@ -71,6 +71,45 @@ function generateSeatMapFromLayout(
         seatLabels.set(keyOf(cell), `${floorPrefix}${row}${String.fromCharCode(65 + i)}`);
       });
     }
+  } else if (baseType === "brazilian_standard") {
+    // Brazilian standard: odd = window, even = aisle, 4 seats per row front-to-back.
+    // Left side (cols ≤ aisleCol): sequential ascending (1, 2, 5, 6, …).
+    // Right side (cols > aisleCol): reversed within the pair so the aisle (even) seat
+    // is physically closer to the corridor — e.g. row 1 → [1, 2] | [4, 3].
+    const maxCol = Math.max(...seatCells.map(c => c.col), 4);
+    const aisleCol = Math.ceil(maxCol / 2);
+
+    const rowGroups = new Map<string, LayoutCell[]>();
+    for (const cell of seatCells) {
+      const key = `${cell.floor ?? 1}-${cell.row}`;
+      if (!rowGroups.has(key)) rowGroups.set(key, []);
+      rowGroups.get(key)!.push(cell);
+    }
+
+    const sortedGroups = [...rowGroups.entries()].sort(([a], [b]) => {
+      const [fa, ra] = a.split("-").map(Number);
+      const [fb, rb] = b.split("-").map(Number);
+      if (fa !== fb) return upperFirst ? fb - fa : fa - fb;
+      return ra - rb;
+    });
+
+    let counter = 1;
+    for (const [, groupCells] of sortedGroups) {
+      const leftCells = groupCells.filter(c => c.col <= aisleCol).sort((a, b) => a.col - b.col);
+      const rightCells = groupCells.filter(c => c.col > aisleCol).sort((a, b) => a.col - b.col);
+
+      for (const lCell of leftCells) {
+        seatLabels.set(keyOf(lCell), lCell.label ?? String(counter++));
+      }
+
+      // Right side: assign in reverse col order so aisle gets the higher (even) number
+      // and window gets the lower (odd) number, matching the physical corridor-first layout.
+      const rightBase = counter;
+      for (let i = 0; i < rightCells.length; i++) {
+        seatLabels.set(keyOf(rightCells[i]), rightCells[i].label ?? String(rightBase + (rightCells.length - 1 - i)));
+      }
+      counter += rightCells.length;
+    }
   } else {
     seatCells.forEach((cell, i) => {
       seatLabels.set(keyOf(cell), cell.label ?? String(i + 1));

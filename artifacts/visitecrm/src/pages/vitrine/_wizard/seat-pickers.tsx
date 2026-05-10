@@ -189,6 +189,19 @@ export function PublicLayoutSeatPicker({
           <div className="bg-gray-800 text-white text-xs font-bold py-2.5 text-center tracking-[0.15em]">
             {isUpper ? "🏢 PISO SUPERIOR — FRENTE" : "🚌 PISO INFERIOR — FRENTE"}
           </div>
+          <div className="flex items-center justify-center gap-1 px-3 pt-2 pb-0.5">
+            <div className="flex gap-1 text-[10px] text-gray-400 font-medium">
+              {Array.from({ length: fAisle }, (_, i) => (
+                <span key={i} className="w-11 text-center">{i === 0 ? "🪟" : "🚶"}</span>
+              ))}
+            </div>
+            <div className="w-6" />
+            <div className="flex gap-1 text-[10px] text-gray-400 font-medium">
+              {Array.from({ length: fMaxCol - fAisle }, (_, i) => (
+                <span key={i} className="w-11 text-center">{i === fMaxCol - fAisle - 1 ? "🪟" : "🚶"}</span>
+              ))}
+            </div>
+          </div>
           <div className="bg-gradient-to-b from-gray-50 to-white p-3 space-y-1.5">
             {Array.from({ length: fMaxRow }, (_, rowIdx) => {
               const rowNum = rowIdx + 1;
@@ -285,6 +298,19 @@ export function PublicLayoutSeatPicker({
           <div className="bg-gray-800 text-white text-xs font-bold py-2.5 text-center tracking-[0.15em]">
             FRENTE DO ÔNIBUS
           </div>
+          <div className="flex items-center justify-center gap-1 px-3 pt-2 pb-0.5">
+            <div className="flex gap-1 text-[10px] text-gray-400 font-medium">
+              {Array.from({ length: aisleAfterCol }, (_, i) => (
+                <span key={i} className="w-11 text-center">{i === 0 ? "🪟" : "🚶"}</span>
+              ))}
+            </div>
+            <div className="w-6" />
+            <div className="flex gap-1 text-[10px] text-gray-400 font-medium">
+              {Array.from({ length: maxCol - aisleAfterCol }, (_, i) => (
+                <span key={i} className="w-11 text-center">{i === maxCol - aisleAfterCol - 1 ? "🪟" : "🚶"}</span>
+              ))}
+            </div>
+          </div>
           <div className="bg-gray-50 p-3 space-y-1.5">
             {Array.from({ length: maxRow }, (_, rowIdx) => {
               const rowNum = rowIdx + 1;
@@ -324,6 +350,11 @@ export function PublicLayoutSeatPicker({
               {selectedSeatObjects.map((seat, idx) => {
                 const isVip = seat.type === "vip";
                 const price = pricePerPerson != null ? pricePerPerson * (isVip ? 1.1 : 1) : null;
+                const fMaxCol = Math.max(...seats.map((s) => s.col), 4);
+                const fAisle = Math.ceil(fMaxCol / 2);
+                const isLeft = seat.col <= fAisle;
+                const isWindowSeat = isLeft ? seat.col === 1 : seat.col === fMaxCol;
+                const positionLabel = isWindowSeat ? "🪟 Janela" : "🚶 Corredor";
                 return (
                   <motion.div
                     key={seat.number}
@@ -338,12 +369,13 @@ export function PublicLayoutSeatPicker({
                       </div>
                       <div>
                         <p className="font-semibold text-sm text-gray-900">Assento {seat.number}</p>
-                        <p className="text-xs text-gray-500 flex items-center gap-1">
+                        <p className="text-xs text-gray-500 flex items-center gap-1 flex-wrap">
                           {floors > 1
                             ? seat.floor === 2
                               ? <><ArrowUp className="w-3 h-3" /> Piso Superior</>
                               : <><ArrowDown className="w-3 h-3" /> Piso Inferior</>
                             : null}
+                          <span className={`${floors > 1 ? "ml-1" : ""} font-medium ${isWindowSeat ? "text-sky-600" : "text-orange-500"}`}>{positionLabel}</span>
                           {isVip && <span className="ml-1 text-yellow-600 font-semibold">• VIP</span>}
                         </p>
                       </div>
@@ -479,6 +511,13 @@ export function SeatGrid({
         <div className="bg-gray-800 text-white text-xs font-bold py-2.5 text-center tracking-[0.15em]">
           FRENTE DO ÔNIBUS
         </div>
+        <div className="flex items-center justify-center gap-1 px-3 pt-2 pb-0 text-[10px] text-gray-400 font-medium">
+          <span className="w-12 sm:w-14 text-center">🪟</span>
+          <span className="w-12 sm:w-14 text-center">🚶</span>
+          <div className="w-6" />
+          <span className="w-12 sm:w-14 text-center">🚶</span>
+          <span className="w-12 sm:w-14 text-center">🪟</span>
+        </div>
         <div className="bg-gray-50 p-3 space-y-2">
           {Array.from({ length: rowCount }, (_, rowIdx) => {
             const s1 = rowIdx * 4 + 1;
@@ -495,8 +534,8 @@ export function SeatGrid({
                   |
                 </div>
                 <div className="flex gap-1.5">
-                  {s3 <= totalCapacity && <SeatBtn seatNum={s3} />}
                   {s4 <= totalCapacity && <SeatBtn seatNum={s4} />}
+                  {s3 <= totalCapacity && <SeatBtn seatNum={s3} />}
                 </div>
               </div>
             );
