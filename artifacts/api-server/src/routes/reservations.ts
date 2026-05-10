@@ -1,6 +1,6 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
-import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, referralSettingsTable, dealsTable, pipelineStagesTable, tenantsTable, emailLogsTable, paymentsTable, commissionsTable } from "@workspace/db";
+import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, storeOrdersTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, referralSettingsTable, dealsTable, pipelineStagesTable, tenantsTable, emailLogsTable, paymentsTable, commissionsTable } from "@workspace/db";
 import { eq, and, sql, desc, asc, inArray, or, ilike } from "drizzle-orm";
 import { generateId, generateVoucherCode } from "../lib/id";
 import { getTenantReservationPrefix, tripTypeToCode, getYearMonth, nextReservationSequence, buildReservationNumber } from "../lib/reservation-number";
@@ -17,7 +17,7 @@ import { broadcastSeatUpdate } from "../lib/realtime";
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { applyDiscounts, computeBalance, computeEffectiveLoyaltyPoints } from "../lib/pricing";
 import { calculateTier, loyaltyAwardPointsForReservation } from "../lib/loyalty-helpers";
-import { ROLES, DEAL_STATUS, RESERVATION_STATUS, REFERRAL_STATUS, COMMISSION_STATUS, STORE_PAYMENT_STATUS, type ReservationStatus } from "@workspace/permissions";
+import { ROLES, DEAL_STATUS, RESERVATION_STATUS, REFERRAL_STATUS, COMMISSION_STATUS, STORE_ORDER_STATUS, STORE_PAYMENT_STATUS, type ReservationStatus } from "@workspace/permissions";
 import { parseReservationStatus } from "../lib/status-validators";
 
 
@@ -1199,6 +1199,31 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
             eq(commissionsTable.tenantId, me.tenantId),
             inArray(commissionsTable.status, [COMMISSION_STATUS.PENDING, COMMISSION_STATUS.APPROVED]),
           ));
+
+        // --- Cancel linked store order ---
+        // Reservations created via the storefront carry a storeOrderId (= orderNumber
+        // of the originating store order). When the reservation is cancelled we must
+        // also close out that order so it does not remain in a dangling open state.
+        // We skip orders that are already cancelled or completed to stay idempotent.
+        if (existing.storeOrderId) {
+          const [storeOrder] = await tx
+            .select({ id: storeOrdersTable.id, status: storeOrdersTable.status })
+            .from(storeOrdersTable)
+            .where(and(
+              eq(storeOrdersTable.tenantId, me.tenantId),
+              eq(storeOrdersTable.orderNumber, existing.storeOrderId),
+            ))
+            .limit(1);
+          if (
+            storeOrder &&
+            storeOrder.status !== STORE_ORDER_STATUS.CANCELLED &&
+            storeOrder.status !== STORE_ORDER_STATUS.COMPLETED
+          ) {
+            await tx.update(storeOrdersTable)
+              .set({ status: STORE_ORDER_STATUS.CANCELLED, cancelledAt: new Date() })
+              .where(eq(storeOrdersTable.id, storeOrder.id));
+          }
+        }
       }
 
       // --- Seat counter sync for manual status transitions ---

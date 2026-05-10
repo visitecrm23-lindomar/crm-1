@@ -83,7 +83,7 @@ vi.mock("@workspace/db", () => ({
     transaction: mockTransaction,
   },
   storesTable: { id: "id", tenantId: "tenant_id" },
-  storeOrdersTable: {},
+  storeOrdersTable: { id: "id", tenantId: "tenant_id", orderNumber: "order_number", status: "status", cancelledAt: "cancelled_at" },
   storeOrderItemsTable: {},
   storeProductsTable: {},
   storeProductVariantsTable: {},
@@ -1187,6 +1187,224 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
       (u) => "usageCount" in u.set,
     );
     expect(couponUpdate).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // Store order lifecycle tests
+  // -------------------------------------------------------------------------
+
+  it("cancels the linked store order when a storefront reservation is cancelled", async () => {
+    const app = buildReservationsApp();
+    // No discounts, no clientId — only seat restore + commission cancel + store order cancel
+    const existing = makeReservation({ storeOrderId: "ORD-2025-0001", clientId: null });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] store order lookup by orderNumber → open order found
+    //   [1] re-fetch updated reservation
+    const tx = buildTxMock([
+      [{ id: "order-001", status: "pending" }],
+      [cancelled],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+
+    // trips (seats) + commissions (cancel) + storeOrders (cancel) + reservations = 4 updates
+    expect(tx.update).toHaveBeenCalledTimes(4);
+
+    // The store order update must set { status: "cancelled", cancelledAt: <Date> }
+    const storeOrderUpdate = capturedUpdates.find(
+      (u) => u.set.status === "cancelled" && "cancelledAt" in u.set,
+    );
+    expect(storeOrderUpdate).toBeDefined();
+  });
+
+  // -------------------------------------------------------------------------
+  it("skips the store order update when the linked order is already cancelled (idempotency)", async () => {
+    const app = buildReservationsApp();
+    const existing = makeReservation({ storeOrderId: "ORD-2025-0002", clientId: null });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] store order lookup → order already cancelled
+    //   [1] re-fetch updated reservation
+    const tx = buildTxMock([
+      [{ id: "order-002", status: "cancelled" }],
+      [cancelled],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+
+    // trips (seats) + commissions (cancel) + reservations = 3 — NO store order update
+    expect(tx.update).toHaveBeenCalledTimes(3);
+
+    // Confirm no update with cancelledAt was issued
+    const storeOrderUpdate = capturedUpdates.find(
+      (u) => "cancelledAt" in u.set,
+    );
+    expect(storeOrderUpdate).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
+  it("skips the store order update when the linked order is completed (idempotency)", async () => {
+    const app = buildReservationsApp();
+    const existing = makeReservation({ storeOrderId: "ORD-2025-0003", clientId: null });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] store order lookup → order already completed (fulfilled, cannot re-cancel)
+    //   [1] re-fetch updated reservation
+    const tx = buildTxMock([
+      [{ id: "order-003", status: "completed" }],
+      [cancelled],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+
+    // trips (seats) + commissions (cancel) + reservations = 3 — NO store order update
+    expect(tx.update).toHaveBeenCalledTimes(3);
+  });
+
+  // -------------------------------------------------------------------------
+  it("gracefully skips the store order update when no matching order is found", async () => {
+    const app = buildReservationsApp();
+    // storeOrderId is set but the order no longer exists in the DB
+    const existing = makeReservation({ storeOrderId: "ORD-MISSING", clientId: null });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] store order lookup → not found
+    //   [1] re-fetch updated reservation
+    const tx = buildTxMock([
+      [], // no store order found
+      [cancelled],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+
+    // trips (seats) + commissions (cancel) + reservations = 3 — NO store order update
+    expect(tx.update).toHaveBeenCalledTimes(3);
+  });
+
+  // -------------------------------------------------------------------------
+  it("cancels store order alongside coupon reversal when storefront reservation has both", async () => {
+    const app = buildReservationsApp();
+    // Reservation from the storefront that also used a coupon; clientId null → no loyalty/referral
+    const existing = makeReservation({
+      storeOrderId: "ORD-2025-0010",
+      discountCouponCode: "STORE20",
+      discountCouponAmount: "20",
+      clientId: null,
+    });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] Reversal 1 — store lookup (for coupon)
+    //   [1] Reversal 1 — coupon lookup
+    //   [2] store order lookup by orderNumber
+    //   [3] re-fetch updated reservation
+    const tx = buildTxMock([
+      [{ id: "store-001" }],
+      [{ id: "coupon-001" }],
+      [{ id: "order-010", status: "confirmed" }],
+      [cancelled],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+    // trips (seats) + storeCoupons (usageCount) + commissions + storeOrders + reservations = 5
+    expect(tx.update).toHaveBeenCalledTimes(5);
+
+    // Both the coupon update and the store order cancel must be present
+    const couponUpdate = capturedUpdates.find((u) => "usageCount" in u.set);
+    expect(couponUpdate).toBeDefined();
+
+    const storeOrderUpdate = capturedUpdates.find(
+      (u) => u.set.status === "cancelled" && "cancelledAt" in u.set,
+    );
+    expect(storeOrderUpdate).toBeDefined();
+  });
+
+  // -------------------------------------------------------------------------
+  it("does not touch any store order when the reservation has no storeOrderId", async () => {
+    const app = buildReservationsApp();
+    // Default makeReservation has storeOrderId: null
+    const existing = makeReservation({ clientId: null });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue: only the re-fetch (no store order lookup needed)
+    const tx = buildTxMock([[cancelled]]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+
+    // No cancelledAt update should appear (store order path never executed)
+    const storeOrderUpdate = capturedUpdates.find((u) => "cancelledAt" in u.set);
+    expect(storeOrderUpdate).toBeUndefined();
   });
 
   // -------------------------------------------------------------------------
