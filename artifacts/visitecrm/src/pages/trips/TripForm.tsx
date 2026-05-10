@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useGetTrip, useCreateTrip, useUpdateTrip, useListLayouts, useListBoardingLocations } from "@workspace/api-client-react";
@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Plus, X, Check, Clock, MapPin, Loader2, Link2 } from "lucide-react";
+import { ArrowLeft, Plus, X, Check, Clock, MapPin, Loader2, Link2, GripVertical } from "lucide-react";
 import { TiptapEditor } from "./TiptapEditor";
 import { LayoutMiniPreview, TripCostsTab } from "./TripCostsSection";
 import { formatCurrency } from "./utils";
@@ -28,6 +28,40 @@ export function TripForm({ tripId }: { tripId?: string }) {
   const [form, setForm] = useState<TripFormData>(EMPTY_FORM);
   const [tripLimitError, setTripLimitError] = useState<{ resource: string; current?: number; limit?: number } | null>(null);
   const [seatConflictError, setSeatConflictError] = useState<string | null>(null);
+  const dragItem = useRef<{ list: "inclusions" | "exclusions"; idx: number } | null>(null);
+  const dragOverItem = useRef<number | null>(null);
+
+  function handleDragStart(list: "inclusions" | "exclusions", idx: number) {
+    dragItem.current = { list, idx };
+  }
+
+  function handleDragEnter(idx: number) {
+    dragOverItem.current = idx;
+  }
+
+  function handleDrop(list: "inclusions" | "exclusions") {
+    try {
+      if (dragItem.current === null || dragOverItem.current === null) return;
+      if (dragItem.current.list !== list) return;
+      const from = dragItem.current.idx;
+      const to = dragOverItem.current;
+      if (from === to) return;
+      setForm(prev => {
+        const items = [...prev[list]];
+        const [moved] = items.splice(from, 1);
+        items.splice(to, 0, moved);
+        return { ...prev, [list]: items };
+      });
+    } finally {
+      dragItem.current = null;
+      dragOverItem.current = null;
+    }
+  }
+
+  function handleDragEnd() {
+    dragItem.current = null;
+    dragOverItem.current = null;
+  }
 
   const { data: existingTrip } = useGetTrip(tripId ?? "", { query: { enabled: !!tripId, queryKey: ["/api/trips", tripId] } });
   const { data: layouts = [] } = useListLayouts({ query: { queryKey: ["layouts"] } });
@@ -547,7 +581,17 @@ export function TripForm({ tripId }: { tripId?: string }) {
               </div>
               <div className="space-y-2">
                 {form.inclusions.map((item, i) => (
-                  <div key={i} className="flex items-center gap-2">
+                  <div
+                    key={i}
+                    className="flex items-center gap-2"
+                    draggable
+                    onDragStart={() => handleDragStart("inclusions", i)}
+                    onDragEnter={() => handleDragEnter(i)}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={() => handleDrop("inclusions")}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <GripVertical className="w-4 h-4 shrink-0 text-muted-foreground cursor-grab active:cursor-grabbing" />
                     <Input
                       value={item}
                       onChange={e => {
@@ -586,7 +630,17 @@ export function TripForm({ tripId }: { tripId?: string }) {
               </div>
               <div className="space-y-2">
                 {form.exclusions.map((item, i) => (
-                  <div key={i} className="flex items-center gap-2">
+                  <div
+                    key={i}
+                    className="flex items-center gap-2"
+                    draggable
+                    onDragStart={() => handleDragStart("exclusions", i)}
+                    onDragEnter={() => handleDragEnter(i)}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={() => handleDrop("exclusions")}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <GripVertical className="w-4 h-4 shrink-0 text-muted-foreground cursor-grab active:cursor-grabbing" />
                     <Input
                       value={item}
                       onChange={e => {
