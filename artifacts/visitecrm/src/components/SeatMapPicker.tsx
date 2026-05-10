@@ -340,10 +340,10 @@ export function SeatMapPicker({ tripId, selectedSeats, onSeatsChange, maxSeats, 
               {selectedSeats.map((num) => {
                 const seatNum = parseInt(num, 10);
                 const isWindow = isBrazilian ? seatNum % 2 !== 0 : null;
-                const posLabel = isWindow === true ? "🪟" : isWindow === false ? "🚶" : null;
+                const posText = isWindow === true ? "🪟 Janela" : isWindow === false ? "🚶 Corredor" : null;
                 return (
                   <span key={num} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold">
-                    {num}{posLabel && <span className="text-[10px]">{posLabel}</span>}
+                    {num}{posText && <span className={`text-[10px] font-medium ${isWindow ? "text-sky-600" : "text-orange-500"}`}>{posText}</span>}
                   </span>
                 );
               })}
