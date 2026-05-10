@@ -123,6 +123,17 @@ function ReferralHistoryRow({ r, primaryColor }: { r: ClientReferral; primaryCol
 
 const PAGE_SIZE = 5;
 
+function safeQrDarkColor(hex: string, fallback = "#111827"): string {
+  const m = hex.replace("#", "").match(/^([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+  if (!m) return fallback;
+  const [r, g, b] = [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)].map((c) => {
+    const s = c / 255;
+    return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance > 0.35 ? fallback : hex;
+}
+
 function formatCurrency(value: string | number) {
   const n = typeof value === "string" ? parseFloat(value) : value;
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -233,14 +244,47 @@ export default function MyReferralPage({ slug, store }: Props) {
     if (!shareLink || !referralCode) return;
     setQrLoading(true);
     try {
-      const dataUrl = await QRCode.toDataURL(shareLink, { width: 512, margin: 2 });
-      setQrPreviewUrl(dataUrl);
+      const canvas = document.createElement("canvas");
+      await QRCode.toCanvas(canvas, shareLink, {
+        width: 512,
+        margin: 2,
+        errorCorrectionLevel: "H",
+        color: {
+          dark: safeQrDarkColor(primaryColor),
+          light: "#FFFFFF",
+        },
+      });
+
+      if (store.logoUrl) {
+        await new Promise<void>((resolve) => {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.onload = () => {
+            const ctx = canvas.getContext("2d");
+            if (!ctx) { resolve(); return; }
+            const logoSize = Math.round(canvas.width * 0.22);
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            const halo = logoSize / 2 + 8;
+            ctx.fillStyle = "#FFFFFF";
+            ctx.beginPath();
+            ctx.arc(cx, cy, halo, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.drawImage(img, cx - logoSize / 2, cy - logoSize / 2, logoSize, logoSize);
+            resolve();
+          };
+          img.onerror = () => resolve();
+          img.src = store.logoUrl!;
+        });
+      }
+
+      setQrPreviewUrl(canvas.toDataURL("image/png"));
     } catch {
       toast({ title: "Erro ao gerar QR Code", description: "Tente novamente em instantes.", variant: "destructive" });
     } finally {
       setQrLoading(false);
     }
-  }, [shareLink, referralCode, toast]);
+  }, [shareLink, referralCode, primaryColor, store.logoUrl, toast]);
 
   const handleDownloadQR = useCallback(() => {
     if (!qrPreviewUrl || !referralCode) return;
