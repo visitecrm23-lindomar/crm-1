@@ -110,6 +110,13 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
 
   const METHOD_LABELS = PAYMENT_METHOD_LABELS;
 
+  const handlePassengersExport = () => {
+    const a = document.createElement("a");
+    a.href = `/api/trips/${tripId}/passengers/export`;
+    a.download = "";
+    a.click();
+  };
+
   const toggleSort = (key: string) => setSort(prev => ({ key, dir: prev.key === key && prev.dir === "asc" ? "desc" : "asc" }));
 
   const startEdit = (r: { id: string; status: string; paymentMethod?: string | null }) => {
@@ -169,6 +176,7 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
               ))}
             </SelectContent>
           </Select>
+          <Button variant="outline" onClick={handlePassengersExport} disabled={!tripId}><Download className="w-4 h-4 mr-2" />Exportar Passageiros</Button>
           <Link href={`/trips/${tripId}/passengers`}><Button variant="outline"><List className="w-4 h-4 mr-2" />Lista ANTT</Button></Link>
           <Link href={`/trips/${tripId}/seat-map`}><Button variant="outline"><Bus className="w-4 h-4 mr-2" />Mapa de Assentos</Button></Link>
           <Link href={`/trips/${tripId}/edit`}><Button variant="outline"><Edit className="w-4 h-4 mr-2" />Editar Viagem</Button></Link>
