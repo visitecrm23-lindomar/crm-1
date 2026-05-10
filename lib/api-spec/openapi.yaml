@@ -99,6 +99,19 @@ paths:
                 $ref: "#/components/schemas/HealthStatus"
 
   # ─── ADMIN ───────────────────────────────────────────────────────
+  /admin/system-health:
+    get:
+      operationId: getSystemHealth
+      tags: [admin]
+      summary: Get system health status (superadmin only)
+      responses:
+        "200":
+          description: System health status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemHealth"
+
   /admin/stats:
     get:
       operationId: getAdminStats
@@ -7575,6 +7588,21 @@ components:
         month:
           type: string
       required: [totalSellers, monthlyCommission, month]
+
+    SystemHealthRedis:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, unavailable]
+      required: [status]
+
+    SystemHealth:
+      type: object
+      properties:
+        redis:
+          $ref: "#/components/schemas/SystemHealthRedis"
+      required: [redis]
 
     # ─── TENANT ────────────────────────────────────────────────────
     AdminStats:

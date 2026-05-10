@@ -114,6 +114,7 @@ import type {
   GetPublicReferralInfo200,
   GetPublicReferralInfoParams,
   HealthStatus,
+  SystemHealth,
   Invoice,
   InvoiceWithTenant,
   ListAdminAuditLogsParams,
@@ -378,6 +379,80 @@ export function useGetAdminStats<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetAdminStatsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get system health status (superadmin only)
+ */
+export const getGetSystemHealthUrl = () => {
+  return `/api/admin/system-health`;
+};
+
+export const getSystemHealth = async (
+  options?: RequestInit,
+): Promise<SystemHealth> => {
+  return customFetch<SystemHealth>(getGetSystemHealthUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSystemHealthQueryKey = () => {
+  return [`/api/admin/system-health`] as const;
+};
+
+export const getGetSystemHealthQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSystemHealth>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getSystemHealth>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSystemHealthQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSystemHealth>>> = ({
+    signal,
+  }) => getSystemHealth({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSystemHealth>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSystemHealthQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSystemHealth>>
+>;
+export type GetSystemHealthQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get system health status (superadmin only)
+ */
+export function useGetSystemHealth<
+  TData = Awaited<ReturnType<typeof getSystemHealth>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getSystemHealth>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSystemHealthQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

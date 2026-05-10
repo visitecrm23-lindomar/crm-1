@@ -4,6 +4,47 @@ import { logger } from "./logger";
 let _connection: Redis | null = null;
 export let isQueueEnabled = false;
 
+// ─── Transient error tracking ─────────────────────────────────────────────────
+// We count consecutive transient Redis errors in-memory so the system-health
+// endpoint can surface a meaningful status without a DB write.
+let _consecutiveTransientErrors = 0;
+let _lastTransientErrorAt: number | null = null;
+const DEGRADED_THRESHOLD = 3;    // ≥3 consecutive errors → degraded
+const UNAVAILABLE_THRESHOLD = 10; // ≥10 consecutive errors → unavailable
+// If the connection has been healthy for this many ms, auto-clear degraded state.
+const ERROR_DECAY_MS = 5 * 60 * 1000; // 5 minutes
+
+export function recordTransientRedisError(): void {
+  _consecutiveTransientErrors++;
+  _lastTransientErrorAt = Date.now();
+}
+
+export function resetTransientRedisErrors(): void {
+  _consecutiveTransientErrors = 0;
+  _lastTransientErrorAt = null;
+}
+
+export function getRedisStatus(): "ok" | "degraded" | "unavailable" {
+  if (!process.env["REDIS_URL"]?.trim()) return "ok"; // Redis not configured — not applicable
+
+  // If the connection is currently ready AND the last transient error is old
+  // enough, treat the service as recovered — even if the counter hasn't been
+  // reset by a full disconnect/reconnect cycle.
+  if (
+    _connection?.status === "ready" &&
+    _lastTransientErrorAt !== null &&
+    Date.now() - _lastTransientErrorAt > ERROR_DECAY_MS
+  ) {
+    return "ok";
+  }
+
+  if (_consecutiveTransientErrors >= UNAVAILABLE_THRESHOLD) return "unavailable";
+  if (_consecutiveTransientErrors >= DEGRADED_THRESHOLD) return "degraded";
+  // Also treat a non-ready connection with any errors as degraded
+  if (_connection && _connection.status !== "ready" && _consecutiveTransientErrors > 0) return "degraded";
+  return "ok";
+}
+
 /**
  * Returns true when an ioredis/BullMQ error looks transient — i.e. the kind
  * of error that is expected to resolve on its own (rate-limited, connection
@@ -20,6 +61,7 @@ export function isTransientRedisError(err: unknown): boolean {
     msg.includes("rate limit") ||
     msg.includes("ratelimit") ||
     msg.includes("max daily request limit") ||
+    msg.includes("max requests limit exceeded") ||
     msg.includes("maxretriesperrequest") ||
     msg.includes("connection is closed") ||
     msg.includes("stream isn't writeable")
@@ -71,11 +113,17 @@ export function getRedisConnection(): Redis | null {
 
       _connection.on("connect", () => {
         isQueueEnabled = true;
+        resetTransientRedisErrors();
         logger.info("[redis] Connected");
+      });
+
+      _connection.on("ready", () => {
+        resetTransientRedisErrors();
       });
 
       _connection.on("error", (err: Error) => {
         if (isTransientRedisError(err)) {
+          recordTransientRedisError();
           logger.warn({ err }, "[redis] Transient error (will retry)");
         } else {
           logger.error({ err }, "[redis] Error");

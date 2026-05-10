@@ -1,6 +1,6 @@
-import { useGetAdminStats } from "@workspace/api-client-react";
+import { useGetAdminStats, useGetSystemHealth } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, CheckCircle2, Clock, XCircle, TrendingUp } from "lucide-react";
+import { AlertTriangle, Building2, CheckCircle2, Clock, XCircle, TrendingUp } from "lucide-react";
 
 const PLAN_LABELS: Record<string, string> = {
   starter: "Starter",
@@ -30,8 +30,28 @@ function formatMRR(value: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 }
 
+const REDIS_STATUS_CONFIG = {
+  degraded: {
+    label: "Redis degradado",
+    description:
+      "O Redis está recebendo erros transitórios consecutivos. Filas de e-mail, PDF e lembretes podem estar lentas ou paradas.",
+    classes: "bg-amber-50 border-amber-300 text-amber-800",
+    iconClasses: "text-amber-500",
+  },
+  unavailable: {
+    label: "Redis indisponível",
+    description:
+      "O limite diário de requisições do Redis (Upstash free tier) foi atingido ou o serviço está inacessível. E-mails, PDFs e lembretes automáticos estão parados até a conexão ser restabelecida.",
+    classes: "bg-red-50 border-red-300 text-red-800",
+    iconClasses: "text-red-500",
+  },
+};
+
 export default function AdminDashboard() {
   const { data: stats, isLoading } = useGetAdminStats();
+  const { data: systemHealth } = useGetSystemHealth({
+    query: { refetchInterval: 60_000 },
+  });
 
   if (isLoading) {
     return (
@@ -43,6 +63,8 @@ export default function AdminDashboard() {
 
   const statusKeys = ["active", "trial", "suspended"];
   const planKeys = Object.keys(stats?.byPlan ?? {});
+  const redisStatus = systemHealth?.redis?.status;
+  const redisAlert = redisStatus && redisStatus !== "ok" ? REDIS_STATUS_CONFIG[redisStatus] : null;
 
   return (
     <div className="space-y-6">
@@ -50,6 +72,16 @@ export default function AdminDashboard() {
         <h1 className="text-2xl font-bold text-foreground">Visão Geral da Plataforma</h1>
         <p className="text-muted-foreground text-sm mt-1">Métricas globais de todos os tenants cadastrados</p>
       </div>
+
+      {redisAlert && (
+        <div className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${redisAlert.classes}`}>
+          <AlertTriangle className={`mt-0.5 h-5 w-5 shrink-0 ${redisAlert.iconClasses}`} />
+          <div>
+            <p className="font-semibold text-sm">{redisAlert.label}</p>
+            <p className="text-sm mt-0.5">{redisAlert.description}</p>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>

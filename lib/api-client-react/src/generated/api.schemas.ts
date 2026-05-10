@@ -9,6 +9,14 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface SystemHealthRedis {
+  status: "ok" | "degraded" | "unavailable";
+}
+
+export interface SystemHealth {
+  redis: SystemHealthRedis;
+}
+
 export interface SuccessResponse {
   success: boolean;
 }

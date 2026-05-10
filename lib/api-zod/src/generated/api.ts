@@ -48,6 +48,15 @@ export const HealthCheckLegacyResponse = zod.object({
 });
 
 /**
+ * @summary Get system health status (superadmin only)
+ */
+export const GetSystemHealthResponse = zod.object({
+  redis: zod.object({
+    status: zod.enum(["ok", "degraded", "unavailable"]),
+  }),
+});
+
+/**
  * @summary Get global platform stats (superadmin only)
  */
 export const GetAdminStatsResponse = zod.object({
