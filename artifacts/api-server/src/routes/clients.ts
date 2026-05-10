@@ -365,24 +365,29 @@ router.delete("/clients/:id", async (req, res, next: NextFunction): Promise<void
 
     const linkedUserId = client.userId;
 
+    let linkedUser: typeof usersTable.$inferSelect | undefined;
+    if (linkedUserId) {
+      const [found] = await db.select().from(usersTable)
+        .where(and(eq(usersTable.id, linkedUserId), eq(usersTable.tenantId, me.tenantId)))
+        .limit(1);
+      linkedUser = found;
+    }
+
+    if (linkedUser) {
+      try {
+        await clerkClient.users.deleteUser(linkedUser.clerkId);
+      } catch (clerkErr: unknown) {
+        const status = (clerkErr as { status?: number })?.status;
+        if (status !== 404) {
+          next(new AppError(`Failed to delete linked Clerk account: ${(clerkErr as Error).message}`, 502, "CLERK_DELETE_FAILED"));
+          return;
+        }
+      }
+      await db.delete(usersTable).where(eq(usersTable.id, linkedUser.id));
+    }
+
     await db.delete(clientsTable)
       .where(and(eq(clientsTable.id, req.params.id), eq(clientsTable.tenantId, me.tenantId)));
-
-    if (linkedUserId) {
-      const [linkedUser] = await db.select().from(usersTable).where(eq(usersTable.id, linkedUserId)).limit(1);
-      if (linkedUser) {
-        try {
-          await clerkClient.users.deleteUser(linkedUser.clerkId);
-        } catch (clerkErr: unknown) {
-          const status = (clerkErr as { status?: number })?.status;
-          if (status !== 404) {
-            next(new AppError(`Failed to delete linked Clerk account: ${(clerkErr as Error).message}`, 502, "CLERK_DELETE_FAILED"));
-            return;
-          }
-        }
-        await db.delete(usersTable).where(eq(usersTable.id, linkedUserId));
-      }
-    }
 
     res.json({ success: true });
   } catch (err) {
