@@ -1742,6 +1742,48 @@ function ApiKeysTab() {
 /* ──────────────────── Features Tab ──────────────────── */
 const PLAN_TIER: Record<string, number> = { starter: 0, pro: 1, enterprise: 2 };
 
+interface UpgradeFeatureModalProps {
+  featureLabel: string;
+  requiredPlanLabel: string;
+  onClose: () => void;
+}
+
+function UpgradeFeatureModal({ featureLabel, requiredPlanLabel, onClose }: UpgradeFeatureModalProps) {
+  function goToPlanTab() {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", "plan");
+    window.location.href = url.toString();
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Lock className="w-5 h-5 text-muted-foreground" />
+            Funcionalidade bloqueada
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">{featureLabel}</span> está disponível
+            apenas no plano <span className="font-semibold text-foreground">{requiredPlanLabel}</span> ou superior.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Faça upgrade do seu plano para desbloquear esta e outras funcionalidades avançadas.
+          </p>
+        </div>
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          <Button variant="outline" onClick={onClose}>Fechar</Button>
+          <Button onClick={goToPlanTab}>
+            Ver planos de upgrade
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function FeaturesTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1754,8 +1796,9 @@ function FeaturesTab() {
     },
   });
   const updateTenant = useUpdateTenant();
+  const [upgradeModal, setUpgradeModal] = useState<{ label: string; planLabel: string } | null>(null);
 
-  const settings = (fullTenant?.settings ?? {}) as Record<string, unknown>;
+  const settings = ((fullTenant as (typeof fullTenant & { settings?: Record<string, unknown> }))?.settings ?? {});
   const referralsEnabled = settings.referralsEnabled !== false;
   const couponsEnabled = settings.couponsEnabled !== false;
 
@@ -1801,40 +1844,48 @@ function FeaturesTab() {
         {FEATURES.map((f) => {
           const locked = currentTier < f.minTier;
           return (
-            <div key={f.key} className="flex items-center justify-between px-4 py-4 gap-4">
+            <div
+              key={f.key}
+              className={`flex items-center justify-between px-4 py-4 gap-4 ${locked ? "cursor-pointer" : ""}`}
+              onClick={locked ? () => setUpgradeModal({ label: f.label, planLabel: f.requiredPlanLabel! }) : undefined}
+            >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium">{f.label}</p>
                   {locked && (
                     <Badge variant="secondary" className="flex items-center gap-1 text-xs">
                       <Lock className="w-3 h-3" />
-                      Plano {f.requiredPlanLabel}
+                      Disponível no plano {f.requiredPlanLabel}
                     </Badge>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">{f.description}</p>
-                {locked && (
-                  <button
-                    className="text-xs text-primary underline mt-1"
-                    onClick={() => {
-                      const url = new URL(window.location.href);
-                      url.searchParams.set("tab", "plan");
-                      window.location.href = url.toString();
-                    }}
-                  >
-                    Fazer upgrade para desbloquear
-                  </button>
-                )}
               </div>
               <Switch
                 checked={f.enabled}
-                onCheckedChange={(v) => handleToggle(f.key, v)}
-                disabled={updateTenant.isPending || locked}
+                aria-disabled={locked || updateTenant.isPending}
+                className={locked ? "opacity-50" : ""}
+                onCheckedChange={(v) => {
+                  if (locked) {
+                    setUpgradeModal({ label: f.label, planLabel: f.requiredPlanLabel! });
+                    return;
+                  }
+                  handleToggle(f.key, v);
+                }}
+                disabled={updateTenant.isPending && !locked}
               />
             </div>
           );
         })}
       </div>
+
+      {upgradeModal && (
+        <UpgradeFeatureModal
+          featureLabel={upgradeModal.label}
+          requiredPlanLabel={upgradeModal.planLabel}
+          onClose={() => setUpgradeModal(null)}
+        />
+      )}
     </div>
   );
 }
