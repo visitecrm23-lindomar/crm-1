@@ -12,8 +12,9 @@ import {
   loyaltyProgramsTable,
   loyaltyMembersTable,
   loyaltyTransactionsTable,
+  clientNotificationsTable,
 } from "@workspace/db";
-import { eq, and, desc, asc, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, asc, sql, inArray, gt, count, isNull } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
@@ -841,8 +842,52 @@ router.get("/client/notifications/stream", async (req, res, next: NextFunction):
       }
     }, 30_000);
 
+    let lastPolledAt = new Date();
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const newRows = await db
+          .select()
+          .from(clientNotificationsTable)
+          .where(
+            and(
+              eq(clientNotificationsTable.clientId, client.id),
+              gt(clientNotificationsTable.createdAt, lastPolledAt),
+            ),
+          )
+          .orderBy(asc(clientNotificationsTable.createdAt));
+
+        if (newRows.length > 0) {
+          lastPolledAt = new Date();
+          const [unreadRow] = await db
+            .select({ cnt: count() })
+            .from(clientNotificationsTable)
+            .where(and(eq(clientNotificationsTable.clientId, client.id), isNull(clientNotificationsTable.readAt)));
+
+          for (const n of newRows) {
+            const frame = JSON.stringify({
+              type: "notification",
+              data: {
+                id: n.id,
+                type: n.type,
+                payload: n.payload ?? {},
+                readAt: null,
+                createdAt: (n.createdAt as unknown as Date).toISOString(),
+                unreadCount: Number(unreadRow?.cnt ?? 0),
+              },
+            });
+            res.write(`data: ${frame}\n\n`);
+          }
+        } else {
+          lastPolledAt = new Date();
+        }
+      } catch {
+      }
+    }, 15_000);
+
     req.on("close", () => {
       clearInterval(heartbeat);
+      clearInterval(pollInterval);
       removeClientSseConnection(client.id, res);
     });
   } catch (err) {

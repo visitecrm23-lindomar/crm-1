@@ -6,7 +6,8 @@ import { z } from "zod/v4";
 export type ClientNotificationType =
   | "referral_converted"
   | "referral_bonus_released"
-  | "referral_bonus_paid";
+  | "referral_bonus_paid"
+  | "referral_link_clicked";
 
 export interface ClientNotificationPayload {
   referredName?: string;

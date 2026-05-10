@@ -36,6 +36,7 @@ import { prepareCheckoutItems } from "../services/checkout/items";
 import { loadReservationContext } from "../services/checkout/reservation-context";
 import { persistCheckoutOrder } from "../services/checkout/persist-order";
 import { runPostBookingSideEffects } from "../services/checkout/post-booking";
+import { insertClientNotification } from "../lib/client-notifications";
 
 function generateCookieId(): string {
   return randomBytes(16).toString("hex");
@@ -1091,6 +1092,19 @@ router.post("/public/store/:slug/referral/track", async (req, res, next: NextFun
         utmContent: parsed.data.utmContent,
         utmTerm: parsed.data.utmTerm,
       });
+
+      // Notify the referrer that someone has clicked their link (first visit only)
+      db.select({ clientId: clientsTable.id, name: clientsTable.name })
+        .from(clientsTable)
+        .where(and(eq(clientsTable.tenantId, store.tenantId), eq(clientsTable.referralCode, code)))
+        .limit(1)
+        .then(([referrer]) => {
+          if (!referrer) return;
+          return insertClientNotification(referrer.clientId, store.tenantId, "referral_link_clicked", {
+            referralCode: code,
+          });
+        })
+        .catch(() => undefined);
     }
 
     // Sync lastVisit and visitsCount back to the referrals table so the admin panel shows live data.

@@ -123,7 +123,8 @@ async function apiReq<T>(method: string, path: string, body?: unknown): Promise<
 export type ClientNotificationType =
   | "referral_converted"
   | "referral_bonus_released"
-  | "referral_bonus_paid";
+  | "referral_bonus_paid"
+  | "referral_link_clicked";
 
 export interface ClientNotification {
   id: string;

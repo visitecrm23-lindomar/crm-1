@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Bell } from "lucide-react";
 import { clientPortalApi, type ClientNotification } from "@/lib/clientPortalApi";
+import { useToast } from "@/hooks/use-toast";
 
 function notificationLabel(type: ClientNotification["type"], payload: ClientNotification["payload"]): string {
   switch (type) {
@@ -16,6 +17,8 @@ function notificationLabel(type: ClientNotification["type"], payload: ClientNoti
       return payload.bonusAmount
         ? `Bônus de R$ ${Number(payload.bonusAmount).toFixed(2)} pago com sucesso!`
         : "Seu bônus de indicação foi pago!";
+    case "referral_link_clicked":
+      return "Alguém acessou sua página via link de indicação!";
     default:
       return "Nova notificação";
   }
@@ -42,6 +45,7 @@ export function NotificationBell({ primaryColor = "#2563eb" }: Props) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const esRef = useRef<EventSource | null>(null);
+  const { toast } = useToast();
 
   const openStream = useCallback(() => {
     if (esRef.current) return;
@@ -78,6 +82,11 @@ export function NotificationBell({ primaryColor = "#2563eb" }: Props) {
           };
           setNotifications((prev) => [newNotif, ...prev].slice(0, 20));
           setUnreadCount(msg.data.unreadCount ?? 0);
+
+          toast({
+            title: "Nova notificação",
+            description: notificationLabel(newNotif.type, newNotif.payload),
+          });
         } else if (msg.type === "all_read") {
           setUnreadCount(0);
           setNotifications((prev) => prev.map((n) => ({ ...n, readAt: new Date().toISOString() })));
@@ -91,7 +100,7 @@ export function NotificationBell({ primaryColor = "#2563eb" }: Props) {
       esRef.current = null;
       setTimeout(openStream, 5_000);
     };
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     openStream();
@@ -136,7 +145,7 @@ export function NotificationBell({ primaryColor = "#2563eb" }: Props) {
         {unreadCount > 0 && (
           <span
             className="absolute -top-1 -right-1 flex items-center justify-center w-4 h-4 rounded-full text-white text-[10px] font-bold leading-none"
-            style={{ backgroundColor: primaryColor === "#2563eb" ? "#ef4444" : primaryColor }}
+            style={{ backgroundColor: primaryColor === "#2563eb" ? "#ef4444" : "#ef4444" }}
           >
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
