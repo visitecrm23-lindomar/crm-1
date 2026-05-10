@@ -145,7 +145,7 @@ export function NotificationBell({ primaryColor = "#2563eb" }: Props) {
         {unreadCount > 0 && (
           <span
             className="absolute -top-1 -right-1 flex items-center justify-center w-4 h-4 rounded-full text-white text-[10px] font-bold leading-none"
-            style={{ backgroundColor: primaryColor === "#2563eb" ? "#ef4444" : "#ef4444" }}
+            style={{ backgroundColor: "#ef4444" }}
           >
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>

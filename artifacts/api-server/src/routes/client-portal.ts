@@ -845,6 +845,9 @@ router.get("/client/notifications/stream", async (req, res, next: NextFunction):
     let lastPolledAt = new Date();
 
     const pollInterval = setInterval(async () => {
+      // Capture the high-water mark BEFORE querying so any row inserted
+      // during query execution is caught on the next tick, never skipped.
+      const queryTime = new Date();
       try {
         const newRows = await db
           .select()
@@ -857,8 +860,11 @@ router.get("/client/notifications/stream", async (req, res, next: NextFunction):
           )
           .orderBy(asc(clientNotificationsTable.createdAt));
 
+        // Advance cursor only after a successful query, using the pre-query
+        // timestamp so rows created between snapshot and now are not lost.
+        lastPolledAt = queryTime;
+
         if (newRows.length > 0) {
-          lastPolledAt = new Date();
           const [unreadRow] = await db
             .select({ cnt: count() })
             .from(clientNotificationsTable)
@@ -878,10 +884,10 @@ router.get("/client/notifications/stream", async (req, res, next: NextFunction):
             });
             res.write(`data: ${frame}\n\n`);
           }
-        } else {
-          lastPolledAt = new Date();
         }
-      } catch {
+      } catch (pollErr) {
+        // Log but do not advance cursor — retry on next tick with same watermark
+        console.warn("[sse-poll] poll error for client", client.id, (pollErr as Error).message);
       }
     }, 15_000);
 
