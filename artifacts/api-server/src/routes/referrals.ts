@@ -835,20 +835,21 @@ router.get("/referrals/export", async (req, res): Promise<void> => {
     }
 
     if (format === "xlsx") {
-      const XLSX = await import("xlsx");
-      const wsData = [headers, ...dataRows];
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-      const colWidths = headers.map((h, i) => ({
-        wch: Math.max(h.length, ...dataRows.map(r => String(r[i] ?? "").length)) + 2,
-      }));
-      ws["!cols"] = colWidths;
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Indicações");
-      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      const ExcelJS = (await import("exceljs")).default;
+      const wb = new ExcelJS.Workbook();
+      wb.creator = "VisiteCRM";
+      const ws = wb.addWorksheet("Indicações");
+      const headerRow = ws.addRow(headers);
+      headerRow.font = { bold: true };
+      for (const row of dataRows) ws.addRow(row);
+      headers.forEach((h, i) => {
+        ws.getColumn(i + 1).width = Math.max(h.length, ...dataRows.map(r => String(r[i] ?? "").length)) + 2;
+      });
+      const buf = await wb.xlsx.writeBuffer();
       const filename = `indicacoes-${dateStr}.xlsx`;
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-      res.send(buf);
+      res.send(Buffer.from(buf));
       return;
     }
 

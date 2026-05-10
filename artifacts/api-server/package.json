@@ -38,7 +38,6 @@
     "pino-http": "^10",
     "qrcode": "^1.5.4",
     "uploadthing": "^7.7.4",
-    "xlsx": "^0.18.5",
     "zod": "catalog:"
   },
   "devDependencies": {
