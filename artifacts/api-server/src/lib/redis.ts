@@ -1,5 +1,6 @@
 import { Redis } from "ioredis";
 import { logger } from "./logger";
+import { sendRedisAlertEmail } from "@workspace/email";
 
 let _connection: Redis | null = null;
 export let isQueueEnabled = false;
@@ -14,14 +15,76 @@ const UNAVAILABLE_THRESHOLD = 10; // ≥10 consecutive errors → unavailable
 // If the connection has been healthy for this many ms, auto-clear degraded state.
 const ERROR_DECAY_MS = 5 * 60 * 1000; // 5 minutes
 
+// ─── Alert rate-limiting ──────────────────────────────────────────────────────
+// At most one email alert per hour, triggered on ok → degraded/unavailable
+// transitions (or when the status worsens further after the rate-limit window).
+let _lastAlertSentAt: number | null = null;
+let _lastKnownStatus: "ok" | "degraded" | "unavailable" = "ok";
+const ALERT_RATE_LIMIT_MS = 60 * 60 * 1000; // 1 hour
+
+function maybeFireRedisAlert(): void {
+  const currentStatus = getRedisStatus();
+
+  if (currentStatus === "ok") {
+    _lastKnownStatus = "ok";
+    return;
+  }
+
+  const prevStatus = _lastKnownStatus;
+  _lastKnownStatus = currentStatus;
+
+  // Skip if the status hasn't changed and we're still within the rate-limit window
+  if (prevStatus === currentStatus && _lastAlertSentAt !== null) {
+    if (Date.now() - _lastAlertSentAt < ALERT_RATE_LIMIT_MS) return;
+  }
+
+  // Skip if this is not a transition from ok and we've already alerted recently
+  if (prevStatus !== "ok" && _lastAlertSentAt !== null) {
+    if (Date.now() - _lastAlertSentAt < ALERT_RATE_LIMIT_MS) return;
+  }
+
+  const superadminEmail = process.env["SUPERADMIN_EMAIL"]?.trim();
+  if (!superadminEmail) {
+    logger.warn("[redis-alert] SUPERADMIN_EMAIL not set — skipping alert email");
+    return;
+  }
+
+  const appUrl = (process.env["APP_URL"] ?? "").trim().replace(/\/$/, "");
+  if (!appUrl) {
+    logger.warn("[redis-alert] APP_URL not set — alert email will not include a dashboard link");
+  }
+  const dashboardUrl = appUrl ? `${appUrl}/admin` : null;
+
+  // Mark the attempt immediately to prevent concurrent duplicate sends.
+  // Reset on failure so the next error can trigger a retry rather than
+  // suppressing alerts for a full hour when delivery itself failed.
+  _lastAlertSentAt = Date.now();
+
+  sendRedisAlertEmail({ to: superadminEmail, status: currentStatus, dashboardUrl })
+    .then((result) => {
+      if (result.success) {
+        logger.warn({ status: currentStatus, to: superadminEmail }, "[redis-alert] Alert email sent");
+      } else {
+        logger.error({ status: currentStatus, error: result.error }, "[redis-alert] Failed to send alert email — clearing rate-limit so next error can retry");
+        _lastAlertSentAt = null;
+      }
+    })
+    .catch((err) => {
+      logger.error({ err }, "[redis-alert] Unexpected error sending alert email — clearing rate-limit so next error can retry");
+      _lastAlertSentAt = null;
+    });
+}
+
 export function recordTransientRedisError(): void {
   _consecutiveTransientErrors++;
   _lastTransientErrorAt = Date.now();
+  maybeFireRedisAlert();
 }
 
 export function resetTransientRedisErrors(): void {
   _consecutiveTransientErrors = 0;
   _lastTransientErrorAt = null;
+  _lastKnownStatus = "ok";
 }
 
 export function getRedisStatus(): "ok" | "degraded" | "unavailable" {
