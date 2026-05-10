@@ -9,6 +9,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { ROLES } from "@workspace/permissions";
 import QRCode from "qrcode";
 import {
@@ -136,6 +143,8 @@ export default function MyReferralPage({ slug, store }: Props) {
   const [loadingReferrals, setLoadingReferrals] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "confirmed" | "expired">("all");
+  const [qrPreviewUrl, setQrPreviewUrl] = useState<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -220,18 +229,26 @@ export default function MyReferralPage({ slug, store }: Props) {
     }
   }, [shareLink, referralCode, store.name]);
 
-  const handleDownloadQR = useCallback(async () => {
+  const handleShowQR = useCallback(async () => {
     if (!shareLink || !referralCode) return;
+    setQrLoading(true);
     try {
       const dataUrl = await QRCode.toDataURL(shareLink, { width: 512, margin: 2 });
-      const anchor = document.createElement("a");
-      anchor.href = dataUrl;
-      anchor.download = `qrcode-indicacao-${referralCode}.png`;
-      anchor.click();
+      setQrPreviewUrl(dataUrl);
     } catch {
       toast({ title: "Erro ao gerar QR Code", description: "Tente novamente em instantes.", variant: "destructive" });
+    } finally {
+      setQrLoading(false);
     }
   }, [shareLink, referralCode, toast]);
+
+  const handleDownloadQR = useCallback(() => {
+    if (!qrPreviewUrl || !referralCode) return;
+    const anchor = document.createElement("a");
+    anchor.href = qrPreviewUrl;
+    anchor.download = `qrcode-indicacao-${referralCode}.png`;
+    anchor.click();
+  }, [qrPreviewUrl, referralCode]);
 
   if (!isLoaded || meLoading || loading) {
     return (
@@ -478,13 +495,18 @@ export default function MyReferralPage({ slug, store }: Props) {
             )}
           </div>
 
-          {/* QR Code download */}
+          {/* QR Code preview */}
           <Button
             variant="outline"
             className="w-full gap-2"
-            onClick={handleDownloadQR}
+            onClick={handleShowQR}
+            disabled={qrLoading}
           >
-            <QrCode className="w-4 h-4" />
+            {qrLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <QrCode className="w-4 h-4" />
+            )}
             Gerar QR Code
           </Button>
         </CardContent>
@@ -650,6 +672,39 @@ export default function MyReferralPage({ slug, store }: Props) {
           </div>
         </CardContent>
       </Card>
+
+      {/* QR Code preview dialog */}
+      <Dialog open={!!qrPreviewUrl} onOpenChange={(open) => { if (!open) setQrPreviewUrl(null); }}>
+        <DialogContent className="max-w-xs w-full">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <QrCode className="w-4 h-4" />
+              QR Code de indicação
+            </DialogTitle>
+            <DialogDescription>
+              Escaneie para acessar sua página de indicação.
+            </DialogDescription>
+          </DialogHeader>
+          {qrPreviewUrl && (
+            <div className="flex flex-col items-center gap-4 py-2">
+              <div className="rounded-xl border p-3 bg-white shadow-sm">
+                <img
+                  src={qrPreviewUrl}
+                  alt="QR Code de indicação"
+                  className="w-56 h-56 object-contain"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                Código: <span className="font-mono font-semibold">{referralCode}</span>
+              </p>
+              <Button className="w-full gap-2" onClick={handleDownloadQR}>
+                <QrCode className="w-4 h-4" />
+                Baixar
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
