@@ -1455,6 +1455,151 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     expect(storeOrderUpdate).toBeUndefined();
   });
 
+  // =========================================================================
+  // Store order lifecycle tests — refunded-status path
+  //
+  // These mirror the cancelled-status store order tests above, verifying that
+  // marking a reservation as "refunded" directly in the CRM (without going
+  // through a payment-gateway webhook) also closes out the linked store order.
+  // Both "cancelled" and "refunded" flow through the same isBeingCancelled &&
+  // wasActive gate in the PATCH handler, so the behaviour must be identical.
+  // =========================================================================
+
+  it("cancels the linked store order when a storefront reservation is marked as refunded", async () => {
+    const app = buildReservationsApp();
+    const existing = makeReservation({ storeOrderId: "ORD-2025-REF-001", clientId: null });
+    const refunded = { ...existing, status: "refunded" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] store order lookup by orderNumber → open order found
+    //   [1] re-fetch updated reservation
+    const tx = buildTxMock([
+      [{ id: "order-ref-001", status: "pending" }],
+      [refunded],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "refunded" });
+
+    expect(res.status).toBe(200);
+
+    // trips (seats) + commissions (cancel) + storeOrders (cancel) + reservations = 4 updates
+    expect(tx.update).toHaveBeenCalledTimes(4);
+
+    // The store order update must set { status: "cancelled", cancelledAt: <Date> }
+    const storeOrderUpdate = capturedUpdates.find(
+      (u) => u.set.status === "cancelled" && "cancelledAt" in u.set,
+    );
+    expect(storeOrderUpdate).toBeDefined();
+  });
+
+  // -------------------------------------------------------------------------
+  it("skips the store order update when the linked order is already cancelled (idempotency — refunded path)", async () => {
+    const app = buildReservationsApp();
+    const existing = makeReservation({ storeOrderId: "ORD-2025-REF-002", clientId: null });
+    const refunded = { ...existing, status: "refunded" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] store order lookup → order already cancelled
+    //   [1] re-fetch updated reservation
+    const tx = buildTxMock([
+      [{ id: "order-ref-002", status: "cancelled" }],
+      [refunded],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "refunded" });
+
+    expect(res.status).toBe(200);
+
+    // trips (seats) + commissions (cancel) + reservations = 3 — NO store order update
+    expect(tx.update).toHaveBeenCalledTimes(3);
+
+    const storeOrderUpdate = capturedUpdates.find((u) => "cancelledAt" in u.set);
+    expect(storeOrderUpdate).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
+  it("skips the store order update when the linked order is completed (idempotency — refunded path)", async () => {
+    const app = buildReservationsApp();
+    const existing = makeReservation({ storeOrderId: "ORD-2025-REF-003", clientId: null });
+    const refunded = { ...existing, status: "refunded" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] store order lookup → order already completed (fulfilled, cannot re-cancel)
+    //   [1] re-fetch updated reservation
+    const tx = buildTxMock([
+      [{ id: "order-ref-003", status: "completed" }],
+      [refunded],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "refunded" });
+
+    expect(res.status).toBe(200);
+
+    // trips (seats) + commissions (cancel) + reservations = 3 — NO store order update
+    expect(tx.update).toHaveBeenCalledTimes(3);
+  });
+
+  // -------------------------------------------------------------------------
+  it("gracefully skips the store order update when no matching order is found (refunded path)", async () => {
+    const app = buildReservationsApp();
+    const existing = makeReservation({ storeOrderId: "ORD-REF-MISSING", clientId: null });
+    const refunded = { ...existing, status: "refunded" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] store order lookup → not found
+    //   [1] re-fetch updated reservation
+    const tx = buildTxMock([
+      [], // no store order found
+      [refunded],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "refunded" });
+
+    expect(res.status).toBe(200);
+
+    // trips (seats) + commissions (cancel) + reservations = 3 — NO store order update
+    expect(tx.update).toHaveBeenCalledTimes(3);
+
+    const storeOrderUpdate = capturedUpdates.find((u) => "cancelledAt" in u.set);
+    expect(storeOrderUpdate).toBeUndefined();
+  });
+
   // -------------------------------------------------------------------------
   it("calls general CalendarSyncService.syncTrip for non-cancellation reservation PATCHes (regression guard)", async () => {
     const app = buildReservationsApp();
