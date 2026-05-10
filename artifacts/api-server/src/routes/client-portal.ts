@@ -139,9 +139,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
               tenantId: me.tenantId,
               tenantSlug: tenant?.slug ?? undefined,
             }).catch((err: unknown) => {
-              // Fire-and-forget — welcome email is non-critical
-              const msg = err instanceof Error ? err.message : String(err);
-              void msg;
+              console.warn("[client-portal] Failed to dispatch referral welcome email:", err instanceof Error ? err.message : String(err));
             });
           }
         } catch {

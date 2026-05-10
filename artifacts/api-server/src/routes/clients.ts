@@ -599,8 +599,7 @@ router.post("/clients/:clientId/referral/generate", async (req, res, next: NextF
       referralCode: code,
       tenantId: me.tenantId,
     }).catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      void msg;
+      console.warn("[clients] Failed to dispatch referral welcome email:", err instanceof Error ? err.message : String(err));
     });
 
     res.json({ code });
