@@ -1194,6 +1194,18 @@ function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
           <CardTitle className="text-base">Minhas Indicações</CardTitle>
         </CardHeader>
         <CardContent>
+          {!loadingReferrals && (
+            <div className="flex gap-2 flex-wrap mb-4">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
+                <CheckCircle className="w-3.5 h-3.5" />
+                {paidBonus.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} recebido
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200">
+                <Clock className="w-3.5 h-3.5" />
+                {pendingBonus.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} a receber
+              </span>
+            </div>
+          )}
           {loadingReferrals ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
