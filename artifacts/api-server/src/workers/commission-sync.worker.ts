@@ -14,6 +14,8 @@ export function startCommissionSyncWorker(): Worker<CommissionSyncJobData> | nul
     return null;
   }
 
+  const isDev = process.env.NODE_ENV !== "production";
+
   _worker = new Worker<CommissionSyncJobData>(
     "commission-sync",
     async (job) => {
@@ -23,10 +25,9 @@ export function startCommissionSyncWorker(): Worker<CommissionSyncJobData> | nul
       await clearCommissionSyncStatus(reservationId, tenantId);
       logger.info({ jobId: job.id, reservationId }, "[commission-sync-worker] Commission sync complete");
     },
-    {
-      connection: conn,
-      concurrency: 3,
-    },
+    isDev
+      ? { connection: conn, concurrency: 1, stalledInterval: 60_000, drainDelay: 30 }
+      : { connection: conn, concurrency: 3, stalledInterval: 15_000 },
   );
 
   _worker.on("failed", (job, err) => {

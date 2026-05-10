@@ -1114,7 +1114,9 @@ export function startReminderWorker(): Worker<ReminderJobData> | null {
         logger.warn({ type: job.data.type }, "[reminder-worker] Unknown reminder type");
       }
     },
-    { connection: conn, concurrency: 1 },
+    process.env.NODE_ENV !== "production"
+      ? { connection: conn, concurrency: 1, stalledInterval: 60_000, drainDelay: 30 }
+      : { connection: conn, concurrency: 1, stalledInterval: 15_000 },
   );
 
   _worker.on("failed", (job, err) => {

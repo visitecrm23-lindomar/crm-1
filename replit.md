@@ -146,3 +146,17 @@ This is required for the billing system, plan selection UI, and tenant onboardin
 - **Google Calendar API**: For event synchronization and management.
 - **Replit DB**: For database hosting in the Replit environment.
 - **Redis (optional)**: Required for BullMQ async job queues. Set `REDIS_URL` env var (Upstash-compatible). When absent, emails are sent synchronously. **Note**: The Upstash free tier has a 500 000 daily request limit. BullMQ's keep-alive polling can exhaust this quickly in active development. Upgrade to a paid Upstash tier or run a local Redis instance (`redis-server`) for sustained dev usage.
+
+### BullMQ Worker Tuning (Redis request reduction)
+
+All five workers (`email`, `reminder`, `pdf`, `commission-sync`, `whatsapp`) are initialised with environment-aware options controlled by a `NODE_ENV !== "production"` guard:
+
+| Setting | Development | Production |
+|---|---|---|
+| `concurrency` | 1 | 1–5 (per worker original value) |
+| `stalledInterval` | 60 000 ms (1 min) | 15 000 ms (15 s) |
+| `drainDelay` | 30 s | 5 s (BullMQ default) |
+
+In **development**, `drainDelay: 30` (seconds) makes each worker pause 30 seconds before re-polling Redis when the queue is empty, dramatically reducing idle request traffic against Upstash's free-tier budget. `stalledInterval: 60_000` (ms) reduces the frequency of stall-detection checks.
+
+In **production**, `stalledInterval: 15_000` (ms) provides fast stall detection (15 s) and `drainDelay` is left at the BullMQ default (5 s) for maximum responsiveness.

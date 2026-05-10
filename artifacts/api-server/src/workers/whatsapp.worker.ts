@@ -13,6 +13,8 @@ export function startWhatsAppWorker(): Worker<WhatsAppNotificationJobData> | nul
     return null;
   }
 
+  const isDev = process.env.NODE_ENV !== "production";
+
   _worker = new Worker<WhatsAppNotificationJobData>(
     "whatsapp-notifications",
     async (job) => {
@@ -22,10 +24,9 @@ export function startWhatsAppWorker(): Worker<WhatsAppNotificationJobData> | nul
         throw new Error(result.error ?? "send_failed");
       }
     },
-    {
-      connection: conn,
-      concurrency: 5,
-    },
+    isDev
+      ? { connection: conn, concurrency: 1, stalledInterval: 60_000, drainDelay: 30 }
+      : { connection: conn, concurrency: 5, stalledInterval: 15_000 },
   );
 
   _worker.on("failed", (job, err) => {

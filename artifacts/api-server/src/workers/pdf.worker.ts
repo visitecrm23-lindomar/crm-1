@@ -15,6 +15,8 @@ export function startPdfWorker(): Worker<PdfJobData> | null {
     return null;
   }
 
+  const isDev = process.env.NODE_ENV !== "production";
+
   _worker = new Worker<PdfJobData>(
     "pdfs",
     async (job) => {
@@ -72,7 +74,9 @@ export function startPdfWorker(): Worker<PdfJobData> | null {
         logger.warn({ type }, "[pdf-worker] Unknown PDF job type");
       }
     },
-    { connection: conn, concurrency: 2 },
+    isDev
+      ? { connection: conn, concurrency: 1, stalledInterval: 60_000, drainDelay: 30 }
+      : { connection: conn, concurrency: 2, stalledInterval: 15_000 },
   );
 
   _worker.on("failed", (job, err) => {

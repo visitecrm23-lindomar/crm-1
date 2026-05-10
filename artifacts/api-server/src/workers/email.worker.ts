@@ -18,6 +18,11 @@ export function startEmailWorker(): Worker<EmailJobData> | null {
     return null;
   }
 
+  const isDev = process.env.NODE_ENV !== "production";
+  const workerOptions = isDev
+    ? { connection: conn, concurrency: 1, stalledInterval: 60_000, drainDelay: 30 }
+    : { connection: conn, concurrency: 5, stalledInterval: 15_000 };
+
   _worker = new Worker<EmailJobData>(
     "emails",
     async (job) => {
@@ -120,10 +125,7 @@ export function startEmailWorker(): Worker<EmailJobData> | null {
 
       logger.info({ jobId: job.id, messageId: result.messageId }, "[email-worker] Email sent");
     },
-    {
-      connection: conn,
-      concurrency: 5,
-    },
+    workerOptions,
   );
 
   _worker.on("failed", async (job, err) => {
