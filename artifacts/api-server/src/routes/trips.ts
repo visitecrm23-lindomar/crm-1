@@ -361,10 +361,11 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
     if (parsed.data.fixedCosts !== undefined) updates.fixedCosts = Array.isArray(parsed.data.fixedCosts) ? (parsed.data.fixedCosts as FixedCostItem[]) : [];
     if (parsed.data.variableCosts !== undefined) updates.variableCosts = Array.isArray(parsed.data.variableCosts) ? (parsed.data.variableCosts as VariableCostItem[]) : [];
     if (parsed.data.gallery !== undefined) updates.gallery = parsed.data.gallery ?? [];
-    if (parsed.data.freePassengers !== undefined && parsed.data.freePassengers !== null) {
-      updates.freePassengers = parsed.data.freePassengers as FreePassenger[];
-      updates.freeOrganizers = parsed.data.freePassengers.filter(p => p.role === "organizer").length;
-      updates.freeGuides = parsed.data.freePassengers.filter(p => p.role === "guide").length;
+    if (parsed.data.freePassengers !== undefined) {
+      const fp: FreePassenger[] = Array.isArray(parsed.data.freePassengers) ? parsed.data.freePassengers as FreePassenger[] : [];
+      updates.freePassengers = fp;
+      updates.freeOrganizers = fp.filter(p => p.role === "organizer").length;
+      updates.freeGuides = fp.filter(p => p.role === "guide").length;
     } else {
       if (parsed.data.freeOrganizers !== undefined) updates.freeOrganizers = parsed.data.freeOrganizers ?? null;
       if (parsed.data.freeGuides !== undefined) updates.freeGuides = parsed.data.freeGuides ?? null;

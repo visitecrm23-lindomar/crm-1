@@ -224,7 +224,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
                         <span
                           className="absolute -top-1.5 -right-1.5 bg-white text-violet-700 text-[8px] font-black leading-none rounded-full w-4 h-4 flex items-center justify-center border border-violet-400 shadow-sm pointer-events-none"
                           aria-hidden="true"
-                        >G</span>
+                        >Grat</span>
                       )}
                     </button>
                   );
