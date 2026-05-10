@@ -17,6 +17,8 @@ export interface ClientPortalReservation {
   tripDepartureDate: string | null;
   tripReturnDate: string | null;
   tripType: string;
+  boardingPointName: string | null;
+  boardingPointTime: string | null;
 }
 
 export interface ClientLoyaltyTransaction {

@@ -147,11 +147,13 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
           storeOrderId: reservationsTable.storeOrderId,
           createdAt: reservationsTable.createdAt,
           seats: reservationsTable.seats,
+          boardingLocationId: reservationsTable.boardingLocationId,
           tripName: tripsTable.name,
           tripDestination: tripsTable.destination,
           tripDepartureDate: tripsTable.departureDate,
           tripReturnDate: tripsTable.returnDate,
           tripType: tripsTable.type,
+          tripBoardingPoints: tripsTable.boardingPoints,
         })
         .from(reservationsTable)
         .innerJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
@@ -166,6 +168,10 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
       reservations = rows.map((r) => {
         const total = Number(r.totalValue);
         const paid = Number(r.paidValue);
+        const boardingPoints = Array.isArray(r.tripBoardingPoints) ? r.tripBoardingPoints : [];
+        const boardingPoint = r.boardingLocationId
+          ? boardingPoints.find((bp: { id: string; name: string; time: string; address: string }) => bp.id === r.boardingLocationId)
+          : null;
         return {
           ...r,
           totalValue: total,
@@ -173,6 +179,10 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
           balance: Math.max(total - paid, 0),
           seatsCount: Array.isArray(r.seats) ? r.seats.length : 0,
           seats: undefined,
+          boardingLocationId: undefined,
+          tripBoardingPoints: undefined,
+          boardingPointName: boardingPoint?.name ?? null,
+          boardingPointTime: boardingPoint?.time ?? null,
           tripDepartureDate: r.tripDepartureDate
             ? (r.tripDepartureDate as unknown as Date).toISOString().slice(0, 10)
             : null,
@@ -391,10 +401,12 @@ router.get("/client/reservations/:id/voucher", async (req, res, next: NextFuncti
         paymentMethod: reservationsTable.paymentMethod,
         createdAt: reservationsTable.createdAt,
         seats: reservationsTable.seats,
+        boardingLocationId: reservationsTable.boardingLocationId,
         tripName: tripsTable.name,
         tripDestination: tripsTable.destination,
         tripDepartureDate: tripsTable.departureDate,
         tripReturnDate: tripsTable.returnDate,
+        tripBoardingPoints: tripsTable.boardingPoints,
       })
       .from(reservationsTable)
       .innerJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
@@ -438,6 +450,12 @@ router.get("/client/reservations/:id/voucher", async (req, res, next: NextFuncti
     const tripReturnDate = row.tripReturnDate
       ? (row.tripReturnDate as unknown as Date).toISOString().slice(0, 10)
       : null;
+    const boardingPoints = Array.isArray(row.tripBoardingPoints) ? row.tripBoardingPoints : [];
+    const boardingPoint = row.boardingLocationId
+      ? boardingPoints.find((bp: { id: string; name: string; time: string; address: string }) => bp.id === row.boardingLocationId)
+      : null;
+    const boardingPointName = boardingPoint?.name ?? null;
+    const boardingPointTime = boardingPoint?.time ?? null;
 
     const voucherData = {
       passengerName,
@@ -457,6 +475,8 @@ router.get("/client/reservations/:id/voucher", async (req, res, next: NextFuncti
       tripDestination: row.tripDestination,
       tripDepartureDate,
       tripReturnDate,
+      boardingPointName,
+      boardingPointTime,
     };
 
     const pdfBuffer = generateVoucherPdf(voucherData);

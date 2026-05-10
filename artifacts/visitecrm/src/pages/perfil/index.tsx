@@ -213,6 +213,15 @@ function ReservationCard({ r, compact = false }: { r: ClientPortalProfile["reser
                   <span>{r.seatsCount} passageiro{r.seatsCount !== 1 ? "s" : ""}</span>
                 </div>
               )}
+              {r.boardingPointName && (
+                <div className="flex items-center gap-1.5 text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-1">
+                  <MapPin className="w-3 h-3" />
+                  <span>
+                    {r.boardingPointName}
+                    {r.boardingPointTime ? ` — ${r.boardingPointTime}` : ""}
+                  </span>
+                </div>
+              )}
               {r.balance > 0 && (
                 <div className="flex items-center gap-1.5 text-xs bg-orange-50 border border-orange-200 text-orange-700 rounded px-2 py-1">
                   <AlertCircle className="w-3 h-3" />

@@ -28,6 +28,8 @@ export interface VoucherData {
   tripDestination: string;
   tripDepartureDate: string | null;
   tripReturnDate: string | null;
+  boardingPointName?: string | null;
+  boardingPointTime?: string | null;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -109,6 +111,11 @@ export function generateVoucherPdf(data: VoucherData): Buffer {
       ["Destino", data.tripDestination],
       ["Data de Partida", fmtDatePt(data.tripDepartureDate)],
       ...(data.tripReturnDate ? [["Data de Retorno", fmtDatePt(data.tripReturnDate)]] : []),
+      ...(data.boardingPointName
+        ? [["Ponto de Embarque", data.boardingPointTime
+            ? `${data.boardingPointName} — ${data.boardingPointTime}`
+            : data.boardingPointName]]
+        : []),
       ["Passageiros", data.seatsCount > 0 ? String(data.seatsCount) : "1"],
     ],
     theme: "plain",

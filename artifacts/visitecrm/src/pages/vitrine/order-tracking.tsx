@@ -24,6 +24,8 @@ export default function VitrineOrderTracking({
     }
     if (meLoading) return;
     if (me?.role === ROLES.CLIENT) {
+      // Passenger trip details (including boarding points) are shown in /perfil.
+      // Boarding point name and time are rendered in the ReservationCard there.
       navigate("/perfil");
     } else if (me?.role) {
       navigate("/dashboard");
