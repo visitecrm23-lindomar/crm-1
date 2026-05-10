@@ -12,7 +12,7 @@ export const reservationsTable = pgTable("reservations", {
   id: text("id").primaryKey(),
   tenantId: text("tenant_id").notNull().references(() => tenantsTable.id, { onDelete: "cascade" }),
   tripId: text("trip_id").notNull().references(() => tripsTable.id),
-  clientId: text("client_id").notNull().references(() => clientsTable.id),
+  clientId: text("client_id").references(() => clientsTable.id),
   seats: text("seats").array().notNull().default([]),
   boardingLocationId: text("boarding_location_id"),
   tripType: text("trip_type"),
