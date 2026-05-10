@@ -440,6 +440,15 @@ export type TripBoardingPointsItem = {
 
 export type TripItineraryItem = { [key: string]: unknown };
 
+export interface FreePassenger {
+  id: string;
+  name: string;
+  cpf: string;
+  whatsapp: string;
+  role: "organizer" | "guide";
+  seatNumber: string | null;
+}
+
 export interface Trip {
   id: string;
   name: string;
@@ -519,18 +528,11 @@ export interface Trip {
   itinerary?: TripItineraryItem[];
   fixedCosts?: unknown[];
   variableCosts?: unknown[];
-  /**
-   * @minimum 0
-   * @maximum 2
-   * @nullable
-   */
+  /** @nullable */
   freeOrganizers?: number | null;
-  /**
-   * @minimum 0
-   * @maximum 2
-   * @nullable
-   */
+  /** @nullable */
   freeGuides?: number | null;
+  freePassengers?: FreePassenger[] | null;
   /** @nullable */
   layoutId?: string | null;
   createdAt: string;
@@ -685,18 +687,11 @@ export interface CreateTripBody {
   itinerary?: unknown[];
   fixedCosts?: unknown[];
   variableCosts?: unknown[];
-  /**
-   * @minimum 0
-   * @maximum 2
-   * @nullable
-   */
+  /** @nullable */
   freeOrganizers?: number | null;
-  /**
-   * @minimum 0
-   * @maximum 2
-   * @nullable
-   */
+  /** @nullable */
   freeGuides?: number | null;
+  freePassengers?: FreePassenger[];
   /** @nullable */
   layoutId?: string | null;
 }
@@ -787,18 +782,11 @@ export interface UpdateTripBody {
   itinerary?: unknown[];
   fixedCosts?: unknown[];
   variableCosts?: unknown[];
-  /**
-   * @minimum 0
-   * @maximum 2
-   * @nullable
-   */
+  /** @nullable */
   freeOrganizers?: number | null;
-  /**
-   * @minimum 0
-   * @maximum 2
-   * @nullable
-   */
+  /** @nullable */
   freeGuides?: number | null;
+  freePassengers?: FreePassenger[] | null;
   /** @nullable */
   layoutId?: string | null;
 }

@@ -1,11 +1,13 @@
+import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, X, Check, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Plus, X, Check, Loader2, UserCog, MapPin } from "lucide-react";
 import { formatCurrency } from "./utils";
 import { FIXED_COST_CATEGORIES, VARIABLE_COST_CATEGORIES } from "./constants";
-import type { TripFormData } from "./types";
+import type { TripFormData, FreePassenger } from "./types";
 
 interface NewFixed { category: string; description: string; customDesc: string; value: string }
 interface NewVariable { category: string; description: string; customDesc: string; valuePax: string }
@@ -26,10 +28,165 @@ interface TripFormPricesTabProps {
 const EMPTY_NEW_FIXED: NewFixed = { category: "", description: "", customDesc: "", value: "" };
 const EMPTY_NEW_VARIABLE: NewVariable = { category: "", description: "", customDesc: "", valuePax: "" };
 
+const EMPTY_FREE_PASSENGER = { name: "", cpf: "", whatsapp: "", seatNumber: "" };
+
+function FreePassengersSection({ form, setForm }: { form: TripFormData; setForm: Dispatch<SetStateAction<TripFormData>> }) {
+  const [addingRole, setAddingRole] = useState<"organizer" | "guide" | null>(null);
+  const [newPax, setNewPax] = useState(EMPTY_FREE_PASSENGER);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editPax, setEditPax] = useState(EMPTY_FREE_PASSENGER);
+
+  const organizers = form.freePassengers.filter(p => p.role === "organizer");
+  const guides = form.freePassengers.filter(p => p.role === "guide");
+
+  const handleAdd = () => {
+    if (!addingRole || !newPax.name) return;
+    const fp: FreePassenger = {
+      id: crypto.randomUUID(),
+      name: newPax.name.trim(),
+      cpf: newPax.cpf.trim(),
+      whatsapp: newPax.whatsapp.trim(),
+      role: addingRole,
+      seatNumber: newPax.seatNumber.trim() || null,
+    };
+    setForm(prev => ({ ...prev, freePassengers: [...prev.freePassengers, fp] }));
+    setNewPax(EMPTY_FREE_PASSENGER);
+    setAddingRole(null);
+  };
+
+  const handleRemove = (id: string) => {
+    setForm(prev => ({ ...prev, freePassengers: prev.freePassengers.filter(p => p.id !== id) }));
+    if (editingId === id) setEditingId(null);
+  };
+
+  const startEdit = (p: FreePassenger) => {
+    setEditingId(p.id);
+    setEditPax({ name: p.name, cpf: p.cpf, whatsapp: p.whatsapp, seatNumber: p.seatNumber ?? "" });
+  };
+
+  const handleSaveEdit = (id: string) => {
+    setForm(prev => ({
+      ...prev,
+      freePassengers: prev.freePassengers.map(p =>
+        p.id === id
+          ? { ...p, name: editPax.name.trim(), cpf: editPax.cpf.trim(), whatsapp: editPax.whatsapp.trim(), seatNumber: editPax.seatNumber.trim() || null }
+          : p
+      ),
+    }));
+    setEditingId(null);
+  };
+
+  const renderPassenger = (p: FreePassenger) => {
+    if (editingId === p.id) {
+      return (
+        <div key={p.id} className="border rounded-lg p-3 space-y-2 bg-muted/10">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Nome *</Label>
+              <Input value={editPax.name} onChange={e => setEditPax(prev => ({ ...prev, name: e.target.value }))} placeholder="Nome completo" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Assento</Label>
+              <Input value={editPax.seatNumber} onChange={e => setEditPax(prev => ({ ...prev, seatNumber: e.target.value }))} placeholder="Ex: 1, 2A..." />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">CPF</Label>
+              <Input value={editPax.cpf} onChange={e => setEditPax(prev => ({ ...prev, cpf: e.target.value }))} placeholder="000.000.000-00" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">WhatsApp</Label>
+              <Input value={editPax.whatsapp} onChange={e => setEditPax(prev => ({ ...prev, whatsapp: e.target.value }))} placeholder="(11) 99999-9999" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => handleSaveEdit(p.id)} disabled={!editPax.name}><Check className="w-3 h-3 mr-1" />Salvar</Button>
+            <Button size="sm" variant="outline" onClick={() => setEditingId(null)}>Cancelar</Button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div key={p.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg text-sm group">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex flex-col min-w-0">
+            <span className="font-medium truncate">{p.name}</span>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              {p.cpf && <span>CPF: {p.cpf}</span>}
+              {p.whatsapp && <span>• {p.whatsapp}</span>}
+              {p.seatNumber && (
+                <Badge variant="secondary" className="text-xs py-0 px-1.5 gap-0.5">
+                  <MapPin className="w-2.5 h-2.5" />Assento {p.seatNumber}
+                </Badge>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0 ml-3">
+          <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => startEdit(p)}>
+            <UserCog className="w-3.5 h-3.5" />
+          </Button>
+          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive opacity-0 group-hover:opacity-100" onClick={() => handleRemove(p.id)}>
+            <X className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderGroup = (role: "organizer" | "guide", label: string, list: FreePassenger[]) => (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-medium">{label}</h4>
+        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => { setAddingRole(role); setNewPax(EMPTY_FREE_PASSENGER); }}>
+          <Plus className="w-3 h-3" />Adicionar
+        </Button>
+      </div>
+      {list.length === 0 && addingRole !== role && (
+        <p className="text-xs text-muted-foreground py-1">Nenhum cadastrado.</p>
+      )}
+      {list.map(renderPassenger)}
+      {addingRole === role && (
+        <div className="border-2 border-dashed border-primary/30 rounded-lg p-3 space-y-2 bg-primary/5">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Nome *</Label>
+              <Input value={newPax.name} onChange={e => setNewPax(prev => ({ ...prev, name: e.target.value }))} placeholder="Nome completo" autoFocus />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Assento (opcional)</Label>
+              <Input value={newPax.seatNumber} onChange={e => setNewPax(prev => ({ ...prev, seatNumber: e.target.value }))} placeholder="Ex: 1, 2A..." />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">CPF (opcional)</Label>
+              <Input value={newPax.cpf} onChange={e => setNewPax(prev => ({ ...prev, cpf: e.target.value }))} placeholder="000.000.000-00" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">WhatsApp (opcional)</Label>
+              <Input value={newPax.whatsapp} onChange={e => setNewPax(prev => ({ ...prev, whatsapp: e.target.value }))} placeholder="(11) 99999-9999" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleAdd} disabled={!newPax.name}><Check className="w-3 h-3 mr-1" />Confirmar</Button>
+            <Button size="sm" variant="outline" onClick={() => setAddingRole(null)}>Cancelar</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="space-y-5">
+      {renderGroup("organizer", "Responsável da Viagem", organizers)}
+      <div className="border-t" />
+      {renderGroup("guide", "Guia de Turismo", guides)}
+    </div>
+  );
+}
+
 export function TripFormPricesTab({ form, setForm, newFixed, setNewFixed, newVariable, setNewVariable, tripId, isSavingCosts, isPending, handleSaveCosts }: TripFormPricesTabProps) {
   const cap = parseInt(form.totalCapacity || "0");
-  const freeSeats = Math.min(parseInt(form.freeOrganizers || "0") + parseInt(form.freeGuides || "0"), cap);
-  const paidCap = Math.max(0, cap - freeSeats);
+  const freeCount = form.freePassengers.length;
+  const paidCap = Math.max(0, cap - freeCount);
   const grossRevenue = parseFloat(form.priceAdult || "0") * paidCap;
   const totalFixed = form.fixedCostItems.reduce((s, c) => s + c.value, 0);
   const totalVariablePax = form.variableCostItems.reduce((s, c) => s + c.valuePax, 0);
@@ -75,29 +232,23 @@ export function TripFormPricesTab({ form, setForm, newFixed, setNewFixed, newVar
         </div>
       </div>
 
-      <div className="bg-card border rounded-lg p-6 space-y-4">
-        <div>
-          <h3 className="font-semibold">Controle de Gratuidades</h3>
-          <p className="text-sm text-muted-foreground">Assentos gratuitos não contabilizados na receita bruta</p>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Responsável da Viagem gratuito</Label>
-            <Input type="number" min="0" max="2" step="1" value={form.freeOrganizers}
-              onChange={e => setForm(prev => ({ ...prev, freeOrganizers: String(Math.min(2, Math.max(0, parseInt(e.target.value) || 0))) }))} />
-            <p className="text-xs text-muted-foreground">Limite: até 2</p>
+      <div className="bg-card border rounded-lg p-6 space-y-5">
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="font-semibold">Controle de Gratuidades</h3>
+            <p className="text-sm text-muted-foreground">Passageiros gratuitos não contabilizados na receita bruta</p>
           </div>
-          <div className="space-y-2">
-            <Label>Guia de turismo gratuito</Label>
-            <Input type="number" min="0" max="2" step="1" value={form.freeGuides}
-              onChange={e => setForm(prev => ({ ...prev, freeGuides: String(Math.min(2, Math.max(0, parseInt(e.target.value) || 0))) }))} />
-            <p className="text-xs text-muted-foreground">Limite: até 2</p>
-          </div>
+          {freeCount > 0 && (
+            <Badge variant="secondary" className="shrink-0">
+              {freeCount} gratuidade{freeCount !== 1 ? "s" : ""}
+            </Badge>
+          )}
         </div>
-        {freeSeats > 0 && (
+        <FreePassengersSection form={form} setForm={setForm} />
+        {freeCount > 0 && (
           <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm dark:bg-amber-950/20 dark:border-amber-800">
             <span className="text-amber-700 dark:text-amber-400 font-medium">
-              {freeSeats} assento{freeSeats > 1 ? "s" : ""} gratuito{freeSeats > 1 ? "s" : ""} — receita calculada sobre {paidCap} pagante{paidCap !== 1 ? "s" : ""}
+              {freeCount} assento{freeCount > 1 ? "s" : ""} gratuito{freeCount > 1 ? "s" : ""} — receita calculada sobre {paidCap} pagante{paidCap !== 1 ? "s" : ""} de {cap} total
             </span>
           </div>
         )}
@@ -259,7 +410,7 @@ export function TripFormPricesTab({ form, setForm, newFixed, setNewFixed, newVar
             { label: "Total Custos Fixos", value: formatCurrency(totalFixed), muted: false },
             { label: `Total Custos Variáveis (${cap} pax)`, value: formatCurrency(totalVariable), muted: false },
             { label: "Custo Operacional Total", value: formatCurrency(totalOperational), muted: false },
-            { label: freeSeats > 0 ? "Custo por Pagante" : "Custo por Passageiro", value: formatCurrency(costPerPax), muted: false },
+            { label: freeCount > 0 ? "Custo por Pagante" : "Custo por Passageiro", value: formatCurrency(costPerPax), muted: false },
             { label: `Receita Bruta (${paidCap} pagantes, 100%)`, value: formatCurrency(grossRevenue), muted: false },
             { label: `Receita Bruta (${paidCap} pagantes, 80%)`, value: formatCurrency(grossRevenue * 0.8), muted: true },
           ].map(row => (

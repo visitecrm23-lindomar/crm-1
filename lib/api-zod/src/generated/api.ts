@@ -1606,16 +1606,16 @@ export const CreateTripBody = zod.object({
   itinerary: zod.array(zod.unknown()).optional(),
   fixedCosts: zod.array(zod.unknown()).optional(),
   variableCosts: zod.array(zod.unknown()).optional(),
-  freeOrganizers: zod
-    .number()
-    .min(createTripBodyFreeOrganizersMin)
-    .max(createTripBodyFreeOrganizersMax)
-    .nullish(),
-  freeGuides: zod
-    .number()
-    .min(createTripBodyFreeGuidesMin)
-    .max(createTripBodyFreeGuidesMax)
-    .nullish(),
+  freeOrganizers: zod.number().nullish(),
+  freeGuides: zod.number().nullish(),
+  freePassengers: zod.array(zod.object({
+    id: zod.string(),
+    name: zod.string(),
+    cpf: zod.string(),
+    whatsapp: zod.string(),
+    role: zod.enum(["organizer", "guide"]),
+    seatNumber: zod.string().nullable(),
+  })).optional(),
   layoutId: zod.string().nullish(),
 });
 
@@ -1693,16 +1693,16 @@ export const GetTripResponse = zod.object({
   itinerary: zod.array(zod.record(zod.string(), zod.unknown())).optional(),
   fixedCosts: zod.array(zod.unknown()).optional(),
   variableCosts: zod.array(zod.unknown()).optional(),
-  freeOrganizers: zod
-    .number()
-    .min(getTripResponseFreeOrganizersMin)
-    .max(getTripResponseFreeOrganizersMax)
-    .nullish(),
-  freeGuides: zod
-    .number()
-    .min(getTripResponseFreeGuidesMin)
-    .max(getTripResponseFreeGuidesMax)
-    .nullish(),
+  freeOrganizers: zod.number().nullish(),
+  freeGuides: zod.number().nullish(),
+  freePassengers: zod.array(zod.object({
+    id: zod.string(),
+    name: zod.string(),
+    cpf: zod.string(),
+    whatsapp: zod.string(),
+    role: zod.enum(["organizer", "guide"]),
+    seatNumber: zod.string().nullable(),
+  })).nullish(),
   layoutId: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
@@ -1779,16 +1779,16 @@ export const UpdateTripBody = zod.object({
   itinerary: zod.array(zod.unknown()).optional(),
   fixedCosts: zod.array(zod.unknown()).optional(),
   variableCosts: zod.array(zod.unknown()).optional(),
-  freeOrganizers: zod
-    .number()
-    .min(updateTripBodyFreeOrganizersMin)
-    .max(updateTripBodyFreeOrganizersMax)
-    .nullish(),
-  freeGuides: zod
-    .number()
-    .min(updateTripBodyFreeGuidesMin)
-    .max(updateTripBodyFreeGuidesMax)
-    .nullish(),
+  freeOrganizers: zod.number().nullish(),
+  freeGuides: zod.number().nullish(),
+  freePassengers: zod.array(zod.object({
+    id: zod.string(),
+    name: zod.string(),
+    cpf: zod.string(),
+    whatsapp: zod.string(),
+    role: zod.enum(["organizer", "guide"]),
+    seatNumber: zod.string().nullable(),
+  })).nullish(),
   layoutId: zod.string().nullish(),
 });
 

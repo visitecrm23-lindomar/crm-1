@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { TripStatus } from "./tripStatus";
+import type { FreePassenger } from "./trip";
 
 export interface CreateTripBody {
   name: string;
@@ -80,18 +81,11 @@ export interface CreateTripBody {
   itinerary?: unknown[];
   fixedCosts?: unknown[];
   variableCosts?: unknown[];
-  /**
-   * @minimum 0
-   * @maximum 2
-   * @nullable
-   */
+  /** @nullable */
   freeOrganizers?: number | null;
-  /**
-   * @minimum 0
-   * @maximum 2
-   * @nullable
-   */
+  /** @nullable */
   freeGuides?: number | null;
+  freePassengers?: FreePassenger[];
   /** @nullable */
   layoutId?: string | null;
 }

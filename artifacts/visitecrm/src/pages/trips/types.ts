@@ -5,6 +5,7 @@ export interface BoardingPoint { id: string; name: string; time?: string; addres
 export interface ItineraryDay { day: number; title: string; description: string; }
 export interface FixedCostItem { id: string; category: string; description: string; value: number; }
 export interface VariableCostItem { id: string; category: string; description: string; valuePax: number; }
+export interface FreePassenger { id: string; name: string; cpf: string; whatsapp: string; role: "organizer" | "guide"; seatNumber: string | null; }
 
 export interface TripFormData {
   name: string; description: string;
@@ -30,6 +31,7 @@ export interface TripFormData {
   gallery: string[];
   freeOrganizers: string;
   freeGuides: string;
+  freePassengers: FreePassenger[];
 }
 
 export interface TripFinancialReport {
@@ -62,7 +64,7 @@ export const EMPTY_FORM: TripFormData = {
   driver2Name: "", driver2Cpf: "", driver2Cnh: "", driver2CnhCategory: "", driver2CnhExpiry: "",
   tourGuideCpf: "", tourGuideRegistration: "",
   boardingPoints: [newBP()], itinerary: [newDay(1)], fixedCostItems: [], variableCostItems: [], gallery: [],
-  freeOrganizers: "0", freeGuides: "0",
+  freeOrganizers: "0", freeGuides: "0", freePassengers: [],
 };
 
 export const toTripFormData = (trip: Trip): TripFormData => ({
@@ -112,4 +114,5 @@ export const toTripFormData = (trip: Trip): TripFormData => ({
   gallery: trip.gallery ?? [],
   freeOrganizers: String(trip.freeOrganizers ?? 0),
   freeGuides: String(trip.freeGuides ?? 0),
+  freePassengers: Array.isArray(trip.freePassengers) ? (trip.freePassengers as FreePassenger[]) : [],
 });

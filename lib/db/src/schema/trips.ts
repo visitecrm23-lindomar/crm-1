@@ -7,6 +7,7 @@ import { tenantsTable } from "./tenants";
 
 export interface FixedCostItem { id: string; category: string; description: string; value: number; }
 export interface VariableCostItem { id: string; category: string; description: string; valuePax: number; }
+export interface FreePassenger { id: string; name: string; cpf: string; whatsapp: string; role: "organizer" | "guide"; seatNumber: string | null; }
 
 export const tripsTable = pgTable("trips", {
   id: text("id").primaryKey(),
@@ -74,6 +75,7 @@ export const tripsTable = pgTable("trips", {
   variableCosts: json("variable_costs").$type<VariableCostItem[]>().default([]),
   freeOrganizers: integer("free_organizers"),
   freeGuides: integer("free_guides"),
+  freePassengers: json("free_passengers").$type<FreePassenger[]>().default([]),
   cancellationPolicy: text("cancellation_policy"),
   metaTitle: text("meta_title"),
   metaDescription: text("meta_description"),

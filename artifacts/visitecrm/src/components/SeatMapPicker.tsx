@@ -33,6 +33,8 @@ export function getSeatColor(status: string, selected: boolean, type?: string) {
       return "bg-orange-400 border-2 border-orange-500 text-white cursor-not-allowed";
     case "confirmed":
       return "bg-green-500 border-2 border-green-600 text-white cursor-not-allowed";
+    case "free":
+      return "bg-violet-500 border-2 border-violet-600 text-white cursor-not-allowed";
     case "blocked":
     case "wc":
     case "stairs":

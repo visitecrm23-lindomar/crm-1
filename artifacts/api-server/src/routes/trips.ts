@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { addSeatClient, removeSeatClient } from "../lib/seat-sse";
 import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable, auditLogsTable } from "@workspace/db";
 import { checkPlanLimit } from "../lib/planLimits";
-import type { LayoutCell, FixedCostItem, VariableCostItem } from "@workspace/db";
+import type { LayoutCell, FixedCostItem, VariableCostItem, FreePassenger } from "@workspace/db";
 import { eq, and, ilike, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -152,6 +152,7 @@ function formatTrip(t: typeof tripsTable.$inferSelect) {
     variableCosts: Array.isArray(t.variableCosts) ? t.variableCosts as VariableCostItem[] : [],
     freeOrganizers: t.freeOrganizers ?? null,
     freeGuides: t.freeGuides ?? null,
+    freePassengers: Array.isArray(t.freePassengers) ? t.freePassengers as FreePassenger[] : [],
     originCity: t.originCity ?? null,
     originState: t.originState ?? null,
     departureTime: t.departureTime ?? null,
@@ -266,8 +267,9 @@ router.post("/trips", async (req, res, next: NextFunction): Promise<void> => {
       driverName: parsed.data.driverName ?? null,
       tourGuide: parsed.data.tourGuide ?? null,
       tripOrganizer: parsed.data.tripOrganizer ?? null,
-      freeOrganizers: parsed.data.freeOrganizers ?? null,
-      freeGuides: parsed.data.freeGuides ?? null,
+      freeOrganizers: parsed.data.freeOrganizers != null ? parsed.data.freeOrganizers : (Array.isArray(parsed.data.freePassengers) ? parsed.data.freePassengers.filter(p => p.role === "organizer").length : null),
+      freeGuides: parsed.data.freeGuides != null ? parsed.data.freeGuides : (Array.isArray(parsed.data.freePassengers) ? parsed.data.freePassengers.filter(p => p.role === "guide").length : null),
+      freePassengers: Array.isArray(parsed.data.freePassengers) ? parsed.data.freePassengers : [],
       originCity: parsed.data.originCity ?? null,
       originState: parsed.data.originState ?? null,
       departureTime: parsed.data.departureTime ?? null,
@@ -359,8 +361,14 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
     if (parsed.data.fixedCosts !== undefined) updates.fixedCosts = Array.isArray(parsed.data.fixedCosts) ? (parsed.data.fixedCosts as FixedCostItem[]) : [];
     if (parsed.data.variableCosts !== undefined) updates.variableCosts = Array.isArray(parsed.data.variableCosts) ? (parsed.data.variableCosts as VariableCostItem[]) : [];
     if (parsed.data.gallery !== undefined) updates.gallery = parsed.data.gallery ?? [];
-    if (parsed.data.freeOrganizers !== undefined) updates.freeOrganizers = parsed.data.freeOrganizers ?? null;
-    if (parsed.data.freeGuides !== undefined) updates.freeGuides = parsed.data.freeGuides ?? null;
+    if (parsed.data.freePassengers !== undefined && parsed.data.freePassengers !== null) {
+      updates.freePassengers = parsed.data.freePassengers as FreePassenger[];
+      updates.freeOrganizers = parsed.data.freePassengers.filter(p => p.role === "organizer").length;
+      updates.freeGuides = parsed.data.freePassengers.filter(p => p.role === "guide").length;
+    } else {
+      if (parsed.data.freeOrganizers !== undefined) updates.freeOrganizers = parsed.data.freeOrganizers ?? null;
+      if (parsed.data.freeGuides !== undefined) updates.freeGuides = parsed.data.freeGuides ?? null;
+    }
     if (parsed.data.originCity !== undefined) updates.originCity = parsed.data.originCity ?? null;
     if (parsed.data.originState !== undefined) updates.originState = parsed.data.originState ?? null;
     if (parsed.data.departureTime !== undefined) updates.departureTime = parsed.data.departureTime ?? null;
@@ -511,6 +519,12 @@ router.get("/trips/:id/seat-map", async (req, res, next: NextFunction): Promise<
       }
     }
 
+    const freePassengers = Array.isArray(trip.freePassengers) ? (trip.freePassengers as FreePassenger[]) : [];
+    const freeSeats: Record<string, string> = {};
+    for (const fp of freePassengers) {
+      if (fp.seatNumber) freeSeats[fp.seatNumber] = fp.name;
+    }
+
     const seatMap = trip.seatMap as Record<string, { row: number; col: number; floor?: number; status: string; type?: string }>;
     const seats = Object.entries(seatMap).map(([num, data]) => ({
       number: num,
@@ -520,8 +534,10 @@ router.get("/trips/:id/seat-map", async (req, res, next: NextFunction): Promise<
       type: data.type ?? "seat",
       status: occupiedSeats[num]
         ? occupiedSeats[num].seatStatus
-        : (data.type && !["seat", "vip", "accessible"].includes(data.type) ? data.type : "available"),
-      passengerName: occupiedSeats[num]?.passengerName ?? null,
+        : freeSeats[num]
+          ? "free"
+          : (data.type && !["seat", "vip", "accessible"].includes(data.type) ? data.type : "available"),
+      passengerName: occupiedSeats[num]?.passengerName ?? freeSeats[num] ?? null,
       reservationId: occupiedSeats[num]?.reservationId ?? null,
     }));
 

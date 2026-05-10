@@ -61,7 +61,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
   const setVal = (k: keyof TripFormData) => (v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
   const cap = parseInt(form.totalCapacity || "0");
-  const freeSeats = Math.min(parseInt(form.freeOrganizers || "0") + parseInt(form.freeGuides || "0"), cap);
+  const freeSeats = Math.min(form.freePassengers.length, cap);
   const paidCap = Math.max(0, cap - freeSeats);
   const grossRevenue = parseFloat(form.priceAdult || "0") * paidCap;
   const totalFixed = form.fixedCostItems.reduce((s, c) => s + c.value, 0);
@@ -105,8 +105,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
             driver1Cpf: form.driver1Cpf || null, driver1Cnh: form.driver1Cnh || null, driver1CnhCategory: form.driver1CnhCategory || null, driver1CnhExpiry: form.driver1CnhExpiry || null,
             driver2Name: form.driver2Name || null, driver2Cpf: form.driver2Cpf || null, driver2Cnh: form.driver2Cnh || null, driver2CnhCategory: form.driver2CnhCategory || null, driver2CnhExpiry: form.driver2CnhExpiry || null,
             tourGuideCpf: form.tourGuideCpf || null, tourGuideRegistration: form.tourGuideRegistration || null,
-            freeOrganizers: parseInt(form.freeOrganizers || "0"),
-            freeGuides: parseInt(form.freeGuides || "0"),
+            freePassengers: form.freePassengers,
             status: statusToSave,
             itinerary: itineraryToSave.length ? itineraryToSave : undefined,
             boardingPoints: boardingPointsToSave.length ? boardingPointsToSave : undefined,
@@ -136,8 +135,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
             driver1Cpf: form.driver1Cpf || null, driver1Cnh: form.driver1Cnh || null, driver1CnhCategory: form.driver1CnhCategory || null, driver1CnhExpiry: form.driver1CnhExpiry || null,
             driver2Name: form.driver2Name || null, driver2Cpf: form.driver2Cpf || null, driver2Cnh: form.driver2Cnh || null, driver2CnhCategory: form.driver2CnhCategory || null, driver2CnhExpiry: form.driver2CnhExpiry || null,
             tourGuideCpf: form.tourGuideCpf || null, tourGuideRegistration: form.tourGuideRegistration || null,
-            freeOrganizers: parseInt(form.freeOrganizers || "0"),
-            freeGuides: parseInt(form.freeGuides || "0"),
+            freePassengers: form.freePassengers,
             status: statusToSave,
             itinerary: itineraryToSave.length ? itineraryToSave : undefined,
             boardingPoints: boardingPointsToSave.length ? boardingPointsToSave : undefined,
