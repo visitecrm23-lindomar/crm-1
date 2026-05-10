@@ -1,7 +1,7 @@
 import type { Trip } from "@workspace/api-client-react";
 import type { TripStatus } from "@workspace/permissions";
 
-export interface BoardingPoint { id: string; name: string; time?: string; address?: string; }
+export interface BoardingPoint { id: string; name: string; time?: string; address?: string; boardingLocationId?: string; }
 export interface ItineraryDay { day: number; title: string; description: string; }
 export interface FixedCostItem { id: string; category: string; description: string; value: number; }
 export interface VariableCostItem { id: string; category: string; description: string; valuePax: number; }

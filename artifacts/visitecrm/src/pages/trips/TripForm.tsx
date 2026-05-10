@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
-import { useGetTrip, useCreateTrip, useUpdateTrip, useListLayouts } from "@workspace/api-client-react";
+import { useGetTrip, useCreateTrip, useUpdateTrip, useListLayouts, useListBoardingLocations } from "@workspace/api-client-react";
 import { PlanLimitWall, usePlanLimitError } from "@/components/plan-limit-wall";
 import { CoverImageUpload } from "@/components/cover-image-upload";
 import { GalleryUpload } from "@/components/gallery-upload";
@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Plus, X, Check, Clock, MapPin, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, X, Check, Clock, MapPin, Loader2, Link2 } from "lucide-react";
 import { TiptapEditor } from "./TiptapEditor";
 import { LayoutMiniPreview, TripCostsTab } from "./TripCostsSection";
 import { formatCurrency } from "./utils";
@@ -45,6 +45,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
   const [newVariable, setNewVariable] = useState(EMPTY_NEW_VARIABLE);
 
   const selectedLayout = layouts.find(l => l.id === form.layoutId) ?? null;
+  const { data: boardingLocationsCatalog = [] } = useListBoardingLocations({ query: { queryKey: ["boarding-locations"] } });
 
   const layoutSeatLabels = useMemo(() => {
     if (!selectedLayout) return undefined;
@@ -397,39 +398,95 @@ export function TripForm({ tripId }: { tripId?: string }) {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-semibold">Pontos de Embarque</h3>
-                <p className="text-sm text-muted-foreground">Cadastre os pontos e horários de coleta da viagem.</p>
+                <p className="text-sm text-muted-foreground">Selecione do catálogo e defina o horário de cada ponto para esta viagem.</p>
               </div>
               <Button size="sm" variant="outline" onClick={() => setForm(prev => ({ ...prev, boardingPoints: [...prev.boardingPoints, newBP()] }))}>
                 <Plus className="w-4 h-4 mr-1" />Adicionar Ponto
               </Button>
             </div>
+            {boardingLocationsCatalog.length === 0 && (
+              <p className="text-xs text-muted-foreground bg-muted/50 rounded p-3">
+                Nenhum local cadastrado no catálogo. <a href="/cadastros/locais-embarque" className="underline text-primary">Cadastre locais de embarque</a> para selecioná-los aqui.
+              </p>
+            )}
             <div className="space-y-3">
-              {form.boardingPoints.map((bp, idx) => (
-                <div key={bp.id} className="border rounded-lg p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-muted-foreground">Ponto {idx + 1}</span>
-                    {form.boardingPoints.length > 1 && (
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setForm(prev => ({ ...prev, boardingPoints: prev.boardingPoints.filter(b => b.id !== bp.id) }))}>
-                        <X className="w-3 h-3" />
-                      </Button>
-                    )}
+              {form.boardingPoints.map((bp, idx) => {
+                const updateBP = (patch: Partial<typeof bp>) =>
+                  setForm(prev => ({ ...prev, boardingPoints: prev.boardingPoints.map(b => b.id === bp.id ? { ...b, ...patch } : b) }));
+                const selectedLoc = boardingLocationsCatalog.find(l => l.id === bp.boardingLocationId);
+                return (
+                  <div key={bp.id} className="border rounded-lg p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-muted-foreground">Ponto {idx + 1}</span>
+                      {form.boardingPoints.length > 1 && (
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setForm(prev => ({ ...prev, boardingPoints: prev.boardingPoints.filter(b => b.id !== bp.id) }))}>
+                          <X className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1 col-span-2">
+                        <Label className="text-xs">Local de Embarque</Label>
+                        {boardingLocationsCatalog.length > 0 ? (
+                          <div className="flex gap-2">
+                            <Select
+                              value={bp.boardingLocationId ?? "__none__"}
+                              onValueChange={val => {
+                                if (val === "__none__") {
+                                  updateBP({ boardingLocationId: undefined, name: "", address: "" });
+                                  return;
+                                }
+                                const loc = boardingLocationsCatalog.find(l => l.id === val);
+                                if (!loc) return;
+                                updateBP({
+                                  boardingLocationId: loc.id,
+                                  name: loc.name,
+                                  address: [loc.address, loc.reference].filter(Boolean).join(" — "),
+                                  time: bp.time || loc.departureTime || "",
+                                });
+                              }}
+                            >
+                              <SelectTrigger className="flex-1">
+                                <SelectValue placeholder="Selecionar do catálogo..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">— Ponto ad-hoc (preencher manualmente) —</SelectItem>
+                                {boardingLocationsCatalog.map(loc => (
+                                  <SelectItem key={loc.id} value={loc.id}>
+                                    {loc.name} — {loc.city}/{loc.state.toUpperCase()}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {selectedLoc && (
+                              <Button size="icon" variant="ghost" className="h-9 w-9 shrink-0" title="Desvincular do catálogo"
+                                onClick={() => updateBP({ boardingLocationId: undefined })}>
+                                <Link2 className="w-3.5 h-3.5 text-teal-600" />
+                              </Button>
+                            )}
+                          </div>
+                        ) : (
+                          <Input placeholder="Terminal Rodoviário" value={bp.name} onChange={e => updateBP({ name: e.target.value })} />
+                        )}
+                      </div>
+                      {(boardingLocationsCatalog.length === 0 || !bp.boardingLocationId) && (
+                        <div className="space-y-1 col-span-2">
+                          <Label className="text-xs">Nome do Ponto</Label>
+                          <Input placeholder="Terminal Rodoviário" value={bp.name} onChange={e => updateBP({ name: e.target.value })} />
+                        </div>
+                      )}
+                      <div className="space-y-1">
+                        <Label className="text-xs">Horário nesta viagem</Label>
+                        <Input type="time" value={bp.time ?? ""} onChange={e => updateBP({ time: e.target.value })} />
+                      </div>
+                      <div className="space-y-1 col-span-2">
+                        <Label className="text-xs">Endereço / Referência</Label>
+                        <Input placeholder="Av. Principal, 100 — Em frente ao posto Shell" value={bp.address ?? ""} onChange={e => updateBP({ address: e.target.value })} />
+                      </div>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Nome do Ponto</Label>
-                      <Input placeholder="Terminal Rodoviário" value={bp.name} onChange={e => setForm(prev => ({ ...prev, boardingPoints: prev.boardingPoints.map(b => b.id === bp.id ? { ...b, name: e.target.value } : b) }))} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Horário</Label>
-                      <Input type="time" value={bp.time} onChange={e => setForm(prev => ({ ...prev, boardingPoints: prev.boardingPoints.map(b => b.id === bp.id ? { ...b, time: e.target.value } : b) }))} />
-                    </div>
-                    <div className="space-y-1 col-span-2">
-                      <Label className="text-xs">Endereço / Referência</Label>
-                      <Input placeholder="Av. Principal, 100 — Em frente ao posto Shell" value={bp.address} onChange={e => setForm(prev => ({ ...prev, boardingPoints: prev.boardingPoints.map(b => b.id === bp.id ? { ...b, address: e.target.value } : b) }))} />
-                    </div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </TabsContent>

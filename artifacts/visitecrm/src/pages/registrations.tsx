@@ -1,6 +1,6 @@
 import { Link } from "wouter";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Truck, Bus, Hotel, MapPin, Package, LayoutGrid } from "lucide-react";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Truck, Bus, Hotel, MapPin, Package, LayoutGrid, Navigation } from "lucide-react";
 
 const SECTIONS = [
   {
@@ -51,6 +51,14 @@ const SECTIONS = [
     color: "text-indigo-500",
     bg: "bg-indigo-50",
   },
+  {
+    title: "Locais de Embarque",
+    description: "Cadastre os pontos de coleta utilizados nas excursões",
+    icon: Navigation,
+    href: "/cadastros/locais-embarque",
+    color: "text-teal-500",
+    bg: "bg-teal-50",
+  },
 ];
 
 export default function Registrations() {
@@ -59,7 +67,7 @@ export default function Registrations() {
       <div>
         <h1 className="text-2xl font-bold">Cadastros</h1>
         <p className="text-sm text-muted-foreground">
-          Gerencie fornecedores, veículos, hospedagens, destinos e produtos
+          Gerencie fornecedores, veículos, hospedagens, destinos, produtos e locais de embarque
         </p>
       </div>
 

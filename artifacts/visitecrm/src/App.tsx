@@ -41,6 +41,7 @@ import Layouts from "@/pages/cadastros/layouts";
 import Hospedagens from "@/pages/cadastros/hospedagens";
 import Destinos from "@/pages/cadastros/destinos";
 import Produtos from "@/pages/cadastros/produtos";
+import LocaisEmbarque from "@/pages/cadastros/locais-embarque";
 import Vendedores from "@/pages/vendedores";
 import MeuPainel from "@/pages/meu-painel";
 import Vouchers from "@/pages/vouchers";
@@ -331,6 +332,7 @@ function Router() {
       <Route path="/cadastros/destinos" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Destinos} />} />
       <Route path="/cadastros/produtos" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Produtos} />} />
       <Route path="/cadastros/layouts" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Layouts} />} />
+      <Route path="/cadastros/locais-embarque" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={LocaisEmbarque} />} />
 
       {/* Analytics */}
       <Route path="/analytics" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Analytics} />} />
