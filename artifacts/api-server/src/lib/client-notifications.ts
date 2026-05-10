@@ -24,7 +24,11 @@ export async function insertClientNotification(
   const [unreadRow] = await db
     .select({ cnt: count() })
     .from(clientNotificationsTable)
-    .where(and(eq(clientNotificationsTable.clientId, clientId), isNull(clientNotificationsTable.readAt)));
+    .where(and(
+      eq(clientNotificationsTable.clientId, clientId),
+      eq(clientNotificationsTable.tenantId, tenantId),
+      isNull(clientNotificationsTable.readAt),
+    ));
 
   emitToClient(clientId, {
     type: "notification",
@@ -39,29 +43,40 @@ export async function insertClientNotification(
   });
 }
 
-export async function getRecentNotifications(clientId: string, limit = 20) {
+export async function getRecentNotifications(clientId: string, tenantId: string, limit = 20) {
   return db
     .select()
     .from(clientNotificationsTable)
-    .where(eq(clientNotificationsTable.clientId, clientId))
+    .where(and(
+      eq(clientNotificationsTable.clientId, clientId),
+      eq(clientNotificationsTable.tenantId, tenantId),
+    ))
     .orderBy(desc(clientNotificationsTable.createdAt))
     .limit(limit);
 }
 
-export async function getUnreadCount(clientId: string): Promise<number> {
+export async function getUnreadCount(clientId: string, tenantId: string): Promise<number> {
   const [row] = await db
     .select({ cnt: count() })
     .from(clientNotificationsTable)
-    .where(and(eq(clientNotificationsTable.clientId, clientId), isNull(clientNotificationsTable.readAt)));
+    .where(and(
+      eq(clientNotificationsTable.clientId, clientId),
+      eq(clientNotificationsTable.tenantId, tenantId),
+      isNull(clientNotificationsTable.readAt),
+    ));
   return Number(row?.cnt ?? 0);
 }
 
-export async function markAllRead(clientId: string): Promise<void> {
+export async function markAllRead(clientId: string, tenantId: string): Promise<void> {
   const now = new Date();
   await db
     .update(clientNotificationsTable)
     .set({ readAt: now })
-    .where(and(eq(clientNotificationsTable.clientId, clientId), isNull(clientNotificationsTable.readAt)));
+    .where(and(
+      eq(clientNotificationsTable.clientId, clientId),
+      eq(clientNotificationsTable.tenantId, tenantId),
+      isNull(clientNotificationsTable.readAt),
+    ));
 
   emitToClient(clientId, { type: "all_read", data: { unreadCount: 0 } });
 }

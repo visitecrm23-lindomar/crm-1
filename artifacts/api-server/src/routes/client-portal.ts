@@ -744,8 +744,8 @@ router.get("/client/notifications", async (req, res, next: NextFunction): Promis
     }
 
     const [notifications, unreadCount] = await Promise.all([
-      getRecentNotifications(client.id, 20),
-      getUnreadCount(client.id),
+      getRecentNotifications(client.id, me.tenantId, 20),
+      getUnreadCount(client.id, me.tenantId),
     ]);
 
     res.json({
@@ -781,7 +781,7 @@ router.post("/client/notifications/read-all", async (req, res, next: NextFunctio
       return;
     }
 
-    await markAllRead(client.id);
+    await markAllRead(client.id, me.tenantId);
     res.status(204).end();
   } catch (err) {
     next(err);
@@ -818,8 +818,8 @@ router.get("/client/notifications/stream", async (req, res, next: NextFunction):
     addClientSseConnection(client.id, res);
 
     const [notifications, unreadCount] = await Promise.all([
-      getRecentNotifications(client.id, 20),
-      getUnreadCount(client.id),
+      getRecentNotifications(client.id, me.tenantId, 20),
+      getUnreadCount(client.id, me.tenantId),
     ]);
 
     // Track IDs already delivered (via init frame or in-process emitToClient)

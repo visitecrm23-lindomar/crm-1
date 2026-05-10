@@ -1,4 +1,5 @@
 import { pgTable, text, timestamp, jsonb, index } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { clientsTable } from "./clients";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -31,6 +32,9 @@ export const clientNotificationsTable = pgTable(
   },
   (table) => [
     index("client_notifications_client_id_idx").on(table.clientId, table.createdAt),
+    index("client_notifications_unread_idx")
+      .on(table.clientId, table.createdAt)
+      .where(sql`read_at IS NULL`),
   ],
 );
 
