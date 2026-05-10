@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, Search, Users, AlertCircle } from "lucide-react";
+import { ArrowLeft, Search, Users, AlertCircle, Download } from "lucide-react";
 
 export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   const [, navigate] = useLocation();
@@ -158,6 +158,13 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
 
   const selectedClient = clientsData?.data?.find(c => c.id === selectedClientId);
 
+  const handlePassengersExport = () => {
+    const a = document.createElement("a");
+    a.href = `/api/trips/${tripId}/passengers/export`;
+    a.download = "";
+    a.click();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 flex-wrap">
@@ -180,6 +187,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
               ))}
             </SelectContent>
           </Select>
+          <Button variant="outline" onClick={handlePassengersExport} disabled={!tripId}><Download className="w-4 h-4 mr-2" />Exportar Passageiros</Button>
           <Link href={`/trips/${tripId}/passengers`}><Button variant="outline"><Users className="w-4 h-4 mr-2" />Lista ANTT</Button></Link>
         </div>
       </div>
