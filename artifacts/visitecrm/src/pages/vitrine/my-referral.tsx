@@ -316,6 +316,19 @@ export default function MyReferralPage({ slug, store }: Props) {
     anchor.click();
   }, [qrPreviewUrl, referralCode]);
 
+  const handleShareQR = useCallback(async () => {
+    if (!qrPreviewUrl || !referralCode) return;
+    try {
+      const res = await fetch(qrPreviewUrl);
+      const blob = await res.blob();
+      const file = new File([blob], `qrcode-indicacao-${referralCode}.png`, { type: "image/png" });
+      if (!navigator.canShare || !navigator.canShare({ files: [file] })) return;
+      await navigator.share({ title: "QR Code de indicação", files: [file] });
+    } catch {
+      // dismissed by user
+    }
+  }, [qrPreviewUrl, referralCode]);
+
   if (!isLoaded || meLoading || loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -780,10 +793,20 @@ export default function MyReferralPage({ slug, store }: Props) {
               <p className="text-xs text-muted-foreground text-center">
                 Código: <span className="font-mono font-semibold">{referralCode}</span>
               </p>
-              <Button className="w-full gap-2" onClick={handleDownloadQR}>
-                <QrCode className="w-4 h-4" />
-                Baixar
-              </Button>
+              <div className="flex gap-2 w-full">
+                <Button className="flex-1 gap-2" onClick={handleDownloadQR}>
+                  <QrCode className="w-4 h-4" />
+                  Baixar
+                </Button>
+                {typeof navigator !== "undefined" &&
+                  "canShare" in navigator &&
+                  navigator.canShare({ files: [new File([], "test.png", { type: "image/png" })] }) && (
+                    <Button variant="outline" className="flex-1 gap-2" onClick={handleShareQR}>
+                      <Share2 className="w-4 h-4" />
+                      Compartilhar
+                    </Button>
+                  )}
+              </div>
             </div>
           )}
         </DialogContent>
