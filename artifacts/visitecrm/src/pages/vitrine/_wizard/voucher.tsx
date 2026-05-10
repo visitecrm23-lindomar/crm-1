@@ -1,4 +1,6 @@
+import { useState, useEffect } from "react";
 import { MapPin, Calendar, Clock, Armchair } from "lucide-react";
+import QRCode from "qrcode";
 import { PublicStore, StoreProduct } from "@/lib/storeApi";
 import { calculateTripDuration } from "@/lib/tripDuration";
 import { fmtDate, PAYMENT_LABELS } from "./constants";
@@ -18,6 +20,16 @@ export function Voucher({
   seats: (number | string)[];
   paymentMethod: string;
 }) {
+  const [qrDataUrl, setQrDataUrl] = useState("");
+
+  useEffect(() => {
+    if (order.orderNumber) {
+      QRCode.toDataURL(order.orderNumber, { width: 80, margin: 1, errorCorrectionLevel: "M" })
+        .then((url) => setQrDataUrl(url))
+        .catch(() => {});
+    }
+  }, [order.orderNumber]);
+
   const startDate = product.departureDate ?? product.startDate;
   const images = product.images ?? [];
 
@@ -112,11 +124,14 @@ export function Voucher({
       </div>
 
       <div className="flex items-center gap-4 border-t pt-4">
-        <div className="w-20 h-20 bg-muted rounded-lg flex items-center justify-center shrink-0 text-center">
-          <div className="text-xs text-muted-foreground leading-tight">
-            <p className="font-mono font-bold text-primary text-xs break-all">{order.orderNumber}</p>
-            <p className="text-[10px] mt-1">QR Code</p>
-          </div>
+        <div className="shrink-0">
+          {qrDataUrl ? (
+            <img src={qrDataUrl} alt="QR Code do pedido" className="w-20 h-20 rounded-lg" />
+          ) : (
+            <div className="w-20 h-20 bg-muted rounded-lg flex items-center justify-center">
+              <p className="text-[10px] text-muted-foreground">QR Code</p>
+            </div>
+          )}
         </div>
         <div className="flex-1 text-xs text-muted-foreground leading-relaxed">
           <p>Apresente este voucher no embarque. Em caso de dúvidas, entre em contato com nossa equipe.</p>

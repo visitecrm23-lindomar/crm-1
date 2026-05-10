@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { CoverImageUpload } from "@/components/cover-image-upload";
+import { storeApi } from "@/lib/storeApi";
 import { useUser } from "@clerk/react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -1266,6 +1267,11 @@ function CustomizationTab() {
     setUploadingCount((n) => Math.max(0, n + (uploading ? 1 : -1)));
   }, []);
 
+  const [storeLogo, setStoreLogo] = useState("");
+  const [storeLogoUploading, setStoreLogoUploading] = useState(false);
+  const [storeLogoSaving, setStoreLogoSaving] = useState(false);
+  const [hasStore, setHasStore] = useState(false);
+
   useEffect(() => {
     if (fullTenant) {
       setPrimaryColor(fullTenant.primaryColor ?? "#3B82F6");
@@ -1273,6 +1279,17 @@ function CustomizationTab() {
       setLogoUrl(fullTenant.logoUrl ?? "");
     }
   }, [fullTenant?.id]);
+
+  useEffect(() => {
+    storeApi.getSettings()
+      .then((s) => {
+        setStoreLogo(s.logo ?? "");
+        setHasStore(true);
+      })
+      .catch(() => {
+        setHasStore(false);
+      });
+  }, []);
 
   async function handleSave() {
     if (!tenantId) {
@@ -1286,6 +1303,18 @@ function CustomizationTab() {
       refetchMe();
     } catch {
       toast({ title: "Erro ao salvar personalização", variant: "destructive" });
+    }
+  }
+
+  async function handleSaveStoreLogo() {
+    setStoreLogoSaving(true);
+    try {
+      await storeApi.updateSettings({ logo: storeLogo });
+      toast({ title: "Logo da loja salvo com sucesso" });
+    } catch {
+      toast({ title: "Erro ao salvar logo da loja", variant: "destructive" });
+    } finally {
+      setStoreLogoSaving(false);
     }
   }
 
@@ -1337,7 +1366,10 @@ function CustomizationTab() {
       </div>
 
       <div className="space-y-2">
-        <h3 className="font-semibold text-sm">Logotipo</h3>
+        <h3 className="font-semibold text-sm">Logotipo da Agência</h3>
+        <p className="text-xs text-muted-foreground">
+          Exibido no painel administrativo do sistema.
+        </p>
         <CoverImageUpload
           endpoint="agencyLogo"
           value={logoUrl}
@@ -1371,6 +1403,38 @@ function CustomizationTab() {
           <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Salvando...</>
         ) : "Salvar personalização"}
       </Button>
+
+      {hasStore && (
+        <div className="border-t pt-6 space-y-2">
+          <h3 className="font-semibold text-sm">Logo da Loja (Vitrine)</h3>
+          <p className="text-xs text-muted-foreground">
+            Exibido na vitrine pública, nos vouchers emitidos e no QR code de confirmação de pedidos.
+          </p>
+          <CoverImageUpload
+            endpoint="storeLogo"
+            value={storeLogo}
+            onChange={setStoreLogo}
+            onUploadingChange={(uploading) => setStoreLogoUploading(uploading)}
+            emptyLabel="Clique ou arraste o logo da loja aqui"
+            previewClassName="h-32"
+            objectFit="contain"
+          />
+          <p className="text-xs text-muted-foreground">
+            Recomendado: PNG com fundo transparente, tamanho mínimo 200x60px
+          </p>
+          <Button
+            onClick={handleSaveStoreLogo}
+            disabled={storeLogoSaving || storeLogoUploading}
+            variant="outline"
+          >
+            {storeLogoUploading ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Aguardando upload...</>
+            ) : storeLogoSaving ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Salvando...</>
+            ) : "Salvar logo da loja"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
