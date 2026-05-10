@@ -18,9 +18,38 @@ export interface ReferralAnalyticsFunnel {
   bonusPaid: number;
 }
 
+export interface ReferralAnalyticsMonthly {
+  month: string;
+  created: number;
+  converted: number;
+  bonusPaid: number;
+}
+
+export interface ReferralAnalyticsChannel {
+  source: string;
+  visitors: number;
+  converted: number;
+}
+
+export interface ReferralAnalyticsROI {
+  totalBonusPaid: number;
+  totalReferredRevenue: number;
+}
+
+export interface ReferralAnalyticsMonthStats {
+  referrals: number;
+  conversions: number;
+  bonusPaid: number;
+}
+
 export interface ReferralAnalyticsData {
   series: ReferralAnalyticsSeries[];
+  monthly: ReferralAnalyticsMonthly[];
   funnel: ReferralAnalyticsFunnel;
+  channels: ReferralAnalyticsChannel[];
+  roi: ReferralAnalyticsROI;
+  currentMonth: ReferralAnalyticsMonthStats;
+  prevMonth: ReferralAnalyticsMonthStats;
   conversionRate: number;
   prevConversionRate: number;
   discountGiven: number;
@@ -153,6 +182,9 @@ export function useGetReferralExpiryEmailStatus<
 
   return { ...query, queryKey };
 }
+
+export const getReferralAnalyticsExportUrl = (period: ReferralAnalyticsPeriod) =>
+  `/api/referrals/analytics/export?period=${period}`;
 
 export const getReferralExportUrl = (filters: ReferralExportFilters = {}) => {
   const params = new URLSearchParams();

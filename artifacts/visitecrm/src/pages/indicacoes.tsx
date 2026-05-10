@@ -11,6 +11,7 @@ import {
   useGetReferralShare,
   useGetReferralExpiryEmailStatus,
   getReferralExportUrl,
+  getReferralAnalyticsExportUrl,
   useGetMe,
 } from "@workspace/api-client-react";
 import type { Referral, ReferralSettings, ReferralTierConfig, ReferralAnalyticsPeriod } from "@workspace/api-client-react";
@@ -79,6 +80,7 @@ import {
   FileText,
   ChevronDown,
 } from "lucide-react";
+import { ReferralAnalyticsCharts } from "@/components/referral-analytics-charts";
 
 const DEFAULT_TIERS: ReferralTierConfig[] = [
   { level: "bronze",  label: "Bronze",   minReferrals: 0,  bonusMultiplier: 1.0 },
@@ -845,102 +847,66 @@ export default function Indicacoes() {
         </Card>
       </div>
 
-      {/* Analytics Section */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-primary" />
-            Tendência e Funil de Conversão
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Trend chart */}
-          {analyticsData && analyticsData.series.length > 0 ? (
-            <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2">Indicações criadas vs. convertidas por semana</p>
-              {(() => {
-                const data = analyticsData.series;
-                const maxVal = Math.max(...data.map(d => Math.max(d.created, d.converted)), 1);
-                const pts = data.map((d, i) => {
-                  const x = data.length === 1 ? 50 : (i / (data.length - 1)) * 100;
-                  const y = 100 - (d.created / maxVal) * 90;
-                  return `${x.toFixed(1)},${y.toFixed(1)}`;
-                }).join(" ");
-                const convPts = data.map((d, i) => {
-                  const x = data.length === 1 ? 50 : (i / (data.length - 1)) * 100;
-                  const y = 100 - (d.converted / maxVal) * 90;
-                  return `${x.toFixed(1)},${y.toFixed(1)}`;
-                }).join(" ");
+      {/* Analytics Charts Section */}
+      {analyticsData ? (
+        <ReferralAnalyticsCharts
+          data={analyticsData}
+          period={analyticsPeriod}
+          analyticsExportUrl={getReferralAnalyticsExportUrl(analyticsPeriod)}
+        />
+      ) : (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-primary" />
+              Analytics avançado de indicações
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-36 flex items-center justify-center text-muted-foreground text-sm">
+              Carregando dados de analytics...
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Funnel (kept for at-a-glance view) */}
+      {analyticsData && analyticsData.funnel.created > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-primary" />
+              Funil de conversão
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {[
+                { label: "Criadas", count: analyticsData.funnel.created, color: "#3B82F6" },
+                { label: "Visitadas", count: analyticsData.funnel.visited, color: "#8B5CF6" },
+                { label: "Convertidas", count: analyticsData.funnel.converted, color: "#10B981" },
+                { label: "Bônus pago", count: analyticsData.funnel.bonusPaid, color: "#F59E0B" },
+              ].map((step) => {
+                const pct = analyticsData.funnel.created > 0 ? Math.round((step.count / analyticsData.funnel.created) * 100) : 0;
                 return (
-                  <div>
-                    <svg viewBox="0 0 100 110" className="w-full h-36" preserveAspectRatio="none">
-                      <polyline points={pts} fill="none" stroke="hsl(var(--primary))" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-                      <polyline points={convPts} fill="none" stroke="#10B981" strokeWidth="1.5" strokeDasharray="3,2" vectorEffect="non-scaling-stroke" />
-                      {data.map((d, i) => {
-                        const x = data.length === 1 ? 50 : (i / (data.length - 1)) * 100;
-                        const y = 100 - (d.created / maxVal) * 90;
-                        return <circle key={i} cx={x.toFixed(1)} cy={y.toFixed(1)} r="1.5" fill="hsl(var(--primary))" vectorEffect="non-scaling-stroke" />;
-                      })}
-                    </svg>
-                    <div className="flex justify-between mt-1">
-                      {data.filter((_, i) => i % Math.max(1, Math.floor(data.length / 6)) === 0).map((d, i) => (
-                        <span key={i} className="text-[10px] text-muted-foreground">
-                          {new Date(d.week + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
-                        </span>
-                      ))}
+                  <div key={step.label} className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground w-24 shrink-0">{step.label}</span>
+                    <div className="flex-1 bg-muted rounded-full h-5 overflow-hidden">
+                      <div
+                        className="h-5 rounded-full flex items-center justify-end pr-2 transition-all duration-500"
+                        style={{ width: `${Math.max(pct, 3)}%`, backgroundColor: step.color }}
+                      >
+                        <span className="text-[10px] font-semibold text-white">{step.count}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-3 h-0.5 bg-primary inline-block" />
-                        Criadas
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-3 h-0.5 bg-emerald-500 inline-block" style={{ backgroundImage: "repeating-linear-gradient(90deg, currentColor 0, currentColor 4px, transparent 4px, transparent 6px)" }} />
-                        Convertidas
-                      </span>
-                    </div>
+                    <span className="text-xs font-medium w-10 text-right">{pct}%</span>
                   </div>
                 );
-              })()}
+              })}
             </div>
-          ) : (
-            <div className="h-36 flex items-center justify-center text-muted-foreground text-sm">
-              Sem dados de indicações no período selecionado
-            </div>
-          )}
-
-          {/* Funnel */}
-          {analyticsData && analyticsData.funnel.created > 0 && (
-            <div>
-              <p className="text-xs font-medium text-muted-foreground mb-3">Funil de conversão</p>
-              <div className="space-y-2">
-                {[
-                  { label: "Criadas", count: analyticsData.funnel.created, color: "#3B82F6" },
-                  { label: "Visitadas", count: analyticsData.funnel.visited, color: "#8B5CF6" },
-                  { label: "Convertidas", count: analyticsData.funnel.converted, color: "#10B981" },
-                  { label: "Bônus pago", count: analyticsData.funnel.bonusPaid, color: "#F59E0B" },
-                ].map((step) => {
-                  const pct = analyticsData.funnel.created > 0 ? Math.round((step.count / analyticsData.funnel.created) * 100) : 0;
-                  return (
-                    <div key={step.label} className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground w-24 shrink-0">{step.label}</span>
-                      <div className="flex-1 bg-muted rounded-full h-5 overflow-hidden">
-                        <div
-                          className="h-5 rounded-full flex items-center justify-end pr-2 transition-all duration-500"
-                          style={{ width: `${Math.max(pct, 3)}%`, backgroundColor: step.color }}
-                        >
-                          <span className="text-[10px] font-semibold text-white">{step.count}</span>
-                        </div>
-                      </div>
-                      <span className="text-xs font-medium w-10 text-right">{pct}%</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Top Referrers Ranking */}
       {ranked.length > 0 && (

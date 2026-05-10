@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, referralsTable, clientsTable, referralSettingsTable, referralTrackingTable, tenantsTable, emailLogsTable } from "@workspace/db";
+import { db, referralsTable, clientsTable, referralSettingsTable, referralTrackingTable, tenantsTable, emailLogsTable, reservationsTable } from "@workspace/db";
 import { eq, and, desc, sql, count, ilike, or, inArray, getTableColumns } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
@@ -650,48 +650,133 @@ router.get("/referrals/analytics", async (req, res): Promise<void> => {
     const now = new Date();
     const since = new Date(now.getTime() - period * 24 * 60 * 60 * 1000);
     const prevSince = new Date(since.getTime() - period * 24 * 60 * 60 * 1000);
+    const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
-    const seriesRows = await db.select({
-      week: sql<string>`date_trunc('week', ${referralsTable.createdAt})::date::text`,
-      created: count(),
-      converted: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.status} = ${REFERRAL_STATUS.COMPLETED})`,
-    }).from(referralsTable)
-      .where(and(
-        eq(referralsTable.tenantId, me.tenantId),
-        sql`${referralsTable.createdAt} >= ${since}`,
-      ))
-      .groupBy(sql`date_trunc('week', ${referralsTable.createdAt})`)
-      .orderBy(sql`date_trunc('week', ${referralsTable.createdAt})`);
+    // Current and previous calendar month boundaries
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
-    const [funnelRow] = await db.select({
-      created: count(),
-      visited: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.visitsCount} > 0)`,
-      converted: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.status} = ${REFERRAL_STATUS.COMPLETED})`,
-      bonusPaid: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.bonusPaid} = true)`,
-    }).from(referralsTable)
-      .where(and(
-        eq(referralsTable.tenantId, me.tenantId),
-        sql`${referralsTable.createdAt} >= ${since}`,
-      ));
+    const [
+      seriesRows,
+      funnelRow_,
+      prevRow_,
+      discountRow_,
+      monthlyRows,
+      channelRows,
+      roiBonusRow_,
+      roiRevenueRow_,
+      currentMonthRow_,
+      prevMonthRow_,
+    ] = await Promise.all([
+      // Weekly series for selected period (existing behaviour)
+      db.select({
+        week: sql<string>`date_trunc('week', ${referralsTable.createdAt})::date::text`,
+        created: count(),
+        converted: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.status} = ${REFERRAL_STATUS.COMPLETED})`,
+      }).from(referralsTable)
+        .where(and(eq(referralsTable.tenantId, me.tenantId), sql`${referralsTable.createdAt} >= ${since}`))
+        .groupBy(sql`date_trunc('week', ${referralsTable.createdAt})`)
+        .orderBy(sql`date_trunc('week', ${referralsTable.createdAt})`),
 
-    const [prevRow] = await db.select({
-      created: count(),
-      converted: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.status} = ${REFERRAL_STATUS.COMPLETED})`,
-    }).from(referralsTable)
-      .where(and(
-        eq(referralsTable.tenantId, me.tenantId),
-        sql`${referralsTable.createdAt} >= ${prevSince}`,
-        sql`${referralsTable.createdAt} < ${since}`,
-      ));
+      // Funnel for period
+      db.select({
+        created: count(),
+        visited: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.visitsCount} > 0)`,
+        converted: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.status} = ${REFERRAL_STATUS.COMPLETED})`,
+        bonusPaid: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.bonusPaid} = true)`,
+      }).from(referralsTable)
+        .where(and(eq(referralsTable.tenantId, me.tenantId), sql`${referralsTable.createdAt} >= ${since}`)),
 
-    const [discountRow] = await db.select({
-      total: sql<number>`COALESCE(SUM(${referralsTable.discountAmount}), 0)`,
-    }).from(referralsTable)
-      .where(and(
-        eq(referralsTable.tenantId, me.tenantId),
-        eq(referralsTable.status, REFERRAL_STATUS.COMPLETED),
-        sql`${referralsTable.createdAt} >= ${since}`,
-      ));
+      // Previous period comparison
+      db.select({
+        created: count(),
+        converted: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.status} = ${REFERRAL_STATUS.COMPLETED})`,
+      }).from(referralsTable)
+        .where(and(
+          eq(referralsTable.tenantId, me.tenantId),
+          sql`${referralsTable.createdAt} >= ${prevSince}`,
+          sql`${referralsTable.createdAt} < ${since}`,
+        )),
+
+      // Discount given in period
+      db.select({ total: sql<number>`COALESCE(SUM(${referralsTable.discountAmount}), 0)` })
+        .from(referralsTable)
+        .where(and(
+          eq(referralsTable.tenantId, me.tenantId),
+          eq(referralsTable.status, REFERRAL_STATUS.COMPLETED),
+          sql`${referralsTable.createdAt} >= ${since}`,
+        )),
+
+      // Monthly time series — last 12 months
+      db.select({
+        month: sql<string>`date_trunc('month', ${referralsTable.createdAt})::date::text`,
+        created: count(),
+        converted: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.status} = ${REFERRAL_STATUS.COMPLETED})`,
+        bonusPaid: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.bonusPaid} = true)`,
+      }).from(referralsTable)
+        .where(and(eq(referralsTable.tenantId, me.tenantId), sql`${referralsTable.createdAt} >= ${twelveMonthsAgo}`))
+        .groupBy(sql`date_trunc('month', ${referralsTable.createdAt})`)
+        .orderBy(sql`date_trunc('month', ${referralsTable.createdAt})`),
+
+      // Channel breakdown from referral_tracking.utmSource for the period
+      db.select({
+        source: sql<string>`COALESCE(NULLIF(${referralTrackingTable.utmSource}, ''), 'direto')`,
+        visitors: sql<number>`COUNT(DISTINCT ${referralTrackingTable.cookieId})`,
+        converted: sql<number>`COUNT(DISTINCT CASE WHEN ${referralTrackingTable.converted} = true THEN ${referralTrackingTable.cookieId} END)`,
+      }).from(referralTrackingTable)
+        .where(and(
+          eq(referralTrackingTable.tenantId, me.tenantId),
+          sql`${referralTrackingTable.createdAt} >= ${since}`,
+        ))
+        .groupBy(sql`COALESCE(NULLIF(${referralTrackingTable.utmSource}, ''), 'direto')`)
+        .orderBy(sql`COUNT(DISTINCT ${referralTrackingTable.cookieId}) DESC`)
+        .limit(8),
+
+      // ROI — total bonus paid out (all time for tenant)
+      db.select({ total: sql<number>`COALESCE(SUM(${referralsTable.bonusAmount}), 0)` })
+        .from(referralsTable)
+        .where(and(eq(referralsTable.tenantId, me.tenantId), eq(referralsTable.bonusPaid, true))),
+
+      // ROI — revenue from referred reservations (discountReferralCode present, not cancelled)
+      db.select({ total: sql<number>`COALESCE(SUM(${reservationsTable.totalValue}), 0)` })
+        .from(reservationsTable)
+        .where(and(
+          eq(reservationsTable.tenantId, me.tenantId),
+          sql`${reservationsTable.discountReferralCode} IS NOT NULL`,
+          sql`${reservationsTable.status} != 'cancelled'`,
+        )),
+
+      // Current calendar month
+      db.select({
+        referrals: count(),
+        conversions: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.status} = ${REFERRAL_STATUS.COMPLETED})`,
+        bonusPaid: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.bonusPaid} = true)`,
+      }).from(referralsTable)
+        .where(and(
+          eq(referralsTable.tenantId, me.tenantId),
+          sql`${referralsTable.createdAt} >= ${currentMonthStart}`,
+        )),
+
+      // Previous calendar month
+      db.select({
+        referrals: count(),
+        conversions: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.status} = ${REFERRAL_STATUS.COMPLETED})`,
+        bonusPaid: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.bonusPaid} = true)`,
+      }).from(referralsTable)
+        .where(and(
+          eq(referralsTable.tenantId, me.tenantId),
+          sql`${referralsTable.createdAt} >= ${prevMonthStart}`,
+          sql`${referralsTable.createdAt} < ${currentMonthStart}`,
+        )),
+    ]);
+
+    const [funnelRow] = funnelRow_;
+    const [prevRow] = prevRow_;
+    const [discountRow] = discountRow_;
+    const [roiBonusRow] = roiBonusRow_;
+    const [roiRevenueRow] = roiRevenueRow_;
+    const [currentMonthRow] = currentMonthRow_;
+    const [prevMonthRow] = prevMonthRow_;
 
     const created = Number(funnelRow?.created ?? 0);
     const converted = Number(funnelRow?.converted ?? 0);
@@ -701,10 +786,12 @@ router.get("/referrals/analytics", async (req, res): Promise<void> => {
     const prevConversionRate = prevCreated > 0 ? Math.round((prevConverted / prevCreated) * 100) : 0;
 
     res.json({
-      series: seriesRows.map(r => ({
-        week: r.week,
+      series: seriesRows.map(r => ({ week: r.week, created: Number(r.created), converted: Number(r.converted) })),
+      monthly: monthlyRows.map(r => ({
+        month: r.month.slice(0, 7),
         created: Number(r.created),
         converted: Number(r.converted),
+        bonusPaid: Number(r.bonusPaid),
       })),
       funnel: {
         created,
@@ -712,12 +799,151 @@ router.get("/referrals/analytics", async (req, res): Promise<void> => {
         converted,
         bonusPaid: Number(funnelRow?.bonusPaid ?? 0),
       },
+      channels: channelRows.map(r => ({
+        source: r.source,
+        visitors: Number(r.visitors),
+        converted: Number(r.converted),
+      })),
+      roi: {
+        totalBonusPaid: Number(roiBonusRow?.total ?? 0),
+        totalReferredRevenue: Number(roiRevenueRow?.total ?? 0),
+      },
+      currentMonth: {
+        referrals: Number(currentMonthRow?.referrals ?? 0),
+        conversions: Number(currentMonthRow?.conversions ?? 0),
+        bonusPaid: Number(currentMonthRow?.bonusPaid ?? 0),
+      },
+      prevMonth: {
+        referrals: Number(prevMonthRow?.referrals ?? 0),
+        conversions: Number(prevMonthRow?.conversions ?? 0),
+        bonusPaid: Number(prevMonthRow?.bonusPaid ?? 0),
+      },
       conversionRate,
       prevConversionRate,
       discountGiven: Number(discountRow?.total ?? 0),
     });
   } catch (err) {
     req.log.error({ err }, "Error fetching referral analytics");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/referrals/analytics/export", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const period = parseInt((req.query.period as string) || "90", 10);
+    if (![30, 90, 180].includes(period)) {
+      res.status(400).json({ error: "period must be 30, 90, or 180" });
+      return;
+    }
+
+    const now = new Date();
+    const since = new Date(now.getTime() - period * 24 * 60 * 60 * 1000);
+    const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+
+    const [monthlyRows, channelRows, roiBonusRow_, roiRevenueRow_] = await Promise.all([
+      db.select({
+        month: sql<string>`date_trunc('month', ${referralsTable.createdAt})::date::text`,
+        created: count(),
+        converted: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.status} = ${REFERRAL_STATUS.COMPLETED})`,
+        bonusPaid: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.bonusPaid} = true)`,
+        bonusTotal: sql<number>`COALESCE(SUM(${referralsTable.bonusAmount}) FILTER (WHERE ${referralsTable.bonusPaid} = true), 0)`,
+      }).from(referralsTable)
+        .where(and(eq(referralsTable.tenantId, me.tenantId), sql`${referralsTable.createdAt} >= ${twelveMonthsAgo}`))
+        .groupBy(sql`date_trunc('month', ${referralsTable.createdAt})`)
+        .orderBy(sql`date_trunc('month', ${referralsTable.createdAt})`),
+
+      db.select({
+        source: sql<string>`COALESCE(NULLIF(${referralTrackingTable.utmSource}, ''), 'direto')`,
+        visitors: sql<number>`COUNT(DISTINCT ${referralTrackingTable.cookieId})`,
+        converted: sql<number>`COUNT(DISTINCT CASE WHEN ${referralTrackingTable.converted} = true THEN ${referralTrackingTable.cookieId} END)`,
+      }).from(referralTrackingTable)
+        .where(and(eq(referralTrackingTable.tenantId, me.tenantId), sql`${referralTrackingTable.createdAt} >= ${since}`))
+        .groupBy(sql`COALESCE(NULLIF(${referralTrackingTable.utmSource}, ''), 'direto')`)
+        .orderBy(sql`COUNT(DISTINCT ${referralTrackingTable.cookieId}) DESC`),
+
+      db.select({ total: sql<number>`COALESCE(SUM(${referralsTable.bonusAmount}), 0)` })
+        .from(referralsTable)
+        .where(and(eq(referralsTable.tenantId, me.tenantId), eq(referralsTable.bonusPaid, true))),
+
+      db.select({ total: sql<number>`COALESCE(SUM(${reservationsTable.totalValue}), 0)` })
+        .from(reservationsTable)
+        .where(and(
+          eq(reservationsTable.tenantId, me.tenantId),
+          sql`${reservationsTable.discountReferralCode} IS NOT NULL`,
+          sql`${reservationsTable.status} != 'cancelled'`,
+        )),
+    ]);
+
+    const [roiBonusRow] = roiBonusRow_;
+    const [roiRevenueRow] = roiRevenueRow_;
+
+    const CHANNEL_LABEL_MAP: Record<string, string> = {
+      whatsapp: "WhatsApp", qr_code: "QR Code", qrcode: "QR Code",
+      direct: "Link direto", direto: "Link direto", instagram: "Instagram",
+      facebook: "Facebook", email: "E-mail", sms: "SMS",
+    };
+    const channelLabelFn = (s: string) => CHANNEL_LABEL_MAP[s.toLowerCase()] ?? s;
+
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "VisiteCRM";
+
+    // Sheet 1: Monthly series
+    const wsMonthly = wb.addWorksheet("Série Mensal");
+    const monthlyHeaders = ["Mês", "Indicações criadas", "Convertidas", "Bônus pagos", "Total bônus (R$)", "Taxa de conversão (%)"];
+    const hRowM = wsMonthly.addRow(monthlyHeaders);
+    hRowM.font = { bold: true };
+    for (const r of monthlyRows) {
+      const monthLabel = r.month.slice(0, 7);
+      const cr = Number(r.created);
+      const cv = Number(r.converted);
+      wsMonthly.addRow([
+        monthLabel,
+        cr,
+        cv,
+        Number(r.bonusPaid),
+        Number(r.bonusTotal).toFixed(2),
+        cr > 0 ? Math.round((cv / cr) * 100) : 0,
+      ]);
+    }
+    monthlyHeaders.forEach((_, i) => { wsMonthly.getColumn(i + 1).width = Math.max(monthlyHeaders[i].length, 16) + 2; });
+
+    // Sheet 2: Channel breakdown
+    const wsChannels = wb.addWorksheet("Canais");
+    const channelHeaders = ["Canal", "Visitantes únicos", "Conversões", "Taxa de conversão (%)"];
+    const hRowC = wsChannels.addRow(channelHeaders);
+    hRowC.font = { bold: true };
+    for (const r of channelRows) {
+      const v = Number(r.visitors);
+      const cv = Number(r.converted);
+      wsChannels.addRow([channelLabelFn(r.source), v, cv, v > 0 ? Math.round((cv / v) * 100) : 0]);
+    }
+    channelHeaders.forEach((_, i) => { wsChannels.getColumn(i + 1).width = Math.max(channelHeaders[i].length, 16) + 2; });
+
+    // Sheet 3: ROI summary
+    const wsRoi = wb.addWorksheet("ROI");
+    wsRoi.addRow(["Métrica", "Valor"]).font = { bold: true };
+    wsRoi.addRow(["Bônus total pago (R$)", Number(roiBonusRow?.total ?? 0).toFixed(2)]);
+    wsRoi.addRow(["Receita gerada por indicações (R$)", Number(roiRevenueRow?.total ?? 0).toFixed(2)]);
+    const roiRatio = Number(roiBonusRow?.total ?? 0) > 0
+      ? (Number(roiRevenueRow?.total ?? 0) / Number(roiBonusRow?.total ?? 0)).toFixed(2)
+      : "—";
+    wsRoi.addRow(["ROI (receita / bônus)", roiRatio]);
+    wsRoi.getColumn(1).width = 36;
+    wsRoi.getColumn(2).width = 20;
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `analytics-indicacoes-${dateStr}.xlsx`;
+    const buf = await wb.xlsx.writeBuffer();
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(Buffer.from(buf));
+  } catch (err) {
+    req.log.error({ err }, "Error exporting referral analytics");
     res.status(500).json({ error: "Internal server error" });
   }
 });
