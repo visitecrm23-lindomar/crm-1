@@ -2,10 +2,12 @@ export { ReservationConfirmationEmail } from './templates/reservation-confirmati
 export type { ReservationConfirmationEmailProps } from './templates/reservation-confirmation';
 export { ReservationCancellationEmail } from './templates/reservation-cancellation';
 export type { ReservationCancellationEmailProps } from './templates/reservation-cancellation';
-export { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail, sendManifestEmail, sendWelcomeCredentialsEmail, sendReminderHtmlEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail } from './service';
+export { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail, sendManifestEmail, sendWelcomeCredentialsEmail, sendReminderHtmlEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail } from './service';
 export { NewBookingNotificationEmail } from './templates/new-booking-notification';
 export type { NewBookingNotificationEmailProps } from './templates/new-booking-notification';
-export type { SendEmailResult, SendManifestEmailOptions, SendReminderEmailOptions, ReservationCancellationEmailProps as CancellationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps } from './service';
+export type { SendEmailResult, SendManifestEmailOptions, SendReminderEmailOptions, ReservationCancellationEmailProps as CancellationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralBonusReleasedEmailProps } from './service';
+export { ReferralBonusReleasedEmail } from './templates/referral-bonus-released';
+export type { ReferralBonusReleasedEmailProps as ReferralBonusReleasedEmailTemplateProps } from './templates/referral-bonus-released';
 export { BirthdayEmail } from './templates/birthday';
 export type { BirthdayEmailProps } from './templates/birthday';
 export { WelcomeCredentialsEmail } from './templates/welcome-credentials';

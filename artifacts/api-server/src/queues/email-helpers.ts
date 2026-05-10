@@ -2,11 +2,11 @@ import { db, emailLogsTable, reservationsTable, tripsTable, clientsTable, referr
 import { eq, and, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { getEmailQueue, getCancellationEmailQueue, getNewBookingNotificationEmailQueue, getReferralEmailQueue } from "./index";
-import type { ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData } from "./index";
-import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail } from "@workspace/email";
+import type { ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData, ReferralBonusReleasedEmailJobData } from "./index";
+import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail } from "@workspace/email";
 import { ROLES } from "@workspace/permissions";
 import { logger } from "../lib/logger";
-import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps } from "@workspace/email";
+import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps } from "@workspace/email";
 
 interface EnqueueEmailOpts {
   tenantId: string;
@@ -861,6 +861,102 @@ export async function dispatchReferralExpiringSoonEmail(
     tenantId,
     referralId,
   );
+}
+
+// ── Referral: bônus liberado para pagamento ───────────────────────────────────
+
+export async function enqueueReferralBonusReleasedEmail(
+  props: ReferralBonusReleasedEmailProps,
+  tenantId: string,
+  referralId?: string,
+): Promise<void> {
+  const emailLogId = generateId();
+  const subject = `🎉 Seu bônus de indicação está disponível para resgate! — ${props.agencyName}`;
+  const queue = getReferralEmailQueue();
+
+  if (queue) {
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId: null,
+      referralId: referralId ?? null,
+      recipient: props.referrerEmail,
+      subject,
+      status: "queued",
+    });
+
+    try {
+      const jobData: ReferralBonusReleasedEmailJobData = { ...props, emailLogId, tenantId };
+      await queue.add("referral-bonus-released", jobData);
+      logger.info({ emailLogId, referrerEmail: props.referrerEmail, referralId }, "[email-queue] Referral bonus-released email enqueued");
+    } catch (enqueueErr) {
+      logger.warn({ emailLogId, err: enqueueErr }, "[email-queue] Failed to enqueue referral bonus-released — falling back to direct send");
+      const result = await sendReferralBonusReleasedEmail(props);
+      await db
+        .update(emailLogsTable)
+        .set({
+          status: result.success ? "sent" : "failed",
+          messageId: result.messageId ?? null,
+          errorMessage: result.error ?? null,
+        })
+        .where(eq(emailLogsTable.id, emailLogId));
+    }
+  } else {
+    const result = await sendReferralBonusReleasedEmail(props);
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId: null,
+      referralId: referralId ?? null,
+      recipient: props.referrerEmail,
+      subject,
+      status: result.success ? "sent" : "failed",
+      messageId: result.messageId ?? null,
+      errorMessage: result.error ?? null,
+    });
+    logger.info({ emailLogId, referrerEmail: props.referrerEmail, referralId, success: result.success }, "[email-queue] Referral bonus-released email sent directly");
+  }
+}
+
+// ── High-level: look up referrer data and dispatch bonus-released email ────────
+
+export async function dispatchReferralBonusReleasedEmail(
+  referrerId: string,
+  tenantId: string,
+  bonusAmount: number,
+  releaseDate: string,
+  referralId?: string,
+): Promise<boolean> {
+  const [referrer] = await db
+    .select({ name: clientsTable.name, email: clientsTable.email })
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, referrerId), eq(clientsTable.tenantId, tenantId)))
+    .limit(1);
+
+  if (!referrer?.email) {
+    logger.warn({ referrerId, tenantId, referralId }, "[email-queue] Referral bonus-released: referrer has no email — skipping (not stamping)");
+    return false;
+  }
+
+  const [tenant] = await db
+    .select({ name: tenantsTable.name, logoUrl: tenantsTable.logoUrl })
+    .from(tenantsTable)
+    .where(eq(tenantsTable.id, tenantId))
+    .limit(1);
+
+  await enqueueReferralBonusReleasedEmail(
+    {
+      referrerName: referrer.name ?? referrer.email,
+      referrerEmail: referrer.email,
+      bonusAmount,
+      releaseDate,
+      agencyName: tenant?.name ?? "Agência",
+      agencyLogo: tenant?.logoUrl ?? null,
+    },
+    tenantId,
+    referralId,
+  );
+  return true;
 }
 
 // ── Resend a failed email log ──────────────────────────────────────────────────

@@ -9,6 +9,7 @@ import { ReferralBonusPaidEmail, type ReferralBonusPaidEmailProps } from './temp
 import { ReferralConvertedEmail, type ReferralConvertedEmailProps } from './templates/referral-converted';
 import { ReferralExpiredEmail, type ReferralExpiredEmailProps } from './templates/referral-expired';
 import { ReferralExpiringSoonEmail, type ReferralExpiringSoonEmailProps } from './templates/referral-expiring-soon';
+import { ReferralBonusReleasedEmail, type ReferralBonusReleasedEmailProps } from './templates/referral-bonus-released';
 
 export type { ReservationCancellationEmailProps };
 
@@ -297,7 +298,7 @@ export async function sendWelcomeCredentialsEmail(
   }
 }
 
-export type { ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps };
+export type { ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralBonusReleasedEmailProps };
 
 export async function sendReferralBonusPaidEmail(
   props: ReferralBonusPaidEmailProps
@@ -382,6 +383,35 @@ export async function sendReferralExpiredEmail(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[email] Unexpected error sending referral expired email:', message);
+    return { success: false, error: message };
+  }
+}
+
+export async function sendReferralBonusReleasedEmail(
+  props: ReferralBonusReleasedEmailProps
+): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const { data, error } = await resend.emails.send({
+      from: `${props.agencyName} <reservas@resend.visitecrm.com>`,
+      to: [props.referrerEmail],
+      subject: `🎉 Seu bônus de indicação está disponível para resgate! — ${props.agencyName}`,
+      react: React.createElement(ReferralBonusReleasedEmail, props),
+    });
+
+    if (error) {
+      console.error('[email] Failed to send referral bonus released email:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Unexpected error sending referral bonus released email:', message);
     return { success: false, error: message };
   }
 }

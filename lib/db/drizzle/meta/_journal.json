@@ -197,6 +197,13 @@
       "when": 1747100000000,
       "tag": "0027_reservation_client_nullable",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1747200000000,
+      "tag": "0028_add_bonus_release_notified_at",
+      "breakpoints": true
     }
   ]
 }

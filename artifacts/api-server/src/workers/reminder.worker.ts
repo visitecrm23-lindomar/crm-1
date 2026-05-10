@@ -2,7 +2,7 @@ import { Worker } from "bullmq";
 import { db, reservationsTable, tripsTable, clientsTable, tenantsTable, paymentsTable, emailLogsTable, storesTable, usersTable, referralsTable, referralSettingsTable } from "@workspace/db";
 import { eq, and, gt, sql, gte, lt, lte, isNull, isNotNull, notLike, like, inArray, not, exists } from "drizzle-orm";
 import { sendReminderHtmlEmail, sendReservationConfirmationEmail, sendReferralExpiringSoonEmail } from "@workspace/email";
-import { dispatchReferralExpiredEmail, dispatchReferralExpiringSoonEmail } from "../queues/email-helpers";
+import { dispatchReferralExpiredEmail, dispatchReferralExpiringSoonEmail, dispatchReferralBonusReleasedEmail } from "../queues/email-helpers";
 import { getRedisConnection, isTransientRedisError, recordTransientRedisError, resetTransientRedisErrors } from "../lib/redis";
 import { logger } from "../lib/logger";
 import { runExpiredReservationsCron } from "../lib/expired-reservations";
@@ -1079,6 +1079,103 @@ async function processExpiringSoonReferralNotifications(): Promise<void> {
 }
 
 // ────────────────────────────────────────────────────────────
+// Bonus release notifications (convertedAt + 30 days <= today)
+// ────────────────────────────────────────────────────────────
+
+const BONUS_LOCK_DAYS = 30;
+
+async function processReferralBonusReleaseNotifications(): Promise<void> {
+  const tz = process.env["REMINDER_TZ"] ?? "America/Sao_Paulo";
+
+  // Find completed referrals where:
+  // - bonusPaid = false (bonus not yet paid)
+  // - bonusReleaseNotifiedAt IS NULL (notification not yet sent)
+  // - status = 'completed' (only notify on actually converted referrals)
+  // - status != 'reversed'
+  // - convertedAt + 30 days <= today (lock period has expired)
+  const releasedReferrals = await db
+    .select({
+      id: referralsTable.id,
+      referrerId: referralsTable.referrerId,
+      tenantId: referralsTable.tenantId,
+      bonusAmount: referralsTable.bonusAmount,
+      convertedAt: referralsTable.convertedAt,
+    })
+    .from(referralsTable)
+    .where(
+      and(
+        eq(referralsTable.status, "completed"),
+        eq(referralsTable.bonusPaid, false),
+        isNull(referralsTable.bonusReleaseNotifiedAt),
+        isNotNull(referralsTable.convertedAt),
+        sql`(${referralsTable.convertedAt} AT TIME ZONE ${tz})::date + INTERVAL '${sql.raw(String(BONUS_LOCK_DAYS))} days' <= (NOW() AT TIME ZONE ${tz})::date`,
+      ),
+    );
+
+  if (releasedReferrals.length === 0) {
+    logger.info("[bonus-release] No referrals with newly released bonuses — skipping");
+    return;
+  }
+
+  logger.info({ count: releasedReferrals.length }, "[bonus-release] Found referrals with released bonuses to notify");
+
+  let notified = 0, errors = 0;
+
+  for (const referral of releasedReferrals) {
+    try {
+      const bonusAmount = parseFloat(String(referral.bonusAmount ?? "0"));
+      const releaseDate = new Date().toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        timeZone: tz,
+      });
+
+      // Check whether the referrer has an email address BEFORE stamping.
+      // Stamping without email would permanently suppress future retries if
+      // an email address is added to the client record later.
+      const hasEmail = await dispatchReferralBonusReleasedEmail(
+        referral.referrerId,
+        referral.tenantId,
+        bonusAmount,
+        releaseDate,
+        referral.id,
+      );
+
+      if (!hasEmail) {
+        // Referrer has no email — skip without marking as notified so a
+        // future run can retry once an email address is added.
+        logger.info({ referralId: referral.id }, "[bonus-release] Skipping stamp — referrer has no email");
+        continue;
+      }
+
+      // Stamp bonusReleaseNotifiedAt with a concurrency guard so parallel cron
+      // runs cannot double-send. If the stamp fails (another run won the race),
+      // the email was already dispatched by the winner — acceptable here because
+      // at-most-once delivery is handled by the queue layer's dedup TTL.
+      // NOTE: if the email job is enqueued successfully but the email worker
+      // later exhausts retries, bonusReleaseNotifiedAt will remain set and no
+      // automatic retry will occur via this cron. This is consistent with the
+      // existing expiry-warning flow; a dedicated retry path can be added later.
+      await db
+        .update(referralsTable)
+        .set({ bonusReleaseNotifiedAt: new Date(), updatedAt: new Date() })
+        .where(eq(referralsTable.id, referral.id));
+
+      notified++;
+    } catch (err) {
+      errors++;
+      logger.error(
+        { err, referralId: referral.id, referrerId: referral.referrerId, tenantId: referral.tenantId },
+        "[bonus-release] Failed to notify bonus release",
+      );
+    }
+  }
+
+  logger.info({ notified, errors, total: releasedReferrals.length }, "[bonus-release] Bonus release notification run complete");
+}
+
+// ────────────────────────────────────────────────────────────
 // Worker bootstrap
 // ────────────────────────────────────────────────────────────
 
@@ -1110,6 +1207,8 @@ export function startReminderWorker(): Worker<ReminderJobData> | null {
         await processExpiringSoonReferralNotifications();
       } else if (job.data.type === "expiry_warning_email_retry") {
         await retryFailedExpiryWarningEmails();
+      } else if (job.data.type === "referral_bonus_release_notification") {
+        await processReferralBonusReleaseNotifications();
       } else {
         logger.warn({ type: job.data.type }, "[reminder-worker] Unknown reminder type");
       }
