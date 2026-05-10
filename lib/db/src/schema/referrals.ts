@@ -50,6 +50,8 @@ export const referralsTable = pgTable("referrals", {
   expiryWarning7SentAt: timestamp("expiry_warning_7_sent_at", { withTimezone: true }),
   expiryWarning1SentAt: timestamp("expiry_warning_1_sent_at", { withTimezone: true }),
   bonusReleaseNotifiedAt: timestamp("bonus_release_notified_at", { withTimezone: true }),
+  bonusCreditUsedAt: timestamp("bonus_credit_used_at", { withTimezone: true }),
+  bonusCreditOrderId: text("bonus_credit_order_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

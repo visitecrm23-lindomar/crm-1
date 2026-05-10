@@ -623,6 +623,7 @@ export interface CreateOrderInput {
   couponCode?: string;
   referralCode?: string;
   referralCookieId?: string;
+  referralCreditUsed?: number;
   paymentMethod?: string;
   notes?: string;
   seats?: string[];

@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { useUser } from "@clerk/react";
 import { publicStoreApi, PublicApiError, PublicStore, CouponValidation, ReferralValidation } from "@/lib/storeApi";
+import { clientPortalApi } from "@/lib/clientPortalApi";
 import { useCart } from "@/contexts/CartContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +26,7 @@ import {
   PartyPopper,
   Copy,
   Check,
+  Gift,
 } from "lucide-react";
 import { PAYMENT_METHOD_LABELS as PAYMENT_LABELS } from "@/lib/labels";
 
@@ -245,6 +248,7 @@ export default function VitrineCheckout({
   store: PublicStore;
 }) {
   const [, navigate] = useLocation();
+  const { isSignedIn } = useUser();
   const { items, total, clearCart } = useCart();
   const [step, setStep] = useState<Step>("dados");
   const [loading, setLoading] = useState(false);
@@ -252,6 +256,9 @@ export default function VitrineCheckout({
   const [reservationExpiresAt, setReservationExpiresAt] = useState<string | null>(null);
   const [expiryCountdown, setExpiryCountdown] = useState<string | null>(null);
   const [reservationExpired, setReservationExpired] = useState(false);
+
+  const [referralCreditBalance, setReferralCreditBalance] = useState(0);
+  const [useReferralCredit, setUseReferralCredit] = useState(false);
 
   const [form, setFormState] = useState(() => {
     const savedCode = localStorage.getItem("referral_code") ?? "";
@@ -276,6 +283,15 @@ export default function VitrineCheckout({
   const [validatingCoupon, setValidatingCoupon] = useState(false);
   const [referralResult, setReferralResult] = useState<ReferralValidation | null>(null);
   const [validatingReferral, setValidatingReferral] = useState(false);
+
+  // Fetch referral credit balance for logged-in users
+  useEffect(() => {
+    if (!isSignedIn) return;
+    clientPortalApi.getProfile().then((p) => {
+      const balance = Number(p.referral?.creditBalance ?? 0);
+      setReferralCreditBalance(balance);
+    }).catch(() => {});
+  }, [isSignedIn]);
 
   // Auto-validate referral code from localStorage on mount
   useEffect(() => {
@@ -303,7 +319,11 @@ export default function VitrineCheckout({
         ? Math.min(referralDiscountValue, total)
         : total * (referralDiscountPct / 100))
     : 0;
-  const discount = couponDiscount + referralDiscount;
+  const afterDiscount = Math.max(0, total - couponDiscount - referralDiscount);
+  const referralCreditApplied = useReferralCredit
+    ? Math.min(referralCreditBalance, afterDiscount)
+    : 0;
+  const discount = couponDiscount + referralDiscount + referralCreditApplied;
   const finalTotal = Math.max(0, total - discount);
 
   async function validateCoupon() {
@@ -373,6 +393,7 @@ export default function VitrineCheckout({
         referralCookieId: referralResult?.valid && !couponResult?.valid
           ? (localStorage.getItem("referral_server_cookie_id") ?? undefined)
           : undefined,
+        referralCreditUsed: referralCreditApplied > 0 ? referralCreditApplied : undefined,
         paymentMethod: form.paymentMethod,
         notes: form.notes || undefined,
       });
@@ -536,11 +557,53 @@ export default function VitrineCheckout({
               <span>- R$ {referralDiscount.toFixed(2)}</span>
             </div>
           )}
+          {referralCreditApplied > 0 && (
+            <div className="flex justify-between text-sm text-purple-600">
+              <span>Crédito de indicação</span>
+              <span>- R$ {referralCreditApplied.toFixed(2)}</span>
+            </div>
+          )}
           <div className="flex justify-between font-bold text-lg border-t pt-2 mt-1">
             <span>Total</span>
             <span style={{ color: store.primaryColor }}>R$ {finalTotal.toFixed(2)}</span>
           </div>
         </div>
+
+        {referralCreditBalance > 0 && (
+          <div className="border rounded-xl p-3 bg-purple-50 border-purple-200 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Gift className="w-4 h-4 text-purple-600 shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-purple-800">
+                    Créditos: R$ {referralCreditBalance.toFixed(2)}
+                  </p>
+                  <p className="text-[11px] text-purple-600">Bônus de indicação acumulados</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUseReferralCredit(!useReferralCredit)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${
+                  useReferralCredit ? "bg-purple-600" : "bg-gray-200"
+                }`}
+                role="switch"
+                aria-checked={useReferralCredit}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-lg transform transition-transform ${
+                    useReferralCredit ? "translate-x-4" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+            {useReferralCredit && referralCreditApplied > 0 && (
+              <p className="text-xs text-purple-700 font-medium">
+                − R$ {referralCreditApplied.toFixed(2)} aplicados no total
+              </p>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

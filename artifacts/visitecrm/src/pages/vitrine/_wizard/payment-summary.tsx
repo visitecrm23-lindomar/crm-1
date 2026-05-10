@@ -2,6 +2,7 @@ import { PublicStore } from "@/lib/storeApi";
 import { TRIP_TYPE_LABELS } from "@/lib/labels";
 import { PAYMENT_LABELS } from "./constants";
 import type { WizardState } from "./use-wizard-state";
+import { Gift } from "lucide-react";
 
 export function StepPaymentSummary({
   state,
@@ -21,6 +22,10 @@ export function StepPaymentSummary({
     referralDiscountPct,
     referralDiscountType,
     couponDiscount,
+    referralCreditBalance,
+    referralCreditApplied,
+    useReferralCredit,
+    setUseReferralCredit,
     finalTotal,
     effectiveSeats,
     form,
@@ -57,6 +62,12 @@ export function StepPaymentSummary({
             <div className="flex justify-between text-green-600">
               <span>Desconto de cupom</span>
               <span>− R$ {couponDiscount.toFixed(2)}</span>
+            </div>
+          )}
+          {referralCreditApplied > 0 && (
+            <div className="flex justify-between text-purple-600">
+              <span>Crédito de indicação</span>
+              <span>− R$ {referralCreditApplied.toFixed(2)}</span>
             </div>
           )}
           <div className="border-t pt-2 flex justify-between font-bold text-base">
@@ -121,6 +132,51 @@ export function StepPaymentSummary({
             <span>− R$ {couponDiscount.toFixed(2)}</span>
           </div>
         )}
+
+        {/* Referral credit toggle */}
+        {referralCreditBalance > 0 && (
+          <div className="border rounded-xl p-3 bg-purple-50 border-purple-200 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Gift className="w-4 h-4 text-purple-600 shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-purple-800">
+                    Créditos disponíveis: R$ {referralCreditBalance.toFixed(2)}
+                  </p>
+                  <p className="text-[11px] text-purple-600">Seus bônus de indicação acumulados</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUseReferralCredit(!useReferralCredit)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${
+                  useReferralCredit ? "bg-purple-600" : "bg-gray-200"
+                }`}
+                role="switch"
+                aria-checked={useReferralCredit}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-lg transform transition-transform ${
+                    useReferralCredit ? "translate-x-4" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+            {useReferralCredit && referralCreditApplied > 0 && (
+              <p className="text-xs text-purple-700 font-medium">
+                − R$ {referralCreditApplied.toFixed(2)} serão descontados no total
+              </p>
+            )}
+          </div>
+        )}
+
+        {referralCreditApplied > 0 && (
+          <div className="flex justify-between text-purple-600">
+            <span>Crédito de indicação</span>
+            <span>− R$ {referralCreditApplied.toFixed(2)}</span>
+          </div>
+        )}
+
         <div className="border-t pt-2 flex justify-between font-bold text-base">
           <span>Total</span>
           <span style={{ color: store.primaryColor }}>R$ {finalTotal.toFixed(2)}</span>

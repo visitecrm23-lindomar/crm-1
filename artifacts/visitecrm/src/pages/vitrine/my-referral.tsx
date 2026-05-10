@@ -110,8 +110,16 @@ function ReferralHistoryRow({ r, primaryColor }: { r: ClientReferral; primaryCol
           </p>
         )}
         {(r.status === "completed" || r.status === "converted") && bonusValue > 0 && (
-          <p className={`text-xs mt-1 font-medium ${r.bonusPaid ? "text-green-600" : "text-orange-500"}`}>
-            {r.bonusPaid
+          <p className={`text-xs mt-1 font-medium ${
+            r.bonusCreditUsedAt
+              ? "text-purple-600"
+              : r.bonusPaid
+              ? "text-green-600"
+              : "text-orange-500"
+          }`}>
+            {r.bonusCreditUsedAt
+              ? `✓ Crédito de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} usado no checkout`
+              : r.bonusPaid
               ? `✓ Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} pago`
               : `⏳ Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} aguardando pagamento`}
           </p>
@@ -382,16 +390,17 @@ export default function MyReferralPage({ slug, store }: Props) {
     return true;
   });
 
-  const { paidBonus, pendingBonus } = (referrals ?? []).reduce(
+  const { paidBonus, pendingBonus, creditUsedBonus } = (referrals ?? []).reduce(
     (acc, r) => {
       if (r.status === "completed" || r.status === "converted") {
         const amount = parseFloat(r.bonusAmount) || 0;
-        if (r.bonusPaid) acc.paidBonus += amount;
+        if (r.bonusCreditUsedAt) acc.creditUsedBonus += amount;
+        else if (r.bonusPaid) acc.paidBonus += amount;
         else acc.pendingBonus += amount;
       }
       return acc;
     },
-    { paidBonus: 0, pendingBonus: 0 },
+    { paidBonus: 0, pendingBonus: 0, creditUsedBonus: 0 },
   );
 
   const stats = [
@@ -660,6 +669,12 @@ export default function MyReferralPage({ slug, store }: Props) {
                   <Clock className="w-3.5 h-3.5" />
                   {formatCurrency(pendingBonus)} a receber
                 </span>
+                {creditUsedBonus > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 border border-purple-200">
+                    <Gift className="w-3.5 h-3.5" />
+                    {formatCurrency(creditUsedBonus)} usado como crédito
+                  </span>
+                )}
               </div>
             </>
           )}

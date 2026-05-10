@@ -486,6 +486,7 @@ const CreateOrderBody = z.object({
   couponCode: z.string().optional(),
   referralCode: z.string().optional(),
   referralCookieId: z.string().optional(),
+  referralCreditUsed: z.number().nonnegative().optional(),
   paymentMethod: z.string().optional(),
   paymentProvider: z.string().optional(),
   notes: z.string().optional(),
@@ -519,7 +520,50 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
       customerEmail: data.customerEmail,
     });
 
-    const totalAmount = roundMoney(Math.max(0, subtotal - discounts.discountAmount));
+    // Resolve referral credit spend
+    let appliedCreditAmount = 0;
+    let creditReferralIds: string[] = [];
+    if (data.referralCreditUsed && data.referralCreditUsed > 0) {
+      const afterDiscount = roundMoney(Math.max(0, subtotal - discounts.discountAmount));
+      // Find the referrer client by email
+      const [creditClient] = await db
+        .select({ id: clientsTable.id })
+        .from(clientsTable)
+        .where(and(
+          eq(clientsTable.tenantId, store.tenantId),
+          eq(clientsTable.email, data.customerEmail.toLowerCase()),
+        ))
+        .limit(1);
+      if (creditClient) {
+        const creditRows = await db
+          .select({
+            id: referralsTable.id,
+            bonusAmount: referralsTable.bonusAmount,
+          })
+          .from(referralsTable)
+          .where(and(
+            eq(referralsTable.tenantId, store.tenantId),
+            eq(referralsTable.referrerId, creditClient.id),
+            inArray(referralsTable.status, ["completed", "converted"]),
+            eq(referralsTable.bonusPaid, false),
+            sql`${referralsTable.bonusCreditUsedAt} IS NULL`,
+          ))
+          .orderBy(asc(referralsTable.createdAt));
+        // Calculate how much credit is actually available
+        const totalAvailable = creditRows.reduce((s, r) => s + Number(r.bonusAmount), 0);
+        const requestedCredit = Math.min(data.referralCreditUsed, totalAvailable, afterDiscount);
+        appliedCreditAmount = roundMoney(requestedCredit);
+        // Collect row IDs to mark as spent (greedy, oldest-first)
+        let remaining = appliedCreditAmount;
+        for (const row of creditRows) {
+          if (remaining <= 0) break;
+          creditReferralIds.push(row.id);
+          remaining -= Number(row.bonusAmount);
+        }
+      }
+    }
+
+    const totalAmount = roundMoney(Math.max(0, subtotal - discounts.discountAmount - appliedCreditAmount));
     const orderId = generateId();
     const orderNumber = `#${new Date().getFullYear()}-${String(Math.floor(Math.random() * 99999)).padStart(5, "0")}`;
     const orderPaymentToken = (await import("node:crypto")).randomBytes(32).toString("base64url");
@@ -551,7 +595,7 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     try {
       const result = await persistCheckoutOrder({
         store, data, orderId, orderNumber, orderPaymentToken,
-        subtotal, discountAmount: discounts.discountAmount, totalAmount,
+        subtotal, discountAmount: discounts.discountAmount + appliedCreditAmount, totalAmount,
         couponId: discounts.couponId,
         appliedReferralCode: discounts.appliedReferralCode,
         appliedReferralReferrerId: discounts.appliedReferralReferrerId,
@@ -562,6 +606,14 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
         reservationExpiresAt, tenantResPrefix, resYearMonth: getYearMonth(),
       });
       reservationClientId = result.reservationClientId;
+      // Mark referral credit rows as spent inside the same logical flow
+      if (creditReferralIds.length > 0) {
+        const now = new Date();
+        await db
+          .update(referralsTable)
+          .set({ bonusCreditUsedAt: now, bonusCreditOrderId: orderId, updatedAt: now })
+          .where(inArray(referralsTable.id, creditReferralIds));
+      }
     } catch (txErr: unknown) {
       if (txErr instanceof Error) {
         const tagged = txErr as Error & { productName?: string; available?: number };

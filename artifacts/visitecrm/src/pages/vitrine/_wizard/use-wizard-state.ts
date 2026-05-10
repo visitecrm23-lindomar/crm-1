@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
+import { useUser } from "@clerk/react";
 import { publicStoreApi, PublicStore, StoreProduct, CouponValidation } from "@/lib/storeApi";
+import { clientPortalApi } from "@/lib/clientPortalApi";
 import { validateCpf } from "@/lib/utils";
 import { useSeatStream } from "@/hooks/useSeatStream";
 import type { LayoutSeatMap, Step } from "./constants";
@@ -114,6 +116,11 @@ export function useWizardState({
   const [referralDiscountType, setReferralDiscountType] = useState<"percentage" | "fixed">("percentage");
   const [referralDiscountValue, setReferralDiscountValue] = useState(5);
 
+  // Referral credit (logged-in referrers spending their earned bonus balance)
+  const { isSignedIn } = useUser();
+  const [referralCreditBalance, setReferralCreditBalance] = useState(0);
+  const [useReferralCredit, setUseReferralCredit] = useState(false);
+
   useEffect(() => {
     setLoadingProduct(true);
     publicStoreApi
@@ -122,6 +129,14 @@ export function useWizardState({
       .catch(() => setNotFound(true))
       .finally(() => setLoadingProduct(false));
   }, [slug, productSlug]);
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+    clientPortalApi.getProfile().then((p) => {
+      const balance = Number(p.referral?.creditBalance ?? 0);
+      setReferralCreditBalance(balance);
+    }).catch(() => {});
+  }, [isSignedIn]);
 
   useEffect(() => {
     if (!product?.tripId) {
@@ -172,7 +187,11 @@ export function useWizardState({
         ? Math.min(referralDiscountValue, subtotal)
         : subtotal * (referralDiscountPct / 100))
     : 0;
-  const finalTotal = Math.max(0, subtotal - couponDiscount - referralDiscount);
+  const afterCouponAndReferral = Math.max(0, subtotal - couponDiscount - referralDiscount);
+  const referralCreditApplied = useReferralCredit
+    ? Math.min(referralCreditBalance, afterCouponAndReferral)
+    : 0;
+  const finalTotal = Math.max(0, afterCouponAndReferral - referralCreditApplied);
 
   const showSeatGrid =
     product?.totalCapacity != null && product.totalCapacity > 0 && product.totalCapacity <= 60;
@@ -344,6 +363,7 @@ export function useWizardState({
         referralCookieId: referralApplied
           ? (localStorage.getItem("referral_server_cookie_id") ?? undefined)
           : undefined,
+        referralCreditUsed: referralCreditApplied > 0 ? referralCreditApplied : undefined,
         paymentMethod: form.paymentMethod,
         notes: extraNotes || undefined,
         seats: effectiveSeats.length > 0 ? effectiveSeats : undefined,
@@ -439,6 +459,10 @@ export function useWizardState({
     subtotal,
     couponDiscount,
     referralDiscount,
+    referralCreditBalance,
+    referralCreditApplied,
+    useReferralCredit,
+    setUseReferralCredit,
     finalTotal,
     showSeatGrid,
     effectiveSeats,

@@ -96,6 +96,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
       completedReferrals: number;
       pendingReferrals: number;
       totalEarnings: string;
+      creditBalance: string;
       shareMessage: string | null;
       currentTierLevel: string;
       currentTierLabel: string;
@@ -109,6 +110,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
       completedReferrals: 0,
       pendingReferrals: 0,
       totalEarnings: "0.00",
+      creditBalance: "0.00",
       shareMessage: null,
       currentTierLevel: "bronze",
       currentTierLabel: "Bronze",
@@ -249,6 +251,20 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
         if (row.status === REFERRAL_STATUS.PENDING) pendingReferrals = Number(row.cnt);
       }
 
+      const [refCreditRow] = await db
+        .select({ balance: sql<string>`COALESCE(SUM(bonus_amount), '0')` })
+        .from(referralsTable)
+        .where(
+          and(
+            eq(referralsTable.tenantId, me.tenantId),
+            eq(referralsTable.referrerId, client.id),
+            inArray(referralsTable.status, [REFERRAL_STATUS.COMPLETED, REFERRAL_STATUS.CONVERTED]),
+            eq(referralsTable.bonusPaid, false),
+            sql`${referralsTable.bonusCreditUsedAt} IS NULL`,
+          ),
+        );
+      const referralCreditBalance = Number(refCreditRow?.balance ?? 0);
+
       const [refSettings] = await db
         .select({
           shareMessage: referralSettingsTable.shareMessage,
@@ -269,6 +285,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
         completedReferrals,
         pendingReferrals,
         totalEarnings: totalEarnings.toFixed(2),
+        creditBalance: referralCreditBalance.toFixed(2),
         shareMessage: refSettings?.shareMessage ?? null,
         currentTierLevel: currentTier.level,
         currentTierLabel: currentTier.label,
@@ -642,6 +659,8 @@ router.get("/client/me/referrals", async (req, res, next: NextFunction): Promise
         bonusAmount: referralsTable.bonusAmount,
         bonusPaid: referralsTable.bonusPaid,
         bonusPaidAt: referralsTable.bonusPaidAt,
+        bonusCreditUsedAt: referralsTable.bonusCreditUsedAt,
+        bonusCreditOrderId: referralsTable.bonusCreditOrderId,
         createdAt: referralsTable.createdAt,
         expiresAt: referralsTable.expiresAt,
       })
@@ -679,6 +698,8 @@ router.get("/client/me/referrals", async (req, res, next: NextFunction): Promise
         bonusAmount: r.bonusAmount,
         bonusPaid: r.bonusPaid,
         bonusPaidAt: r.bonusPaidAt ? (r.bonusPaidAt as unknown as Date).toISOString() : null,
+        bonusCreditUsedAt: r.bonusCreditUsedAt ? (r.bonusCreditUsedAt as unknown as Date).toISOString() : null,
+        bonusCreditOrderId: r.bonusCreditOrderId ?? null,
         createdAt: (r.createdAt as unknown as Date).toISOString(),
         expiresAt: r.expiresAt ? (r.expiresAt as unknown as Date).toISOString() : null,
       })),

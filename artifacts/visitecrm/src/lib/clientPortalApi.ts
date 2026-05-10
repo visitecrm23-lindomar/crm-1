@@ -49,6 +49,8 @@ export interface ClientReferral {
   bonusAmount: string;
   bonusPaid: boolean;
   bonusPaidAt: string | null;
+  bonusCreditUsedAt: string | null;
+  bonusCreditOrderId: string | null;
   createdAt: string;
   expiresAt: string | null;
 }
@@ -87,6 +89,7 @@ export interface ClientPortalProfile {
     completedReferrals: number;
     pendingReferrals: number;
     totalEarnings: string;
+    creditBalance: string;
     shareMessage: string | null;
     currentTierLevel: string;
     currentTierLabel: string;
