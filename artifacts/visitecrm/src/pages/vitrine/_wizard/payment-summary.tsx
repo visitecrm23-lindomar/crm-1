@@ -19,6 +19,7 @@ export function StepPaymentSummary({
     subtotal,
     referralDiscount,
     referralDiscountPct,
+    referralDiscountType,
     couponDiscount,
     finalTotal,
     effectiveSeats,
@@ -44,13 +45,17 @@ export function StepPaymentSummary({
           </div>
           {referralDiscount > 0 && (
             <div className="flex justify-between text-green-600">
-              <span>Desconto Indicação</span>
+              <span>
+                {referralDiscountType === "percentage"
+                  ? `Desconto de indicação (${referralDiscountPct}%)`
+                  : "Desconto de indicação"}
+              </span>
               <span>− R$ {referralDiscount.toFixed(2)}</span>
             </div>
           )}
           {couponDiscount > 0 && (
             <div className="flex justify-between text-green-600">
-              <span>Desconto Cupom</span>
+              <span>Desconto de cupom</span>
               <span>− R$ {couponDiscount.toFixed(2)}</span>
             </div>
           )}
@@ -102,13 +107,17 @@ export function StepPaymentSummary({
         </div>
         {referralDiscount > 0 && (
           <div className="flex justify-between text-green-600">
-            <span>Desc. Indicação</span>
+            <span>
+              {referralDiscountType === "percentage"
+                ? `Desconto de indicação (${referralDiscountPct}%)`
+                : "Desconto de indicação"}
+            </span>
             <span>− R$ {referralDiscount.toFixed(2)}</span>
           </div>
         )}
         {couponDiscount > 0 && (
           <div className="flex justify-between text-green-600">
-            <span>Desc. Cupom</span>
+            <span>Desconto de cupom</span>
             <span>− R$ {couponDiscount.toFixed(2)}</span>
           </div>
         )}

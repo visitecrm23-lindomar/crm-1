@@ -30,8 +30,22 @@ export function StepConfirmation({
   store: PublicStore;
   slug: string;
 }) {
-  const { product, completedOrder, showConfetti, expiryCountdown, qty, effectiveSeats, form, navigate } =
-    state;
+  const {
+    product,
+    completedOrder,
+    showConfetti,
+    expiryCountdown,
+    qty,
+    effectiveSeats,
+    form,
+    navigate,
+    referralDiscount,
+    referralApplied,
+    referralDiscountType,
+    referralDiscountPct,
+    couponDiscount,
+    couponResult,
+  } = state;
   if (!product || !completedOrder) return null;
   const totalAmt = parseFloat(completedOrder.totalAmount);
   const startDate = product.departureDate ?? product.startDate;
@@ -217,6 +231,30 @@ export function StepConfirmation({
               <p className="text-2xl font-bold text-orange-600">R$ {totalAmt.toFixed(2)}</p>
             </div>
           </div>
+          {(referralApplied && referralDiscount > 0) || couponDiscount > 0 ? (
+            <div className="space-y-1 text-sm text-green-700 border border-green-200 bg-green-50 rounded-xl px-4 py-3">
+              {referralApplied && referralDiscount > 0 && (
+                <div className="flex justify-between">
+                  <span>
+                    {referralDiscountType === "percentage"
+                      ? `Desconto de indicação (${referralDiscountPct}%)`
+                      : "Desconto de indicação"}
+                  </span>
+                  <span className="font-semibold">− R$ {referralDiscount.toFixed(2)}</span>
+                </div>
+              )}
+              {couponDiscount > 0 && (
+                <div className="flex justify-between">
+                  <span>
+                    {couponResult?.code
+                      ? `Cupom ${couponResult.code}`
+                      : "Desconto de cupom"}
+                  </span>
+                  <span className="font-semibold">− R$ {couponDiscount.toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+          ) : null}
           <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-900">
             <p>
               <strong>Forma de Pagamento:</strong>{" "}
