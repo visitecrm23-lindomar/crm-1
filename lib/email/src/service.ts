@@ -11,6 +11,7 @@ import { ReferralExpiredEmail, type ReferralExpiredEmailProps } from './template
 import { ReferralExpiringSoonEmail, type ReferralExpiringSoonEmailProps } from './templates/referral-expiring-soon';
 import { ReferralBonusReleasedEmail, type ReferralBonusReleasedEmailProps } from './templates/referral-bonus-released';
 import { ReferralWelcomeEmail, type ReferralWelcomeEmailProps } from './templates/referral-welcome';
+export type { ReferralWelcomeEmailProps };
 
 export type { ReservationCancellationEmailProps };
 

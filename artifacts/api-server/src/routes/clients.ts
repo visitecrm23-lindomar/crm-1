@@ -5,6 +5,7 @@ import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTa
 import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
 import { generateId, generateReferralCode } from "../lib/id";
 import { generateAndAssignReferralCode } from "../lib/referral-code";
+import { dispatchReferralWelcomeEmail } from "../queues/email-helpers";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { validateCPF, cleanCPF } from "../lib/cpf";
 import { checkPlanLimit } from "../lib/planLimits";
@@ -591,6 +592,16 @@ router.post("/clients/:clientId/referral/generate", async (req, res, next: NextF
       namePart,
       year,
     );
+
+    // Fire-and-forget welcome email on first code generation
+    dispatchReferralWelcomeEmail({
+      clientId: client.id,
+      referralCode: code,
+      tenantId: me.tenantId,
+    }).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      void msg;
+    });
 
     res.json({ code });
   } catch (err) {

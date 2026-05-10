@@ -1014,9 +1014,28 @@ export async function dispatchReferralWelcomeEmail(opts: {
   clientId: string;
   referralCode: string;
   tenantId: string;
-  tenantSlug: string;
+  tenantSlug?: string;
 }): Promise<void> {
   const { clientId, referralCode, tenantId, tenantSlug } = opts;
+
+  // Pre-flight check: only attempt if the client has a valid email address.
+  // We do this BEFORE claiming the idempotency stamp so a missing email doesn't
+  // permanently block future delivery (e.g. after the address is corrected).
+  const [preCheck] = await db
+    .select({ email: clientsTable.email, sentAt: clientsTable.referralWelcomeEmailSentAt })
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, clientId), eq(clientsTable.tenantId, tenantId)))
+    .limit(1);
+
+  if (!preCheck) {
+    logger.warn({ clientId, tenantId }, "[email-queue] Referral welcome: client not found — skipping");
+    return;
+  }
+
+  if (!preCheck.email) {
+    logger.warn({ clientId, tenantId }, "[email-queue] Referral welcome: client has no email — skipping (not stamping)");
+    return;
+  }
 
   // Atomic idempotency claim: stamp the column in a single UPDATE that only
   // matches rows where it is still NULL. If no row is returned, another
@@ -1040,14 +1059,9 @@ export async function dispatchReferralWelcomeEmail(opts: {
 
   const client = claimed[0];
 
-  if (!client.email) {
-    logger.warn({ clientId, tenantId }, "[email-queue] Referral welcome: client has no email — skipping");
-    return;
-  }
-
   const [tenant, settings] = await Promise.all([
     db
-      .select({ name: tenantsTable.name, logoUrl: tenantsTable.logoUrl })
+      .select({ name: tenantsTable.name, logoUrl: tenantsTable.logoUrl, slug: tenantsTable.slug })
       .from(tenantsTable)
       .where(eq(tenantsTable.id, tenantId))
       .limit(1)
@@ -1068,8 +1082,9 @@ export async function dispatchReferralWelcomeEmail(opts: {
   const bonusValue = settings ? Number(settings.bonusValue) : 0;
   const discountValue = settings ? Number(settings.discountValue) : 5;
 
+  const resolvedSlug = tenantSlug ?? tenant?.slug ?? "";
   const frontendBase = (process.env["FRONTEND_URL"] ?? "https://app.visitecrm.com.br").replace(/\/$/, "");
-  const storeBase = frontendBase.replace("app.", `${tenantSlug}.`);
+  const storeBase = frontendBase.replace("app.", `${resolvedSlug}.`);
   const referralLink = `${storeBase}?ref=${referralCode}`;
 
   const defaultMessage = settings?.shareMessage

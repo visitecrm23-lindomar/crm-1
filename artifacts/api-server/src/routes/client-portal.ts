@@ -132,12 +132,12 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
           const baseCode = generateReferralCode(client.name ?? "REF", me.tenantId);
           resolvedReferralCode = await generateAndAssignReferralCode(client.id, me.tenantId, baseCode, namePart, year);
 
-          if (resolvedReferralCode && tenant?.slug) {
+          if (resolvedReferralCode) {
             dispatchReferralWelcomeEmail({
               clientId: client.id,
               referralCode: resolvedReferralCode,
               tenantId: me.tenantId,
-              tenantSlug: tenant.slug,
+              tenantSlug: tenant?.slug ?? undefined,
             }).catch((err: unknown) => {
               // Fire-and-forget — welcome email is non-critical
               const msg = err instanceof Error ? err.message : String(err);
