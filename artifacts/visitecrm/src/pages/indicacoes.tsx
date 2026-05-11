@@ -2407,11 +2407,9 @@ export default function Indicacoes() {
                           ? `× ${Number(c.bonusValue).toFixed(2).replace(".00","")} no bônus`
                           : `+ ${fmtCurrency(Number(c.bonusValue))} de bônus extra`}
                       </p>
-                      {(c.referralsCount ?? 0) > 0 && (
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {c.referralsCount} conversão{c.referralsCount !== 1 ? "ões" : ""} · {fmtCurrency(c.bonusPaidAmount ?? 0)} pagos
-                        </p>
-                      )}
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {c.referralsCount ?? 0} conversão{(c.referralsCount ?? 0) !== 1 ? "ões" : ""} · {fmtCurrency(c.bonusPaidAmount ?? 0)} pagos
+                      </p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <Button

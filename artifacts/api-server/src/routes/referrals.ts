@@ -1310,28 +1310,46 @@ router.get("/referrals/campaigns", async (req, res): Promise<void> => {
       .where(eq(referralCampaignsTable.tenantId, me.tenantId))
       .orderBy(desc(referralCampaignsTable.startsAt));
 
+    if (campaigns.length === 0) { res.json([]); return; }
+
+    // Single grouped query for all campaign stats to avoid N+1
     const now = new Date();
-    const result = await Promise.all(campaigns.map(async (c) => {
-      const clampedEnd = new Date(c.endsAt) > now ? now : new Date(c.endsAt);
-      const [stats] = await db.select({
-        referralsCount: count(),
-        bonusPaidCount: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.bonusPaid} = true)`,
-        bonusPaidAmount: sql<number>`COALESCE(SUM(${referralsTable.bonusAmount}) FILTER (WHERE ${referralsTable.bonusPaid} = true), 0)`,
-      }).from(referralsTable)
-        .where(and(
-          eq(referralsTable.tenantId, me.tenantId),
-          eq(referralsTable.status, REFERRAL_STATUS.COMPLETED),
-          sql`${referralsTable.convertedAt} >= ${new Date(c.startsAt)}`,
-          sql`${referralsTable.convertedAt} <= ${clampedEnd}`,
-        ));
+    const statsRows = await db.select({
+      campaignId: sql<string>`
+        (SELECT c2.id FROM referral_campaigns c2
+         WHERE c2.tenant_id = ${me.tenantId}
+           AND ${referralsTable.convertedAt} >= c2.starts_at
+           AND ${referralsTable.convertedAt} <= LEAST(c2.ends_at, ${now}::timestamptz)
+         LIMIT 1)
+      `,
+      referralsCount: count(),
+      bonusPaidAmount: sql<number>`COALESCE(SUM(${referralsTable.bonusAmount}) FILTER (WHERE ${referralsTable.bonusPaid} = true), 0)`,
+    })
+    .from(referralsTable)
+    .where(and(
+      eq(referralsTable.tenantId, me.tenantId),
+      eq(referralsTable.status, REFERRAL_STATUS.COMPLETED),
+      sql`${referralsTable.convertedAt} >= (SELECT MIN(starts_at) FROM referral_campaigns WHERE tenant_id = ${me.tenantId})`,
+    ))
+    .groupBy(sql`
+      (SELECT c2.id FROM referral_campaigns c2
+       WHERE c2.tenant_id = ${me.tenantId}
+         AND ${referralsTable.convertedAt} >= c2.starts_at
+         AND ${referralsTable.convertedAt} <= LEAST(c2.ends_at, ${now}::timestamptz)
+       LIMIT 1)
+    `);
+
+    const statsMap = new Map(statsRows.map((r) => [r.campaignId, r]));
+
+    const result = campaigns.map((c) => {
+      const stats = statsMap.get(c.id);
       return {
         ...c,
         bonusValue: Number(c.bonusValue),
         referralsCount: Number(stats?.referralsCount ?? 0),
-        bonusPaidCount: Number(stats?.bonusPaidCount ?? 0),
         bonusPaidAmount: Number(stats?.bonusPaidAmount ?? 0),
       };
-    }));
+    });
 
     res.json(result);
   } catch (err) {
