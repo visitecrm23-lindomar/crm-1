@@ -213,3 +213,121 @@ export async function closeRedisConnection(): Promise<void> {
     isQueueEnabled = false;
   }
 }
+
+// ─── Upstash daily usage stats ────────────────────────────────────────────────
+
+export const REDIS_DAILY_LIMIT = 500_000;
+
+/**
+ * The usage percentage (0–100) at which we start warning.
+ * Defaults to 80 but can be overridden via REDIS_DAILY_LIMIT_THRESHOLD_PCT.
+ */
+export function getRedisWarningThresholdPct(): number {
+  const raw = process.env["REDIS_DAILY_LIMIT_THRESHOLD_PCT"]?.trim();
+  if (raw) {
+    const parsed = parseInt(raw, 10);
+    if (!isNaN(parsed) && parsed > 0 && parsed <= 100) return parsed;
+  }
+  return 80;
+}
+
+export interface UpstashDailyStats {
+  commandCount: number;
+  maxCommands: number;
+  usagePct: number;
+  warningThresholdPct: number;
+}
+
+/**
+ * Derives the Upstash REST base URL and Bearer token from environment.
+ *
+ * Priority:
+ * 1. UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN  (explicit)
+ * 2. Derived from REDIS_URL  (rediss://:<password>@<host>:port)
+ *
+ * Returns null when neither source is configured.
+ */
+function getUpstashRestCredentials(): { restUrl: string; token: string } | null {
+  const explicitUrl = process.env["UPSTASH_REDIS_REST_URL"]?.trim();
+  const explicitToken = process.env["UPSTASH_REDIS_REST_TOKEN"]?.trim();
+  if (explicitUrl && explicitToken) {
+    return { restUrl: explicitUrl.replace(/\/$/, ""), token: explicitToken };
+  }
+
+  const redisUrl = process.env["REDIS_URL"]?.trim();
+  if (!redisUrl) return null;
+
+  const urlMatch = redisUrl.match(/(rediss?:\/\/\S+)/);
+  const url = urlMatch ? urlMatch[1] : redisUrl;
+
+  try {
+    // rediss://:<password>@<host>:<port>
+    const parsed = new URL(url);
+    const token = parsed.password;
+    const host = parsed.hostname;
+    if (!token || !host) return null;
+
+    // Only derive REST creds for known Upstash hosts — other Redis providers
+    // don't expose a compatible REST stats API.
+    const isUpstash = host.endsWith(".upstash.io");
+    if (!isUpstash) return null;
+
+    return { restUrl: `https://${host}`, token };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetches the current daily request count from the Upstash REST INFO endpoint.
+ *
+ * Returns null when:
+ * - Redis is not configured
+ * - The host is not an Upstash instance (no REST stats API available)
+ * - The network request fails
+ */
+export async function fetchUpstashDailyStats(): Promise<UpstashDailyStats | null> {
+  const creds = getUpstashRestCredentials();
+  if (!creds) return null;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5_000);
+
+    const response = await fetch(`${creds.restUrl}/info`, {
+      headers: { Authorization: `Bearer ${creds.token}` },
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      logger.warn(
+        { status: response.status },
+        "[redis-stats] Upstash INFO request returned non-OK status",
+      );
+      return null;
+    }
+
+    // Upstash REST returns the INFO bulk string directly when called with GET /info
+    // The body is a JSON object: { result: "<redis info string>" }
+    const json = (await response.json()) as { result?: string };
+    const infoStr = json.result ?? "";
+
+    const parseField = (field: string): number | null => {
+      const match = new RegExp(`^${field}:(\\d+)`, "m").exec(infoStr);
+      return match ? parseInt(match[1], 10) : null;
+    };
+
+    const commandCount = parseField("daily_request_count") ?? 0;
+    // Upstash free tier hard limit
+    const maxCommands = parseField("max_daily_requests") ?? REDIS_DAILY_LIMIT;
+    const usagePct = maxCommands > 0 ? (commandCount / maxCommands) * 100 : 0;
+    const warningThresholdPct = getRedisWarningThresholdPct();
+
+    return { commandCount, maxCommands, usagePct, warningThresholdPct };
+  } catch (err) {
+    logger.warn({ err }, "[redis-stats] Failed to fetch Upstash daily stats");
+    return null;
+  }
+}

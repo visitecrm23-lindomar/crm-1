@@ -59,6 +59,14 @@ export const HealthCheckLegacyResponse = zod.object({
 export const GetSystemHealthResponse = zod.object({
   redis: zod.object({
     status: zod.enum(["ok", "degraded", "unavailable"]),
+    dailyUsage: zod
+      .object({
+        commandCount: zod.number(),
+        maxCommands: zod.number(),
+        usagePct: zod.number(),
+        warningThresholdPct: zod.number(),
+      })
+      .optional(),
   }),
 });
 

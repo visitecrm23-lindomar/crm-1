@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "../lib/tenant";
-import { getRedisStatus } from "../lib/redis";
+import { getRedisStatus, fetchUpstashDailyStats } from "../lib/redis";
 import { ROLES } from "@workspace/permissions";
 
 const router = Router();
@@ -15,10 +15,21 @@ router.get("/admin/system-health", async (req, res): Promise<void> => {
     }
 
     const redisStatus = getRedisStatus();
+    const dailyStats = await fetchUpstashDailyStats();
 
     res.json({
       redis: {
         status: redisStatus,
+        ...(dailyStats !== null
+          ? {
+              dailyUsage: {
+                commandCount: dailyStats.commandCount,
+                maxCommands: dailyStats.maxCommands,
+                usagePct: Math.round(dailyStats.usagePct * 10) / 10,
+                warningThresholdPct: dailyStats.warningThresholdPct,
+              },
+            }
+          : {}),
       },
     });
   } catch (err) {

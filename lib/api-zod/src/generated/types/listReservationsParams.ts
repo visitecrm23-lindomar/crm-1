@@ -39,6 +39,10 @@ export type ListReservationsParams = {
    * @nullable
    */
   commissionSyncStatus?: string | null;
+  /**
+   * @nullable
+   */
+  hasAutoRetry?: boolean | null;
   page?: number;
   limit?: number;
 };

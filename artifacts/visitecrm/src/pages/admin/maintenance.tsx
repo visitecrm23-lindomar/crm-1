@@ -34,6 +34,7 @@ import {
   Bell,
   FileText,
   DollarSign,
+  Gauge,
 } from "lucide-react";
 import {
   useGetSystemHealth,
@@ -150,6 +151,8 @@ function SystemHealthSection() {
     ? "loading"
     : systemHealth?.redis?.status ?? "unknown";
 
+  const redisDailyUsage = systemHealth?.redis?.dailyUsage ?? null;
+
   const dbStatus: StatusLevel = isLoading
     ? "loading"
     : healthData?.database?.connected
@@ -220,6 +223,49 @@ function SystemHealthSection() {
             }
             status={redisStatus}
           />
+          {!isLoading && redisDailyUsage !== null && (
+            <div className="py-3 border-b last:border-b-0">
+              <div className="flex items-center gap-3 mb-2">
+                <Gauge className="w-4 h-4 text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">Uso Diário do Redis (Upstash)</p>
+                  <p className="text-xs text-muted-foreground">
+                    {redisDailyUsage.commandCount.toLocaleString("pt-BR")} de{" "}
+                    {redisDailyUsage.maxCommands.toLocaleString("pt-BR")} requisições hoje
+                  </p>
+                </div>
+                <span
+                  className={`text-sm font-semibold shrink-0 ${
+                    redisDailyUsage.usagePct >= 90
+                      ? "text-red-600"
+                      : redisDailyUsage.usagePct >= redisDailyUsage.warningThresholdPct
+                      ? "text-amber-600"
+                      : "text-green-600"
+                  }`}
+                >
+                  {redisDailyUsage.usagePct.toFixed(1)}%
+                </span>
+              </div>
+              <div className="pl-7">
+                <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      redisDailyUsage.usagePct >= 90
+                        ? "bg-red-500"
+                        : redisDailyUsage.usagePct >= redisDailyUsage.warningThresholdPct
+                        ? "bg-amber-400"
+                        : "bg-green-500"
+                    }`}
+                    style={{ width: `${Math.min(redisDailyUsage.usagePct, 100)}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Limite diário: {redisDailyUsage.maxCommands.toLocaleString("pt-BR")} req — aviso a partir de{" "}
+                  {redisDailyUsage.warningThresholdPct}%
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="pt-3">

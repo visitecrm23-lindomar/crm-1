@@ -5,13 +5,7 @@
  * VisiteCRM API - SaaS CRM for tourism agencies
  * OpenAPI spec version: 0.1.0
  */
-
-export interface ReferralTierConfigInlineUpdate {
-  level: string;
-  label: string;
-  minReferrals: number;
-  bonusMultiplier: number;
-}
+import type { ReferralTierConfig } from "./referralTierConfig";
 
 export interface UpdateReferralSettingsBody {
   isEnabled?: boolean;
@@ -23,7 +17,7 @@ export interface UpdateReferralSettingsBody {
   allowSelfReferral?: boolean;
   requireFirstPurchase?: boolean;
   shareMessage?: string;
-  tiersConfig?: ReferralTierConfigInlineUpdate[];
+  tiersConfig?: ReferralTierConfig[];
   whatsappEnabled?: boolean;
   whatsappPhoneNumber?: string;
   whatsappConvertedMessage?: string;

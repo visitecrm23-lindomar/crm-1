@@ -8,15 +8,6 @@
 import type { TripBoardingPointsItem } from "./tripBoardingPointsItem";
 import type { TripItineraryItem } from "./tripItineraryItem";
 
-export interface FreePassenger {
-  id: string;
-  name: string;
-  cpf: string;
-  whatsapp: string;
-  role: "organizer" | "guide";
-  seatNumber: string | null;
-}
-
 export interface Trip {
   id: string;
   name: string;
@@ -96,11 +87,18 @@ export interface Trip {
   itinerary?: TripItineraryItem[];
   fixedCosts?: unknown[];
   variableCosts?: unknown[];
-  /** @nullable */
+  /**
+   * @minimum 0
+   * @maximum 2
+   * @nullable
+   */
   freeOrganizers?: number | null;
-  /** @nullable */
+  /**
+   * @minimum 0
+   * @maximum 2
+   * @nullable
+   */
   freeGuides?: number | null;
-  freePassengers?: FreePassenger[] | null;
   /** @nullable */
   layoutId?: string | null;
   createdAt: string;

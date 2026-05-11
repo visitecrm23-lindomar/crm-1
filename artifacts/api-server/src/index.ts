@@ -7,7 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { runBirthdayCron } from "./lib/birthday";
 import { runExpiredReservationsCron } from "./lib/expired-reservations";
-import { getRedisConnection } from "./lib/redis";
+import { getRedisConnection, fetchUpstashDailyStats, getRedisWarningThresholdPct } from "./lib/redis";
 import { getReminderQueue, closeQueues } from "./queues/index";
 import { startEmailWorker, stopEmailWorker } from "./workers/email.worker";
 import { startReminderWorker, stopReminderWorker, retryFailedBookingEmails, retryFailedExpiryWarningEmails } from "./workers/reminder.worker";
@@ -134,6 +134,34 @@ applyMigrations()
         logger.info("[birthday] Daily cron triggered");
         runBirthdayCron().catch((err) => logger.error({ err }, "[birthday] Cron failed"));
       }, { timezone: "America/Sao_Paulo" });
+
+      // ── Log Upstash daily usage on startup (non-fatal) ──
+      fetchUpstashDailyStats()
+        .then((stats) => {
+          if (!stats) return;
+          const threshold = getRedisWarningThresholdPct();
+          if (stats.usagePct >= threshold) {
+            logger.warn(
+              {
+                commandCount: stats.commandCount,
+                maxCommands: stats.maxCommands,
+                usagePct: Math.round(stats.usagePct * 10) / 10,
+                warningThresholdPct: threshold,
+              },
+              `[redis-stats] ⚠️  Daily request usage is at ${Math.round(stats.usagePct)}% of the ${stats.maxCommands.toLocaleString()} limit (${stats.commandCount.toLocaleString()} used). Consider reducing polling or upgrading the plan.`,
+            );
+          } else {
+            logger.info(
+              {
+                commandCount: stats.commandCount,
+                maxCommands: stats.maxCommands,
+                usagePct: Math.round(stats.usagePct * 10) / 10,
+              },
+              `[redis-stats] Daily request usage: ${stats.commandCount.toLocaleString()} / ${stats.maxCommands.toLocaleString()} (${Math.round(stats.usagePct)}%)`,
+            );
+          }
+        })
+        .catch((err) => logger.warn({ err }, "[redis-stats] Failed to check daily usage on startup"));
 
       // BullMQ: start workers if Redis is available
       const redisConn = getRedisConnection();

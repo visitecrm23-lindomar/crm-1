@@ -33,8 +33,16 @@ export interface HealthStatus {
   bullmq: HealthStatusBullmq;
 }
 
+export interface SystemHealthRedisDailyUsage {
+  commandCount: number;
+  maxCommands: number;
+  usagePct: number;
+  warningThresholdPct: number;
+}
+
 export interface SystemHealthRedis {
   status: "ok" | "degraded" | "unavailable";
+  dailyUsage?: SystemHealthRedisDailyUsage;
 }
 
 export interface SystemHealth {

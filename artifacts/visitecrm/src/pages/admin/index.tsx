@@ -47,6 +47,33 @@ const REDIS_STATUS_CONFIG = {
   },
 };
 
+function buildDailyUsageAlert(
+  usagePct: number,
+  commandCount: number,
+  maxCommands: number,
+  warningThresholdPct: number,
+): { label: string; description: string; classes: string; iconClasses: string } | null {
+  if (usagePct < warningThresholdPct) return null;
+  const pctLabel = usagePct.toFixed(1);
+  const usedLabel = commandCount.toLocaleString("pt-BR");
+  const maxLabel = maxCommands.toLocaleString("pt-BR");
+  const isCritical = usagePct >= 90;
+  return {
+    label: isCritical
+      ? `Redis: uso crítico (${pctLabel}% do limite diário)`
+      : `Redis: uso elevado (${pctLabel}% do limite diário)`,
+    description: `${usedLabel} de ${maxLabel} requisições usadas hoje. ${
+      isCritical
+        ? "O serviço pode ser interrompido em breve. Reduza o polling ou atualize o plano."
+        : "Considere reduzir a frequência de polling ou atualizar o plano Upstash."
+    }`,
+    classes: isCritical
+      ? "bg-red-50 border-red-300 text-red-800"
+      : "bg-amber-50 border-amber-300 text-amber-800",
+    iconClasses: isCritical ? "text-red-500" : "text-amber-500",
+  };
+}
+
 export default function AdminDashboard() {
   const { data: stats, isLoading } = useGetAdminStats();
   const { data: systemHealth } = useGetSystemHealth({
@@ -66,6 +93,16 @@ export default function AdminDashboard() {
   const redisStatus = systemHealth?.redis?.status;
   const redisAlert = redisStatus && redisStatus !== "ok" ? REDIS_STATUS_CONFIG[redisStatus] : null;
 
+  const redisDailyUsage = systemHealth?.redis?.dailyUsage ?? null;
+  const dailyUsageAlert = redisDailyUsage
+    ? buildDailyUsageAlert(
+        redisDailyUsage.usagePct,
+        redisDailyUsage.commandCount,
+        redisDailyUsage.maxCommands,
+        redisDailyUsage.warningThresholdPct,
+      )
+    : null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -79,6 +116,16 @@ export default function AdminDashboard() {
           <div>
             <p className="font-semibold text-sm">{redisAlert.label}</p>
             <p className="text-sm mt-0.5">{redisAlert.description}</p>
+          </div>
+        </div>
+      )}
+
+      {dailyUsageAlert && !redisAlert && (
+        <div className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${dailyUsageAlert.classes}`}>
+          <AlertTriangle className={`mt-0.5 h-5 w-5 shrink-0 ${dailyUsageAlert.iconClasses}`} />
+          <div>
+            <p className="font-semibold text-sm">{dailyUsageAlert.label}</p>
+            <p className="text-sm mt-0.5">{dailyUsageAlert.description}</p>
           </div>
         </div>
       )}

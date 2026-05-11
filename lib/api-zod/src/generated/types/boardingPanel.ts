@@ -7,6 +7,7 @@
  */
 import type { BoardingPassenger } from "./boardingPassenger";
 import type { BoardingPoint } from "./boardingPoint";
+import type { FreePassenger } from "./freePassenger";
 
 export interface BoardingPanel {
   tripId: string;
@@ -51,4 +52,5 @@ export interface BoardingPanel {
   tourGuideCpf?: string | null;
   /** @nullable */
   tourGuideRegistration?: string | null;
+  freePassengers: FreePassenger[];
 }
