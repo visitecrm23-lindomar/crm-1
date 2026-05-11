@@ -16,6 +16,7 @@ import {
   useListReferralCampaigns,
   useCreateReferralCampaign,
   useDeleteReferralCampaign,
+  useUpdateReferralCampaign,
 } from "@workspace/api-client-react";
 import type { Referral, ReferralSettings, ReferralTierConfig, ReferralAnalyticsPeriod, ReferralCampaign } from "@workspace/api-client-react";
 import { REFERRAL_STATUS } from "@workspace/permissions";
@@ -84,6 +85,7 @@ import {
   ChevronDown,
   Megaphone,
   Flame,
+  Pencil,
 } from "lucide-react";
 import { ReferralAnalyticsCharts } from "@/components/referral-analytics-charts";
 
@@ -194,9 +196,11 @@ export default function Indicacoes() {
     bonusType: "multiplier" as "multiplier" | "fixed_extra",
     bonusValue: "2", bannerText: "",
   });
+  const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
   const { data: campaigns = [], refetch: refetchCampaigns } = useListReferralCampaigns();
   const createCampaign = useCreateReferralCampaign();
   const deleteCampaign = useDeleteReferralCampaign();
+  const updateCampaign = useUpdateReferralCampaign();
 
   const shareQueryId = shareModalOpen ? shareReferralId : (detailModalOpen && selectedReferral ? selectedReferral.id : null);
   const { data: shareData, isLoading: shareLoading } = useGetReferralShare(shareQueryId);
@@ -395,15 +399,29 @@ export default function Indicacoes() {
       toast({ title: "Valor do bônus inválido", variant: "destructive" }); return;
     }
     try {
-      await createCampaign.mutateAsync({
-        name: name.trim(),
-        startsAt: new Date(startsAt).toISOString(),
-        endsAt: new Date(endsAt).toISOString(),
-        bonusType,
-        bonusValue: bonusNum,
-        bannerText: bannerText.trim() || undefined,
-      });
-      toast({ title: "Campanha criada com sucesso!" });
+      if (editingCampaignId) {
+        await updateCampaign.mutateAsync({
+          id: editingCampaignId,
+          name: name.trim(),
+          startsAt: new Date(startsAt).toISOString(),
+          endsAt: new Date(endsAt).toISOString(),
+          bonusType,
+          bonusValue: bonusNum,
+          bannerText: bannerText.trim() || null,
+        });
+        toast({ title: "Campanha atualizada com sucesso!" });
+        setEditingCampaignId(null);
+      } else {
+        await createCampaign.mutateAsync({
+          name: name.trim(),
+          startsAt: new Date(startsAt).toISOString(),
+          endsAt: new Date(endsAt).toISOString(),
+          bonusType,
+          bonusValue: bonusNum,
+          bannerText: bannerText.trim() || undefined,
+        });
+        toast({ title: "Campanha criada com sucesso!" });
+      }
       setCampaignFormData({ name: "", startsAt: "", endsAt: "", bonusType: "multiplier", bonusValue: "2", bannerText: "" });
       setShowCampaignForm(false);
       refetchCampaigns();
@@ -411,6 +429,24 @@ export default function Indicacoes() {
       const msg = (err as { message?: string })?.message ?? "Erro ao criar campanha";
       toast({ title: msg, variant: "destructive" });
     }
+  }
+
+  function handleEditCampaign(c: ReferralCampaign) {
+    const toLocalDatetime = (iso: string) => {
+      const d = new Date(iso);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+    setCampaignFormData({
+      name: c.name,
+      startsAt: toLocalDatetime(c.startsAt),
+      endsAt: toLocalDatetime(c.endsAt),
+      bonusType: c.bonusType as "multiplier" | "fixed_extra",
+      bonusValue: String(c.bonusValue),
+      bannerText: c.bannerText ?? "",
+    });
+    setEditingCampaignId(c.id);
+    setShowCampaignForm(true);
   }
 
   async function handleDeleteCampaign(id: string) {
@@ -2248,7 +2284,7 @@ export default function Indicacoes() {
             <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
               <div className="flex items-center justify-between">
                 <p className="font-semibold text-sm">Nova campanha</p>
-                <Button variant="ghost" size="sm" onClick={() => setShowCampaignForm(false)}>
+                <Button variant="ghost" size="sm" onClick={() => { setShowCampaignForm(false); setEditingCampaignId(null); setCampaignFormData({ name: "", startsAt: "", endsAt: "", bonusType: "multiplier", bonusValue: "2", bannerText: "" }); }}>
                   <XCircle className="w-4 h-4" />
                 </Button>
               </div>
@@ -2329,9 +2365,11 @@ export default function Indicacoes() {
                 </p>
               </div>
 
-              <Button onClick={handleSaveCampaign} disabled={createCampaign.isPending}>
-                {createCampaign.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                {createCampaign.isPending ? "Salvando..." : "Criar campanha"}
+              <Button onClick={handleSaveCampaign} disabled={createCampaign.isPending || updateCampaign.isPending}>
+                {(createCampaign.isPending || updateCampaign.isPending) && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                {(createCampaign.isPending || updateCampaign.isPending)
+                  ? "Salvando..."
+                  : editingCampaignId ? "Salvar alterações" : "Criar campanha"}
               </Button>
             </div>
           )}
@@ -2375,15 +2413,25 @@ export default function Indicacoes() {
                         </p>
                       )}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-500 hover:text-red-600 hover:bg-red-50 shrink-0"
-                      onClick={() => handleDeleteCampaign(c.id)}
-                      disabled={deleteCampaign.isPending}
-                    >
-                      <Ban className="w-4 h-4" />
-                    </Button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={() => handleEditCampaign(c)}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                        onClick={() => handleDeleteCampaign(c.id)}
+                        disabled={deleteCampaign.isPending}
+                      >
+                        <Ban className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 );
               })}

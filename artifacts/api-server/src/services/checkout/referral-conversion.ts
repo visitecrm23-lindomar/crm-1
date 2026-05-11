@@ -3,6 +3,7 @@ import {
   referralsTable,
   referralSettingsTable,
   referralTrackingTable,
+  referralCampaignsTable,
   storeOrdersTable,
 } from "@workspace/db";
 import { and, desc, eq, sql } from "drizzle-orm";
@@ -46,6 +47,27 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
 
   const baseBonusValue = refSettings ? Number(refSettings.bonusValue) : 10;
 
+  // Apply active campaign bonus adjustment if any
+  const campaignNow = new Date();
+  const [activeCampaign] = await tx
+    .select({
+      bonusType: referralCampaignsTable.bonusType,
+      bonusValue: referralCampaignsTable.bonusValue,
+    })
+    .from(referralCampaignsTable)
+    .where(and(
+      eq(referralCampaignsTable.tenantId, tenantId),
+      sql`${referralCampaignsTable.startsAt} <= ${campaignNow}`,
+      sql`${referralCampaignsTable.endsAt} >= ${campaignNow}`,
+    ))
+    .limit(1);
+
+  const effectiveBonusValue = activeCampaign
+    ? activeCampaign.bonusType === "multiplier"
+      ? baseBonusValue * Number(activeCampaign.bonusValue)
+      : baseBonusValue + Number(activeCampaign.bonusValue)
+    : baseBonusValue;
+
   const [referrer] = await tx
     .select({
       successfulReferrals: clientsTable.successfulReferrals,
@@ -57,7 +79,7 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
 
   const currentCompleted = referrer?.successfulReferrals ?? 0;
   const { tier } = computeReferralTier(currentCompleted, refSettings?.tiersConfig ?? null);
-  const bonusAmount = Math.round(baseBonusValue * tier.bonusMultiplier * 100) / 100;
+  const bonusAmount = Math.round(effectiveBonusValue * tier.bonusMultiplier * 100) / 100;
 
   const referralId = generateId();
   const conversionAt = new Date();

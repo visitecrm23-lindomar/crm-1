@@ -254,6 +254,26 @@ export const useDeleteReferralCampaign = (): UseMutationResult<void, ErrorType, 
       customFetch<void>(`/api/referrals/campaigns/${id}`, { method: "DELETE" }),
   });
 
+export interface UpdateReferralCampaignBody {
+  id: string;
+  name?: string;
+  startsAt?: string;
+  endsAt?: string;
+  bonusType?: "multiplier" | "fixed_extra";
+  bonusValue?: number;
+  bannerText?: string | null;
+}
+
+export const useUpdateReferralCampaign = (): UseMutationResult<ReferralCampaign, ErrorType, UpdateReferralCampaignBody> =>
+  useMutation({
+    mutationFn: ({ id, ...body }: UpdateReferralCampaignBody) =>
+      customFetch<ReferralCampaign>(`/api/referrals/campaigns/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+  });
+
 export const getReferralExportUrl = (filters: ReferralExportFilters = {}) => {
   const params = new URLSearchParams();
   if (filters.status && filters.status !== "all") params.set("status", filters.status);

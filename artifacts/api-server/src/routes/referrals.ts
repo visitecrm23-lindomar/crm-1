@@ -1423,6 +1423,72 @@ router.delete("/referrals/campaigns/:id", async (req, res): Promise<void> => {
   }
 });
 
+router.patch("/referrals/campaigns/:id", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const [existing] = await db.select().from(referralCampaignsTable)
+      .where(and(
+        eq(referralCampaignsTable.id, req.params.id),
+        eq(referralCampaignsTable.tenantId, me.tenantId),
+      ))
+      .limit(1);
+    if (!existing) { res.status(404).json({ error: "Campanha não encontrada" }); return; }
+
+    const parsed = z.object({
+      name: z.string().min(1).max(120).optional(),
+      startsAt: z.string().datetime().optional(),
+      endsAt: z.string().datetime().optional(),
+      bonusType: z.enum(["multiplier", "fixed_extra"]).optional(),
+      bonusValue: z.number().positive().optional(),
+      bannerText: z.string().max(500).nullable().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const starts = parsed.data.startsAt ? new Date(parsed.data.startsAt) : new Date(existing.startsAt);
+    const ends = parsed.data.endsAt ? new Date(parsed.data.endsAt) : new Date(existing.endsAt);
+    if (ends <= starts) { res.status(400).json({ error: "endsAt deve ser após startsAt" }); return; }
+
+    const [overlap] = await db.select({ id: referralCampaignsTable.id })
+      .from(referralCampaignsTable)
+      .where(and(
+        eq(referralCampaignsTable.tenantId, me.tenantId),
+        sql`${referralCampaignsTable.id} != ${req.params.id}`,
+        sql`${referralCampaignsTable.startsAt} < ${ends}`,
+        sql`${referralCampaignsTable.endsAt} > ${starts}`,
+      ))
+      .limit(1);
+    if (overlap) {
+      res.status(409).json({ error: "Já existe uma campanha nesse período. Apenas uma campanha pode estar ativa por vez." });
+      return;
+    }
+
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (parsed.data.name !== undefined) updates.name = parsed.data.name;
+    if (parsed.data.startsAt !== undefined) updates.startsAt = starts;
+    if (parsed.data.endsAt !== undefined) updates.endsAt = ends;
+    if (parsed.data.bonusType !== undefined) updates.bonusType = parsed.data.bonusType;
+    if (parsed.data.bonusValue !== undefined) updates.bonusValue = parsed.data.bonusValue.toFixed(4);
+    if (parsed.data.bannerText !== undefined) updates.bannerText = parsed.data.bannerText;
+
+    await db.update(referralCampaignsTable)
+      .set(updates)
+      .where(and(
+        eq(referralCampaignsTable.id, req.params.id),
+        eq(referralCampaignsTable.tenantId, me.tenantId),
+      ));
+
+    const [updated] = await db.select().from(referralCampaignsTable)
+      .where(eq(referralCampaignsTable.id, req.params.id)).limit(1);
+    res.json({ ...updated!, bonusValue: Number(updated!.bonusValue) });
+  } catch (err) {
+    req.log.error({ err }, "Error updating referral campaign");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/referrals/active-campaign", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
