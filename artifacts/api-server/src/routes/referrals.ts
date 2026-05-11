@@ -1313,7 +1313,6 @@ router.get("/referrals/campaigns", async (req, res): Promise<void> => {
     if (campaigns.length === 0) { res.json([]); return; }
 
     // Single grouped query for all campaign stats to avoid N+1
-    const now = new Date();
     const statsRows = await db.select({
       campaignId: sql<string>`
         (SELECT c2.id FROM referral_campaigns c2
