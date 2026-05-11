@@ -186,7 +186,8 @@ export default function MyReferralPage({ slug, store }: Props) {
   useEffect(() => {
     if (!activeCampaign) { setCountdown(""); return; }
     function calc() {
-      const diff = Math.max(0, new Date(activeCampaign!.endsAt).getTime() - Date.now());
+      const diff = new Date(activeCampaign!.endsAt).getTime() - Date.now();
+      if (diff <= 0) { setCountdown(""); return; }
       const d = Math.floor(diff / 86400000);
       const h = Math.floor((diff % 86400000) / 3600000);
       const m = Math.floor((diff % 3600000) / 60000);
