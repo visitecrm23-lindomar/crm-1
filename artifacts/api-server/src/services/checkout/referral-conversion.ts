@@ -48,7 +48,7 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
   const baseBonusValue = refSettings ? Number(refSettings.bonusValue) : 10;
 
   // Apply active campaign bonus adjustment if any
-  const effectiveBonusValue = await applyActiveCampaignBonus(tx as never, tenantId, baseBonusValue);
+  const effectiveBonusValue = await applyActiveCampaignBonus(tx, tenantId, baseBonusValue);
 
   const [referrer] = await tx
     .select({

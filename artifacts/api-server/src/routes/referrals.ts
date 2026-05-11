@@ -1519,7 +1519,7 @@ router.get("/referrals/active-campaign", async (req, res): Promise<void> => {
       .where(and(
         eq(referralCampaignsTable.tenantId, me.tenantId),
         sql`${referralCampaignsTable.startsAt} <= ${now}`,
-        sql`${referralCampaignsTable.endsAt} >= ${now}`,
+        sql`${referralCampaignsTable.endsAt} > ${now}`,
       ))
       .orderBy(desc(referralCampaignsTable.startsAt))
       .limit(1);
