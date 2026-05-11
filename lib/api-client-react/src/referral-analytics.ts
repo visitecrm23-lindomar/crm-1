@@ -40,6 +40,7 @@ export interface ReferralAnalyticsMonthStats {
   referrals: number;
   conversions: number;
   bonusPaid: number;
+  bonusPaidAmount: number;
 }
 
 export interface ReferralAnalyticsData {
@@ -183,8 +184,19 @@ export function useGetReferralExpiryEmailStatus<
   return { ...query, queryKey };
 }
 
-export const getReferralAnalyticsExportUrl = (period: ReferralAnalyticsPeriod) =>
-  `/api/referrals/analytics/export?period=${period}`;
+export const getReferralAnalyticsExportUrl = (
+  period: ReferralAnalyticsPeriod,
+  opts?: { startDate?: string; endDate?: string },
+) => {
+  const params = new URLSearchParams();
+  if (opts?.startDate) {
+    params.set("startDate", opts.startDate);
+    if (opts.endDate) params.set("endDate", opts.endDate);
+  } else {
+    params.set("period", String(period));
+  }
+  return `/api/referrals/analytics/export?${params.toString()}`;
+};
 
 export const getReferralExportUrl = (filters: ReferralExportFilters = {}) => {
   const params = new URLSearchParams();

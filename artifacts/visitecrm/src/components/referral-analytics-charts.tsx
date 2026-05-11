@@ -118,8 +118,9 @@ export function ReferralAnalyticsCharts({ data, period, analyticsExportUrl }: Pr
             <CardTitle className="text-sm font-medium text-muted-foreground">Este mês — bônus pagos</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-amber-600">{currentMonth.bonusPaid}</p>
-            <DeltaBadge current={currentMonth.bonusPaid} prev={prevMonth.bonusPaid} />
+            <p className="text-3xl font-bold text-amber-600">{fmtCurrency(currentMonth.bonusPaidAmount)}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{currentMonth.bonusPaid} pagamentos</p>
+            <DeltaBadge current={currentMonth.bonusPaidAmount} prev={prevMonth.bonusPaidAmount} suffix=" R$" />
           </CardContent>
         </Card>
       </div>
@@ -171,7 +172,7 @@ export function ReferralAnalyticsCharts({ data, period, analyticsExportUrl }: Pr
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Canal de origem</CardTitle>
-            <CardDescription>Visitas únicas por canal (UTM source)</CardDescription>
+            <CardDescription>Conversões por canal de compartilhamento</CardDescription>
           </CardHeader>
           <CardContent>
             {channels.length === 0 ? (
@@ -185,7 +186,7 @@ export function ReferralAnalyticsCharts({ data, period, analyticsExportUrl }: Pr
                   <PieChart>
                     <Pie
                       data={channels}
-                      dataKey="visitors"
+                      dataKey="converted"
                       nameKey="source"
                       cx="50%"
                       cy="50%"
@@ -204,7 +205,7 @@ export function ReferralAnalyticsCharts({ data, period, analyticsExportUrl }: Pr
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(v: number, name: string) => [v, channelLabel(name)]}
+                      formatter={(v: number, name: string) => [`${v} conversões`, channelLabel(name)]}
                       contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }}
                     />
                   </PieChart>
@@ -217,10 +218,10 @@ export function ReferralAnalyticsCharts({ data, period, analyticsExportUrl }: Pr
                         <span className="text-muted-foreground truncate max-w-[100px]">{channelLabel(ch.source)}</span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="font-medium">{ch.visitors}</span>
-                        {ch.converted > 0 && (
+                        <span className="font-medium">{ch.converted} conv.</span>
+                        {ch.visitors > 0 && (
                           <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
-                            {ch.converted} conv.
+                            {ch.visitors} vis.
                           </Badge>
                         )}
                       </div>

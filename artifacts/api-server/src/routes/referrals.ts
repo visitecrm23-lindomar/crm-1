@@ -751,6 +751,7 @@ router.get("/referrals/analytics", async (req, res): Promise<void> => {
         referrals: count(),
         conversions: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.status} = ${REFERRAL_STATUS.COMPLETED})`,
         bonusPaid: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.bonusPaid} = true)`,
+        bonusPaidAmount: sql<number>`COALESCE(SUM(${referralsTable.bonusAmount}) FILTER (WHERE ${referralsTable.bonusPaid} = true), 0)`,
       }).from(referralsTable)
         .where(and(
           eq(referralsTable.tenantId, me.tenantId),
@@ -762,6 +763,7 @@ router.get("/referrals/analytics", async (req, res): Promise<void> => {
         referrals: count(),
         conversions: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.status} = ${REFERRAL_STATUS.COMPLETED})`,
         bonusPaid: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.bonusPaid} = true)`,
+        bonusPaidAmount: sql<number>`COALESCE(SUM(${referralsTable.bonusAmount}) FILTER (WHERE ${referralsTable.bonusPaid} = true), 0)`,
       }).from(referralsTable)
         .where(and(
           eq(referralsTable.tenantId, me.tenantId),
@@ -812,11 +814,13 @@ router.get("/referrals/analytics", async (req, res): Promise<void> => {
         referrals: Number(currentMonthRow?.referrals ?? 0),
         conversions: Number(currentMonthRow?.conversions ?? 0),
         bonusPaid: Number(currentMonthRow?.bonusPaid ?? 0),
+        bonusPaidAmount: Number(currentMonthRow?.bonusPaidAmount ?? 0),
       },
       prevMonth: {
         referrals: Number(prevMonthRow?.referrals ?? 0),
         conversions: Number(prevMonthRow?.conversions ?? 0),
         bonusPaid: Number(prevMonthRow?.bonusPaid ?? 0),
+        bonusPaidAmount: Number(prevMonthRow?.bonusPaidAmount ?? 0),
       },
       conversionRate,
       prevConversionRate,
@@ -834,17 +838,32 @@ router.get("/referrals/analytics/export", async (req, res): Promise<void> => {
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
 
-    const period = parseInt((req.query.period as string) || "90", 10);
-    if (![30, 90, 180].includes(period)) {
-      res.status(400).json({ error: "period must be 30, 90, or 180" });
-      return;
-    }
-
     const now = new Date();
-    const since = new Date(now.getTime() - period * 24 * 60 * 60 * 1000);
+    let since: Date;
+
+    // Support either explicit startDate/endDate OR the period shortcut
+    const startDateParam = req.query.startDate as string | undefined;
+    const endDateParam = req.query.endDate as string | undefined;
+    if (startDateParam) {
+      const parsed = new Date(startDateParam);
+      if (isNaN(parsed.getTime())) {
+        res.status(400).json({ error: "startDate must be a valid ISO date" });
+        return;
+      }
+      since = parsed;
+    } else {
+      const period = parseInt((req.query.period as string) || "90", 10);
+      if (![30, 90, 180].includes(period)) {
+        res.status(400).json({ error: "period must be 30, 90, or 180; or provide startDate/endDate" });
+        return;
+      }
+      since = new Date(now.getTime() - period * 24 * 60 * 60 * 1000);
+    }
+    const until: Date = endDateParam ? new Date(endDateParam) : now;
     const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
     const [monthlyRows, channelRows, roiBonusRow_, roiRevenueRow_] = await Promise.all([
+      // Monthly series for the selected date window (or last 12 months from window end)
       db.select({
         month: sql<string>`date_trunc('month', ${referralsTable.createdAt})::date::text`,
         created: count(),
@@ -852,29 +871,47 @@ router.get("/referrals/analytics/export", async (req, res): Promise<void> => {
         bonusPaid: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.bonusPaid} = true)`,
         bonusTotal: sql<number>`COALESCE(SUM(${referralsTable.bonusAmount}) FILTER (WHERE ${referralsTable.bonusPaid} = true), 0)`,
       }).from(referralsTable)
-        .where(and(eq(referralsTable.tenantId, me.tenantId), sql`${referralsTable.createdAt} >= ${twelveMonthsAgo}`))
+        .where(and(
+          eq(referralsTable.tenantId, me.tenantId),
+          sql`${referralsTable.createdAt} >= ${since}`,
+          sql`${referralsTable.createdAt} <= ${until}`,
+        ))
         .groupBy(sql`date_trunc('month', ${referralsTable.createdAt})`)
         .orderBy(sql`date_trunc('month', ${referralsTable.createdAt})`),
 
+      // Channel breakdown for the same window
       db.select({
         source: sql<string>`COALESCE(NULLIF(${referralTrackingTable.utmSource}, ''), 'direto')`,
         visitors: sql<number>`COUNT(DISTINCT ${referralTrackingTable.cookieId})`,
         converted: sql<number>`COUNT(DISTINCT CASE WHEN ${referralTrackingTable.converted} = true THEN ${referralTrackingTable.cookieId} END)`,
       }).from(referralTrackingTable)
-        .where(and(eq(referralTrackingTable.tenantId, me.tenantId), sql`${referralTrackingTable.createdAt} >= ${since}`))
+        .where(and(
+          eq(referralTrackingTable.tenantId, me.tenantId),
+          sql`${referralTrackingTable.createdAt} >= ${since}`,
+          sql`${referralTrackingTable.createdAt} <= ${until}`,
+        ))
         .groupBy(sql`COALESCE(NULLIF(${referralTrackingTable.utmSource}, ''), 'direto')`)
         .orderBy(sql`COUNT(DISTINCT ${referralTrackingTable.cookieId}) DESC`),
 
+      // ROI — bonus paid in the window
       db.select({ total: sql<number>`COALESCE(SUM(${referralsTable.bonusAmount}), 0)` })
         .from(referralsTable)
-        .where(and(eq(referralsTable.tenantId, me.tenantId), eq(referralsTable.bonusPaid, true))),
+        .where(and(
+          eq(referralsTable.tenantId, me.tenantId),
+          eq(referralsTable.bonusPaid, true),
+          sql`${referralsTable.bonusPaidAt} >= ${since}`,
+          sql`${referralsTable.bonusPaidAt} <= ${until}`,
+        )),
 
+      // ROI — revenue from referred reservations in the window
       db.select({ total: sql<number>`COALESCE(SUM(${reservationsTable.totalValue}), 0)` })
         .from(reservationsTable)
         .where(and(
           eq(reservationsTable.tenantId, me.tenantId),
           sql`${reservationsTable.discountReferralCode} IS NOT NULL`,
           sql`${reservationsTable.status} != 'cancelled'`,
+          sql`${reservationsTable.createdAt} >= ${since}`,
+          sql`${reservationsTable.createdAt} <= ${until}`,
         )),
     ]);
 
