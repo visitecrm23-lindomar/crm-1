@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, type ReactElement } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useUser } from "@clerk/react";
-import { useGetMe } from "@workspace/api-client-react";
+import { useGetMe, useGetActiveCampaign } from "@workspace/api-client-react";
 import { clientPortalApi, type ClientPortalProfile, type ClientReferral } from "@/lib/clientPortalApi";
 import { PublicStore } from "@/lib/storeApi";
 import { Button } from "@/components/ui/button";
@@ -180,6 +180,23 @@ export default function MyReferralPage({ slug, store }: Props) {
   );
   const [qrPreviewUrl, setQrPreviewUrl] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
+  const { data: activeCampaign } = useGetActiveCampaign();
+  const [countdown, setCountdown] = useState<string>("");
+
+  useEffect(() => {
+    if (!activeCampaign) { setCountdown(""); return; }
+    function calc() {
+      const diff = Math.max(0, new Date(activeCampaign!.endsAt).getTime() - Date.now());
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff % 86400000) / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setCountdown(d > 0 ? `${d}d ${String(h).padStart(2,"0")}h ${String(m).padStart(2,"0")}m` : `${String(h).padStart(2,"0")}h ${String(m).padStart(2,"0")}m ${String(s).padStart(2,"0")}s`);
+    }
+    calc();
+    const id = setInterval(calc, 1000);
+    return () => clearInterval(id);
+  }, [activeCampaign]);
 
   useEffect(() => {
     const incoming = parseStatusFilter(new URLSearchParams(search).get("status"));
@@ -441,6 +458,31 @@ export default function MyReferralPage({ slug, store }: Props) {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-10 space-y-6">
+      {/* Campaign banner */}
+      {activeCampaign && countdown && (
+        <div
+          className="rounded-xl p-4 text-white text-center shadow-md animate-in fade-in slide-in-from-top-2 duration-500"
+          style={{ background: `linear-gradient(135deg, ${primaryColor}dd, ${secondaryColor}dd)` }}
+        >
+          <div className="flex items-center justify-center gap-2 font-bold text-base mb-1">
+            <span className="text-lg">🔥</span>
+            <span>
+              {activeCampaign.bannerText
+                ? activeCampaign.bannerText
+                : activeCampaign.bonusType === "multiplier"
+                  ? `Bônus ${activeCampaign.bonusValue}× por tempo limitado!`
+                  : `Bônus extra de R$ ${Number(activeCampaign.bonusValue).toFixed(2).replace(".", ",")} nesta campanha!`}
+            </span>
+          </div>
+          <p className="text-white/80 text-xs">
+            Termina em{" "}
+            <span className="font-mono font-semibold text-white bg-black/20 px-1.5 py-0.5 rounded">
+              {countdown}
+            </span>
+          </p>
+        </div>
+      )}
+
       {/* Header */}
       <div
         className="rounded-2xl p-6 text-white"

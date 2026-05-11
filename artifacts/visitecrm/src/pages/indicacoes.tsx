@@ -13,8 +13,11 @@ import {
   getReferralExportUrl,
   getReferralAnalyticsExportUrl,
   useGetMe,
+  useListReferralCampaigns,
+  useCreateReferralCampaign,
+  useDeleteReferralCampaign,
 } from "@workspace/api-client-react";
-import type { Referral, ReferralSettings, ReferralTierConfig, ReferralAnalyticsPeriod } from "@workspace/api-client-react";
+import type { Referral, ReferralSettings, ReferralTierConfig, ReferralAnalyticsPeriod, ReferralCampaign } from "@workspace/api-client-react";
 import { REFERRAL_STATUS } from "@workspace/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,6 +82,8 @@ import {
   FileSpreadsheet,
   FileText,
   ChevronDown,
+  Megaphone,
+  Flame,
 } from "lucide-react";
 import { ReferralAnalyticsCharts } from "@/components/referral-analytics-charts";
 
@@ -181,6 +186,17 @@ export default function Indicacoes() {
   const [shareReferralId, setShareReferralId] = useState<string | null>(null);
   const [shareReferral, setShareReferral] = useState<EnrichedReferral | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
+
+  const [campaignsDialogOpen, setCampaignsDialogOpen] = useState(false);
+  const [showCampaignForm, setShowCampaignForm] = useState(false);
+  const [campaignFormData, setCampaignFormData] = useState({
+    name: "", startsAt: "", endsAt: "",
+    bonusType: "multiplier" as "multiplier" | "fixed_extra",
+    bonusValue: "2", bannerText: "",
+  });
+  const { data: campaigns = [], refetch: refetchCampaigns } = useListReferralCampaigns();
+  const createCampaign = useCreateReferralCampaign();
+  const deleteCampaign = useDeleteReferralCampaign();
 
   const shareQueryId = shareModalOpen ? shareReferralId : (detailModalOpen && selectedReferral ? selectedReferral.id : null);
   const { data: shareData, isLoading: shareLoading } = useGetReferralShare(shareQueryId);
@@ -368,6 +384,53 @@ export default function Indicacoes() {
       toast({ title: "Não foi possível copiar o link", variant: "destructive" });
     }
   }
+
+  async function handleSaveCampaign() {
+    const { name, startsAt, endsAt, bonusType, bonusValue, bannerText } = campaignFormData;
+    if (!name.trim() || !startsAt || !endsAt) {
+      toast({ title: "Preencha todos os campos obrigatórios", variant: "destructive" }); return;
+    }
+    const bonusNum = parseFloat(bonusValue);
+    if (isNaN(bonusNum) || bonusNum <= 0) {
+      toast({ title: "Valor do bônus inválido", variant: "destructive" }); return;
+    }
+    try {
+      await createCampaign.mutateAsync({
+        name: name.trim(),
+        startsAt: new Date(startsAt).toISOString(),
+        endsAt: new Date(endsAt).toISOString(),
+        bonusType,
+        bonusValue: bonusNum,
+        bannerText: bannerText.trim() || undefined,
+      });
+      toast({ title: "Campanha criada com sucesso!" });
+      setCampaignFormData({ name: "", startsAt: "", endsAt: "", bonusType: "multiplier", bonusValue: "2", bannerText: "" });
+      setShowCampaignForm(false);
+      refetchCampaigns();
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message ?? "Erro ao criar campanha";
+      toast({ title: msg, variant: "destructive" });
+    }
+  }
+
+  async function handleDeleteCampaign(id: string) {
+    try {
+      await deleteCampaign.mutateAsync({ id });
+      toast({ title: "Campanha excluída" });
+      refetchCampaigns();
+    } catch {
+      toast({ title: "Erro ao excluir campanha", variant: "destructive" });
+    }
+  }
+
+  function getCampaignStatus(c: ReferralCampaign): "active" | "upcoming" | "past" {
+    const n = new Date();
+    if (new Date(c.endsAt) < n) return "past";
+    if (new Date(c.startsAt) > n) return "upcoming";
+    return "active";
+  }
+
+  const activeCampaignAdmin = campaigns.find((c) => getCampaignStatus(c) === "active");
 
   async function confirmBulkPay() {
     setBulkPaying(true);
@@ -654,6 +717,7 @@ export default function Indicacoes() {
   }
 
   return (
+    <>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -698,6 +762,13 @@ export default function Indicacoes() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button variant="outline" onClick={() => { setCampaignsDialogOpen(true); setShowCampaignForm(false); }}>
+            <Megaphone className="w-4 h-4 mr-2" />
+            Campanhas
+            {activeCampaignAdmin && (
+              <span className="ml-1.5 w-2 h-2 rounded-full bg-green-500 inline-block" />
+            )}
+          </Button>
           <Button variant="outline" onClick={openSettings}>
             <Settings className="w-4 h-4 mr-2" />
             Configurações
@@ -2141,5 +2212,186 @@ export default function Indicacoes() {
         </DialogContent>
       </Dialog>
     </div>
+
+    {/* Campaigns management dialog */}
+    <Dialog open={campaignsDialogOpen} onOpenChange={setCampaignsDialogOpen}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Megaphone className="w-5 h-5 text-primary" />
+            Campanhas de Indicação
+          </DialogTitle>
+          <DialogDescription>
+            Crie promoções temporárias de bônus — apenas uma campanha pode estar ativa por vez.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 pt-1">
+          {/* Active campaign notice */}
+          {activeCampaignAdmin && (
+            <div className="flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+              <Flame className="w-4 h-4 mt-0.5 shrink-0 text-green-600" />
+              <span>
+                <span className="font-semibold">Campanha ativa agora:</span> {activeCampaignAdmin.name} — termina em{" "}
+                {new Date(activeCampaignAdmin.endsAt).toLocaleString("pt-BR")}
+              </span>
+            </div>
+          )}
+
+          {/* Create form toggle */}
+          {!showCampaignForm ? (
+            <Button variant="outline" onClick={() => setShowCampaignForm(true)}>
+              <Megaphone className="w-4 h-4 mr-2" />
+              Nova campanha
+            </Button>
+          ) : (
+            <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
+              <div className="flex items-center justify-between">
+                <p className="font-semibold text-sm">Nova campanha</p>
+                <Button variant="ghost" size="sm" onClick={() => setShowCampaignForm(false)}>
+                  <XCircle className="w-4 h-4" />
+                </Button>
+              </div>
+
+              <div className="space-y-1">
+                <Label>Nome da campanha *</Label>
+                <Input
+                  value={campaignFormData.name}
+                  onChange={(e) => setCampaignFormData((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="Ex: Bônus Duplo de Maio, Promoção Férias"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label>Início *</Label>
+                  <Input
+                    type="datetime-local"
+                    value={campaignFormData.startsAt}
+                    onChange={(e) => setCampaignFormData((f) => ({ ...f, startsAt: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Término *</Label>
+                  <Input
+                    type="datetime-local"
+                    value={campaignFormData.endsAt}
+                    onChange={(e) => setCampaignFormData((f) => ({ ...f, endsAt: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label>Tipo de bônus *</Label>
+                  <Select
+                    value={campaignFormData.bonusType}
+                    onValueChange={(v) => setCampaignFormData((f) => ({ ...f, bonusType: v as "multiplier" | "fixed_extra" }))}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="multiplier">Multiplicador (×) — ex: 2× o bônus base</SelectItem>
+                      <SelectItem value="fixed_extra">Valor extra (R$) — ex: +R$ 20 ao bônus</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>
+                    {campaignFormData.bonusType === "multiplier" ? "Multiplicador *" : "Valor extra (R$) *"}
+                  </Label>
+                  <Input
+                    type="number"
+                    min={campaignFormData.bonusType === "multiplier" ? 0.1 : 0.5}
+                    step={campaignFormData.bonusType === "multiplier" ? 0.1 : 0.5}
+                    value={campaignFormData.bonusValue}
+                    onChange={(e) => setCampaignFormData((f) => ({ ...f, bonusValue: e.target.value }))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {campaignFormData.bonusType === "multiplier"
+                      ? `Bônus base × ${campaignFormData.bonusValue || "?"} durante a campanha`
+                      : `Bônus base + R$ ${campaignFormData.bonusValue || "?"} durante a campanha`}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label>
+                  Texto do banner{" "}
+                  <span className="text-muted-foreground font-normal text-xs">(opcional)</span>
+                </Label>
+                <Input
+                  value={campaignFormData.bannerText}
+                  onChange={(e) => setCampaignFormData((f) => ({ ...f, bannerText: e.target.value }))}
+                  placeholder="Ex: Bônus dobrado esse fim de semana!"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Exibido no app do cliente durante a campanha. Deixe vazio para texto automático.
+                </p>
+              </div>
+
+              <Button onClick={handleSaveCampaign} disabled={createCampaign.isPending}>
+                {createCampaign.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                {createCampaign.isPending ? "Salvando..." : "Criar campanha"}
+              </Button>
+            </div>
+          )}
+
+          {/* Campaigns list */}
+          {campaigns.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">
+              <Megaphone className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              Nenhuma campanha criada ainda
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {campaigns.map((c) => {
+                const status = getCampaignStatus(c);
+                return (
+                  <div key={c.id} className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-accent/30 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        {status === "active" ? (
+                          <Badge className="bg-green-500 text-white">Ativa</Badge>
+                        ) : status === "upcoming" ? (
+                          <Badge variant="outline" className="border-blue-400 text-blue-600">Agendada</Badge>
+                        ) : (
+                          <Badge variant="secondary">Encerrada</Badge>
+                        )}
+                        <span className="font-medium text-sm">{c.name}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(c.startsAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                        {" → "}
+                        {new Date(c.endsAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                      </p>
+                      <p className="text-xs mt-0.5 font-medium">
+                        {c.bonusType === "multiplier"
+                          ? `× ${Number(c.bonusValue).toFixed(2).replace(".00","")} no bônus`
+                          : `+ ${fmtCurrency(Number(c.bonusValue))} de bônus extra`}
+                      </p>
+                      {(c.referralsCount ?? 0) > 0 && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {c.referralsCount} conversão{c.referralsCount !== 1 ? "ões" : ""} · {fmtCurrency(c.bonusPaidAmount ?? 0)} pagos
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-500 hover:text-red-600 hover:bg-red-50 shrink-0"
+                      onClick={() => handleDeleteCampaign(c.id)}
+                      disabled={deleteCampaign.isPending}
+                    >
+                      <Ban className="w-4 h-4" />
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

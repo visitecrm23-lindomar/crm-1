@@ -1,6 +1,6 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
-import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, storeOrdersTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, referralSettingsTable, dealsTable, pipelineStagesTable, tenantsTable, emailLogsTable, paymentsTable, commissionsTable } from "@workspace/db";
+import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, storeOrdersTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, referralSettingsTable, referralCampaignsTable, dealsTable, pipelineStagesTable, tenantsTable, emailLogsTable, paymentsTable, commissionsTable } from "@workspace/db";
 import { eq, and, sql, desc, asc, inArray, or, ilike } from "drizzle-orm";
 import { generateId, generateVoucherCode } from "../lib/id";
 import { getTenantReservationPrefix, tripTypeToCode, getYearMonth, nextReservationSequence, buildReservationNumber } from "../lib/reservation-number";
@@ -645,6 +645,27 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
       serverReferralAmount = Math.round((baseValue * (serverReferralDiscountPct / 100)) * 100) / 100;
       // Bonus earned by the referrer
       serverReferralBonusValue = Number(refSettings?.bonusValue ?? "10");
+
+      // Apply active campaign multiplier / extra bonus if any
+      const campaignNow = new Date();
+      const [activeCampaign] = await db.select({
+        bonusType: referralCampaignsTable.bonusType,
+        bonusValue: referralCampaignsTable.bonusValue,
+      }).from(referralCampaignsTable)
+        .where(and(
+          eq(referralCampaignsTable.tenantId, me.tenantId),
+          sql`${referralCampaignsTable.startsAt} <= ${campaignNow}`,
+          sql`${referralCampaignsTable.endsAt} >= ${campaignNow}`,
+        ))
+        .limit(1);
+      if (activeCampaign) {
+        const campaignBonusVal = Number(activeCampaign.bonusValue);
+        if (activeCampaign.bonusType === "multiplier") {
+          serverReferralBonusValue = serverReferralBonusValue * campaignBonusVal;
+        } else {
+          serverReferralBonusValue = serverReferralBonusValue + campaignBonusVal;
+        }
+      }
     }
 
     // Apply discounts in priority order: coupon → loyalty → referral

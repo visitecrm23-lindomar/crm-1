@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
-import type { UseQueryOptions, UseQueryResult, QueryKey } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import type { UseQueryOptions, UseQueryResult, QueryKey, UseMutationResult } from "@tanstack/react-query";
 import { customFetch } from "./custom-fetch";
 import type { ErrorType } from "./custom-fetch";
 
@@ -197,6 +197,62 @@ export const getReferralAnalyticsExportUrl = (
   }
   return `/api/referrals/analytics/export?${params.toString()}`;
 };
+
+export interface ReferralCampaign {
+  id: string;
+  tenantId: string;
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  bonusType: "multiplier" | "fixed_extra";
+  bonusValue: number;
+  bannerText: string | null;
+  createdAt: string;
+  updatedAt: string;
+  referralsCount?: number;
+  bonusPaidCount?: number;
+  bonusPaidAmount?: number;
+}
+
+export interface CreateReferralCampaignBody {
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  bonusType: "multiplier" | "fixed_extra";
+  bonusValue: number;
+  bannerText?: string;
+}
+
+export const useListReferralCampaigns = (): UseQueryResult<ReferralCampaign[], ErrorType> =>
+  useQuery({
+    queryKey: ["referrals", "campaigns"],
+    queryFn: () => customFetch<ReferralCampaign[]>("/api/referrals/campaigns"),
+    staleTime: 30_000,
+  });
+
+export const useGetActiveCampaign = (): UseQueryResult<ReferralCampaign | null, ErrorType> =>
+  useQuery({
+    queryKey: ["referrals", "active-campaign"],
+    queryFn: () => customFetch<ReferralCampaign | null>("/api/referrals/active-campaign"),
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
+  });
+
+export const useCreateReferralCampaign = (): UseMutationResult<ReferralCampaign, ErrorType, CreateReferralCampaignBody> =>
+  useMutation({
+    mutationFn: (body: CreateReferralCampaignBody) =>
+      customFetch<ReferralCampaign>("/api/referrals/campaigns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+  });
+
+export const useDeleteReferralCampaign = (): UseMutationResult<void, ErrorType, { id: string }> =>
+  useMutation({
+    mutationFn: ({ id }: { id: string }) =>
+      customFetch<void>(`/api/referrals/campaigns/${id}`, { method: "DELETE" }),
+  });
 
 export const getReferralExportUrl = (filters: ReferralExportFilters = {}) => {
   const params = new URLSearchParams();

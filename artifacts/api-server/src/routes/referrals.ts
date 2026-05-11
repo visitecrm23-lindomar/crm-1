@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, referralsTable, clientsTable, referralSettingsTable, referralTrackingTable, tenantsTable, emailLogsTable, reservationsTable } from "@workspace/db";
+import { db, referralsTable, clientsTable, referralSettingsTable, referralTrackingTable, tenantsTable, emailLogsTable, reservationsTable, referralCampaignsTable } from "@workspace/db";
 import { eq, and, desc, sql, count, ilike, or, inArray, getTableColumns } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
@@ -1296,6 +1296,152 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
     res.json(savedSettings);
   } catch (err) {
     req.log.error({ err }, "Error updating referral settings");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/referrals/campaigns", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const campaigns = await db.select().from(referralCampaignsTable)
+      .where(eq(referralCampaignsTable.tenantId, me.tenantId))
+      .orderBy(desc(referralCampaignsTable.startsAt));
+
+    const now = new Date();
+    const result = await Promise.all(campaigns.map(async (c) => {
+      const clampedEnd = new Date(c.endsAt) > now ? now : new Date(c.endsAt);
+      const [stats] = await db.select({
+        referralsCount: count(),
+        bonusPaidCount: sql<number>`COUNT(*) FILTER (WHERE ${referralsTable.bonusPaid} = true)`,
+        bonusPaidAmount: sql<number>`COALESCE(SUM(${referralsTable.bonusAmount}) FILTER (WHERE ${referralsTable.bonusPaid} = true), 0)`,
+      }).from(referralsTable)
+        .where(and(
+          eq(referralsTable.tenantId, me.tenantId),
+          eq(referralsTable.status, REFERRAL_STATUS.COMPLETED),
+          sql`${referralsTable.convertedAt} >= ${new Date(c.startsAt)}`,
+          sql`${referralsTable.convertedAt} <= ${clampedEnd}`,
+        ));
+      return {
+        ...c,
+        bonusValue: Number(c.bonusValue),
+        referralsCount: Number(stats?.referralsCount ?? 0),
+        bonusPaidCount: Number(stats?.bonusPaidCount ?? 0),
+        bonusPaidAmount: Number(stats?.bonusPaidAmount ?? 0),
+      };
+    }));
+
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Error listing referral campaigns");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/referrals/campaigns", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const parsed = z.object({
+      name: z.string().min(1).max(120),
+      startsAt: z.string().datetime(),
+      endsAt: z.string().datetime(),
+      bonusType: z.enum(["multiplier", "fixed_extra"]),
+      bonusValue: z.number().positive(),
+      bannerText: z.string().max(500).optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const starts = new Date(parsed.data.startsAt);
+    const ends = new Date(parsed.data.endsAt);
+    if (ends <= starts) {
+      res.status(400).json({ error: "endsAt deve ser após startsAt" }); return;
+    }
+
+    const [overlap] = await db.select({ id: referralCampaignsTable.id })
+      .from(referralCampaignsTable)
+      .where(and(
+        eq(referralCampaignsTable.tenantId, me.tenantId),
+        sql`${referralCampaignsTable.startsAt} < ${ends}`,
+        sql`${referralCampaignsTable.endsAt} > ${starts}`,
+      ))
+      .limit(1);
+    if (overlap) {
+      res.status(409).json({ error: "Já existe uma campanha nesse período. Apenas uma campanha pode estar ativa por vez." });
+      return;
+    }
+
+    const id = generateId();
+    await db.insert(referralCampaignsTable).values({
+      id,
+      tenantId: me.tenantId,
+      name: parsed.data.name,
+      startsAt: starts,
+      endsAt: ends,
+      bonusType: parsed.data.bonusType,
+      bonusValue: parsed.data.bonusValue.toFixed(4),
+      bannerText: parsed.data.bannerText ?? null,
+    });
+
+    const [campaign] = await db.select().from(referralCampaignsTable)
+      .where(eq(referralCampaignsTable.id, id)).limit(1);
+    res.status(201).json({ ...campaign!, bonusValue: Number(campaign!.bonusValue) });
+  } catch (err) {
+    req.log.error({ err }, "Error creating referral campaign");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/referrals/campaigns/:id", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const [existing] = await db.select({ id: referralCampaignsTable.id })
+      .from(referralCampaignsTable)
+      .where(and(
+        eq(referralCampaignsTable.id, req.params.id),
+        eq(referralCampaignsTable.tenantId, me.tenantId),
+      ))
+      .limit(1);
+    if (!existing) { res.status(404).json({ error: "Campanha não encontrada" }); return; }
+
+    await db.delete(referralCampaignsTable)
+      .where(and(
+        eq(referralCampaignsTable.id, req.params.id),
+        eq(referralCampaignsTable.tenantId, me.tenantId),
+      ));
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Error deleting referral campaign");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/referrals/active-campaign", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    const now = new Date();
+    const [campaign] = await db.select().from(referralCampaignsTable)
+      .where(and(
+        eq(referralCampaignsTable.tenantId, me.tenantId),
+        sql`${referralCampaignsTable.startsAt} <= ${now}`,
+        sql`${referralCampaignsTable.endsAt} >= ${now}`,
+      ))
+      .orderBy(desc(referralCampaignsTable.startsAt))
+      .limit(1);
+
+    if (!campaign) { res.json(null); return; }
+    res.json({ ...campaign, bonusValue: Number(campaign.bonusValue) });
+  } catch (err) {
+    req.log.error({ err }, "Error fetching active referral campaign");
     res.status(500).json({ error: "Internal server error" });
   }
 });

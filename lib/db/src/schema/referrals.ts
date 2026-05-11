@@ -117,3 +117,18 @@ export const referralSettingsTable = pgTable("referral_settings", {
 export const insertReferralSettingsSchema = createInsertSchema(referralSettingsTable).omit({ createdAt: true, updatedAt: true });
 export type InsertReferralSettings = z.infer<typeof insertReferralSettingsSchema>;
 export type ReferralSettings = typeof referralSettingsTable.$inferSelect;
+
+export const referralCampaignsTable = pgTable("referral_campaigns", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  name: text("name").notNull(),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+  bonusType: text("bonus_type").notNull().default("multiplier"),
+  bonusValue: numeric("bonus_value", { precision: 10, scale: 4 }).notNull().default("2"),
+  bannerText: text("banner_text"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type ReferralCampaign = typeof referralCampaignsTable.$inferSelect;
