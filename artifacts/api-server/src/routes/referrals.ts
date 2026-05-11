@@ -1319,7 +1319,7 @@ router.get("/referrals/campaigns", async (req, res): Promise<void> => {
         (SELECT c2.id FROM referral_campaigns c2
          WHERE c2.tenant_id = ${me.tenantId}
            AND ${referralsTable.convertedAt} >= c2.starts_at
-           AND ${referralsTable.convertedAt} <= LEAST(c2.ends_at, ${now}::timestamptz)
+           AND ${referralsTable.convertedAt} < c2.ends_at
          LIMIT 1)
       `,
       referralsCount: count(),
@@ -1335,7 +1335,7 @@ router.get("/referrals/campaigns", async (req, res): Promise<void> => {
       (SELECT c2.id FROM referral_campaigns c2
        WHERE c2.tenant_id = ${me.tenantId}
          AND ${referralsTable.convertedAt} >= c2.starts_at
-         AND ${referralsTable.convertedAt} <= LEAST(c2.ends_at, ${now}::timestamptz)
+         AND ${referralsTable.convertedAt} < c2.ends_at
        LIMIT 1)
     `);
 

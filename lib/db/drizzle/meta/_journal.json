@@ -253,6 +253,13 @@
       "when": 1747900000000,
       "tag": "0035_referral_campaigns_no_overlap_constraint",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1748000000000,
+      "tag": "0036_referral_campaigns_check_constraints",
+      "breakpoints": true
     }
   ]
 }
