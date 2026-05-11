@@ -2337,7 +2337,7 @@ export default function Indicacoes() {
                   </Label>
                   <Input
                     type="number"
-                    min={campaignFormData.bonusType === "multiplier" ? 0.1 : 0.5}
+                    min={campaignFormData.bonusType === "multiplier" ? 1 : 0.5}
                     step={campaignFormData.bonusType === "multiplier" ? 0.1 : 0.5}
                     value={campaignFormData.bonusValue}
                     onChange={(e) => setCampaignFormData((f) => ({ ...f, bonusValue: e.target.value }))}
