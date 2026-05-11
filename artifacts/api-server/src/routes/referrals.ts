@@ -1394,6 +1394,11 @@ router.post("/referrals/campaigns", async (req, res): Promise<void> => {
       .where(eq(referralCampaignsTable.id, id)).limit(1);
     res.status(201).json({ ...campaign!, bonusValue: Number(campaign!.bonusValue) });
   } catch (err) {
+    const pgErr = err as { code?: string };
+    if (pgErr.code === "23P01") {
+      res.status(409).json({ error: "Já existe uma campanha nesse período. Apenas uma campanha pode estar ativa por vez." });
+      return;
+    }
     req.log.error({ err }, "Error creating referral campaign");
     res.status(500).json({ error: "Internal server error" });
   }
@@ -1449,9 +1454,9 @@ router.patch("/referrals/campaigns/:id", async (req, res): Promise<void> => {
       bannerText: z.string().max(500).nullable().optional(),
     }).refine(
       (d) => {
-        const type = d.bonusType ?? existing.bonusType;
-        const val = d.bonusValue;
-        return type !== "multiplier" || val === undefined || val >= 1;
+        const effectiveType = d.bonusType ?? existing.bonusType;
+        const effectiveVal = d.bonusValue ?? Number(existing.bonusValue);
+        return effectiveType !== "multiplier" || effectiveVal >= 1;
       },
       { message: "Multiplicador deve ser ≥ 1 para não reduzir o bônus base", path: ["bonusValue"] },
     ).safeParse(req.body);
@@ -1494,6 +1499,11 @@ router.patch("/referrals/campaigns/:id", async (req, res): Promise<void> => {
       .where(eq(referralCampaignsTable.id, req.params.id)).limit(1);
     res.json({ ...updated!, bonusValue: Number(updated!.bonusValue) });
   } catch (err) {
+    const pgErr = err as { code?: string };
+    if (pgErr.code === "23P01") {
+      res.status(409).json({ error: "Já existe uma campanha nesse período. Apenas uma campanha pode estar ativa por vez." });
+      return;
+    }
     req.log.error({ err }, "Error updating referral campaign");
     res.status(500).json({ error: "Internal server error" });
   }
