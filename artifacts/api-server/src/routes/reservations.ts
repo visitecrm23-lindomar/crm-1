@@ -657,14 +657,14 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
           sql`${referralCampaignsTable.startsAt} <= ${campaignNow}`,
           sql`${referralCampaignsTable.endsAt} >= ${campaignNow}`,
         ))
+        .orderBy(sql`${referralCampaignsTable.startsAt} DESC`)
         .limit(1);
       if (activeCampaign) {
         const campaignBonusVal = Number(activeCampaign.bonusValue);
-        if (activeCampaign.bonusType === "multiplier") {
-          serverReferralBonusValue = serverReferralBonusValue * campaignBonusVal;
-        } else {
-          serverReferralBonusValue = serverReferralBonusValue + campaignBonusVal;
-        }
+        const campaignAdjusted = activeCampaign.bonusType === "multiplier"
+          ? serverReferralBonusValue * campaignBonusVal
+          : serverReferralBonusValue + campaignBonusVal;
+        serverReferralBonusValue = Math.max(serverReferralBonusValue, campaignAdjusted);
       }
     }
 

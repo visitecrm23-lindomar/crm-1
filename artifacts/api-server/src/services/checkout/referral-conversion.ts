@@ -60,12 +60,16 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
       sql`${referralCampaignsTable.startsAt} <= ${campaignNow}`,
       sql`${referralCampaignsTable.endsAt} >= ${campaignNow}`,
     ))
+    .orderBy(desc(referralCampaignsTable.startsAt))
     .limit(1);
 
   const effectiveBonusValue = activeCampaign
-    ? activeCampaign.bonusType === "multiplier"
-      ? baseBonusValue * Number(activeCampaign.bonusValue)
-      : baseBonusValue + Number(activeCampaign.bonusValue)
+    ? Math.max(
+        baseBonusValue,
+        activeCampaign.bonusType === "multiplier"
+          ? baseBonusValue * Number(activeCampaign.bonusValue)
+          : baseBonusValue + Number(activeCampaign.bonusValue),
+      )
     : baseBonusValue;
 
   const [referrer] = await tx

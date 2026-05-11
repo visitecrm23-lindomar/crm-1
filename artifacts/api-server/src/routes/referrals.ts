@@ -1353,7 +1353,10 @@ router.post("/referrals/campaigns", async (req, res): Promise<void> => {
       bonusType: z.enum(["multiplier", "fixed_extra"]),
       bonusValue: z.number().positive(),
       bannerText: z.string().max(500).optional(),
-    }).safeParse(req.body);
+    }).refine(
+      (d) => d.bonusType !== "multiplier" || d.bonusValue >= 1,
+      { message: "Multiplicador deve ser ≥ 1 para não reduzir o bônus base", path: ["bonusValue"] },
+    ).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
     const starts = new Date(parsed.data.startsAt);
@@ -1444,7 +1447,14 @@ router.patch("/referrals/campaigns/:id", async (req, res): Promise<void> => {
       bonusType: z.enum(["multiplier", "fixed_extra"]).optional(),
       bonusValue: z.number().positive().optional(),
       bannerText: z.string().max(500).nullable().optional(),
-    }).safeParse(req.body);
+    }).refine(
+      (d) => {
+        const type = d.bonusType ?? existing.bonusType;
+        const val = d.bonusValue;
+        return type !== "multiplier" || val === undefined || val >= 1;
+      },
+      { message: "Multiplicador deve ser ≥ 1 para não reduzir o bônus base", path: ["bonusValue"] },
+    ).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
     const starts = parsed.data.startsAt ? new Date(parsed.data.startsAt) : new Date(existing.startsAt);
