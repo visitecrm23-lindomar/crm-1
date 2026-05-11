@@ -3,10 +3,10 @@ import {
   referralsTable,
   referralSettingsTable,
   referralTrackingTable,
-  referralCampaignsTable,
   storeOrdersTable,
 } from "@workspace/db";
 import { and, desc, eq, sql } from "drizzle-orm";
+import { applyActiveCampaignBonus } from "../../lib/referral-campaigns";
 import { generateId } from "../../lib/id";
 import type { Tx } from "./tx";
 import { REFERRAL_STATUS } from "@workspace/permissions";
@@ -48,29 +48,7 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
   const baseBonusValue = refSettings ? Number(refSettings.bonusValue) : 10;
 
   // Apply active campaign bonus adjustment if any
-  const campaignNow = new Date();
-  const [activeCampaign] = await tx
-    .select({
-      bonusType: referralCampaignsTable.bonusType,
-      bonusValue: referralCampaignsTable.bonusValue,
-    })
-    .from(referralCampaignsTable)
-    .where(and(
-      eq(referralCampaignsTable.tenantId, tenantId),
-      sql`${referralCampaignsTable.startsAt} <= ${campaignNow}`,
-      sql`${referralCampaignsTable.endsAt} >= ${campaignNow}`,
-    ))
-    .orderBy(desc(referralCampaignsTable.startsAt))
-    .limit(1);
-
-  const effectiveBonusValue = activeCampaign
-    ? Math.max(
-        baseBonusValue,
-        activeCampaign.bonusType === "multiplier"
-          ? baseBonusValue * Number(activeCampaign.bonusValue)
-          : baseBonusValue + Number(activeCampaign.bonusValue),
-      )
-    : baseBonusValue;
+  const effectiveBonusValue = await applyActiveCampaignBonus(tx as never, tenantId, baseBonusValue);
 
   const [referrer] = await tx
     .select({

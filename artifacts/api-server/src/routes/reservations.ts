@@ -16,6 +16,7 @@ import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 import { broadcastSeatUpdate } from "../lib/realtime";
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { applyDiscounts, computeBalance, computeEffectiveLoyaltyPoints } from "../lib/pricing";
+import { applyActiveCampaignBonus } from "../lib/referral-campaigns";
 import { calculateTier, loyaltyAwardPointsForReservation } from "../lib/loyalty-helpers";
 import { ROLES, DEAL_STATUS, RESERVATION_STATUS, REFERRAL_STATUS, COMMISSION_STATUS, STORE_ORDER_STATUS, STORE_PAYMENT_STATUS, type ReservationStatus } from "@workspace/permissions";
 import { parseReservationStatus } from "../lib/status-validators";
@@ -647,25 +648,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
       serverReferralBonusValue = Number(refSettings?.bonusValue ?? "10");
 
       // Apply active campaign multiplier / extra bonus if any
-      const campaignNow = new Date();
-      const [activeCampaign] = await db.select({
-        bonusType: referralCampaignsTable.bonusType,
-        bonusValue: referralCampaignsTable.bonusValue,
-      }).from(referralCampaignsTable)
-        .where(and(
-          eq(referralCampaignsTable.tenantId, me.tenantId),
-          sql`${referralCampaignsTable.startsAt} <= ${campaignNow}`,
-          sql`${referralCampaignsTable.endsAt} >= ${campaignNow}`,
-        ))
-        .orderBy(sql`${referralCampaignsTable.startsAt} DESC`)
-        .limit(1);
-      if (activeCampaign) {
-        const campaignBonusVal = Number(activeCampaign.bonusValue);
-        const campaignAdjusted = activeCampaign.bonusType === "multiplier"
-          ? serverReferralBonusValue * campaignBonusVal
-          : serverReferralBonusValue + campaignBonusVal;
-        serverReferralBonusValue = Math.max(serverReferralBonusValue, campaignAdjusted);
-      }
+      serverReferralBonusValue = await applyActiveCampaignBonus(db, me.tenantId, serverReferralBonusValue);
     }
 
     // Apply discounts in priority order: coupon → loyalty → referral
