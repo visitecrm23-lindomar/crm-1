@@ -46,9 +46,11 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
     .limit(1);
 
   const baseBonusValue = refSettings ? Number(refSettings.bonusValue) : 10;
+  const conversionAt = new Date();
 
-  // Apply active campaign bonus adjustment if any
-  const effectiveBonusValue = await applyActiveCampaignBonus(tx, tenantId, baseBonusValue);
+  // Apply active campaign bonus adjustment using the same timestamp that
+  // will be persisted as convertedAt to avoid clock drift at window boundaries
+  const effectiveBonusValue = await applyActiveCampaignBonus(tx, tenantId, baseBonusValue, conversionAt);
 
   const [referrer] = await tx
     .select({
@@ -64,7 +66,6 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
   const bonusAmount = Math.round(effectiveBonusValue * tier.bonusMultiplier * 100) / 100;
 
   const referralId = generateId();
-  const conversionAt = new Date();
 
   const expirationDays = refSettings?.expirationDays ?? 30;
   const expiresAt = new Date(conversionAt);

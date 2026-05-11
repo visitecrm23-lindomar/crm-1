@@ -615,6 +615,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
     let serverReferralBonusValue = 0;
     let serverReferralDiscountPct = 5;
     let serverReferralReferrerId: string | null = null;
+    let serverReferralConversionAt: Date = new Date();
 
     if (parsed.data.discountReferralCode) {
       const upperCode = parsed.data.discountReferralCode.toUpperCase();
@@ -648,7 +649,9 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
       serverReferralBonusValue = Number(refSettings?.bonusValue ?? "10");
 
       // Apply active campaign multiplier / extra bonus if any
-      serverReferralBonusValue = await applyActiveCampaignBonus(db, me.tenantId, serverReferralBonusValue);
+      // Capture timestamp here so campaign eligibility check and convertedAt are consistent
+      serverReferralConversionAt = new Date();
+      serverReferralBonusValue = await applyActiveCampaignBonus(db, me.tenantId, serverReferralBonusValue, serverReferralConversionAt);
     }
 
     // Apply discounts in priority order: coupon → loyalty → referral
@@ -814,7 +817,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
           discountValue: serverReferralDiscountPct.toFixed(2),
           discountAmount: appliedReferralAmount.toFixed(2),
           bonusAmount: serverReferralBonusValue.toFixed(2),
-          convertedAt: new Date(),
+          convertedAt: serverReferralConversionAt,
         });
         // Update referrer client stats (earnings += referrer bonus)
         await tx.update(clientsTable)

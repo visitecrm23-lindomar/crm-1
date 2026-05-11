@@ -12,8 +12,9 @@ export async function applyActiveCampaignBonus(
   qr: QueryRunner,
   tenantId: string,
   baseBonusValue: number,
+  asOf: Date = new Date(),
 ): Promise<number> {
-  const now = new Date();
+  const now = asOf;
   const [activeCampaign] = await qr
     .select({
       bonusType: referralCampaignsTable.bonusType,
