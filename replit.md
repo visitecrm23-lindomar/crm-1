@@ -146,6 +146,7 @@ This is required for the billing system, plan selection UI, and tenant onboardin
 - **Google Calendar API**: For event synchronization and management.
 - **Replit DB**: For database hosting in the Replit environment.
 - **Redis (optional)**: Required for BullMQ async job queues. Set `REDIS_URL` env var (Upstash-compatible). When absent, emails are sent synchronously. **Note**: The Upstash free tier has a 500 000 daily request limit. BullMQ's keep-alive polling can exhaust this quickly in active development. Upgrade to a paid Upstash tier or run a local Redis instance (`redis-server`) for sustained dev usage.
+- **`ENABLE_WORKERS`** (optional): Controls whether BullMQ workers are initialized on startup. Defaults to `false` in development and `true` in production. Set `ENABLE_WORKERS=true` in your local environment to enable the full async job queue (requires a valid `REDIS_URL`). When `false`, no BullMQ workers are started and no Redis connection is established by the server. Three specific node-cron fallbacks are registered instead: expired-reservations cleanup (every 5 min), failed booking email retry (every 15 min), and expiry-warning email retry (every 15 min). Note: if `REDIS_URL` is also set, queue producer helpers may still open a Redis connection when enqueuing individual jobs — set `ENABLE_WORKERS=false` together with an unset `REDIS_URL` for a fully Redis-free local session.
 
 ### BullMQ Worker Tuning (Redis request reduction)
 

@@ -163,6 +163,42 @@ applyMigrations()
         })
         .catch((err) => logger.warn({ err }, "[redis-stats] Failed to check daily usage on startup"));
 
+      // ENABLE_WORKERS: opt-in flag for BullMQ worker initialization.
+      // Defaults to true in production and false in development so that
+      // Redis connections are not established when not needed locally.
+      const workersEnabledEnv = process.env["ENABLE_WORKERS"];
+      const workersEnabled =
+        workersEnabledEnv !== undefined
+          ? workersEnabledEnv === "true"
+          : process.env["NODE_ENV"] === "production";
+
+      if (!workersEnabled) {
+        logger.info("[queue] ENABLE_WORKERS is false — skipping BullMQ worker initialization");
+
+        cron.schedule("*/5 * * * *", () => {
+          runExpiredReservationsCron().catch((err) =>
+            logger.error({ err }, "[expired-reservations] Cron failed"),
+          );
+        });
+        logger.info("[expired-reservations] node-cron fallback registered (every 5 minutes)");
+
+        cron.schedule("*/15 * * * *", () => {
+          retryFailedBookingEmails().catch((err) =>
+            logger.error({ err }, "[email-retry] node-cron fallback failed"),
+          );
+        });
+        logger.info("[email-retry] node-cron fallback registered (every 15 minutes)");
+
+        cron.schedule("*/15 * * * *", () => {
+          retryFailedExpiryWarningEmails().catch((err) =>
+            logger.error({ err }, "[expiry-warning-retry] node-cron fallback failed"),
+          );
+        });
+        logger.info("[expiry-warning-retry] node-cron fallback registered (every 15 minutes)");
+
+        return;
+      }
+
       // BullMQ: start workers if Redis is available
       const redisConn = getRedisConnection();
       if (redisConn) {
