@@ -648,10 +648,11 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
       // Bonus earned by the referrer
       serverReferralBonusValue = Number(refSettings?.bonusValue ?? "10");
 
-      // Apply active campaign multiplier / extra bonus if any
-      // Capture timestamp here so campaign eligibility check and convertedAt are consistent
+      // Apply active campaign bonus; capture timestamp for convertedAt consistency.
+      // fixed_extra is a flat add-on; multiplier adjusts the base.
       serverReferralConversionAt = new Date();
-      serverReferralBonusValue = await applyActiveCampaignBonus(db, me.tenantId, serverReferralBonusValue, serverReferralConversionAt);
+      const campaignResult = await applyActiveCampaignBonus(db, me.tenantId, serverReferralBonusValue, serverReferralConversionAt);
+      serverReferralBonusValue = campaignResult.adjustedBase + campaignResult.fixedExtra;
     }
 
     // Apply discounts in priority order: coupon → loyalty → referral

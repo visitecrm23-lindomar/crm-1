@@ -48,9 +48,10 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
   const baseBonusValue = refSettings ? Number(refSettings.bonusValue) : 10;
   const conversionAt = new Date();
 
-  // Apply active campaign bonus adjustment using the same timestamp that
-  // will be persisted as convertedAt to avoid clock drift at window boundaries
-  const effectiveBonusValue = await applyActiveCampaignBonus(tx, tenantId, baseBonusValue, conversionAt);
+  // Apply active campaign bonus using the same timestamp that will be
+  // persisted as convertedAt to avoid clock drift at window boundaries.
+  // fixed_extra is added after tier multiplication; multiplier adjusts base before tier.
+  const { adjustedBase, fixedExtra } = await applyActiveCampaignBonus(tx, tenantId, baseBonusValue, conversionAt);
 
   const [referrer] = await tx
     .select({
@@ -63,7 +64,7 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
 
   const currentCompleted = referrer?.successfulReferrals ?? 0;
   const { tier } = computeReferralTier(currentCompleted, refSettings?.tiersConfig ?? null);
-  const bonusAmount = Math.round(effectiveBonusValue * tier.bonusMultiplier * 100) / 100;
+  const bonusAmount = Math.round((adjustedBase * tier.bonusMultiplier + fixedExtra) * 100) / 100;
 
   const referralId = generateId();
 
