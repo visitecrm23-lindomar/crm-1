@@ -859,7 +859,19 @@ router.get("/referrals/analytics/export", async (req, res): Promise<void> => {
       }
       since = new Date(now.getTime() - period * 24 * 60 * 60 * 1000);
     }
-    const until: Date = endDateParam ? new Date(endDateParam) : now;
+    let until: Date = now;
+    if (endDateParam) {
+      const parsedEnd = new Date(endDateParam);
+      if (isNaN(parsedEnd.getTime())) {
+        res.status(400).json({ error: "endDate must be a valid ISO date" });
+        return;
+      }
+      if (parsedEnd < since) {
+        res.status(400).json({ error: "endDate must be on or after startDate" });
+        return;
+      }
+      until = parsedEnd;
+    }
     const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
     const [monthlyRows, channelRows, roiBonusRow_, roiRevenueRow_] = await Promise.all([
