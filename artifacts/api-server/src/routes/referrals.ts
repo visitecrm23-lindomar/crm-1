@@ -1329,7 +1329,12 @@ router.get("/referrals/campaigns", async (req, res): Promise<void> => {
     .where(and(
       eq(referralsTable.tenantId, me.tenantId),
       eq(referralsTable.status, REFERRAL_STATUS.COMPLETED),
-      sql`${referralsTable.convertedAt} >= (SELECT MIN(starts_at) FROM referral_campaigns WHERE tenant_id = ${me.tenantId})`,
+      sql`EXISTS (
+        SELECT 1 FROM referral_campaigns c2
+        WHERE c2.tenant_id = ${me.tenantId}
+          AND ${referralsTable.convertedAt} >= c2.starts_at
+          AND ${referralsTable.convertedAt} < c2.ends_at
+      )`,
     ))
     .groupBy(sql`
       (SELECT c2.id FROM referral_campaigns c2
