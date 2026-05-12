@@ -965,6 +965,10 @@ router.get("/public/store/:slug/referral/info", async (req, res, next: NextFunct
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
+    const [tenantRowRefInfo] = await db.select({ settings: tenantsTable.settings }).from(tenantsTable).where(eq(tenantsTable.id, store.tenantId)).limit(1);
+    if ((tenantRowRefInfo?.settings as Record<string, unknown> | null)?.referralsEnabled === false) {
+      next(new NotFoundError("Not found", "NOT_FOUND")); return;
+    }
     const code = (req.query.code as string | undefined)?.toUpperCase();
     if (!code) { next(new ValidationError("code is required", "VALIDATION_ERROR")); return; }
 
@@ -1016,6 +1020,10 @@ router.post("/public/store/:slug/referral/track", async (req, res, next: NextFun
   try {
     const store = await getActiveStore(req.params.slug);
     if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
+    const [tenantRowRefTrack] = await db.select({ settings: tenantsTable.settings }).from(tenantsTable).where(eq(tenantsTable.id, store.tenantId)).limit(1);
+    if ((tenantRowRefTrack?.settings as Record<string, unknown> | null)?.referralsEnabled === false) {
+      next(new NotFoundError("Not found", "NOT_FOUND")); return;
+    }
     const parsed = z.object({
       code: z.string().min(1),
       serverCookieId: z.string().optional(),
