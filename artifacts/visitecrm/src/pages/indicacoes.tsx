@@ -2184,7 +2184,33 @@ export default function Indicacoes() {
                       onChange={(e) => setLocalSettings((s) => ({ ...s, whatsappBonusPaidMessage: e.target.value }))}
                       placeholder="Seu bônus de R$ {{valor}} foi pago! Obrigado por indicar clientes para a {{agencia}}."
                     />
-                    <p className="text-[11px] text-muted-foreground">Variáveis: {"{{valor}}"}, {"{{agencia}}"}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Variáveis:{" "}
+                      <code className="bg-muted px-1 rounded">{"{nome}"}</code> nome do indicador,{" "}
+                      <code className="bg-muted px-1 rounded">{"{codigo}"}</code> código de indicação,{" "}
+                      <code className="bg-muted px-1 rounded">{"{bonus}"}</code> valor do bônus,{" "}
+                      <code className="bg-muted px-1 rounded">{"{valor}"}</code> valor numérico,{" "}
+                      <code className="bg-muted px-1 rounded">{"{agencia}"}</code> nome da agência.
+                    </p>
+                    {(localSettings.whatsappBonusPaidMessage as string)?.trim() && (
+                      <p className="text-[11px] text-muted-foreground bg-muted/50 border rounded px-2 py-1.5">
+                        <span className="font-medium text-muted-foreground">Pré-visualização:</span>{" "}
+                        {(() => {
+                          const sub = (tpl: string, key: string, value: string) =>
+                            tpl.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value)
+                               .replace(new RegExp(`\\{${key}\\}`, "g"), value);
+                          const bonusFormatted = fmtCurrency(settings?.bonusValue ?? 10);
+                          const valorFormatted = (settings?.bonusValue ?? 10).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                          let msg = localSettings.whatsappBonusPaidMessage as string;
+                          msg = sub(msg, "nome", "João");
+                          msg = sub(msg, "codigo", "JOAO123");
+                          msg = sub(msg, "bonus", bonusFormatted);
+                          msg = sub(msg, "valor", valorFormatted);
+                          msg = sub(msg, "agencia", "Minha Agência");
+                          return msg;
+                        })()}
+                      </p>
+                    )}
                   </div>
                 </>
               )}

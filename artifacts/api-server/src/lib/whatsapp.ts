@@ -61,15 +61,23 @@ export async function sendWhatsAppMessage(
 
 /**
  * Replaces template variables in a message string.
- * Supported variables: {{nome}}, {{codigo}}, {{valor}}, {{agencia}}
+ * Supports both single-brace ({nome}) and double-brace ({{nome}}) syntax.
+ * Supported variables: nome, codigo, bonus, valor, agencia
  */
 export function interpolateWhatsAppMessage(
   template: string,
-  vars: { nome?: string; codigo?: string; valor?: string; agencia?: string },
+  vars: { nome?: string; codigo?: string; bonus?: string; valor?: string; agencia?: string },
 ): string {
-  return template
-    .replace(/\{\{nome\}\}/g, vars.nome ?? "")
-    .replace(/\{\{codigo\}\}/g, vars.codigo ?? "")
-    .replace(/\{\{valor\}\}/g, vars.valor ?? "")
-    .replace(/\{\{agencia\}\}/g, vars.agencia ?? "");
+  const replace = (tpl: string, key: string, value: string) =>
+    tpl
+      .replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value)
+      .replace(new RegExp(`\\{${key}\\}`, "g"), value);
+
+  let result = template;
+  result = replace(result, "nome", vars.nome ?? "");
+  result = replace(result, "codigo", vars.codigo ?? "");
+  result = replace(result, "bonus", vars.bonus ?? "");
+  result = replace(result, "valor", vars.valor ?? "");
+  result = replace(result, "agencia", vars.agencia ?? "");
+  return result;
 }

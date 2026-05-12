@@ -413,6 +413,8 @@ router.post("/referrals/:id/pay-bonus", async (req, res): Promise<void> => {
     dispatchWhatsAppReferralBonusPaid({
       referrerId: row.referrerId,
       referrerPhone: row.referrerClientWhatsapp ?? row.referrerClientPhone ?? null,
+      referrerName: referrerName,
+      referralCode: row.code ?? null,
       bonusAmount: bonusValue,
       tenantId: me.tenantId,
       tenantName: agencyName,

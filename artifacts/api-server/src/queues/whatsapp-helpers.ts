@@ -93,11 +93,13 @@ export async function dispatchWhatsAppReferralConverted(opts: {
 export async function dispatchWhatsAppReferralBonusPaid(opts: {
   referrerId: string;
   referrerPhone: string | null;
+  referrerName: string | null;
+  referralCode: string | null;
   bonusAmount: number;
   tenantId: string;
   tenantName: string;
 }): Promise<void> {
-  const { referrerId, referrerPhone, bonusAmount, tenantId, tenantName } = opts;
+  const { referrerId, referrerPhone, referrerName, referralCode, bonusAmount, tenantId, tenantName } = opts;
 
   const [settings] = await db
     .select({
@@ -123,6 +125,9 @@ export async function dispatchWhatsAppReferralBonusPaid(opts: {
 
   const template = settings.whatsappBonusPaidMessage ?? DEFAULT_BONUS_PAID_MESSAGE;
   const message = interpolateWhatsAppMessage(template, {
+    nome: referrerName ?? "",
+    codigo: referralCode ?? "",
+    bonus: bonusAmount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
     valor: bonusAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     agencia: tenantName,
   });
