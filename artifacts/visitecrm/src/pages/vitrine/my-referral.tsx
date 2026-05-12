@@ -150,7 +150,7 @@ function formatCurrency(value: string | number) {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-const VALID_STATUS_FILTERS = ["all", "pending", "confirmed", "expired"] as const;
+const VALID_STATUS_FILTERS = ["all", "pending", "confirmed", "expired", "reversed"] as const;
 type StatusFilter = (typeof VALID_STATUS_FILTERS)[number];
 
 function parseStatusFilter(value: string | null): StatusFilter {
