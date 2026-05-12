@@ -1409,6 +1409,26 @@ export default function Indicacoes() {
                   </p>
                 )}
               </div>
+              {settings?.shareMessage && (() => {
+                const bonusFormatted = shareReferral?.bonusAmount != null ? fmtCurrency(shareReferral.bonusAmount) : "";
+                const resolved = settings.shareMessage
+                  .replace(/\{nome\}/g, shareReferral?.referrerName ?? "")
+                  .replace(/\{codigo\}/g, shareReferral?.code ?? "")
+                  .replace(/\{bonus\}/g, bonusFormatted)
+                  .replace(/\{link\}/g, shareData.link);
+                const preview = /\{link\}/.test(settings.shareMessage) ? resolved : `${resolved}\n${shareData.link}`;
+                return (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      Mensagem
+                    </p>
+                    <div className="rounded-md border bg-muted/50 px-3 py-2 text-xs text-foreground whitespace-pre-wrap break-words leading-relaxed">
+                      {preview}
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                   <QrCode className="w-3.5 h-3.5" />
