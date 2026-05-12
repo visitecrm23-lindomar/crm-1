@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import DOMPurify from "dompurify";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
@@ -288,10 +289,9 @@ export function ProductQuickView({
           )}
 
           {product.shortDescription && (
-            <div
-              className="text-sm text-muted-foreground prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: product.shortDescription }}
-            />
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {product.shortDescription}
+            </p>
           )}
 
           {product.description && (
@@ -299,7 +299,7 @@ export function ProductQuickView({
               <h3 className="text-sm font-semibold mb-1.5">Sobre a Viagem</h3>
               <div
                 className="text-sm text-muted-foreground leading-relaxed prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: product.description }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description) }}
               />
             </div>
           )}

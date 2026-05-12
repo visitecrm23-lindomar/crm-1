@@ -22,6 +22,10 @@ export function getCountdownLabel(date: string) {
   }
 }
 
+export function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, " ").replace(/\s{2,}/g, " ").trim();
+}
+
 export function escapeHtml(str: string) {
   return str
     .replace(/&/g, "&amp;")
@@ -67,7 +71,7 @@ export function buildTripProductPayload(trip: Trip) {
 
   const shortDescription = (typeof t.shortDescription === "string" && t.shortDescription)
     ? t.shortDescription
-    : (trip.description ? trip.description.slice(0, 200) : undefined);
+    : (trip.description ? stripHtml(trip.description).slice(0, 200) : undefined);
 
   const metaTitle = (typeof t.metaTitle === "string" && t.metaTitle)
     ? t.metaTitle
@@ -75,7 +79,7 @@ export function buildTripProductPayload(trip: Trip) {
 
   const metaDescription = (typeof t.metaDescription === "string" && t.metaDescription)
     ? t.metaDescription
-    : (trip.description ? trip.description.slice(0, 160) : undefined);
+    : (trip.description ? stripHtml(trip.description).slice(0, 160) : undefined);
 
   const country = (typeof t.destinationCountry === "string" && t.destinationCountry)
     ? t.destinationCountry
