@@ -289,9 +289,10 @@ export function ProductQuickView({
           )}
 
           {product.shortDescription && (
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              {product.shortDescription}
-            </p>
+            <div
+              className="text-sm text-muted-foreground leading-relaxed prose prose-sm max-w-none"
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.shortDescription) }}
+            />
           )}
 
           {product.description && (
