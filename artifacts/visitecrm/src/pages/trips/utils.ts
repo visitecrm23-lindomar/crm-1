@@ -70,7 +70,7 @@ export function buildTripProductPayload(trip: Trip) {
   }
 
   const shortDescription = (typeof t.shortDescription === "string" && t.shortDescription)
-    ? t.shortDescription
+    ? stripHtml(t.shortDescription)
     : (trip.description ? stripHtml(trip.description).slice(0, 200) : undefined);
 
   const metaTitle = (typeof t.metaTitle === "string" && t.metaTitle)
@@ -78,7 +78,7 @@ export function buildTripProductPayload(trip: Trip) {
     : trip.name;
 
   const metaDescription = (typeof t.metaDescription === "string" && t.metaDescription)
-    ? t.metaDescription
+    ? stripHtml(t.metaDescription)
     : (trip.description ? stripHtml(trip.description).slice(0, 160) : undefined);
 
   const country = (typeof t.destinationCountry === "string" && t.destinationCountry)
