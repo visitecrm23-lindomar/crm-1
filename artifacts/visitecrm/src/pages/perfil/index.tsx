@@ -567,6 +567,8 @@ function SegurancaSection({ email }: { email: string }) {
   const { signOut } = useClerk();
   const [step, setStep] = useState<ResetStep>("idle");
   const [deleting, setDeleting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -761,7 +763,13 @@ function SegurancaSection({ email }: { email: string }) {
               Remove permanentemente o seu acesso ao portal. Seus dados de reservas são preservados na agência.
               Esta ação não pode ser desfeita.
             </p>
-            <AlertDialog>
+            <AlertDialog
+              open={deleteDialogOpen}
+              onOpenChange={(open) => {
+                setDeleteDialogOpen(open);
+                if (!open) setDeleteConfirmText("");
+              }}
+            >
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" size="sm" disabled={deleting}>
                   {deleting && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
@@ -777,11 +785,24 @@ function SegurancaSection({ email }: { email: string }) {
                     Esta ação é permanente e irreversível.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
+                <div className="px-1 py-2">
+                  <Label htmlFor="delete-confirm" className="text-sm mb-1.5 block">
+                    Para confirmar, digite <span className="font-semibold">EXCLUIR</span> abaixo:
+                  </Label>
+                  <Input
+                    id="delete-confirm"
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    placeholder="EXCLUIR"
+                    disabled={deleting}
+                    autoComplete="off"
+                  />
+                </div>
                 <AlertDialogFooter>
                   <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={handleDeleteAccount}
-                    disabled={deleting}
+                    disabled={deleting || deleteConfirmText !== "EXCLUIR"}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
                     {deleting && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
