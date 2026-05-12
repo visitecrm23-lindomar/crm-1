@@ -25,13 +25,14 @@ export interface RecordReferralArgs {
   discountType: string;
   referralCookieId?: string;
   conversionIp?: string | null;
+  reservationId?: string | null;
 }
 
 export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs): Promise<void> {
   const {
     tenantId, referrerId, referralCode, referredClientId,
     customerEmail, customerName, discountAmount, discountValue, discountType,
-    referralCookieId, conversionIp,
+    referralCookieId, conversionIp, reservationId,
   } = args;
 
   const [refSettings] = await tx
@@ -89,6 +90,7 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
     convertedAt: conversionAt,
     expiresAt,
     ipAddress: conversionIp ?? null,
+    reservationId: reservationId ?? null,
   });
 
   const trackingWhere = referralCookieId

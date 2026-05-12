@@ -408,6 +408,7 @@ export default function MyReferralPage({ slug, store }: Props) {
     if (statusFilter === "pending") return r.status === "pending";
     if (statusFilter === "confirmed") return r.status === "completed" || r.status === "converted";
     if (statusFilter === "expired") return r.status === "expired";
+    if (statusFilter === "reversed") return r.status === "reversed";
     return true;
   });
 
@@ -674,6 +675,7 @@ export default function MyReferralPage({ slug, store }: Props) {
                     { key: "pending",   label: "Pendentes",   count: referrals.filter((r) => r.status === "pending").length },
                     { key: "confirmed", label: "Confirmadas", count: referrals.filter((r) => r.status === "completed" || r.status === "converted").length },
                     { key: "expired",   label: "Expiradas",   count: referrals.filter((r) => r.status === "expired").length },
+                    { key: "reversed",  label: "Canceladas",  count: referrals.filter((r) => r.status === "reversed").length },
                   ] as const
                 ).map(({ key, label, count }) => {
                   const isActive = statusFilter === key;

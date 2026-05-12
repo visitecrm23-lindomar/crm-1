@@ -1093,10 +1093,13 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
         }
 
         // --- Reversal 3: referral bonus credited to referrer ---
-        // Uses reservationId for exact scoping — avoids matching the wrong completed
-        // referral when the same client has multiple bookings with the same code.
+        // Primary lookup: by reservationId (set for all new storefront and CRM bookings).
+        // Fallback lookup: by referral code + referredId for older records created before
+        // reservationId was saved (storefront orders prior to this fix).
         if (existing.discountReferralCode) {
-          const [referralRecord] = await tx
+          let referralRecord: { id: string; referrerId: string; bonusAmount: string } | undefined;
+
+          const [byReservation] = await tx
             .select({ id: referralsTable.id, referrerId: referralsTable.referrerId, bonusAmount: referralsTable.bonusAmount })
             .from(referralsTable)
             .where(and(
@@ -1105,6 +1108,24 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
               eq(referralsTable.status, REFERRAL_STATUS.COMPLETED),
             ))
             .limit(1);
+
+          if (byReservation) {
+            referralRecord = byReservation;
+          } else if (existing.clientId) {
+            // Fallback for older records that were created without reservationId
+            const [byCodeAndReferred] = await tx
+              .select({ id: referralsTable.id, referrerId: referralsTable.referrerId, bonusAmount: referralsTable.bonusAmount })
+              .from(referralsTable)
+              .where(and(
+                eq(referralsTable.tenantId, me.tenantId),
+                eq(referralsTable.code, existing.discountReferralCode),
+                eq(referralsTable.referredId, existing.clientId),
+                eq(referralsTable.status, REFERRAL_STATUS.COMPLETED),
+              ))
+              .limit(1);
+            referralRecord = byCodeAndReferred;
+          }
+
           if (referralRecord) {
             const bonusToReverse = Number(referralRecord.bonusAmount);
             await tx.update(clientsTable)

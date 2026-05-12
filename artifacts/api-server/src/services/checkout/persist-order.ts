@@ -156,17 +156,20 @@ async function writeReservationsAndDeals(
   args: PersistOrderArgs,
   reservationClientId: string,
   lockedTripTypes: Map<string, string>,
-): Promise<void> {
+): Promise<string | null> {
   const {
     store, data, orderNumber, promoDiscountAmount, appliedReferralCode,
     tripLinkedProducts, reservationCreatedById, vitrineStageId, tripNameMap,
     reservationExpiresAt, tenantResPrefix, resYearMonth,
   } = args;
-  if (!reservationCreatedById) return;
+  if (!reservationCreatedById) return null;
+
+  let firstReservationId: string | null = null;
 
   for (const [tripId, { product, totalQty, totalValue }] of tripLinkedProducts) {
     const voucherCode = generateVoucherCode();
     const reservationId = generateId();
+    if (!firstReservationId) firstReservationId = reservationId;
     const realSeats = (data.seats && data.seats.length >= totalQty)
       ? data.seats.slice(0, totalQty)
       : Array.from({ length: totalQty }, (_, i) => String(i + 1));
@@ -220,6 +223,8 @@ async function writeReservationsAndDeals(
       });
     }
   }
+
+  return firstReservationId;
 }
 
 export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<PersistOrderResult> {
@@ -251,8 +256,9 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
     await writeOrderAndItems(tx, args, reservationClientId);
     await decrementStockAndSales(tx, args);
 
+    let firstReservationId: string | null = null;
     if (args.tripLinkedProducts.size > 0 && reservationClientId) {
-      await writeReservationsAndDeals(tx, args, reservationClientId, lockedTripTypes);
+      firstReservationId = await writeReservationsAndDeals(tx, args, reservationClientId, lockedTripTypes);
     }
 
     if (args.couponId) {
@@ -274,6 +280,7 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
         discountType: args.appliedReferralDiscountType,
         referralCookieId: args.data.referralCookieId,
         conversionIp: args.data.ipAddress ?? null,
+        reservationId: firstReservationId,
       });
     }
     await tx.update(storesTable)
