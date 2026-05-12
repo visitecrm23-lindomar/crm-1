@@ -254,8 +254,8 @@ function ReservationCard({ r, compact = false }: { r: ClientPortalProfile["reser
 }
 
 const CARD_TIER_GRADIENTS: Record<string, string> = {
-  bronze:  "from-amber-700 via-amber-600 to-yellow-500",
-  silver:  "from-slate-600 via-slate-500 to-slate-300",
+  bronze:  "from-amber-700 via-amber-500 to-yellow-400",
+  silver:  "from-slate-600 via-slate-400 to-gray-300",
   gold:    "from-yellow-600 via-yellow-400 to-amber-300",
   diamond: "from-cyan-700 via-cyan-500 to-cyan-300",
 };
@@ -267,6 +267,13 @@ const CARD_TIER_ICONS: Record<string, string> = {
   diamond: "💎",
 };
 
+const CARD_TIER_LABELS: Record<string, string> = {
+  bronze:  "Bronze",
+  silver:  "Prata",
+  gold:    "Ouro",
+  diamond: "Diamante",
+};
+
 function ClienteCard({
   profile,
   primaryColor,
@@ -276,12 +283,12 @@ function ClienteCard({
 }) {
   const displayName = profile.client?.name ?? profile.user?.name ?? "Viajante";
   const cpf = profile.client?.cpf ?? null;
-  const tierLevel = profile.referral?.currentTierLevel ?? null;
-  const tierLabel = profile.referral?.currentTierLabel ?? null;
+  const hasLoyalty = !!profile.loyalty;
+  const tierLevel = hasLoyalty ? (profile.loyalty!.tier ?? null) : null;
+  const tierLabel = tierLevel ? (CARD_TIER_LABELS[tierLevel] ?? tierLevel) : null;
   const loyaltyPoints = profile.loyalty?.availablePoints ?? null;
   const referralCode = profile.referral?.code ?? null;
   const agencyName = profile.tenant?.name ?? "VisiteCRM";
-  const hasLoyalty = profile.loyalty !== null;
 
   const maskedNumber = cpf
     ? `•••• •••• ••• ${cpf.replace(/\D/g, "").slice(-3)}`
@@ -333,17 +340,17 @@ function ClienteCard({
               <p className="text-[13px] font-bold uppercase truncate drop-shadow-sm leading-tight">{displayName}</p>
             </div>
 
-            {hasLoyalty && tierLabel && (
-              <div className="text-center shrink-0">
-                <p className="text-[8px] text-white/55 uppercase tracking-wider mb-0.5">Nível</p>
-                <p className="text-[11px] font-bold drop-shadow-sm leading-tight">{tierIcon} {tierLabel}</p>
-              </div>
-            )}
+            <div className="text-center shrink-0">
+              <p className="text-[8px] text-white/55 uppercase tracking-wider mb-0.5">Nível</p>
+              <p className="text-[11px] font-bold drop-shadow-sm leading-tight">
+                {hasLoyalty && tierLabel ? `${tierIcon} ${tierLabel}` : "Membro"}
+              </p>
+            </div>
 
             {loyaltyPoints !== null ? (
               <div className="text-right shrink-0">
                 <p className="text-[8px] text-white/55 uppercase tracking-wider mb-0.5">Pontos</p>
-                <p className="text-[11px] font-bold drop-shadow-sm leading-tight">{loyaltyPoints.toLocaleString("pt-BR")}</p>
+                <p className="text-[11px] font-bold drop-shadow-sm leading-tight">{loyaltyPoints.toLocaleString("pt-BR")} pts</p>
               </div>
             ) : referralCode ? (
               <div className="text-right shrink-0">
