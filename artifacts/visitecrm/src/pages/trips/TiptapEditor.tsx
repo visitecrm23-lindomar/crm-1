@@ -365,7 +365,7 @@ export function TiptapEditor({
         <EditorContent
           editor={editor}
           className={[
-            "prose prose-sm max-w-none p-4 min-h-[200px] focus-within:outline-none",
+            "prose prose-sm max-w-none p-4 min-h-[200px] max-h-[520px] overflow-y-auto focus-within:outline-none",
             "[&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[180px]",
             "[&_.ProseMirror_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)]",
             "[&_.ProseMirror_p.is-editor-empty:first-child::before]:text-muted-foreground/50",
