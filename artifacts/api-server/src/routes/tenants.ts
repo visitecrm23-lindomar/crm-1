@@ -6,6 +6,7 @@ import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { deleteOrphanedFile } from "../lib/uploadthing";
 import { ROLES } from "@workspace/permissions";
+import { canEnableFeature, getFeatureLabel, getFeatureRequiredPlanLabel } from "../lib/plan-features";
 
 const router = Router();
 
@@ -165,7 +166,26 @@ router.patch("/tenants/:id", async (req, res): Promise<void> => {
     if (updateData.reservationPrefix != null) {
       updateData.reservationPrefix = (updateData.reservationPrefix as string).trim().toUpperCase().slice(0, 5) || null;
     }
-    const [existing] = await db.select({ settings: tenantsTable.settings, logoUrl: tenantsTable.logoUrl }).from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
+    const [existing] = await db.select({ settings: tenantsTable.settings, logoUrl: tenantsTable.logoUrl, planId: tenantsTable.planId }).from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
+    if (me.role !== ROLES.SUPER_ADMIN) {
+      const rawPlanId = existing?.planId ?? "starter";
+      const [planRow] = await db.select({ slug: plansTable.slug }).from(plansTable).where(eq(plansTable.id, rawPlanId)).limit(1);
+      const planSlug = planRow?.slug ?? rawPlanId;
+      const featuresToCheck: Array<{ key: string; effectiveValue: boolean }> = [
+        { key: "couponsEnabled", effectiveValue: couponsEnabled !== undefined ? (couponsEnabled ?? true) : false },
+        { key: "referralsEnabled", effectiveValue: referralsEnabled !== undefined ? (referralsEnabled ?? true) : false },
+      ];
+      for (const { key, effectiveValue } of featuresToCheck) {
+        if (effectiveValue === true && !canEnableFeature(key, planSlug)) {
+          const featureLabel = getFeatureLabel(key);
+          const requiredPlan = getFeatureRequiredPlanLabel(key);
+          res.status(403).json({
+            error: `O plano atual não inclui "${featureLabel}". Faça upgrade para o plano ${requiredPlan} ou superior para ativar esta funcionalidade.`,
+          });
+          return;
+        }
+      }
+    }
     const settingsUpdates: Record<string, unknown> = {};
     if (birthdayMessagesEnabled !== undefined) settingsUpdates.birthdayMessagesEnabled = birthdayMessagesEnabled ?? true;
     if (couponsEnabled !== undefined) settingsUpdates.couponsEnabled = couponsEnabled ?? true;
