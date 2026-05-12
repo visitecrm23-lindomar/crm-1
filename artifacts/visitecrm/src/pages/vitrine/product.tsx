@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import DOMPurify from "dompurify";
 import { useLocation } from "wouter";
 import { publicStoreApi, PublicStore, StoreProduct, StoreReview } from "@/lib/storeApi";
 import { calculateTripDuration } from "@/lib/tripDuration";
@@ -776,9 +777,10 @@ export default function VitrineProduct({
 
           <div className="pt-6">
             {currentTab === "descricao" && product.description && (
-              <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                {product.description}
-              </div>
+              <div
+                className="prose prose-sm max-w-none text-muted-foreground leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description) }}
+              />
             )}
 
             {currentTab === "requisitos" && requirements.length > 0 && (
