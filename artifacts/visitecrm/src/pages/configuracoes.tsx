@@ -1804,7 +1804,6 @@ function ApiKeysTab() {
 }
 
 /* ──────────────────── Features Tab ──────────────────── */
-const PLAN_TIER: Record<string, number> = { starter: 0, pro: 1, enterprise: 2 };
 
 interface UpgradeFeatureModalProps {
   featureLabel: string;
@@ -1859,6 +1858,7 @@ function FeaturesTab() {
       enabled: !!tenantId,
     },
   });
+  const { data: subData, isError: subError } = useGetCurrentSubscription();
   const updateTenant = useUpdateTenant();
   const [upgradeModal, setUpgradeModal] = useState<{ label: string; planLabel: string } | null>(null);
 
@@ -1866,8 +1866,13 @@ function FeaturesTab() {
   const referralsEnabled = settings.referralsEnabled !== false;
   const couponsEnabled = settings.couponsEnabled !== false;
 
-  const planId = (fullTenant?.planId ?? "starter") as string;
-  const currentTier = PLAN_TIER[planId] ?? 0;
+  const planLoaded = subData !== undefined || subError;
+  const supportedFeatures: string[] = subData?.plan?.supportedFeatures ?? [];
+
+  function isFeatureLocked(featureKey: string): boolean {
+    if (!planLoaded) return false;
+    return !supportedFeatures.includes(featureKey);
+  }
 
   async function handleToggle(key: "referralsEnabled" | "couponsEnabled", value: boolean) {
     if (!tenantId) return;
@@ -1883,19 +1888,19 @@ function FeaturesTab() {
   const FEATURES = [
     {
       key: "referralsEnabled" as const,
+      featureKey: "referrals",
       label: "Programa de Indicação",
       description: "Permite que clientes gerem códigos de indicação e ganhem bônus por conversões",
       enabled: referralsEnabled,
-      minTier: 1,
       requiredPlanLabel: "Pro",
     },
     {
       key: "couponsEnabled" as const,
+      featureKey: "coupons",
       label: "Cupons de Desconto",
       description: "Habilita a criação e uso de cupons de desconto na sua loja",
       enabled: couponsEnabled,
-      minTier: 0,
-      requiredPlanLabel: null,
+      requiredPlanLabel: "Pro",
     },
   ];
 
@@ -1906,7 +1911,7 @@ function FeaturesTab() {
       </p>
       <div className="rounded-md border divide-y">
         {FEATURES.map((f) => {
-          const locked = currentTier < f.minTier;
+          const locked = isFeatureLocked(f.featureKey);
           return (
             <div
               key={f.key}

@@ -2815,6 +2815,7 @@ export interface Plan {
   maxClients: number;
   maxTrips: number;
   features: string[];
+  supportedFeatures: string[];
   isActive: boolean;
   isFeatured: boolean;
   createdAt: string;
@@ -2831,6 +2832,7 @@ export interface CreatePlanBody {
   maxClients?: number;
   maxTrips?: number;
   features?: string[];
+  supportedFeatures?: string[];
   isActive?: boolean;
   isFeatured?: boolean;
 }
@@ -2845,6 +2847,7 @@ export interface UpdatePlanBody {
   maxClients?: number;
   maxTrips?: number;
   features?: string[];
+  supportedFeatures?: string[];
   isActive?: boolean;
   isFeatured?: boolean;
 }

@@ -34,6 +34,7 @@ interface PlanFormData {
   maxClients: number;
   maxTrips: number;
   features: string;
+  supportedFeatures: string;
   isActive: boolean;
   isFeatured: boolean;
 }
@@ -48,6 +49,7 @@ const DEFAULT_FORM: PlanFormData = {
   maxClients: 100,
   maxTrips: 20,
   features: "",
+  supportedFeatures: "",
   isActive: true,
   isFeatured: false,
 };
@@ -75,6 +77,7 @@ function PlanModal({ plan, onClose }: PlanModalProps) {
           maxClients: plan.maxClients,
           maxTrips: plan.maxTrips,
           features: (plan.features ?? []).join(", "),
+          supportedFeatures: (plan.supportedFeatures ?? []).join(", "),
           isActive: plan.isActive,
           isFeatured: plan.isFeatured,
         }
@@ -94,6 +97,7 @@ function PlanModal({ plan, onClose }: PlanModalProps) {
       maxClients: form.maxClients,
       maxTrips: form.maxTrips,
       features: form.features ? form.features.split(",").map((f) => f.trim()).filter(Boolean) : [],
+      supportedFeatures: form.supportedFeatures ? form.supportedFeatures.split(",").map((f) => f.trim()).filter(Boolean) : [],
       isActive: form.isActive,
       isFeatured: form.isFeatured,
     };
@@ -157,8 +161,13 @@ function PlanModal({ plan, onClose }: PlanModalProps) {
             </div>
           </div>
           <div>
-            <Label className="text-sm font-medium">Features (separadas por vírgula)</Label>
+            <Label className="text-sm font-medium">Features de marketing (separadas por vírgula)</Label>
             <Input value={form.features} onChange={(e) => setForm({ ...form, features: e.target.value })} placeholder="CRM, Relatórios, API" />
+          </div>
+          <div>
+            <Label className="text-sm font-medium">Funcionalidades habilitadas (separadas por vírgula)</Label>
+            <Input value={form.supportedFeatures} onChange={(e) => setForm({ ...form, supportedFeatures: e.target.value })} placeholder="referrals, coupons" />
+            <p className="text-xs text-muted-foreground mt-1">Chaves de funcionalidades desbloqueadas neste plano. Ex: <span className="font-mono">referrals</span>, <span className="font-mono">coupons</span></p>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="flex items-center gap-2">

@@ -18,6 +18,7 @@ const PlanBody = z.object({
   maxClients: z.number().int().optional(),
   maxTrips: z.number().int().optional(),
   features: z.array(z.string()).optional(),
+  supportedFeatures: z.array(z.string()).optional(),
   isActive: z.boolean().optional(),
   isFeatured: z.boolean().optional(),
 });

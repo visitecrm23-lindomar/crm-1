@@ -18,6 +18,7 @@ export interface PlanPublic {
   maxClients: number;
   maxTrips: number;
   features: string[];
+  supportedFeatures: string[];
   isActive: boolean;
   isFeatured: boolean;
   sortOrder: number;

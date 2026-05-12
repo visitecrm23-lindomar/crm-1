@@ -13,6 +13,7 @@ export const plansTable = pgTable("plans", {
   maxClients: integer("max_clients").notNull().default(100),
   maxTrips: integer("max_trips").notNull().default(20),
   features: json("features").$type<string[]>().notNull().default([]),
+  supportedFeatures: json("supported_features").$type<string[]>().notNull().default([]),
   isActive: boolean("is_active").notNull().default(true),
   isFeatured: boolean("is_featured").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
