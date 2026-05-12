@@ -316,8 +316,10 @@ export default function Indicacoes() {
     const personalizedMessage = message
       .replace(/\{nome\}/g, referrerName ?? "")
       .replace(/\{codigo\}/g, referralCode ?? "")
-      .replace(/\{bonus\}/g, bonusFormatted);
-    const text = personalizedMessage ? `${personalizedMessage}\n${link}` : link;
+      .replace(/\{bonus\}/g, bonusFormatted)
+      .replace(/\{link\}/g, link);
+    const linkAlreadyEmbedded = /\{link\}/.test(message);
+    const text = personalizedMessage ? (linkAlreadyEmbedded ? personalizedMessage : `${personalizedMessage}\n${link}`) : link;
     return `https://wa.me/55${num}?text=${encodeURIComponent(text)}`;
   }
 
@@ -2079,8 +2081,9 @@ export default function Indicacoes() {
                 Variáveis disponíveis:{" "}
                 <code className="bg-muted px-1 rounded">{"{nome}"}</code> nome do indicador,{" "}
                 <code className="bg-muted px-1 rounded">{"{codigo}"}</code> código de indicação,{" "}
+                <code className="bg-muted px-1 rounded">{"{link}"}</code> link de indicação,{" "}
                 <code className="bg-muted px-1 rounded">{"{bonus}"}</code> valor do bônus.{" "}
-                Ex.: <em>Olá! {"{nome}"} te indicou — use o código {"{codigo}"} e ganhe {"{bonus}"}.</em>
+                Ex.: <em>Olá {"{nome}"}! Use o código <strong>{"{codigo}"}</strong> ou acesse {"{link}"} e ganhe {"{bonus}"}.</em>
               </p>
               {(localSettings.shareMessage as string)?.trim() && (
                 <p className="text-xs text-muted-foreground bg-muted/50 border rounded px-2 py-1.5">
@@ -2088,6 +2091,7 @@ export default function Indicacoes() {
                   {(localSettings.shareMessage as string)
                     .replace(/\{nome\}/g, "João")
                     .replace(/\{codigo\}/g, "JOAO123")
+                    .replace(/\{link\}/g, "https://exemplo.com.br/ind/JOAO123")
                     .replace(/\{bonus\}/g, fmtCurrency(settings?.bonusValue ?? 10))}
                 </p>
               )}
