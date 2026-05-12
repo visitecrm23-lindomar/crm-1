@@ -5,6 +5,7 @@ import Link from "@tiptap/extension-link";
 import UnderlineExt from "@tiptap/extension-underline";
 import TextAlign from "@tiptap/extension-text-align";
 import Placeholder from "@tiptap/extension-placeholder";
+import Image from "@tiptap/extension-image";
 import { TableKit } from "@tiptap/extension-table/kit";
 import {
   Bold,
@@ -17,8 +18,11 @@ import {
   AlignJustify,
   List,
   ListOrdered,
+  IndentDecrease,
+  IndentIncrease,
   Link2,
   Link2Off,
+  ImageIcon,
   Table2,
   Undo2,
   Redo2,
@@ -28,6 +32,7 @@ import {
   Columns3,
   Trash2,
   Plus,
+  Minus,
 } from "lucide-react";
 
 const BTN_BASE =
@@ -65,6 +70,8 @@ function Divider() {
   return <span className="w-px h-5 bg-border mx-0.5 shrink-0" />;
 }
 
+type DialogMode = "none" | "link" | "image";
+
 export function TiptapEditor({
   value,
   onChange,
@@ -74,9 +81,10 @@ export function TiptapEditor({
 }) {
   const [mode, setMode] = useState<"visual" | "html">("visual");
   const [htmlValue, setHtmlValue] = useState(value ?? "");
-  const [showLinkDialog, setShowLinkDialog] = useState(false);
+  const [dialog, setDialog] = useState<DialogMode>("none");
   const [linkUrl, setLinkUrl] = useState("");
-  const linkInputRef = useRef<HTMLInputElement>(null);
+  const [imageUrl, setImageUrl] = useState("");
+  const dialogInputRef = useRef<HTMLInputElement>(null);
 
   const editor = useEditor({
     extensions: [
@@ -84,6 +92,7 @@ export function TiptapEditor({
       UnderlineExt,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Link.configure({ openOnClick: false, autolink: true }),
+      Image.configure({ inline: false }),
       Placeholder.configure({ placeholder: "Descreva a viagem, inclua itinerário, o que está incluso, dicas..." }),
       TableKit,
     ],
@@ -111,12 +120,15 @@ export function TiptapEditor({
   }, [mode]);
 
   useEffect(() => {
-    if (showLinkDialog) {
-      const existing = editor?.getAttributes("link").href ?? "";
-      setLinkUrl(existing);
-      setTimeout(() => linkInputRef.current?.focus(), 50);
+    if (dialog !== "none") {
+      if (dialog === "link") {
+        setLinkUrl(editor?.getAttributes("link").href ?? "");
+      } else {
+        setImageUrl("");
+      }
+      setTimeout(() => dialogInputRef.current?.focus(), 50);
     }
-  }, [showLinkDialog]);
+  }, [dialog]);
 
   if (!editor) return null;
 
@@ -129,8 +141,19 @@ export function TiptapEditor({
       const href = url.match(/^https?:\/\//) ? url : `https://${url}`;
       editor.chain().focus().setLink({ href, target: "_blank" }).run();
     }
-    setShowLinkDialog(false);
+    setDialog("none");
     setLinkUrl("");
+  }
+
+  function applyImage() {
+    if (!editor) return;
+    const url = imageUrl.trim();
+    if (url) {
+      const src = url.match(/^https?:\/\//) ? url : `https://${url}`;
+      editor.chain().focus().setImage({ src }).run();
+    }
+    setDialog("none");
+    setImageUrl("");
   }
 
   const paragraphType = editor.isActive("heading", { level: 1 })
@@ -153,6 +176,7 @@ export function TiptapEditor({
     else chain.setParagraph().run();
   }
 
+  const isInList = editor.isActive("bulletList") || editor.isActive("orderedList");
   const isInTable = editor.isActive("table");
 
   return (
@@ -198,9 +222,11 @@ export function TiptapEditor({
 
         <Divider />
 
-        {/* Lists */}
+        {/* Lists + indent/outdent */}
         <ToolBtn icon={List} title="Lista com marcadores" active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()} />
         <ToolBtn icon={ListOrdered} title="Lista numerada" active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
+        <ToolBtn icon={IndentIncrease} title="Aumentar recuo (Tab)" disabled={!isInList} onClick={() => editor.chain().focus().sinkListItem("listItem").run()} />
+        <ToolBtn icon={IndentDecrease} title="Diminuir recuo (Shift+Tab)" disabled={!isInList} onClick={() => editor.chain().focus().liftListItem("listItem").run()} />
 
         <Divider />
 
@@ -208,14 +234,24 @@ export function TiptapEditor({
         <ToolBtn
           icon={Link2}
           title="Inserir/editar link"
-          active={editor.isActive("link") || showLinkDialog}
-          onClick={() => setShowLinkDialog((v) => !v)}
+          active={editor.isActive("link") || dialog === "link"}
+          onClick={() => setDialog(dialog === "link" ? "none" : "link")}
         />
         <ToolBtn
           icon={Link2Off}
           title="Remover link"
           disabled={!editor.isActive("link")}
           onClick={() => editor.chain().focus().unsetLink().run()}
+        />
+
+        <Divider />
+
+        {/* Image */}
+        <ToolBtn
+          icon={ImageIcon}
+          title="Inserir imagem (URL)"
+          active={dialog === "image"}
+          onClick={() => setDialog(dialog === "image" ? "none" : "image")}
         />
 
         <Divider />
@@ -233,10 +269,22 @@ export function TiptapEditor({
           onClick={() => editor.chain().focus().addRowAfter().run()}
         />
         <ToolBtn
+          icon={Minus}
+          title="Remover linha atual"
+          disabled={!isInTable}
+          onClick={() => editor.chain().focus().deleteRow().run()}
+        />
+        <ToolBtn
           icon={Columns3}
           title="Adicionar coluna à direita"
           disabled={!isInTable}
           onClick={() => editor.chain().focus().addColumnAfter().run()}
+        />
+        <ToolBtn
+          icon={Plus}
+          title="Remover coluna atual"
+          disabled={!isInTable}
+          onClick={() => editor.chain().focus().deleteColumn().run()}
         />
         <ToolBtn
           icon={Trash2}
@@ -249,11 +297,6 @@ export function TiptapEditor({
 
         {/* Quote & HR */}
         <ToolBtn icon={Quote} title="Citação em bloco" active={editor.isActive("blockquote")} onClick={() => editor.chain().focus().toggleBlockquote().run()} />
-        <ToolBtn
-          icon={Plus}
-          title="Linha horizontal"
-          onClick={() => editor.chain().focus().setHorizontalRule().run()}
-        />
 
         {/* Visual/HTML toggle — push to right */}
         <span className="flex-1" />
@@ -276,35 +319,44 @@ export function TiptapEditor({
       </div>
 
       {/* Link dialog */}
-      {showLinkDialog && (
+      {dialog === "link" && (
         <div className="flex items-center gap-2 border-b bg-muted/20 px-3 py-2">
           <Link2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
           <input
-            ref={linkInputRef}
+            ref={dialogInputRef}
             type="url"
             value={linkUrl}
             onChange={(e) => setLinkUrl(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") { e.preventDefault(); applyLink(); }
-              if (e.key === "Escape") { setShowLinkDialog(false); }
+              if (e.key === "Escape") setDialog("none");
             }}
             placeholder="https://exemplo.com"
             className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground/60"
           />
-          <button
-            type="button"
-            onClick={applyLink}
-            className="text-xs font-medium text-primary hover:underline"
-          >
-            Aplicar
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowLinkDialog(false)}
-            className="text-xs text-muted-foreground hover:text-foreground"
-          >
-            Cancelar
-          </button>
+          <button type="button" onClick={applyLink} className="text-xs font-medium text-primary hover:underline">Aplicar</button>
+          <button type="button" onClick={() => setDialog("none")} className="text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+        </div>
+      )}
+
+      {/* Image dialog */}
+      {dialog === "image" && (
+        <div className="flex items-center gap-2 border-b bg-muted/20 px-3 py-2">
+          <ImageIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          <input
+            ref={dialog === "image" ? dialogInputRef : undefined}
+            type="url"
+            value={imageUrl}
+            onChange={(e) => setImageUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); applyImage(); }
+              if (e.key === "Escape") setDialog("none");
+            }}
+            placeholder="https://exemplo.com/imagem.jpg"
+            className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground/60"
+          />
+          <button type="button" onClick={applyImage} className="text-xs font-medium text-primary hover:underline">Inserir</button>
+          <button type="button" onClick={() => setDialog("none")} className="text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
         </div>
       )}
 
@@ -324,6 +376,7 @@ export function TiptapEditor({
             "[&_td]:border [&_td]:border-border [&_td]:p-2 [&_td]:align-top",
             "[&_th]:border [&_th]:border-border [&_th]:p-2 [&_th]:bg-muted [&_th]:font-semibold [&_th]:text-left",
             "[&_.tableWrapper]:overflow-x-auto",
+            "[&_img]:max-w-full [&_img]:rounded-md [&_img]:my-2",
           ].join(" ")}
         />
       ) : (
