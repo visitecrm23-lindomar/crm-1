@@ -2385,6 +2385,7 @@ export interface ReferralSettings {
   whatsappBonusPaidMessage?: string | null;
   expiryWarning7DaysEnabled: boolean;
   expiryWarning1DayEnabled: boolean;
+  bonusReleaseEmailEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -2406,6 +2407,7 @@ export interface UpdateReferralSettingsBody {
   whatsappBonusPaidMessage?: string;
   expiryWarning7DaysEnabled?: boolean;
   expiryWarning1DayEnabled?: boolean;
+  bonusReleaseEmailEnabled?: boolean;
 }
 
 export interface ClientReferralInfo {

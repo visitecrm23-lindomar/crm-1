@@ -1170,6 +1170,7 @@ router.get("/referral-settings", async (req, res): Promise<void> => {
         whatsappBonusPaidMessage: null,
         expiryWarning7DaysEnabled: true,
         expiryWarning1DayEnabled: true,
+        bonusReleaseEmailEnabled: true,
       };
       await db.insert(referralSettingsTable).values(defaults);
       res.json(defaults);
@@ -1214,6 +1215,7 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
       whatsappBonusPaidMessage: z.string().optional(),
       expiryWarning7DaysEnabled: z.boolean().optional(),
       expiryWarning1DayEnabled: z.boolean().optional(),
+      bonusReleaseEmailEnabled: z.boolean().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -1234,6 +1236,7 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
     if (parsed.data.whatsappBonusPaidMessage !== undefined) updates.whatsappBonusPaidMessage = parsed.data.whatsappBonusPaidMessage;
     if (parsed.data.expiryWarning7DaysEnabled != null) updates.expiryWarning7DaysEnabled = parsed.data.expiryWarning7DaysEnabled;
     if (parsed.data.expiryWarning1DayEnabled != null) updates.expiryWarning1DayEnabled = parsed.data.expiryWarning1DayEnabled;
+    if (parsed.data.bonusReleaseEmailEnabled != null) updates.bonusReleaseEmailEnabled = parsed.data.bonusReleaseEmailEnabled;
 
     const [existing] = await db.select({
       id: referralSettingsTable.id,
@@ -1267,6 +1270,7 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
           whatsappBonusPaidMessage: (updates.whatsappBonusPaidMessage as string | undefined) ?? null,
           expiryWarning7DaysEnabled: (updates.expiryWarning7DaysEnabled as boolean | undefined) ?? true,
           expiryWarning1DayEnabled: (updates.expiryWarning1DayEnabled as boolean | undefined) ?? true,
+          bonusReleaseEmailEnabled: (updates.bonusReleaseEmailEnabled as boolean | undefined) ?? true,
         });
         [result] = await tx.select().from(referralSettingsTable)
           .where(eq(referralSettingsTable.id, id)).limit(1);

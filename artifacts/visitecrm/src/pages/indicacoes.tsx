@@ -229,6 +229,7 @@ export default function Indicacoes() {
       whatsappBonusPaidMessage: settings?.whatsappBonusPaidMessage ?? "",
       expiryWarning7DaysEnabled: settings?.expiryWarning7DaysEnabled ?? true,
       expiryWarning1DayEnabled: settings?.expiryWarning1DayEnabled ?? true,
+      bonusReleaseEmailEnabled: settings?.bonusReleaseEmailEnabled ?? true,
     });
     setSettingsModalOpen(true);
   }
@@ -253,6 +254,7 @@ export default function Indicacoes() {
           whatsappBonusPaidMessage: localSettings.whatsappBonusPaidMessage as string | undefined,
           expiryWarning7DaysEnabled: localSettings.expiryWarning7DaysEnabled,
           expiryWarning1DayEnabled: localSettings.expiryWarning1DayEnabled,
+          bonusReleaseEmailEnabled: localSettings.bonusReleaseEmailEnabled,
         },
       });
       toast({ title: "Configurações salvas com sucesso" });
@@ -2140,6 +2142,16 @@ export default function Indicacoes() {
                 <Switch
                   checked={localSettings.expiryWarning1DayEnabled ?? true}
                   onCheckedChange={(v) => setLocalSettings((s) => ({ ...s, expiryWarning1DayEnabled: v }))}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-normal">Aviso de bônus liberado</Label>
+                  <p className="text-xs text-muted-foreground">Envia e-mail ao indicador quando o período de carência de 30 dias expira e o bônus está disponível</p>
+                </div>
+                <Switch
+                  checked={localSettings.bonusReleaseEmailEnabled ?? true}
+                  onCheckedChange={(v) => setLocalSettings((s) => ({ ...s, bonusReleaseEmailEnabled: v }))}
                 />
               </div>
             </div>

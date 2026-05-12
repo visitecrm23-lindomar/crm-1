@@ -1087,6 +1087,27 @@ const BONUS_LOCK_DAYS = 30;
 async function processReferralBonusReleaseNotifications(): Promise<void> {
   const tz = process.env["REMINDER_TZ"] ?? "America/Sao_Paulo";
 
+  // Fetch per-tenant settings. Only consider tenants with referrals enabled (isEnabled=true).
+  const tenantSettings = await db
+    .select({
+      tenantId: referralSettingsTable.tenantId,
+      bonusReleaseEmailEnabled: referralSettingsTable.bonusReleaseEmailEnabled,
+    })
+    .from(referralSettingsTable)
+    .where(eq(referralSettingsTable.isEnabled, true));
+
+  if (tenantSettings.length === 0) {
+    logger.info("[bonus-release] No tenants with referrals enabled — skipping");
+    return;
+  }
+
+  const enabledTenantIds = tenantSettings.map((r) => r.tenantId);
+
+  // Map for O(1) per-tenant toggle lookup in the processing loop.
+  const bonusReleaseEnabledMap = new Map(
+    tenantSettings.map((r) => [r.tenantId, r.bonusReleaseEmailEnabled]),
+  );
+
   // Find completed referrals where:
   // - bonusPaid = false (bonus not yet paid)
   // - bonusReleaseNotifiedAt IS NULL (notification not yet sent)
@@ -1108,6 +1129,7 @@ async function processReferralBonusReleaseNotifications(): Promise<void> {
         eq(referralsTable.bonusPaid, false),
         isNull(referralsTable.bonusReleaseNotifiedAt),
         isNotNull(referralsTable.convertedAt),
+        inArray(referralsTable.tenantId, enabledTenantIds),
         sql`(${referralsTable.convertedAt} AT TIME ZONE ${tz})::date + INTERVAL '${sql.raw(String(BONUS_LOCK_DAYS))} days' <= (NOW() AT TIME ZONE ${tz})::date`,
       ),
     );
@@ -1119,10 +1141,18 @@ async function processReferralBonusReleaseNotifications(): Promise<void> {
 
   logger.info({ count: releasedReferrals.length }, "[bonus-release] Found referrals with released bonuses to notify");
 
-  let notified = 0, errors = 0;
+  let notified = 0, skippedDisabled = 0, errors = 0;
 
   for (const referral of releasedReferrals) {
     try {
+      // Respect the per-tenant toggle flag.
+      const emailEnabled = bonusReleaseEnabledMap.get(referral.tenantId);
+      if (emailEnabled === false) {
+        skippedDisabled++;
+        logger.info({ referralId: referral.id }, "[bonus-release] Skipping — bonus release email disabled for tenant");
+        continue;
+      }
+
       const bonusAmount = parseFloat(String(referral.bonusAmount ?? "0"));
       const releaseDate = new Date().toLocaleDateString("pt-BR", {
         day: "2-digit",
@@ -1172,7 +1202,7 @@ async function processReferralBonusReleaseNotifications(): Promise<void> {
     }
   }
 
-  logger.info({ notified, errors, total: releasedReferrals.length }, "[bonus-release] Bonus release notification run complete");
+  logger.info({ notified, skippedDisabled, errors, total: releasedReferrals.length }, "[bonus-release] Bonus release notification run complete");
 }
 
 // ────────────────────────────────────────────────────────────

@@ -24,4 +24,5 @@ export interface UpdateReferralSettingsBody {
   whatsappBonusPaidMessage?: string;
   expiryWarning7DaysEnabled?: boolean;
   expiryWarning1DayEnabled?: boolean;
+  bonusReleaseEmailEnabled?: boolean;
 }

@@ -110,6 +110,7 @@ export const referralSettingsTable = pgTable("referral_settings", {
   whatsappBonusPaidMessage: text("whatsapp_bonus_paid_message"),
   expiryWarning7DaysEnabled: boolean("expiry_warning_7_days_enabled").notNull().default(true),
   expiryWarning1DayEnabled: boolean("expiry_warning_1_day_enabled").notNull().default(true),
+  bonusReleaseEmailEnabled: boolean("bonus_release_email_enabled").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

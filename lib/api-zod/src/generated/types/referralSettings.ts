@@ -30,6 +30,7 @@ export interface ReferralSettings {
   whatsappBonusPaidMessage?: string | null;
   expiryWarning7DaysEnabled: boolean;
   expiryWarning1DayEnabled: boolean;
+  bonusReleaseEmailEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 }
