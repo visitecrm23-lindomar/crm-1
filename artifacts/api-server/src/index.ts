@@ -7,7 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { runBirthdayCron } from "./lib/birthday";
 import { runExpiredReservationsCron } from "./lib/expired-reservations";
-import { getRedisConnection, fetchUpstashDailyStats, getRedisWarningThresholdPct } from "./lib/redis";
+import { getRedisConnection, fetchUpstashDailyStats, getRedisWarningThresholdPct, maybeSendDailyLimitAlert } from "./lib/redis";
 import { getReminderQueue, closeQueues } from "./queues/index";
 import { startEmailWorker, stopEmailWorker } from "./workers/email.worker";
 import { startReminderWorker, stopReminderWorker, retryFailedBookingEmails, retryFailedExpiryWarningEmails } from "./workers/reminder.worker";
@@ -150,6 +150,7 @@ applyMigrations()
               },
               `[redis-stats] ⚠️  Daily request usage is at ${Math.round(stats.usagePct)}% of the ${stats.maxCommands.toLocaleString()} limit (${stats.commandCount.toLocaleString()} used). Consider reducing polling or upgrading the plan.`,
             );
+            maybeSendDailyLimitAlert(stats);
           } else {
             logger.info(
               {
@@ -162,6 +163,19 @@ applyMigrations()
           }
         })
         .catch((err) => logger.warn({ err }, "[redis-stats] Failed to check daily usage on startup"));
+
+      // ── Hourly Redis daily-limit alert check ──
+      // Polls usage once per hour and emails the superadmin when the configured
+      // threshold is crossed. The alert itself is rate-limited to 1/hour inside
+      // maybeSendDailyLimitAlert() so duplicate cron runs never flood the inbox.
+      cron.schedule("0 * * * *", () => {
+        fetchUpstashDailyStats()
+          .then((stats) => {
+            if (!stats) return;
+            maybeSendDailyLimitAlert(stats);
+          })
+          .catch((err) => logger.warn({ err }, "[redis-daily-limit] Hourly check failed"));
+      });
 
       // ENABLE_WORKERS: opt-in flag for BullMQ worker initialization.
       // Defaults to true in production and false in development so that

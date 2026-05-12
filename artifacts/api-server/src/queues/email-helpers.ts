@@ -8,6 +8,7 @@ import { ROLES } from "@workspace/permissions";
 import { logger } from "../lib/logger";
 import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps, ReferralWelcomeEmailProps } from "@workspace/email";
 import { insertClientNotification } from "../lib/client-notifications";
+import { areWorkersEnabled } from "../lib/redis";
 
 interface EnqueueEmailOpts {
   tenantId: string;
@@ -60,7 +61,13 @@ export async function enqueueReservationConfirmationEmail(opts: EnqueueEmailOpts
       logger.info({ emailLogId, reservationId, success: result.success }, "[email-queue] Fallback direct send result");
     }
   } else {
-    // No Redis — send directly and log the outcome immediately
+    // No queue — send directly and log the outcome immediately
+    if (!areWorkersEnabled()) {
+      logger.warn(
+        { reservationId, tenantId, jobType: "reservation-confirmation" },
+        "[workers-disabled] ENABLE_WORKERS=false — sending confirmation email directly instead of queuing",
+      );
+    }
     const result = await sendReservationConfirmationEmail(props);
 
     await db.insert(emailLogsTable).values({
@@ -129,6 +136,12 @@ export async function enqueueReservationCancellationEmail(
       logger.info({ emailLogId, reservationId, success: result.success }, "[email-queue] Fallback direct send result (cancellation)");
     }
   } else {
+    if (!areWorkersEnabled()) {
+      logger.warn(
+        { reservationId, tenantId, jobType: "reservation-cancellation" },
+        "[workers-disabled] ENABLE_WORKERS=false — sending cancellation email directly instead of queuing",
+      );
+    }
     const result = await sendReservationCancellationEmail(props);
     await db.insert(emailLogsTable).values({
       id: emailLogId,
@@ -279,6 +292,12 @@ export async function enqueueNewBookingNotificationEmail(
       );
     }
   } else {
+    if (!areWorkersEnabled()) {
+      logger.warn(
+        { reservationId, tenantId, jobType: "new-booking-notification" },
+        "[workers-disabled] ENABLE_WORKERS=false — sending new-booking notification directly instead of queuing",
+      );
+    }
     const result = await sendNewBookingNotificationEmail(props, { to: recipients, cc });
     await db.insert(emailLogsTable).values({
       id: emailLogId,
@@ -551,6 +570,12 @@ export async function enqueueReferralBonusPaidEmail(
         .where(eq(emailLogsTable.id, emailLogId));
     }
   } else {
+    if (!areWorkersEnabled()) {
+      logger.warn(
+        { tenantId, jobType: "referral-bonus-paid" },
+        "[workers-disabled] ENABLE_WORKERS=false — sending referral bonus-paid email directly instead of queuing",
+      );
+    }
     const result = await sendReferralBonusPaidEmail(props);
     await db.insert(emailLogsTable).values({
       id: emailLogId,
@@ -603,6 +628,12 @@ export async function enqueueReferralConvertedEmail(
         .where(eq(emailLogsTable.id, emailLogId));
     }
   } else {
+    if (!areWorkersEnabled()) {
+      logger.warn(
+        { tenantId, jobType: "referral-converted" },
+        "[workers-disabled] ENABLE_WORKERS=false — sending referral converted email directly instead of queuing",
+      );
+    }
     const result = await sendReferralConvertedEmail(props);
     await db.insert(emailLogsTable).values({
       id: emailLogId,
@@ -655,6 +686,12 @@ export async function enqueueReferralExpiredEmail(
         .where(eq(emailLogsTable.id, emailLogId));
     }
   } else {
+    if (!areWorkersEnabled()) {
+      logger.warn(
+        { tenantId, jobType: "referral-expired" },
+        "[workers-disabled] ENABLE_WORKERS=false — sending referral expired email directly instead of queuing",
+      );
+    }
     const result = await sendReferralExpiredEmail(props);
     await db.insert(emailLogsTable).values({
       id: emailLogId,
@@ -797,6 +834,12 @@ export async function enqueueReferralExpiringSoonEmail(
         .where(eq(emailLogsTable.id, emailLogId));
     }
   } else {
+    if (!areWorkersEnabled()) {
+      logger.warn(
+        { tenantId, jobType: "referral-expiring-soon" },
+        "[workers-disabled] ENABLE_WORKERS=false — sending referral expiring-soon email directly instead of queuing",
+      );
+    }
     const result = await sendReferralExpiringSoonEmail(props);
     await db.insert(emailLogsTable).values({
       id: emailLogId,
@@ -913,6 +956,12 @@ export async function enqueueReferralBonusReleasedEmail(
         .where(eq(emailLogsTable.id, emailLogId));
     }
   } else {
+    if (!areWorkersEnabled()) {
+      logger.warn(
+        { tenantId, jobType: "referral-bonus-released" },
+        "[workers-disabled] ENABLE_WORKERS=false — sending referral bonus-released email directly instead of queuing",
+      );
+    }
     const result = await sendReferralBonusReleasedEmail(props);
     await db.insert(emailLogsTable).values({
       id: emailLogId,
@@ -1014,6 +1063,12 @@ export async function enqueueReferralWelcomeEmail(
         .where(eq(emailLogsTable.id, emailLogId));
     }
   } else {
+    if (!areWorkersEnabled()) {
+      logger.warn(
+        { tenantId, jobType: "referral-welcome" },
+        "[workers-disabled] ENABLE_WORKERS=false — sending referral welcome email directly instead of queuing",
+      );
+    }
     const result = await sendReferralWelcomeEmail(props);
     await db.insert(emailLogsTable).values({
       id: emailLogId,

@@ -502,6 +502,81 @@ export async function sendReferralWelcomeEmail(
   }
 }
 
+export interface SendRedisDailyLimitAlertEmailOptions {
+  to: string;
+  usagePct: number;
+  commandCount: number;
+  maxCommands: number;
+  warningThresholdPct: number;
+  dashboardUrl: string | null;
+}
+
+export async function sendRedisDailyLimitAlertEmail(opts: SendRedisDailyLimitAlertEmailOptions): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const usagePctRounded = Math.round(opts.usagePct * 10) / 10;
+    const subject = `[VisiteCRM] Alerta: Redis com ${usagePctRounded}% do limite diário`;
+    const dashboardButton = opts.dashboardUrl
+      ? `<p style="margin-top: 24px;">
+          <a href="${opts.dashboardUrl}" style="background: #2563eb; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none;">
+            Acessar o painel de administração
+          </a>
+        </p>`
+      : '';
+    const barColor = opts.usagePct >= 90 ? '#dc2626' : '#f59e0b';
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+        <h2 style="color: ${barColor};">⚠️ Alerta de Limite Diário — Redis Upstash</h2>
+        <p>O uso de requisições Redis hoje atingiu <strong>${usagePctRounded}%</strong> do limite diário (threshold configurado: ${opts.warningThresholdPct}%).</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <tr>
+            <td style="padding: 8px; border: 1px solid #e5e7eb; color: #6b7280;">Requisições usadas</td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb; font-weight: bold;">${opts.commandCount.toLocaleString('pt-BR')}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border: 1px solid #e5e7eb; color: #6b7280;">Limite diário</td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb; font-weight: bold;">${opts.maxCommands.toLocaleString('pt-BR')}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border: 1px solid #e5e7eb; color: #6b7280;">Uso atual</td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb; font-weight: bold; color: ${barColor};">${usagePctRounded}%</td>
+          </tr>
+        </table>
+        <div style="background: #f3f4f6; border-radius: 8px; height: 12px; margin: 16px 0; overflow: hidden;">
+          <div style="background: ${barColor}; height: 100%; width: ${Math.min(100, opts.usagePct)}%;"></div>
+        </div>
+        <p style="color: #6b7280; font-size: 14px;">Se o limite for atingido, filas de e-mail e jobs em background passarão a rodar de forma síncrona até a renovação diária. Considere reduzir o número de operações Redis ou fazer upgrade do plano Upstash.</p>
+        ${dashboardButton}
+        <p style="margin-top: 24px; color: #6b7280; font-size: 12px;">
+          Este alerta é enviado no máximo uma vez por hora. Horário do alerta: ${new Date().toISOString()}
+        </p>
+      </div>
+    `;
+
+    const { data, error } = await resend.emails.send({
+      from: 'VisiteCRM <reservas@resend.visitecrm.com>',
+      to: [opts.to],
+      subject,
+      html,
+    });
+
+    if (error) {
+      console.error('[email] Failed to send Redis daily limit alert email:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Unexpected error sending Redis daily limit alert email:', message);
+    return { success: false, error: message };
+  }
+}
+
 export async function sendReferralExpiringSoonEmail(
   props: ReferralExpiringSoonEmailProps
 ): Promise<SendEmailResult> {

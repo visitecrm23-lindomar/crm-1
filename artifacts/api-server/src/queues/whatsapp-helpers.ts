@@ -4,6 +4,7 @@ import { sendWhatsAppMessage, interpolateWhatsAppMessage } from "../lib/whatsapp
 import { getWhatsAppQueue } from "./index";
 import { logger } from "../lib/logger";
 import { REFERRAL_STATUS } from "@workspace/permissions";
+import { areWorkersEnabled } from "../lib/redis";
 
 const DEFAULT_CONVERTED_MESSAGE =
   "Boa notícia! {{nome}} usou seu código {{codigo}} e comprou com a {{agencia}}. Seu bônus de R$ {{valor}} está sendo processado.";
@@ -17,6 +18,12 @@ async function enqueueOrSend(phone: string, message: string, tenantId: string): 
     await queue.add("whatsapp-notification", { phone, message, tenantId });
     logger.info({ phone }, "[whatsapp-queue] Job enqueued");
   } else {
+    if (!areWorkersEnabled()) {
+      logger.warn(
+        { phone, tenantId, jobType: "whatsapp-notification" },
+        "[workers-disabled] ENABLE_WORKERS=false — sending WhatsApp message directly instead of queuing",
+      );
+    }
     const result = await sendWhatsAppMessage(phone, message);
     if (!result.success && result.error !== "credentials_not_configured") {
       logger.warn({ phone, error: result.error }, "[whatsapp-queue] Direct send failed");

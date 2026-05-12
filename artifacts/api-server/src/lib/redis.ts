@@ -1,6 +1,6 @@
 import { Redis } from "ioredis";
 import { logger } from "./logger";
-import { sendRedisAlertEmail } from "@workspace/email";
+import { sendRedisAlertEmail, sendRedisDailyLimitAlertEmail } from "@workspace/email";
 
 let _connection: Redis | null = null;
 export let isQueueEnabled = false;
@@ -214,6 +214,16 @@ export async function closeRedisConnection(): Promise<void> {
   }
 }
 
+// ─── Workers-enabled flag ─────────────────────────────────────────────────────
+// Returns true when BullMQ workers are (or would be) initialised. Follows the
+// same logic used in index.ts: explicit ENABLE_WORKERS env var takes precedence,
+// otherwise defaults to true in production and false elsewhere.
+export function areWorkersEnabled(): boolean {
+  const envVal = process.env["ENABLE_WORKERS"];
+  if (envVal !== undefined) return envVal === "true";
+  return process.env["NODE_ENV"] === "production";
+}
+
 // ─── Upstash daily usage stats ────────────────────────────────────────────────
 
 export const REDIS_DAILY_LIMIT = 500_000;
@@ -278,8 +288,78 @@ function getUpstashRestCredentials(): { restUrl: string; token: string } | null 
   }
 }
 
+// ─── Upstash daily stats cache ────────────────────────────────────────────────
+// Caching avoids hammering the Upstash REST API on every /admin/system-health
+// request. The cache is intentionally short-lived so the dashboard still
+// reflects near-real-time data.
+let _dailyStatsCache: { stats: UpstashDailyStats; fetchedAt: number } | null = null;
+const DAILY_STATS_CACHE_TTL_MS = 45_000; // 45 seconds
+
+// ─── Upstash daily limit alert ────────────────────────────────────────────────
+// At most one alert per hour when usage crosses the configured threshold.
+let _lastDailyLimitAlertAt: number | null = null;
+const DAILY_LIMIT_ALERT_RATE_LIMIT_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Sends a daily-limit alert email to the superadmin if usage has crossed the
+ * warning threshold and the rate-limit window has elapsed.
+ * Safe to call on every stats fetch — does nothing if conditions aren't met.
+ */
+export function maybeSendDailyLimitAlert(stats: UpstashDailyStats): void {
+  if (stats.usagePct < stats.warningThresholdPct) return;
+
+  if (_lastDailyLimitAlertAt !== null) {
+    if (Date.now() - _lastDailyLimitAlertAt < DAILY_LIMIT_ALERT_RATE_LIMIT_MS) return;
+  }
+
+  const superadminEmail = process.env["SUPERADMIN_EMAIL"]?.trim();
+  if (!superadminEmail) {
+    logger.warn("[redis-daily-limit] SUPERADMIN_EMAIL not set — skipping alert email");
+    return;
+  }
+
+  const appUrl = (process.env["APP_URL"] ?? "").trim().replace(/\/$/, "");
+  const dashboardUrl = appUrl ? `${appUrl}/admin` : null;
+
+  // Mark immediately to prevent concurrent duplicate sends; reset on failure.
+  _lastDailyLimitAlertAt = Date.now();
+
+  sendRedisDailyLimitAlertEmail({
+    to: superadminEmail,
+    usagePct: stats.usagePct,
+    commandCount: stats.commandCount,
+    maxCommands: stats.maxCommands,
+    warningThresholdPct: stats.warningThresholdPct,
+    dashboardUrl,
+  })
+    .then((result) => {
+      if (result.success) {
+        logger.warn(
+          { usagePct: Math.round(stats.usagePct * 10) / 10, to: superadminEmail },
+          "[redis-daily-limit] Alert email sent",
+        );
+      } else {
+        logger.error(
+          { error: result.error },
+          "[redis-daily-limit] Failed to send alert email — clearing rate-limit so next check can retry",
+        );
+        _lastDailyLimitAlertAt = null;
+      }
+    })
+    .catch((err) => {
+      logger.error(
+        { err },
+        "[redis-daily-limit] Unexpected error sending alert email — clearing rate-limit so next check can retry",
+      );
+      _lastDailyLimitAlertAt = null;
+    });
+}
+
 /**
  * Fetches the current daily request count from the Upstash REST INFO endpoint.
+ *
+ * Results are cached for 45 seconds so repeated calls (e.g. from the
+ * /admin/system-health endpoint) don't each consume a REST request.
  *
  * Returns null when:
  * - Redis is not configured
@@ -287,6 +367,11 @@ function getUpstashRestCredentials(): { restUrl: string; token: string } | null 
  * - The network request fails
  */
 export async function fetchUpstashDailyStats(): Promise<UpstashDailyStats | null> {
+  // Return cached result if still fresh
+  if (_dailyStatsCache !== null && Date.now() - _dailyStatsCache.fetchedAt < DAILY_STATS_CACHE_TTL_MS) {
+    return _dailyStatsCache.stats;
+  }
+
   const creds = getUpstashRestCredentials();
   if (!creds) return null;
 
@@ -325,7 +410,9 @@ export async function fetchUpstashDailyStats(): Promise<UpstashDailyStats | null
     const usagePct = maxCommands > 0 ? (commandCount / maxCommands) * 100 : 0;
     const warningThresholdPct = getRedisWarningThresholdPct();
 
-    return { commandCount, maxCommands, usagePct, warningThresholdPct };
+    const result = { commandCount, maxCommands, usagePct, warningThresholdPct };
+    _dailyStatsCache = { stats: result, fetchedAt: Date.now() };
+    return result;
   } catch (err) {
     logger.warn({ err }, "[redis-stats] Failed to fetch Upstash daily stats");
     return null;

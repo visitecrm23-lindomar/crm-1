@@ -3,6 +3,7 @@ import { eq, and } from "drizzle-orm";
 import { getCommissionSyncQueue } from "./index";
 import { syncReservationCommission } from "../routes/payments";
 import { logger } from "../lib/logger";
+import { areWorkersEnabled } from "../lib/redis";
 
 /**
  * Marks a reservation's commissionSyncStatus as "failed" so administrators
@@ -55,6 +56,12 @@ export async function enqueueCommissionSync(reservationId: string, tenantId: str
       await runDirectWithFallback(reservationId, tenantId);
     }
   } else {
+    if (!areWorkersEnabled()) {
+      logger.warn(
+        { reservationId, tenantId, jobType: "commission-sync" },
+        "[workers-disabled] ENABLE_WORKERS=false — running commission sync directly instead of queuing",
+      );
+    }
     await runDirectWithFallback(reservationId, tenantId);
   }
 }
