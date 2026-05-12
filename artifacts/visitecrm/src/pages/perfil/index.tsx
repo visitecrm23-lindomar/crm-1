@@ -253,6 +253,123 @@ function ReservationCard({ r, compact = false }: { r: ClientPortalProfile["reser
   );
 }
 
+const CARD_TIER_GRADIENTS: Record<string, string> = {
+  bronze:  "from-amber-700 via-amber-600 to-yellow-500",
+  silver:  "from-slate-600 via-slate-500 to-slate-300",
+  gold:    "from-yellow-600 via-yellow-400 to-amber-300",
+  diamond: "from-cyan-700 via-cyan-500 to-cyan-300",
+};
+
+const CARD_TIER_ICONS: Record<string, string> = {
+  bronze:  "🥉",
+  silver:  "🥈",
+  gold:    "🥇",
+  diamond: "💎",
+};
+
+function ClienteCard({
+  profile,
+  primaryColor,
+}: {
+  profile: ClientPortalProfile;
+  primaryColor: string;
+}) {
+  const displayName = profile.client?.name ?? profile.user?.name ?? "Viajante";
+  const cpf = profile.client?.cpf ?? null;
+  const tierLevel = profile.referral?.currentTierLevel ?? null;
+  const tierLabel = profile.referral?.currentTierLabel ?? null;
+  const loyaltyPoints = profile.loyalty?.availablePoints ?? null;
+  const referralCode = profile.referral?.code ?? null;
+  const agencyName = profile.tenant?.name ?? "VisiteCRM";
+  const hasLoyalty = profile.loyalty !== null;
+
+  const maskedNumber = cpf
+    ? `•••• •••• ••• ${cpf.replace(/\D/g, "").slice(-3)}`
+    : "•••• •••• •••• ••••";
+
+  const tierGradient = hasLoyalty && tierLevel ? CARD_TIER_GRADIENTS[tierLevel] : null;
+  const tierIcon = tierLevel ? CARD_TIER_ICONS[tierLevel] : null;
+
+  return (
+    <div className="flex justify-center">
+      <div
+        className={`relative w-full max-w-[420px] rounded-2xl overflow-hidden shadow-2xl text-white select-none${tierGradient ? ` bg-gradient-to-br ${tierGradient}` : ""}`}
+        style={!tierGradient ? { background: `linear-gradient(135deg, ${primaryColor}ee, ${primaryColor}88)` } : undefined}
+        aria-label="Cartão de viajante"
+      >
+        <div className="aspect-[1.586/1] relative p-5 flex flex-col justify-between">
+          {/* Decorative background circles */}
+          <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-white/10 pointer-events-none" />
+          <div className="absolute -bottom-14 -left-10 w-56 h-56 rounded-full bg-white/10 pointer-events-none" />
+          <div className="absolute top-6 right-16 w-20 h-20 rounded-full bg-white/5 pointer-events-none" />
+
+          {/* Top row: agency name + chip */}
+          <div className="relative flex items-start justify-between">
+            <div className="min-w-0 flex-1">
+              <p className="text-[9px] text-white/60 uppercase tracking-widest leading-none mb-0.5">Cartão de Viajante</p>
+              <p className="text-sm font-bold truncate drop-shadow-sm">{agencyName}</p>
+            </div>
+            {/* EMV chip SVG */}
+            <svg width="36" height="28" viewBox="0 0 36 28" className="shrink-0 opacity-95" aria-hidden="true">
+              <rect x="1" y="1" width="34" height="26" rx="4" fill="#C9A227" stroke="#E8C14A" strokeWidth="0.8"/>
+              <rect x="12" y="1" width="12" height="26" fill="#B8901E" opacity="0.55"/>
+              <rect x="1" y="9.5" width="34" height="9" fill="#B8901E" opacity="0.55"/>
+              <line x1="12" y1="1" x2="12" y2="27" stroke="#E8C14A" strokeWidth="0.4" opacity="0.5"/>
+              <line x1="24" y1="1" x2="24" y2="27" stroke="#E8C14A" strokeWidth="0.4" opacity="0.5"/>
+              <line x1="1" y1="9.5" x2="35" y2="9.5" stroke="#E8C14A" strokeWidth="0.4" opacity="0.5"/>
+              <line x1="1" y1="18.5" x2="35" y2="18.5" stroke="#E8C14A" strokeWidth="0.4" opacity="0.5"/>
+            </svg>
+          </div>
+
+          {/* Card number */}
+          <div className="relative">
+            <p className="text-lg font-mono font-semibold tracking-[0.22em] drop-shadow-sm">{maskedNumber}</p>
+          </div>
+
+          {/* Bottom row: name / tier / points-or-code */}
+          <div className="relative flex items-end justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-[8px] text-white/55 uppercase tracking-wider mb-0.5">Titular</p>
+              <p className="text-[13px] font-bold uppercase truncate drop-shadow-sm leading-tight">{displayName}</p>
+            </div>
+
+            {hasLoyalty && tierLabel && (
+              <div className="text-center shrink-0">
+                <p className="text-[8px] text-white/55 uppercase tracking-wider mb-0.5">Nível</p>
+                <p className="text-[11px] font-bold drop-shadow-sm leading-tight">{tierIcon} {tierLabel}</p>
+              </div>
+            )}
+
+            {loyaltyPoints !== null ? (
+              <div className="text-right shrink-0">
+                <p className="text-[8px] text-white/55 uppercase tracking-wider mb-0.5">Pontos</p>
+                <p className="text-[11px] font-bold drop-shadow-sm leading-tight">{loyaltyPoints.toLocaleString("pt-BR")}</p>
+              </div>
+            ) : referralCode ? (
+              <div className="text-right shrink-0">
+                <p className="text-[8px] text-white/55 uppercase tracking-wider mb-0.5">Código</p>
+                <p className="text-[11px] font-mono font-bold drop-shadow-sm leading-tight">{referralCode}</p>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Contactless icon (top-right corner) */}
+          <svg
+            className="absolute bottom-4 right-5 opacity-30"
+            width="22" height="22" viewBox="0 0 24 24" fill="none"
+            aria-hidden="true"
+          >
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="none"/>
+            <path d="M6.5 12a5.5 5.5 0 0 1 5.5-5.5" stroke="white" strokeWidth="2" strokeLinecap="round" fill="none"/>
+            <path d="M9 12a3 3 0 0 1 3-3" stroke="white" strokeWidth="2" strokeLinecap="round" fill="none"/>
+            <circle cx="12" cy="12" r="1.2" fill="white"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function InicioTab({
   profile,
   primaryColor,
@@ -330,39 +447,34 @@ function InicioTab({
 
   return (
     <div className="space-y-6">
-      <div
-        className="rounded-2xl p-6 text-white"
-        style={{ background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}cc)` }}
-      >
-        <p className="text-white/80 text-sm mb-1">Bem-vindo(a) de volta,</p>
-        <h2 className="text-2xl font-bold">{firstName}!</h2>
-        {nextTrip && days !== null && days >= 0 && (
-          <p className="text-white/90 text-sm mt-2">
-            {days === 0
-              ? "Sua próxima viagem é hoje!"
-              : days === 1
-              ? "Sua próxima viagem é amanhã!"
-              : `Sua próxima viagem está chegando em ${days} dias.`}
+      <div className="space-y-3">
+        <ClienteCard profile={profile} primaryColor={primaryColor} />
+        <div className="px-1">
+          <p className="text-sm text-muted-foreground">
+            Bem-vindo(a) de volta, <span className="font-semibold text-foreground">{firstName}</span>!
+            {nextTrip && days !== null && days >= 0 && (
+              <span>
+                {" "}
+                {days === 0
+                  ? "Sua próxima viagem é hoje! 🎉"
+                  : days === 1
+                  ? "Sua próxima viagem é amanhã!"
+                  : `Sua próxima viagem começa em ${days} dias.`}
+              </span>
+            )}
           </p>
-        )}
-        {!nextTrip && (
-          <p className="text-white/80 text-sm mt-2">
-            {profile.tenant?.slug
-              ? "Explore nossos pacotes e planeje sua próxima aventura."
-              : "Nenhuma viagem agendada no momento."}
-          </p>
-        )}
-        {!nextTrip && profile.tenant?.slug && (
-          <Button
-            variant="secondary"
-            size="sm"
-            className="mt-3"
-            onClick={() => (window.location.href = `/loja/${profile.tenant!.slug}/produtos`)}
-          >
-            Ver Pacotes
-            <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
-          </Button>
-        )}
+          {!nextTrip && profile.tenant?.slug && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() => (window.location.href = `/loja/${profile.tenant!.slug}/produtos`)}
+            >
+              Ver Pacotes
+              <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
