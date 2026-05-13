@@ -1715,6 +1715,17 @@ export default function Indicacoes() {
                   <p className="text-muted-foreground">Expira em</p>
                   <p>{fmtDate(selectedReferral.expiresAt)}</p>
                 </div>
+                <div>
+                  <p className="text-muted-foreground">Notif. liberação de bônus</p>
+                  {selectedReferral.bonusReleaseNotifiedAt ? (
+                    <p className="text-xs text-green-700 flex items-center gap-1">
+                      <Check className="w-3 h-3" />
+                      {fmtDateTime(selectedReferral.bonusReleaseNotifiedAt)}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Não enviado</p>
+                  )}
+                </div>
                 {selectedReferral.expiresAt && (
                   <>
                     <div>

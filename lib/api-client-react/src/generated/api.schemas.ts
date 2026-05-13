@@ -2325,6 +2325,8 @@ export interface Referral {
   expiryWarning7SentAt?: string | null;
   /** @nullable */
   expiryWarning1SentAt?: string | null;
+  /** @nullable */
+  bonusReleaseNotifiedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
