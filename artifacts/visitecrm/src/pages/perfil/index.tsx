@@ -330,11 +330,11 @@ function ClienteCard({
 
           {/* Card number / points display */}
           <div className="relative">
-            {loyaltyPoints !== null ? (
+            {hasLoyalty ? (
               <div>
                 <p className="text-[9px] text-white/55 uppercase tracking-widest mb-0.5">Pontos disponíveis</p>
                 <p className="text-2xl font-bold text-white drop-shadow-sm tabular-nums">
-                  {loyaltyPoints.toLocaleString("pt-BR")} <span className="text-base font-semibold opacity-80">pts</span>
+                  {(loyaltyPoints ?? 0).toLocaleString("pt-BR")} <span className="text-base font-semibold opacity-80">PTS</span>
                 </p>
               </div>
             ) : (
