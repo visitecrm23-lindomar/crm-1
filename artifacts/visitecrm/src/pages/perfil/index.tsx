@@ -328,34 +328,38 @@ function ClienteCard({
             </svg>
           </div>
 
-          {/* Card number */}
+          {/* Card number / points display */}
           <div className="relative">
-            <p className="text-lg font-mono font-semibold tracking-[0.22em] drop-shadow-sm">{maskedNumber}</p>
+            {loyaltyPoints !== null ? (
+              <div>
+                <p className="text-[9px] text-white/55 uppercase tracking-widest mb-0.5">Pontos disponíveis</p>
+                <p className="text-2xl font-bold text-white drop-shadow-sm tabular-nums">
+                  {loyaltyPoints.toLocaleString("pt-BR")} <span className="text-base font-semibold opacity-80">pts</span>
+                </p>
+              </div>
+            ) : (
+              <p className="text-lg font-mono font-semibold text-white tracking-[0.22em] drop-shadow-sm">{maskedNumber}</p>
+            )}
           </div>
 
           {/* Bottom row: name / tier / points-or-code */}
           <div className="relative flex items-end justify-between gap-2">
             <div className="flex-1 min-w-0">
-              <p className="text-[8px] text-white/55 uppercase tracking-wider mb-0.5">Titular</p>
-              <p className="text-[13px] font-bold uppercase truncate drop-shadow-sm leading-tight">{displayName}</p>
+              <p className="text-[8px] text-white/55 uppercase tracking-wider mb-0.5">Viajante</p>
+              <p className="text-[13px] font-bold uppercase truncate drop-shadow-sm leading-tight text-white">{displayName}</p>
             </div>
 
             <div className="text-center shrink-0">
               <p className="text-[8px] text-white/55 uppercase tracking-wider mb-0.5">Nível</p>
-              <p className="text-[11px] font-bold drop-shadow-sm leading-tight">
+              <p className="text-[11px] font-bold text-white drop-shadow-sm leading-tight">
                 {hasLoyalty && tierLabel ? `${tierIcon} ${tierLabel}` : "Membro"}
               </p>
             </div>
 
-            {loyaltyPoints !== null ? (
-              <div className="text-right shrink-0">
-                <p className="text-[8px] text-white/55 uppercase tracking-wider mb-0.5">Pontos</p>
-                <p className="text-[11px] font-bold drop-shadow-sm leading-tight">{loyaltyPoints.toLocaleString("pt-BR")} pts</p>
-              </div>
-            ) : referralCode ? (
+            {referralCode ? (
               <div className="text-right shrink-0">
                 <p className="text-[8px] text-white/55 uppercase tracking-wider mb-0.5">Código</p>
-                <p className="text-[11px] font-mono font-bold drop-shadow-sm leading-tight">{referralCode}</p>
+                <p className="text-[11px] font-mono font-bold text-white drop-shadow-sm leading-tight">{referralCode}</p>
               </div>
             ) : null}
           </div>
