@@ -28,10 +28,11 @@ export async function runPostBookingSideEffects(args: PostBookingArgs): Promise<
   const agencyLogo = store.logo ?? "";
   const agencyPhone = store.whatsapp ?? store.phone ?? "";
   const agencyEmail = store.email ?? "";
+  const STORE_PUBLIC_BASE = (process.env["STORE_PUBLIC_URL"] ?? "https://visitecrm.com").replace(/\/$/, "");
   const storeBase = store.customDomain
     ? `https://${store.customDomain}`
-    : `https://${store.slug}.visitecrm.com.br`;
-  const loginUrl = `${storeBase}/loja/${store.slug}/entrar`;
+    : `${STORE_PUBLIC_BASE}/loja/${store.slug}`;
+  const loginUrl = `${storeBase}/entrar`;
   const consultUrl = `${storeBase}/consultar-pedido`;
 
   try {

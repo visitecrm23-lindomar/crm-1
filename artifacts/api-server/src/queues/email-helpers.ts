@@ -198,7 +198,8 @@ async function buildCancellationEmailPropsFromReservation(
     : "";
 
   const agencyPhone = row.agencyPhone ?? row.agencyPhoneVoice ?? "";
-  const agencyWebsite = row.agencyWebsite ?? `https://${row.tenantSlug}.visitecrm.com.br`;
+  const STORE_PUBLIC_BASE = (process.env["STORE_PUBLIC_URL"] ?? "https://visitecrm.com").replace(/\/$/, "");
+  const agencyWebsite = row.agencyWebsite ?? `${STORE_PUBLIC_BASE}/loja/${row.tenantSlug}`;
   const whatsappNum = agencyPhone.replace(/\D/g, "");
   const whatsappUrl = whatsappNum ? `https://wa.me/${whatsappNum}` : "";
 
@@ -468,7 +469,8 @@ export async function buildEmailPropsFromReservation(
   }
 
   const agencyPhone = row.agencyPhone ?? row.agencyPhoneVoice ?? "";
-  const agencyWebsite = row.agencyWebsite ?? `https://${row.tenantSlug}.visitecrm.com.br`;
+  const STORE_PUBLIC_BASE = (process.env["STORE_PUBLIC_URL"] ?? "https://visitecrm.com").replace(/\/$/, "");
+  const agencyWebsite = row.agencyWebsite ?? `${STORE_PUBLIC_BASE}/loja/${row.tenantSlug}`;
   const whatsappNum = agencyPhone.replace(/\D/g, "");
   const whatsappUrl = whatsappNum ? `https://wa.me/${whatsappNum}` : "";
   const publicBase = agencyWebsite.replace(/\/$/, "");
