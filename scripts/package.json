@@ -13,7 +13,8 @@
   "dependencies": {
     "@workspace/db": "workspace:*",
     "@workspace/permissions": "workspace:*",
-    "drizzle-orm": "catalog:"
+    "drizzle-orm": "catalog:",
+    "stripe": "^22.1.1"
   },
   "devDependencies": {
     "@types/node": "catalog:",

@@ -192,3 +192,22 @@ export const useCreateStripeCheckout = <
     ...options,
   });
 };
+
+export interface CustomerPortalResponse {
+  portalUrl: string;
+}
+
+export const useCreateCustomerPortalSession = <
+  TError = unknown,
+  TContext = unknown,
+>(
+  options?: UseMutationOptions<CustomerPortalResponse, TError, void, TContext>
+): UseMutationResult<CustomerPortalResponse, TError, void, TContext> => {
+  return useMutation({
+    mutationFn: () =>
+      customFetch<CustomerPortalResponse>("/api/subscriptions/customer-portal", {
+        method: "POST",
+      }),
+    ...options,
+  });
+};

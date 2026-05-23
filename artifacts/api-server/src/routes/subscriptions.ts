@@ -8,6 +8,7 @@ import { generatePixEMV, generatePixQrCodeUrl } from "../lib/pix";
 import { persistUsageSnapshot } from "../lib/planLimits";
 import { generateInvoiceNumber } from "../lib/invoiceNumber";
 import { ROLES, INVOICE_STATUS, TENANT_STATUS, SUBSCRIPTION_STATUS } from "@workspace/permissions";
+import { getUncachableStripeClient, getStripeWebhookSecret } from "../lib/stripeClient";
 
 const router = Router();
 
@@ -395,12 +396,6 @@ router.post("/invoices/:id/stripe/checkout", async (req, res): Promise<void> => 
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    const stripeKey = process.env["STRIPE_SECRET_KEY"];
-    if (!stripeKey) {
-      res.status(400).json({ error: "Stripe não configurado. Entre em contato com o suporte." });
-      return;
-    }
-
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
     if (!invoice) { res.status(404).json({ error: "Fatura não encontrada" }); return; }
     if (me.role !== ROLES.SUPER_ADMIN && invoice.tenantId !== me.tenantId) {
@@ -408,43 +403,142 @@ router.post("/invoices/:id/stripe/checkout", async (req, res): Promise<void> => 
     }
     if (invoice.status === INVOICE_STATUS.PAID) { res.status(400).json({ error: "Fatura já está paga" }); return; }
 
-    const amountCents = Math.round(Number(invoice.amount) * 100);
-
-    const piBody = new URLSearchParams({
-      amount: String(amountCents),
-      currency: "brl",
-      "payment_method_types[]": "card",
-      "metadata[invoiceId]": invoice.id,
-      "metadata[tenantId]": invoice.tenantId,
-      description: invoice.description ?? "Assinatura VisiteCRM",
-    });
-
-    const response = await fetch("https://api.stripe.com/v1/payment_intents", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${stripeKey}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: piBody.toString(),
-    });
-
-    if (!response.ok) {
-      const errBody = await response.json() as { error?: { message?: string } };
-      req.log.error({ errBody }, "Stripe PaymentIntent error");
-      res.status(502).json({ error: "Erro ao criar intenção de pagamento Stripe" });
+    let stripe;
+    try {
+      stripe = await getUncachableStripeClient();
+    } catch {
+      res.status(400).json({ error: "Stripe não configurado. Entre em contato com o suporte." });
       return;
     }
 
-    const pi = await response.json() as { id: string; client_secret: string };
+    const amountCents = Math.round(Number(invoice.amount) * 100);
+
+    // Find or create a Stripe customer for this tenant so the portal works later
+    const existingSub = await db
+      .select()
+      .from(subscriptionsTable)
+      .where(and(
+        eq(subscriptionsTable.tenantId, invoice.tenantId),
+        // stripeCustomerId must not be null — Drizzle handles this via .isNotNull() but a simple filter works too
+      ))
+      .orderBy(desc(subscriptionsTable.createdAt))
+      .limit(10);
+
+    let stripeCustomerId = existingSub.find(s => s.stripeCustomerId)?.stripeCustomerId ?? null;
+
+    if (!stripeCustomerId) {
+      const [adminUser] = await db
+        .select({ email: usersTable.email, name: usersTable.name })
+        .from(usersTable)
+        .where(and(eq(usersTable.tenantId, invoice.tenantId), eq(usersTable.role, ROLES.AGENCY_ADMIN)))
+        .limit(1);
+
+      const customer = await stripe.customers.create({
+        email: adminUser?.email ?? undefined,
+        name: adminUser?.name ?? undefined,
+        metadata: { tenantId: invoice.tenantId },
+      });
+      stripeCustomerId = customer.id;
+
+      // Persist on the most recent subscription
+      if (existingSub.length > 0) {
+        await db.update(subscriptionsTable)
+          .set({ stripeCustomerId })
+          .where(eq(subscriptionsTable.id, existingSub[0]!.id));
+      }
+    }
+
+    const pi = await stripe.paymentIntents.create({
+      amount: amountCents,
+      currency: "brl",
+      customer: stripeCustomerId,
+      payment_method_types: ["card"],
+      metadata: { invoiceId: invoice.id, tenantId: invoice.tenantId },
+      description: invoice.description ?? "Assinatura VisiteCRM",
+    });
 
     await db.update(invoicesTable).set({
       paymentMethod: "card",
       stripePaymentIntentId: pi.id,
+      stripeCustomerId,
     }).where(eq(invoicesTable.id, req.params.id));
 
-    res.json({ clientSecret: pi.client_secret, paymentIntentId: pi.id });
+    res.json({ clientSecret: pi.client_secret!, paymentIntentId: pi.id });
   } catch (err) {
     req.log.error({ err }, "Error creating Stripe PaymentIntent");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/subscriptions/customer-portal", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!me.tenantId) { res.status(400).json({ error: "No tenant" }); return; }
+
+    let stripe;
+    try {
+      stripe = await getUncachableStripeClient();
+    } catch {
+      res.status(400).json({ error: "Stripe não configurado. Entre em contato com o suporte." });
+      return;
+    }
+
+    // Look up an existing Stripe customer for this tenant
+    const subs = await db
+      .select()
+      .from(subscriptionsTable)
+      .where(eq(subscriptionsTable.tenantId, me.tenantId))
+      .orderBy(desc(subscriptionsTable.createdAt))
+      .limit(10);
+
+    let stripeCustomerId = subs.find(s => s.stripeCustomerId)?.stripeCustomerId ?? null;
+
+    // Also check invoices table as a fallback
+    if (!stripeCustomerId) {
+      const inv = await db
+        .select({ stripeCustomerId: invoicesTable.stripeCustomerId })
+        .from(invoicesTable)
+        .where(eq(invoicesTable.tenantId, me.tenantId))
+        .orderBy(desc(invoicesTable.createdAt))
+        .limit(10);
+      stripeCustomerId = inv.find(i => i.stripeCustomerId)?.stripeCustomerId ?? null;
+    }
+
+    if (!stripeCustomerId) {
+      // Create a new customer so the portal can be accessed
+      const [adminUser] = await db
+        .select({ email: usersTable.email, name: usersTable.name })
+        .from(usersTable)
+        .where(and(eq(usersTable.tenantId, me.tenantId), eq(usersTable.role, ROLES.AGENCY_ADMIN)))
+        .limit(1);
+
+      const customer = await stripe.customers.create({
+        email: adminUser?.email ?? undefined,
+        name: adminUser?.name ?? undefined,
+        metadata: { tenantId: me.tenantId },
+      });
+      stripeCustomerId = customer.id;
+
+      if (subs.length > 0) {
+        await db.update(subscriptionsTable)
+          .set({ stripeCustomerId })
+          .where(eq(subscriptionsTable.id, subs[0]!.id));
+      }
+    }
+
+    const frontendUrl = process.env["FRONTEND_URL"]
+      ?? (process.env["REPLIT_DEV_DOMAIN"] ? `https://${process.env["REPLIT_DEV_DOMAIN"]}` : "");
+    const returnUrl = `${frontendUrl}/configuracoes?tab=plano`;
+
+    const portalSession = await stripe.billingPortal.sessions.create({
+      customer: stripeCustomerId,
+      return_url: returnUrl,
+    });
+
+    res.json({ portalUrl: portalSession.url });
+  } catch (err) {
+    req.log.error({ err }, "Error creating customer portal session");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -511,8 +605,8 @@ async function failInvoice(invoiceId: string): Promise<void> {
 
 router.post("/webhooks/stripe", async (req, res): Promise<void> => {
   try {
-    const stripeWebhookSecret = process.env["STRIPE_WEBHOOK_SECRET"];
-    if (!stripeWebhookSecret) {
+    const webhookSecret = await getStripeWebhookSecret();
+    if (!webhookSecret) {
       res.status(400).json({ error: "Stripe webhook não configurado" });
       return;
     }
@@ -526,36 +620,22 @@ router.post("/webhooks/stripe", async (req, res): Promise<void> => {
       return;
     }
 
-    const crypto = await import("crypto");
-    const [timestampPart, v1Part] = sig.split(",").reduce<[string, string]>((acc, part) => {
-      if (part.startsWith("t=")) acc[0] = part.slice(2);
-      if (part.startsWith("v1=")) acc[1] = part.slice(3);
-      return acc;
-    }, ["", ""]);
+    let stripe;
+    try {
+      stripe = await getUncachableStripeClient();
+    } catch {
+      res.status(400).json({ error: "Stripe não configurado" });
+      return;
+    }
 
-    const signedPayload = `${timestampPart}.${rawBody.toString("utf8")}`;
-    const expectedSig = crypto.createHmac("sha256", stripeWebhookSecret)
-      .update(signedPayload, "utf8")
-      .digest("hex");
-
-    if (expectedSig !== v1Part) {
-      req.log.warn("Stripe webhook signature verification failed");
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+    } catch (err) {
+      req.log.warn({ err }, "Stripe webhook signature verification failed");
       res.status(400).json({ error: "Assinatura inválida" });
       return;
     }
-
-    const tsDiff = Math.abs(Date.now() / 1000 - Number(timestampPart));
-    if (tsDiff > 300) {
-      req.log.warn({ tsDiff }, "Stripe webhook timestamp too old");
-      res.status(400).json({ error: "Webhook timestamp fora do prazo" });
-      return;
-    }
-
-    interface StripeEvent {
-      type: string;
-      data: { object: { id?: string; metadata?: { invoiceId?: string; tenantId?: string }; status?: string; last_payment_error?: unknown } };
-    }
-    const event = req.body as StripeEvent;
 
     if (event.type === "payment_intent.succeeded") {
       const pi = event.data.object;

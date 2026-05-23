@@ -18,6 +18,7 @@ import {
   useGetCurrentSubscription,
   useUpgradeSubscription,
   useCreateStripeCheckout,
+  useCreateCustomerPortalSession,
   getCurrentSubscriptionQueryKey,
   type PlanPublic,
   type SubscriptionInvoice,
@@ -28,7 +29,7 @@ import type {
   UpdateTenantBody,
   SystemConfig,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -585,6 +586,7 @@ function PlanTab() {
   const { data: subData, isLoading } = useGetCurrentSubscription();
   const upgrade = useUpgradeSubscription();
   const stripeCheckout = useCreateStripeCheckout();
+  const customerPortal = useCreateCustomerPortalSession();
   const [showPixModal, setShowPixModal] = useState(false);
   const [showCardModal, setShowCardModal] = useState(false);
   const [cardClientSecret, setCardClientSecret] = useState<string | null>(null);
@@ -634,6 +636,15 @@ function PlanTab() {
       setShowCardModal(true);
     } catch {
       toast({ title: "Erro ao iniciar pagamento com cartão", variant: "destructive" });
+    }
+  }
+
+  async function handleCustomerPortal() {
+    try {
+      const result = await customerPortal.mutateAsync();
+      window.location.href = result.portalUrl;
+    } catch {
+      toast({ title: "Erro ao acessar portal de cobrança", variant: "destructive" });
     }
   }
 
@@ -688,6 +699,23 @@ function PlanTab() {
               })}
             </div>
           </CardContent>
+        )}
+        {currentPlan && Number(currentPlan.monthlyPrice) > 0 && (
+          <CardFooter className="pt-0">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={handleCustomerPortal}
+              disabled={customerPortal.isPending}
+            >
+              {customerPortal.isPending ? (
+                <><Loader2 className="w-3 h-3 animate-spin" />Aguarde...</>
+              ) : (
+                <><CreditCard className="w-3 h-3" />Gerenciar Assinatura</>
+              )}
+            </Button>
+          </CardFooter>
         )}
       </Card>
 
