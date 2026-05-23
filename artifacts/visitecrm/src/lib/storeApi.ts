@@ -303,6 +303,8 @@ export interface StoreSettings {
   // the UI show whether a credential is currently set.
   stripeSecretKey?: string | null;
   stripeSecretKeyConfigured?: boolean;
+  stripeWebhookSecret?: string | null;
+  stripeWebhookSecretConfigured?: boolean;
   mpEnabled: boolean;
   mpPublicKey?: string | null;
   mpAccessToken?: string | null;

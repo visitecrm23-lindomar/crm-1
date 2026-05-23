@@ -281,6 +281,13 @@
       "when": 1748300000000,
       "tag": "0039_add_bonus_release_email_enabled",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1748400000000,
+      "tag": "0040_add_stripe_webhook_secret",
+      "breakpoints": true
     }
   ]
 }

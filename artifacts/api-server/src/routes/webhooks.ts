@@ -32,6 +32,7 @@ interface StoreScope {
   tenantId: string;
   slug: string;
   mpAccessToken: string | null;
+  stripeWebhookSecret: string | null;
 }
 
 /**
@@ -48,6 +49,7 @@ async function resolveStore(slug: string): Promise<StoreScope | null> {
       tenantId: storesTable.tenantId,
       slug: storesTable.slug,
       mpAccessToken: storesTable.mpAccessToken,
+      stripeWebhookSecret: storesTable.stripeWebhookSecret,
     })
     .from(storesTable)
     .where(eq(storesTable.slug, slug))
@@ -100,16 +102,26 @@ interface StripeEvent {
 
 router.post("/webhooks/stripe/:storeSlug", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const secret = process.env["STRIPE_WEBHOOK_SECRET"];
-    if (!secret) {
-      logger.warn("[webhooks/stripe] STRIPE_WEBHOOK_SECRET not configured — rejecting");
-      res.status(400).json({ error: "Webhook not configured" });
-      return;
-    }
-
     const store = await resolveStore(req.params["storeSlug"] ?? "");
     if (!store) {
       res.status(400).json({ error: "Unknown store" });
+      return;
+    }
+
+    // Prefer the per-store webhook secret; fall back to the global env var for
+    // backward compatibility with deployments that have not yet migrated to
+    // per-store secrets.
+    const secret =
+      decryptOrPassthrough(store.stripeWebhookSecret) ??
+      process.env["STRIPE_WEBHOOK_SECRET"] ??
+      null;
+
+    if (!secret) {
+      logger.warn(
+        { slug: store.slug },
+        "[webhooks/stripe] No webhook secret configured (per-store or global) — rejecting",
+      );
+      res.status(400).json({ error: "Webhook not configured" });
       return;
     }
 

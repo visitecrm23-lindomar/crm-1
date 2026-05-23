@@ -814,6 +814,29 @@ export default function LojaConfiguracoes() {
                         className="font-mono text-sm"
                       />
                     </div>
+                    <div className="space-y-2">
+                      <Label>Webhook Secret</Label>
+                      <Input
+                        type="password"
+                        value={form.stripeWebhookSecret ?? ""}
+                        onChange={(e) => set("stripeWebhookSecret", e.target.value)}
+                        placeholder={form.stripeWebhookSecretConfigured ? "•••••• (deixe em branco para manter)" : "whsec_..."}
+                        className="font-mono text-sm"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Encontre o Webhook Secret no{" "}
+                        <a
+                          href="https://dashboard.stripe.com/webhooks"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline underline-offset-2 hover:text-foreground"
+                        >
+                          painel do Stripe → Webhooks
+                        </a>
+                        {" "}ao criar ou editar um endpoint. O valor começa com{" "}
+                        <span className="font-mono">whsec_</span>.
+                      </p>
+                    </div>
                   </div>
                 )}
               </CardContent>

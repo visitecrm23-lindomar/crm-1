@@ -64,6 +64,7 @@ export const storesTable = pgTable("stores", {
   stripeEnabled: boolean("stripe_enabled").notNull().default(false),
   stripePublicKey: text("stripe_public_key"),
   stripeSecretKey: text("stripe_secret_key"),
+  stripeWebhookSecret: text("stripe_webhook_secret"),
 
   mpEnabled: boolean("mp_enabled").notNull().default(false),
   mpPublicKey: text("mp_public_key"),

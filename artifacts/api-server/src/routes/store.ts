@@ -26,17 +26,18 @@ import { encryptCredential } from "../lib/crypto";
 // returned by GET endpoints, and only updated when the request body
 // supplies a non-empty value (so saving the form without retyping a
 // credential leaves the stored value intact).
-const SENSITIVE_CREDENTIAL_FIELDS = ["stripeSecretKey", "mpAccessToken", "pixKey"] as const;
+const SENSITIVE_CREDENTIAL_FIELDS = ["stripeSecretKey", "stripeWebhookSecret", "mpAccessToken", "pixKey"] as const;
 type SensitiveField = typeof SENSITIVE_CREDENTIAL_FIELDS[number];
 
-function redactStore<T extends Record<string, unknown>>(store: T | undefined): (T & { stripeSecretKeyConfigured: boolean; mpAccessTokenConfigured: boolean; pixKeyConfigured: boolean }) | undefined {
+function redactStore<T extends Record<string, unknown>>(store: T | undefined): (T & { stripeSecretKeyConfigured: boolean; stripeWebhookSecretConfigured: boolean; mpAccessTokenConfigured: boolean; pixKeyConfigured: boolean }) | undefined {
   if (!store) return store as undefined;
   const out: Record<string, unknown> = { ...store };
   out["stripeSecretKeyConfigured"] = !!store["stripeSecretKey"];
+  out["stripeWebhookSecretConfigured"] = !!store["stripeWebhookSecret"];
   out["mpAccessTokenConfigured"] = !!store["mpAccessToken"];
   out["pixKeyConfigured"] = !!store["pixKey"];
   for (const f of SENSITIVE_CREDENTIAL_FIELDS) delete out[f];
-  return out as T & { stripeSecretKeyConfigured: boolean; mpAccessTokenConfigured: boolean; pixKeyConfigured: boolean };
+  return out as T & { stripeSecretKeyConfigured: boolean; stripeWebhookSecretConfigured: boolean; mpAccessTokenConfigured: boolean; pixKeyConfigured: boolean };
 }
 
 // Replace each sensitive field with its encrypted form when present and
@@ -100,6 +101,7 @@ const StoreSettingsBody = z.object({
   stripeEnabled: z.boolean().optional(),
   stripePublicKey: z.string().nullish(),
   stripeSecretKey: z.string().nullish(),
+  stripeWebhookSecret: z.string().nullish(),
   mpEnabled: z.boolean().optional(),
   mpPublicKey: z.string().nullish(),
   mpAccessToken: z.string().nullish(),
