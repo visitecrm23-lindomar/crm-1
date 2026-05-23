@@ -248,11 +248,38 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
           }
         }
 
+        // If Stripe Checkout URL is available, do NOT activate trial yet.
+        // Activation happens via checkout.session.completed webhook (ensures payment method captured).
+        if (checkoutUrlForTrial) {
+          // Mark tenant as pending so they know checkout is required
+          await db.update(tenantsTable)
+            .set({ pendingPlanId: newPlan.slug, status: TENANT_STATUS.PENDING_PAYMENT, updatedAt: now })
+            .where(eq(tenantsTable.id, me.tenantId));
+
+          await db.insert(subscriptionsTable).values({
+            id: generateId(),
+            tenantId: me.tenantId,
+            planId: newPlan.id,
+            status: SUBSCRIPTION_STATUS.PENDING_PAYMENT,
+            billingCycle: parsed.data.billingCycle,
+            currentPeriodStart: now,
+            currentPeriodEnd: trialEnd,
+            trialStart: now,
+            trialEnd,
+            ...(stripeCustomerIdForTrial ? { stripeCustomerId: stripeCustomerIdForTrial } : {}),
+          });
+
+          void persistUsageSnapshot(me.tenantId);
+          res.json({ upgraded: false, pendingInvoice: true, trial: true, trialDays, trialEndsAt: trialEnd, plan: newPlan, invoice: null, checkoutUrl: checkoutUrlForTrial });
+          return;
+        }
+
+        // No Stripe → activate trial immediately (PIX payment method captured later)
         await db.update(tenantsTable)
           .set({ planId: newPlan.slug, status: TENANT_STATUS.ACTIVE, updatedAt: now })
           .where(eq(tenantsTable.id, me.tenantId));
 
-        const [trialSub] = await db.insert(subscriptionsTable).values({
+        await db.insert(subscriptionsTable).values({
           id: generateId(),
           tenantId: me.tenantId,
           planId: newPlan.id,
@@ -262,19 +289,9 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
           currentPeriodEnd: trialEnd,
           trialStart: now,
           trialEnd,
-          ...(stripeCustomerIdForTrial ? { stripeCustomerId: stripeCustomerIdForTrial } : {}),
-          ...(stripeSubscriptionIdForTrial ? { stripeSubscriptionId: stripeSubscriptionIdForTrial } : {}),
-        }).returning();
+        });
 
         void persistUsageSnapshot(me.tenantId);
-
-        // If we got a Stripe Checkout URL (trial needs payment method), redirect there
-        if (checkoutUrlForTrial) {
-          res.json({ upgraded: true, trial: true, trialDays, trialEndsAt: trialEnd, plan: newPlan, invoice: null, checkoutUrl: checkoutUrlForTrial });
-          return;
-        }
-
-        // No Stripe price found — trial without payment method capture (PIX later)
         res.json({ upgraded: true, trial: true, trialDays, trialEndsAt: trialEnd, plan: newPlan, invoice: null });
         return;
       }
