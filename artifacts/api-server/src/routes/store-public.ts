@@ -29,6 +29,7 @@ import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { getTenantReservationPrefix, getYearMonth } from "../lib/reservation-number";
 import { randomBytes } from "crypto";
+import { decryptOrPassthrough } from "../lib/crypto";
 import { writeClientActivity } from "../lib/activities";
 import { getClientIp } from "../lib/get-client-ip";
 import { resolveCheckoutDiscounts } from "../services/checkout/discounts";
@@ -129,6 +130,7 @@ router.get("/public/store/:slug", async (req, res, next: NextFunction): Promise<
       pixEnabled: store.pixEnabled,
       boletoEnabled: store.boletoEnabled,
       stripeEnabled: store.stripeEnabled,
+      stripePublicKey: store.stripePublicKey,
       mpEnabled: store.mpEnabled,
       termsOfService: store.termsOfService,
       privacyPolicy: store.privacyPolicy,
@@ -1196,6 +1198,87 @@ router.post("/public/store/:slug/coupons/validate", async (req, res, next: NextF
       discountAmount,
       description: coupon.description,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/public/store/:slug/create-payment-intent", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const store = await getActiveStore(req.params.slug);
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
+    if (!store.stripeEnabled) {
+      next(new ValidationError("Stripe não está habilitado para esta loja", "STRIPE_NOT_ENABLED")); return;
+    }
+    const stripeSecretKey = decryptOrPassthrough(store.stripeSecretKey);
+    if (!stripeSecretKey) {
+      next(new ValidationError("Chave secreta do Stripe não configurada", "STRIPE_NOT_CONFIGURED")); return;
+    }
+    if (!store.stripePublicKey) {
+      next(new ValidationError("Chave pública do Stripe não configurada", "STRIPE_NOT_CONFIGURED")); return;
+    }
+
+    const body = (req.body ?? {}) as { orderNumber?: unknown; paymentToken?: unknown };
+    const orderNumber = typeof body.orderNumber === "string" ? body.orderNumber.trim() : "";
+    const paymentToken = typeof body.paymentToken === "string" ? body.paymentToken.trim() : "";
+
+    if (!orderNumber) {
+      next(new ValidationError("orderNumber é obrigatório", "VALIDATION_ERROR")); return;
+    }
+    if (!paymentToken) {
+      next(new ValidationError("paymentToken é obrigatório", "VALIDATION_ERROR")); return;
+    }
+
+    const [order] = await db
+      .select({
+        id: storeOrdersTable.id,
+        orderNumber: storeOrdersTable.orderNumber,
+        totalAmount: storeOrdersTable.totalAmount,
+        storedPaymentToken: storeOrdersTable.paymentToken,
+        existingPaymentIntentId: storeOrdersTable.paymentIntentId,
+      })
+      .from(storeOrdersTable)
+      .where(and(
+        eq(storeOrdersTable.storeId, store.id),
+        eq(storeOrdersTable.tenantId, store.tenantId),
+        eq(storeOrdersTable.orderNumber, orderNumber),
+      ))
+      .limit(1);
+
+    if (!order) { next(new NotFoundError("Pedido não encontrado", "NOT_FOUND")); return; }
+
+    const stored = order.storedPaymentToken ?? "";
+    const a = Buffer.from(paymentToken);
+    const b = Buffer.from(stored);
+    const tokenMatches = a.length === b.length && a.length > 0 && (await import("node:crypto")).timingSafeEqual(a, b);
+    if (!tokenMatches) {
+      next(new ValidationError("Token de pagamento inválido", "INVALID_TOKEN")); return;
+    }
+
+    if (order.existingPaymentIntentId) {
+      res.json({ clientSecret: null, paymentIntentId: order.existingPaymentIntentId, publishableKey: store.stripePublicKey, reused: true });
+      return;
+    }
+
+    const Stripe = (await import("stripe")).default;
+    const stripe = new Stripe(stripeSecretKey);
+    const amountInCents = Math.round(Number(order.totalAmount) * 100);
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amountInCents,
+      currency: "brl",
+      metadata: {
+        orderNumber: order.orderNumber,
+        storeId: store.id,
+        storeName: store.name,
+      },
+    });
+
+    await db
+      .update(storeOrdersTable)
+      .set({ paymentIntentId: paymentIntent.id })
+      .where(eq(storeOrdersTable.id, order.id));
+
+    res.json({ clientSecret: paymentIntent.client_secret, publishableKey: store.stripePublicKey });
   } catch (err) {
     next(err);
   }

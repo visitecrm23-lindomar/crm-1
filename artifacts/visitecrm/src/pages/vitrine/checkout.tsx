@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useUser } from "@clerk/react";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { publicStoreApi, PublicApiError, PublicStore, CouponValidation, ReferralValidation } from "@/lib/storeApi";
 import { clientPortalApi } from "@/lib/clientPortalApi";
 import { useCart } from "@/contexts/CartContext";
@@ -142,9 +144,58 @@ function BoletoPayment() {
   );
 }
 
+function StripePaymentForm({ onSuccess }: { onSuccess: () => void }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [paying, setPaying] = useState(false);
+  const [stripeError, setStripeError] = useState<string | null>(null);
+
+  async function handlePay() {
+    if (!stripe || !elements) return;
+    setPaying(true);
+    setStripeError(null);
+    try {
+      const { error } = await stripe.confirmPayment({
+        elements,
+        confirmParams: { return_url: window.location.href },
+        redirect: "if_required",
+      });
+      if (error) {
+        setStripeError(error.message ?? "Pagamento falhou. Verifique os dados e tente novamente.");
+      } else {
+        onSuccess();
+      }
+    } finally {
+      setPaying(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <PaymentElement />
+      {stripeError && (
+        <p className="text-sm text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{stripeError}</p>
+      )}
+      <Button
+        className="w-full h-11 text-white font-bold"
+        onClick={handlePay}
+        disabled={paying || !stripe || !elements}
+      >
+        {paying && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+        Pagar agora
+      </Button>
+      <p className="text-xs text-muted-foreground text-center">
+        Seus dados são processados com segurança pelo Stripe.
+      </p>
+    </div>
+  );
+}
+
 function CardPayment({
   form,
   set,
+  stripeState,
+  onStripeSuccess,
 }: {
   form: {
     cardNumber: string;
@@ -154,7 +205,25 @@ function CardPayment({
     installments: string;
   };
   set: (field: string, value: string) => void;
+  stripeState?: { clientSecret: string; publishableKey: string } | null;
+  onStripeSuccess?: () => void;
 }) {
+  const stripePromise = useMemo(
+    () => (stripeState ? loadStripe(stripeState.publishableKey) : null),
+    [stripeState?.publishableKey]
+  );
+
+  if (stripeState && stripePromise) {
+    return (
+      <Elements
+        stripe={stripePromise}
+        options={{ clientSecret: stripeState.clientSecret, locale: "pt-BR" }}
+      >
+        <StripePaymentForm onSuccess={onStripeSuccess ?? (() => {})} />
+      </Elements>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
@@ -234,7 +303,7 @@ function CardPayment({
         </div>
       </div>
       <p className="text-xs text-muted-foreground text-center">
-        🔒 Dados protegidos com SSL. Não armazenamos informações do cartão.
+        Dados protegidos com SSL. Não armazenamos informações do cartão.
       </p>
     </div>
   );
@@ -283,6 +352,7 @@ export default function VitrineCheckout({
   const [validatingCoupon, setValidatingCoupon] = useState(false);
   const [referralResult, setReferralResult] = useState<ReferralValidation | null>(null);
   const [validatingReferral, setValidatingReferral] = useState(false);
+  const [stripeState, setStripeState] = useState<{ clientSecret: string; publishableKey: string } | null>(null);
 
   // Fetch referral credit balance for logged-in users
   useEffect(() => {
@@ -373,6 +443,11 @@ export default function VitrineCheckout({
     return !!form.customerName && !!form.customerEmail;
   }
 
+  const isStripeCardPayment =
+    (form.paymentMethod === "credit_card" || form.paymentMethod === "debit_card") &&
+    store.stripeEnabled &&
+    !!store.stripePublicKey;
+
   async function submit() {
     setLoading(true);
     try {
@@ -407,7 +482,13 @@ export default function VitrineCheckout({
         }));
       }
       clearCart();
-      setStep("confirmado");
+
+      if (isStripeCardPayment) {
+        const pi = await publicStoreApi.createPaymentIntent(slug, order.orderNumber, order.paymentToken as string);
+        setStripeState({ clientSecret: pi.clientSecret, publishableKey: pi.publishableKey });
+      } else {
+        setStep("confirmado");
+      }
     } catch (err: unknown) {
       if (err instanceof PublicApiError) {
         const { code } = err;
@@ -893,6 +974,8 @@ export default function VitrineCheckout({
                             installments: form.installments,
                           }}
                           set={set}
+                          stripeState={stripeState}
+                          onStripeSuccess={() => setStep("confirmado")}
                         />
                       )}
                       {form.paymentMethod === "transfer" && (
@@ -914,18 +997,22 @@ export default function VitrineCheckout({
                   </CardContent>
                 </Card>
 
-              <Button
-                className="w-full h-11 text-white font-bold"
-                style={{ backgroundColor: store.primaryColor }}
-                onClick={submit}
-                disabled={loading}
-              >
-                {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Confirmar Pedido
-              </Button>
-              <p className="text-xs text-center text-muted-foreground">
-                Ao confirmar, você concorda com os termos da loja.
-              </p>
+              {!stripeState && (
+                <>
+                  <Button
+                    className="w-full h-11 text-white font-bold"
+                    style={{ backgroundColor: store.primaryColor }}
+                    onClick={submit}
+                    disabled={loading}
+                  >
+                    {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    {isStripeCardPayment ? "Continuar para Pagamento" : "Confirmar Pedido"}
+                  </Button>
+                  <p className="text-xs text-center text-muted-foreground">
+                    Ao confirmar, você concorda com os termos da loja.
+                  </p>
+                </>
+              )}
             </>
           )}
         </div>

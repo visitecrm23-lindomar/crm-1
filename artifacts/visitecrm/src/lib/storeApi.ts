@@ -227,6 +227,12 @@ export const publicStoreApi = {
         status: string;
       }>;
     }>("GET", `/public/store/${slug}/trips/${tripId}/seat-map`),
+  createPaymentIntent: (slug: string, orderNumber: string, paymentToken: string) =>
+    publicReq<{ clientSecret: string; publishableKey: string }>(
+      "POST",
+      `/public/store/${slug}/create-payment-intent`,
+      { orderNumber, paymentToken }
+    ),
   validateReferral: (slug: string, code: string) =>
     publicReq<ReferralValidation>("POST", `/public/store/${slug}/referral/validate`, { code }),
   getReferralInfo: (slug: string, code: string) =>
@@ -345,6 +351,8 @@ export interface PublicStore {
   seoTitle?: string | null;
   seoDescription?: string | null;
   paymentMethods: string[];
+  stripeEnabled: boolean;
+  stripePublicKey?: string | null;
   shippingPolicy?: string | null;
   returnPolicy?: string | null;
   privacyPolicy?: string | null;
@@ -485,6 +493,7 @@ export interface StoreOrder {
   updatedAt: string;
   itemCount?: number;
   items: StoreOrderItem[];
+  paymentToken?: string | null;
   reservationExpiresAt?: string | null;
 }
 
