@@ -75,7 +75,17 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
     return;
   }
 
-  const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+  // When the route is registered with express.raw(), the parsed buffer arrives
+  // in req.body (not req.rawBody). When the route goes through express.json()
+  // with the verify hook, it arrives in req.rawBody. Accept either.
+  const reqAny = req as Request & { rawBody?: Buffer };
+  const rawBody: Buffer | undefined =
+    reqAny.rawBody instanceof Buffer
+      ? reqAny.rawBody
+      : req.body instanceof Buffer
+        ? req.body
+        : undefined;
+
   if (!rawBody) {
     res.status(400).json({ error: "Raw body não disponível para verificação de assinatura" });
     return;

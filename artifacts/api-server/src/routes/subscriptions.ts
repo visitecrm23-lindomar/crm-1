@@ -164,11 +164,95 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
         const now = new Date();
         const trialEnd = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
 
+        // Try Stripe-native trial (creates subscription with trial_end so Stripe
+        // charges automatically at trial expiration — no manual invoice needed).
+        let stripeForTrial;
+        try { stripeForTrial = await getUncachableStripeClient(); } catch { stripeForTrial = null; }
+
+        let stripeCustomerIdForTrial: string | null = null;
+        let stripeSubscriptionIdForTrial: string | null = null;
+        let checkoutUrlForTrial: string | null = null;
+
+        if (stripeForTrial) {
+          // Find or create customer
+          const existingSubsForTrial = await db
+            .select()
+            .from(subscriptionsTable)
+            .where(eq(subscriptionsTable.tenantId, me.tenantId))
+            .orderBy(desc(subscriptionsTable.createdAt))
+            .limit(10);
+          stripeCustomerIdForTrial = existingSubsForTrial.find(s => s.stripeCustomerId)?.stripeCustomerId ?? null;
+
+          if (!stripeCustomerIdForTrial) {
+            const existingInvForTrial = await db
+              .select({ cid: invoicesTable.stripeCustomerId })
+              .from(invoicesTable)
+              .where(eq(invoicesTable.tenantId, me.tenantId))
+              .orderBy(desc(invoicesTable.createdAt))
+              .limit(5);
+            stripeCustomerIdForTrial = existingInvForTrial.find(i => i.cid)?.cid ?? null;
+          }
+
+          if (!stripeCustomerIdForTrial) {
+            const [adminUserForTrial] = await db
+              .select({ email: usersTable.email, name: usersTable.name })
+              .from(usersTable)
+              .where(and(eq(usersTable.tenantId, me.tenantId), eq(usersTable.role, ROLES.AGENCY_ADMIN)))
+              .limit(1);
+            const customer = await stripeForTrial.customers.create({
+              email: adminUserForTrial?.email ?? undefined,
+              name: adminUserForTrial?.name ?? undefined,
+              metadata: { tenantId: me.tenantId },
+            });
+            stripeCustomerIdForTrial = customer.id;
+          }
+
+          // Find a Stripe price for this plan
+          const priceIntervalForTrial = parsed.data.billingCycle === "annual" ? "year" : "month";
+          const trialPriceAmount = parsed.data.billingCycle === "annual"
+            ? Number(newPlan.annualPrice) : Number(newPlan.monthlyPrice);
+          const amountCentsForTrial = Math.round(trialPriceAmount * 100);
+
+          const stripePricesForTrial = await stripeForTrial.prices.search({
+            query: `metadata['planSlug']:'${newPlan.slug}' AND active:'true'`,
+          });
+          const matchingPriceForTrial = stripePricesForTrial.data.find(
+            p => p.recurring?.interval === priceIntervalForTrial &&
+                 p.unit_amount === amountCentsForTrial &&
+                 p.currency === "brl"
+          );
+
+          if (matchingPriceForTrial) {
+            // Create Stripe Checkout Session with trial_end — Stripe charges automatically
+            const frontendUrl = process.env["FRONTEND_URL"]
+              ?? (process.env["REPLIT_DEV_DOMAIN"] ? `https://${process.env["REPLIT_DEV_DOMAIN"]}` : "");
+            const successUrl = `${frontendUrl}/configuracoes?tab=plano&payment=success&trial=1`;
+            const cancelUrl = `${frontendUrl}/configuracoes?tab=plano&payment=cancel`;
+
+            const trialSession = await stripeForTrial.checkout.sessions.create({
+              mode: "subscription",
+              customer: stripeCustomerIdForTrial,
+              line_items: [{ price: matchingPriceForTrial.id, quantity: 1 }],
+              success_url: successUrl,
+              cancel_url: cancelUrl,
+              client_reference_id: me.tenantId,
+              metadata: { tenantId: me.tenantId, planId: newPlan.id },
+              subscription_data: {
+                trial_end: Math.floor(trialEnd.getTime() / 1000),
+                metadata: { tenantId: me.tenantId, planId: newPlan.id },
+              },
+            });
+            checkoutUrlForTrial = trialSession.url;
+            stripeSubscriptionIdForTrial = typeof trialSession.subscription === "string"
+              ? trialSession.subscription : null;
+          }
+        }
+
         await db.update(tenantsTable)
           .set({ planId: newPlan.slug, status: TENANT_STATUS.ACTIVE, updatedAt: now })
           .where(eq(tenantsTable.id, me.tenantId));
 
-        await db.insert(subscriptionsTable).values({
+        const [trialSub] = await db.insert(subscriptionsTable).values({
           id: generateId(),
           tenantId: me.tenantId,
           planId: newPlan.id,
@@ -178,33 +262,20 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
           currentPeriodEnd: trialEnd,
           trialStart: now,
           trialEnd,
-        });
-
-        let trialInvoice = null;
-        const trialPrice = parsed.data.billingCycle === "annual"
-          ? Number(newPlan.annualPrice)
-          : Number(newPlan.monthlyPrice);
-        if (trialPrice > 0) {
-          const trialInvoiceId = generateId();
-          const trialInvoiceNumber = await generateInvoiceNumber(me.tenantId, now.getFullYear());
-          const [inv] = await db.insert(invoicesTable).values({
-            id: trialInvoiceId,
-            tenantId: me.tenantId,
-            planId: newPlan.id,
-            invoiceNumber: trialInvoiceNumber,
-            amount: String(trialPrice),
-            totalAmount: String(trialPrice),
-            currency: "BRL",
-            status: INVOICE_STATUS.PENDING,
-            paymentMethod: "pix",
-            dueDate: trialEnd,
-            description: `${newPlan.name} — ${parsed.data.billingCycle === "annual" ? "anual" : "mensal"} (vence após trial)`,
-          }).returning();
-          trialInvoice = inv;
-        }
+          ...(stripeCustomerIdForTrial ? { stripeCustomerId: stripeCustomerIdForTrial } : {}),
+          ...(stripeSubscriptionIdForTrial ? { stripeSubscriptionId: stripeSubscriptionIdForTrial } : {}),
+        }).returning();
 
         void persistUsageSnapshot(me.tenantId);
-        res.json({ upgraded: true, trial: true, trialDays, trialEndsAt: trialEnd, plan: newPlan, invoice: trialInvoice ?? null });
+
+        // If we got a Stripe Checkout URL (trial needs payment method), redirect there
+        if (checkoutUrlForTrial) {
+          res.json({ upgraded: true, trial: true, trialDays, trialEndsAt: trialEnd, plan: newPlan, invoice: null, checkoutUrl: checkoutUrlForTrial });
+          return;
+        }
+
+        // No Stripe price found — trial without payment method capture (PIX later)
+        res.json({ upgraded: true, trial: true, trialDays, trialEndsAt: trialEnd, plan: newPlan, invoice: null });
         return;
       }
     }

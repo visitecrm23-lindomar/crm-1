@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runMigrations } from "@workspace/db";
+import { getUncachableStripeClient } from "./lib/stripeClient";
 import { backfillEncryptedCredentials } from "./lib/credential-backfill";
 import cron from "node-cron";
 import path from "path";
@@ -99,6 +100,18 @@ async function applyMigrations() {
   logger.info("Credential backfill complete");
 }
 
+async function initStripe() {
+  try {
+    await getUncachableStripeClient();
+    logger.info("[stripe] Stripe client initialized successfully");
+  } catch {
+    logger.warn(
+      "[stripe] Stripe not configured — payment features will be unavailable. " +
+      "Connect the Stripe integration or set STRIPE_SECRET_KEY to enable billing."
+    );
+  }
+}
+
 // ── Graceful shutdown ──
 const shutdown = async (signal: string) => {
   logger.info({ signal }, "Shutdown signal received");
@@ -125,6 +138,10 @@ applyMigrations()
   .catch((err) => {
     logger.error({ err }, "Credential backfill failed — aborting boot");
     process.exit(1);
+  })
+  .then(() => {
+    // Initialize Stripe client (non-fatal — warns if not configured)
+    void initStripe();
   })
   .then(() => {
     // ── Background: cron + BullMQ workers (non-fatal if Redis is unavailable) ──
