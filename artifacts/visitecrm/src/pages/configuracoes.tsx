@@ -602,23 +602,26 @@ function PlanTab() {
   async function handleUpgrade(plan: PlanPublic) {
     try {
       const result = await upgrade.mutateAsync({ planId: plan.id, billingCycle: selectedCycle });
+
+      // Stripe Checkout Session — redirect immediately
+      if (result.checkoutUrl) {
+        window.location.href = result.checkoutUrl;
+        return;
+      }
+
       await queryClient.invalidateQueries({ queryKey: getCurrentSubscriptionQueryKey() });
-      const r = result as unknown as { upgraded: boolean; trial?: boolean; trialEndsAt?: string; invoice?: typeof result.invoice };
-      if (r.upgraded && result.invoice) {
-        setPendingInvoice(result.invoice);
-        if (r.trial) {
-          toast({
-            title: `Trial do ${plan.name} ativado!`,
-            description: r.trialEndsAt
-              ? `Seu trial vai até ${new Date(r.trialEndsAt).toLocaleDateString("pt-BR")}. Uma cobrança será gerada ao final.`
-              : "Seu trial foi ativado com sucesso.",
-          });
-        } else {
-          setShowPixModal(true);
-        }
+
+      if (result.upgraded && result.trial) {
+        toast({
+          title: `Trial do ${plan.name} ativado!`,
+          description: result.trialEndsAt
+            ? `Seu trial vai até ${new Date(result.trialEndsAt).toLocaleDateString("pt-BR")}. Uma cobrança será gerada ao final.`
+            : "Seu trial foi ativado com sucesso.",
+        });
       } else if (result.upgraded) {
         toast({ title: `Plano ${plan.name} ativado!`, description: "Seu plano foi alterado com sucesso." });
       } else if (result.invoice) {
+        // PIX fallback (when Stripe is not configured)
         setPendingInvoice(result.invoice);
         setShowPixModal(true);
       }

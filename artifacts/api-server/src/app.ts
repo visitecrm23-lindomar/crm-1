@@ -8,6 +8,7 @@ import { CLERK_PROXY_PATH, clerkProxyMiddleware } from "./middlewares/clerkProxy
 import { requestId, errorHandler } from "./middlewares/errorHandler";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { handleStripeWebhook } from "./lib/stripeWebhookHandler";
 
 const app: Express = express();
 
@@ -79,6 +80,16 @@ if (!process.env["CLERK_PROXY_URL"]) {
 }
 
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware(isAllowedOrigin));
+
+// ── Stripe webhook — MUST be registered BEFORE express.json() ──
+// The rawBody is also captured via the verify hook below, which covers
+// the existing /api/webhooks/stripe route. This dedicated route uses
+// express.raw() as a belt-and-suspenders approach.
+app.post(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  (req, res) => void handleStripeWebhook(req, res),
+);
 
 app.use(cors({
   credentials: true,

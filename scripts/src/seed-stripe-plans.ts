@@ -1,102 +1,128 @@
 import Stripe from "stripe";
+import { pool } from "@workspace/db";
 
-const PLANS = [
-  {
-    name: "Pro",
-    slug: "pro",
-    description: "Para agências em crescimento",
-    monthlyPriceBRL: 9700,
-    annualPriceBRL: 97000,
-  },
-  {
-    name: "Enterprise",
-    slug: "enterprise",
-    description: "Para grandes operadoras",
-    monthlyPriceBRL: 39700,
-    annualPriceBRL: 397000,
-  },
-];
+interface PlanRow {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  monthly_price: string;
+  annual_price: string;
+}
 
 async function main() {
   const secretKey = process.env["STRIPE_SECRET_KEY"];
   if (!secretKey) {
     throw new Error(
-      "STRIPE_SECRET_KEY is required. Set it before running this script."
+      "STRIPE_SECRET_KEY is required. Set it before running this script.\n" +
+      "Example: STRIPE_SECRET_KEY=sk_test_... pnpm --filter @workspace/scripts tsx src/seed-stripe-plans.ts"
     );
   }
 
-  const stripe = new Stripe(secretKey);
-  console.log("Seeding Stripe products and prices for VisiteCRM plans...");
+  const stripe = new Stripe(secretKey, {
+    apiVersion: "2025-08-27.basil" as Stripe.LatestApiVersion,
+  });
 
-  for (const plan of PLANS) {
+  const client = await pool.connect();
+  let plans: PlanRow[];
+  try {
+    const result = await client.query<PlanRow>(
+      "SELECT id, name, slug, description, monthly_price, annual_price FROM plans WHERE is_active = true AND payment_required = true ORDER BY sort_order"
+    );
+    plans = result.rows;
+  } finally {
+    client.release();
+    await pool.end();
+  }
+
+  if (plans.length === 0) {
+    console.log("No paid plans found in DB. Run seed-plans first.");
+    return;
+  }
+
+  console.log(`Seeding ${plans.length} plans into Stripe...`);
+
+  for (const plan of plans) {
     const productName = `VisiteCRM ${plan.name}`;
+    const monthlyAmountCents = Math.round(Number(plan.monthly_price) * 100);
+    const annualAmountCents = Math.round(Number(plan.annual_price) * 100);
 
-    const existing = await stripe.products.search({
-      query: `name:'${productName}' AND active:'true'`,
+    // Find or create product by metadata planSlug (idempotent)
+    const existingProducts = await stripe.products.search({
+      query: `metadata['planSlug']:'${plan.slug}' AND active:'true'`,
     });
 
     let product: Stripe.Product;
-    if (existing.data.length > 0) {
-      product = existing.data[0]!;
-      console.log(`Product already exists: ${productName} (${product.id})`);
+    if (existingProducts.data.length > 0) {
+      product = existingProducts.data[0]!;
+      console.log(`  Product exists: ${productName} (${product.id})`);
+      // Update description if changed
+      await stripe.products.update(product.id, {
+        description: plan.description ?? undefined,
+        name: productName,
+      });
     } else {
       product = await stripe.products.create({
         name: productName,
-        description: plan.description,
-        metadata: { slug: plan.slug },
+        description: plan.description ?? undefined,
+        metadata: { planSlug: plan.slug, planId: plan.id },
       });
-      console.log(`Created product: ${productName} (${product.id})`);
+      console.log(`  Created product: ${productName} (${product.id})`);
     }
 
-    const prices = await stripe.prices.list({ product: product.id, active: true });
+    // Monthly price — find by metadata planSlug + cycle
+    const existingPrices = await stripe.prices.list({ product: product.id, active: true });
 
-    const hasMonthly = prices.data.some(
+    const hasMonthly = existingPrices.data.some(
       (p) =>
         p.recurring?.interval === "month" &&
-        p.unit_amount === plan.monthlyPriceBRL &&
-        p.currency === "brl"
+        p.unit_amount === monthlyAmountCents &&
+        p.currency === "brl" &&
+        p.metadata?.planSlug === plan.slug
     );
-    if (!hasMonthly) {
+    if (!hasMonthly && monthlyAmountCents > 0) {
       const price = await stripe.prices.create({
         product: product.id,
-        unit_amount: plan.monthlyPriceBRL,
+        unit_amount: monthlyAmountCents,
         currency: "brl",
         recurring: { interval: "month" },
-        metadata: { slug: plan.slug, cycle: "monthly" },
+        metadata: { planSlug: plan.slug, planId: plan.id, cycle: "monthly" },
       });
-      console.log(
-        `  Created monthly price: R$${(plan.monthlyPriceBRL / 100).toFixed(2)}/mês (${price.id})`
-      );
-    } else {
-      console.log(`  Monthly price already exists.`);
+      console.log(`    Created monthly price: R$${(monthlyAmountCents / 100).toFixed(2)}/mês (${price.id})`);
+    } else if (hasMonthly) {
+      console.log(`    Monthly price already exists.`);
     }
 
-    const hasAnnual = prices.data.some(
+    const hasAnnual = existingPrices.data.some(
       (p) =>
         p.recurring?.interval === "year" &&
-        p.unit_amount === plan.annualPriceBRL &&
-        p.currency === "brl"
+        p.unit_amount === annualAmountCents &&
+        p.currency === "brl" &&
+        p.metadata?.planSlug === plan.slug
     );
-    if (!hasAnnual) {
+    if (!hasAnnual && annualAmountCents > 0) {
       const price = await stripe.prices.create({
         product: product.id,
-        unit_amount: plan.annualPriceBRL,
+        unit_amount: annualAmountCents,
         currency: "brl",
         recurring: { interval: "year" },
-        metadata: { slug: plan.slug, cycle: "annual" },
+        metadata: { planSlug: plan.slug, planId: plan.id, cycle: "annual" },
       });
-      console.log(
-        `  Created annual price: R$${(plan.annualPriceBRL / 100).toFixed(2)}/ano (${price.id})`
-      );
-    } else {
-      console.log(`  Annual price already exists.`);
+      console.log(`    Created annual price: R$${(annualAmountCents / 100).toFixed(2)}/ano (${price.id})`);
+    } else if (hasAnnual) {
+      console.log(`    Annual price already exists.`);
     }
   }
 
   console.log("\nDone! Stripe products and prices are ready.");
-  console.log(
-    "Set STRIPE_WEBHOOK_SECRET after creating a webhook endpoint that points to /api/webhooks/stripe."
-  );
+  console.log("Next steps:");
+  console.log("  1. Create a webhook in Stripe Dashboard → Developers → Webhooks");
+  console.log("     URL: https://<your-domain>/api/webhooks/stripe");
+  console.log("     Events: checkout.session.completed, invoice.payment_succeeded,");
+  console.log("             payment_intent.succeeded, payment_intent.payment_failed,");
+  console.log("             customer.subscription.updated, customer.subscription.deleted");
+  console.log("  2. Set STRIPE_WEBHOOK_SECRET in your environment secrets");
+  console.log("  3. Set VITE_STRIPE_PUBLIC_KEY in your environment secrets (for frontend)");
 }
 
 main().catch((err) => {

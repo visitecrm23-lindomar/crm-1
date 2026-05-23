@@ -91,8 +91,12 @@ export interface UpgradeSubscriptionBody {
 export interface UpgradeSubscriptionResponse {
   upgraded: boolean;
   pendingInvoice?: boolean;
+  trial?: boolean;
+  trialDays?: number;
+  trialEndsAt?: string;
   plan: PlanPublic;
   invoice: SubscriptionInvoice | null;
+  checkoutUrl?: string | null;
 }
 
 export const getCurrentSubscriptionQueryKey = () => ["/api/subscriptions/current"] as const;
@@ -205,7 +209,7 @@ export const useCreateCustomerPortalSession = <
 ): UseMutationResult<CustomerPortalResponse, TError, void, TContext> => {
   return useMutation({
     mutationFn: () =>
-      customFetch<CustomerPortalResponse>("/api/subscriptions/customer-portal", {
+      customFetch<CustomerPortalResponse>("/api/subscriptions/portal", {
         method: "POST",
       }),
     ...options,

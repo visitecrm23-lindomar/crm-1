@@ -8,7 +8,8 @@ import { generatePixEMV, generatePixQrCodeUrl } from "../lib/pix";
 import { persistUsageSnapshot } from "../lib/planLimits";
 import { generateInvoiceNumber } from "../lib/invoiceNumber";
 import { ROLES, INVOICE_STATUS, TENANT_STATUS, SUBSCRIPTION_STATUS } from "@workspace/permissions";
-import { getUncachableStripeClient, getStripeWebhookSecret } from "../lib/stripeClient";
+import { getUncachableStripeClient } from "../lib/stripeClient";
+import { handleStripeWebhook } from "../lib/stripeWebhookHandler";
 
 const router = Router();
 
@@ -208,6 +209,14 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
       }
     }
 
+    // Try Stripe Checkout Session first; fall back to PIX if Stripe not configured
+    let stripe;
+    try {
+      stripe = await getUncachableStripeClient();
+    } catch {
+      stripe = null;
+    }
+
     const price = parsed.data.billingCycle === "annual"
       ? Number(newPlan.annualPrice)
       : Number(newPlan.monthlyPrice);
@@ -222,6 +231,153 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
     const invoiceId = generateId();
     const invoiceNumber = await generateInvoiceNumber(me.tenantId, now.getFullYear());
 
+    if (stripe) {
+      // ── Stripe Checkout Session path ──
+      // Find or create Stripe customer for this tenant
+      const existingSubs = await db
+        .select()
+        .from(subscriptionsTable)
+        .where(eq(subscriptionsTable.tenantId, me.tenantId))
+        .orderBy(desc(subscriptionsTable.createdAt))
+        .limit(10);
+
+      let stripeCustomerId = existingSubs.find(s => s.stripeCustomerId)?.stripeCustomerId ?? null;
+      if (!stripeCustomerId) {
+        const existingInv = await db
+          .select({ cid: invoicesTable.stripeCustomerId })
+          .from(invoicesTable)
+          .where(eq(invoicesTable.tenantId, me.tenantId))
+          .orderBy(desc(invoicesTable.createdAt))
+          .limit(10);
+        stripeCustomerId = existingInv.find(i => i.cid)?.cid ?? null;
+      }
+
+      if (!stripeCustomerId) {
+        const [adminUser] = await db
+          .select({ email: usersTable.email, name: usersTable.name })
+          .from(usersTable)
+          .where(and(eq(usersTable.tenantId, me.tenantId), eq(usersTable.role, ROLES.AGENCY_ADMIN)))
+          .limit(1);
+
+        const customer = await stripe.customers.create({
+          email: adminUser?.email ?? undefined,
+          name: adminUser?.name ?? undefined,
+          metadata: { tenantId: me.tenantId },
+        });
+        stripeCustomerId = customer.id;
+
+        if (existingSubs.length > 0) {
+          await db.update(subscriptionsTable)
+            .set({ stripeCustomerId })
+            .where(eq(subscriptionsTable.id, existingSubs[0]!.id));
+        }
+      }
+
+      // Find active Stripe price matching plan + billing cycle
+      const priceInterval = parsed.data.billingCycle === "annual" ? "year" : "month";
+      const amountCents = Math.round(price * 100);
+
+      const stripePrices = await stripe.prices.search({
+        query: `metadata['planSlug']:'${newPlan.slug}' AND active:'true'`,
+      });
+
+      const matchingPrice = stripePrices.data.find(
+        p => p.recurring?.interval === priceInterval && p.unit_amount === amountCents && p.currency === "brl"
+      );
+
+      const frontendUrl = process.env["FRONTEND_URL"]
+        ?? (process.env["REPLIT_DEV_DOMAIN"] ? `https://${process.env["REPLIT_DEV_DOMAIN"]}` : "");
+      const successUrl = `${frontendUrl}/configuracoes?tab=plano&payment=success`;
+      const cancelUrl = `${frontendUrl}/configuracoes?tab=plano&payment=cancel`;
+
+      // Create pending invoice record
+      await db.insert(invoicesTable).values({
+        id: invoiceId,
+        invoiceNumber,
+        tenantId: me.tenantId,
+        planId: newPlan.id,
+        amount: String(price),
+        currency: "BRL",
+        status: INVOICE_STATUS.PENDING,
+        paymentMethod: "card",
+        dueDate,
+        description: `Assinatura ${newPlan.name} — ${parsed.data.billingCycle === "annual" ? "Anual" : "Mensal"}`,
+        billingPeriodStart: periodStart,
+        billingPeriodEnd: periodEnd,
+        stripeCustomerId,
+      });
+
+      await db.update(tenantsTable)
+        .set({ status: TENANT_STATUS.PENDING_PAYMENT, pendingPlanId: newPlan.slug, updatedAt: now })
+        .where(eq(tenantsTable.id, me.tenantId));
+
+      await db.insert(subscriptionsTable).values({
+        id: generateId(),
+        tenantId: me.tenantId,
+        planId: newPlan.id,
+        status: SUBSCRIPTION_STATUS.PENDING_PAYMENT,
+        billingCycle: parsed.data.billingCycle,
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
+        stripeCustomerId,
+      });
+
+      void persistUsageSnapshot(me.tenantId);
+
+      let checkoutSession;
+      if (matchingPrice) {
+        // Subscription mode — recurring billing
+        checkoutSession = await stripe.checkout.sessions.create({
+          mode: "subscription",
+          customer: stripeCustomerId,
+          line_items: [{ price: matchingPrice.id, quantity: 1 }],
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+          client_reference_id: me.tenantId,
+          metadata: { tenantId: me.tenantId, planId: newPlan.id, invoiceId },
+          subscription_data: {
+            metadata: { tenantId: me.tenantId, planId: newPlan.id },
+          },
+        });
+      } else {
+        // No recurring Stripe price found — use payment mode with ad-hoc price
+        checkoutSession = await stripe.checkout.sessions.create({
+          mode: "payment",
+          customer: stripeCustomerId,
+          line_items: [{
+            price_data: {
+              currency: "brl",
+              product_data: {
+                name: `VisiteCRM ${newPlan.name}`,
+                description: `Assinatura ${parsed.data.billingCycle === "annual" ? "anual" : "mensal"}`,
+              },
+              unit_amount: amountCents,
+            },
+            quantity: 1,
+          }],
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+          client_reference_id: me.tenantId,
+          metadata: { tenantId: me.tenantId, planId: newPlan.id, invoiceId },
+          payment_intent_data: {
+            metadata: { tenantId: me.tenantId, planId: newPlan.id, invoiceId },
+          },
+        });
+      }
+
+      // Store the checkout session ID on the invoice
+      if (checkoutSession.payment_intent && typeof checkoutSession.payment_intent === "string") {
+        await db.update(invoicesTable).set({
+          stripePaymentIntentId: checkoutSession.payment_intent,
+        }).where(eq(invoicesTable.id, invoiceId));
+      }
+
+      const [createdInvoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
+      res.json({ upgraded: false, pendingInvoice: true, plan: newPlan, invoice: createdInvoice, checkoutUrl: checkoutSession.url });
+      return;
+    }
+
+    // ── PIX fallback (when Stripe is not configured) ──
     const pixKey = process.env["PIX_KEY"];
     const pixName = process.env["PIX_NAME"] ?? "VisiteCRM";
     const pixCity = process.env["PIX_CITY"] ?? "SAO PAULO";
@@ -470,11 +626,14 @@ router.post("/invoices/:id/stripe/checkout", async (req, res): Promise<void> => 
   }
 });
 
-router.post("/subscriptions/customer-portal", async (req, res): Promise<void> => {
+router.post("/subscriptions/portal", async (req, res): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!me.tenantId) { res.status(400).json({ error: "No tenant" }); return; }
+    if (me.role !== ROLES.AGENCY_ADMIN && me.role !== ROLES.SUPER_ADMIN) {
+      res.status(403).json({ error: "Apenas administradores podem acessar o portal de cobrança" }); return;
+    }
 
     let stripe;
     try {
@@ -543,120 +702,6 @@ router.post("/subscriptions/customer-portal", async (req, res): Promise<void> =>
   }
 });
 
-async function activateInvoicePlan(
-  invoiceId: string,
-  tenantId: string,
-  log: { error: (obj: object, msg: string) => void }
-): Promise<void> {
-  const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
-  if (!invoice || invoice.status === INVOICE_STATUS.PAID) return;
-
-  await db.update(invoicesTable).set({
-    status: INVOICE_STATUS.PAID,
-    paidAt: new Date(),
-  }).where(eq(invoicesTable.id, invoiceId));
-
-  if (invoice.planId) {
-    const [plan] = await db.select().from(plansTable).where(eq(plansTable.id, invoice.planId)).limit(1);
-    if (plan) {
-      await db.update(tenantsTable).set({
-        planId: plan.slug,
-        pendingPlanId: null,
-        status: TENANT_STATUS.ACTIVE,
-        updatedAt: new Date(),
-      }).where(eq(tenantsTable.id, tenantId));
-
-      const existingSub = await db
-        .select()
-        .from(subscriptionsTable)
-        .where(eq(subscriptionsTable.tenantId, tenantId))
-        .orderBy(desc(subscriptionsTable.createdAt))
-        .limit(1);
-
-      const periodEnd = invoice.billingPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-      if (existingSub.length > 0) {
-        await db.update(subscriptionsTable).set({
-          planId: plan.id,
-          status: SUBSCRIPTION_STATUS.ACTIVE,
-          currentPeriodEnd: periodEnd,
-        }).where(eq(subscriptionsTable.id, existingSub[0]!.id));
-      } else {
-        await db.insert(subscriptionsTable).values({
-          id: generateId(),
-          tenantId,
-          planId: plan.id,
-          status: SUBSCRIPTION_STATUS.ACTIVE,
-          billingCycle: "monthly",
-          currentPeriodStart: new Date(),
-          currentPeriodEnd: periodEnd,
-        });
-      }
-    }
-  }
-}
-
-async function failInvoice(invoiceId: string): Promise<void> {
-  await db.update(invoicesTable).set({
-    status: INVOICE_STATUS.FAILED,
-    notes: "Pagamento falhou via Stripe",
-  }).where(eq(invoicesTable.id, invoiceId));
-}
-
-router.post("/webhooks/stripe", async (req, res): Promise<void> => {
-  try {
-    const webhookSecret = await getStripeWebhookSecret();
-    if (!webhookSecret) {
-      res.status(400).json({ error: "Stripe webhook não configurado" });
-      return;
-    }
-
-    const sig = req.headers["stripe-signature"] as string | undefined;
-    if (!sig) { res.status(400).json({ error: "Missing stripe-signature header" }); return; }
-
-    const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
-    if (!rawBody) {
-      res.status(400).json({ error: "Raw body não disponível para verificação de assinatura" });
-      return;
-    }
-
-    let stripe;
-    try {
-      stripe = await getUncachableStripeClient();
-    } catch {
-      res.status(400).json({ error: "Stripe não configurado" });
-      return;
-    }
-
-    let event;
-    try {
-      event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
-    } catch (err) {
-      req.log.warn({ err }, "Stripe webhook signature verification failed");
-      res.status(400).json({ error: "Assinatura inválida" });
-      return;
-    }
-
-    if (event.type === "payment_intent.succeeded") {
-      const pi = event.data.object;
-      const invoiceId = pi.metadata?.invoiceId;
-      const tenantId = pi.metadata?.tenantId;
-      if (invoiceId && tenantId) {
-        await activateInvoicePlan(invoiceId, tenantId, req.log);
-      }
-    } else if (event.type === "payment_intent.payment_failed") {
-      const pi = event.data.object;
-      const invoiceId = pi.metadata?.invoiceId;
-      if (invoiceId) {
-        await failInvoice(invoiceId);
-      }
-    }
-
-    res.json({ received: true });
-  } catch (err) {
-    req.log.error({ err }, "Error processing Stripe webhook");
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+router.post("/webhooks/stripe", (req, res) => void handleStripeWebhook(req, res));
 
 export default router;
