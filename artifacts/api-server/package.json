@@ -37,7 +37,8 @@
     "pino": "^9",
     "pino-http": "^10",
     "qrcode": "^1.5.4",
-    "stripe": "^22.1.1",
+    "stripe": "^20.0.0",
+    "stripe-replit-sync": "1.0.0",
     "uploadthing": "^7.7.4",
     "zod": "catalog:"
   },
