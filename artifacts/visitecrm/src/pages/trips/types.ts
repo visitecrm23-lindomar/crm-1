@@ -16,6 +16,7 @@ export interface TripFormData {
   departureTime: string; returnTime: string;
   totalCapacity: string; seatLayout: string;
   layoutId: string;
+  showSeatMap: boolean;
   priceAdult: string; priceChild: string; priceSenior: string;
   inclusions: string[]; exclusions: string[];
   coverImage: string;
@@ -57,6 +58,7 @@ export const EMPTY_FORM: TripFormData = {
   type: "excursao", category: "standard", departureDate: "", returnDate: "",
   departureTime: "", returnTime: "",
   totalCapacity: "46", seatLayout: "2x2", layoutId: "",
+  showSeatMap: true,
   priceAdult: "", priceChild: "", priceSenior: "",
   inclusions: ["Transporte ida e volta", "Café da manhã", "Guia turístico", "Seguro de viagem"],
   exclusions: ["Despesas pessoais", "Almoço e jantar", "Ingresso para atrações opcionais"],
@@ -86,6 +88,7 @@ export const toTripFormData = (trip: Trip): TripFormData => ({
   totalCapacity: String(trip.totalCapacity),
   seatLayout: trip.seatLayout ?? "2x2",
   layoutId: trip.layoutId ?? "",
+  showSeatMap: trip.showSeatMap !== false,
   priceAdult: String(trip.priceAdult),
   priceChild: trip.priceChild ? String(trip.priceChild) : "",
   priceSenior: trip.priceSenior ? String(trip.priceSenior) : "",

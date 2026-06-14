@@ -106,4 +106,6 @@ export interface UpdateTripBody {
   freeGuides?: number | null;
   /** @nullable */
   layoutId?: string | null;
+  /** @nullable */
+  showSeatMap?: boolean | null;
 }

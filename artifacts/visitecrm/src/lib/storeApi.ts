@@ -395,6 +395,7 @@ export interface StoreProduct {
   originState?: string | null;
   departureTime?: string | null;
   returnTime?: string | null;
+  showSeatMap?: boolean | null;
   type: string;
   name: string;
   slug: string;

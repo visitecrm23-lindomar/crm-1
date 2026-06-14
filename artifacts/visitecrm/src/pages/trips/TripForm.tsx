@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { ArrowLeft, Plus, X, Check, Clock, MapPin, Loader2, Link2, GripVertical } from "lucide-react";
 import { TiptapEditor } from "./TiptapEditor";
 import { LayoutMiniPreview, TripCostsTab } from "./TripCostsSection";
@@ -177,6 +178,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
             driver2Name: form.driver2Name || null, driver2Cpf: form.driver2Cpf || null, driver2Cnh: form.driver2Cnh || null, driver2CnhCategory: form.driver2CnhCategory || null, driver2CnhExpiry: form.driver2CnhExpiry || null,
             tourGuideCpf: form.tourGuideCpf || null, tourGuideRegistration: form.tourGuideRegistration || null,
             freePassengers: form.freePassengers,
+            showSeatMap: form.showSeatMap,
             status: statusToSave,
             itinerary: itineraryToSave.length ? itineraryToSave : undefined,
             boardingPoints: boardingPointsToSave.length ? boardingPointsToSave : undefined,
@@ -207,6 +209,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
             driver2Name: form.driver2Name || null, driver2Cpf: form.driver2Cpf || null, driver2Cnh: form.driver2Cnh || null, driver2CnhCategory: form.driver2CnhCategory || null, driver2CnhExpiry: form.driver2CnhExpiry || null,
             tourGuideCpf: form.tourGuideCpf || null, tourGuideRegistration: form.tourGuideRegistration || null,
             freePassengers: form.freePassengers,
+            showSeatMap: form.showSeatMap,
             status: statusToSave,
             itinerary: itineraryToSave.length ? itineraryToSave : undefined,
             boardingPoints: boardingPointsToSave.length ? boardingPointsToSave : undefined,
@@ -420,6 +423,23 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 {selectedLayout && (
                   <p className="text-xs text-muted-foreground">Calculado automaticamente ({selectedLayout.seatCount} assentos)</p>
                 )}
+              </div>
+              <div className="col-span-2">
+                <div className="flex items-center gap-4 p-4 border rounded-lg bg-card">
+                  <Switch
+                    id="showSeatMap"
+                    checked={form.showSeatMap}
+                    onCheckedChange={v => setForm(prev => ({ ...prev, showSeatMap: v }))}
+                  />
+                  <div>
+                    <Label htmlFor="showSeatMap" className="cursor-pointer font-medium">Exibir mapa de assentos na vitrine</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {form.showSeatMap
+                        ? "Passageiros escolherão seus assentos durante a reserva."
+                        : "Assentos serão atribuídos automaticamente em ordem de chegada."}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

@@ -80,6 +80,7 @@ export const tripsTable = pgTable("trips", {
   metaTitle: text("meta_title"),
   metaDescription: text("meta_description"),
   layoutId: text("layout_id"),
+  showSeatMap: boolean("show_seat_map").notNull().default(true),
   createdById: text("created_by_id").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

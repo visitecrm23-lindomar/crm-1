@@ -9,6 +9,7 @@ import { PublicStore } from "@/lib/storeApi";
 import { TRIP_TYPE_LABELS } from "@/lib/labels";
 import { useWizardState } from "./_wizard/use-wizard-state";
 import { StepIndicator } from "./_wizard/step-indicator";
+import { STEPS } from "./_wizard/constants";
 import { StepPassengerForm } from "./_wizard/step-passenger-form";
 import { StepReview } from "./_wizard/step-review";
 import { StepSeatSelector } from "./_wizard/step-seat-selector";
@@ -25,6 +26,9 @@ export default function ReservationWizard({
   store: PublicStore;
 }) {
   const state = useWizardState({ slug, productSlug, store });
+  const visibleSteps = state.product?.showSeatMap === false
+    ? STEPS.filter(s => s.key !== "assento")
+    : STEPS;
   const {
     product,
     loadingProduct,
@@ -89,7 +93,7 @@ export default function ReservationWizard({
         )}
       </div>
 
-      <StepIndicator current={step} />
+      <StepIndicator current={step} steps={visibleSteps} />
 
       {step === "dados" && <StepPassengerForm state={state} />}
       {step === "revisao" && <StepReview state={state} store={store} />}

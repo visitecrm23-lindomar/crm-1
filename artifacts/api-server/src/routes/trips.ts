@@ -187,6 +187,7 @@ function formatTrip(t: typeof tripsTable.$inferSelect) {
     manifestNumber: t.manifestNumber ?? null,
     seatLayout: t.seatLayout,
     layoutId: t.layoutId ?? null,
+    showSeatMap: t.showSeatMap,
     fixedCosts: Array.isArray(t.fixedCosts) ? t.fixedCosts as FixedCostItem[] : [],
     variableCosts: Array.isArray(t.variableCosts) ? t.variableCosts as VariableCostItem[] : [],
     freeOrganizers: t.freeOrganizers ?? null,
@@ -326,6 +327,7 @@ router.post("/trips", async (req, res, next: NextFunction): Promise<void> => {
       driver2CnhExpiry: parsed.data.driver2CnhExpiry ?? null,
       tourGuideCpf: parsed.data.tourGuideCpf ?? null,
       tourGuideRegistration: parsed.data.tourGuideRegistration ?? null,
+      ...(parsed.data.showSeatMap != null ? { showSeatMap: parsed.data.showSeatMap } : {}),
     });
 
     const [trip] = await db.select().from(tripsTable)
@@ -378,6 +380,7 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
     if (parsed.data.coverImage !== undefined) updates.coverImage = parsed.data.coverImage ?? null;
     if (parsed.data.seatLayout !== undefined) updates.seatLayout = parsed.data.seatLayout ?? null;
     if (parsed.data.layoutId !== undefined) updates.layoutId = parsed.data.layoutId ?? null;
+    if (parsed.data.showSeatMap != null) updates.showSeatMap = parsed.data.showSeatMap;
 
     const capacityOrLayoutChanged =
       parsed.data.totalCapacity != null || parsed.data.seatLayout !== undefined || parsed.data.layoutId !== undefined;

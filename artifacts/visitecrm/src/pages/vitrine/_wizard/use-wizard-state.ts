@@ -314,6 +314,7 @@ export function useWizardState({
   }
 
   function canProceedFromAssento() {
+    if (product?.showSeatMap === false) return true;
     if (layoutSeatMap) return layoutSeats.length === qty;
     if (showSeatGrid) return selectedSeats.length === qty;
     return true;
@@ -390,13 +391,29 @@ export function useWizardState({
 
   function goNext() {
     const idx = STEP_ORDER.indexOf(step);
-    if (idx < STEP_ORDER.length - 1) setStep(STEP_ORDER[idx + 1]);
+    if (idx < STEP_ORDER.length - 1) {
+      const next = STEP_ORDER[idx + 1];
+      if (next === "assento" && product?.showSeatMap === false) {
+        if (idx + 2 < STEP_ORDER.length) setStep(STEP_ORDER[idx + 2]);
+      } else {
+        setStep(next);
+      }
+    }
   }
 
   function goBack() {
     const idx = STEP_ORDER.indexOf(step);
-    if (idx > 0) setStep(STEP_ORDER[idx - 1]);
-    else navigate(`/loja/${slug}/produtos/${productSlug}`);
+    if (idx > 0) {
+      const prev = STEP_ORDER[idx - 1];
+      if (prev === "assento" && product?.showSeatMap === false) {
+        if (idx - 2 >= 0) setStep(STEP_ORDER[idx - 2]);
+        else navigate(`/loja/${slug}/produtos/${productSlug}`);
+      } else {
+        setStep(prev);
+      }
+    } else {
+      navigate(`/loja/${slug}/produtos/${productSlug}`);
+    }
   }
 
   useEffect(() => {

@@ -1640,6 +1640,7 @@ export const CreateTripBody = zod.object({
     seatNumber: zod.string().nullable(),
   })).optional(),
   layoutId: zod.string().nullish(),
+  showSeatMap: zod.boolean().nullish(),
 });
 
 /**
@@ -1813,6 +1814,7 @@ export const UpdateTripBody = zod.object({
     seatNumber: zod.string().nullable(),
   })).nullish(),
   layoutId: zod.string().nullish(),
+  showSeatMap: zod.boolean().nullish(),
 });
 
 export const updateTripResponseFreeOrganizersMin = 0;

@@ -288,6 +288,13 @@
       "when": 1748400000000,
       "tag": "0040_add_stripe_webhook_secret",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1748500000000,
+      "tag": "0041_add_show_seat_map",
+      "breakpoints": true
     }
   ]
 }

@@ -101,6 +101,7 @@ export interface Trip {
   freeGuides?: number | null;
   /** @nullable */
   layoutId?: string | null;
+  showSeatMap?: boolean;
   createdAt: string;
   updatedAt: string;
 }

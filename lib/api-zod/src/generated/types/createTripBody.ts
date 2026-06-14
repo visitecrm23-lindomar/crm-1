@@ -94,4 +94,6 @@ export interface CreateTripBody {
   freeGuides?: number | null;
   /** @nullable */
   layoutId?: string | null;
+  /** @nullable */
+  showSeatMap?: boolean | null;
 }

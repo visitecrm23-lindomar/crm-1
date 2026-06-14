@@ -170,9 +170,26 @@ async function writeReservationsAndDeals(
     const voucherCode = generateVoucherCode();
     const reservationId = generateId();
     if (!firstReservationId) firstReservationId = reservationId;
-    const realSeats = (data.seats && data.seats.length >= totalQty)
-      ? data.seats.slice(0, totalQty)
-      : Array.from({ length: totalQty }, (_, i) => String(i + 1));
+    let realSeats: string[];
+    if (data.seats && data.seats.length >= totalQty) {
+      realSeats = data.seats.slice(0, totalQty);
+    } else {
+      const activeReservations = await tx.select({ seats: reservationsTable.seats })
+        .from(reservationsTable)
+        .where(and(
+          eq(reservationsTable.tripId, tripId),
+          eq(reservationsTable.tenantId, store.tenantId),
+          inArray(reservationsTable.status, [RESERVATION_STATUS.PENDING, RESERVATION_STATUS.CONFIRMED]),
+        ));
+      const occupied = new Set(activeReservations.flatMap(r => r.seats));
+      const assigned: string[] = [];
+      let candidate = 1;
+      while (assigned.length < totalQty && candidate <= 999) {
+        if (!occupied.has(String(candidate))) assigned.push(String(candidate));
+        candidate++;
+      }
+      realSeats = assigned;
+    }
     const resTypeCode = tripTypeToCode(lockedTripTypes.get(tripId) ?? "");
     const resSeq = await nextReservationSequence(store.tenantId, resYearMonth, resTypeCode, tx);
     const reservationNumber = buildReservationNumber(tenantResPrefix, resTypeCode, resYearMonth, resSeq);

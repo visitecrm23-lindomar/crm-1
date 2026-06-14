@@ -1,11 +1,14 @@
 import { Check } from "lucide-react";
 import { STEPS, type Step } from "./constants";
+import type { ReactNode } from "react";
 
-export function StepIndicator({ current }: { current: Step }) {
-  const currentIdx = STEPS.findIndex((s) => s.key === current);
+type StepEntry = { key: Step; label: string; icon: ReactNode };
+
+export function StepIndicator({ current, steps = STEPS }: { current: Step; steps?: StepEntry[] }) {
+  const currentIdx = steps.findIndex((s) => s.key === current);
   return (
     <div className="flex items-center justify-center mb-8 print:hidden">
-      {STEPS.map((step, idx) => {
+      {steps.map((step, idx) => {
         const done = idx < currentIdx;
         const active = idx === currentIdx;
         return (
@@ -30,7 +33,7 @@ export function StepIndicator({ current }: { current: Step }) {
                 {step.label}
               </span>
             </div>
-            {idx < STEPS.length - 1 && (
+            {idx < steps.length - 1 && (
               <div className={`h-0.5 w-8 sm:w-12 mx-1 ${done ? "bg-green-500" : "bg-muted"}`} />
             )}
           </div>
