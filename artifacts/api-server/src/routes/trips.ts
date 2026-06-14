@@ -390,15 +390,17 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
     if (parsed.data.coverImage !== undefined) updates.coverImage = parsed.data.coverImage ?? null;
     if (parsed.data.seatLayout !== undefined) updates.seatLayout = parsed.data.seatLayout ?? null;
     if (parsed.data.layoutId !== undefined) updates.layoutId = parsed.data.layoutId ?? null;
-    if (parsed.data.showSeatMap != null) {
-      const [patchTenantPlanRow] = await db
-        .select({ supportedFeatures: plansTable.supportedFeatures })
-        .from(tenantsTable)
-        .leftJoin(plansTable, eq(plansTable.slug, tenantsTable.planId))
-        .where(eq(tenantsTable.id, me.tenantId))
-        .limit(1);
-      const patchPlanSupportsSeatMap = hasSeatMapFeature((patchTenantPlanRow?.supportedFeatures ?? []) as string[]);
-      updates.showSeatMap = patchPlanSupportsSeatMap ? parsed.data.showSeatMap : true;
+    const [patchTenantPlanRow] = await db
+      .select({ supportedFeatures: plansTable.supportedFeatures })
+      .from(tenantsTable)
+      .leftJoin(plansTable, eq(plansTable.slug, tenantsTable.planId))
+      .where(eq(tenantsTable.id, me.tenantId))
+      .limit(1);
+    const patchPlanSupportsSeatMap = hasSeatMapFeature((patchTenantPlanRow?.supportedFeatures ?? []) as string[]);
+    if (!patchPlanSupportsSeatMap) {
+      updates.showSeatMap = true;
+    } else if (parsed.data.showSeatMap != null) {
+      updates.showSeatMap = parsed.data.showSeatMap;
     }
 
     const capacityOrLayoutChanged =
