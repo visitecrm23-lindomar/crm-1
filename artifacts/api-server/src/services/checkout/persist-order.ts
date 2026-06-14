@@ -181,14 +181,12 @@ async function writeReservationsAndDeals(
           eq(reservationsTable.tenantId, store.tenantId),
           inArray(reservationsTable.status, [RESERVATION_STATUS.PENDING, RESERVATION_STATUS.CONFIRMED]),
         ));
-      const occupied = new Set(activeReservations.flatMap(r => r.seats));
-      const assigned: string[] = [];
-      let candidate = 1;
-      while (assigned.length < totalQty && candidate <= 999) {
-        if (!occupied.has(String(candidate))) assigned.push(String(candidate));
-        candidate++;
-      }
-      realSeats = assigned;
+      const allOccupiedNums = activeReservations
+        .flatMap(r => r.seats)
+        .map(s => parseInt(s, 10))
+        .filter(n => !isNaN(n));
+      const maxOccupied = allOccupiedNums.length > 0 ? Math.max(...allOccupiedNums) : 0;
+      realSeats = Array.from({ length: totalQty }, (_, i) => String(maxOccupied + 1 + i));
     }
     const resTypeCode = tripTypeToCode(lockedTripTypes.get(tripId) ?? "");
     const resSeq = await nextReservationSequence(store.tenantId, resYearMonth, resTypeCode, tx);
