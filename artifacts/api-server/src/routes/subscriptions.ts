@@ -603,6 +603,10 @@ router.post("/admin/invoices/:id/confirm-payment", async (req, res): Promise<voi
           status: TENANT_STATUS.ACTIVE,
         }).where(eq(tenantsTable.id, invoice.tenantId));
 
+        if (!hasSeatMapFeature((plan.supportedFeatures ?? []) as string[])) {
+          await db.update(tripsTable).set({ showSeatMap: true }).where(eq(tripsTable.tenantId, invoice.tenantId));
+        }
+
         const existingSub = await db
           .select()
           .from(subscriptionsTable)
