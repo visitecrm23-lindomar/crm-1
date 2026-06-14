@@ -19,7 +19,7 @@ run = "pnpm --filter @workspace/visitecrm run dev"
 
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/visitecrm", "run", "build" ]
-run = "npx serve -s artifacts/visitecrm/dist/public -l $PORT"
+run = "node artifacts/visitecrm/serve-static.mjs"
 
 [services.env]
 PORT = "19951"
