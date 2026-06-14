@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Plus, X, Check, Clock, MapPin, Loader2, Link2, GripVertical } from "lucide-react";
+import { ArrowLeft, Plus, X, Check, Clock, MapPin, Loader2, Link2, GripVertical, Lock } from "lucide-react";
 import { TiptapEditor } from "./TiptapEditor";
 import { LayoutMiniPreview, TripCostsTab } from "./TripCostsSection";
 import { formatCurrency } from "./utils";
@@ -427,7 +427,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
                   <p className="text-xs text-muted-foreground">Calculado automaticamente ({selectedLayout.seatCount} assentos)</p>
                 )}
               </div>
-              {hasSeatMapPlan && (
+              {hasSeatMapPlan ? (
                 <div className="col-span-2">
                   <div className="flex items-center gap-4 p-4 border rounded-lg bg-card">
                     <Switch
@@ -441,6 +441,25 @@ export function TripForm({ tripId }: { tripId?: string }) {
                         {form.showSeatMap
                           ? "Passageiros escolherão seus assentos durante a reserva."
                           : "Assentos serão atribuídos automaticamente em ordem de chegada."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="col-span-2">
+                  <div className="flex items-center gap-4 p-4 border rounded-lg bg-muted/40">
+                    <Lock className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-muted-foreground">Exibir mapa de assentos na vitrine</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Disponível no plano Pro.{" "}
+                        <button
+                          type="button"
+                          className="text-primary underline hover:text-primary/80"
+                          onClick={() => navigate("/configuracoes?tab=plan")}
+                        >
+                          Fazer upgrade
+                        </button>
                       </p>
                     </div>
                   </div>
