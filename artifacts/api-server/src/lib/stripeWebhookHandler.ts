@@ -1,10 +1,11 @@
 import type { Request, Response } from "express";
-import { db, tenantsTable, plansTable, invoicesTable, subscriptionsTable } from "@workspace/db";
+import { db, tenantsTable, plansTable, invoicesTable, subscriptionsTable, tripsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { INVOICE_STATUS, TENANT_STATUS, SUBSCRIPTION_STATUS } from "@workspace/permissions";
 import { getUncachableStripeClient, getStripeWebhookSecret } from "./stripeClient";
 import { generateId } from "./id";
 import { logger } from "./logger";
+import { hasSeatMapFeature } from "./plan-features";
 
 async function activateSubscriptionForTenant(
   tenantId: string,
@@ -30,6 +31,10 @@ async function activateSubscriptionForTenant(
     status: TENANT_STATUS.ACTIVE,
     updatedAt: new Date(),
   }).where(eq(tenantsTable.id, tenantId));
+
+  if (!hasSeatMapFeature((plan.supportedFeatures ?? []) as string[])) {
+    await db.update(tripsTable).set({ showSeatMap: true }).where(eq(tripsTable.tenantId, tenantId));
+  }
 
   const existingSubs = await db.select().from(subscriptionsTable)
     .where(eq(subscriptionsTable.tenantId, tenantId))

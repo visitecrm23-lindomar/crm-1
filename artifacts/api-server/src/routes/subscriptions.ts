@@ -10,6 +10,7 @@ import { generateInvoiceNumber } from "../lib/invoiceNumber";
 import { ROLES, INVOICE_STATUS, TENANT_STATUS, SUBSCRIPTION_STATUS } from "@workspace/permissions";
 import { getUncachableStripeClient } from "../lib/stripeClient";
 import { handleStripeWebhook } from "../lib/stripeWebhookHandler";
+import { hasSeatMapFeature } from "../lib/plan-features";
 
 const router = Router();
 
@@ -139,6 +140,10 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
         currentPeriodStart: new Date(),
         currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
       });
+
+      if (!hasSeatMapFeature((newPlan.supportedFeatures ?? []) as string[])) {
+        await db.update(tripsTable).set({ showSeatMap: true }).where(eq(tripsTable.tenantId, me.tenantId));
+      }
 
       res.json({ upgraded: true, plan: newPlan, invoice: null });
       return;

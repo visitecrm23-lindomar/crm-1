@@ -1,10 +1,11 @@
 import { Router } from "express";
-import { db, invoicesTable, tenantsTable, plansTable, subscriptionsTable } from "@workspace/db";
+import { db, invoicesTable, tenantsTable, plansTable, subscriptionsTable, tripsTable } from "@workspace/db";
 import { eq, desc, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { ROLES, INVOICE_STATUS, INVOICE_STATUS_VALUES, TENANT_STATUS, SUBSCRIPTION_STATUS } from "@workspace/permissions";
+import { hasSeatMapFeature } from "../lib/plan-features";
 
 async function activateInvoicePlan(invoiceId: string, tenantId: string): Promise<void> {
   const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
@@ -18,6 +19,10 @@ async function activateInvoicePlan(invoiceId: string, tenantId: string): Promise
     if (plan) {
       await db.update(tenantsTable).set({ planId: plan.slug, pendingPlanId: null, status: TENANT_STATUS.ACTIVE, updatedAt: new Date() })
         .where(eq(tenantsTable.id, tenantId));
+
+      if (!hasSeatMapFeature((plan.supportedFeatures ?? []) as string[])) {
+        await db.update(tripsTable).set({ showSeatMap: true }).where(eq(tripsTable.tenantId, tenantId));
+      }
 
       const [existingSub] = await db.select().from(subscriptionsTable)
         .where(eq(subscriptionsTable.tenantId, tenantId))

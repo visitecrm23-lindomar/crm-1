@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
-import { useGetTrip, useCreateTrip, useUpdateTrip, useListLayouts, useListBoardingLocations } from "@workspace/api-client-react";
+import { useGetTrip, useCreateTrip, useUpdateTrip, useListLayouts, useListBoardingLocations, useGetCurrentSubscription } from "@workspace/api-client-react";
 import { PlanLimitWall, usePlanLimitError } from "@/components/plan-limit-wall";
 import { CoverImageUpload } from "@/components/cover-image-upload";
 import { GalleryUpload } from "@/components/gallery-upload";
@@ -63,6 +63,9 @@ export function TripForm({ tripId }: { tripId?: string }) {
     dragItem.current = null;
     dragOverItem.current = null;
   }
+
+  const { data: subData } = useGetCurrentSubscription();
+  const hasSeatMapPlan = ((subData?.plan?.supportedFeatures ?? []) as string[]).includes("seatMap");
 
   const { data: existingTrip } = useGetTrip(tripId ?? "", { query: { enabled: !!tripId, queryKey: ["/api/trips", tripId] } });
   const { data: layouts = [] } = useListLayouts({ query: { queryKey: ["layouts"] } });
@@ -424,23 +427,25 @@ export function TripForm({ tripId }: { tripId?: string }) {
                   <p className="text-xs text-muted-foreground">Calculado automaticamente ({selectedLayout.seatCount} assentos)</p>
                 )}
               </div>
-              <div className="col-span-2">
-                <div className="flex items-center gap-4 p-4 border rounded-lg bg-card">
-                  <Switch
-                    id="showSeatMap"
-                    checked={form.showSeatMap}
-                    onCheckedChange={v => setForm(prev => ({ ...prev, showSeatMap: v }))}
-                  />
-                  <div>
-                    <Label htmlFor="showSeatMap" className="cursor-pointer font-medium">Exibir mapa de assentos na vitrine</Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {form.showSeatMap
-                        ? "Passageiros escolherão seus assentos durante a reserva."
-                        : "Assentos serão atribuídos automaticamente em ordem de chegada."}
-                    </p>
+              {hasSeatMapPlan && (
+                <div className="col-span-2">
+                  <div className="flex items-center gap-4 p-4 border rounded-lg bg-card">
+                    <Switch
+                      id="showSeatMap"
+                      checked={form.showSeatMap}
+                      onCheckedChange={v => setForm(prev => ({ ...prev, showSeatMap: v }))}
+                    />
+                    <div>
+                      <Label htmlFor="showSeatMap" className="cursor-pointer font-medium">Exibir mapa de assentos na vitrine</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {form.showSeatMap
+                          ? "Passageiros escolherão seus assentos durante a reserva."
+                          : "Assentos serão atribuídos automaticamente em ordem de chegada."}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </TabsContent>

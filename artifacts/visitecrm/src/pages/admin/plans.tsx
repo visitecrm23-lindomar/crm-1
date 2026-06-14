@@ -166,8 +166,8 @@ function PlanModal({ plan, onClose }: PlanModalProps) {
           </div>
           <div>
             <Label className="text-sm font-medium">Funcionalidades habilitadas (separadas por vírgula)</Label>
-            <Input value={form.supportedFeatures} onChange={(e) => setForm({ ...form, supportedFeatures: e.target.value })} placeholder="referrals, coupons" />
-            <p className="text-xs text-muted-foreground mt-1">Chaves de funcionalidades desbloqueadas neste plano. Ex: <span className="font-mono">referrals</span>, <span className="font-mono">coupons</span></p>
+            <Input value={form.supportedFeatures} onChange={(e) => setForm({ ...form, supportedFeatures: e.target.value })} placeholder="referrals, coupons, seatMap" />
+            <p className="text-xs text-muted-foreground mt-1">Chaves de funcionalidades desbloqueadas neste plano. Ex: <span className="font-mono">referrals</span>, <span className="font-mono">coupons</span>, <span className="font-mono">seatMap</span></p>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="flex items-center gap-2">

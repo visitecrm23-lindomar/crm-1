@@ -1,13 +1,14 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { addSeatClient, removeSeatClient } from "../lib/seat-sse";
-import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable, auditLogsTable } from "@workspace/db";
+import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable, auditLogsTable, plansTable } from "@workspace/db";
 import { checkPlanLimit } from "../lib/planLimits";
 import type { LayoutCell, FixedCostItem, VariableCostItem, FreePassenger } from "@workspace/db";
 import { eq, and, ilike, sql, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { deleteOrphanedFile } from "../lib/uploadthing";
+import { hasSeatMapFeature } from "../lib/plan-features";
 import { deriveAgeCategory, getAgeYears } from "../lib/passenger";
 import { CreateTripBody, UpdateTripBody } from "@workspace/api-zod";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
@@ -273,6 +274,15 @@ router.post("/trips", async (req, res, next: NextFunction): Promise<void> => {
       }
     }
 
+    const [tenantPlanRow] = await db
+      .select({ supportedFeatures: plansTable.supportedFeatures })
+      .from(tenantsTable)
+      .leftJoin(plansTable, eq(plansTable.slug, tenantsTable.planId))
+      .where(eq(tenantsTable.id, me.tenantId))
+      .limit(1);
+    const planSupportsSeatMap = hasSeatMapFeature((tenantPlanRow?.supportedFeatures ?? []) as string[]);
+    const resolvedShowSeatMap = planSupportsSeatMap ? (parsed.data.showSeatMap ?? true) : true;
+
     await db.insert(tripsTable).values({
       id,
       tenantId: me.tenantId,
@@ -327,7 +337,7 @@ router.post("/trips", async (req, res, next: NextFunction): Promise<void> => {
       driver2CnhExpiry: parsed.data.driver2CnhExpiry ?? null,
       tourGuideCpf: parsed.data.tourGuideCpf ?? null,
       tourGuideRegistration: parsed.data.tourGuideRegistration ?? null,
-      ...(parsed.data.showSeatMap != null ? { showSeatMap: parsed.data.showSeatMap } : {}),
+      showSeatMap: resolvedShowSeatMap,
     });
 
     const [trip] = await db.select().from(tripsTable)
@@ -380,7 +390,16 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
     if (parsed.data.coverImage !== undefined) updates.coverImage = parsed.data.coverImage ?? null;
     if (parsed.data.seatLayout !== undefined) updates.seatLayout = parsed.data.seatLayout ?? null;
     if (parsed.data.layoutId !== undefined) updates.layoutId = parsed.data.layoutId ?? null;
-    if (parsed.data.showSeatMap != null) updates.showSeatMap = parsed.data.showSeatMap;
+    if (parsed.data.showSeatMap != null) {
+      const [patchTenantPlanRow] = await db
+        .select({ supportedFeatures: plansTable.supportedFeatures })
+        .from(tenantsTable)
+        .leftJoin(plansTable, eq(plansTable.slug, tenantsTable.planId))
+        .where(eq(tenantsTable.id, me.tenantId))
+        .limit(1);
+      const patchPlanSupportsSeatMap = hasSeatMapFeature((patchTenantPlanRow?.supportedFeatures ?? []) as string[]);
+      updates.showSeatMap = patchPlanSupportsSeatMap ? parsed.data.showSeatMap : true;
+    }
 
     const capacityOrLayoutChanged =
       parsed.data.totalCapacity != null || parsed.data.seatLayout !== undefined || parsed.data.layoutId !== undefined;

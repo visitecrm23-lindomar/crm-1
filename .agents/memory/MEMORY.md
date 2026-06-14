@@ -1,1 +1,2 @@
 - [api-zod-manual-edits](api-zod-manual-edits.md) — orval-generated files in lib/api-zod are hand-edited; must update both TS types AND Zod schemas in api.ts together
+- [DB package TypeScript build](db-ts-build.md) — After adding columns to DB schema, run `npx tsc --build` in lib/db and lib/api-zod to refresh .d.ts files used by api-server.

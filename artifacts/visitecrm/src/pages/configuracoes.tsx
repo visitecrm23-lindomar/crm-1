@@ -1977,6 +1977,35 @@ function FeaturesTab() {
             </div>
           );
         })}
+        {(() => {
+          const seatMapLocked = isFeatureLocked("seatMap");
+          return (
+            <div
+              className={`flex items-center justify-between px-4 py-4 gap-4 ${seatMapLocked ? "cursor-pointer" : ""}`}
+              onClick={seatMapLocked ? () => setUpgradeModal({ label: "Mapa de Assentos Personalizável", planLabel: "Pro" }) : undefined}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium">Mapa de Assentos Personalizável</p>
+                  {seatMapLocked ? (
+                    <Badge variant="secondary" className="flex items-center gap-1 text-xs">
+                      <Lock className="w-3 h-3" />
+                      Disponível no plano Pro
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="flex items-center gap-1 text-xs text-green-700 border-green-300 bg-green-50">
+                      <CheckCircle2 className="w-3 h-3" />
+                      Ativo no seu plano
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Permite ocultar o mapa de assentos em viagens individuais — configurável em cada viagem.
+                </p>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {upgradeModal && (

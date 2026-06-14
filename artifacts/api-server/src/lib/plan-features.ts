@@ -12,6 +12,7 @@ interface FeatureRequirement {
 const FEATURE_REQUIREMENTS: Record<string, FeatureRequirement> = {
   referralsEnabled: { minTier: 1, label: "Programa de Indicação" },
   couponsEnabled: { minTier: 0, label: "Cupons de Desconto" },
+  seatMap: { minTier: 1, label: "Mapa de Assentos Personalizável" },
 };
 
 export function getPlanTier(planId: string): number {
@@ -34,4 +35,8 @@ export function getFeatureRequiredPlanLabel(featureKey: string): string | null {
 
 export function getFeatureLabel(featureKey: string): string {
   return FEATURE_REQUIREMENTS[featureKey]?.label ?? featureKey;
+}
+
+export function hasSeatMapFeature(supportedFeatures: string[]): boolean {
+  return supportedFeatures.includes("seatMap");
 }
