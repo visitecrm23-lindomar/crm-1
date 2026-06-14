@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, tenantsTable, usersTable, plansTable, referralSettingsTable, tripsTable } from "@workspace/db";
-import { eq, desc, count } from "drizzle-orm";
+import { eq, desc, count, or } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
@@ -197,10 +197,11 @@ router.patch("/tenants/:id", async (req, res): Promise<void> => {
     const oldLogoUrl = existing?.logoUrl;
     await db.update(tenantsTable).set(updateData).where(eq(tenantsTable.id, req.params.id));
     if (typeof updateData.planId === "string" && updateData.planId) {
+      const newPlanId = updateData.planId;
       const [syncPlan] = await db
         .select({ supportedFeatures: plansTable.supportedFeatures })
         .from(plansTable)
-        .where(eq(plansTable.slug, updateData.planId))
+        .where(or(eq(plansTable.id, newPlanId), eq(plansTable.slug, newPlanId)))
         .limit(1);
       if (syncPlan && !hasSeatMapFeature((syncPlan.supportedFeatures ?? []) as string[])) {
         await db.update(tripsTable).set({ showSeatMap: true }).where(eq(tripsTable.tenantId, req.params.id));
