@@ -4,7 +4,7 @@ import { addSeatClient, removeSeatClient } from "../lib/seat-sse";
 import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable, auditLogsTable, plansTable } from "@workspace/db";
 import { checkPlanLimit } from "../lib/planLimits";
 import type { LayoutCell, FixedCostItem, VariableCostItem, FreePassenger } from "@workspace/db";
-import { eq, and, ilike, sql, desc, inArray } from "drizzle-orm";
+import { eq, and, ilike, sql, desc, inArray, or } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { deleteOrphanedFile } from "../lib/uploadthing";
@@ -274,11 +274,16 @@ router.post("/trips", async (req, res, next: NextFunction): Promise<void> => {
       }
     }
 
+    const [tenantRow] = await db
+      .select({ planId: tenantsTable.planId })
+      .from(tenantsTable)
+      .where(eq(tenantsTable.id, me.tenantId))
+      .limit(1);
+    const tenantPlanId = tenantRow?.planId ?? "starter";
     const [tenantPlanRow] = await db
       .select({ supportedFeatures: plansTable.supportedFeatures })
-      .from(tenantsTable)
-      .leftJoin(plansTable, eq(plansTable.slug, tenantsTable.planId))
-      .where(eq(tenantsTable.id, me.tenantId))
+      .from(plansTable)
+      .where(or(eq(plansTable.id, tenantPlanId), eq(plansTable.slug, tenantPlanId)))
       .limit(1);
     const planSupportsSeatMap = hasSeatMapFeature((tenantPlanRow?.supportedFeatures ?? []) as string[]);
     const resolvedShowSeatMap = planSupportsSeatMap ? (parsed.data.showSeatMap ?? true) : true;
@@ -390,11 +395,16 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
     if (parsed.data.coverImage !== undefined) updates.coverImage = parsed.data.coverImage ?? null;
     if (parsed.data.seatLayout !== undefined) updates.seatLayout = parsed.data.seatLayout ?? null;
     if (parsed.data.layoutId !== undefined) updates.layoutId = parsed.data.layoutId ?? null;
+    const [patchTenantRow] = await db
+      .select({ planId: tenantsTable.planId })
+      .from(tenantsTable)
+      .where(eq(tenantsTable.id, me.tenantId))
+      .limit(1);
+    const patchTenantPlanId = patchTenantRow?.planId ?? "starter";
     const [patchTenantPlanRow] = await db
       .select({ supportedFeatures: plansTable.supportedFeatures })
-      .from(tenantsTable)
-      .leftJoin(plansTable, eq(plansTable.slug, tenantsTable.planId))
-      .where(eq(tenantsTable.id, me.tenantId))
+      .from(plansTable)
+      .where(or(eq(plansTable.id, patchTenantPlanId), eq(plansTable.slug, patchTenantPlanId)))
       .limit(1);
     const patchPlanSupportsSeatMap = hasSeatMapFeature((patchTenantPlanRow?.supportedFeatures ?? []) as string[]);
     if (!patchPlanSupportsSeatMap) {
