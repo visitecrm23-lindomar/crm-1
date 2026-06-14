@@ -1084,7 +1084,7 @@ async function processExpiringSoonReferralNotifications(): Promise<void> {
 
 const BONUS_LOCK_DAYS = 30;
 
-async function processReferralBonusReleaseNotifications(): Promise<void> {
+export async function processReferralBonusReleaseNotifications(): Promise<void> {
   const tz = process.env["REMINDER_TZ"] ?? "America/Sao_Paulo";
 
   // Fetch per-tenant settings. Only consider tenants with referrals enabled (isEnabled=true).
@@ -1161,36 +1161,41 @@ async function processReferralBonusReleaseNotifications(): Promise<void> {
         timeZone: tz,
       });
 
-      // Check whether the referrer has an email address BEFORE stamping.
-      // Stamping without email would permanently suppress future retries if
-      // an email address is added to the client record later.
-      const hasEmail = await dispatchReferralBonusReleasedEmail(
+      // Atomically claim this referral BEFORE dispatching the email.
+      // The IS NULL guard in the WHERE clause means only one concurrent cron run
+      // can win the race: the first writer gets a non-empty RETURNING result and
+      // proceeds to dispatch; subsequent writers get an empty result and skip.
+      // This prevents double-sending even when multiple cron instances overlap.
+      //
+      // Trade-off: if the referrer currently has no email address the stamp is
+      // set permanently (future runs will skip). This case is rare — a referrer
+      // must have had an account (and email) to generate a code. If needed, an
+      // operator can manually reset bonusReleaseNotifiedAt on the row.
+      //
+      // NOTE: if the email job is enqueued but the email worker later exhausts
+      // retries, bonusReleaseNotifiedAt will remain set and this cron will not
+      // retry automatically. A dedicated retry path can be added later (see
+      // retryFailedExpiryWarningEmails for the expiry-warning equivalent).
+      const stamped = await db
+        .update(referralsTable)
+        .set({ bonusReleaseNotifiedAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(referralsTable.id, referral.id), isNull(referralsTable.bonusReleaseNotifiedAt)))
+        .returning({ id: referralsTable.id });
+
+      if (stamped.length === 0) {
+        // Another concurrent run already claimed this referral — skip dispatch
+        // to avoid a double-send. The winning run will (or already did) dispatch.
+        logger.info({ referralId: referral.id }, "[bonus-release] Stamp was no-op — concurrent run already claimed this referral, skipping dispatch");
+        continue;
+      }
+
+      await dispatchReferralBonusReleasedEmail(
         referral.referrerId,
         referral.tenantId,
         bonusAmount,
         releaseDate,
         referral.id,
       );
-
-      if (!hasEmail) {
-        // Referrer has no email — skip without marking as notified so a
-        // future run can retry once an email address is added.
-        logger.info({ referralId: referral.id }, "[bonus-release] Skipping stamp — referrer has no email");
-        continue;
-      }
-
-      // Stamp bonusReleaseNotifiedAt with a concurrency guard so parallel cron
-      // runs cannot double-send. If the stamp fails (another run won the race),
-      // the email was already dispatched by the winner — acceptable here because
-      // at-most-once delivery is handled by the queue layer's dedup TTL.
-      // NOTE: if the email job is enqueued successfully but the email worker
-      // later exhausts retries, bonusReleaseNotifiedAt will remain set and no
-      // automatic retry will occur via this cron. This is consistent with the
-      // existing expiry-warning flow; a dedicated retry path can be added later.
-      await db
-        .update(referralsTable)
-        .set({ bonusReleaseNotifiedAt: new Date(), updatedAt: new Date() })
-        .where(eq(referralsTable.id, referral.id));
 
       notified++;
     } catch (err) {
