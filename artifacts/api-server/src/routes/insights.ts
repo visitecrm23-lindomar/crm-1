@@ -232,6 +232,7 @@ router.get("/insights/summary", async (req, res): Promise<void> => {
     const newTrips = Number(newTripsCurr[0]?.cnt ?? 0);
     const newTripsPrevCount = Number(newTripsPrev[0]?.cnt ?? 0);
     const revenuePerTrip = activeTrips > 0 ? totalRevenue / activeTrips : 0;
+    const revenuePerTripPrev = newTripsPrevCount > 0 ? totalRevenuePrev / newTripsPrevCount : 0;
     const avgReservationsPerTrip = activeTrips > 0 ? newReservations / activeTrips : 0;
     const avgReservationsPerTripPrev = newTripsPrevCount > 0 ? newReservationsPrev / newTripsPrevCount : 0;
 
