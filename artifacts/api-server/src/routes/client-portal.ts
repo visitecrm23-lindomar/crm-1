@@ -487,11 +487,12 @@ router.patch("/client/me/preferences", async (req, res, next: NextFunction): Pro
   }
 });
 
+// Must match calculateTier() in loyalty-helpers.ts and TIER_CONFIG in perfil/index.tsx
 const LOYALTY_TIER_THRESHOLDS = [
-  { tier: "bronze", min: 0, next: 500, nextLabel: "Prata" },
-  { tier: "silver", min: 500, next: 2000, nextLabel: "Ouro" },
-  { tier: "gold", min: 2000, next: 5000, nextLabel: "Diamante" },
-  { tier: "diamond", min: 5000, next: null, nextLabel: null },
+  { tier: "bronze", min: 0,    next: 500,  nextLabel: "Prata"    },
+  { tier: "silver", min: 500,  next: 1500, nextLabel: "Ouro"     },
+  { tier: "gold",   min: 1500, next: 5000, nextLabel: "Diamante" },
+  { tier: "diamond",min: 5000, next: null, nextLabel: null       },
 ] as const;
 
 router.get("/client/me/loyalty", async (req, res, next: NextFunction): Promise<void> => {
@@ -727,15 +728,12 @@ router.post("/client/me/loyalty/redeem", async (req, res, next: NextFunction): P
     }
 
     const realPerPoint = Number(loyaltyProgram.realPerPoint);
-    const requestedDiscount = body.data.pointsToRedeem * realPerPoint;
-    const discountAmount = Math.min(requestedDiscount, balance);
-    const actualPointsRedeemed = Math.ceil(discountAmount / realPerPoint);
 
-    // Wrap all mutations in a DB transaction with row-level lock on the member row
-    // to prevent double-spend in concurrent requests.
-    let newAvailablePoints: number;
+    // All reads used for point/discount computation happen inside the transaction
+    // with row-level locks to prevent double-spend and stale-snapshot bugs.
+    let result: { pointsRedeemed: number; discountAmount: number; newAvailablePoints: number };
     await db.transaction(async (tx) => {
-      // Lock member row for the duration of this transaction
+      // Lock member row — prevents concurrent redemptions from overspending
       const [lockedMember] = await tx
         .select({ availablePoints: loyaltyMembersTable.availablePoints })
         .from(loyaltyMembersTable)
@@ -743,11 +741,42 @@ router.post("/client/me/loyalty/redeem", async (req, res, next: NextFunction): P
         .for("update")
         .limit(1);
 
-      if (!lockedMember || lockedMember.availablePoints < actualPointsRedeemed) {
+      if (!lockedMember) throw new ValidationError("Membro não encontrado");
+      if (lockedMember.availablePoints < loyaltyProgram.minRedeemPoints) {
+        throw new ValidationError(`São necessários pelo menos ${loyaltyProgram.minRedeemPoints} pontos para resgatar`);
+      }
+      if (lockedMember.availablePoints < body.data.pointsToRedeem) {
         throw new ValidationError("Pontos insuficientes (tente novamente)");
       }
 
-      newAvailablePoints = lockedMember.availablePoints - actualPointsRedeemed;
+      // Lock reservation row — prevents concurrent requests from applying duplicate discounts
+      const [lockedReservation] = await tx
+        .select({
+          totalValue: reservationsTable.totalValue,
+          paidValue: reservationsTable.paidValue,
+          reservationNumber: reservationsTable.reservationNumber,
+        })
+        .from(reservationsTable)
+        .where(eq(reservationsTable.id, reservation.id))
+        .for("update")
+        .limit(1);
+
+      if (!lockedReservation) throw new ValidationError("Reserva não encontrada");
+      const currentBalance = Math.max(
+        Number(lockedReservation.totalValue) - Number(lockedReservation.paidValue),
+        0,
+      );
+      if (currentBalance <= 0) throw new ValidationError("Esta reserva não possui saldo pendente");
+
+      // Compute discount inside the transaction using locked, fresh values.
+      // Use floor (never ceil) so we never deduct more points than the discount grants.
+      const requestedDiscount = body.data.pointsToRedeem * realPerPoint;
+      const discountAmount = Math.min(requestedDiscount, currentBalance);
+      const actualPointsRedeemed = requestedDiscount <= currentBalance
+        ? body.data.pointsToRedeem                          // exact — no rounding needed
+        : Math.floor(currentBalance / realPerPoint);        // capped — floor avoids overcharge
+
+      const newAvailablePoints = lockedMember.availablePoints - actualPointsRedeemed;
 
       await tx
         .update(loyaltyMembersTable)
@@ -762,7 +791,7 @@ router.post("/client/me/loyalty/redeem", async (req, res, next: NextFunction): P
         programId: loyaltyProgram.id,
         type: "redeem",
         points: actualPointsRedeemed,
-        description: `Resgate de pontos — Reserva ${reservation.reservationNumber ?? reservation.id.slice(-6).toUpperCase()}`,
+        description: `Resgate de pontos — Reserva ${lockedReservation.reservationNumber ?? reservation.id.slice(-6).toUpperCase()}`,
         referenceId: reservation.id,
         referenceType: "reservation",
       });
@@ -775,13 +804,11 @@ router.post("/client/me/loyalty/redeem", async (req, res, next: NextFunction): P
           discountLoyaltyAmount: sql`COALESCE(${reservationsTable.discountLoyaltyAmount}, '0') + ${discountAmount}`,
         })
         .where(eq(reservationsTable.id, reservation.id));
+
+      result = { pointsRedeemed: actualPointsRedeemed, discountAmount, newAvailablePoints };
     });
 
-    res.json({
-      pointsRedeemed: actualPointsRedeemed,
-      discountAmount,
-      newAvailablePoints: newAvailablePoints!,
-    });
+    res.json(result!);
   } catch (err) {
     next(err);
   }
