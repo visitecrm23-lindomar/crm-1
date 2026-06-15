@@ -717,6 +717,11 @@ router.post("/client/me/loyalty/redeem", async (req, res, next: NextFunction): P
       return;
     }
 
+    if (body.data.pointsToRedeem < loyaltyProgram.minRedeemPoints) {
+      next(new ValidationError(`O mínimo para resgate é ${loyaltyProgram.minRedeemPoints} pontos`));
+      return;
+    }
+
     if (member.availablePoints < loyaltyProgram.minRedeemPoints) {
       next(new ValidationError(`São necessários pelo menos ${loyaltyProgram.minRedeemPoints} pontos para resgatar`));
       return;
@@ -768,13 +773,19 @@ router.post("/client/me/loyalty/redeem", async (req, res, next: NextFunction): P
       );
       if (currentBalance <= 0) throw new ValidationError("Esta reserva não possui saldo pendente");
 
-      // Compute discount inside the transaction using locked, fresh values.
-      // Use floor (never ceil) so we never deduct more points than the discount grants.
-      const requestedDiscount = body.data.pointsToRedeem * realPerPoint;
-      const discountAmount = Math.min(requestedDiscount, currentBalance);
-      const actualPointsRedeemed = requestedDiscount <= currentBalance
-        ? body.data.pointsToRedeem                          // exact — no rounding needed
-        : Math.floor(currentBalance / realPerPoint);        // capped — floor avoids overcharge
+      // Compute points first, then derive discount — never the other way around.
+      // This prevents the case where floor(balance/realPerPoint)=0 but discount>0.
+      // Policy: actualPoints = min(requestedPoints, maxAffordableByBalance)
+      //         discountAmount = actualPoints * realPerPoint (always ≥ 0, never > balance)
+      const maxPointsByBalance = Math.floor(currentBalance / realPerPoint);
+      if (maxPointsByBalance < 1) {
+        throw new ValidationError("Saldo da reserva insuficiente para resgate (menor que 1 ponto)");
+      }
+      const actualPointsRedeemed = Math.min(body.data.pointsToRedeem, maxPointsByBalance);
+      if (actualPointsRedeemed < loyaltyProgram.minRedeemPoints) {
+        throw new ValidationError(`O mínimo para resgate é ${loyaltyProgram.minRedeemPoints} pontos (saldo disponível permite ${maxPointsByBalance})`);
+      }
+      const discountAmount = actualPointsRedeemed * realPerPoint;
 
       const newAvailablePoints = lockedMember.availablePoints - actualPointsRedeemed;
 

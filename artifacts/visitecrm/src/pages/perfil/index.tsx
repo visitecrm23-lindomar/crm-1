@@ -1939,11 +1939,13 @@ function FidelidadeTab({
   primaryColor,
   reservations,
   onRefresh,
+  txRefreshKey = 0,
 }: {
   loyalty: ClientLoyalty | null;
   primaryColor: string;
   reservations: ClientPortalReservation[];
   onRefresh: () => void;
+  txRefreshKey?: number;
 }) {
   const { toast } = useToast();
   const [txItems, setTxItems] = useState<ClientLoyaltyTransaction[]>([]);
@@ -1962,6 +1964,13 @@ function FidelidadeTab({
       loadTransactions(1, true);
     }
   }, [loyalty]);
+
+  // Force reload when a redemption happens from another tab (e.g. ReservasTab)
+  useEffect(() => {
+    if (txInitialized && txRefreshKey > 0) {
+      loadTransactions(1, true);
+    }
+  }, [txRefreshKey]);
 
   async function loadTransactions(page: number, reset = false) {
     setTxLoading(true);
@@ -1993,6 +2002,7 @@ function FidelidadeTab({
       setRedeemPoints("");
       setRedeemReservationId("");
       onRefresh();
+      loadTransactions(1, true);  // refresh extrato immediately — don't wait for profile reload
     } catch (err) {
       toast({
         title: "Erro ao resgatar pontos",
@@ -2755,6 +2765,7 @@ export default function PerfilPage() {
     return VALID_PERFIL_TABS.includes(t ?? "") ? t! : "inicio";
   });
   const [reservationFilter, setReservationFilter] = useState<"com-saldo" | null>(null);
+  const [loyaltyTxKey, setLoyaltyTxKey] = useState(0);
 
   useEffect(() => {
     const t = new URLSearchParams(searchStr).get("tab");
@@ -2868,6 +2879,7 @@ export default function PerfilPage() {
             loyalty={profile.loyalty}
             onRefresh={() => {
               clientPortalApi.getProfile().then(setProfile).catch(() => {});
+              setLoyaltyTxKey((k) => k + 1);
             }}
           />
         </TabsContent>
@@ -2890,6 +2902,7 @@ export default function PerfilPage() {
             loyalty={profile.loyalty}
             primaryColor={primaryColor}
             reservations={profile.reservations}
+            txRefreshKey={loyaltyTxKey}
             onRefresh={() => {
               clientPortalApi.getProfile().then(setProfile).catch(() => {});
             }}
