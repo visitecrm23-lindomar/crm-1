@@ -1,6 +1,6 @@
 import { useState, useEffect, type ReactElement } from "react";
 import { useLocation, useSearch } from "wouter";
-import { clientPortalApi, type ClientPortalProfile, type ClientLoyalty, type ClientReferral, type FavoritesResponse } from "@/lib/clientPortalApi";
+import { clientPortalApi, type ClientPortalProfile, type ClientLoyalty, type ClientReferral, type FavoritesResponse, type ClientPortalReservation, type ClientLoyaltyTransaction } from "@/lib/clientPortalApi";
 import QRCode from "qrcode";
 import { useGetMe } from "@workspace/api-client-react";
 import { RESERVATION_STATUS } from "@workspace/permissions";
@@ -1782,7 +1782,87 @@ const TRANSACTION_TYPE_MAP: Record<string, { label: string; sign: "+" | "-"; col
   adjust:  { label: "Ajuste",  sign: "+", color: "text-slate-500" },
 };
 
-function FidelidadeTab({ loyalty, primaryColor }: { loyalty: ClientLoyalty | null; primaryColor: string }) {
+const TIER_BENEFITS_DEFAULT: Record<string, string[]> = {
+  bronze: ["Acúmulo de pontos em todas as reservas"],
+  silver: ["Acúmulo de pontos em todas as reservas", "Atendimento prioritário", "Acesso antecipado a promoções"],
+  gold: ["Acúmulo de pontos em todas as reservas", "Atendimento VIP", "Brindes exclusivos", "Desconto especial em pacotes"],
+  diamond: ["Todos os benefícios Ouro", "Consultor exclusivo", "Upgrade gratuito em viagens", "Convites para lançamentos exclusivos"],
+};
+
+const TIER_DISPLAY_ICONS: Record<string, string> = {
+  bronze: "🥉", silver: "🥈", gold: "🥇", diamond: "💎",
+};
+
+function FidelidadeTab({
+  loyalty,
+  primaryColor,
+  reservations,
+  onRefresh,
+}: {
+  loyalty: ClientLoyalty | null;
+  primaryColor: string;
+  reservations: ClientPortalReservation[];
+  onRefresh: () => void;
+}) {
+  const { toast } = useToast();
+  const [txItems, setTxItems] = useState<ClientLoyaltyTransaction[]>([]);
+  const [txPage, setTxPage] = useState(1);
+  const [txHasMore, setTxHasMore] = useState(false);
+  const [txLoading, setTxLoading] = useState(false);
+  const [txInitialized, setTxInitialized] = useState(false);
+  const [redeemOpen, setRedeemOpen] = useState(false);
+  const [redeemReservationId, setRedeemReservationId] = useState("");
+  const [redeemPoints, setRedeemPoints] = useState("");
+  const [redeemLoading, setRedeemLoading] = useState(false);
+
+  useEffect(() => {
+    if (loyalty && !txInitialized) {
+      setTxInitialized(true);
+      loadTransactions(1, true);
+    }
+  }, [loyalty]);
+
+  async function loadTransactions(page: number, reset = false) {
+    setTxLoading(true);
+    try {
+      const result = await clientPortalApi.getLoyaltyTransactions(page);
+      setTxItems((prev) => (reset ? result.data : [...prev, ...result.data]));
+      setTxHasMore(result.hasMore);
+      setTxPage(page);
+    } catch {
+      if (reset && loyalty) setTxItems(loyalty.recentTransactions);
+    } finally {
+      setTxLoading(false);
+    }
+  }
+
+  async function handleRedeem(e: React.FormEvent) {
+    e.preventDefault();
+    if (!redeemReservationId || !loyalty) return;
+    const pts = parseInt(redeemPoints, 10);
+    if (isNaN(pts) || pts <= 0) return;
+    setRedeemLoading(true);
+    try {
+      const result = await clientPortalApi.redeemLoyaltyPoints(redeemReservationId, pts);
+      toast({
+        title: "Pontos resgatados com sucesso!",
+        description: `${result.pointsRedeemed.toLocaleString("pt-BR")} pts → ${result.discountAmount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} de desconto aplicado.`,
+      });
+      setRedeemOpen(false);
+      setRedeemPoints("");
+      setRedeemReservationId("");
+      onRefresh();
+    } catch (err) {
+      toast({
+        title: "Erro ao resgatar pontos",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setRedeemLoading(false);
+    }
+  }
+
   if (!loyalty) {
     return (
       <div className="text-center py-16">
@@ -1799,20 +1879,31 @@ function FidelidadeTab({ loyalty, primaryColor }: { loyalty: ClientLoyalty | nul
   const tierCfg = TIER_CONFIG[tier] ?? TIER_CONFIG["bronze"];
   const nextTierName = tierCfg.nextLabel;
   const progress = tierCfg.next !== null
-    ? Math.min(
-        ((loyalty.totalPoints - tierCfg.min) / (tierCfg.next - tierCfg.min)) * 100,
-        100,
-      )
+    ? Math.min(((loyalty.totalPoints - tierCfg.min) / (tierCfg.next - tierCfg.min)) * 100, 100)
     : 100;
   const pointsToNext = tierCfg.next !== null ? Math.max(tierCfg.next - loyalty.totalPoints, 0) : 0;
-
   const equivalentValue = (loyalty.availablePoints * loyalty.realPerPoint).toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL",
   });
 
+  const pendingReservations = reservations.filter(
+    (r) => r.balance > 0 && r.status !== "cancelled",
+  );
+
+  const selectedReservation = pendingReservations.find((r) => r.id === redeemReservationId);
+  const maxRedeemPoints = selectedReservation
+    ? Math.min(loyalty.availablePoints, Math.ceil(selectedReservation.balance / loyalty.realPerPoint))
+    : loyalty.availablePoints;
+  const redeemPointsNum = parseInt(redeemPoints, 10) || 0;
+  const estimatedDiscount = redeemPointsNum * loyalty.realPerPoint;
+
+  const displayedTransactions = txInitialized ? txItems : loyalty.recentTransactions;
+  const tierBenefitsMap: Record<string, string[]> = (loyalty.tierBenefits as Record<string, string[]> | null) ?? TIER_BENEFITS_DEFAULT;
+
   return (
     <div className="space-y-4">
+      {/* Hero card */}
       <div
         className="rounded-2xl p-6 text-white"
         style={{ background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}cc)` }}
@@ -1827,29 +1918,24 @@ function FidelidadeTab({ loyalty, primaryColor }: { loyalty: ClientLoyalty | nul
           </div>
           <TierBadge tier={loyalty.tier} />
         </div>
-
         <div className="mt-4">
           <div className="flex justify-between text-white/80 text-xs mb-1.5">
             <span>{tierLabel(loyalty.tier)}</span>
             {nextTierName && <span>{nextTierName}</span>}
           </div>
           <div className="h-2 rounded-full bg-white/20 overflow-hidden">
-            <div
-              className="h-full rounded-full bg-white/80 transition-all duration-700"
-              style={{ width: `${progress}%` }}
-            />
+            <div className="h-full rounded-full bg-white/80 transition-all duration-700" style={{ width: `${progress}%` }} />
           </div>
           {nextTierName && pointsToNext > 0 && (
             <p className="text-white/70 text-xs mt-1.5">
               Faltam {pointsToNext.toLocaleString("pt-BR")} pontos para {nextTierName}
             </p>
           )}
-          {!nextTierName && (
-            <p className="text-white/70 text-xs mt-1.5">Você está no nível máximo!</p>
-          )}
+          {!nextTierName && <p className="text-white/70 text-xs mt-1.5">Você está no nível máximo!</p>}
         </div>
       </div>
 
+      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Card>
           <CardContent className="pt-4 pb-3 text-center">
@@ -1871,20 +1957,164 @@ function FidelidadeTab({ loyalty, primaryColor }: { loyalty: ClientLoyalty | nul
         </Card>
       </div>
 
+      {/* Tier Benefits */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Star className="w-4 h-4" style={{ color: primaryColor }} />
+            Benefícios por nível
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 border-t">
+            {(["bronze", "silver", "gold", "diamond"] as const).map((t) => {
+              const cfg = TIER_CONFIG[t];
+              const benefits = tierBenefitsMap[t] ?? [];
+              const isCurrentTier = t === tier;
+              return (
+                <div key={t} className={`p-3 ${isCurrentTier ? "bg-muted/50" : ""}`}>
+                  <div className={`text-xs font-bold mb-2 flex items-center gap-1 ${cfg.color}`}>
+                    <span>{TIER_DISPLAY_ICONS[t]}</span>
+                    <span>{cfg.label}</span>
+                    {isCurrentTier && (
+                      <span className="ml-auto text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                        seu nível
+                      </span>
+                    )}
+                  </div>
+                  {benefits.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">Sem benefícios</p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {benefits.map((b, i) => (
+                        <li key={i} className="text-xs text-muted-foreground flex items-start gap-1">
+                          <span className="mt-0.5 shrink-0 text-primary">•</span>
+                          <span>{b}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Redeem Points */}
+      {pendingReservations.length > 0 && loyalty.availablePoints >= loyalty.minRedeemPoints && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Coins className="w-4 h-4" style={{ color: primaryColor }} />
+              Usar pontos em reservas
+            </CardTitle>
+            <CardDescription>
+              Aplique seus {loyalty.availablePoints.toLocaleString("pt-BR")} pontos como desconto nas reservas com saldo pendente.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {pendingReservations.map((r) => (
+                <div key={r.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-muted/30">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{r.tripName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Saldo pendente: {r.balance.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => {
+                      setRedeemReservationId(r.id);
+                      setRedeemPoints(String(Math.min(loyalty.availablePoints, Math.ceil(r.balance / loyalty.realPerPoint))));
+                      setRedeemOpen(true);
+                    }}
+                  >
+                    <Coins className="w-3.5 h-3.5 mr-1.5" />
+                    Resgatar
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Redemption Modal */}
+      {redeemOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => !redeemLoading && setRedeemOpen(false)} />
+          <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <div>
+              <h3 className="font-bold text-lg">Resgatar pontos</h3>
+              <p className="text-sm text-muted-foreground">{selectedReservation?.tripName}</p>
+            </div>
+            <form onSubmit={handleRedeem} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="redeemPointsInput">Pontos a resgatar</Label>
+                <Input
+                  id="redeemPointsInput"
+                  type="number"
+                  min={loyalty.minRedeemPoints}
+                  max={maxRedeemPoints}
+                  value={redeemPoints}
+                  onChange={(e) => setRedeemPoints(e.target.value)}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  Disponível: {loyalty.availablePoints.toLocaleString("pt-BR")} pts · Máx. para esta reserva: {maxRedeemPoints.toLocaleString("pt-BR")} pts
+                </p>
+              </div>
+              {redeemPointsNum >= loyalty.minRedeemPoints && (
+                <div className="bg-muted rounded-lg p-3 text-sm space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Pontos usados:</span>
+                    <span className="font-semibold">{redeemPointsNum.toLocaleString("pt-BR")}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Desconto estimado:</span>
+                    <span className="font-bold text-green-600">
+                      {estimatedDiscount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    </span>
+                  </div>
+                </div>
+              )}
+              <div className="flex gap-2 justify-end">
+                <Button type="button" variant="outline" onClick={() => setRedeemOpen(false)} disabled={redeemLoading}>
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={redeemLoading || redeemPointsNum < loyalty.minRedeemPoints || redeemPointsNum > maxRedeemPoints}
+                  style={{ backgroundColor: primaryColor }}
+                  className="text-white"
+                >
+                  {redeemLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirmar resgate"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Transaction History */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Extrato de pontos</CardTitle>
           <CardDescription>{loyalty.programName}</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          {loyalty.recentTransactions.length === 0 ? (
+          {displayedTransactions.length === 0 && !txLoading ? (
             <div className="text-center py-10">
               <Coins className="w-10 h-10 mx-auto mb-3 text-muted-foreground/30" />
               <p className="text-sm text-muted-foreground">Nenhuma transação registrada ainda.</p>
             </div>
           ) : (
             <div className="divide-y">
-              {loyalty.recentTransactions.map((t) => {
+              {displayedTransactions.map((t) => {
                 const type = TRANSACTION_TYPE_MAP[t.type] ?? { label: t.type, sign: "+" as const, color: "text-slate-500" };
                 return (
                   <div key={t.id} className="flex items-center justify-between px-4 py-3 hover:bg-muted/40 transition-colors">
@@ -1900,6 +2130,18 @@ function FidelidadeTab({ loyalty, primaryColor }: { loyalty: ClientLoyalty | nul
                   </div>
                 );
               })}
+              {txLoading && (
+                <div className="py-4 text-center">
+                  <Loader2 className="w-4 h-4 mx-auto animate-spin text-muted-foreground" />
+                </div>
+              )}
+            </div>
+          )}
+          {txHasMore && !txLoading && (
+            <div className="p-4 border-t">
+              <Button variant="outline" size="sm" className="w-full" onClick={() => loadTransactions(txPage + 1)}>
+                Carregar mais
+              </Button>
             </div>
           )}
         </CardContent>
@@ -2492,7 +2734,14 @@ export default function PerfilPage() {
         </TabsContent>
 
         <TabsContent value="fidelidade">
-          <FidelidadeTab loyalty={profile.loyalty} primaryColor={primaryColor} />
+          <FidelidadeTab
+            loyalty={profile.loyalty}
+            primaryColor={primaryColor}
+            reservations={profile.reservations}
+            onRefresh={() => {
+              clientPortalApi.getProfile().then(setProfile).catch(() => {});
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="preferencias">

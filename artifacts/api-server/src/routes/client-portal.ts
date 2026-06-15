@@ -356,6 +356,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
             pointsPerReal: Number(loyaltyProgram.pointsPerReal),
             realPerPoint: Number(loyaltyProgram.realPerPoint),
             minRedeemPoints: loyaltyProgram.minRedeemPoints,
+            tierBenefits: loyaltyProgram.tierBenefits ?? null,
             recentTransactions: transactions.map((t) => ({
               id: t.id,
               type: t.type,
@@ -373,6 +374,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
             pointsPerReal: Number(loyaltyProgram.pointsPerReal),
             realPerPoint: Number(loyaltyProgram.realPerPoint),
             minRedeemPoints: loyaltyProgram.minRedeemPoints,
+            tierBenefits: loyaltyProgram.tierBenefits ?? null,
             recentTransactions: [],
           };
         }
@@ -480,6 +482,216 @@ router.patch("/client/me/preferences", async (req, res, next: NextFunction): Pro
         .where(and(eq(clientsTable.id, client.id), eq(clientsTable.tenantId, me.tenantId)));
     }
     res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/client/me/loyalty/transactions", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== ROLES.CLIENT) {
+      next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE"));
+      return;
+    }
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = 50;
+    const offset = (page - 1) * limit;
+
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) {
+      res.json({ data: [], hasMore: false, total: 0 });
+      return;
+    }
+
+    const [loyaltyProgram] = await db
+      .select({ id: loyaltyProgramsTable.id })
+      .from(loyaltyProgramsTable)
+      .where(and(eq(loyaltyProgramsTable.tenantId, me.tenantId), eq(loyaltyProgramsTable.isActive, true)))
+      .limit(1);
+
+    if (!loyaltyProgram) {
+      res.json({ data: [], hasMore: false, total: 0 });
+      return;
+    }
+
+    const [member] = await db
+      .select({ id: loyaltyMembersTable.id })
+      .from(loyaltyMembersTable)
+      .where(and(
+        eq(loyaltyMembersTable.tenantId, me.tenantId),
+        eq(loyaltyMembersTable.programId, loyaltyProgram.id),
+        eq(loyaltyMembersTable.clientId, client.id),
+      ))
+      .limit(1);
+
+    if (!member) {
+      res.json({ data: [], hasMore: false, total: 0 });
+      return;
+    }
+
+    const [totalRow] = await db
+      .select({ cnt: count() })
+      .from(loyaltyTransactionsTable)
+      .where(eq(loyaltyTransactionsTable.memberId, member.id));
+    const total = Number(totalRow?.cnt ?? 0);
+
+    const transactions = await db
+      .select()
+      .from(loyaltyTransactionsTable)
+      .where(eq(loyaltyTransactionsTable.memberId, member.id))
+      .orderBy(desc(loyaltyTransactionsTable.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    res.json({
+      data: transactions.map((t) => ({
+        id: t.id,
+        type: t.type,
+        points: t.points,
+        description: t.description,
+        referenceId: t.referenceId,
+        referenceType: t.referenceType,
+        createdAt: t.createdAt.toISOString(),
+      })),
+      hasMore: offset + limit < total,
+      total,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/client/me/loyalty/redeem", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== ROLES.CLIENT) {
+      next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE"));
+      return;
+    }
+
+    const body = z.object({
+      reservationId: z.string().min(1),
+      pointsToRedeem: z.number().int().positive(),
+    }).safeParse(req.body);
+    if (!body.success) {
+      next(new ValidationError(String(body.error.message)));
+      return;
+    }
+
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) {
+      next(new NotFoundError("Perfil de cliente não encontrado", "NOT_FOUND"));
+      return;
+    }
+
+    const [reservation] = await db
+      .select({
+        id: reservationsTable.id,
+        reservationNumber: reservationsTable.reservationNumber,
+        totalValue: reservationsTable.totalValue,
+        paidValue: reservationsTable.paidValue,
+        status: reservationsTable.status,
+      })
+      .from(reservationsTable)
+      .where(and(
+        eq(reservationsTable.id, body.data.reservationId),
+        eq(reservationsTable.clientId, client.id),
+        eq(reservationsTable.tenantId, me.tenantId),
+      ))
+      .limit(1);
+
+    if (!reservation) {
+      next(new NotFoundError("Reserva não encontrada", "NOT_FOUND"));
+      return;
+    }
+
+    const balance = Math.max(Number(reservation.totalValue) - Number(reservation.paidValue), 0);
+    if (balance <= 0) {
+      next(new ValidationError("Esta reserva não possui saldo pendente"));
+      return;
+    }
+
+    if (reservation.status === RESERVATION_STATUS.CANCELLED) {
+      next(new ValidationError("Não é possível resgatar pontos em reservas canceladas"));
+      return;
+    }
+
+    const [loyaltyProgram] = await db
+      .select()
+      .from(loyaltyProgramsTable)
+      .where(and(eq(loyaltyProgramsTable.tenantId, me.tenantId), eq(loyaltyProgramsTable.isActive, true)))
+      .limit(1);
+
+    if (!loyaltyProgram) {
+      next(new NotFoundError("Programa de fidelidade não ativo", "NOT_FOUND"));
+      return;
+    }
+
+    const [member] = await db
+      .select()
+      .from(loyaltyMembersTable)
+      .where(and(
+        eq(loyaltyMembersTable.tenantId, me.tenantId),
+        eq(loyaltyMembersTable.programId, loyaltyProgram.id),
+        eq(loyaltyMembersTable.clientId, client.id),
+      ))
+      .limit(1);
+
+    if (!member) {
+      next(new NotFoundError("Você não é membro do programa de fidelidade", "NOT_FOUND"));
+      return;
+    }
+
+    if (member.availablePoints < loyaltyProgram.minRedeemPoints) {
+      next(new ValidationError(`São necessários pelo menos ${loyaltyProgram.minRedeemPoints} pontos para resgatar`));
+      return;
+    }
+
+    if (body.data.pointsToRedeem > member.availablePoints) {
+      next(new ValidationError("Pontos insuficientes"));
+      return;
+    }
+
+    const realPerPoint = Number(loyaltyProgram.realPerPoint);
+    const requestedDiscount = body.data.pointsToRedeem * realPerPoint;
+    const discountAmount = Math.min(requestedDiscount, balance);
+    const actualPointsRedeemed = Math.ceil(discountAmount / realPerPoint);
+
+    await db
+      .update(loyaltyMembersTable)
+      .set({ availablePoints: member.availablePoints - actualPointsRedeemed })
+      .where(eq(loyaltyMembersTable.id, member.id));
+
+    const txId = generateId("ltx");
+    await db.insert(loyaltyTransactionsTable).values({
+      id: txId,
+      tenantId: me.tenantId,
+      memberId: member.id,
+      programId: loyaltyProgram.id,
+      type: "redeem",
+      points: actualPointsRedeemed,
+      description: `Resgate de pontos — Reserva ${reservation.reservationNumber ?? reservation.id.slice(-6).toUpperCase()}`,
+      referenceId: reservation.id,
+      referenceType: "reservation",
+    });
+
+    await db
+      .update(reservationsTable)
+      .set({
+        paidValue: sql`${reservationsTable.paidValue} + ${discountAmount}`,
+        discountLoyaltyPoints: sql`COALESCE(${reservationsTable.discountLoyaltyPoints}, 0) + ${actualPointsRedeemed}`,
+        discountLoyaltyAmount: sql`COALESCE(${reservationsTable.discountLoyaltyAmount}, '0') + ${discountAmount}`,
+      })
+      .where(eq(reservationsTable.id, reservation.id));
+
+    res.json({
+      pointsRedeemed: actualPointsRedeemed,
+      discountAmount,
+      newAvailablePoints: member.availablePoints - actualPointsRedeemed,
+    });
   } catch (err) {
     next(err);
   }

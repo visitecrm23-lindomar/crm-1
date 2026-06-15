@@ -27,7 +27,16 @@ export interface ClientLoyaltyTransaction {
   type: string;
   points: number;
   description: string;
+  referenceId?: string | null;
+  referenceType?: string | null;
   createdAt: string;
+}
+
+export interface TierBenefits {
+  bronze?: string[];
+  silver?: string[];
+  gold?: string[];
+  diamond?: string[];
 }
 
 export interface ClientLoyalty {
@@ -38,6 +47,7 @@ export interface ClientLoyalty {
   pointsPerReal: number;
   realPerPoint: number;
   minRedeemPoints: number;
+  tierBenefits: TierBenefits | null;
   recentTransactions: ClientLoyaltyTransaction[];
 }
 
@@ -179,6 +189,18 @@ export interface FavoritesResponse {
   products: FavoriteProductItem[];
 }
 
+export interface LoyaltyTransactionsResponse {
+  data: ClientLoyaltyTransaction[];
+  hasMore: boolean;
+  total: number;
+}
+
+export interface RedeemLoyaltyResponse {
+  pointsRedeemed: number;
+  discountAmount: number;
+  newAvailablePoints: number;
+}
+
 export const clientPortalApi = {
   getProfile: () => apiReq<ClientPortalProfile>("GET", "/client/me"),
   updateProfile: (data: {
@@ -217,4 +239,8 @@ export const clientPortalApi = {
     apiReq<{ id: string }>("POST", "/client/me/favorites", { itemType, itemId }),
   removeFavorite: (itemType: "trip" | "product", itemId: string) =>
     apiReq<void>("DELETE", `/client/me/favorites/${itemType}/${itemId}`),
+  getLoyaltyTransactions: (page = 1) =>
+    apiReq<LoyaltyTransactionsResponse>("GET", `/client/me/loyalty/transactions?page=${page}`),
+  redeemLoyaltyPoints: (reservationId: string, pointsToRedeem: number) =>
+    apiReq<RedeemLoyaltyResponse>("POST", "/client/me/loyalty/redeem", { reservationId, pointsToRedeem }),
 };

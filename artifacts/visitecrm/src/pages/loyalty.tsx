@@ -113,9 +113,27 @@ const txTypeConfig: Record<
   },
 };
 
+const TIER_BENEFIT_KEYS = ["bronze", "silver", "gold", "diamond"] as const;
+const TIER_BENEFIT_LABELS: Record<string, string> = {
+  bronze: "🥉 Bronze",
+  silver: "🥈 Prata",
+  gold: "🥇 Ouro",
+  diamond: "💎 Diamante",
+};
+
 function ProgramConfig({ program }: { program: LoyaltyProgram }) {
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isBenefitsOpen, setIsBenefitsOpen] = useState(false);
   const updateProgram = useUpdateLoyaltyProgram();
+  const { toast } = useToast();
+
+  const existingBenefits = (program.tierBenefits ?? {}) as Record<string, string[]>;
+  const [benefitDrafts, setBenefitDrafts] = useState<Record<string, string>>({
+    bronze: (existingBenefits.bronze ?? []).join("\n"),
+    silver: (existingBenefits.silver ?? []).join("\n"),
+    gold: (existingBenefits.gold ?? []).join("\n"),
+    diamond: (existingBenefits.diamond ?? []).join("\n"),
+  });
 
   const handleUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -135,89 +153,121 @@ function ProgramConfig({ program }: { program: LoyaltyProgram }) {
     setIsEditOpen(false);
   };
 
+  const handleSaveBenefits = async () => {
+    const tierBenefits: Record<string, string[]> = {};
+    for (const key of TIER_BENEFIT_KEYS) {
+      const lines = benefitDrafts[key]
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
+      tierBenefits[key] = lines;
+    }
+    try {
+      await updateProgram.mutateAsync({
+        id: program.id,
+        data: { tierBenefits },
+      });
+      toast({ title: "Benefícios salvos!", description: "Os benefícios de tier foram atualizados." });
+      setIsBenefitsOpen(false);
+    } catch {
+      toast({ title: "Erro ao salvar benefícios", variant: "destructive" });
+    }
+  };
+
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <div>
             <CardTitle className="text-base">{program.name}</CardTitle>
             {program.description && (
               <CardDescription className="mt-0.5">{program.description}</CardDescription>
             )}
           </div>
-          <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" variant="outline">
-                <Settings2 className="w-3.5 h-3.5 mr-1.5" /> Configurar
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Configurar Programa</DialogTitle>
-              </DialogHeader>
-              <form
-                key={program.id}
-                onSubmit={handleUpdate}
-                className="space-y-4 mt-4"
-              >
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Nome</label>
-                  <Input name="name" defaultValue={program.name} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Descrição</label>
-                  <Textarea
-                    name="description"
-                    defaultValue={program.description ?? ""}
-                    rows={2}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Pontos por R$ gasto</label>
-                    <Input
-                      name="pointsPerReal"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      defaultValue={program.pointsPerReal}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">R$ por ponto</label>
-                    <Input
-                      name="realPerPoint"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      defaultValue={program.realPerPoint}
-                    />
+          <div className="flex gap-2">
+            <Dialog open={isBenefitsOpen} onOpenChange={setIsBenefitsOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline">
+                  <Star className="w-3.5 h-3.5 mr-1.5" /> Benefícios
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Benefícios por Nível</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Digite um benefício por linha para cada nível. Esses textos aparecem no portal do cliente.
+                  </p>
+                  {TIER_BENEFIT_KEYS.map((key) => (
+                    <div key={key} className="space-y-1.5">
+                      <label className="text-sm font-semibold">{TIER_BENEFIT_LABELS[key]}</label>
+                      <Textarea
+                        rows={3}
+                        placeholder={`Ex: Atendimento prioritário\nDesconto exclusivo em pacotes`}
+                        value={benefitDrafts[key]}
+                        onChange={(e) =>
+                          setBenefitDrafts((prev) => ({ ...prev, [key]: e.target.value }))
+                        }
+                      />
+                    </div>
+                  ))}
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={() => setIsBenefitsOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button onClick={handleSaveBenefits} disabled={updateProgram.isPending}>
+                      {updateProgram.isPending ? "Salvando..." : "Salvar benefícios"}
+                    </Button>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Mínimo para resgate</label>
-                  <Input
-                    name="minRedeemPoints"
-                    type="number"
-                    min="1"
-                    defaultValue={program.minRedeemPoints}
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsEditOpen(false)}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button type="submit" disabled={updateProgram.isPending}>
-                    {updateProgram.isPending ? "Salvando..." : "Salvar"}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+              </DialogContent>
+            </Dialog>
+            <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline">
+                  <Settings2 className="w-3.5 h-3.5 mr-1.5" /> Configurar
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Configurar Programa</DialogTitle>
+                </DialogHeader>
+                <form key={program.id} onSubmit={handleUpdate} className="space-y-4 mt-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Nome</label>
+                    <Input name="name" defaultValue={program.name} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Descrição</label>
+                    <Textarea name="description" defaultValue={program.description ?? ""} rows={2} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Pontos por R$ gasto</label>
+                      <Input name="pointsPerReal" type="number" step="0.01" min="0" defaultValue={program.pointsPerReal} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">R$ por ponto</label>
+                      <Input name="realPerPoint" type="number" step="0.01" min="0" defaultValue={program.realPerPoint} />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Mínimo para resgate</label>
+                    <Input name="minRedeemPoints" type="number" min="1" defaultValue={program.minRedeemPoints} />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button type="submit" disabled={updateProgram.isPending}>
+                      {updateProgram.isPending ? "Salvando..." : "Salvar"}
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -236,16 +286,19 @@ function ProgramConfig({ program }: { program: LoyaltyProgram }) {
           </div>
         </div>
         <div className="mt-3 grid grid-cols-4 gap-2">
-          {Object.entries(tierConfig).map(([tier, cfg]) => (
-            <div
-              key={tier}
-              className={`text-center p-2 rounded-lg text-xs font-medium ${cfg.className}`}
-            >
-              <Award className="w-4 h-4 mx-auto mb-0.5" />
-              {cfg.label}
-              <p className="font-normal opacity-75">{cfg.threshold}+ pts</p>
-            </div>
-          ))}
+          {Object.entries(tierConfig).map(([tier, cfg]) => {
+            const benefits = ((program.tierBenefits ?? {}) as Record<string, string[]>)[tier] ?? [];
+            return (
+              <div key={tier} className={`p-2 rounded-lg text-xs font-medium ${cfg.className}`}>
+                <Award className="w-4 h-4 mx-auto mb-0.5" />
+                <p className="text-center">{cfg.label}</p>
+                <p className="font-normal opacity-75 text-center">{cfg.threshold}+ pts</p>
+                {benefits.length > 0 && (
+                  <p className="font-normal opacity-60 text-center mt-0.5">{benefits.length} benefício{benefits.length !== 1 ? "s" : ""}</p>
+                )}
+              </div>
+            );
+          })}
         </div>
       </CardContent>
     </Card>

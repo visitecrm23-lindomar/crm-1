@@ -2499,15 +2499,19 @@ export interface LoyaltyProgram {
   realPerPoint: string;
   minRedeemPoints: number;
   isActive: boolean;
+  /** @nullable */
+  tierBenefits?: Record<string, string[]> | null;
   createdAt: string;
 }
 
 export interface CreateLoyaltyProgramBody {
-  name: string;
+  name?: string;
   description?: string;
   pointsPerReal?: string;
   realPerPoint?: string;
   minRedeemPoints?: number;
+  /** @nullable */
+  tierBenefits?: Record<string, string[]> | null;
 }
 
 export interface LoyaltyMember {

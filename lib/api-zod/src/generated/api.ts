@@ -5145,11 +5145,12 @@ export const UpdateLoyaltyProgramParams = zod.object({
 });
 
 export const UpdateLoyaltyProgramBody = zod.object({
-  name: zod.string(),
+  name: zod.string().optional(),
   description: zod.string().optional(),
   pointsPerReal: zod.string().optional(),
   realPerPoint: zod.string().optional(),
   minRedeemPoints: zod.number().optional(),
+  tierBenefits: zod.record(zod.string(), zod.array(zod.string())).nullable().optional(),
 });
 
 export const UpdateLoyaltyProgramResponse = zod.object({
@@ -5161,6 +5162,7 @@ export const UpdateLoyaltyProgramResponse = zod.object({
   realPerPoint: zod.string(),
   minRedeemPoints: zod.number(),
   isActive: zod.boolean(),
+  tierBenefits: zod.record(zod.string(), zod.array(zod.string())).nullish(),
   createdAt: zod.string(),
 });
 

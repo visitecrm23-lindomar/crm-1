@@ -323,6 +323,13 @@
       "when": 1750300000000,
       "tag": "0045_add_client_favorites",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1750400000000,
+      "tag": "0046_add_loyalty_tier_benefits",
+      "breakpoints": true
     }
   ]
 }

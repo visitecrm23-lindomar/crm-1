@@ -16,6 +16,7 @@ const CreateProgramBody = z.object({
   pointsPerReal: z.string().optional(),
   realPerPoint: z.string().optional(),
   minRedeemPoints: z.number().int().optional(),
+  tierBenefits: z.record(z.string(), z.array(z.string())).nullable().optional(),
 });
 
 const CreateMemberBody = z.object({

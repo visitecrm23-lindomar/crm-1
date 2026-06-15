@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, numeric, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, numeric, integer, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -11,6 +11,7 @@ export const loyaltyProgramsTable = pgTable("loyalty_programs", {
   realPerPoint: numeric("real_per_point", { precision: 10, scale: 4 }).notNull().default("0.01"),
   minRedeemPoints: integer("min_redeem_points").notNull().default(100),
   isActive: boolean("is_active").notNull().default(true),
+  tierBenefits: jsonb("tier_benefits"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
