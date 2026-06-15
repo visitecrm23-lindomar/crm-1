@@ -238,6 +238,11 @@ export const publicStoreApi = {
       `/public/store/${slug}/create-payment-intent`,
       { orderNumber, paymentToken }
     ),
+  checkCpf: (slug: string, productSlug: string, cpf: string) =>
+    publicReq<{ exists: boolean }>(
+      "GET",
+      `/public/store/${slug}/products/${encodeURIComponent(productSlug)}/check-cpf?cpf=${encodeURIComponent(cpf)}`
+    ),
   validateReferral: (slug: string, code: string) =>
     publicReq<ReferralValidation>("POST", `/public/store/${slug}/referral/validate`, { code }),
   getReferralInfo: (slug: string, code: string) =>

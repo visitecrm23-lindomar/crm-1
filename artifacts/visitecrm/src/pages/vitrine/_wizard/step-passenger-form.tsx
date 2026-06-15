@@ -6,7 +6,7 @@ import type { WizardState } from "./use-wizard-state";
 import { validateCpf, validatePhone } from "@/lib/utils";
 
 export function StepPassengerForm({ state }: { state: WizardState }) {
-  const { form, set, qty, changeQty, isSoldOut, maxSeats, passengerOptions, product } = state;
+  const { form, set, qty, changeQty, isSoldOut, maxSeats, passengerOptions, product, cpfDuplicateWarning } = state;
   return (
     <div className="space-y-5">
       <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -94,6 +94,15 @@ export function StepPassengerForm({ state }: { state: WizardState }) {
             )}
           </div>
         </div>
+
+        {cpfDuplicateWarning && (
+          <div className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <AlertTriangle className="mt-0.5 w-4 h-4 flex-shrink-0 text-amber-500" />
+            <span>
+              Este CPF já possui uma reserva para esta viagem. Você ainda pode continuar, mas verifique se a reserva não foi feita em duplicidade.
+            </span>
+          </div>
+        )}
 
         <div className="border-t pt-4">
           <Label className="flex items-center gap-1.5 mb-2">

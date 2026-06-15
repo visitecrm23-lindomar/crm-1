@@ -506,6 +506,44 @@ router.get("/public/store/:slug/trips/:tripId/seat-map", async (req, res, next: 
   }
 });
 
+router.get("/public/store/:slug/products/:productSlug/check-cpf", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const { slug, productSlug } = req.params;
+    const cpf = String(req.query.cpf ?? "").trim();
+    if (!cpf) { res.json({ exists: false }); return; }
+
+    const store = await getActiveStore(slug);
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
+
+    const [product] = await db.select({ tripId: storeProductsTable.tripId })
+      .from(storeProductsTable)
+      .where(and(
+        eq(storeProductsTable.storeId, store.id),
+        eq(storeProductsTable.slug, productSlug),
+        eq(storeProductsTable.status, "active"),
+      )).limit(1);
+
+    if (!product?.tripId) { res.json({ exists: false }); return; }
+
+    const normalizedCpf = cpf.replace(/\D/g, "");
+    if (!normalizedCpf) { res.json({ exists: false }); return; }
+
+    const [match] = await db.select({ id: reservationsTable.id })
+      .from(reservationsTable)
+      .innerJoin(clientsTable, eq(reservationsTable.clientId, clientsTable.id))
+      .where(and(
+        eq(reservationsTable.tripId, product.tripId),
+        eq(reservationsTable.tenantId, store.tenantId),
+        sql`${reservationsTable.status} != ${RESERVATION_STATUS.CANCELLED}`,
+        sql`REGEXP_REPLACE(${clientsTable.cpf}, '[^0-9]', '', 'g') = ${normalizedCpf}`,
+      )).limit(1);
+
+    res.json({ exists: !!match });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/public/store/:slug/trips/:tripId/seats/stream", async (req, res, next: NextFunction): Promise<void> => {
   const store = await getActiveStore(req.params.slug).catch(() => null);
   if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useUser } from "@clerk/react";
 import { publicStoreApi, PublicStore, StoreProduct, CouponValidation, PartnerProductInfo } from "@/lib/storeApi";
@@ -128,6 +128,26 @@ export function useWizardState({
       setSelectedBoardingPointId(bps[0].id);
     }
   }, [product?.boardingPoints]);
+
+  const [cpfDuplicateWarning, setCpfDuplicateWarning] = useState(false);
+  const cpfCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (cpfCheckTimer.current) clearTimeout(cpfCheckTimer.current);
+    if (!validateCpf(form.customerCpf) || !product?.tripId) {
+      setCpfDuplicateWarning(false);
+      return;
+    }
+    cpfCheckTimer.current = setTimeout(() => {
+      publicStoreApi
+        .checkCpf(slug, productSlug, form.customerCpf)
+        .then((res) => setCpfDuplicateWarning(res.exists))
+        .catch(() => setCpfDuplicateWarning(false));
+    }, 500);
+    return () => {
+      if (cpfCheckTimer.current) clearTimeout(cpfCheckTimer.current);
+    };
+  }, [form.customerCpf, product?.tripId, slug, productSlug]);
 
   const [referralCode, setReferralCode] = useState(() => localStorage.getItem("referral_code") ?? "");
   const [referralApplied, setReferralApplied] = useState(false);
@@ -536,6 +556,7 @@ export function useWizardState({
     isSoldOut,
     occupiedSeats,
     passengerOptions,
+    cpfDuplicateWarning,
     canProceedFromDados,
     canProceedFromRevisao,
     canProceedFromAssento,
