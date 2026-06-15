@@ -203,6 +203,24 @@ function formatTrip(t: typeof tripsTable.$inferSelect) {
   };
 }
 
+async function checkFreePassengerSeatConflicts(
+  tripId: string,
+  tenantId: string,
+  freePassengers: FreePassenger[],
+): Promise<string[]> {
+  const freeSeatNumbers = freePassengers.filter(p => p.seatNumber).map(p => p.seatNumber as string);
+  if (freeSeatNumbers.length === 0) return [];
+  const activeReservations = await db.select({ seats: reservationsTable.seats })
+    .from(reservationsTable)
+    .where(and(
+      eq(reservationsTable.tripId, tripId),
+      eq(reservationsTable.tenantId, tenantId),
+      inArray(reservationsTable.status, [RESERVATION_STATUS.PENDING, RESERVATION_STATUS.CONFIRMED]),
+    ));
+  const reservedSeatSet = new Set(activeReservations.flatMap(r => r.seats));
+  return freeSeatNumbers.filter(s => reservedSeatSet.has(s));
+}
+
 router.get("/trips", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
@@ -287,6 +305,20 @@ router.post("/trips", async (req, res, next: NextFunction): Promise<void> => {
       .limit(1);
     const planSupportsSeatMap = hasSeatMapFeature((tenantPlanRow?.supportedFeatures ?? []) as string[]);
     const resolvedShowSeatMap = planSupportsSeatMap ? (parsed.data.showSeatMap ?? true) : true;
+
+    if (Array.isArray(parsed.data.freePassengers) && parsed.data.freePassengers.length > 0) {
+      const conflicts = await checkFreePassengerSeatConflicts(id, me.tenantId, parsed.data.freePassengers as FreePassenger[]);
+      if (conflicts.length > 0) {
+        const plural = conflicts.length > 1;
+        next(new AppError(
+          `Assento${plural ? "s" : ""} ${conflicts.join(", ")} já ${plural ? "estão reservados" : "está reservado"} por passageiros pagantes`,
+          422,
+          "SEAT_CONFLICT",
+          { conflictingSeats: conflicts },
+        ));
+        return;
+      }
+    }
 
     await db.insert(tripsTable).values({
       id,
@@ -436,27 +468,16 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
     if (parsed.data.gallery !== undefined) updates.gallery = parsed.data.gallery ?? [];
     if (parsed.data.freePassengers !== undefined) {
       const fp: FreePassenger[] = Array.isArray(parsed.data.freePassengers) ? parsed.data.freePassengers as FreePassenger[] : [];
-      const freeSeatNumbers = fp.filter(p => p.seatNumber).map(p => p.seatNumber as string);
-      if (freeSeatNumbers.length > 0) {
-        const activeReservations = await db.select({ seats: reservationsTable.seats })
-          .from(reservationsTable)
-          .where(and(
-            eq(reservationsTable.tripId, req.params.id),
-            eq(reservationsTable.tenantId, me.tenantId),
-            inArray(reservationsTable.status, [RESERVATION_STATUS.PENDING, RESERVATION_STATUS.CONFIRMED]),
-          ));
-        const reservedSeatSet = new Set(activeReservations.flatMap(r => r.seats));
-        const conflicts = freeSeatNumbers.filter(s => reservedSeatSet.has(s));
-        if (conflicts.length > 0) {
-          const plural = conflicts.length > 1;
-          next(new AppError(
-            `Assento${plural ? "s" : ""} ${conflicts.join(", ")} já ${plural ? "estão reservados" : "está reservado"} por passageiros pagantes`,
-            422,
-            "SEAT_CONFLICT",
-            { conflictingSeats: conflicts },
-          ));
-          return;
-        }
+      const conflicts = await checkFreePassengerSeatConflicts(req.params.id, me.tenantId, fp);
+      if (conflicts.length > 0) {
+        const plural = conflicts.length > 1;
+        next(new AppError(
+          `Assento${plural ? "s" : ""} ${conflicts.join(", ")} já ${plural ? "estão reservados" : "está reservado"} por passageiros pagantes`,
+          422,
+          "SEAT_CONFLICT",
+          { conflictingSeats: conflicts },
+        ));
+        return;
       }
       updates.freePassengers = fp;
       updates.freeOrganizers = fp.filter(p => p.role === "organizer").length;
