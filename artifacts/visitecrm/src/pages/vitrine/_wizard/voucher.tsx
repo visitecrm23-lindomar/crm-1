@@ -12,6 +12,11 @@ export function Voucher({
   customerName,
   seats,
   paymentMethod,
+  referralDiscount = 0,
+  referralDiscountType,
+  referralDiscountPct,
+  couponDiscount = 0,
+  couponCode,
 }: {
   order: { orderNumber: string; totalAmount: string; createdAt: string };
   product: StoreProduct;
@@ -19,6 +24,11 @@ export function Voucher({
   customerName: string;
   seats: (number | string)[];
   paymentMethod: string;
+  referralDiscount?: number;
+  referralDiscountType?: string;
+  referralDiscountPct?: number;
+  couponDiscount?: number;
+  couponCode?: string;
 }) {
   const [qrDataUrl, setQrDataUrl] = useState("");
 
@@ -122,6 +132,28 @@ export function Voucher({
           </p>
         </div>
       </div>
+
+      {(referralDiscount > 0 || couponDiscount > 0) && (
+        <div className="border border-green-200 bg-green-50 rounded-lg px-3 py-2 mb-4 space-y-1 text-sm text-green-800">
+          <p className="text-xs font-semibold text-green-700 mb-1">Descontos aplicados</p>
+          {referralDiscount > 0 && (
+            <div className="flex justify-between">
+              <span>
+                {referralDiscountType === "percentage" && referralDiscountPct != null
+                  ? `Desconto de indicação (${referralDiscountPct}%)`
+                  : "Desconto de indicação"}
+              </span>
+              <span className="font-semibold">− R$ {referralDiscount.toFixed(2)}</span>
+            </div>
+          )}
+          {couponDiscount > 0 && (
+            <div className="flex justify-between">
+              <span>{couponCode ? `Cupom ${couponCode}` : "Desconto de cupom"}</span>
+              <span className="font-semibold">− R$ {couponDiscount.toFixed(2)}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center gap-4 border-t pt-4">
         <div className="shrink-0">

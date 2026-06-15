@@ -297,6 +297,11 @@ export function StepConfirmation({
           customerName={form.customerName}
           seats={effectiveSeats}
           paymentMethod={form.paymentMethod}
+          referralDiscount={referralApplied ? referralDiscount : 0}
+          referralDiscountType={referralDiscountType}
+          referralDiscountPct={referralDiscountPct}
+          couponDiscount={couponDiscount}
+          couponCode={couponResult?.code}
         />
 
         <div className="rounded-2xl p-6 text-center border-2 print:hidden"
