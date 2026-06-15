@@ -314,14 +314,14 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
                 { color: "bg-blue-50 border-2 border-blue-400", label: "Acessível ♿" },
                 { color: "bg-orange-400", label: "Reservado" },
                 { color: "bg-green-500", label: "Confirmado" },
-                { color: "bg-violet-500", label: "Gratuidade" },
+                { color: "bg-violet-500", label: "Gratuidade", tooltip: "Assento ocupado por passageiro isento (organizador, guia, etc.)" },
                 { color: "bg-gray-300", label: "Bloqueado" },
                 { color: "bg-cyan-100 border-2 border-cyan-300", label: "Banheiro 🚽" },
                 { color: "bg-purple-100 border-2 border-purple-300", label: "Escada 🪜" },
               ].map(l => (
-                <div key={l.label} className="flex items-center gap-1.5">
+                <div key={l.label} className="flex items-center gap-1.5" title={"tooltip" in l ? l.tooltip : undefined}>
                   <div className={`w-4 h-4 rounded ${l.color}`} />
-                  <span className="text-muted-foreground">{l.label}</span>
+                  <span className={"tooltip" in l ? "text-muted-foreground underline decoration-dotted cursor-help" : "text-muted-foreground"}>{l.label}</span>
                 </div>
               ))}
             </div>
