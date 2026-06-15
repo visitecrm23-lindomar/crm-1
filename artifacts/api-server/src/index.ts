@@ -8,6 +8,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { runBirthdayCron } from "./lib/birthday";
 import { runExpiredReservationsCron } from "./lib/expired-reservations";
+import { runPipelineTripEndedCron } from "./services/pipeline-automation";
 import { getRedisConnection, fetchUpstashDailyStats, getRedisWarningThresholdPct, maybeSendDailyLimitAlert } from "./lib/redis";
 import { getReminderQueue, closeQueues } from "./queues/index";
 import { startEmailWorker, stopEmailWorker } from "./workers/email.worker";
@@ -140,6 +141,11 @@ applyMigrations()
       cron.schedule("0 0 * * *", () => {
         logger.info("[birthday] Daily cron triggered");
         runBirthdayCron().catch((err) => logger.error({ err }, "[birthday] Cron failed"));
+      }, { timezone: "America/Sao_Paulo" });
+
+      cron.schedule("0 2 * * *", () => {
+        logger.info("[pipeline-trip-ended] Daily cron triggered");
+        runPipelineTripEndedCron().catch((err) => logger.error({ err }, "[pipeline-trip-ended] Cron failed"));
       }, { timezone: "America/Sao_Paulo" });
 
       // ── Log Upstash daily usage on startup (non-fatal) ──

@@ -14,6 +14,7 @@ import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib
 import { syncReservationPaymentStatus } from "../lib/reservation-payments";
 import { ROLES, RESERVATION_STATUS, COMMISSION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, type PaymentStatus, type PaymentType, type ExpenseStatus } from "@workspace/permissions";
 import { parsePaymentStatus, parsePaymentType, parseExpenseStatus } from "../lib/status-validators";
+import { moveDealToStage } from "../services/pipeline-automation";
 
 const router = Router();
 
@@ -509,6 +510,10 @@ router.post("/payments", async (req, res, next: NextFunction): Promise<void> => 
       writeClientActivity(effectiveClientId, "payment", `Pagamento de ${amountFormatted} recebido`, me.id, { amount: parsed.data.amount, reservationId: parsed.data.reservationId })
         .catch(() => {});
     }
+    if (effectiveClientId && explicitStatus === PAYMENT_STATUS.PAID && parsed.data.type === PAYMENT_TYPE.RECEIVABLE) {
+      moveDealToStage({ tenantId: me.tenantId, clientId: effectiveClientId, reservationId: parsed.data.reservationId ?? null, targetStageName: "Pagamento Confirmado", forwardOnly: true })
+        .catch((err) => req.log.error({ err }, "Error moving deal to Pagamento Confirmado on payment create"));
+    }
   } catch (err) {
     req.log.error({ err }, "Error creating payment");
     next(err);
@@ -599,6 +604,10 @@ router.patch("/payments/:id", async (req, res, next: NextFunction): Promise<void
           tenantId: me.tenantId,
         });
       }
+    }
+    if (payment.status === PAYMENT_STATUS.PAID && payment.type === PAYMENT_TYPE.RECEIVABLE) {
+      moveDealToStage({ tenantId: me.tenantId, clientId: payment.clientId ?? null, reservationId: payment.reservationId ?? null, targetStageName: "Pagamento Confirmado", forwardOnly: true })
+        .catch((err) => req.log.error({ err }, "Error moving deal to Pagamento Confirmado on payment update"));
     }
     res.json(formatPayment(payment));
     CalendarSyncService.syncPayment(req.params.id)

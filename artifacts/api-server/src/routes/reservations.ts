@@ -20,11 +20,12 @@ import { applyActiveCampaignBonus } from "../lib/referral-campaigns";
 import { calculateTier, loyaltyAwardPointsForReservation } from "../lib/loyalty-helpers";
 import { ROLES, DEAL_STATUS, RESERVATION_STATUS, REFERRAL_STATUS, COMMISSION_STATUS, STORE_ORDER_STATUS, STORE_PAYMENT_STATUS, type ReservationStatus } from "@workspace/permissions";
 import { parseReservationStatus } from "../lib/status-validators";
+import { moveDealToStage } from "../services/pipeline-automation";
 
 
 const router = Router();
 
-async function syncClientDeal(clientId: string, tenantId: string, tripId: string, totalValue: number, ownerId: string): Promise<void> {
+async function syncClientDeal(clientId: string, tenantId: string, tripId: string, totalValue: number, ownerId: string, reservationId?: string | null): Promise<void> {
   const [client] = await db.select({ name: clientsTable.name })
     .from(clientsTable).where(and(eq(clientsTable.id, clientId), eq(clientsTable.tenantId, tenantId))).limit(1);
   const [trip] = await db.select({ name: tripsTable.name })
@@ -41,21 +42,29 @@ async function syncClientDeal(clientId: string, tenantId: string, tripId: string
     .limit(1);
 
   if (existingDeal) {
-    await db.update(dealsTable).set({ value: String(totalValue), tripId, title })
+    await db.update(dealsTable)
+      .set({ value: String(totalValue), tripId, title, ...(reservationId ? { reservationId } : {}) })
       .where(and(eq(dealsTable.id, existingDeal.id), eq(dealsTable.tenantId, tenantId)));
+    await moveDealToStage({ tenantId, dealId: existingDeal.id, targetStageName: "Reserva Criada", forwardOnly: true });
   } else {
+    const [reservaCriadaStage] = await db.select({ id: pipelineStagesTable.id })
+      .from(pipelineStagesTable)
+      .where(and(eq(pipelineStagesTable.tenantId, tenantId), eq(pipelineStagesTable.name, "Reserva Criada")))
+      .limit(1);
     const [firstStage] = await db.select({ id: pipelineStagesTable.id })
       .from(pipelineStagesTable)
       .where(eq(pipelineStagesTable.tenantId, tenantId))
       .orderBy(asc(pipelineStagesTable.order))
       .limit(1);
-    if (!firstStage) return;
+    const stageId = reservaCriadaStage?.id ?? firstStage?.id;
+    if (!stageId) return;
     await db.insert(dealsTable).values({
       id: generateId(),
       tenantId,
       clientId,
-      stageId: firstStage.id,
+      stageId,
       tripId,
+      reservationId: reservationId ?? null,
       title,
       value: String(totalValue),
       status: DEAL_STATUS.OPEN,
@@ -865,7 +874,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
     enqueueCommissionSync(id, me.tenantId)
       .catch((err) => req.log.error({ err }, "Error enqueuing commission sync after reservation creation"));
     if (reservation.clientId) {
-      syncClientDeal(reservation.clientId, me.tenantId, reservation.tripId, Number(reservation.totalValue), me.id)
+      syncClientDeal(reservation.clientId, me.tenantId, reservation.tripId, Number(reservation.totalValue), me.id, id)
         .catch((err) => req.log.error({ err }, "Error syncing deal after reservation creation"));
       const totalFormatted = Number(reservation.totalValue).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
       writeClientActivity(reservation.clientId, "reservation_created", `Reserva ${voucherCode} criada — ${totalFormatted}`, me.id, { voucherCode, totalValue: Number(reservation.totalValue) })
@@ -1440,7 +1449,7 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
 
     if (!reservation) { next(new NotFoundError("Reservation not found", "NOT_FOUND")); return; }
     if (parsed.data.totalValue != null && existing.clientId) {
-      syncClientDeal(existing.clientId, me.tenantId, existing.tripId, parsed.data.totalValue, me.id)
+      syncClientDeal(existing.clientId, me.tenantId, existing.tripId, parsed.data.totalValue, me.id, req.params.id)
         .catch((err) => req.log.error({ err }, "Error syncing deal after reservation update"));
     }
     if (isBeingConfirmed && existing.clientId) {
@@ -1455,6 +1464,8 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
       const code = existing.voucherCode ?? req.params.id.slice(-8).toUpperCase();
       writeClientActivity(existing.clientId, "reservation_cancelled", `Reserva ${code} cancelada`, me.id, { voucherCode: code })
         .catch((err) => req.log.error({ err }, "Error writing cancellation activity"));
+      moveDealToStage({ tenantId: me.tenantId, clientId: existing.clientId, reservationId: existing.id, targetStageName: "Lead", forwardOnly: false })
+        .catch((err) => req.log.error({ err }, "Error moving deal to Lead on reservation cancellation"));
     }
     if (!isBeingCancelled) {
       enqueueCommissionSync(req.params.id, me.tenantId)
@@ -1539,6 +1550,8 @@ router.post("/reservations/:id/check-in", async (req, res, next: NextFunction): 
       const tripName = trip?.name ?? "viagem";
       writeClientActivity(existing.clientId, "checkin", `Check-in realizado na viagem ${tripName}`, me.id, { tripName })
         .catch((err) => req.log.error({ err }, "Error writing check-in activity"));
+      moveDealToStage({ tenantId: me.tenantId, clientId: existing.clientId, reservationId: req.params.id, targetStageName: "Em Viagem", forwardOnly: true })
+        .catch((err) => req.log.error({ err }, "Error moving deal to Em Viagem on check-in"));
     }
   } catch (err) {
     next(err);
