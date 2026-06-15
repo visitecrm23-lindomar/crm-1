@@ -23,6 +23,7 @@ export type WizardForm = {
   cardCvv: string;
   installments: string;
   partnerSelectedDate: string;
+  partnerSelectedTime: string;
   partnerTransferOrigin: string;
   partnerTransferDestination: string;
 };
@@ -72,6 +73,7 @@ export function useWizardState({
     cardCvv: "",
     installments: "1",
     partnerSelectedDate: "",
+    partnerSelectedTime: "",
     partnerTransferOrigin: "",
     partnerTransferDestination: "",
   });
@@ -367,7 +369,7 @@ export function useWizardState({
       const partnerNote = partnerInfo?.hasPartner
         ? [
             (partnerInfo.type === "passeio" || partnerInfo.type === "experiencia") && form.partnerSelectedDate
-              ? `Data do passeio: ${form.partnerSelectedDate}.`
+              ? `Data do passeio: ${form.partnerSelectedDate}${form.partnerSelectedTime ? " às " + form.partnerSelectedTime : ""}.`
               : "",
             partnerInfo.type === "transfer" && form.partnerTransferOrigin
               ? `Transfer: ${form.partnerTransferOrigin} → ${form.partnerTransferDestination}.`

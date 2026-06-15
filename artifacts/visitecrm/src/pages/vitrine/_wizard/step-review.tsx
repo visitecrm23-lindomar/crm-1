@@ -170,6 +170,19 @@ export function StepReview({ state, store }: { state: WizardState; store: Public
               </div>
             )}
 
+            {(partnerInfo.type === "passeio" || partnerInfo.type === "experiencia") && (
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Horário preferido</Label>
+                <Input
+                  type="time"
+                  value={form.partnerSelectedTime}
+                  onChange={(e) => set("partnerSelectedTime", e.target.value)}
+                  className="w-36"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Opcional — confirme com o parceiro</p>
+              </div>
+            )}
+
             {partnerInfo.type === "transfer" && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>

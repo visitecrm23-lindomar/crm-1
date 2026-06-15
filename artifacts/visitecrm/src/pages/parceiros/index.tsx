@@ -66,6 +66,11 @@ async function partnerFetch<T>(path: string, opts: RequestInit = {}): Promise<T>
     const body = await res.json().catch(() => ({}));
     throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
   }
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
+    return null as unknown as T;
+  }
+  const ct = res.headers.get("content-type") ?? "";
+  if (!ct.includes("application/json")) return null as unknown as T;
   return res.json() as Promise<T>;
 }
 
