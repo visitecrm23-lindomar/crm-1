@@ -192,10 +192,12 @@ router.put("/ai-integration", async (req, res): Promise<void> => {
       }
     }
 
-    // Re-testing is required after any credential/endpoint change.
+    // Re-testing is required after any credential/endpoint change, and a
+    // disabled config should never display a stale "connected/error" badge.
     const resetStatus =
       keyChanged ||
       !existing ||
+      !enabled ||
       existing.provider !== provider ||
       (existing.baseUrl ?? null) !== baseUrl;
     const status = resetStatus ? "disconnected" : existing.status;

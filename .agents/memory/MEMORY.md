@@ -4,5 +4,5 @@
 - [Favorites feature pattern](favorites-pattern.md) — FavoritesContext wraps Vitrine (CartProvider > FavoritesProvider); uses useGetMe role check; optimistic toggle.
 - [Manual migration workflow](manual-migration.md) — drizzle-kit is interactive; write SQL + update _journal.json; run `pnpm --filter @workspace/db migrate`.
 - [Store product vs trip favorites](store-favorites-join.md) — Trip favorites store tripId; join via storeProductsTable.tripId to get slug. Product favorites store storeProductsTable.id; join with storesTable for tenantId filter.
-- [SSRF for tenant base URLs](ssrf-tenant-base-url.md) — tenant-supplied provider URLs need connect-time IP enforcement (undici Agent lookup + undici's own fetch), not just a pre-check; guard empty custom baseURL centrally to avoid leaking keys to OpenAI default.
+- [SSRF for tenant base URLs](ssrf-tenant-base-url.md) — connect-time IP enforcement (not just a pre-check); canonicalize IPv4-in-IPv6 literals; guard empty custom baseURL to avoid leaking keys to OpenAI.
 - [AI config Test vs Save status](ai-config-test-vs-save.md) — "Testar Conexão" must test unsaved form values & never persist status (acceptance criterion); only Save persists status via its own server-side auto-test. Don't recouple.

@@ -18,7 +18,56 @@ export type AIProvider = "openai" | "anthropic" | "gemini" | "custom";
 // IP ranges (checked against the resolved address, not just the hostname), and
 // refuse redirects that could bypass the check.
 
-function isPrivateIp(ip: string): boolean {
+// Parses any textual IPv6 form to its 16 bytes, or null if invalid. Handles
+// "::" zero-compression and a trailing embedded dotted-quad IPv4
+// (e.g. ::ffff:127.0.0.1) by first folding it into two hex groups.
+function ipv6ToBytes(input: string): number[] | null {
+  let s = input.toLowerCase();
+  const zone = s.indexOf("%");
+  if (zone >= 0) s = s.slice(0, zone); // drop scope/zone id
+  const lastColon = s.lastIndexOf(":");
+  if (lastColon >= 0) {
+    const tail = s.slice(lastColon + 1);
+    if (tail.includes(".")) {
+      if (!net.isIPv4(tail)) return null;
+      const p = tail.split(".").map(Number) as [number, number, number, number];
+      s =
+        s.slice(0, lastColon + 1) +
+        (((p[0] << 8) | p[1]) >>> 0).toString(16) +
+        ":" +
+        (((p[2] << 8) | p[3]) >>> 0).toString(16);
+    }
+  }
+  const halves = s.split("::");
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(":") : [];
+  let groups: string[];
+  if (halves.length === 2) {
+    const tailGroups = halves[1] ? halves[1].split(":") : [];
+    const missing = 8 - head.length - tailGroups.length;
+    if (missing < 0) return null;
+    groups = [...head, ...Array(missing).fill("0"), ...tailGroups];
+  } else {
+    groups = head;
+  }
+  if (groups.length !== 8) return null;
+  const bytes: number[] = [];
+  for (const g of groups) {
+    if (!/^[0-9a-f]{1,4}$/.test(g)) return null;
+    const v = parseInt(g, 16);
+    bytes.push((v >> 8) & 0xff, v & 0xff);
+  }
+  return bytes;
+}
+
+// True when an IP literal is loopback/private/link-local/reserved and therefore
+// must not be reachable from a server-side request. Handles IPv4, IPv6, and
+// EVERY textual encoding of IPv4-in-IPv6 — mapped (::ffff:0:0/96), compatible
+// (::/96, incl. ::1 and ::), and NAT64 (64:ff9b::/96) — so a hex form such as
+// ::ffff:7f00:1 cannot smuggle 127.0.0.1 past the check. Surrounding brackets
+// (from a URL host) are tolerated.
+export function isPrivateIp(ipRaw: string): boolean {
+  const ip = ipRaw.replace(/^\[|\]$/g, "");
   if (net.isIPv4(ip)) {
     const [a, b] = ip.split(".").map(Number) as [number, number, number, number];
     if (a === 0 || a === 10 || a === 127) return true;
@@ -30,15 +79,23 @@ function isPrivateIp(ip: string): boolean {
     return false;
   }
   if (net.isIPv6(ip)) {
-    const lower = ip.toLowerCase();
-    if (lower === "::1" || lower === "::") return true; // loopback / unspecified
-    if (lower.startsWith("fe80")) return true; // link-local
-    if (lower.startsWith("fc") || lower.startsWith("fd")) return true; // unique-local
-    const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped && mapped[1]) return isPrivateIp(mapped[1]);
+    const bytes = ipv6ToBytes(ip);
+    if (!bytes) return true; // unparseable → unsafe
+    const allZero = (from: number, to: number): boolean =>
+      bytes.slice(from, to).every((x) => x === 0);
+    const embeddedV4 = `${bytes[12]}.${bytes[13]}.${bytes[14]}.${bytes[15]}`;
+    // IPv4-mapped ::ffff:0:0/96
+    if (allZero(0, 10) && bytes[10] === 0xff && bytes[11] === 0xff) return isPrivateIp(embeddedV4);
+    // IPv4-compatible ::/96 (covers ::1 loopback and :: unspecified too)
+    if (allZero(0, 12)) return isPrivateIp(embeddedV4);
+    // NAT64 64:ff9b::/96
+    if (bytes[0] === 0x00 && bytes[1] === 0x64 && bytes[2] === 0xff && bytes[3] === 0x9b && allZero(4, 12))
+      return isPrivateIp(embeddedV4);
+    if (bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0x80) return true; // link-local fe80::/10
+    if ((bytes[0] & 0xfe) === 0xfc) return true; // unique-local fc00::/7
     return false;
   }
-  return true; // unparseable → treat as unsafe
+  return true; // not a recognizable IP → treat as unsafe
 }
 
 // Validates a provider URL is HTTPS and resolves only to public addresses.
@@ -53,7 +110,10 @@ export async function assertSafeUrl(rawUrl: string): Promise<void> {
   if (url.protocol !== "https:") {
     throw new Error("A URL do provedor deve usar HTTPS.");
   }
-  const host = url.hostname;
+  // url.hostname keeps the brackets for IPv6 literals ("[::1]"); strip them so
+  // net.isIP recognizes the literal and we classify it instead of (incorrectly)
+  // sending a bracketed string to DNS resolution.
+  const host = url.hostname.replace(/^\[|\]$/g, "");
   let addresses: string[];
   if (net.isIP(host)) {
     addresses = [host];
