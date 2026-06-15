@@ -20,7 +20,7 @@ import {
   useGenerateClientReferralCode,
   useGetMe,
 } from "@workspace/api-client-react";
-import { RESERVATION_STATUS, REFERRAL_STATUS, PAYMENT_STATUS } from "@workspace/permissions";
+import { RESERVATION_STATUS, REFERRAL_STATUS, PAYMENT_STATUS, ADMIN_ROLES } from "@workspace/permissions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -31,7 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Phone, Mail, MapPin, Calendar, FileText, Download, Upload, Trash2,
   Star, TrendingUp, Gift, Award, Zap, MessageSquare, Loader2, Plus,
-  CreditCard, CheckSquare, XCircle, Globe,
+  CreditCard, CheckSquare, XCircle, Globe, RefreshCw,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -535,6 +535,25 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
 
   const isOpen = open && !!id;
   const [activeTab, setActiveTab] = useState("data");
+  const { data: me } = useGetMe();
+  const { toast } = useToast();
+  const [recalculating, setRecalculating] = useState(false);
+
+  const handleRecalculate = async () => {
+    setRecalculating(true);
+    try {
+      const resp = await fetch(`${API_BASE_ADMIN}/api/admin/clients/${id}/recalculate-score`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error("Failed");
+      toast({ title: "Recálculo iniciado!", description: "Os scores serão atualizados em instantes." });
+    } catch {
+      toast({ title: "Erro ao iniciar recálculo", variant: "destructive" });
+    } finally {
+      setRecalculating(false);
+    }
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={o => { if (!o) onClose(); }}>
@@ -585,7 +604,7 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-8">
+              <TabsList className="grid w-full grid-cols-9">
                 <TabsTrigger value="data">Dados</TabsTrigger>
                 <TabsTrigger value="trips">Viagens</TabsTrigger>
                 <TabsTrigger value="financial">Financeiro</TabsTrigger>
@@ -594,6 +613,7 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                 <TabsTrigger value="history">Histórico</TabsTrigger>
                 <TabsTrigger value="documents">Docs</TabsTrigger>
                 <TabsTrigger value="sonhos">Sonhos</TabsTrigger>
+                <TabsTrigger value="ia">IA</TabsTrigger>
               </TabsList>
 
               <TabsContent value="data" className="space-y-3 mt-4">
@@ -791,6 +811,72 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
 
               <TabsContent value="sonhos">
                 <ClientDreamsTab clientId={id} isOpen={activeTab === "sonhos"} />
+              </TabsContent>
+
+              <TabsContent value="ia" className="mt-4 space-y-4">
+                {client.purchaseScore == null ? (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-muted-foreground">Scores ainda não calculados.</p>
+                    <p className="text-xs text-muted-foreground mt-1">Serão gerados automaticamente na próxima análise diária (3h00).</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 gap-3">
+                      <Card className="p-3 text-center">
+                        <p className="text-xs text-muted-foreground mb-1">Prob. Compra</p>
+                        <p className={`text-2xl font-bold ${
+                          client.purchaseScore >= 70 ? "text-green-600" :
+                          client.purchaseScore >= 40 ? "text-yellow-600" : "text-red-600"
+                        }`}>{client.purchaseScore}%</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {client.purchaseScore >= 70 ? "Alta" : client.purchaseScore >= 40 ? "Média" : "Baixa"}
+                        </p>
+                      </Card>
+                      <Card className="p-3 text-center">
+                        <p className="text-xs text-muted-foreground mb-1">Prob. Recompra</p>
+                        <p className={`text-2xl font-bold ${
+                          (client.recompraScore ?? 0) >= 70 ? "text-green-600" :
+                          (client.recompraScore ?? 0) >= 40 ? "text-yellow-600" : "text-red-600"
+                        }`}>{client.recompraScore ?? 0}%</p>
+                      </Card>
+                      <Card className="p-3 text-center">
+                        <p className="text-xs text-muted-foreground mb-1">Risco de Churn</p>
+                        <p className={`text-2xl font-bold ${
+                          (client.churnScore ?? 0) >= 70 ? "text-red-600" :
+                          (client.churnScore ?? 0) >= 40 ? "text-yellow-600" : "text-green-600"
+                        }`}>{client.churnScore ?? 0}%</p>
+                      </Card>
+                    </div>
+
+                    {client.nboReasoning && (
+                      <div className="p-4 rounded-lg border bg-blue-50/50 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <TrendingUp className="w-4 h-4 text-blue-600" />
+                          <p className="text-sm font-semibold text-blue-800">Próxima Melhor Oferta</p>
+                        </div>
+                        {client.nboTripName && (
+                          <p className="font-medium text-sm">🗺️ {client.nboTripName}{client.nboTripDestination ? ` — ${client.nboTripDestination}` : ""}</p>
+                        )}
+                        <p className="text-sm text-muted-foreground">{client.nboReasoning}</p>
+                      </div>
+                    )}
+
+                    {client.scoresCalculatedAt && (
+                      <p className="text-xs text-muted-foreground">
+                        Atualizado em {format(parseISO(client.scoresCalculatedAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                      </p>
+                    )}
+                  </>
+                )}
+
+                {ADMIN_ROLES.includes(me?.role ?? "") && (
+                  <div className="pt-2 border-t">
+                    <Button variant="outline" size="sm" onClick={handleRecalculate} disabled={recalculating}>
+                      {recalculating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                      Recalcular agora
+                    </Button>
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
 

@@ -1035,7 +1035,7 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId 
 }
 
 
-type SortField = "name" | "createdAt" | "totalSpent";
+type SortField = "name" | "createdAt" | "totalSpent" | "purchaseScore" | "churnScore";
 type SortOrder = "asc" | "desc";
 
 interface SortableHeaderProps {
@@ -1325,18 +1325,19 @@ export default function Clients() {
                 <TableHead>Status</TableHead>
                 <TableHead><SortableHeader label="Gasto Total" field="totalSpent" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></TableHead>
                 <TableHead>Saldo</TableHead>
+                <TableHead><SortableHeader label="Score IA" field="purchaseScore" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i}>{Array.from({ length: 10 }).map((__, j) => <TableCell key={j}><Skeleton className="h-8 w-full" /></TableCell>)}</TableRow>
+                  <TableRow key={i}>{Array.from({ length: 11 }).map((__, j) => <TableCell key={j}><Skeleton className="h-8 w-full" /></TableCell>)}</TableRow>
                 ))
               ) : birthdayFilter ? (
                 birthdayClients.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
+                    <TableCell colSpan={11} className="text-center py-12 text-muted-foreground">
                       Nenhum aniversariante hoje.
                     </TableCell>
                   </TableRow>
@@ -1371,6 +1372,15 @@ export default function Clients() {
                       </TableCell>
                       <TableCell className="text-sm font-medium">{formatCurrency(client.totalSpent)}</TableCell>
                       <TableCell className="text-sm">{formatCurrency(client.outstandingBalance)}</TableCell>
+                      <TableCell>
+                        {client.purchaseScore != null ? (
+                          <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${
+                            client.purchaseScore >= 70 ? "bg-green-100 text-green-700" :
+                            client.purchaseScore >= 40 ? "bg-yellow-100 text-yellow-700" :
+                            "bg-red-100 text-red-700"
+                          }`}>{client.purchaseScore}%</span>
+                        ) : <span className="text-muted-foreground text-xs">—</span>}
+                      </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -1387,7 +1397,7 @@ export default function Clients() {
                 })
               ) : (clientsData?.data ?? []).length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={11} className="text-center py-12 text-muted-foreground">
                     {hasFilters ? "Nenhum cliente encontrado com os filtros aplicados." : "Nenhum cliente cadastrado."}
                   </TableCell>
                 </TableRow>
@@ -1437,6 +1447,15 @@ export default function Clients() {
                         <span className={`text-sm font-medium ${client.outstandingBalance > 0 ? "text-destructive" : "text-muted-foreground"}`}>
                           {formatCurrency(client.outstandingBalance)}
                         </span>
+                      </TableCell>
+                      <TableCell>
+                        {client.purchaseScore != null ? (
+                          <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${
+                            client.purchaseScore >= 70 ? "bg-green-100 text-green-700" :
+                            client.purchaseScore >= 40 ? "bg-yellow-100 text-yellow-700" :
+                            "bg-red-100 text-red-700"
+                          }`}>{client.purchaseScore}%</span>
+                        ) : <span className="text-muted-foreground text-xs">—</span>}
                       </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>

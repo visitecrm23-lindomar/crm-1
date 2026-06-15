@@ -35,3 +35,4 @@ export * from "./favorites";
 export * from "./ai-integration";
 export * from "./tenant-integrations";
 export * from "./achievements";
+export * from "./scores";

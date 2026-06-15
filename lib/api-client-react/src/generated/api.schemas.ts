@@ -301,6 +301,22 @@ export interface Client {
   isNew?: boolean | null;
   /** @nullable */
   message?: string | null;
+  /** @nullable */
+  purchaseScore?: number | null;
+  /** @nullable */
+  recompraScore?: number | null;
+  /** @nullable */
+  churnScore?: number | null;
+  /** @nullable */
+  nboTripId?: string | null;
+  /** @nullable */
+  nboTripName?: string | null;
+  /** @nullable */
+  nboTripDestination?: string | null;
+  /** @nullable */
+  nboReasoning?: string | null;
+  /** @nullable */
+  scoresCalculatedAt?: string | null;
 }
 
 export interface ClientListResponse {

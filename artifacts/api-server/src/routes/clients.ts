@@ -1,7 +1,7 @@
 import { Router, type NextFunction } from "express";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { db } from "@workspace/db";
-import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable, usersTable, paymentsTable, dealsTable, storeOrdersTable, storeReviewsTable } from "@workspace/db";
+import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable, usersTable, paymentsTable, dealsTable, storeOrdersTable, storeReviewsTable, clientScoresTable } from "@workspace/db";
 import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
 import { generateId, generateReferralCode } from "../lib/id";
 import { generateAndAssignReferralCode } from "../lib/referral-code";
@@ -19,10 +19,23 @@ import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { ROLES } from "@workspace/permissions";
 import { clerkClient } from "@clerk/express";
+import { calculateScoresForClient } from "../lib/client-scores";
 
 const router = Router();
 
-function formatClient(c: typeof clientsTable.$inferSelect, extra?: { isNew?: boolean; message?: string }) {
+type ScoreRow = {
+  clientId: string;
+  purchaseScore: number;
+  recompraScore: number;
+  churnScore: number;
+  nboTripId: string | null;
+  nboReasoning: string | null;
+  calculatedAt: Date;
+  nboTripName: string | null;
+  nboTripDestination: string | null;
+};
+
+function formatClient(c: typeof clientsTable.$inferSelect, extra?: { isNew?: boolean; message?: string; scores?: ScoreRow | null }) {
   return {
     id: c.id,
     name: c.name,
@@ -60,6 +73,14 @@ function formatClient(c: typeof clientsTable.$inferSelect, extra?: { isNew?: boo
     companyNps: c.companyNps ?? null,
     isNew: extra?.isNew ?? null,
     message: extra?.message ?? null,
+    purchaseScore: extra?.scores?.purchaseScore ?? null,
+    recompraScore: extra?.scores?.recompraScore ?? null,
+    churnScore: extra?.scores?.churnScore ?? null,
+    nboTripId: extra?.scores?.nboTripId ?? null,
+    nboTripName: extra?.scores?.nboTripName ?? null,
+    nboTripDestination: extra?.scores?.nboTripDestination ?? null,
+    nboReasoning: extra?.scores?.nboReasoning ?? null,
+    scoresCalculatedAt: extra?.scores?.calculatedAt?.toISOString() ?? null,
   };
 }
 
@@ -126,15 +147,22 @@ router.get("/clients", async (req, res, next: NextFunction): Promise<void> => {
       conditions.push(ids.length > 0 ? inArray(clientsTable.id, ids) : sql`false` as ReturnType<typeof eq>);
     }
 
-    const orderCol = sortBy === "name" ? clientsTable.name
-      : sortBy === "totalSpent" ? clientsTable.totalSpent
-      : sortBy === "createdAt" ? clientsTable.createdAt
-      : clientsTable.createdAt;
-    const orderDir = sortOrder === "asc" ? orderCol : desc(orderCol);
+    const scoreColName = sortBy === "purchaseScore" ? "purchase_score"
+      : sortBy === "churnScore" ? "churn_score" : null;
+    const orderExpr = scoreColName
+      ? (sortOrder === "asc"
+        ? sql`(SELECT ${sql.raw(scoreColName)} FROM client_scores WHERE client_id = ${clientsTable.id} AND tenant_id = ${clientsTable.tenantId}) ASC NULLS LAST`
+        : sql`(SELECT ${sql.raw(scoreColName)} FROM client_scores WHERE client_id = ${clientsTable.id} AND tenant_id = ${clientsTable.tenantId}) DESC NULLS LAST`)
+      : (() => {
+          const col = sortBy === "name" ? clientsTable.name
+            : sortBy === "totalSpent" ? clientsTable.totalSpent
+            : clientsTable.createdAt;
+          return sortOrder === "asc" ? col : desc(col);
+        })();
 
     const clients = await db.select().from(clientsTable)
       .where(and(...conditions))
-      .orderBy(orderDir)
+      .orderBy(orderExpr)
       .limit(limitNum)
       .offset(offset);
 
@@ -158,8 +186,27 @@ router.get("/clients", async (req, res, next: NextFunction): Promise<void> => {
       }
     }
 
+    let scoreMap = new Map<string, ScoreRow>();
+    if (clientIds.length > 0) {
+      const scoreRows = await db.select({
+        clientId: clientScoresTable.clientId,
+        purchaseScore: clientScoresTable.purchaseScore,
+        recompraScore: clientScoresTable.recompraScore,
+        churnScore: clientScoresTable.churnScore,
+        nboTripId: clientScoresTable.nboTripId,
+        nboReasoning: clientScoresTable.nboReasoning,
+        calculatedAt: clientScoresTable.calculatedAt,
+        nboTripName: tripsTable.name,
+        nboTripDestination: tripsTable.destination,
+      })
+        .from(clientScoresTable)
+        .leftJoin(tripsTable, eq(clientScoresTable.nboTripId, tripsTable.id))
+        .where(and(inArray(clientScoresTable.clientId, clientIds), eq(clientScoresTable.tenantId, me.tenantId)));
+      scoreMap = new Map(scoreRows.map(s => [s.clientId, s]));
+    }
+
     res.json({
-      data: clients.map(c => ({ ...formatClient(c), lastTripName: lastTripMap[c.id] ?? null })),
+      data: clients.map(c => ({ ...formatClient(c, { scores: scoreMap.get(c.id) ?? null }), lastTripName: lastTripMap[c.id] ?? null })),
       total: Number(countResult?.count ?? 0),
       page: pageNum,
       limit: limitNum,
@@ -263,7 +310,22 @@ router.get("/clients/:id", async (req, res, next: NextFunction): Promise<void> =
     const me = await requireAuth(req, res);
     if (!me) return;
     const client = await requireClientAccess(me, req.params.id);
-    res.json(formatClient(client));
+    const [scoreRow] = await db.select({
+      clientId: clientScoresTable.clientId,
+      purchaseScore: clientScoresTable.purchaseScore,
+      recompraScore: clientScoresTable.recompraScore,
+      churnScore: clientScoresTable.churnScore,
+      nboTripId: clientScoresTable.nboTripId,
+      nboReasoning: clientScoresTable.nboReasoning,
+      calculatedAt: clientScoresTable.calculatedAt,
+      nboTripName: tripsTable.name,
+      nboTripDestination: tripsTable.destination,
+    })
+      .from(clientScoresTable)
+      .leftJoin(tripsTable, eq(clientScoresTable.nboTripId, tripsTable.id))
+      .where(and(eq(clientScoresTable.clientId, client.id), eq(clientScoresTable.tenantId, me.tenantId)))
+      .limit(1);
+    res.json(formatClient(client, { scores: scoreRow ?? null }));
   } catch (err) {
     next(err);
   }
@@ -603,6 +665,21 @@ router.post("/clients/:clientId/referral/generate", async (req, res, next: NextF
     });
 
     res.json({ code });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/clients/:id/recalculate-score", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+    const client = await requireClientAccess(me, req.params.id);
+    calculateScoresForClient(client.id, me.tenantId).catch((err) => {
+      req.log.warn({ err, clientId: client.id }, "[scores] Background recalculation failed");
+    });
+    res.status(202).json({ message: "Recálculo de scores iniciado." });
   } catch (err) {
     next(err);
   }
