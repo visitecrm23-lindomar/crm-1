@@ -3644,7 +3644,6 @@ export interface InsightsSummaryExecutive {
   confirmedReservations: number;
   confirmedReservationsPrev: number;
   occupancyRate: number;
-  occupancyRatePrev: number;
   conversionRate: number;
   conversionRatePrev: number;
   averageNps: number | null;
@@ -3652,6 +3651,8 @@ export interface InsightsSummaryExecutive {
   activeTrips: number;
   profitMargin: number;
   profitMarginPrev: number;
+  momGrowth: number | null;
+  yoyGrowth: number | null;
 }
 
 export interface InsightsSummaryCommercial {
@@ -3671,6 +3672,8 @@ export interface InsightsSummaryCommercial {
   conversionRatePrev: number;
   totalLeads: number;
   totalLeadsPrev: number;
+  repeatClients: number;
+  repeatClientsPrev: number;
 }
 
 export interface InsightsSummaryMarketing {
@@ -3678,10 +3681,27 @@ export interface InsightsSummaryMarketing {
   newClientsPrev: number;
   referrals: number;
   referralsPrev: number;
+  convertedReferrals: number;
+  convertedReferralsPrev: number;
   totalLeads: number;
   totalLeadsPrev: number;
   conversionRate: number;
   conversionRatePrev: number;
+  activeCampaigns: number;
+  newCampaigns: number;
+  newCampaignsPrev: number;
+  sentCampaigns: number;
+  totalSentMessages: number;
+  totalOpenedMessages: number;
+  totalClickedMessages: number;
+  totalRecipients: number;
+  openRate: number;
+  clickRate: number;
+}
+
+export interface InsightsSummaryExpenseCategoryBreakdown {
+  category: string;
+  total: number;
 }
 
 export interface InsightsSummaryFinancial {
@@ -3693,11 +3713,14 @@ export interface InsightsSummaryFinancial {
   netProfitPrev: number;
   profitMargin: number;
   profitMarginPrev: number;
+  commissions: number;
+  commissionsPrev: number;
   receivable: number;
   payable: number;
   overdue: number;
   avgTicket: number;
   avgTicketPrev: number;
+  expenseCategories: InsightsSummaryExpenseCategoryBreakdown[];
 }
 
 export interface InsightsSummaryOperational {
@@ -3705,6 +3728,7 @@ export interface InsightsSummaryOperational {
   newTrips: number;
   newTripsPrev: number;
   occupancyRate: number;
+  totalAvailableSeats: number;
   avgReservationsPerTrip: number;
   avgReservationsPerTripPrev: number;
   confirmedReservations: number;
@@ -3716,21 +3740,32 @@ export interface InsightsSummaryOperational {
   totalSuppliers: number;
   newSuppliers: number;
   newSuppliersPrev: number;
+  checkedInPassengers: number;
+  checkedInPassengersPrev: number;
+  averageNps: number | null;
+  averageNpsPrev: number | null;
 }
 
 export interface InsightsSummaryRetention {
   loyaltyMembers: number;
+  loyaltyActiveMembers: number;
   loyaltyNewMembers: number;
   loyaltyNewMembersPrev: number;
   averageNps: number | null;
   averageNpsPrev: number | null;
+  promoterClients: number;
+  promoterClientsPrev: number;
   retentionRate: number;
   retentionRatePrev: number;
+  referralRate: number;
+  referralRatePrev: number;
   newClients: number;
   newClientsPrev: number;
   repeatClients: number;
   repeatClientsPrev: number;
   totalClients: number;
+  convertedReferrals: number;
+  convertedReferralsPrev: number;
 }
 
 export interface InsightsSummaryTopDestination {
@@ -3741,6 +3776,9 @@ export interface InsightsSummaryTopDestination {
 export interface InsightsSummaryExpansion {
   newTrips: number;
   newTripsPrev: number;
+  newDestinations90d: number;
+  newDestinationsPrev90d: number;
+  totalDestinations: number;
   newSuppliers: number;
   newSuppliersPrev: number;
   totalSuppliers: number;
@@ -3751,6 +3789,8 @@ export interface InsightsSummaryExpansion {
   avgTicketPrev: number;
   totalRevenue: number;
   totalRevenuePrev: number;
+  momGrowth: number | null;
+  yoyGrowth: number | null;
 }
 
 export interface InsightsSummary {
