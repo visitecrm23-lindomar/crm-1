@@ -28,7 +28,7 @@ import {
   TRIP_STATUS,
   REFERRAL_STATUS,
 } from "@workspace/permissions";
-import { openai } from "@workspace/integrations-openai-ai-server";
+import { getAIClientForTenant } from "../lib/ai-client";
 
 const router = Router();
 
@@ -500,9 +500,18 @@ router.post("/insights/chat", async (req, res): Promise<void> => {
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
 
-    const stream = await openai.chat.completions.create({
-      model: "gpt-5.4",
-      max_completion_tokens: 8192,
+    // Resolve the AI client: per-tenant configured provider when enabled,
+    // otherwise the platform-managed proxy.
+    const { client, model, provider } = await getAIClientForTenant(me.tenantId);
+    // OpenAI's newer models require max_completion_tokens; other OpenAI-compatible
+    // providers (Anthropic/Gemini) expect max_tokens.
+    const useCompletionTokens = provider === "openai";
+
+    const stream = await client.chat.completions.create({
+      model,
+      ...(useCompletionTokens
+        ? { max_completion_tokens: 8192 }
+        : { max_tokens: 8192 }),
       messages: [
         { role: "system", content: systemPrompt },
         ...messages,

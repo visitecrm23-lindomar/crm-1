@@ -83,6 +83,9 @@ import {
   Link2,
   Unlink,
   ToggleLeft,
+  Sparkles,
+  AlertCircle,
+  History,
 } from "lucide-react";
 import { formatCurrencyBRL } from "@/lib/utils";
 import { ROLES, INVOICE_STATUS } from "@workspace/permissions";
@@ -967,6 +970,7 @@ function IntegrationsTab() {
   return (
     <div className="space-y-4">
       <GoogleCalendarCard />
+      <AICard />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {INTEGRATIONS.map((integration) => {
           const configured = isConfigured(integration.key);
@@ -1040,6 +1044,362 @@ function IntegrationsTab() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/* ──────────────────── Inteligência Artificial Card ──────────────────── */
+interface AILog {
+  id: string;
+  event: string;
+  level: string;
+  message: string;
+  actorName: string | null;
+  createdAt: string;
+}
+
+const AI_PROVIDER_OPTIONS: { value: string; label: string }[] = [
+  { value: "openai", label: "OpenAI" },
+  { value: "anthropic", label: "Anthropic" },
+  { value: "gemini", label: "Google Gemini" },
+  { value: "custom", label: "Compatível (OpenAI API)" },
+];
+
+const AI_PROVIDER_DEFAULTS: Record<string, { baseUrl: string; model: string }> = {
+  openai: { baseUrl: "https://api.openai.com/v1", model: "gpt-4o" },
+  anthropic: { baseUrl: "https://api.anthropic.com/v1", model: "claude-3-5-sonnet-latest" },
+  gemini: { baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-2.0-flash" },
+  custom: { baseUrl: "", model: "" },
+};
+
+function AICard() {
+  const { toast } = useToast();
+  const { data: me } = useGetMe();
+  const canManage = me?.role === ROLES.AGENCY_ADMIN || me?.role === ROLES.SUPER_ADMIN;
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [forbidden, setForbidden] = useState(false);
+
+  const [provider, setProvider] = useState("openai");
+  const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [defaultModel, setDefaultModel] = useState("");
+  const [enabled, setEnabled] = useState(false);
+  const [status, setStatus] = useState("disconnected");
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [maskedApiKey, setMaskedApiKey] = useState<string | null>(null);
+  const [logs, setLogs] = useState<AILog[]>([]);
+  const [showLogs, setShowLogs] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  const loadConfig = useCallback(async () => {
+    try {
+      const res = await fetch(`${BASE}/api/ai-integration`, { credentials: "include" });
+      if (res.status === 403) {
+        setForbidden(true);
+        return;
+      }
+      if (!res.ok) throw new Error("load failed");
+      const data = await res.json();
+      setProvider(data.provider ?? "openai");
+      setBaseUrl(data.baseUrl ?? "");
+      setDefaultModel(data.defaultModel ?? "");
+      setEnabled(data.enabled ?? false);
+      setStatus(data.status ?? "disconnected");
+      setLastSyncAt(data.lastSyncAt ?? null);
+      setLastError(data.lastError ?? null);
+      setHasApiKey(data.hasApiKey ?? false);
+      setMaskedApiKey(data.maskedApiKey ?? null);
+      setDirty(false);
+    } catch {
+      // silent — card stays in default state
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadLogs = useCallback(async () => {
+    try {
+      const res = await fetch(`${BASE}/api/ai-integration/logs`, { credentials: "include" });
+      if (!res.ok) return;
+      setLogs(await res.json());
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!canManage) {
+      setLoading(false);
+      return;
+    }
+    void loadConfig();
+    void loadLogs();
+  }, [canManage, loadConfig, loadLogs]);
+
+  if (!canManage || forbidden) return null;
+
+  const defaults = AI_PROVIDER_DEFAULTS[provider] ?? AI_PROVIDER_DEFAULTS.openai!;
+
+  // Tests the *saved* configuration. The backend persists the resulting status,
+  // so we reload afterwards to reflect it.
+  async function performTest() {
+    setTesting(true);
+    try {
+      const res = await fetch(`${BASE}/api/ai-integration/test`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        toast({ title: "Conexão estabelecida com sucesso" });
+      } else {
+        toast({ title: data.message || "Falha ao conectar", variant: "destructive" });
+      }
+      await loadConfig();
+      await loadLogs();
+    } catch {
+      toast({ title: "Falha ao testar conexão", variant: "destructive" });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const keyExists = !!apiKey.trim() || hasApiKey;
+      const body: Record<string, unknown> = { provider, baseUrl, defaultModel, enabled };
+      if (apiKey.trim()) body.apiKey = apiKey.trim();
+      const res = await fetch(`${BASE}/api/ai-integration`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Erro ao salvar");
+      }
+      toast({ title: "Configuração de IA salva com sucesso" });
+      setApiKey("");
+      setDirty(false);
+      await loadConfig();
+      await loadLogs();
+      // Auto-verify the saved config so the connection status is immediately accurate.
+      if (keyExists) await performTest();
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Erro ao salvar", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleTestClick() {
+    if (dirty) {
+      toast({ title: "Salve as alterações antes de testar a conexão.", variant: "destructive" });
+      return;
+    }
+    void performTest();
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-purple-500" />
+            Inteligência Artificial
+          </CardTitle>
+          {status === "connected" ? (
+            <Badge className="text-xs bg-green-50 text-green-700 border border-green-200">
+              <CheckCircle2 className="w-3 h-3 mr-1" />
+              Conectado
+            </Badge>
+          ) : status === "error" ? (
+            <Badge className="text-xs bg-red-50 text-red-700 border border-red-200">
+              <AlertCircle className="w-3 h-3 mr-1" />
+              Erro
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-xs">Não conectado</Badge>
+          )}
+        </div>
+        <CardDescription className="text-xs">
+          Configure seu próprio provedor de IA para o assistente de Insights. Sem configuração,
+          usamos o provedor gerenciado da plataforma.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {loading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+            <Loader2 className="w-4 h-4 animate-spin" /> Carregando...
+          </div>
+        ) : (
+          <>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Provedor</Label>
+              <Select
+                value={provider}
+                onValueChange={(v) => {
+                  setProvider(v);
+                  setDirty(true);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AI_PROVIDER_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Chave de API</Label>
+              <Input
+                type="password"
+                value={apiKey}
+                onChange={(e) => {
+                  setApiKey(e.target.value);
+                  setDirty(true);
+                }}
+                placeholder={hasApiKey ? maskedApiKey ?? "••••••••" : "Insira sua chave de API"}
+                autoComplete="off"
+              />
+              {hasApiKey && (
+                <p className="text-[11px] text-muted-foreground">
+                  Uma chave já está salva. Deixe em branco para mantê-la.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Base URL {provider === "custom" ? "" : "(opcional)"}</Label>
+              <Input
+                value={baseUrl}
+                onChange={(e) => {
+                  setBaseUrl(e.target.value);
+                  setDirty(true);
+                }}
+                placeholder={defaults.baseUrl || "https://..."}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Modelo padrão (opcional)</Label>
+              <Input
+                value={defaultModel}
+                onChange={(e) => {
+                  setDefaultModel(e.target.value);
+                  setDirty(true);
+                }}
+                placeholder={defaults.model || "ex: gpt-4o"}
+              />
+            </div>
+
+            <div className="flex items-center justify-between rounded-md border p-2.5">
+              <div className="space-y-0.5">
+                <Label className="text-xs font-medium">Usar minha configuração</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Quando ativo, o assistente usa este provedor.
+                </p>
+              </div>
+              <Switch
+                checked={enabled}
+                onCheckedChange={(v) => {
+                  setEnabled(v);
+                  setDirty(true);
+                }}
+              />
+            </div>
+
+            {status === "error" && lastError && (
+              <div className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded p-2 break-words">
+                {lastError}
+              </div>
+            )}
+
+            {lastSyncAt && (
+              <p className="text-[11px] text-muted-foreground">
+                Última verificação: {new Date(lastSyncAt).toLocaleString("pt-BR")}
+              </p>
+            )}
+
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleTestClick}
+                disabled={testing || saving}
+                className="gap-1.5"
+              >
+                {testing ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Wifi className="w-3.5 h-3.5" />
+                )}
+                Testar Conexão
+              </Button>
+              <Button size="sm" onClick={handleSave} disabled={saving || testing} className="gap-1.5">
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                Salvar
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setShowLogs((s) => !s);
+                  if (!showLogs) void loadLogs();
+                }}
+                className="gap-1.5 ml-auto"
+              >
+                <History className="w-3.5 h-3.5" />
+                {showLogs ? "Ocultar logs" : "Ver logs"}
+              </Button>
+            </div>
+
+            {showLogs && (
+              <div className="border rounded-md divide-y max-h-56 overflow-y-auto">
+                {logs.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground p-3 text-center">
+                    Nenhum registro ainda.
+                  </p>
+                ) : (
+                  logs.map((log) => (
+                    <div key={log.id} className="p-2 text-[11px] flex items-start gap-2">
+                      <span
+                        className={`mt-0.5 inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
+                          log.level === "error"
+                            ? "bg-red-500"
+                            : log.level === "warn"
+                              ? "bg-amber-500"
+                              : "bg-green-500"
+                        }`}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-foreground break-words">{log.message}</p>
+                        <p className="text-muted-foreground">
+                          {new Date(log.createdAt).toLocaleString("pt-BR")}
+                          {log.actorName ? ` • ${log.actorName}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

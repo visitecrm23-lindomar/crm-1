@@ -337,6 +337,13 @@
       "when": 1750500000000,
       "tag": "0047_add_referral_points_per_referral",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1750600000000,
+      "tag": "0048_add_ai_integration",
+      "breakpoints": true
     }
   ]
 }
