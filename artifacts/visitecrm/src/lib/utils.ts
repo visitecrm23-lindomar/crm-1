@@ -64,6 +64,19 @@ export function validateCpf(cpf: string): boolean {
   return calc(9) === Number(digits[9]) && calc(10) === Number(digits[10]);
 }
 
+export function validatePhone(phone: string): boolean {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 11) {
+    // Mobile: area code (2 digits) + 9 + 8 digits
+    return /^[1-9]{2}9[0-9]{8}$/.test(digits);
+  }
+  if (digits.length === 10) {
+    // Landline: area code (2 digits) + 8 digits (starting with 2-8)
+    return /^[1-9]{2}[2-8][0-9]{7}$/.test(digits);
+  }
+  return false;
+}
+
 export function formatCpf(cpf: string | null | undefined): string {
   if (!cpf) return "—";
   const digits = cpf.replace(/\D/g, "");

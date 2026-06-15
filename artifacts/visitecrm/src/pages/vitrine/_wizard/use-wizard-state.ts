@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useUser } from "@clerk/react";
 import { publicStoreApi, PublicStore, StoreProduct, CouponValidation, PartnerProductInfo } from "@/lib/storeApi";
 import { clientPortalApi } from "@/lib/clientPortalApi";
-import { validateCpf } from "@/lib/utils";
+import { validateCpf, validatePhone } from "@/lib/utils";
 import { useSeatStream } from "@/hooks/useSeatStream";
 import type { LayoutSeatMap, Step } from "./constants";
 import { CLICKABLE_SEAT_TYPES, STEP_ORDER } from "./constants";
@@ -328,7 +328,7 @@ export function useWizardState({
     return (
       !!form.customerName.trim() &&
       !!form.customerEmail.trim() &&
-      !!form.customerPhone.trim() &&
+      validatePhone(form.customerPhone) &&
       validateCpf(form.customerCpf)
     );
   }
