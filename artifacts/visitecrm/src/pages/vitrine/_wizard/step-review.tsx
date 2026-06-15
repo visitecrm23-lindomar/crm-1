@@ -1,5 +1,5 @@
 import { Label } from "@/components/ui/label";
-import { ClipboardList, AlertTriangle, Users } from "lucide-react";
+import { ClipboardList, AlertTriangle, Users, Armchair } from "lucide-react";
 import { PublicStore } from "@/lib/storeApi";
 import { ProductCard } from "./product-card";
 import { StepCouponReferral } from "./coupon-referral";
@@ -104,6 +104,17 @@ export function StepReview({ state, store }: { state: WizardState; store: Public
             </button>
           </div>
         </div>
+
+        {product.showSeatMap === false && (
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-800">
+            <Armchair className="w-4 h-4 shrink-0 mt-0.5" />
+            <p>
+              {qty > 1
+                ? "Seus assentos serão atribuídos automaticamente após a confirmação da reserva."
+                : "Seu assento será atribuído automaticamente após a confirmação da reserva."}
+            </p>
+          </div>
+        )}
 
         <div className="border rounded-xl p-4 space-y-4">
           <h3 className="text-sm font-semibold">Resumo do Passageiro</h3>
