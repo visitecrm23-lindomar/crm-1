@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation, useSearch } from "wouter";
 import {
   useListLoyaltyPrograms,
   useCreateLoyaltyProgram,
@@ -251,7 +252,28 @@ function ProgramConfig({ program }: { program: LoyaltyProgram }) {
   );
 }
 
+const VALID_LOYALTY_TABS = ["members", "transactions"];
+
 export default function Loyalty() {
+  const [, navigate] = useLocation();
+  const searchStr = useSearch();
+  const [tab, setTab] = useState(() => {
+    const t = new URLSearchParams(searchStr).get("tab");
+    return VALID_LOYALTY_TABS.includes(t ?? "") ? t! : "members";
+  });
+
+  useEffect(() => {
+    const t = new URLSearchParams(searchStr).get("tab");
+    if (t && VALID_LOYALTY_TABS.includes(t)) setTab(t);
+  }, [searchStr]);
+
+  function handleTabChange(value: string) {
+    setTab(value);
+    const params = new URLSearchParams(searchStr);
+    params.set("tab", value);
+    navigate(`?${params.toString()}`, { replace: true });
+  }
+
   const [isProgramOpen, setIsProgramOpen] = useState(false);
   const [isMemberOpen, setIsMemberOpen] = useState(false);
   const [isTxOpen, setIsTxOpen] = useState(false);
@@ -590,7 +612,7 @@ export default function Loyalty() {
         (programs ?? []).map((p) => <ProgramConfig key={p.id} program={p} />)
       )}
 
-      <Tabs defaultValue="members">
+      <Tabs value={tab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTrigger value="members">
             <Users className="w-4 h-4 mr-1.5" /> Membros

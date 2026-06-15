@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useLocation, useSearch } from "wouter";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useListCoupons,
@@ -76,9 +77,43 @@ import type { Coupon } from "@workspace/api-client-react";
 import { toast } from "@/hooks/use-toast";
 
 
+const VALID_MARKETING_TABS = ["coupons", "birthdays"];
+const VALID_BIRTHDAY_SUBTABS = ["today", "upcoming7", "upcoming30", "history", "settings"];
+
 export default function Marketing() {
-  const [tab, setTab] = useState("coupons");
-  const [birthdaySubTab, setBirthdaySubTab] = useState("today");
+  const [, navigate] = useLocation();
+  const searchStr = useSearch();
+  const [tab, setTab] = useState(() => {
+    const t = new URLSearchParams(searchStr).get("tab");
+    return VALID_MARKETING_TABS.includes(t ?? "") ? t! : "coupons";
+  });
+  const [birthdaySubTab, setBirthdaySubTab] = useState(() => {
+    const s = new URLSearchParams(searchStr).get("subtab");
+    return VALID_BIRTHDAY_SUBTABS.includes(s ?? "") ? s! : "today";
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchStr);
+    const t = params.get("tab");
+    if (t && VALID_MARKETING_TABS.includes(t)) setTab(t);
+    const s = params.get("subtab");
+    if (s && VALID_BIRTHDAY_SUBTABS.includes(s)) setBirthdaySubTab(s);
+  }, [searchStr]);
+
+  function handleTabChange(value: string) {
+    setTab(value);
+    const params = new URLSearchParams(searchStr);
+    params.set("tab", value);
+    params.delete("subtab");
+    navigate(`?${params.toString()}`, { replace: true });
+  }
+
+  function handleSubTabChange(value: string) {
+    setBirthdaySubTab(value);
+    const params = new URLSearchParams(searchStr);
+    params.set("subtab", value);
+    navigate(`?${params.toString()}`, { replace: true });
+  }
   const [isOpen, setIsOpen] = useState(false);
   const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
   const [couponType, setCouponType] = useState<CreateCouponBodyType>("percentage");
@@ -252,7 +287,7 @@ export default function Marketing() {
         </div>
       </div>
 
-      <Tabs value={tab} onValueChange={setTab}>
+      <Tabs value={tab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTrigger value="coupons">
             <Ticket className="w-4 h-4 mr-1.5" /> Cupons
@@ -652,7 +687,7 @@ export default function Marketing() {
             </Dialog>
           </div>
 
-          <Tabs value={birthdaySubTab} onValueChange={setBirthdaySubTab}>
+          <Tabs value={birthdaySubTab} onValueChange={handleSubTabChange}>
             <TabsList className="flex-wrap h-auto gap-1">
               <TabsTrigger value="today" className="text-xs">
                 <Cake className="w-3 h-3 mr-1" /> Hoje

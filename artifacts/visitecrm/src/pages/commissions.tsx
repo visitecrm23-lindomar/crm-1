@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useLocation, useSearch } from "wouter";
 import {
   useListCommissions,
   useListCommissionRules,
@@ -26,8 +27,27 @@ import { COMMISSION_STATUS_LABELS as STATUS_LABELS, COMMISSION_STATUS_COLORS as 
 
 const fmt = (v: number | string) => formatCurrency(typeof v === "string" ? parseFloat(v) || 0 : v);
 
+const VALID_COMMISSION_TABS = ["commissions", "rules"];
+
 export default function Commissions() {
-  const [tab, setTab] = useState("commissions");
+  const [, navigate] = useLocation();
+  const searchStr = useSearch();
+  const [tab, setTab] = useState(() => {
+    const t = new URLSearchParams(searchStr).get("tab");
+    return VALID_COMMISSION_TABS.includes(t ?? "") ? t! : "commissions";
+  });
+
+  useEffect(() => {
+    const t = new URLSearchParams(searchStr).get("tab");
+    if (t && VALID_COMMISSION_TABS.includes(t)) setTab(t);
+  }, [searchStr]);
+
+  function handleTabChange(value: string) {
+    setTab(value);
+    const params = new URLSearchParams(searchStr);
+    params.set("tab", value);
+    navigate(`?${params.toString()}`, { replace: true });
+  }
   const [statusFilter, setStatusFilter] = useState("");
   const [isRuleOpen, setIsRuleOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<CommissionRule | null>(null);
@@ -251,7 +271,7 @@ export default function Commissions() {
         </Card>
       )}
 
-      <Tabs value={tab} onValueChange={setTab}>
+      <Tabs value={tab} onValueChange={handleTabChange}>
         <div className="flex items-center justify-between">
           <TabsList>
             <TabsTrigger value="commissions">Comissões</TabsTrigger>

@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useLocation, useSearch } from "wouter";
 import {
   useGetDashboardRevenueChart,
   useGetPaymentsSummary,
@@ -224,7 +225,28 @@ const PAYMENT_METHOD_COLORS: Record<string, string> = {
   pix: "#10B981", credit_card: "#8B5CF6", debit_card: "#6366F1", bank_transfer: "#3B82F6", cash: "#F59E0B", boleto: "#EF4444",
 };
 
+const VALID_REVENUE_TABS = ["charts", "funnel", "sellers", "heatmap", "trips"];
+
 export default function Revenue() {
+  const [, navigate] = useLocation();
+  const searchStr = useSearch();
+  const [tab, setTab] = useState(() => {
+    const t = new URLSearchParams(searchStr).get("tab");
+    return VALID_REVENUE_TABS.includes(t ?? "") ? t! : "charts";
+  });
+
+  useEffect(() => {
+    const t = new URLSearchParams(searchStr).get("tab");
+    if (t && VALID_REVENUE_TABS.includes(t)) setTab(t);
+  }, [searchStr]);
+
+  function handleTabChange(value: string) {
+    setTab(value);
+    const params = new URLSearchParams(searchStr);
+    params.set("tab", value);
+    navigate(`?${params.toString()}`, { replace: true });
+  }
+
   const [period, setPeriod] = useState<GetDashboardRevenueChartPeriod>("12m");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -488,7 +510,7 @@ export default function Revenue() {
         <KpiCard icon={Repeat} label="Clientes Recorrentes" value={String(recurringClients)} sub="com mais de 1 reserva (estimado)" color="text-indigo-600" />
       </div>
 
-      <Tabs defaultValue="charts">
+      <Tabs value={tab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTrigger value="charts">Evolução</TabsTrigger>
           <TabsTrigger value="funnel">Funil</TabsTrigger>

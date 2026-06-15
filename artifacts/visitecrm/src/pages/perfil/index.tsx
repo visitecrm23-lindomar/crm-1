@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactElement } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { clientPortalApi, type ClientPortalProfile, type ClientLoyalty, type ClientReferral } from "@/lib/clientPortalApi";
 import QRCode from "qrcode";
 import { useGetMe } from "@workspace/api-client-react";
@@ -1769,18 +1769,26 @@ function FidelidadeTab({ loyalty, primaryColor }: { loyalty: ClientLoyalty | nul
   );
 }
 
+const VALID_PERFIL_TABS = ["inicio", "reservas", "dados", "indicacoes", "fidelidade"];
+
 export default function PerfilPage() {
   const [, navigate] = useLocation();
+  const searchStr = useSearch();
   const { data: me } = useGetMe();
   const [profile, setProfile] = useState<ClientPortalProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const params = new URLSearchParams(window.location.search);
-  const defaultTab = params.get("tab") ?? "inicio";
-
-  const [activeTab, setActiveTab] = useState(defaultTab);
+  const [activeTab, setActiveTab] = useState(() => {
+    const t = new URLSearchParams(searchStr).get("tab");
+    return VALID_PERFIL_TABS.includes(t ?? "") ? t! : "inicio";
+  });
   const [reservationFilter, setReservationFilter] = useState<"com-saldo" | null>(null);
+
+  useEffect(() => {
+    const t = new URLSearchParams(searchStr).get("tab");
+    if (t && VALID_PERFIL_TABS.includes(t)) setActiveTab(t);
+  }, [searchStr]);
 
   useEffect(() => {
     clientPortalApi
@@ -1820,6 +1828,9 @@ export default function PerfilPage() {
         onValueChange={(tab) => {
           if (tab === "reservas") setReservationFilter(null);
           setActiveTab(tab);
+          const params = new URLSearchParams(searchStr);
+          params.set("tab", tab);
+          navigate(`?${params.toString()}`, { replace: true });
         }}
       >
         <TabsList className="mb-6 w-full sm:w-auto flex-wrap h-auto gap-1">
