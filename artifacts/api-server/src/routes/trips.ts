@@ -1056,6 +1056,7 @@ router.get("/trips/:id/passengers/export", async (req, res, next: NextFunction):
           p.seatNumber ?? "",
           boardingName,
           checkInStr,
+          "",
         ];
       });
     }
@@ -1067,13 +1068,14 @@ router.get("/trips/:id/passengers/export", async (req, res, next: NextFunction):
       fp.cpf ?? "",
       "",
       "",
-      `Gratuidade — ${freeRoleLabel[fp.role] ?? fp.role}`,
+      "Gratuidade",
       fp.seatNumber ?? "",
       "",
       "—",
+      freeRoleLabel[fp.role] ?? fp.role,
     ]);
 
-    const header = ["Passageiro", "CPF", "RG", "Data Nasc.", "Categoria", "Assento", "Local de Embarque", "Check-in"];
+    const header = ["Passageiro", "CPF", "RG", "Data Nasc.", "Categoria", "Assento", "Local de Embarque", "Check-in", "Função"];
     const csvLines = [header, ...rows, ...freeRows].map(r =>
       r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")
     );
