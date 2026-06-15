@@ -111,6 +111,13 @@ async function formatReservation(r: typeof reservationsTable.$inferSelect) {
     checkedInAt: r.checkedInAt?.toISOString() ?? null,
     notes: r.notes,
     boardingLocationId: r.boardingLocationId ?? null,
+    boardingLocation: (() => {
+      if (!r.boardingLocationId || !trip) return null;
+      const bps = (trip.boardingPoints ?? []) as Array<{ id: string; name: string; time?: string }>;
+      const bp = bps.find(p => p.id === r.boardingLocationId);
+      if (!bp) return null;
+      return { name: bp.name, time: bp.time ?? null };
+    })(),
     storeOrderId: r.storeOrderId ?? null,
     discountCouponCode: r.discountCouponCode ?? null,
     discountCouponAmount: r.discountCouponAmount != null ? Number(r.discountCouponAmount) : null,

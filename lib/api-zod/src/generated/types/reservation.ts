@@ -45,6 +45,8 @@ export interface Reservation {
   /** @nullable */
   boardingLocationId?: string | null;
   /** @nullable */
+  boardingLocation?: { name: string; time?: string | null } | null;
+  /** @nullable */
   storeOrderId?: string | null;
   /** @nullable */
   discountCouponCode?: string | null;

@@ -62,6 +62,16 @@ function VoucherContent({ r, qrDataUrl }: { r: Reservation | null | undefined; q
         </div>
       </div>
 
+      {r?.boardingLocation && (
+        <div className="mb-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Ponto de Embarque</p>
+          <p className="font-bold text-sm text-gray-900">{r.boardingLocation.name}</p>
+          {r.boardingLocation.time && (
+            <p className="text-xs text-gray-500">Horário: {r.boardingLocation.time}</p>
+          )}
+        </div>
+      )}
+
       {(r?.seats?.length ?? 0) > 0 && (
         <div className="mb-4">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Assentos</p>
