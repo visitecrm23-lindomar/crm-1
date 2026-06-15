@@ -1225,6 +1225,8 @@ export const GetReferralSettingsResponse = zod.object({
   whatsappBonusPaidMessage: zod.string().nullish(),
   expiryWarning7DaysEnabled: zod.boolean(),
   expiryWarning1DayEnabled: zod.boolean(),
+  bonusReleaseEmailEnabled: zod.boolean(),
+  pointsPerReferral: zod.number(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -1249,6 +1251,8 @@ export const UpdateReferralSettingsBody = zod.object({
   whatsappBonusPaidMessage: zod.string().optional(),
   expiryWarning7DaysEnabled: zod.boolean().optional(),
   expiryWarning1DayEnabled: zod.boolean().optional(),
+  bonusReleaseEmailEnabled: zod.boolean().optional(),
+  pointsPerReferral: zod.number().optional(),
 });
 
 export const UpdateReferralSettingsResponse = zod.object({
@@ -1270,6 +1274,8 @@ export const UpdateReferralSettingsResponse = zod.object({
   whatsappBonusPaidMessage: zod.string().nullish(),
   expiryWarning7DaysEnabled: zod.boolean(),
   expiryWarning1DayEnabled: zod.boolean(),
+  bonusReleaseEmailEnabled: zod.boolean(),
+  pointsPerReferral: zod.number(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });

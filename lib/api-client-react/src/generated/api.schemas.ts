@@ -2390,6 +2390,7 @@ export interface ReferralSettings {
   expiryWarning7DaysEnabled: boolean;
   expiryWarning1DayEnabled: boolean;
   bonusReleaseEmailEnabled: boolean;
+  pointsPerReferral: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -2412,6 +2413,7 @@ export interface UpdateReferralSettingsBody {
   expiryWarning7DaysEnabled?: boolean;
   expiryWarning1DayEnabled?: boolean;
   bonusReleaseEmailEnabled?: boolean;
+  pointsPerReferral?: number;
 }
 
 export interface ClientReferralInfo {

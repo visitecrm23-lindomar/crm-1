@@ -330,6 +330,13 @@
       "when": 1750400000000,
       "tag": "0046_add_loyalty_tier_benefits",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1750500000000,
+      "tag": "0047_add_referral_points_per_referral",
+      "breakpoints": true
     }
   ]
 }

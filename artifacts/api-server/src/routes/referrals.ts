@@ -1216,6 +1216,7 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
       expiryWarning7DaysEnabled: z.boolean().optional(),
       expiryWarning1DayEnabled: z.boolean().optional(),
       bonusReleaseEmailEnabled: z.boolean().optional(),
+      pointsPerReferral: z.number().int().min(0).optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -1237,6 +1238,7 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
     if (parsed.data.expiryWarning7DaysEnabled != null) updates.expiryWarning7DaysEnabled = parsed.data.expiryWarning7DaysEnabled;
     if (parsed.data.expiryWarning1DayEnabled != null) updates.expiryWarning1DayEnabled = parsed.data.expiryWarning1DayEnabled;
     if (parsed.data.bonusReleaseEmailEnabled != null) updates.bonusReleaseEmailEnabled = parsed.data.bonusReleaseEmailEnabled;
+    if (parsed.data.pointsPerReferral != null) updates.pointsPerReferral = parsed.data.pointsPerReferral;
 
     const [existing] = await db.select({
       id: referralSettingsTable.id,

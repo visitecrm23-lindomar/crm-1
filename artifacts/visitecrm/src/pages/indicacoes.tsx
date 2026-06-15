@@ -230,6 +230,7 @@ export default function Indicacoes() {
       expiryWarning7DaysEnabled: settings?.expiryWarning7DaysEnabled ?? true,
       expiryWarning1DayEnabled: settings?.expiryWarning1DayEnabled ?? true,
       bonusReleaseEmailEnabled: settings?.bonusReleaseEmailEnabled ?? true,
+      pointsPerReferral: settings?.pointsPerReferral ?? 0,
     });
     setSettingsModalOpen(true);
   }
@@ -255,6 +256,7 @@ export default function Indicacoes() {
           expiryWarning7DaysEnabled: localSettings.expiryWarning7DaysEnabled,
           expiryWarning1DayEnabled: localSettings.expiryWarning1DayEnabled,
           bonusReleaseEmailEnabled: localSettings.bonusReleaseEmailEnabled,
+          pointsPerReferral: localSettings.pointsPerReferral != null ? Number(localSettings.pointsPerReferral) : undefined,
         },
       });
       toast({ title: "Configurações salvas com sucesso" });
@@ -2161,6 +2163,27 @@ export default function Indicacoes() {
                     .replace(/\{bonus\}/g, fmtCurrency(settings?.bonusValue ?? 10))}
                 </p>
               )}
+            </div>
+
+            <div className="space-y-3 border rounded-lg p-3 bg-indigo-50/50">
+              <Label className="flex items-center gap-1.5 font-semibold text-indigo-800">
+                <span className="text-base">⭐</span>
+                Pontos de fidelidade por indicação
+              </Label>
+              <div className="space-y-1">
+                <Label className="text-xs">Pontos por indicação confirmada</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={String(localSettings.pointsPerReferral ?? 0)}
+                  onChange={(e) => setLocalSettings((s) => ({ ...s, pointsPerReferral: Math.max(0, parseInt(e.target.value) || 0) }))}
+                  placeholder="0"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Quantos pontos de fidelidade o indicador ganha por indicação convertida. Use 0 para desativar.
+                </p>
+              </div>
             </div>
 
             <div className="space-y-3 border rounded-lg p-3 bg-amber-50/50">

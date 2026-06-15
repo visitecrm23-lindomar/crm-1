@@ -111,6 +111,7 @@ export const referralSettingsTable = pgTable("referral_settings", {
   expiryWarning7DaysEnabled: boolean("expiry_warning_7_days_enabled").notNull().default(true),
   expiryWarning1DayEnabled: boolean("expiry_warning_1_day_enabled").notNull().default(true),
   bonusReleaseEmailEnabled: boolean("bonus_release_email_enabled").notNull().default(true),
+  pointsPerReferral: integer("points_per_referral").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

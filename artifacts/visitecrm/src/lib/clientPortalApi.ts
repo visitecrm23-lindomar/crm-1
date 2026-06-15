@@ -118,6 +118,7 @@ export interface ClientPortalProfile {
     tierProgress: number;
     nextTierMin: number | null;
     nextTierLabel: string | null;
+    pointsPerReferral: number;
   };
   stats: {
     totalSpent: number;

@@ -111,6 +111,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
       tierProgress: number;
       nextTierMin: number | null;
       nextTierLabel: string | null;
+      pointsPerReferral: number;
     } = {
       code: client?.referralCode ?? null,
       totalReferrals: 0,
@@ -125,6 +126,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
       tierProgress: 0,
       nextTierMin: 5,
       nextTierLabel: "Prata",
+      pointsPerReferral: 0,
     };
     let stats = { totalSpent: 0 };
     let loyalty: unknown = null;
@@ -290,6 +292,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
         .select({
           shareMessage: referralSettingsTable.shareMessage,
           tiersConfig: referralSettingsTable.tiersConfig,
+          pointsPerReferral: referralSettingsTable.pointsPerReferral,
         })
         .from(referralSettingsTable)
         .where(eq(referralSettingsTable.tenantId, me.tenantId))
@@ -314,6 +317,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
         tierProgress,
         nextTierMin: nextTier?.minReferrals ?? null,
         nextTierLabel: nextTier?.label ?? null,
+        pointsPerReferral: refSettings?.pointsPerReferral ?? 0,
       };
 
       const [loyaltyProgram] = await db

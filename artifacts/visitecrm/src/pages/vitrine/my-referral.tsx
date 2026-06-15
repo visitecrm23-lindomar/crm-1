@@ -33,6 +33,7 @@ import {
   CheckCircle,
   XCircle,
   QrCode,
+  Coins,
 } from "lucide-react";
 
 interface Props {
@@ -551,6 +552,14 @@ export default function MyReferralPage({ slug, store }: Props) {
           <CardDescription>
             Compartilhe este código com amigos. Quando eles comprarem, você ganha bônus!
           </CardDescription>
+          {ref.pointsPerReferral > 0 && profile.loyalty && (
+            <div className="flex items-center gap-1.5 text-xs text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 mt-2">
+              <Coins className="w-3.5 h-3.5 shrink-0" />
+              <span>
+                Ganhe também <strong>{ref.pointsPerReferral.toLocaleString("pt-BR")} pontos</strong> de fidelidade por indicação confirmada!
+              </span>
+            </div>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Code display */}

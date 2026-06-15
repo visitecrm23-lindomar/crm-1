@@ -4,6 +4,8 @@ import {
   referralSettingsTable,
   referralTrackingTable,
   storeOrdersTable,
+  loyaltyMembersTable,
+  loyaltyTransactionsTable,
 } from "@workspace/db";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { applyActiveCampaignBonus } from "../../lib/referral-campaigns";
@@ -12,6 +14,7 @@ import type { Tx } from "./tx";
 import { REFERRAL_STATUS } from "@workspace/permissions";
 import { computeReferralTier } from "../../lib/referral-tiers";
 import { detectReferralFraud } from "../../lib/referral-fraud";
+import { calculateTier } from "../../lib/loyalty-helpers";
 
 export interface RecordReferralArgs {
   tenantId: string;
@@ -41,6 +44,7 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
       bonusType: referralSettingsTable.bonusType,
       tiersConfig: referralSettingsTable.tiersConfig,
       expirationDays: referralSettingsTable.expirationDays,
+      pointsPerReferral: referralSettingsTable.pointsPerReferral,
     })
     .from(referralSettingsTable)
     .where(eq(referralSettingsTable.tenantId, tenantId))
@@ -163,5 +167,64 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
         eq(referralTrackingTable.tenantId, tenantId),
         eq(referralTrackingTable.referralCode, referralCode),
       ));
+  }
+
+  const pointsPerReferral = refSettings ? Number(refSettings.pointsPerReferral ?? 0) : 0;
+  if (pointsPerReferral > 0) {
+    const [loyaltyMember] = await tx
+      .select({
+        id: loyaltyMembersTable.id,
+        totalPoints: loyaltyMembersTable.totalPoints,
+        availablePoints: loyaltyMembersTable.availablePoints,
+      })
+      .from(loyaltyMembersTable)
+      .where(
+        and(
+          eq(loyaltyMembersTable.tenantId, tenantId),
+          eq(loyaltyMembersTable.clientId, referrerId),
+        ),
+      )
+      .limit(1);
+
+    if (loyaltyMember) {
+      const [existingLoyaltyTx] = await tx
+        .select({ id: loyaltyTransactionsTable.id })
+        .from(loyaltyTransactionsTable)
+        .where(
+          and(
+            eq(loyaltyTransactionsTable.memberId, loyaltyMember.id),
+            eq(loyaltyTransactionsTable.referenceId, referralId),
+            eq(loyaltyTransactionsTable.referenceType, "referral"),
+          ),
+        )
+        .limit(1);
+
+      if (!existingLoyaltyTx) {
+        await tx.insert(loyaltyTransactionsTable).values({
+          id: generateId(),
+          tenantId,
+          memberId: loyaltyMember.id,
+          type: "referral",
+          points: pointsPerReferral,
+          description: "Bônus de indicação",
+          referenceId: referralId,
+          referenceType: "referral",
+        });
+
+        const newTotal = loyaltyMember.totalPoints + pointsPerReferral;
+        const newAvailable = loyaltyMember.availablePoints + pointsPerReferral;
+        const newTier = calculateTier(newTotal);
+
+        await tx
+          .update(loyaltyMembersTable)
+          .set({
+            totalPoints: newTotal,
+            availablePoints: newAvailable,
+            tier: newTier,
+            lastActivityAt: new Date(),
+          })
+          .where(eq(loyaltyMembersTable.id, loyaltyMember.id));
+      }
+    }
   }
 }

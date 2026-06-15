@@ -1915,12 +1915,13 @@ function TierBadge({ tier }: { tier: string }) {
 }
 
 const TRANSACTION_TYPE_MAP: Record<string, { label: string; sign: "+" | "-"; color: string }> = {
-  earn:    { label: "Ganho",   sign: "+", color: "text-green-600" },
-  redeem:  { label: "Resgate", sign: "-", color: "text-red-600" },
-  bonus:   { label: "Bônus",   sign: "+", color: "text-purple-600" },
-  expire:  { label: "Expirado",sign: "-", color: "text-orange-500" },
-  refund:  { label: "Estorno", sign: "+", color: "text-blue-600" },
-  adjust:  { label: "Ajuste",  sign: "+", color: "text-slate-500" },
+  earn:     { label: "Ganho",          sign: "+", color: "text-green-600" },
+  redeem:   { label: "Resgate",        sign: "-", color: "text-red-600" },
+  bonus:    { label: "Bônus",          sign: "+", color: "text-purple-600" },
+  expire:   { label: "Expirado",       sign: "-", color: "text-orange-500" },
+  refund:   { label: "Estorno",        sign: "+", color: "text-blue-600" },
+  adjust:   { label: "Ajuste",         sign: "+", color: "text-slate-500" },
+  referral: { label: "Bônus indicação",sign: "+", color: "text-indigo-600" },
 };
 
 const TIER_BENEFITS_DEFAULT: Record<string, string[]> = {
