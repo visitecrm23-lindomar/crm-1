@@ -327,6 +327,53 @@ const TEMPLATES: LayoutTemplate[] = [
   },
 ];
 
+const SEAT_TYPES_RENUMBER = ["seat", "vip", "accessible"] as const;
+
+function applyBrazilianNumbering(cells: LayoutCell[], floors: number): LayoutCell[] {
+  const upperFirst = floors > 1;
+  const seatCells = cells.filter(c => (SEAT_TYPES_RENUMBER as readonly string[]).includes(c.type));
+  const maxCol = seatCells.length > 0 ? Math.max(...seatCells.map(c => c.col)) : 4;
+  const aisleCol = Math.ceil(maxCol / 2);
+
+  const rowGroups = new Map<string, LayoutCell[]>();
+  for (const cell of seatCells) {
+    const key = `${cell.floor ?? 1}-${cell.row}`;
+    if (!rowGroups.has(key)) rowGroups.set(key, []);
+    rowGroups.get(key)!.push(cell);
+  }
+
+  const sortedGroups = [...rowGroups.entries()].sort(([a], [b]) => {
+    const [fa, ra] = a.split("-").map(Number);
+    const [fb, rb] = b.split("-").map(Number);
+    if (fa !== fb) return upperFirst ? fb - fa : fa - fb;
+    return ra - rb;
+  });
+
+  const labels = new Map<string, string>();
+  let counter = 1;
+  for (const [, groupCells] of sortedGroups) {
+    const leftCells = groupCells.filter(c => c.col <= aisleCol).sort((a, b) => a.col - b.col);
+    const rightCells = groupCells.filter(c => c.col > aisleCol).sort((a, b) => a.col - b.col);
+    for (const lCell of leftCells) {
+      labels.set(`${lCell.floor ?? 1}-${lCell.row}-${lCell.col}`, String(counter++));
+    }
+    const rightBase = counter;
+    for (let i = 0; i < rightCells.length; i++) {
+      const rCell = rightCells[i];
+      labels.set(`${rCell.floor ?? 1}-${rCell.row}-${rCell.col}`, String(rightBase + (rightCells.length - 1 - i)));
+    }
+    counter += rightCells.length;
+  }
+
+  return cells.map(cell => {
+    const key = `${cell.floor ?? 1}-${cell.row}-${cell.col}`;
+    const label = labels.get(key);
+    if (label !== undefined) return { ...cell, label };
+    const { label: _removed, ...rest } = cell as LayoutCell & { label?: string };
+    return rest as LayoutCell;
+  });
+}
+
 function generateDefaultCells(rows: number, cols: number, existing: LayoutCell[] = [], floors = 1): LayoutCell[] {
   const existingMap = new Map(existing.map(c => [`${c.floor ?? 1}-${c.row}-${c.col}`, c]));
   const cells: LayoutCell[] = [];
@@ -705,6 +752,7 @@ function LayoutEditorModal({
   const [selectedType, setSelectedType] = useState<CellType>("seat");
   const [editingFloor, setEditingFloor] = useState(1);
   const [filterBusType, setFilterBusType] = useState("all");
+  const [showRenumberConfirm, setShowRenumberConfirm] = useState(false);
 
   const setField = <K extends keyof EditorState>(k: K) => (v: EditorState[K]) =>
     setForm(f => ({ ...f, [k]: v }));
@@ -1077,7 +1125,15 @@ function LayoutEditorModal({
           </div>
         </div>
 
-        <DialogFooter className="mt-4">
+        <DialogFooter className="mt-4 flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="border-green-600 text-green-700 hover:bg-green-50 mr-auto"
+            onClick={() => setShowRenumberConfirm(true)}
+          >
+            🇧🇷 Renumerar assentos
+          </Button>
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button
             onClick={() => onSave(form)}
@@ -1087,6 +1143,34 @@ function LayoutEditorModal({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <AlertDialog open={showRenumberConfirm} onOpenChange={setShowRenumberConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Renumerar assentos com padrão brasileiro?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Os labels de todas as poltronas serão redefinidos seguindo o padrão brasileiro (ímpar = janela, par = corredor, da frente para o fundo{form.floors > 1 ? ", andar superior primeiro" : ""}).
+              O tipo de numeração também será atualizado automaticamente. Essa ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const newNumberingType = form.floors > 1 ? "brazilian_standard_upper_first" : "brazilian_standard";
+                setForm(f => ({
+                  ...f,
+                  numberingType: newNumberingType,
+                  cells: applyBrazilianNumbering(f.cells, f.floors),
+                }));
+                setShowRenumberConfirm(false);
+              }}
+            >
+              Sim, renumerar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }
