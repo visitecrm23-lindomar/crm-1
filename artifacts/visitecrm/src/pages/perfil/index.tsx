@@ -55,6 +55,7 @@ import {
   Download,
   MessageCircle,
   Wallet,
+  Heart,
 } from "lucide-react";
 import { formatCurrency as fmtCurrencyLib, formatDateShort } from "@/lib/utils";
 
@@ -1769,7 +1770,287 @@ function FidelidadeTab({ loyalty, primaryColor }: { loyalty: ClientLoyalty | nul
   );
 }
 
-const VALID_PERFIL_TABS = ["inicio", "reservas", "dados", "indicacoes", "fidelidade"];
+function PreferenciasTab({
+  profile,
+  onUpdated,
+}: {
+  profile: ClientPortalProfile;
+  onUpdated: (updated: ClientPortalProfile["client"]) => void;
+}) {
+  const { toast } = useToast();
+  const c = profile.client;
+
+  const [musicalPreferences, setMusicalPreferences] = useState(c?.musicalPreferences ?? "");
+  const [favoriteDrink, setFavoriteDrink] = useState(c?.favoriteDrink ?? "");
+  const [dreamDestinations, setDreamDestinations] = useState<string[]>(c?.dreamDestinations ?? []);
+  const [dreamInput, setDreamInput] = useState("");
+  const [foodPreferences, setFoodPreferences] = useState(c?.foodPreferences ?? "");
+  const [birthDate, setBirthDate] = useState(c?.birthDate ?? "");
+  const [travelInterests, setTravelInterests] = useState<string[]>(c?.travelInterests ?? []);
+  const [likesPhotosVideos, setLikesPhotosVideos] = useState<boolean | null>(c?.likesPhotosVideos ?? null);
+  const [preferredDestinationTypes, setPreferredDestinationTypes] = useState<string[]>(c?.preferredDestinationTypes ?? []);
+  const [travelPreference, setTravelPreference] = useState(c?.travelPreference ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const DESTINATION_TYPES = ["Praia", "Serra/Montanha", "Aventura", "Cultural", "Religioso", "Ecoturismo", "Campo/Fazenda", "Cidade/Urbano", "Internacional"];
+  const TRAVEL_INTERESTS_OPTIONS = ["Gastronomia", "Natureza", "Cultura e história", "Compras", "Aventura", "Religiosidade", "Descanso", "Ecoturismo", "Arte e música", "Fotografia"];
+  const TRAVEL_STYLES = ["Em grupo", "A dois (casal)", "Em família", "Sozinho(a)"];
+
+  function toggleMulti(arr: string[], val: string, setArr: (v: string[]) => void) {
+    setArr(arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val]);
+  }
+
+  function addDream() {
+    const v = dreamInput.trim();
+    if (v && !dreamDestinations.includes(v)) {
+      setDreamDestinations((prev) => [...prev, v]);
+    }
+    setDreamInput("");
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await clientPortalApi.updatePreferences({
+        musicalPreferences: musicalPreferences || null,
+        favoriteDrink: favoriteDrink || null,
+        dreamDestinations,
+        foodPreferences: foodPreferences || null,
+        birthDate: birthDate || null,
+        travelInterests,
+        likesPhotosVideos,
+        preferredDestinationTypes,
+        travelPreference: travelPreference || null,
+      });
+      if (c) {
+        onUpdated({
+          ...c,
+          musicalPreferences: musicalPreferences || null,
+          favoriteDrink: favoriteDrink || null,
+          dreamDestinations,
+          foodPreferences: foodPreferences || null,
+          birthDate: birthDate || null,
+          travelInterests,
+          likesPhotosVideos,
+          preferredDestinationTypes,
+          travelPreference: travelPreference || null,
+        });
+      }
+      toast({ title: "Preferências salvas!", description: "Suas informações foram atualizadas." });
+    } catch {
+      toast({ title: "Erro ao salvar", description: "Tente novamente mais tarde.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!c) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center text-sm text-muted-foreground">
+          Complete seu cadastro para personalizar suas preferências de viagem.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6 max-w-xl">
+      <div>
+        <h3 className="font-semibold text-base">Suas preferências de viagem</h3>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Essas informações nos ajudam a criar experiências mais personalizadas para você.
+        </p>
+      </div>
+
+      <div className="grid gap-5">
+        <div className="space-y-1.5">
+          <Label htmlFor="musicalPreferences">🎵 Música ou estilo musical favorito</Label>
+          <Input
+            id="musicalPreferences"
+            placeholder="Ex: Sertanejo, MPB, Rock…"
+            value={musicalPreferences}
+            onChange={(e) => setMusicalPreferences(e.target.value)}
+            maxLength={500}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="favoriteDrink">🥤 Bebida favorita</Label>
+          <Input
+            id="favoriteDrink"
+            placeholder="Ex: Suco de laranja, Café, Vinho…"
+            value={favoriteDrink}
+            onChange={(e) => setFavoriteDrink(e.target.value)}
+            maxLength={200}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>🌎 Destinos dos seus sonhos</Label>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Ex: Paris, Fernando de Noronha…"
+              value={dreamInput}
+              onChange={(e) => setDreamInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addDream();
+                }
+              }}
+              maxLength={200}
+            />
+            <Button type="button" variant="outline" size="sm" onClick={addDream} className="shrink-0">
+              Adicionar
+            </Button>
+          </div>
+          {dreamDestinations.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
+              {dreamDestinations.map((dest, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-3 py-0.5 text-sm"
+                >
+                  {dest}
+                  <button
+                    type="button"
+                    onClick={() => setDreamDestinations((prev) => prev.filter((_, j) => j !== i))}
+                    className="ml-0.5 text-blue-400 hover:text-blue-700 leading-none"
+                    aria-label={`Remover ${dest}`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="foodPreferences">🍽️ Comida favorita</Label>
+          <Input
+            id="foodPreferences"
+            placeholder="Ex: Churrasco, Frutos do mar, Pizza…"
+            value={foodPreferences}
+            onChange={(e) => setFoodPreferences(e.target.value)}
+            maxLength={500}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="birthDate">🎂 Data de aniversário</Label>
+          <Input
+            id="birthDate"
+            type="date"
+            value={birthDate}
+            onChange={(e) => setBirthDate(e.target.value)}
+            max={new Date().toISOString().slice(0, 10)}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>
+            🏖️ Tipo de destino preferido{" "}
+            <span className="text-muted-foreground text-xs font-normal">(pode escolher mais de um)</span>
+          </Label>
+          <div className="flex flex-wrap gap-2">
+            {DESTINATION_TYPES.map((type) => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => toggleMulti(preferredDestinationTypes, type, setPreferredDestinationTypes)}
+                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                  preferredDestinationTypes.includes(type)
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border hover:bg-muted"
+                }`}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>
+            🎯 Principais interesses durante a viagem{" "}
+            <span className="text-muted-foreground text-xs font-normal">(pode escolher mais de um)</span>
+          </Label>
+          <div className="flex flex-wrap gap-2">
+            {TRAVEL_INTERESTS_OPTIONS.map((interest) => (
+              <button
+                key={interest}
+                type="button"
+                onClick={() => toggleMulti(travelInterests, interest, setTravelInterests)}
+                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                  travelInterests.includes(interest)
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border hover:bg-muted"
+                }`}
+              >
+                {interest}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>📸 Você gosta de registrar suas viagens com fotos e vídeos?</Label>
+          <div className="flex gap-2">
+            {([true, false] as const).map((val) => (
+              <button
+                key={String(val)}
+                type="button"
+                onClick={() => setLikesPhotosVideos(val)}
+                className={`px-5 py-2 rounded-md text-sm border transition-colors ${
+                  likesPhotosVideos === val
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border hover:bg-muted"
+                }`}
+              >
+                {val ? "Sim" : "Não"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>🚌 Como você prefere viajar?</Label>
+          <div className="flex flex-wrap gap-2">
+            {TRAVEL_STYLES.map((style) => (
+              <button
+                key={style}
+                type="button"
+                onClick={() => setTravelPreference(travelPreference === style ? "" : style)}
+                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                  travelPreference === style
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border hover:bg-muted"
+                }`}
+              >
+                {style}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto">
+        {saving ? (
+          <>
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            Salvando…
+          </>
+        ) : (
+          "Salvar preferências"
+        )}
+      </Button>
+    </div>
+  );
+}
+
+const VALID_PERFIL_TABS = ["inicio", "reservas", "dados", "indicacoes", "fidelidade", "preferencias"];
 
 export default function PerfilPage() {
   const [, navigate] = useLocation();
@@ -1864,6 +2145,10 @@ export default function PerfilPage() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="preferencias" className="flex items-center gap-1.5">
+            <Heart className="w-4 h-4" />
+            Preferências
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="inicio">
@@ -1904,6 +2189,15 @@ export default function PerfilPage() {
 
         <TabsContent value="fidelidade">
           <FidelidadeTab loyalty={profile.loyalty} primaryColor={primaryColor} />
+        </TabsContent>
+
+        <TabsContent value="preferencias">
+          <PreferenciasTab
+            profile={profile}
+            onUpdated={(updated) => {
+              setProfile((prev) => prev ? { ...prev, client: updated } : prev);
+            }}
+          />
         </TabsContent>
       </Tabs>
     </div>

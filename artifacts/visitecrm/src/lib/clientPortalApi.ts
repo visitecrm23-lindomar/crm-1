@@ -76,6 +76,14 @@ export interface ClientPortalProfile {
     addressCity: string | null;
     addressState: string | null;
     referralCode: string | null;
+    musicalPreferences: string | null;
+    favoriteDrink: string | null;
+    dreamDestinations: string[];
+    foodPreferences: string | null;
+    travelPreference: string | null;
+    travelInterests: string[];
+    likesPhotosVideos: boolean | null;
+    preferredDestinationTypes: string[];
   } | null;
   tenant: {
     id: string;
@@ -158,6 +166,17 @@ export const clientPortalApi = {
   getNotifications: () => apiReq<ClientNotificationsResponse>("GET", "/client/notifications"),
   markAllNotificationsRead: () => apiReq<void>("POST", "/client/notifications/read-all"),
   getNotificationStreamUrl: () => `${BASE}/api/client/notifications/stream`,
+  updatePreferences: (data: {
+    musicalPreferences?: string | null;
+    favoriteDrink?: string | null;
+    dreamDestinations?: string[];
+    foodPreferences?: string | null;
+    birthDate?: string | null;
+    travelInterests?: string[];
+    likesPhotosVideos?: boolean | null;
+    preferredDestinationTypes?: string[];
+    travelPreference?: string | null;
+  }) => apiReq<void>("PATCH", "/client/me/preferences", data),
   submitNps: (data: {
     reservationId: string;
     score: number;

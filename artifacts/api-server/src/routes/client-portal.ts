@@ -400,6 +400,14 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
             addressCity: client.addressCity,
             addressState: client.addressState,
             referralCode: client.referralCode,
+            musicalPreferences: client.musicalPreferences ?? null,
+            favoriteDrink: client.favoriteDrink ?? null,
+            dreamDestinations: client.dreamDestinations ?? [],
+            foodPreferences: client.foodPreferences ?? null,
+            travelPreference: client.travelPreference ?? null,
+            travelInterests: client.travelInterests ?? [],
+            likesPhotosVideos: client.likesPhotosVideos ?? null,
+            preferredDestinationTypes: client.preferredDestinationTypes ?? [],
           }
         : null,
       tenant: tenant
@@ -416,6 +424,59 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
       stats,
       loyalty,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch("/client/me/preferences", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== ROLES.CLIENT) {
+      next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE"));
+      return;
+    }
+    const body = z.object({
+      musicalPreferences: z.string().max(500).nullable().optional(),
+      favoriteDrink: z.string().max(200).nullable().optional(),
+      dreamDestinations: z.array(z.string().max(200)).max(20).optional(),
+      foodPreferences: z.string().max(500).nullable().optional(),
+      birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+      travelInterests: z.array(z.string().max(100)).max(20).optional(),
+      likesPhotosVideos: z.boolean().nullable().optional(),
+      preferredDestinationTypes: z.array(z.string().max(100)).max(20).optional(),
+      travelPreference: z.string().max(200).nullable().optional(),
+    }).safeParse(req.body);
+    if (!body.success) {
+      next(new ValidationError(String(body.error.message)));
+      return;
+    }
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) {
+      next(new NotFoundError("Perfil de cliente não encontrado", "NOT_FOUND"));
+      return;
+    }
+    const updates: Record<string, unknown> = {};
+    if (body.data.musicalPreferences !== undefined) updates.musicalPreferences = body.data.musicalPreferences;
+    if (body.data.favoriteDrink !== undefined) updates.favoriteDrink = body.data.favoriteDrink;
+    if (body.data.dreamDestinations !== undefined) updates.dreamDestinations = body.data.dreamDestinations;
+    if (body.data.foodPreferences !== undefined) updates.foodPreferences = body.data.foodPreferences;
+    if (body.data.birthDate !== undefined) {
+      updates.birthDate = body.data.birthDate ? new Date(body.data.birthDate) : null;
+    }
+    if (body.data.travelInterests !== undefined) updates.travelInterests = body.data.travelInterests;
+    if (body.data.likesPhotosVideos !== undefined) updates.likesPhotosVideos = body.data.likesPhotosVideos;
+    if (body.data.preferredDestinationTypes !== undefined) updates.preferredDestinationTypes = body.data.preferredDestinationTypes;
+    if (body.data.travelPreference !== undefined) updates.travelPreference = body.data.travelPreference;
+
+    if (Object.keys(updates).length > 0) {
+      await db
+        .update(clientsTable)
+        .set(updates)
+        .where(and(eq(clientsTable.id, client.id), eq(clientsTable.tenantId, me.tenantId)));
+    }
+    res.status(204).end();
   } catch (err) {
     next(err);
   }

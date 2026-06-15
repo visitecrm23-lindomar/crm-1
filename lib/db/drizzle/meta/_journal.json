@@ -309,6 +309,13 @@
       "when": 1750100000000,
       "tag": "0043_add_nps_category_scores",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1750200000000,
+      "tag": "0044_add_client_preference_fields",
+      "breakpoints": true
     }
   ]
 }
