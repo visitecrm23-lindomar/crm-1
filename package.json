@@ -13,8 +13,8 @@
   },
   "private": true,
   "devDependencies": {
-    "typescript": "~5.9.2",
-    "prettier": "^3.8.1"
+    "prettier": "^3.8.1",
+    "typescript": "~5.9.2"
   },
   "pnpm": {
     "overrides": {
@@ -51,6 +51,9 @@
       "metro-symbolicate": "0.83.7",
       "metro-transform-plugins": "0.83.7",
       "metro-transform-worker": "0.83.7"
+    },
+    "patchedDependencies": {
+      "metro@0.83.7": "patches/metro@0.83.7.patch"
     }
   }
 }

@@ -1,0 +1,27 @@
+diff --git a/src/node-haste/DependencyGraph.js b/src/node-haste/DependencyGraph.js
+index 8222d8c69059bfb3fe444acba9f96ab2cc7bec0b..751cb47e179d5887062ce049cfd198503300f143 100644
+--- a/src/node-haste/DependencyGraph.js
++++ b/src/node-haste/DependencyGraph.js
+@@ -95,13 +95,15 @@ class DependencyGraph extends _events.default {
+   }
+   _onHasteChange({ changes, rootDir }) {
+     this._resolutionCache = new Map();
+-    [
+-      ...changes.addedFiles,
+-      ...changes.modifiedFiles,
+-      ...changes.removedFiles,
+-    ].forEach(([canonicalPath]) =>
+-      this.#packageCache.invalidate(_path.default.join(rootDir, canonicalPath)),
+-    );
++    if (changes != null) {
++      [
++        ...changes.addedFiles,
++        ...changes.modifiedFiles,
++        ...changes.removedFiles,
++      ].forEach(([canonicalPath]) =>
++        this.#packageCache.invalidate(_path.default.join(rootDir, canonicalPath)),
++      );
++    }
+     this._createModuleResolver();
+     this.emit("change");
+   }
