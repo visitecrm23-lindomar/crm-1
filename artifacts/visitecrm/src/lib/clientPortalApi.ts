@@ -29,6 +29,7 @@ export interface ClientLoyaltyTransaction {
   description: string;
   referenceId?: string | null;
   referenceType?: string | null;
+  runningBalance?: number;
   createdAt: string;
 }
 

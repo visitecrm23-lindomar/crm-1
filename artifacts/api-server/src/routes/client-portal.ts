@@ -487,6 +487,65 @@ router.patch("/client/me/preferences", async (req, res, next: NextFunction): Pro
   }
 });
 
+const LOYALTY_TIER_THRESHOLDS = [
+  { tier: "bronze", min: 0, next: 500, nextLabel: "Prata" },
+  { tier: "silver", min: 500, next: 2000, nextLabel: "Ouro" },
+  { tier: "gold", min: 2000, next: 5000, nextLabel: "Diamante" },
+  { tier: "diamond", min: 5000, next: null, nextLabel: null },
+] as const;
+
+router.get("/client/me/loyalty", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== ROLES.CLIENT) {
+      next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE"));
+      return;
+    }
+
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) { res.json(null); return; }
+
+    const [loyaltyProgram] = await db
+      .select()
+      .from(loyaltyProgramsTable)
+      .where(and(eq(loyaltyProgramsTable.tenantId, me.tenantId), eq(loyaltyProgramsTable.isActive, true)))
+      .limit(1);
+
+    if (!loyaltyProgram) { res.json(null); return; }
+
+    const [member] = await db
+      .select()
+      .from(loyaltyMembersTable)
+      .where(and(
+        eq(loyaltyMembersTable.tenantId, me.tenantId),
+        eq(loyaltyMembersTable.programId, loyaltyProgram.id),
+        eq(loyaltyMembersTable.clientId, client.id),
+      ))
+      .limit(1);
+
+    const totalPoints = member?.totalPoints ?? 0;
+    const currentTierKey = member?.tier ?? "bronze";
+    const tierInfo = LOYALTY_TIER_THRESHOLDS.find((t) => t.tier === currentTierKey) ?? LOYALTY_TIER_THRESHOLDS[0];
+    const pointsToNext = tierInfo.next !== null ? Math.max(tierInfo.next - totalPoints, 0) : 0;
+
+    res.json({
+      availablePoints: member?.availablePoints ?? 0,
+      totalPoints,
+      tier: currentTierKey,
+      nextTier: tierInfo.nextLabel,
+      pointsToNext,
+      programName: loyaltyProgram.name,
+      pointsPerReal: Number(loyaltyProgram.pointsPerReal),
+      realPerPoint: Number(loyaltyProgram.realPerPoint),
+      minRedeemPoints: loyaltyProgram.minRedeemPoints,
+      tierBenefits: loyaltyProgram.tierBenefits ?? null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/client/me/loyalty/transactions", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
@@ -517,7 +576,7 @@ router.get("/client/me/loyalty/transactions", async (req, res, next: NextFunctio
     }
 
     const [member] = await db
-      .select({ id: loyaltyMembersTable.id })
+      .select({ id: loyaltyMembersTable.id, availablePoints: loyaltyMembersTable.availablePoints })
       .from(loyaltyMembersTable)
       .where(and(
         eq(loyaltyMembersTable.tenantId, me.tenantId),
@@ -537,23 +596,33 @@ router.get("/client/me/loyalty/transactions", async (req, res, next: NextFunctio
       .where(eq(loyaltyTransactionsTable.memberId, member.id));
     const total = Number(totalRow?.cnt ?? 0);
 
-    const transactions = await db
-      .select()
-      .from(loyaltyTransactionsTable)
-      .where(eq(loyaltyTransactionsTable.memberId, member.id))
-      .orderBy(desc(loyaltyTransactionsTable.createdAt))
-      .limit(limit)
-      .offset(offset);
+    // Fetch with running balance: balance AFTER each transaction = availablePoints minus sum of all newer transactions
+    const rows = await db.execute(
+      sql`SELECT
+          t.id, t.type, t.points, t.description, t.reference_id, t.reference_type, t.created_at,
+          (${member.availablePoints} - COALESCE((
+            SELECT SUM(lt2.points)
+            FROM loyalty_transactions lt2
+            WHERE lt2.member_id = ${member.id} AND lt2.created_at > t.created_at
+          ), 0)) AS running_balance
+        FROM loyalty_transactions t
+        WHERE t.member_id = ${member.id}
+        ORDER BY t.created_at DESC
+        LIMIT ${limit} OFFSET ${offset}`
+    );
 
     res.json({
-      data: transactions.map((t) => ({
-        id: t.id,
-        type: t.type,
-        points: t.points,
-        description: t.description,
-        referenceId: t.referenceId,
-        referenceType: t.referenceType,
-        createdAt: t.createdAt.toISOString(),
+      data: (rows.rows as Record<string, unknown>[]).map((t) => ({
+        id: t.id as string,
+        type: t.type as string,
+        points: Number(t.points),
+        description: t.description as string,
+        referenceId: t.reference_id as string | null,
+        referenceType: t.reference_type as string | null,
+        runningBalance: Number(t.running_balance),
+        createdAt: t.created_at instanceof Date
+          ? t.created_at.toISOString()
+          : String(t.created_at),
       })),
       hasMore: offset + limit < total,
       total,

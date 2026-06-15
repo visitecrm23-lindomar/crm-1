@@ -112,7 +112,15 @@ function daysUntilBirthday(birthDateStr: string | null): number | null {
   return Math.round((next.getTime() - today.getTime()) / 86400000);
 }
 
-function ReservationCard({ r, compact = false }: { r: ClientPortalProfile["reservations"][number]; compact?: boolean }) {
+function ReservationCard({
+  r,
+  compact = false,
+  onRedeemClick,
+}: {
+  r: ClientPortalProfile["reservations"][number];
+  compact?: boolean;
+  onRedeemClick?: () => void;
+}) {
   const { toast } = useToast();
   const [downloading, setDownloading] = useState(false);
   const days = daysUntil(r.tripDepartureDate);
@@ -246,6 +254,15 @@ function ReservationCard({ r, compact = false }: { r: ClientPortalProfile["reser
                   <AlertCircle className="w-3 h-3" />
                   <span>Saldo pendente: {fmtCurrency(r.balance)}</span>
                 </div>
+              )}
+              {r.balance > 0 && onRedeemClick && (
+                <button
+                  onClick={onRedeemClick}
+                  className="flex items-center gap-1.5 text-xs bg-amber-50 border border-amber-200 text-amber-700 rounded px-2 py-1 hover:bg-amber-100 transition-colors"
+                >
+                  <Coins className="w-3 h-3" />
+                  <span>Usar pontos</span>
+                </button>
               )}
             </div>
 
@@ -925,13 +942,61 @@ function ReservasTab({
   profile,
   filter,
   onClearFilter,
+  loyalty,
+  onRefresh,
 }: {
   profile: ClientPortalProfile;
   filter?: "com-saldo" | null;
   onClearFilter?: () => void;
+  loyalty?: ClientLoyalty | null;
+  onRefresh?: () => void;
 }) {
+  const { toast } = useToast();
+  const [redeemOpen, setRedeemOpen] = useState(false);
+  const [redeemReservationId, setRedeemReservationId] = useState("");
+  const [redeemPoints, setRedeemPoints] = useState("");
+  const [redeemLoading, setRedeemLoading] = useState(false);
+
+  const primaryColor = profile.tenant?.primaryColor ?? "#3B82F6";
+
+  function openRedeem(reservationId: string, balance: number) {
+    if (!loyalty) return;
+    const maxPts = Math.min(loyalty.availablePoints, Math.ceil(balance / loyalty.realPerPoint));
+    setRedeemReservationId(reservationId);
+    setRedeemPoints(String(maxPts));
+    setRedeemOpen(true);
+  }
+
+  async function handleRedeem(e: React.FormEvent) {
+    e.preventDefault();
+    if (!loyalty || !redeemReservationId) return;
+    const pts = parseInt(redeemPoints, 10);
+    if (isNaN(pts) || pts <= 0) return;
+    setRedeemLoading(true);
+    try {
+      const result = await clientPortalApi.redeemLoyaltyPoints(redeemReservationId, pts);
+      toast({
+        title: "Pontos resgatados com sucesso!",
+        description: `${result.pointsRedeemed.toLocaleString("pt-BR")} pts → ${result.discountAmount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} de desconto aplicado.`,
+      });
+      setRedeemOpen(false);
+      setRedeemPoints("");
+      setRedeemReservationId("");
+      onRefresh?.();
+    } catch (err) {
+      toast({
+        title: "Erro ao resgatar pontos",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setRedeemLoading(false);
+    }
+  }
+
   const today = new Date().toISOString().slice(0, 10);
   const all = profile.reservations;
+  const canRedeem = !!loyalty && loyalty.availablePoints >= loyalty.minRedeemPoints;
 
   const upcoming = all.filter(
     (r) =>
@@ -967,42 +1032,112 @@ function ReservasTab({
     );
   }
 
+  const redeemReservation = all.find((r) => r.id === redeemReservationId);
+  const maxRedeemPoints = redeemReservation && loyalty
+    ? Math.min(loyalty.availablePoints, Math.ceil(redeemReservation.balance / loyalty.realPerPoint))
+    : 0;
+  const redeemPointsNum = parseInt(redeemPoints, 10) || 0;
+  const estimatedDiscount = loyalty ? redeemPointsNum * loyalty.realPerPoint : 0;
+
+  const redeemModal = redeemOpen && loyalty ? (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40" onClick={() => !redeemLoading && setRedeemOpen(false)} />
+      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+        <div>
+          <h3 className="font-bold text-lg">Usar pontos nesta reserva</h3>
+          <p className="text-sm text-muted-foreground">{redeemReservation?.tripName}</p>
+        </div>
+        <form onSubmit={handleRedeem} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="reservasRedeemInput">Pontos a resgatar</Label>
+            <Input
+              id="reservasRedeemInput"
+              type="number"
+              min={loyalty.minRedeemPoints}
+              max={maxRedeemPoints}
+              value={redeemPoints}
+              onChange={(e) => setRedeemPoints(e.target.value)}
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              Disponível: {loyalty.availablePoints.toLocaleString("pt-BR")} pts · Máx. nesta reserva: {maxRedeemPoints.toLocaleString("pt-BR")} pts
+            </p>
+          </div>
+          {redeemPointsNum >= loyalty.minRedeemPoints && (
+            <div className="bg-muted rounded-lg p-3 text-sm space-y-1">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Pontos usados:</span>
+                <span className="font-semibold">{redeemPointsNum.toLocaleString("pt-BR")}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Desconto estimado:</span>
+                <span className="font-bold text-green-600">
+                  {estimatedDiscount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                </span>
+              </div>
+            </div>
+          )}
+          <div className="flex gap-2 justify-end">
+            <Button type="button" variant="outline" onClick={() => setRedeemOpen(false)} disabled={redeemLoading}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              disabled={redeemLoading || redeemPointsNum < loyalty.minRedeemPoints || redeemPointsNum > maxRedeemPoints}
+              style={{ backgroundColor: primaryColor }}
+              className="text-white"
+            >
+              {redeemLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirmar resgate"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  ) : null;
+
   if (filter === "com-saldo") {
     const withBalance = all.filter(
       (r) => r.balance > 0 && r.status !== RESERVATION_STATUS.CANCELLED,
     );
     return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-orange-500" />
-            <span className="text-sm font-semibold text-orange-800">
-              {withBalance.length} reserva{withBalance.length !== 1 ? "s" : ""} com pagamento pendente
-            </span>
+      <>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-orange-500" />
+              <span className="text-sm font-semibold text-orange-800">
+                {withBalance.length} reserva{withBalance.length !== 1 ? "s" : ""} com pagamento pendente
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground"
+              onClick={onClearFilter}
+            >
+              Ver todas
+              <ArrowRight className="w-3 h-3 ml-1" />
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs text-muted-foreground"
-            onClick={onClearFilter}
-          >
-            Ver todas
-            <ArrowRight className="w-3 h-3 ml-1" />
-          </Button>
+          {withBalance.length === 0 ? (
+            <div className="text-center py-10">
+              <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-400" />
+              <p className="text-muted-foreground text-sm">Nenhuma reserva com saldo pendente.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {withBalance.map((r) => (
+                <ReservationCard
+                  key={r.id}
+                  r={r}
+                  onRedeemClick={canRedeem ? () => openRedeem(r.id, r.balance) : undefined}
+                />
+              ))}
+            </div>
+          )}
         </div>
-        {withBalance.length === 0 ? (
-          <div className="text-center py-10">
-            <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-400" />
-            <p className="text-muted-foreground text-sm">Nenhuma reserva com saldo pendente.</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {withBalance.map((r) => (
-              <ReservationCard key={r.id} r={r} />
-            ))}
-          </div>
-        )}
-      </div>
+        {redeemModal}
+      </>
     );
   }
 
@@ -1015,7 +1150,11 @@ function ReservasTab({
           </h2>
           <div className="space-y-3">
             {upcoming.map((r) => (
-              <ReservationCard key={r.id} r={r} />
+              <ReservationCard
+                key={r.id}
+                r={r}
+                onRedeemClick={canRedeem && r.balance > 0 ? () => openRedeem(r.id, r.balance) : undefined}
+              />
             ))}
           </div>
         </section>
@@ -1033,6 +1172,8 @@ function ReservasTab({
           </div>
         </section>
       )}
+
+      {redeemModal}
     </div>
   );
 }
@@ -2124,8 +2265,15 @@ function FidelidadeTab({
                         {type.label} · {new Date(t.createdAt).toLocaleDateString("pt-BR")}
                       </p>
                     </div>
-                    <div className={`text-sm font-bold ml-4 shrink-0 ${type.color}`}>
-                      {type.sign}{Math.abs(t.points).toLocaleString("pt-BR")} pts
+                    <div className="ml-4 shrink-0 text-right">
+                      <p className={`text-sm font-bold ${type.color}`}>
+                        {type.sign}{Math.abs(t.points).toLocaleString("pt-BR")} pts
+                      </p>
+                      {t.runningBalance !== undefined && (
+                        <p className="text-xs text-muted-foreground">
+                          saldo: {t.runningBalance.toLocaleString("pt-BR")}
+                        </p>
+                      )}
                     </div>
                   </div>
                 );
@@ -2717,6 +2865,10 @@ export default function PerfilPage() {
             profile={profile}
             filter={reservationFilter}
             onClearFilter={() => setReservationFilter(null)}
+            loyalty={profile.loyalty}
+            onRefresh={() => {
+              clientPortalApi.getProfile().then(setProfile).catch(() => {});
+            }}
           />
         </TabsContent>
 
