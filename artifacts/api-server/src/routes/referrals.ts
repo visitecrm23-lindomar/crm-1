@@ -1171,6 +1171,7 @@ router.get("/referral-settings", async (req, res): Promise<void> => {
         expiryWarning7DaysEnabled: true,
         expiryWarning1DayEnabled: true,
         bonusReleaseEmailEnabled: true,
+        pointsPerReferral: 0,
       };
       await db.insert(referralSettingsTable).values(defaults);
       res.json(defaults);
