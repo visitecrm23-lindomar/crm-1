@@ -185,9 +185,20 @@ const REGISTRY: Record<string, RegistryEntry> = {
 
   // ── Stripe (agency's own account) ──────────────────────────────────────────
   // Calls the Stripe API on a fixed host — no SSRF risk.
+  // publishableKey (pk_…) goes to config (non-secret — safe to embed in frontend).
+  // secretKey + webhookSecret are encrypted secrets.
   stripe_account: {
     label: "Stripe (conta da agência)",
-    fields: [{ key: "secretKey", label: "Chave Secreta (sk_…)", secret: true }],
+    fields: [
+      { key: "publishableKey", label: "Chave Publicável (pk_…)", secret: false, optional: true },
+      { key: "secretKey", label: "Chave Secreta (sk_…)", secret: true },
+      {
+        key: "webhookSecret",
+        label: "Webhook Secret (whsec_…)",
+        secret: true,
+        optional: true,
+      },
+    ],
     async testConnection(_config, secrets) {
       const secretKey = secrets.secretKey?.trim();
       if (!secretKey) {

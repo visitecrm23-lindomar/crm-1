@@ -313,6 +313,7 @@ router.put("/ai-integration", async (req, res): Promise<void> => {
 const testSchema = z.object({
   provider: z.enum(["openai", "anthropic", "gemini", "custom"]),
   apiKey: z.string().optional(),
+  accessToken: z.string().optional(),
   baseUrl: z.string().optional(),
   defaultModel: z.string().optional(),
 });
@@ -331,38 +332,61 @@ router.post("/ai-integration/test", async (req, res): Promise<void> => {
     const baseUrl = (parsed.data.baseUrl ?? "").trim() || null;
     const defaultModel = (parsed.data.defaultModel ?? "").trim() || null;
 
-    // Resolve the key to test: a freshly typed key, or — when the field still
-    // holds the masked sentinel / is empty — the saved key.
+    // Resolve the effective Bearer credential: freshly typed apiKey takes
+    // priority; then saved apiKey; then accessToken (for OAuth-style custom
+    // providers that authenticate with a Bearer token rather than an API key);
+    // then saved accessToken.
     const incomingKey = (parsed.data.apiKey ?? "").trim();
+    const incomingToken = (parsed.data.accessToken ?? "").trim();
     const useSavedKey = incomingKey.length === 0 || incomingKey.startsWith(MASK);
+    const useSavedToken = incomingToken.length === 0 || incomingToken.startsWith(MASK);
 
     let apiKey: string;
-    if (useSavedKey) {
+    if (!useSavedKey) {
+      // Freshly typed API key — use directly.
+      apiKey = incomingKey;
+    } else {
+      // Load saved row to resolve stored credentials.
       const [existing] = await db
         .select()
         .from(aiIntegrationsTable)
         .where(eq(aiIntegrationsTable.tenantId, me.tenantId))
         .limit(1);
-      if (!existing?.apiKeyEncrypted) {
+
+      let resolved = "";
+
+      // Priority 1: saved API key.
+      if (!resolved && existing?.apiKeyEncrypted) {
+        try {
+          resolved = decryptCredential(existing.apiKeyEncrypted);
+        } catch {
+          // ignore — key may be malformed; fall through
+        }
+      }
+
+      // Priority 2: freshly typed access token (OAuth Bearer for custom providers).
+      if (!resolved && !useSavedToken) {
+        resolved = incomingToken;
+      }
+
+      // Priority 3: saved access token.
+      if (!resolved && existing?.accessTokenEncrypted) {
+        try {
+          resolved = decryptCredential(existing.accessTokenEncrypted);
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!resolved) {
         res.status(400).json({
           ok: false,
           status: "error",
-          message: "Informe uma chave de API para testar a conexão.",
+          message: "Informe uma chave de API ou token de acesso para testar a conexão.",
         });
         return;
       }
-      try {
-        apiKey = decryptCredential(existing.apiKeyEncrypted);
-      } catch {
-        res.status(400).json({
-          ok: false,
-          status: "error",
-          message: "Não foi possível ler a chave salva. Informe a chave novamente.",
-        });
-        return;
-      }
-    } else {
-      apiKey = incomingKey;
+      apiKey = resolved;
     }
 
     // Reject SSRF-prone base URLs early (mirrors PUT) so the admin gets a clear
