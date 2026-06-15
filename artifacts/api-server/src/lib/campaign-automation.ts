@@ -1,8 +1,8 @@
 import { db, campaignsTable, campaignSendsTable, clientsTable, tenantsTable, reservationsTable, tripsTable } from "@workspace/db";
-import { eq, and, sql, isNotNull, inArray } from "drizzle-orm";
+import { eq, ne, and, sql, isNotNull, inArray } from "drizzle-orm";
 import { logger } from "./logger";
 import { generateId } from "./id";
-import { sendReminderHtmlEmail } from "@workspace/email";
+import { sendReminderHtmlEmail, type SendEmailResult } from "@workspace/email";
 import { getCampaignEmailQueue } from "../queues/index";
 
 const TRIGGER_TYPES = [
@@ -140,7 +140,10 @@ async function getAlreadySentClientIds(
   campaignId: string,
   sinceDate?: Date
 ): Promise<Set<string>> {
-  const conditions = [eq(campaignSendsTable.campaignId, campaignId)];
+  const conditions = [
+    eq(campaignSendsTable.campaignId, campaignId),
+    ne(campaignSendsTable.status, "error"),
+  ];
   if (sinceDate) {
     conditions.push(sql`${campaignSendsTable.sentAt} >= ${sinceDate.toISOString()}`);
   }
@@ -149,40 +152,6 @@ async function getAlreadySentClientIds(
     .from(campaignSendsTable)
     .where(and(...conditions));
   return new Set(rows.map((r) => r.clientId));
-}
-
-async function enqueueCampaignEmail(
-  to: string,
-  toName: string,
-  subject: string,
-  htmlContent: string,
-  fromName: string,
-  campaignId: string,
-  clientId: string,
-  tenantId: string
-): Promise<void> {
-  const personalised = htmlContent
-    .replace(/\{nome\}/gi, toName)
-    .replace(/\{name\}/gi, toName);
-
-  const queue = getCampaignEmailQueue();
-  if (queue) {
-    await queue.add("campaign-email", {
-      to,
-      toName,
-      subject,
-      htmlContent: personalised,
-      fromName,
-      campaignId,
-      clientId,
-      tenantId,
-    });
-  } else {
-    const result = await sendReminderHtmlEmail({ to, subject, html: personalised, fromName });
-    if (!result.success) {
-      throw new Error(result.error ?? "Email send failed");
-    }
-  }
 }
 
 function getSinceDate(triggerType: TriggerType): Date | undefined {
@@ -213,40 +182,31 @@ async function processTenantCampaign(
 
   if (eligible.length === 0) return;
 
+  const queue = getCampaignEmailQueue();
   let successCount = 0;
   let errorCount = 0;
 
   for (const client of eligible) {
     if (!client.email) continue;
+    if (campaign.type !== "email" || !campaign.subject) continue;
+
     const sendId = generateId();
-    try {
-      if (campaign.type === "email" && campaign.subject) {
-        await enqueueCampaignEmail(
-          client.email,
-          client.name,
-          campaign.subject,
-          campaign.content,
-          tenantName,
-          campaign.id,
-          client.id,
-          campaign.tenantId
-        );
-      }
-      await db
-        .insert(campaignSendsTable)
-        .values({
-          id: sendId,
+    const personalised = campaign.content
+      .replace(/\{nome\}/gi, client.name)
+      .replace(/\{name\}/gi, client.name);
+
+    if (queue) {
+      try {
+        await queue.add("campaign-email", {
+          to: client.email,
+          toName: client.name,
+          subject: campaign.subject,
+          htmlContent: personalised,
+          fromName: tenantName,
           campaignId: campaign.id,
           clientId: client.id,
           tenantId: campaign.tenantId,
-          status: "sent",
-        })
-        .onConflictDoNothing();
-      successCount++;
-    } catch (err) {
-      errorCount++;
-      logger.error({ err, campaignId: campaign.id, clientId: client.id }, "Failed to enqueue campaign email");
-      try {
+        });
         await db
           .insert(campaignSendsTable)
           .values({
@@ -254,11 +214,68 @@ async function processTenantCampaign(
             campaignId: campaign.id,
             clientId: client.id,
             tenantId: campaign.tenantId,
-            status: "error",
-            error: String(err),
+            status: "queued",
           })
-          .onConflictDoNothing();
-      } catch (_) {}
+          .onConflictDoUpdate({
+            target: [campaignSendsTable.campaignId, campaignSendsTable.clientId],
+            set: { id: sendId, status: "queued", sentAt: new Date(), error: null },
+            setWhere: eq(campaignSendsTable.status, "error"),
+          });
+        successCount++;
+      } catch (err) {
+        errorCount++;
+        logger.error({ err, campaignId: campaign.id, clientId: client.id }, "[campaign-automation] Failed to enqueue");
+      }
+    } else {
+      let sendResult: SendEmailResult;
+      try {
+        sendResult = await sendReminderHtmlEmail({
+          to: client.email,
+          subject: campaign.subject,
+          html: personalised,
+          fromName: tenantName,
+        });
+      } catch (err) {
+        sendResult = { success: false, error: String(err) };
+      }
+      if (sendResult.success) {
+        try {
+          await db
+            .insert(campaignSendsTable)
+            .values({
+              id: sendId,
+              campaignId: campaign.id,
+              clientId: client.id,
+              tenantId: campaign.tenantId,
+              status: "sent",
+            })
+            .onConflictDoUpdate({
+              target: [campaignSendsTable.campaignId, campaignSendsTable.clientId],
+              set: { id: sendId, status: "sent", sentAt: new Date(), error: null },
+              setWhere: eq(campaignSendsTable.status, "error"),
+            });
+        } catch (_) {}
+        successCount++;
+      } else {
+        errorCount++;
+        logger.error({ err: sendResult.error, campaignId: campaign.id, clientId: client.id }, "[campaign-automation] Direct send failed");
+        try {
+          await db
+            .insert(campaignSendsTable)
+            .values({
+              id: sendId,
+              campaignId: campaign.id,
+              clientId: client.id,
+              tenantId: campaign.tenantId,
+              status: "error",
+              error: sendResult.error ?? "Send failed",
+            })
+            .onConflictDoUpdate({
+              target: [campaignSendsTable.campaignId, campaignSendsTable.clientId],
+              set: { status: "error", error: sendResult.error ?? "Send failed" },
+            });
+        } catch (_) {}
+      }
     }
   }
 

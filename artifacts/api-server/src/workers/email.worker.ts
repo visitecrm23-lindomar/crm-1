@@ -1,6 +1,6 @@
 import { Worker } from "bullmq";
-import { db, emailLogsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, emailLogsTable, campaignSendsTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail, sendReminderHtmlEmail } from "@workspace/email";
 import { getRedisConnection, isTransientRedisError, recordTransientRedisError, resetTransientRedisErrors } from "../lib/redis";
 import { logger } from "../lib/logger";
@@ -129,8 +129,19 @@ export function startEmailWorker(): Worker<EmailJobData> | null {
           })
           .where(eq(emailLogsTable.id, emailLogId));
       } else if (job.name === "campaign-email") {
-        const { to, subject, htmlContent, fromName } = job.data as CampaignEmailJobData;
+        const { to, subject, htmlContent, fromName, campaignId, clientId } = job.data as CampaignEmailJobData;
         result = await sendReminderHtmlEmail({ to, subject, html: htmlContent, fromName });
+        if (result.success) {
+          await db
+            .update(campaignSendsTable)
+            .set({ status: "sent", error: null })
+            .where(
+              and(
+                eq(campaignSendsTable.campaignId, campaignId),
+                eq(campaignSendsTable.clientId, clientId)
+              )
+            );
+        }
       } else {
         const { emailLogId: _e, tenantId: _t, reservationId: _r, ...emailProps } =
           job.data as ReservationEmailJobData;
@@ -166,18 +177,35 @@ export function startEmailWorker(): Worker<EmailJobData> | null {
         "[email-worker] ALERT: job exhausted all retries — email was NOT delivered",
       );
 
-      const data = job.data as Partial<ReservationEmailJobData & CancellationEmailJobData>;
-      if (data.emailLogId) {
+      if (job.name === "campaign-email") {
+        const { campaignId, clientId } = job.data as CampaignEmailJobData;
         try {
           await db
-            .update(emailLogsTable)
-            .set({
-              status: "failed",
-              errorMessage: err?.message ?? "Unknown error after all retries",
-            })
-            .where(eq(emailLogsTable.id, data.emailLogId));
+            .update(campaignSendsTable)
+            .set({ status: "error", error: err?.message ?? "All retries exhausted" })
+            .where(
+              and(
+                eq(campaignSendsTable.campaignId, campaignId),
+                eq(campaignSendsTable.clientId, clientId)
+              )
+            );
         } catch (dbErr) {
-          logger.error({ jobId: job.id, dbErr }, "[email-worker] Failed to update email log after exhausted retries");
+          logger.error({ jobId: job.id, campaignId, clientId, dbErr }, "[email-worker] Failed to update campaign_sends after exhausted retries");
+        }
+      } else {
+        const data = job.data as Partial<ReservationEmailJobData & CancellationEmailJobData>;
+        if (data.emailLogId) {
+          try {
+            await db
+              .update(emailLogsTable)
+              .set({
+                status: "failed",
+                errorMessage: err?.message ?? "Unknown error after all retries",
+              })
+              .where(eq(emailLogsTable.id, data.emailLogId));
+          } catch (dbErr) {
+            logger.error({ jobId: job.id, dbErr }, "[email-worker] Failed to update email log after exhausted retries");
+          }
         }
       }
     } else {
