@@ -5,6 +5,7 @@ import { useSeatStream } from "@/hooks/useSeatStream";
 import {
   useListTrips, useGetTrip, useGetTripSeatMap, getGetTripSeatMapQueryKey,
   useListReservations, useListClients, useCreateReservation, useCreateClient,
+  useRegenerateTripSeatMap,
 } from "@workspace/api-client-react";
 import type { Seat } from "@workspace/api-client-react";
 import { getSeatColor, getCellIcon } from "@/components/SeatMapPicker";
@@ -13,8 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, Search, Users, AlertCircle, Download } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { ArrowLeft, Search, Users, AlertCircle, Download, RefreshCw } from "lucide-react";
 
 export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   const [, navigate] = useLocation();
@@ -31,6 +32,10 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   const [isSaving, setIsSaving] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
   const [optimisticSeats, setOptimisticSeats] = useState<Record<string, string>>({});
+  const [showRenumberDialog, setShowRenumberDialog] = useState(false);
+  const [isRenumbering, setIsRenumbering] = useState(false);
+  const [renumberError, setRenumberError] = useState<string | null>(null);
+  const regenerateSeatMap = useRegenerateTripSeatMap();
 
   const { data: allTripsData } = useListTrips({ limit: 100 });
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
@@ -165,6 +170,37 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
     a.click();
   };
 
+  const isBrazilianLayout = seatMap?.numberingType?.includes("brazilian");
+
+  const pendingSeatCount = useMemo(() => {
+    return seats.filter(s => {
+      const eff = optimisticSeats[s.number] ?? s.status;
+      return eff === "reserved" || eff === "occupied";
+    }).length;
+  }, [seats, optimisticSeats]);
+
+  const confirmedSeatCount = useMemo(() => {
+    return seats.filter(s => {
+      const eff = optimisticSeats[s.number] ?? s.status;
+      return eff === "confirmed";
+    }).length;
+  }, [seats, optimisticSeats]);
+
+  const handleRenumber = async () => {
+    setIsRenumbering(true);
+    setRenumberError(null);
+    try {
+      await regenerateSeatMap.mutateAsync({ id: tripId });
+      await queryClient.invalidateQueries({ queryKey: getGetTripSeatMapQueryKey(tripId) });
+      setOptimisticSeats({});
+      setShowRenumberDialog(false);
+    } catch {
+      setRenumberError("Erro ao renumerar. Tente novamente.");
+    } finally {
+      setIsRenumbering(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 flex-wrap">
@@ -188,6 +224,11 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={handlePassengersExport} disabled={!tripId}><Download className="w-4 h-4 mr-2" />Exportar Passageiros</Button>
+          {isBrazilianLayout && (
+            <Button variant="outline" onClick={() => { setRenumberError(null); setShowRenumberDialog(true); }} disabled={!tripId}>
+              <RefreshCw className="w-4 h-4 mr-2" />🇧🇷 Renumerar (Padrão Brasileiro)
+            </Button>
+          )}
           <Link href={`/trips/${tripId}/passengers`}><Button variant="outline"><Users className="w-4 h-4 mr-2" />Lista ANTT</Button></Link>
         </div>
       </div>
@@ -350,6 +391,50 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
           </div>
         </div>
       </div>
+
+      <Dialog open={showRenumberDialog} onOpenChange={v => { if (!isRenumbering) { setShowRenumberDialog(v); setRenumberError(null); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>🇧🇷 Renumerar Assentos (Padrão Brasileiro)</DialogTitle>
+            <DialogDescription>
+              O mapa de assentos será re-gerado com a numeração correta para o padrão brasileiro (lado direito: corredor → janela).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="rounded-lg border bg-muted/50 p-3 space-y-1.5 text-sm">
+              {pendingSeatCount > 0 ? (
+                <div className="flex items-start gap-2">
+                  <span className="w-2 h-2 rounded-full bg-orange-400 mt-1.5 shrink-0" />
+                  <span><strong>{pendingSeatCount} assento{pendingSeatCount !== 1 ? "s" : ""} reservado{pendingSeatCount !== 1 ? "s" : ""} (pendente{pendingSeatCount !== 1 ? "s" : ""})</strong> — terão seus números atualizados para a nova numeração.</span>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2">
+                  <span className="w-2 h-2 rounded-full bg-green-500 mt-1.5 shrink-0" />
+                  <span>Nenhum assento reservado pendente.</span>
+                </div>
+              )}
+              {confirmedSeatCount > 0 ? (
+                <div className="flex items-start gap-2">
+                  <span className="w-2 h-2 rounded-full bg-green-500 mt-1.5 shrink-0" />
+                  <span><strong>{confirmedSeatCount} assento{confirmedSeatCount !== 1 ? "s" : ""} confirmado{confirmedSeatCount !== 1 ? "s" : ""}</strong> — serão preservados com o número original (bilhetes já emitidos).</span>
+                </div>
+              ) : null}
+            </div>
+            {renumberError && (
+              <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-md p-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{renumberError}</span>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowRenumberDialog(false); setRenumberError(null); }} disabled={isRenumbering}>Cancelar</Button>
+            <Button onClick={handleRenumber} disabled={isRenumbering}>
+              {isRenumbering ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Renumerando...</> : "Confirmar Renumeração"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showModal} onOpenChange={() => { setShowModal(false); setSelectedSeat(null); }}>
         <DialogContent className="max-w-md">

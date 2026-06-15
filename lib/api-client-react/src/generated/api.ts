@@ -5194,6 +5194,88 @@ export function useGetTripSeatMap<
 }
 
 /**
+ * @summary Regenerate seat map for a trip using the current layout numbering
+ */
+export const getRegenerateTripSeatMapUrl = (id: string) => {
+  return `/api/trips/${id}/regenerate-seat-map`;
+};
+
+export const regenerateTripSeatMap = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Trip> => {
+  return customFetch<Trip>(getRegenerateTripSeatMapUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRegenerateTripSeatMapMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof regenerateTripSeatMap>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof regenerateTripSeatMap>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["regenerateTripSeatMap"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof regenerateTripSeatMap>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+    return regenerateTripSeatMap(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RegenerateTripSeatMapMutationResult = NonNullable<
+  Awaited<ReturnType<typeof regenerateTripSeatMap>>
+>;
+export type RegenerateTripSeatMapMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Regenerate seat map for a trip using the current layout numbering
+ */
+export const useRegenerateTripSeatMap = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof regenerateTripSeatMap>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof regenerateTripSeatMap>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getRegenerateTripSeatMapMutationOptions(options));
+};
+
+/**
  * @summary Get boarding panel for a trip (all passengers across all reservations)
  */
 export const getGetTripBoardingPanelUrl = (id: string) => {

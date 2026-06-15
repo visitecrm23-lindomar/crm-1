@@ -662,6 +662,151 @@ router.get("/trips/:id/seat-map", async (req, res, next: NextFunction): Promise<
   }
 });
 
+router.post("/trips/:id/regenerate-seat-map", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+
+    const [trip] = await db.select().from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!trip) { next(new NotFoundError("Viagem não encontrada", "TRIP_NOT_FOUND")); return; }
+    if (!trip.layoutId) { next(new ValidationError("Esta viagem não tem layout vinculado", "NO_LAYOUT")); return; }
+
+    const [layout] = await db.select().from(vehicleLayoutsTable)
+      .where(and(eq(vehicleLayoutsTable.id, trip.layoutId), eq(vehicleLayoutsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!layout) { next(new NotFoundError("Layout não encontrado", "LAYOUT_NOT_FOUND")); return; }
+
+    const cells = (layout.cells ?? []) as LayoutCell[];
+    const newSeatMap = generateSeatMapFromLayout(cells, layout.numberingType);
+
+    const seatTypes = ["seat", "vip", "accessible"] as const;
+
+    const posToNewNumber = new Map<string, string>();
+    for (const [num, data] of Object.entries(newSeatMap)) {
+      if (seatTypes.includes((data.type ?? "seat") as (typeof seatTypes)[number])) {
+        posToNewNumber.set(`${data.floor ?? 1}-${data.row}-${data.col}`, num);
+      }
+    }
+
+    const oldSeatMap = (trip.seatMap ?? {}) as Record<string, SeatMapEntry>;
+    const oldNumberToPos = new Map<string, string>();
+    for (const [num, data] of Object.entries(oldSeatMap)) {
+      oldNumberToPos.set(num, `${data.floor ?? 1}-${data.row}-${data.col}`);
+    }
+
+    const activeReservations = await db.select().from(reservationsTable)
+      .where(and(
+        eq(reservationsTable.tripId, req.params.id),
+        eq(reservationsTable.tenantId, me.tenantId),
+        inArray(reservationsTable.status, [RESERVATION_STATUS.PENDING, RESERVATION_STATUS.CONFIRMED]),
+      ));
+
+    const confirmedReservations = activeReservations.filter(r => r.status === RESERVATION_STATUS.CONFIRMED);
+    const pendingReservations = activeReservations.filter(r => r.status === RESERVATION_STATUS.PENDING);
+
+    // Pass 1: process confirmed seats first.
+    // Build the set of preserved (old) seat numbers so pending remapping can avoid them.
+    const preservedNumbers = new Set<string>();
+
+    for (const r of confirmedReservations) {
+      for (const oldNum of r.seats) {
+        preservedNumbers.add(oldNum);
+        const pos = oldNumberToPos.get(oldNum);
+        if (pos) {
+          // The new seat map gave this position a new number — remove it to free the slot.
+          const newNum = posToNewNumber.get(pos);
+          if (newNum && newNum !== oldNum) {
+            delete newSeatMap[newNum];
+          }
+          // Re-insert the confirmed seat under its old number.
+          const oldData = oldSeatMap[oldNum];
+          if (oldData) {
+            newSeatMap[oldNum] = { ...oldData, status: "confirmed" };
+          }
+        }
+      }
+    }
+
+    // Pass 2: process pending seats, avoiding collisions with preserved confirmed numbers.
+    const pendingUpdates: { id: string; oldSeats: string[]; newSeats: string[] }[] = [];
+
+    for (const r of pendingReservations) {
+      const newSeats: string[] = [];
+      for (const oldNum of r.seats) {
+        const pos = oldNumberToPos.get(oldNum);
+        const candidateNew = pos ? (posToNewNumber.get(pos) ?? oldNum) : oldNum;
+        // If the candidate number is already reserved by a confirmed seat, fall back to the
+        // old number so we don't overwrite the confirmed entry.
+        const resolvedNum = preservedNumbers.has(candidateNew) ? oldNum : candidateNew;
+        newSeats.push(resolvedNum);
+
+        if (newSeatMap[resolvedNum]) {
+          // Entry already in new map (either available or just-deleted-and-now-the-fallback);
+          // mark it as reserved only if it's not a confirmed seat.
+          if (newSeatMap[resolvedNum].status !== "confirmed") {
+            newSeatMap[resolvedNum] = { ...newSeatMap[resolvedNum], status: "reserved" };
+          }
+        } else {
+          // The old number was removed from newSeatMap during confirmed processing
+          // (it was the "new number" for a confirmed seat's position). Restore it.
+          const oldData = oldSeatMap[resolvedNum];
+          if (oldData) {
+            newSeatMap[resolvedNum] = { ...oldData, status: "reserved" };
+          }
+        }
+      }
+      pendingUpdates.push({ id: r.id, oldSeats: r.seats, newSeats });
+    }
+
+    // Integrity guard: ensure no seat number appears in more than one active reservation.
+    const allActiveSeats = new Map<string, string>(); // seat -> reservationId
+    for (const r of confirmedReservations) {
+      for (const s of r.seats) {
+        if (allActiveSeats.has(s)) {
+          next(new AppError(`Assento ${s} está em múltiplas reservas — resolva os conflitos antes de renumerar`, 409, "SEAT_COLLISION"));
+          return;
+        }
+        allActiveSeats.set(s, r.id);
+      }
+    }
+    for (const { id, newSeats } of pendingUpdates) {
+      for (const s of newSeats) {
+        if (allActiveSeats.has(s)) {
+          next(new AppError(`Assento ${s} está em múltiplas reservas — resolva os conflitos antes de renumerar`, 409, "SEAT_COLLISION"));
+          return;
+        }
+        allActiveSeats.set(s, id);
+      }
+    }
+
+    // Commit all changes atomically.
+    await db.transaction(async (tx) => {
+      for (const { id, oldSeats, newSeats } of pendingUpdates) {
+        if (JSON.stringify(newSeats) !== JSON.stringify(oldSeats)) {
+          await tx.update(reservationsTable)
+            .set({ seats: newSeats })
+            .where(eq(reservationsTable.id, id));
+        }
+      }
+      await tx.update(tripsTable)
+        .set({ seatMap: newSeatMap })
+        .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)));
+    });
+
+    const [updatedTrip] = await db.select().from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!updatedTrip) { next(new AppError("Falha ao buscar viagem atualizada", 500, "TRIP_FETCH_FAILED")); return; }
+
+    res.json(formatTrip(updatedTrip));
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/trips/:id/seats/stream", async (req, res, next: NextFunction): Promise<void> => {
   const me = await requireAuth(req, res);
   if (!me) return;
