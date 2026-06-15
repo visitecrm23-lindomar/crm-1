@@ -5,6 +5,8 @@ import { SeatMap } from "./trips/SeatMap";
 import { PassengersOverview } from "./trips/PassengersOverview";
 import { PassengersList } from "./trips/PassengersList";
 import { TripCalendar } from "./trips/TripCalendar";
+import { TripCheckinPanel } from "./trips/TripCheckinPanel";
+import { TabletCheckin } from "./trips/TabletCheckin";
 
 export { TripForm, TripList, SeatMap, PassengersOverview, PassengersList, TripCalendar };
 
@@ -15,6 +17,8 @@ export default function Trips() {
   const [matchSeatMap, paramsSeatMap] = useRoute("/trips/:id/seat-map");
   const [matchPassengersOverview, paramsPassengersOverview] = useRoute("/trips/:id/passengers-overview");
   const [matchPassengers, paramsPassengers] = useRoute("/trips/:id/passengers");
+  const [matchCheckinPanel, paramsCheckinPanel] = useRoute("/trips/:id/checkin-panel");
+  const [matchTabletCheckin, paramsTabletCheckin] = useRoute("/trips/:id/checkin");
   const [matchDetail, paramsDetail] = useRoute("/trips/:id");
 
   if (matchNew) return <TripForm />;
@@ -23,6 +27,8 @@ export default function Trips() {
   if (matchSeatMap && paramsSeatMap?.id) return <SeatMap tripId={paramsSeatMap.id} />;
   if (matchPassengersOverview && paramsPassengersOverview?.id) return <PassengersOverview tripId={paramsPassengersOverview.id} />;
   if (matchPassengers && paramsPassengers?.id) return <PassengersList tripId={paramsPassengers.id} />;
+  if (matchCheckinPanel && paramsCheckinPanel?.id) return <TripCheckinPanel tripId={paramsCheckinPanel.id} />;
+  if (matchTabletCheckin && paramsTabletCheckin?.id) return <TabletCheckin tripId={paramsTabletCheckin.id} />;
   if (matchDetail && paramsDetail?.id) return <PassengersOverview tripId={paramsDetail.id} />;
 
   return <TripList />;

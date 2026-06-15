@@ -48,6 +48,7 @@ import subscriptionsRouter from "./subscriptions";
 import clientPortalRouter from "./client-portal";
 import clubRouter from "./club";
 import partnersRouter from "./partners";
+import guideRouter from "./guide";
 import webhooksRouter from "./webhooks";
 
 const router: IRouter = Router();
@@ -100,6 +101,7 @@ router.use(subscriptionsRouter);
 router.use(clientPortalRouter);
 router.use(clubRouter);
 router.use(partnersRouter);
+router.use(guideRouter);
 router.use(webhooksRouter);
 router.use("/uploadthing", uploadthingRouter);
 

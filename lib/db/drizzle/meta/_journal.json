@@ -393,6 +393,13 @@
       "when": 1781533492300,
       "tag": "0055_marketplace_partners",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1782000000000,
+      "tag": "0056_guide_checkin",
+      "breakpoints": true
     }
   ]
 }

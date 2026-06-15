@@ -311,6 +311,8 @@ function Router() {
       <Route path="/trips/:id/seat-map" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Trips} />} />
       <Route path="/trips/:id/passengers-overview" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Trips} />} />
       <Route path="/trips/:id/passengers" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Trips} />} />
+      <Route path="/trips/:id/checkin-panel" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Trips} />} />
+      <Route path="/trips/:id/checkin" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Trips} />} />
       <Route path="/trips/:id" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Trips} />} />
       <Route path="/reservations" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Reservations} />} />
       <Route path="/reservations/:id" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Reservations} />} />

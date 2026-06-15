@@ -4,6 +4,7 @@
 - [Favorites feature pattern](favorites-pattern.md) — FavoritesContext wraps Vitrine (CartProvider > FavoritesProvider); uses useGetMe role check; optimistic toggle.
 - [Manual migration workflow](manual-migration.md) — drizzle-kit is interactive; write SQL + update _journal.json; run `pnpm --filter @workspace/db migrate`.
 - [Store product vs trip favorites](store-favorites-join.md) — Trip favorites store tripId; join via storeProductsTable.tripId to get slug. Product favorites store storeProductsTable.id; join with storesTable for tenantId filter.
+- [Expo Metro version pins](expo-metro-version-pins.md) — metro-* must be at 0.83.7 EXCEPT metro-file-map (keep 0.83.3) for guide-app Expo artifact to start without crashing.
 - [SSRF for tenant base URLs](ssrf-tenant-base-url.md) — connect-time IP enforcement (not just a pre-check); canonicalize IPv4-in-IPv6 literals; guard empty custom baseURL to avoid leaking keys to OpenAI.
 - [AI config Test vs Save status](ai-config-test-vs-save.md) — "Testar Conexão" must test unsaved form values & never persist status (acceptance criterion); only Save persists status via its own server-side auto-test. Don't recouple.
 - [Client scores RFM pattern](client-scores-rfm.md) — purchaseScore/recompraScore/churnScore in client_scores table (migration 0052); scores fetched separately then merged into formatClient; sort by score uses correlated SQL subquery in orderBy with NULLS LAST.

@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   ArrowLeft, Bus, Edit, X, Check, Download, Send, Plus, DollarSign,
-  List, UserRound, MapPin, ChevronDown,
+  List, UserRound, MapPin, ChevronDown, ClipboardCheck,
 } from "lucide-react";
 import { STATUS_MAP } from "./constants";
 import { formatCurrency, formatDate } from "./utils";
@@ -179,6 +179,7 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
           <Button variant="outline" onClick={handlePassengersExport} disabled={!tripId}><Download className="w-4 h-4 mr-2" />Exportar Passageiros</Button>
           <Link href={`/trips/${tripId}/passengers`}><Button variant="outline"><List className="w-4 h-4 mr-2" />Lista ANTT</Button></Link>
           <Link href={`/trips/${tripId}/seat-map`}><Button variant="outline"><Bus className="w-4 h-4 mr-2" />Mapa de Assentos</Button></Link>
+          <Link href={`/trips/${tripId}/checkin-panel`}><Button variant="outline" className="border-green-300 text-green-700 hover:bg-green-50"><ClipboardCheck className="w-4 h-4 mr-2" />Check-in ao Vivo</Button></Link>
           <Link href={`/trips/${tripId}/edit`}><Button variant="outline"><Edit className="w-4 h-4 mr-2" />Editar Viagem</Button></Link>
         </div>
       </div>

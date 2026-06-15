@@ -1,10 +1,10 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { addSeatClient, removeSeatClient } from "../lib/seat-sse";
-import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable, auditLogsTable, plansTable, tripMediaTable } from "@workspace/db";
+import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable, auditLogsTable, plansTable, tripMediaTable, tripCheckinsTable, tripGuideLocationsTable } from "@workspace/db";
 import { checkPlanLimit } from "../lib/planLimits";
 import type { LayoutCell, FixedCostItem, VariableCostItem, FreePassenger } from "@workspace/db";
-import { eq, and, ilike, sql, desc, asc, inArray, or } from "drizzle-orm";
+import { eq, and, ilike, sql, desc, asc, inArray, or, gt } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { deleteOrphanedFile } from "../lib/uploadthing";
@@ -2072,4 +2072,106 @@ router.delete("/trips/:id/media/:mediaId", async (req, res, next: NextFunction):
   } catch (err) { next(err); }
 });
 
+// ─── Staff check-in routes (Clerk JWT) ───────────────────────────────────────
+
+router.get("/trips/:id/checkins", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const [trip] = await db.select({ id: tripsTable.id })
+      .from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id!), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!trip) { next(new NotFoundError("Viagem não encontrada", "TRIP_NOT_FOUND")); return; }
+    const checkins = await db.select()
+      .from(tripCheckinsTable)
+      .where(and(eq(tripCheckinsTable.tripId, req.params.id!), eq(tripCheckinsTable.tenantId, me.tenantId)));
+    res.json({ data: checkins });
+  } catch (err) { next(err); }
+});
+
+router.post("/trips/:id/checkins", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const { passengerId, reservationId, notes, status } = z.object({
+      passengerId: z.string().min(1),
+      reservationId: z.string().optional(),
+      notes: z.string().optional(),
+      status: z.enum(["present", "absent"]).default("present"),
+    }).parse(req.body);
+
+    const [trip] = await db.select({ id: tripsTable.id })
+      .from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id!), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!trip) { next(new NotFoundError("Viagem não encontrada", "TRIP_NOT_FOUND")); return; }
+
+    const checkedInAt = new Date();
+    await db.insert(tripCheckinsTable)
+      .values({
+        id: generateId(),
+        tripId: req.params.id!,
+        tenantId: me.tenantId,
+        passengerId,
+        reservationId: reservationId ?? null,
+        checkedInByUserRef: me.id,
+        checkedInAt,
+        notes: notes ?? null,
+        status,
+      })
+      .onConflictDoUpdate({
+        target: [tripCheckinsTable.tripId, tripCheckinsTable.passengerId],
+        set: { checkedInByUserRef: me.id, checkedInAt, notes: notes ?? null, status },
+      });
+
+    await db.update(passengersTable)
+      .set({ checkedInAt: status === "present" ? checkedInAt : null })
+      .where(eq(passengersTable.id, passengerId));
+
+    res.status(201).json({ success: true, passengerId, status, checkedInAt: checkedInAt.toISOString() });
+  } catch (err) { next(err); }
+});
+
+router.delete("/trips/:id/checkins/:passengerId", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const [trip] = await db.select({ id: tripsTable.id })
+      .from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id!), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!trip) { next(new NotFoundError("Viagem não encontrada", "TRIP_NOT_FOUND")); return; }
+
+    await db.delete(tripCheckinsTable)
+      .where(and(
+        eq(tripCheckinsTable.tripId, req.params.id!),
+        eq(tripCheckinsTable.passengerId, req.params.passengerId!),
+        eq(tripCheckinsTable.tenantId, me.tenantId),
+      ));
+    await db.update(passengersTable)
+      .set({ checkedInAt: null })
+      .where(eq(passengersTable.id, req.params.passengerId!));
+    res.status(204).send();
+  } catch (err) { next(err); }
+});
+
+// ─── Guide location read (staff Clerk JWT) ────────────────────────────────────
+
+router.get("/trips/:id/location", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const [location] = await db.select()
+      .from(tripGuideLocationsTable)
+      .where(and(
+        eq(tripGuideLocationsTable.tripId, req.params.id!),
+        eq(tripGuideLocationsTable.tenantId, me.tenantId),
+      ))
+      .limit(1);
+    res.json({ location: location ?? null });
+  } catch (err) { next(err); }
+});
+
 export default router;
+
