@@ -127,10 +127,16 @@ async function writePartnerCommissions(
   const partnerMap = new Map(partners.map((p) => [p.id, p]));
   const period = new Date().toISOString().slice(0, 7);
 
+  // Group by partnerId so there is exactly one commission row per partner per order
+  const partnerGrossMap = new Map<string, number>();
   for (const pp of partnerProducts) {
-    const grossAmount = partnerProductTotals.get(pp.id) ?? 0;
+    const gross = partnerProductTotals.get(pp.id) ?? 0;
+    partnerGrossMap.set(pp.partnerId, (partnerGrossMap.get(pp.partnerId) ?? 0) + gross);
+  }
+
+  for (const [partnerId, grossAmount] of partnerGrossMap) {
     if (grossAmount <= 0) continue;
-    const partner = partnerMap.get(pp.partnerId);
+    const partner = partnerMap.get(partnerId);
     if (!partner) continue;
     const agencyPct = Number(partner.commissionPct);
     const agencyAmount = Math.round(grossAmount * agencyPct) / 100;
@@ -138,7 +144,7 @@ async function writePartnerCommissions(
     await tx.insert(partnerCommissionsTable).values({
       id: generateId(),
       orderId,
-      partnerId: partner.id,
+      partnerId,
       tenantId,
       grossAmount: grossAmount.toFixed(2),
       partnerAmount: partnerAmount.toFixed(2),

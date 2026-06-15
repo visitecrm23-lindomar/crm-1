@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useUser } from "@clerk/react";
-import { publicStoreApi, PublicStore, StoreProduct, CouponValidation } from "@/lib/storeApi";
+import { publicStoreApi, PublicStore, StoreProduct, CouponValidation, PartnerProductInfo } from "@/lib/storeApi";
 import { clientPortalApi } from "@/lib/clientPortalApi";
 import { validateCpf } from "@/lib/utils";
 import { useSeatStream } from "@/hooks/useSeatStream";
@@ -22,6 +22,9 @@ export type WizardForm = {
   cardExpiry: string;
   cardCvv: string;
   installments: string;
+  partnerSelectedDate: string;
+  partnerTransferOrigin: string;
+  partnerTransferDestination: string;
 };
 
 export type CompletedOrder = {
@@ -68,11 +71,15 @@ export function useWizardState({
     cardExpiry: "",
     cardCvv: "",
     installments: "1",
+    partnerSelectedDate: "",
+    partnerTransferOrigin: "",
+    partnerTransferDestination: "",
   });
   const [qty, setQty] = useState(1);
   const [selectedVariant, setSelectedVariant] = useState<WizardSelectedVariant | null>(null);
   const [couponResult, setCouponResult] = useState<CouponValidation | null>(null);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
+  const [partnerInfo, setPartnerInfo] = useState<PartnerProductInfo | null>(null);
   const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
   const [layoutSeats, setLayoutSeats] = useState<string[]>([]);
   const [layoutSeatMap, setLayoutSeatMap] = useState<LayoutSeatMap | null>(null);
@@ -137,6 +144,14 @@ export function useWizardState({
       setReferralCreditBalance(balance);
     }).catch(() => {});
   }, [isSignedIn]);
+
+  useEffect(() => {
+    if (!product?.partnerProductId) { setPartnerInfo(null); return; }
+    publicStoreApi
+      .getPartnerInfo(slug, productSlug)
+      .then((info) => setPartnerInfo(info))
+      .catch(() => setPartnerInfo(null));
+  }, [product?.partnerProductId, slug, productSlug]);
 
   useEffect(() => {
     if (!product?.tripId) {
@@ -310,7 +325,16 @@ export function useWizardState({
     if (isSoldOut) return false;
     if (product?.hasVariants && !selectedVariant) return false;
     if (showSeatGrid && product?.totalCapacity && qty > product.totalCapacity) return false;
-    return qty >= 1;
+    if (qty < 1) return false;
+    if (partnerInfo?.hasPartner) {
+      if (partnerInfo.type === "passeio" || partnerInfo.type === "experiencia") {
+        if (!form.partnerSelectedDate) return false;
+      }
+      if (partnerInfo.type === "transfer") {
+        if (!form.partnerTransferOrigin.trim() || !form.partnerTransferDestination.trim()) return false;
+      }
+    }
+    return true;
   }
 
   function canProceedFromAssento() {
@@ -340,7 +364,19 @@ export function useWizardState({
       const referralNote = referralApplied
         ? `Código de indicação: ${referralCode}. Desconto de indicação: R$ ${referralDiscount.toFixed(2)}.`
         : "";
-      const extraNotes = [seatNotes, birthdateNote, referralNote, form.notes]
+      const partnerNote = partnerInfo?.hasPartner
+        ? [
+            (partnerInfo.type === "passeio" || partnerInfo.type === "experiencia") && form.partnerSelectedDate
+              ? `Data do passeio: ${form.partnerSelectedDate}.`
+              : "",
+            partnerInfo.type === "transfer" && form.partnerTransferOrigin
+              ? `Transfer: ${form.partnerTransferOrigin} → ${form.partnerTransferDestination}.`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" ")
+        : "";
+      const extraNotes = [seatNotes, birthdateNote, referralNote, partnerNote, form.notes]
         .filter(Boolean)
         .join(" ");
 
@@ -496,6 +532,7 @@ export function useWizardState({
     goBack,
     toggleSeat,
     toggleLayoutSeat,
+    partnerInfo,
   };
 }
 

@@ -175,6 +175,11 @@ export const publicStoreApi = {
       "GET",
       `/public/store/${slug}/products/${productSlug}`
     ),
+  getPartnerInfo: (slug: string, productSlug: string) =>
+    publicReq<PartnerProductInfo>(
+      "GET",
+      `/public/store/${slug}/products/${productSlug}/partner-info`
+    ),
   getReviews: (slug: string, params?: { limit?: number; featured?: boolean }) => {
     const qs = params ? "?" + new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString() : "";
     return publicReq<StoreReview[]>("GET", `/public/store/${slug}/reviews${qs}`);
@@ -442,6 +447,19 @@ export interface StoreProduct {
   salesCount: number;
   createdAt: string;
   updatedAt: string;
+  partnerProductId?: string | null;
+}
+
+export interface PartnerProductInfo {
+  hasPartner: boolean;
+  id?: string;
+  type?: string;
+  title?: string;
+  meetingPoint?: string | null;
+  durationMinutes?: number | null;
+  maxCapacity?: number | null;
+  cancellationPolicy?: string | null;
+  availability?: Array<{ date: string; spotsTotal: number; spotsUsed: number }>;
 }
 
 export interface StoreOrderItem {

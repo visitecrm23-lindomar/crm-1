@@ -1,5 +1,6 @@
 import { Label } from "@/components/ui/label";
-import { ClipboardList, AlertTriangle, Users, Armchair } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { ClipboardList, AlertTriangle, Users, Armchair, Calendar, MapPin, Clock } from "lucide-react";
 import { PublicStore } from "@/lib/storeApi";
 import { ProductCard } from "./product-card";
 import { StepCouponReferral } from "./coupon-referral";
@@ -19,6 +20,8 @@ export function StepReview({ state, store }: { state: WizardState; store: Public
     incrementQty,
     decrementQty,
     form,
+    set,
+    partnerInfo,
   } = state;
   if (!product) return null;
   return (
@@ -113,6 +116,109 @@ export function StepReview({ state, store }: { state: WizardState; store: Public
                 ? "Seus assentos serão atribuídos automaticamente após a confirmação da reserva."
                 : "Seu assento será atribuído automaticamente após a confirmação da reserva."}
             </p>
+          </div>
+        )}
+
+        {partnerInfo?.hasPartner && (
+          <div className="border rounded-xl p-4 space-y-4">
+            <h3 className="text-sm font-semibold flex items-center gap-2">
+              {partnerInfo.type === "passeio" || partnerInfo.type === "experiencia" ? (
+                <><Calendar className="w-4 h-4 text-primary" /> Data do Passeio</>
+              ) : partnerInfo.type === "transfer" ? (
+                <><MapPin className="w-4 h-4 text-primary" /> Detalhes do Transfer</>
+              ) : (
+                <><Clock className="w-4 h-4 text-primary" /> Informações do Serviço</>
+              )}
+            </h3>
+
+            {(partnerInfo.type === "passeio" || partnerInfo.type === "experiencia") && (
+              <div>
+                <Label className="text-sm font-medium mb-2 block">
+                  Data <span className="text-red-500">*</span>
+                </Label>
+                {(partnerInfo.availability ?? []).length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {(partnerInfo.availability ?? []).map((a) => (
+                      <button
+                        key={a.date}
+                        type="button"
+                        onClick={() => set("partnerSelectedDate", a.date)}
+                        className={`px-3 py-1.5 rounded-lg border-2 text-sm font-medium transition-colors ${
+                          form.partnerSelectedDate === a.date
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border hover:bg-muted"
+                        }`}
+                      >
+                        {new Date(a.date + "T12:00:00").toLocaleDateString("pt-BR")}
+                        <span className="ml-1 text-xs opacity-70">
+                          ({a.spotsTotal - a.spotsUsed} vagas)
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <Input
+                    type="date"
+                    value={form.partnerSelectedDate}
+                    onChange={(e) => set("partnerSelectedDate", e.target.value)}
+                    className="mt-1"
+                  />
+                )}
+                {!form.partnerSelectedDate && (
+                  <p className="text-xs text-amber-600 mt-1">Selecione uma data para continuar</p>
+                )}
+              </div>
+            )}
+
+            {partnerInfo.type === "transfer" && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-sm font-medium">
+                    Origem <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    placeholder="De onde?"
+                    value={form.partnerTransferOrigin}
+                    onChange={(e) => set("partnerTransferOrigin", e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">
+                    Destino <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    placeholder="Para onde?"
+                    value={form.partnerTransferDestination}
+                    onChange={(e) => set("partnerTransferDestination", e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+                {(!form.partnerTransferOrigin.trim() || !form.partnerTransferDestination.trim()) && (
+                  <p className="text-xs text-amber-600 col-span-2">
+                    Informe a origem e o destino para continuar
+                  </p>
+                )}
+              </div>
+            )}
+
+            {partnerInfo.meetingPoint && (
+              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <MapPin className="w-3.5 h-3.5 shrink-0" />
+                Ponto de encontro: {partnerInfo.meetingPoint}
+              </div>
+            )}
+            {partnerInfo.durationMinutes && (
+              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Clock className="w-3.5 h-3.5 shrink-0" />
+                Duração: {partnerInfo.durationMinutes} minutos
+              </div>
+            )}
+            {partnerInfo.cancellationPolicy && (
+              <p className="text-xs text-muted-foreground border-t pt-3">
+                {partnerInfo.cancellationPolicy}
+              </p>
+            )}
           </div>
         )}
 

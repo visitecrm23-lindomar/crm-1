@@ -23,6 +23,8 @@ import {
   referralsTable,
   tenantsTable,
   vehicleLayoutsTable,
+  partnerProductsTable,
+  partnerAvailabilityTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, ilike, or, sql, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -328,6 +330,7 @@ router.get("/public/store/:slug/products/:productSlug", async (req, res, next: N
       metaKeywords: storeProductsTable.metaKeywords,
       status: storeProductsTable.status,
       order: storeProductsTable.order,
+      partnerProductId: storeProductsTable.partnerProductId,
       createdAt: storeProductsTable.createdAt,
       updatedAt: storeProductsTable.updatedAt,
       availableSeats: tripsTable.availableSeats,
@@ -368,6 +371,62 @@ router.get("/public/store/:slug/products/:productSlug", async (req, res, next: N
         ? (row.returnDate as unknown as Date).toISOString().slice(0, 10)
         : null,
       reviews,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /public/store/:slug/products/:productSlug/partner-info  — public, no auth required
+router.get("/public/store/:slug/products/:productSlug/partner-info", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const store = await getActiveStore(req.params.slug);
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
+
+    const [product] = await db.select({
+      id: storeProductsTable.id,
+      partnerProductId: storeProductsTable.partnerProductId,
+    }).from(storeProductsTable)
+      .where(and(
+        eq(storeProductsTable.storeId, store.id),
+        eq(storeProductsTable.slug, req.params.productSlug!),
+        eq(storeProductsTable.status, "active"),
+      )).limit(1);
+
+    if (!product?.partnerProductId) { res.json({ hasPartner: false }); return; }
+
+    const [pp] = await db.select({
+      id: partnerProductsTable.id,
+      type: partnerProductsTable.type,
+      title: partnerProductsTable.title,
+      meetingPoint: partnerProductsTable.meetingPoint,
+      durationMinutes: partnerProductsTable.durationMinutes,
+      maxCapacity: partnerProductsTable.maxCapacity,
+      cancellationPolicy: partnerProductsTable.cancellationPolicy,
+    }).from(partnerProductsTable)
+      .where(and(
+        eq(partnerProductsTable.id, product.partnerProductId),
+        eq(partnerProductsTable.status, "active"),
+      )).limit(1);
+
+    if (!pp) { res.json({ hasPartner: false }); return; }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const availability = await db.select({
+      date: partnerAvailabilityTable.date,
+      spotsTotal: partnerAvailabilityTable.spotsTotal,
+      spotsUsed: partnerAvailabilityTable.spotsUsed,
+    }).from(partnerAvailabilityTable)
+      .where(and(
+        eq(partnerAvailabilityTable.productId, pp.id),
+        sql`${partnerAvailabilityTable.date} >= ${today}`,
+      ))
+      .orderBy(asc(partnerAvailabilityTable.date));
+
+    res.json({
+      hasPartner: true,
+      ...pp,
+      availability: availability.filter((a) => a.spotsTotal - a.spotsUsed > 0),
     });
   } catch (err) {
     next(err);

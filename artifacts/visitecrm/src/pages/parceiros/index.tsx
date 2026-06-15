@@ -71,6 +71,7 @@ async function partnerFetch<T>(path: string, opts: RequestInit = {}): Promise<T>
 
 // ─── Login ────────────────────────────────────────────────────────────────────
 function LoginScreen({ onLogin }: { onLogin: (profile: PartnerProfile) => void }) {
+  const [storeSlug, setStoreSlug] = useState(() => new URLSearchParams(window.location.search).get("agency") ?? "");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -82,7 +83,7 @@ function LoginScreen({ onLogin }: { onLogin: (profile: PartnerProfile) => void }
     try {
       const res = await partnerFetch<{ token: string; partner: PartnerProfile }>("/partner/login", {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, storeSlug: storeSlug.trim() }),
       });
       setToken(res.token);
       onLogin(res.partner);
@@ -106,8 +107,13 @@ function LoginScreen({ onLogin }: { onLogin: (profile: PartnerProfile) => void }
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
+              <Label>Código da Agência</Label>
+              <Input value={storeSlug} onChange={e => setStoreSlug(e.target.value)} required autoFocus placeholder="ex: minha-agencia" className="font-mono" />
+              <p className="text-xs text-muted-foreground mt-1">Fornecido pela agência parceira</p>
+            </div>
+            <div>
               <Label>E-mail</Label>
-              <Input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus placeholder="seu@email.com" />
+              <Input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="seu@email.com" />
             </div>
             <div>
               <Label>Senha</Label>

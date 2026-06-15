@@ -9,6 +9,7 @@ import {
   storeOrdersTable,
   storeOrderItemsTable,
   storeProductsTable,
+  storesTable,
 } from "@workspace/db";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -104,13 +105,25 @@ router.post("/partner/login", async (req, res, next: NextFunction): Promise<void
     const body = z.object({
       email: z.string().email(),
       password: z.string().min(1),
+      storeSlug: z.string().min(1).max(100),
     }).safeParse(req.body);
-    if (!body.success) { next(new ValidationError("Email e senha são obrigatórios")); return; }
+    if (!body.success) { next(new ValidationError("Email, senha e código da agência são obrigatórios")); return; }
+
+    // Resolve tenantId from store slug to enforce tenant isolation
+    const [store] = await db
+      .select({ tenantId: storesTable.tenantId })
+      .from(storesTable)
+      .where(and(eq(storesTable.slug, body.data.storeSlug), eq(storesTable.isActive, true)))
+      .limit(1);
+    if (!store) {
+      res.status(401).json({ error: "Agência não encontrada. Verifique o código da agência.", code: "STORE_NOT_FOUND" });
+      return;
+    }
 
     const [partner] = await db
       .select()
       .from(partnersTable)
-      .where(eq(partnersTable.email, body.data.email.toLowerCase()))
+      .where(and(eq(partnersTable.email, body.data.email.toLowerCase()), eq(partnersTable.tenantId, store.tenantId)))
       .limit(1);
 
     if (!partner || !partner.passwordHash || !verifyPassword(body.data.password, partner.passwordHash)) {
@@ -559,7 +572,7 @@ router.get("/parceiros/commissions", async (req, res, next: NextFunction): Promi
         agencyAmount: sql<number>`SUM(${partnerCommissionsTable.agencyAmount})::float`,
         pendingCount: sql<number>`COUNT(*) FILTER (WHERE ${partnerCommissionsTable.status} = 'pending')::int`,
         paidCount: sql<number>`COUNT(*) FILTER (WHERE ${partnerCommissionsTable.status} = 'paid')::int`,
-        orderCount: sql<number>`COUNT(*)::int`,
+        orderCount: sql<number>`COUNT(DISTINCT ${partnerCommissionsTable.orderId})::int`,
       })
       .from(partnerCommissionsTable)
       .innerJoin(partnersTable, eq(partnersTable.id, partnerCommissionsTable.partnerId))
