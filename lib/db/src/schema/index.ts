@@ -33,3 +33,4 @@ export * from "./notifications";
 export * from "./nps";
 export * from "./favorites";
 export * from "./ai-integration";
+export * from "./tenant-integrations";

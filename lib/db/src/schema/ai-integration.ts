@@ -11,11 +11,19 @@ export const aiIntegrationsTable = pgTable("ai_integrations", {
     .unique()
     .references(() => tenantsTable.id, { onDelete: "cascade" }),
 
+  // Optional human label for the integration.
+  name: text("name"),
+
   // openai | anthropic | gemini | custom
   provider: text("provider").notNull().default("openai"),
   apiKeyEncrypted: text("api_key_encrypted"),
+  // Separate access token for providers that use one alongside the API key.
+  accessTokenEncrypted: text("access_token_encrypted"),
   baseUrl: text("base_url"),
   defaultModel: text("default_model"),
+
+  // production | test
+  environment: text("environment").notNull().default("production"),
 
   // When false, Insights falls back to the platform-managed AI proxy.
   enabled: boolean("enabled").notNull().default(false),
