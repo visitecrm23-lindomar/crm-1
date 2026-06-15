@@ -645,6 +645,57 @@ function BirthdayBonusCard({
   );
 }
 
+function BirthdayGreetingCard({
+  firstName,
+  storeUrl,
+}: {
+  firstName: string;
+  storeUrl: string | null;
+}) {
+  return (
+    <div className="rounded-xl overflow-hidden shadow-md">
+      <div
+        className="p-4 text-white"
+        style={{ background: "linear-gradient(135deg, #ec4899, #f59e0b)" }}
+      >
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0 text-xl leading-none">
+            🥳
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-base leading-tight">Amanhã é seu dia!</p>
+            <p className="text-sm text-white/90 mt-0.5">
+              Parabéns antecipado, <span className="font-semibold">{firstName}</span>! 🎉
+              Que seu aniversário seja repleto de alegria e novas aventuras.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-3 rounded-lg bg-white/15 border border-white/25 p-3">
+          <p className="text-sm font-semibold">🎁 Bônus de Aniversário Exclusivo</p>
+          <p className="text-xs text-white/85 mt-1 leading-relaxed">
+            Preparamos condições especiais para você celebrar essa data com uma viagem
+            inesquecível. Fique atento às próximas novidades e garanta sua próxima experiência com
+            benefícios exclusivos de aniversariante.
+          </p>
+        </div>
+
+        {storeUrl && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-3 w-full border-white/50 text-white bg-white/10 hover:bg-white/20 hover:text-white"
+            onClick={() => (window.location.href = storeUrl)}
+          >
+            Ver Pacotes Especiais
+            <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function InicioTab({
   profile,
   primaryColor,
@@ -786,7 +837,14 @@ function InicioTab({
         ))}
       </div>
 
-      {bdDays !== null && bdDays >= 1 && bdDays <= 90 && (
+      {bdDays === 1 && (
+        <BirthdayGreetingCard
+          firstName={firstName}
+          storeUrl={profile.tenant?.slug ? `/loja/${profile.tenant.slug}/produtos` : null}
+        />
+      )}
+
+      {bdDays !== null && bdDays >= 2 && bdDays <= 90 && (
         <BirthdayBonusCard
           daysLeft={bdDays}
           storeUrl={profile.tenant?.slug ? `/loja/${profile.tenant.slug}/produtos` : null}
