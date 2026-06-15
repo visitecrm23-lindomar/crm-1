@@ -596,12 +596,14 @@ router.get("/client/me/loyalty/transactions", async (req, res, next: NextFunctio
       .where(eq(loyaltyTransactionsTable.memberId, member.id));
     const total = Number(totalRow?.cnt ?? 0);
 
-    // Fetch with running balance: balance AFTER each transaction = availablePoints minus sum of all newer transactions
+    // Fetch with running balance: balance AFTER each transaction.
+    // Earn/bonus transactions add to balance (+points), redeem/expire subtract (-points).
+    // running_balance(T) = availablePoints - SUM(signed_delta) of all transactions newer than T.
     const rows = await db.execute(
       sql`SELECT
           t.id, t.type, t.points, t.description, t.reference_id, t.reference_type, t.created_at,
           (${member.availablePoints} - COALESCE((
-            SELECT SUM(lt2.points)
+            SELECT SUM(CASE WHEN lt2.type IN ('redeem', 'expire') THEN -lt2.points ELSE lt2.points END)
             FROM loyalty_transactions lt2
             WHERE lt2.member_id = ${member.id} AND lt2.created_at > t.created_at
           ), 0)) AS running_balance
@@ -729,37 +731,56 @@ router.post("/client/me/loyalty/redeem", async (req, res, next: NextFunction): P
     const discountAmount = Math.min(requestedDiscount, balance);
     const actualPointsRedeemed = Math.ceil(discountAmount / realPerPoint);
 
-    await db
-      .update(loyaltyMembersTable)
-      .set({ availablePoints: member.availablePoints - actualPointsRedeemed })
-      .where(eq(loyaltyMembersTable.id, member.id));
+    // Wrap all mutations in a DB transaction with row-level lock on the member row
+    // to prevent double-spend in concurrent requests.
+    let newAvailablePoints: number;
+    await db.transaction(async (tx) => {
+      // Lock member row for the duration of this transaction
+      const [lockedMember] = await tx
+        .select({ availablePoints: loyaltyMembersTable.availablePoints })
+        .from(loyaltyMembersTable)
+        .where(eq(loyaltyMembersTable.id, member.id))
+        .for("update")
+        .limit(1);
 
-    const txId = generateId("ltx");
-    await db.insert(loyaltyTransactionsTable).values({
-      id: txId,
-      tenantId: me.tenantId,
-      memberId: member.id,
-      programId: loyaltyProgram.id,
-      type: "redeem",
-      points: actualPointsRedeemed,
-      description: `Resgate de pontos — Reserva ${reservation.reservationNumber ?? reservation.id.slice(-6).toUpperCase()}`,
-      referenceId: reservation.id,
-      referenceType: "reservation",
+      if (!lockedMember || lockedMember.availablePoints < actualPointsRedeemed) {
+        throw new ValidationError("Pontos insuficientes (tente novamente)");
+      }
+
+      newAvailablePoints = lockedMember.availablePoints - actualPointsRedeemed;
+
+      await tx
+        .update(loyaltyMembersTable)
+        .set({ availablePoints: newAvailablePoints })
+        .where(eq(loyaltyMembersTable.id, member.id));
+
+      const txId = generateId("ltx");
+      await tx.insert(loyaltyTransactionsTable).values({
+        id: txId,
+        tenantId: me.tenantId,
+        memberId: member.id,
+        programId: loyaltyProgram.id,
+        type: "redeem",
+        points: actualPointsRedeemed,
+        description: `Resgate de pontos — Reserva ${reservation.reservationNumber ?? reservation.id.slice(-6).toUpperCase()}`,
+        referenceId: reservation.id,
+        referenceType: "reservation",
+      });
+
+      await tx
+        .update(reservationsTable)
+        .set({
+          paidValue: sql`${reservationsTable.paidValue} + ${discountAmount}`,
+          discountLoyaltyPoints: sql`COALESCE(${reservationsTable.discountLoyaltyPoints}, 0) + ${actualPointsRedeemed}`,
+          discountLoyaltyAmount: sql`COALESCE(${reservationsTable.discountLoyaltyAmount}, '0') + ${discountAmount}`,
+        })
+        .where(eq(reservationsTable.id, reservation.id));
     });
-
-    await db
-      .update(reservationsTable)
-      .set({
-        paidValue: sql`${reservationsTable.paidValue} + ${discountAmount}`,
-        discountLoyaltyPoints: sql`COALESCE(${reservationsTable.discountLoyaltyPoints}, 0) + ${actualPointsRedeemed}`,
-        discountLoyaltyAmount: sql`COALESCE(${reservationsTable.discountLoyaltyAmount}, '0') + ${discountAmount}`,
-      })
-      .where(eq(reservationsTable.id, reservation.id));
 
     res.json({
       pointsRedeemed: actualPointsRedeemed,
       discountAmount,
-      newAvailablePoints: member.availablePoints - actualPointsRedeemed,
+      newAvailablePoints: newAvailablePoints!,
     });
   } catch (err) {
     next(err);
