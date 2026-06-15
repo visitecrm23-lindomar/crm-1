@@ -188,6 +188,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const handleCsvExport = () => {
     const activeCols = PASSENGER_COLS.filter(c => visibleCols[c.key]);
     const header = ["Nº", ...activeCols.map(c => c.label), "Telefone Passageiro", "Tipo Doc.", "Nec. Especiais", "Observações"];
+    const freeRoleLabel: Record<string, string> = { organizer: "Organizador", guide: "Guia de Turismo" };
     const rows = filtered.map((p, i) => {
       const values: string[] = [String(i + 1)];
       for (const col of activeCols) {
@@ -208,7 +209,28 @@ export function PassengersList({ tripId }: { tripId: string }) {
       values.push(p.observations ?? "");
       return values;
     });
-    const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const freePassengers = panel?.freePassengers ?? [];
+    const freeRows = freePassengers.map((fp, i) => {
+      const values: string[] = [String(filtered.length + i + 1)];
+      for (const col of activeCols) {
+        switch (col.key) {
+          case "nome": values.push(fp.name); break;
+          case "cpf": values.push(formatCpf(fp.cpf)); break;
+          case "birthDate": values.push(""); break;
+          case "seatNumber": values.push(fp.seatNumber ?? ""); break;
+          case "ageCategory": values.push(`Gratuidade — ${freeRoleLabel[fp.role] ?? fp.role}`); break;
+          case "boardingLocation": values.push(""); break;
+          case "whatsapp": values.push(fp.whatsapp ?? ""); break;
+          case "checkedInAt": values.push("—"); break;
+        }
+      }
+      values.push("");
+      values.push("");
+      values.push("");
+      values.push("");
+      return values;
+    });
+    const csv = [header, ...rows, ...freeRows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -220,7 +242,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
   };
 
   const handlePdfPrint = () => {
-    printPassengersManifest(panel as never, trip as never, allPassengers, getBoardingPointName, formatCpf, AGE_CATEGORY_LABELS);
+    printPassengersManifest(panel as never, trip as never, allPassengers, getBoardingPointName, formatCpf, AGE_CATEGORY_LABELS, panel?.freePassengers ?? []);
   };
 
   const CATEGORY_LABELS: Record<string, string> = { all: "Todas as categorias", ...AGE_CATEGORY_LABELS };

@@ -1060,8 +1060,21 @@ router.get("/trips/:id/passengers/export", async (req, res, next: NextFunction):
       });
     }
 
+    const freePassengersData = Array.isArray(trip.freePassengers) ? (trip.freePassengers as FreePassenger[]) : [];
+    const freeRoleLabel: Record<string, string> = { organizer: "Organizador", guide: "Guia de Turismo" };
+    const freeRows: string[][] = freePassengersData.map(fp => [
+      fp.name,
+      fp.cpf ?? "",
+      "",
+      "",
+      `Gratuidade — ${freeRoleLabel[fp.role] ?? fp.role}`,
+      fp.seatNumber ?? "",
+      "",
+      "—",
+    ]);
+
     const header = ["Passageiro", "CPF", "RG", "Data Nasc.", "Categoria", "Assento", "Local de Embarque", "Check-in"];
-    const csvLines = [header, ...rows].map(r =>
+    const csvLines = [header, ...rows, ...freeRows].map(r =>
       r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")
     );
     const csvContent = "\uFEFF" + csvLines.join("\n");

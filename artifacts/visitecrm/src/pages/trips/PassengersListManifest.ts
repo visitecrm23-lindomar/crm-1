@@ -1,6 +1,6 @@
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { BoardingPassenger } from "@workspace/api-client-react";
+import type { BoardingPassenger, FreePassenger } from "@workspace/api-client-react";
 
 export interface ManifestPanel {
   tripName?: string | null;
@@ -46,6 +46,7 @@ export function printPassengersManifest(
   getBoardingPointName: (id: string | null | undefined) => string,
   formatCpf: (cpf: string | null | undefined) => string,
   AGE_CATEGORY_LABELS: Record<string, string>,
+  freePassengers: FreePassenger[] = [],
 ) {
   const p = panel;
   const tripName = escapeHtml(p?.tripName ?? "");
@@ -78,13 +79,17 @@ export function printPassengersManifest(
   const anttBucket: Record<string, string> = { adult: "adulto", child: "crianca", senior: "idoso", baby: "gratuidade", pcd: "pcd" };
   const catOrder = ["adulto", "crianca", "idoso", "pcd", "gratuidade"];
   const catLabel: Record<string, string> = { adulto: "Adultos", crianca: "Crianças", idoso: "Idosos", pcd: "PCDs", gratuidade: "Gratuidades" };
+  const freeRoleLabel: Record<string, string> = { organizer: "Organizador", guide: "Guia de Turismo" };
   const categoryCounts: Record<string, number> = {};
   for (const pass of allPassengers) {
     const bucket = anttBucket[pass.ageCategory] ?? "adulto";
     categoryCounts[bucket] = (categoryCounts[bucket] ?? 0) + 1;
   }
+  if (freePassengers.length > 0) {
+    categoryCounts["gratuidade"] = (categoryCounts["gratuidade"] ?? 0) + freePassengers.length;
+  }
 
-  const rows = allPassengers.map((pass, i) => {
+  const paidRows = allPassengers.map((pass, i) => {
     const nome = escapeHtml(pass.name);
     const cpfStr = escapeHtml(formatCpf(pass.cpf));
     const nasc = pass.birthDate ? escapeHtml(new Date(pass.birthDate).toLocaleDateString("pt-BR")) : "—";
@@ -104,7 +109,28 @@ export function printPassengersManifest(
       <td class="obs-cell">${obs}</td>
       <td class="sig"></td>
     </tr>`;
-  }).join("");
+  });
+
+  const freeRows = freePassengers.map((fp, i) => {
+    const nome = escapeHtml(fp.name);
+    const cpfStr = escapeHtml(formatCpf(fp.cpf));
+    const roleStr = escapeHtml(freeRoleLabel[fp.role] ?? fp.role);
+    const poltrona = escapeHtml(fp.seatNumber ?? "—");
+    const rowNum = allPassengers.length + i + 1;
+    return `<tr class="free-row">
+      <td class="num">${String(rowNum).padStart(2, "0")}</td>
+      <td>${nome}</td>
+      <td>${cpfStr}</td>
+      <td>—</td>
+      <td>Gratuidade<br><span class="free-role">${roleStr}</span></td>
+      <td class="seat">${poltrona}</td>
+      <td>—</td>
+      <td class="obs-cell"></td>
+      <td class="sig"></td>
+    </tr>`;
+  });
+
+  const rows = [...paidRows, ...freeRows].join("");
 
   const totalsRow = catOrder
     .filter(c => categoryCounts[c])
@@ -152,6 +178,9 @@ export function printPassengersManifest(
   .sig-block { margin-top: 20pt; display: flex; gap: 30pt; }
   .sig-line { flex: 1; border-top: 1px solid #000; padding-top: 4pt; font-size: 8pt; text-align: center; }
   .footer { margin-top: 12pt; display: flex; justify-content: space-between; font-size: 8pt; color: #555; border-top: 1px solid #ccc; padding-top: 4pt; }
+  .free-row { background: #fffde7; }
+  .free-row td { font-style: italic; }
+  .free-role { font-size: 7pt; color: #555; font-style: normal; }
   @media print { body { padding: 8mm; } }
 </style>
 </head>
@@ -178,7 +207,7 @@ export function printPassengersManifest(
 </div>
 ${crewRows ? `<div class="section"><div class="section-title">Tripulação</div><table class="crew-table"><thead><tr><th>Função</th><th>Nome</th><th>Habilitação / Registro</th><th>CPF</th></tr></thead><tbody>${crewRows}</tbody></table></div>` : ""}
 <div class="section">
-  <div class="section-title">Lista de Passageiros (${allPassengers.length})</div>
+  <div class="section-title">Lista de Passageiros (${allPassengers.length + freePassengers.length})</div>
   <div class="totals-row">${totalsRow}</div>
   <table>
     <thead>
