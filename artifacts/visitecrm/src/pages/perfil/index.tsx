@@ -3318,9 +3318,11 @@ function ClubeTab({ profile }: { profile: ClientPortalProfile }) {
 
   const currentTier = profile.loyalty?.tier ?? "bronze";
   const tierIndex = TIER_ORDER.indexOf(currentTier);
-  const nextTier = TIER_ORDER[tierIndex + 1];
+  const upperTiers = TIER_ORDER.slice(tierIndex + 1);
   const currentBenefits = benefits.filter((b) => b.tier === currentTier);
-  const nextBenefits = nextTier ? benefits.filter((b) => b.tier === nextTier) : [];
+  const upperTierBenefits = upperTiers
+    .map((t) => ({ tier: t, benefits: benefits.filter((b) => b.tier === t) }))
+    .filter(({ benefits: bs }) => bs.length > 0);
 
   const month = ranking?.month
     ? new Date(ranking.month + "-01T12:00:00").toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
@@ -3341,9 +3343,12 @@ function ClubeTab({ profile }: { profile: ClientPortalProfile }) {
             </div>
           </div>
           <div className="mt-4 flex items-center gap-2">
-            <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30">
-              {TIER_ICONS[currentTier]} {TIER_LABELS[currentTier] ?? currentTier}
-            </Badge>
+            <span className="relative inline-flex">
+              <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30 relative z-10">
+                {TIER_ICONS[currentTier]} {TIER_LABELS[currentTier] ?? currentTier}
+              </Badge>
+              <span className="absolute inset-0 rounded-full animate-ping bg-white/30 z-0" />
+            </span>
             <span className="text-sm opacity-75">Seu nível atual</span>
           </div>
         </div>
@@ -3381,24 +3386,26 @@ function ClubeTab({ profile }: { profile: ClientPortalProfile }) {
         </Card>
       ) : null}
 
-      {/* Next tier preview */}
-      {nextTier && nextBenefits.length > 0 && (
-        <Card className={`border border-dashed ${TIER_COLORS[nextTier]}`}>
+      {/* All upper tier previews */}
+      {upperTierBenefits.map(({ tier, benefits: tierBs }, idx) => (
+        <Card key={tier} className={`border border-dashed ${TIER_COLORS[tier] ?? ""}`}>
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-base flex items-center gap-2">
-                <span>{TIER_ICONS[nextTier]}</span>
-                Próximo nível — {TIER_LABELS[nextTier]}
+                <span>{TIER_ICONS[tier]}</span>
+                {idx === 0 ? "Próximo nível" : "Nível"} — {TIER_LABELS[tier] ?? tier}
               </CardTitle>
-              <Badge variant="outline" className="text-xs">Em breve</Badge>
+              <Badge variant="outline" className="text-xs">
+                {idx === 0 ? "Em breve" : "Futuro"}
+              </Badge>
             </div>
             <CardDescription className="text-xs">
-              Suba para {TIER_LABELS[nextTier]} e desbloqueie:
+              Suba para {TIER_LABELS[tier] ?? tier} e desbloqueie:
             </CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="space-y-2 opacity-60">
-              {nextBenefits.map((b) => (
+              {tierBs.map((b) => (
                 <li key={b.id} className="flex items-start gap-2">
                   <Star className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
                   <div>
@@ -3410,7 +3417,7 @@ function ClubeTab({ profile }: { profile: ClientPortalProfile }) {
             </ul>
           </CardContent>
         </Card>
-      )}
+      ))}
 
       {/* Ambassador opt-in */}
       <Card>

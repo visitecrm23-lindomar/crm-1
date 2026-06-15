@@ -1,4 +1,4 @@
-import { Router, type NextFunction } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import {
   clientsTable,
@@ -7,15 +7,18 @@ import {
   referralsTable,
   reservationsTable,
   tripsTable,
+  tenantsTable,
 } from "@workspace/db";
 import { eq, and, desc, sql, inArray, isNotNull } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, MANAGEMENT_ROLES } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
-import { ROLES, REFERRAL_STATUS, RESERVATION_STATUS } from "@workspace/permissions";
+import { REFERRAL_STATUS, RESERVATION_STATUS } from "@workspace/permissions";
 import { generateId } from "../lib/id";
 
 const router = Router();
+
+// ──────────────────── Helpers ────────────────────
 
 function maskName(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -24,16 +27,66 @@ function maskName(name: string): string {
   return `${parts[0]} ${lastName.charAt(0).toUpperCase()}.`;
 }
 
-// GET /club/config — any authenticated user, tenant scoped
+/**
+ * Resolve the tenant for public club routes.
+ * If ?slug=<agency-slug> is present → public access, no auth required.
+ * Otherwise → require authenticated session and use me.tenantId.
+ * Returns { tenantId, isAdmin } or null (response already sent).
+ */
+async function resolveClubTenant(
+  req: Request,
+  res: Response,
+): Promise<{ tenantId: string; isAdmin: boolean } | null> {
+  const slug = req.query["slug"] as string | undefined;
+
+  if (slug) {
+    const [tenant] = await db
+      .select({ id: tenantsTable.id })
+      .from(tenantsTable)
+      .where(eq(tenantsTable.slug, slug))
+      .limit(1);
+
+    if (!tenant) {
+      res.status(404).json({ error: "Agência não encontrada", code: "NOT_FOUND" });
+      return null;
+    }
+    return { tenantId: tenant.id, isAdmin: false };
+  }
+
+  // No slug → fall back to authenticated session
+  const me = await requireAuth(req, res);
+  if (!me) return null;
+  return {
+    tenantId: me.tenantId,
+    isAdmin: MANAGEMENT_ROLES.includes(me.role as never),
+  };
+}
+
+/**
+ * Neutralize CSV formula injection.
+ * Wraps the value in quotes and prefixes formula-leading characters with an apostrophe.
+ */
+function sanitizeCsvCell(value: string | null | undefined): string {
+  const str = String(value ?? "");
+  const escaped = str.replace(/"/g, '""');
+  if (/^[=+\-@\t\r\n]/.test(escaped)) {
+    return `"'${escaped}"`;
+  }
+  return `"${escaped}"`;
+}
+
+// ──────────────────── Public / auth-optional routes ────────────────────
+
+// GET /club/config — public via ?slug=... or authenticated session
 router.get("/club/config", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const me = await requireAuth(req, res);
-    if (!me) return;
+    const resolved = await resolveClubTenant(req, res);
+    if (!resolved) return;
 
     const [config] = await db
       .select()
       .from(clubConfigTable)
-      .where(eq(clubConfigTable.tenantId, me.tenantId))
+      .where(eq(clubConfigTable.tenantId, resolved.tenantId))
       .limit(1);
 
     res.json({
@@ -44,6 +97,108 @@ router.get("/club/config", async (req, res, next: NextFunction): Promise<void> =
     next(err);
   }
 });
+
+// GET /club/benefits — public via ?slug=... or authenticated session
+router.get("/club/benefits", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const resolved = await resolveClubTenant(req, res);
+    if (!resolved) return;
+
+    const benefits = await db
+      .select()
+      .from(clubBenefitsTable)
+      .where(eq(clubBenefitsTable.tenantId, resolved.tenantId))
+      .orderBy(clubBenefitsTable.tier, clubBenefitsTable.sortOrder);
+
+    res.json({ data: benefits });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /club/ranking — public via ?slug=... or authenticated session
+// Public / client access: top-10 opt-in only, names masked
+// Admin session: all clients, full names
+router.get("/club/ranking", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const resolved = await resolveClubTenant(req, res);
+    if (!resolved) return;
+    const { tenantId, isAdmin } = resolved;
+
+    const referrersRaw = await db
+      .select({
+        clientId: referralsTable.referrerId,
+        name: clientsTable.name,
+        count: sql<number>`COUNT(${referralsTable.id})::int`,
+      })
+      .from(referralsTable)
+      .innerJoin(
+        clientsTable,
+        isAdmin
+          ? eq(clientsTable.id, referralsTable.referrerId)
+          : and(eq(clientsTable.id, referralsTable.referrerId), eq(clientsTable.ambassadorOptIn, true)),
+      )
+      .where(
+        and(
+          eq(referralsTable.tenantId, tenantId),
+          inArray(referralsTable.status, [REFERRAL_STATUS.COMPLETED, REFERRAL_STATUS.CONVERTED]),
+          sql`DATE_TRUNC('month', ${referralsTable.createdAt}) = DATE_TRUNC('month', NOW() AT TIME ZONE 'America/Sao_Paulo')`,
+        ),
+      )
+      .groupBy(referralsTable.referrerId, clientsTable.name)
+      .orderBy(desc(sql`COUNT(${referralsTable.id})`))
+      .limit(10);
+
+    // Only COMPLETED trips (return_date in current month) — not "confirmed pending" trips
+    const travelersRaw = await db
+      .select({
+        clientId: reservationsTable.clientId,
+        name: clientsTable.name,
+        count: sql<number>`COUNT(${reservationsTable.id})::int`,
+      })
+      .from(reservationsTable)
+      .innerJoin(tripsTable, eq(tripsTable.id, reservationsTable.tripId))
+      .innerJoin(
+        clientsTable,
+        isAdmin
+          ? and(eq(clientsTable.id, reservationsTable.clientId), isNotNull(reservationsTable.clientId))
+          : and(
+              eq(clientsTable.id, reservationsTable.clientId),
+              eq(clientsTable.ambassadorOptIn, true),
+              isNotNull(reservationsTable.clientId),
+            ),
+      )
+      .where(
+        and(
+          eq(reservationsTable.tenantId, tenantId),
+          eq(reservationsTable.status, RESERVATION_STATUS.COMPLETED),
+          isNotNull(reservationsTable.clientId),
+          sql`DATE_TRUNC('month', ${tripsTable.returnDate}) = DATE_TRUNC('month', NOW() AT TIME ZONE 'America/Sao_Paulo')`,
+        ),
+      )
+      .groupBy(reservationsTable.clientId, clientsTable.name)
+      .orderBy(desc(sql`COUNT(${reservationsTable.id})`))
+      .limit(10);
+
+    res.json({
+      referrers: referrersRaw.map((r, i) => ({
+        rank: i + 1,
+        name: isAdmin ? r.name : maskName(r.name),
+        count: r.count,
+      })),
+      travelers: travelersRaw.map((r, i) => ({
+        rank: i + 1,
+        name: isAdmin ? r.name : maskName(r.name),
+        count: r.count,
+      })),
+      month: new Date().toISOString().slice(0, 7),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ──────────────────── Admin-only routes ────────────────────
 
 // PUT /club/config — admin only
 router.put("/club/config", async (req, res, next: NextFunction): Promise<void> => {
@@ -73,11 +228,7 @@ router.put("/club/config", async (req, res, next: NextFunction): Promise<void> =
     if (existing) {
       await db
         .update(clubConfigTable)
-        .set({
-          clubName: body.data.clubName,
-          description: body.data.description ?? null,
-          updatedAt: new Date(),
-        })
+        .set({ clubName: body.data.clubName, description: body.data.description ?? null, updatedAt: new Date() })
         .where(eq(clubConfigTable.id, existing.id));
     } else {
       await db.insert(clubConfigTable).values({
@@ -90,24 +241,6 @@ router.put("/club/config", async (req, res, next: NextFunction): Promise<void> =
     }
 
     res.status(204).end();
-  } catch (err) {
-    next(err);
-  }
-});
-
-// GET /club/benefits — any authenticated user, tenant scoped
-router.get("/club/benefits", async (req, res, next: NextFunction): Promise<void> => {
-  try {
-    const me = await requireAuth(req, res);
-    if (!me) return;
-
-    const benefits = await db
-      .select()
-      .from(clubBenefitsTable)
-      .where(eq(clubBenefitsTable.tenantId, me.tenantId))
-      .orderBy(clubBenefitsTable.tier, clubBenefitsTable.sortOrder);
-
-    res.json({ data: benefits });
   } catch (err) {
     next(err);
   }
@@ -226,87 +359,7 @@ router.delete("/club/benefits/:id", async (req, res, next: NextFunction): Promis
   }
 });
 
-// GET /club/ranking — any authenticated user; non-admins get masked names + opt-in only
-router.get("/club/ranking", async (req, res, next: NextFunction): Promise<void> => {
-  try {
-    const me = await requireAuth(req, res);
-    if (!me) return;
-
-    const isAdmin = MANAGEMENT_ROLES.includes(me.role as never);
-
-    const optInFilter = isAdmin ? undefined : eq(clientsTable.ambassadorOptIn, true);
-
-    const referrersRaw = await db
-      .select({
-        clientId: referralsTable.referrerId,
-        name: clientsTable.name,
-        count: sql<number>`COUNT(${referralsTable.id})::int`,
-      })
-      .from(referralsTable)
-      .innerJoin(
-        clientsTable,
-        isAdmin
-          ? eq(clientsTable.id, referralsTable.referrerId)
-          : and(eq(clientsTable.id, referralsTable.referrerId), eq(clientsTable.ambassadorOptIn, true)),
-      )
-      .where(
-        and(
-          eq(referralsTable.tenantId, me.tenantId),
-          inArray(referralsTable.status, [REFERRAL_STATUS.COMPLETED, REFERRAL_STATUS.CONVERTED]),
-          sql`DATE_TRUNC('month', ${referralsTable.createdAt}) = DATE_TRUNC('month', NOW() AT TIME ZONE 'America/Sao_Paulo')`,
-        ),
-      )
-      .groupBy(referralsTable.referrerId, clientsTable.name)
-      .orderBy(desc(sql`COUNT(${referralsTable.id})`))
-      .limit(10);
-
-    const travelersRaw = await db
-      .select({
-        clientId: reservationsTable.clientId,
-        name: clientsTable.name,
-        count: sql<number>`COUNT(${reservationsTable.id})::int`,
-      })
-      .from(reservationsTable)
-      .innerJoin(tripsTable, eq(tripsTable.id, reservationsTable.tripId))
-      .innerJoin(
-        clientsTable,
-        isAdmin
-          ? and(eq(clientsTable.id, reservationsTable.clientId), isNotNull(reservationsTable.clientId))
-          : and(eq(clientsTable.id, reservationsTable.clientId), eq(clientsTable.ambassadorOptIn, true), isNotNull(reservationsTable.clientId)),
-      )
-      .where(
-        and(
-          eq(reservationsTable.tenantId, me.tenantId),
-          inArray(reservationsTable.status, [RESERVATION_STATUS.CONFIRMED, RESERVATION_STATUS.COMPLETED]),
-          isNotNull(reservationsTable.clientId),
-          sql`DATE_TRUNC('month', ${tripsTable.returnDate}) = DATE_TRUNC('month', NOW() AT TIME ZONE 'America/Sao_Paulo')`,
-        ),
-      )
-      .groupBy(reservationsTable.clientId, clientsTable.name)
-      .orderBy(desc(sql`COUNT(${reservationsTable.id})`))
-      .limit(10);
-
-    void optInFilter;
-
-    res.json({
-      referrers: referrersRaw.map((r, i) => ({
-        rank: i + 1,
-        name: isAdmin ? r.name : maskName(r.name),
-        count: r.count,
-      })),
-      travelers: travelersRaw.map((r, i) => ({
-        rank: i + 1,
-        name: isAdmin ? r.name : maskName(r.name),
-        count: r.count,
-      })),
-      month: new Date().toISOString().slice(0, 7),
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// GET /club/ranking/full — admin only (full names, CSV export available)
+// GET /club/ranking/full — admin only (full names, optional CSV export)
 router.get("/club/ranking/full", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
@@ -354,7 +407,7 @@ router.get("/club/ranking/full", async (req, res, next: NextFunction): Promise<v
       .where(
         and(
           eq(reservationsTable.tenantId, me.tenantId),
-          inArray(reservationsTable.status, [RESERVATION_STATUS.CONFIRMED, RESERVATION_STATUS.COMPLETED]),
+          eq(reservationsTable.status, RESERVATION_STATUS.COMPLETED),
           isNotNull(reservationsTable.clientId),
           sql`DATE_TRUNC('month', ${tripsTable.returnDate}) = DATE_TRUNC('month', NOW() AT TIME ZONE 'America/Sao_Paulo')`,
         ),
@@ -369,13 +422,13 @@ router.get("/club/ranking/full", async (req, res, next: NextFunction): Promise<v
         `RANKING DE INDICADORES - ${month}`,
         "Posição,Nome,Email,Indicações,Embaixador",
         ...referrersRaw.map((r, i) =>
-          `${i + 1},"${r.name}","${r.email}",${r.count},${r.ambassadorOptIn ? "Sim" : "Não"}`
+          `${i + 1},${sanitizeCsvCell(r.name)},${sanitizeCsvCell(r.email)},${r.count},${r.ambassadorOptIn ? "Sim" : "Não"}`
         ),
         "",
         `RANKING DE VIAJANTES - ${month}`,
         "Posição,Nome,Email,Viagens,Embaixador",
         ...travelersRaw.map((r, i) =>
-          `${i + 1},"${r.name}","${r.email}",${r.count},${r.ambassadorOptIn ? "Sim" : "Não"}`
+          `${i + 1},${sanitizeCsvCell(r.name)},${sanitizeCsvCell(r.email)},${r.count},${r.ambassadorOptIn ? "Sim" : "Não"}`
         ),
       ];
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
