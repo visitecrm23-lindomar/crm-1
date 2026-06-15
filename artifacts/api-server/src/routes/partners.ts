@@ -493,6 +493,66 @@ router.get("/parceiros/commissions", async (req, res, next: NextFunction): Promi
       .where(and(eq(partnerCommissionsTable.tenantId, me.tenantId), eq(partnerCommissionsTable.period, currentPeriod)))
       .groupBy(partnerCommissionsTable.partnerId, partnersTable.name, partnersTable.email);
 
+    if (req.query["export"] === "pdf") {
+      const [year, month] = currentPeriod.split("-");
+      const monthNames = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+      const formattedPeriod = `${monthNames[parseInt(month ?? "1") - 1] ?? month} de ${year}`;
+      const brl = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+      const totalGross = rows.reduce((s, r) => s + Number(r.grossAmount), 0);
+      const totalPartner = rows.reduce((s, r) => s + Number(r.partnerAmount), 0);
+      const totalAgency = rows.reduce((s, r) => s + Number(r.agencyAmount), 0);
+      const rowsHtml = rows.map(r => `
+        <tr>
+          <td>${r.partnerName ?? ""}</td>
+          <td>${r.partnerEmail ?? ""}</td>
+          <td class="text-right">${r.orderCount}</td>
+          <td class="text-right">${brl(Number(r.grossAmount))}</td>
+          <td class="text-right">${brl(Number(r.partnerAmount))}</td>
+          <td class="text-right">${brl(Number(r.agencyAmount))}</td>
+          <td>${r.pendingCount > 0 ? '<span class="badge badge-pending">Pendente</span>' : '<span class="badge badge-paid">Pago</span>'}</td>
+        </tr>`).join("");
+      const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Repasses ${currentPeriod}</title>
+<style>
+  body{font-family:Arial,sans-serif;margin:2cm;color:#111;font-size:13px}
+  h1{font-size:1.3rem;margin:0 0 4px}
+  .sub{color:#555;font-size:.8rem;margin-bottom:1.5rem}
+  table{width:100%;border-collapse:collapse}
+  th{background:#1e3a5f;color:#fff;padding:8px 10px;text-align:left;font-size:.8rem}
+  td{padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:.8rem}
+  tr:nth-child(even) td{background:#f9fafb}
+  .text-right{text-align:right}
+  tfoot td{font-weight:700;background:#f3f4f6;border-top:2px solid #d1d5db}
+  .badge{display:inline-block;padding:2px 7px;border-radius:9999px;font-size:.7rem;font-weight:600}
+  .badge-pending{background:#fef3c7;color:#92400e}
+  .badge-paid{background:#dcfce7;color:#166534}
+  @media print{@page{margin:1.5cm}button{display:none}}
+</style></head><body>
+<h1>Relatório de Repasses</h1>
+<p class="sub">Período: <strong>${formattedPeriod}</strong> &nbsp;|&nbsp; Gerado em: ${new Date().toLocaleString("pt-BR")}</p>
+<table>
+  <thead><tr>
+    <th>Parceiro</th><th>E-mail</th><th class="text-right">Pedidos</th>
+    <th class="text-right">Bruto</th><th class="text-right">Repasse Parceiro</th>
+    <th class="text-right">Receita Agência</th><th>Status</th>
+  </tr></thead>
+  <tbody>${rowsHtml}</tbody>
+  <tfoot><tr>
+    <td colspan="2"><strong>TOTAL (${rows.length} parceiros)</strong></td>
+    <td class="text-right">${rows.reduce((s, r) => s + r.orderCount, 0)}</td>
+    <td class="text-right">${brl(totalGross)}</td>
+    <td class="text-right">${brl(totalPartner)}</td>
+    <td class="text-right">${brl(totalAgency)}</td>
+    <td></td>
+  </tr></tfoot>
+</table>
+<script>setTimeout(()=>window.print(),400);</script>
+</body></html>`;
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.send(html);
+      return;
+    }
+
     if (req.query["export"] === "csv") {
       const sanitize = (v: string | null | undefined) => {
         const s = String(v ?? "");

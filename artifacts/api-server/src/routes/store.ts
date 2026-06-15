@@ -11,6 +11,7 @@ import {
   pipelineStagesTable,
   dealsTable,
   reservationsTable,
+  partnerProductsTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, count, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -177,6 +178,7 @@ const ProductBody = z.object({
   isFeatured: z.boolean().optional(),
   order: z.number().int().optional(),
   status: z.enum(["draft", "active", "archived"]).optional(),
+  partnerProductId: z.string().nullable().optional(),
 });
 
 const CouponBody = z.object({
@@ -416,6 +418,13 @@ router.post("/store/products", async (req, res): Promise<void> => {
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const id = generateId();
     const data = parsed.data;
+    if (data.partnerProductId) {
+      const [pp] = await db.select({ id: partnerProductsTable.id })
+        .from(partnerProductsTable)
+        .where(and(eq(partnerProductsTable.id, data.partnerProductId), eq(partnerProductsTable.tenantId, me.tenantId)))
+        .limit(1);
+      if (!pp) { res.status(400).json({ error: "Produto de parceiro não encontrado" }); return; }
+    }
     await db.insert(storeProductsTable).values({
       id,
       storeId: store.id,
@@ -460,6 +469,7 @@ router.post("/store/products", async (req, res): Promise<void> => {
       ...(data.isFeatured != null && { isFeatured: data.isFeatured }),
       ...(data.order != null && { order: data.order }),
       ...(data.status && { status: data.status }),
+      ...(data.partnerProductId !== undefined && { partnerProductId: data.partnerProductId ?? null }),
     });
     const [product] = await db.select().from(storeProductsTable)
       .where(eq(storeProductsTable.id, id)).limit(1);
@@ -482,7 +492,13 @@ router.put("/store/products/:id", async (req, res): Promise<void> => {
     const [existingProduct] = await db.select().from(storeProductsTable)
       .where(and(eq(storeProductsTable.id, req.params.id), eq(storeProductsTable.storeId, store.id))).limit(1);
     if (!existingProduct) { res.status(404).json({ error: "Product not found" }); return; }
-
+    if (parsed.data.partnerProductId) {
+      const [pp] = await db.select({ id: partnerProductsTable.id })
+        .from(partnerProductsTable)
+        .where(and(eq(partnerProductsTable.id, parsed.data.partnerProductId), eq(partnerProductsTable.tenantId, me.tenantId)))
+        .limit(1);
+      if (!pp) { res.status(400).json({ error: "Produto de parceiro não encontrado" }); return; }
+    }
     const updates: Record<string, unknown> = { ...parsed.data };
     if (parsed.data.saleStartsAt) updates.saleStartsAt = new Date(parsed.data.saleStartsAt);
     if (parsed.data.saleEndsAt) updates.saleEndsAt = new Date(parsed.data.saleEndsAt);

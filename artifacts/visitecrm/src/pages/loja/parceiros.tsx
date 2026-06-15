@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Download, CheckCircle, XCircle, Clock, Building2, Package, DollarSign, RefreshCw } from "lucide-react";
+import { Plus, Pencil, Download, CheckCircle, XCircle, Clock, Building2, Package, DollarSign, RefreshCw, Store } from "lucide-react";
 
 interface Partner {
   id: string; name: string; email: string; cnpj: string | null;
@@ -249,6 +249,32 @@ function PartnerProductsPanel({ partnerId }: { partnerId: string }) {
     }
   }
 
+  async function createStoreProduct(p: PartnerProduct) {
+    const slug = p.title.toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+      + "-" + p.id.slice(0, 6);
+    const res = await fetch(`${import.meta.env.BASE_URL}api/store/products`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: p.type,
+        name: p.title,
+        slug,
+        price: p.price,
+        ...(p.description && { shortDescription: p.description }),
+        partnerProductId: p.id,
+        status: "active",
+      }),
+    });
+    if (res.ok) {
+      toast({ title: "Produto criado na vitrine!", description: `Slug: ${slug}` });
+    } else {
+      const body = await res.json() as { error?: string };
+      toast({ title: "Erro ao criar produto", description: body.error ?? "Tente novamente", variant: "destructive" });
+    }
+  }
+
   if (loading) return <div className="text-sm text-muted-foreground py-4">Carregando...</div>;
   if (products.length === 0) return <div className="text-sm text-muted-foreground py-4">Nenhum produto cadastrado.</div>;
 
@@ -268,16 +294,21 @@ function PartnerProductsPanel({ partnerId }: { partnerId: string }) {
               {p.meetingPoint ? ` · 📍${p.meetingPoint}` : ""}
             </div>
           </div>
-          {p.status === "pending" && (
-            <div className="flex gap-1 shrink-0">
+          <div className="flex gap-1 shrink-0">
+            {p.status === "pending" && (<>
               <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => updateStatus(p.id, "active")}>
                 <CheckCircle className="w-3.5 h-3.5 mr-1" />Aprovar
               </Button>
               <Button size="sm" variant="destructive" onClick={() => updateStatus(p.id, "rejected")}>
                 <XCircle className="w-3.5 h-3.5 mr-1" />Rejeitar
               </Button>
-            </div>
-          )}
+            </>)}
+            {p.status === "active" && (
+              <Button size="sm" variant="outline" onClick={() => void createStoreProduct(p)} title="Criar produto na vitrine vinculado a este parceiro">
+                <Store className="w-3.5 h-3.5 mr-1" />Criar na Vitrine
+              </Button>
+            )}
+          </div>
         </div>
       ))}
     </div>
@@ -319,6 +350,11 @@ export default function LojaParceiros() {
 
   function downloadCsv() {
     const url = `${import.meta.env.BASE_URL}api/parceiros/commissions?period=${reportPeriod}&export=csv`;
+    window.open(url, "_blank");
+  }
+
+  function openPdfReport() {
+    const url = `${import.meta.env.BASE_URL}api/parceiros/commissions?period=${reportPeriod}&export=pdf`;
     window.open(url, "_blank");
   }
 
@@ -447,6 +483,9 @@ export default function LojaParceiros() {
                   />
                   <Button variant="outline" size="sm" onClick={loadReport} disabled={loadingReport}>
                     <RefreshCw className={`w-4 h-4 ${loadingReport ? "animate-spin" : ""}`} />
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={openPdfReport} title="Abrir relatório para imprimir/salvar como PDF">
+                    <Download className="w-4 h-4 mr-1.5" />PDF
                   </Button>
                   <Button size="sm" onClick={downloadCsv}>
                     <Download className="w-4 h-4 mr-1.5" />CSV
