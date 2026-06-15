@@ -44,16 +44,29 @@ const MoveDealBody = z.object({ stageId: z.string() });
 const DEFAULT_STAGES = [
   { name: "Lead", order: 1, color: "#6366F1", isFinal: false, isDefaultWeb: false },
   { name: "Vitrine", order: 2, color: "#3B82F6", isFinal: false, isDefaultWeb: true },
-  { name: "Interessado", order: 3, color: "#F59E0B", isFinal: false, isDefaultWeb: false },
-  { name: "Cliente", order: 4, color: "#10B981", isFinal: false, isDefaultWeb: false },
+  { name: "Reserva Criada", order: 3, color: "#0EA5E9", isFinal: false, isDefaultWeb: false },
+  { name: "Pagamento Confirmado", order: 4, color: "#10B981", isFinal: false, isDefaultWeb: false },
   { name: "Em Viagem", order: 5, color: "#06B6D4", isFinal: false, isDefaultWeb: false },
-  { name: "Pós-venda", order: 6, color: "#6B7280", isFinal: true, isDefaultWeb: false },
+  { name: "Pós Viagem", order: 6, color: "#6B7280", isFinal: true, isDefaultWeb: false },
+];
+
+const STAGE_RENAMES: { oldName: string; newName: string }[] = [
+  { oldName: "Interessado", newName: "Reserva Criada" },
+  { oldName: "Cliente", newName: "Pagamento Confirmado" },
+  { oldName: "Pós-venda", newName: "Pós Viagem" },
 ];
 
 async function ensureDefaultPipeline(tenantId: string): Promise<string> {
   const existing = await db.select().from(pipelineStagesTable)
     .where(eq(pipelineStagesTable.tenantId, tenantId));
-  if (existing.length > 0) return existing[0].pipelineId;
+  if (existing.length > 0) {
+    for (const r of STAGE_RENAMES) {
+      await db.update(pipelineStagesTable)
+        .set({ name: r.newName })
+        .where(and(eq(pipelineStagesTable.tenantId, tenantId), eq(pipelineStagesTable.name, r.oldName)));
+    }
+    return existing[0].pipelineId;
+  }
   const pipelineId = generateId();
   await db.insert(pipelinesTable).values({
     id: pipelineId,
