@@ -416,10 +416,10 @@ CONTEXTO DA AGÊNCIA:
 - Ticket médio: ${fmtBRL(co.avgTicket)} | LTV estimado: ${fmtBRL(co.ltv)} | CAC estimado: ${fmtBRL(co.cac)}
 - Pipeline: ${fmtBRL(co.pipelineValue)} (${co.openDeals} negócios abertos, ${co.wonDeals} ganhos)
 - Clientes ativos: ${co.activeClients} | Recorrentes: ${co.repeatClients} | Cancelamentos: ${co.cancellations}
-- Reservas confirmadas: ${co.confirmedReservations} | Leads: ${co.totalLeads}
+- Reservas confirmadas: ${op.confirmedReservations} | Leads: ${co.totalLeads}
 
 📣 PILAR MARKETING:
-- Novos clientes: ${co.newClients} | Indicações: ${mk.referrals} (convertidas: ${mk.convertedReferrals})
+- Novos clientes: ${mk.newClients} | Indicações: ${mk.referrals} (convertidas: ${mk.convertedReferrals})
 - Campanhas: ${mk.activeCampaigns} ativas | ${mk.sentCampaigns} disparadas | ${mk.totalSentMessages.toLocaleString("pt-BR")} mensagens
 - Taxa de abertura: ${mk.openRate}% | Cliques: ${mk.clickRate}%
 - ROI por campanha: ${fmtBRL(mk.campaignRoi)}
@@ -530,6 +530,439 @@ router.post("/insights/chat", async (req, res): Promise<void> => {
     res.end();
   } catch (err) {
     console.error("[insights/chat]", err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Internal server error" });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: "Erro interno. Tente novamente." })}\n\n`);
+      res.end();
+    }
+  }
+});
+
+// ─── BI Avançado: Previsões, Risco de Ocupação, Simulador, Assistente ─────────
+
+interface RevenueHistoryPoint { month: string; revenue: number; }
+interface ForecastPoint { month: string; base: number; optimistic: number; pessimistic: number; }
+interface RevenueForecastResponse {
+  history: RevenueHistoryPoint[];
+  forecast: ForecastPoint[];
+  narrative: string;
+  source: "ai" | "computed";
+  generatedAt: string;
+}
+
+interface OccupancyTrip {
+  id: string; name: string; destination: string; departureDate: string;
+  daysUntil: number; capacity: number; occupied: number; availableSeats: number;
+  fillRate: number; risk: "red" | "yellow" | "green"; comment: string | null;
+}
+interface OccupancyRiskResponse {
+  trips: OccupancyTrip[];
+  summary: string;
+  counts: { red: number; yellow: number; green: number };
+  generatedAt: string;
+}
+
+interface SimulatorResponse {
+  baselineRevenue: number;
+  projectedRevenue: number;
+  deltaRevenue: number;
+  deltaPct: number;
+  reasoning: string;
+  source: "ai" | "computed";
+  generatedAt: string;
+}
+
+// In-memory per-tenant TTL cache (forecasts are computed on demand, not persisted).
+const ADVANCED_CACHE_TTL_MS = 5 * 60_000;
+const forecastCache = new Map<string, { at: number; data: RevenueForecastResponse }>();
+const occupancyCache = new Map<string, { at: number; data: OccupancyRiskResponse }>();
+
+function monthKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+async function monthlyRevenueHistory(tenantId: string, months: number): Promise<RevenueHistoryPoint[]> {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+  const rows = await db
+    .select({
+      ym: sql<string>`to_char(${paymentsTable.paidAt}, 'YYYY-MM')`,
+      total: sql<number>`coalesce(sum(cast(amount as numeric)), 0)`,
+    })
+    .from(paymentsTable)
+    .where(and(
+      eq(paymentsTable.tenantId, tenantId),
+      eq(paymentsTable.type, PAYMENT_TYPE.RECEIVABLE),
+      eq(paymentsTable.status, PAYMENT_STATUS.PAID),
+      gte(paymentsTable.paidAt, start),
+      lte(paymentsTable.paidAt, now),
+    ))
+    .groupBy(sql`to_char(${paymentsTable.paidAt}, 'YYYY-MM')`);
+  const map = new Map(rows.map((r) => [r.ym, Number(r.total)]));
+  const result: RevenueHistoryPoint[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = monthKey(d);
+    result.push({ month: key, revenue: Math.round(map.get(key) ?? 0) });
+  }
+  return result;
+}
+
+function nextMonthKeys(count: number): string[] {
+  const now = new Date();
+  const keys: string[] = [];
+  for (let i = 1; i <= count; i++) {
+    keys.push(monthKey(new Date(now.getFullYear(), now.getMonth() + i, 1)));
+  }
+  return keys;
+}
+
+// Deterministic projection used as an anchor for the LLM and as a graceful
+// fallback when the AI step is unavailable or returns unusable output.
+function computeBaselineForecast(history: RevenueHistoryPoint[]): ForecastPoint[] {
+  const last6 = history.map((h) => h.revenue).slice(-6);
+  const nonZero = last6.filter((v) => v > 0);
+  const avg = nonZero.length > 0 ? nonZero.reduce((a, b) => a + b, 0) / nonZero.length : 0;
+  const half = Math.floor(last6.length / 2) || 1;
+  const firstAvg = last6.slice(0, half).reduce((a, b) => a + b, 0) / half;
+  const secondAvg = last6.slice(-half).reduce((a, b) => a + b, 0) / half;
+  const trend = (secondAvg - firstAvg) / half;
+  return nextMonthKeys(3).map((key, idx) => {
+    const base = Math.max(0, Math.round(avg + trend * (idx + 1)));
+    return { month: key, base, optimistic: Math.round(base * 1.2), pessimistic: Math.round(base * 0.8) };
+  });
+}
+
+function extractJson(text: string): Record<string, unknown> | null {
+  if (!text) return null;
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1] : text;
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+  if (start === -1 || end === -1 || end < start) return null;
+  try {
+    return JSON.parse(candidate.slice(start, end + 1)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+async function completeText(tenantId: string, systemPrompt: string, userPrompt: string, maxTokens = 2048): Promise<string> {
+  const { client, model, provider } = await getAIClientForTenant(tenantId);
+  const useCompletionTokens = provider === "openai";
+  const resp = await client.chat.completions.create({
+    model,
+    ...(useCompletionTokens ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+  });
+  return resp.choices[0]?.message?.content ?? "";
+}
+
+async function tenantName(tenantId: string): Promise<string> {
+  const [tenant] = await db.select({ name: tenantsTable.name }).from(tenantsTable).where(eq(tenantsTable.id, tenantId)).limit(1);
+  return tenant?.name ?? "Agência";
+}
+
+// ─── GET /insights/revenue-forecast ───────────────────────────────────────────
+router.get("/insights/revenue-forecast", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role === ROLES.SALES || me.role === ROLES.CLIENT) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const cached = forecastCache.get(me.tenantId);
+    if (cached && Date.now() - cached.at < ADVANCED_CACHE_TTL_MS) {
+      res.json(cached.data);
+      return;
+    }
+
+    const history = await monthlyRevenueHistory(me.tenantId, 24);
+    const baseline = computeBaselineForecast(history);
+    const futureKeys = nextMonthKeys(3);
+
+    let forecast = baseline;
+    let narrative = "";
+    let source: "ai" | "computed" = "computed";
+
+    try {
+      const agencyName = await tenantName(me.tenantId);
+      const historyStr = history.map((h) => `${h.month}: ${h.revenue}`).join("\n");
+      const system = `Você é um analista financeiro sênior de uma agência de turismo brasileira (${agencyName}). Projete a receita confirmada (em reais, número inteiro) para os próximos 3 meses com base no histórico mensal dos últimos 24 meses. Considere sazonalidade e tendência. Responda APENAS com JSON válido, sem texto fora do JSON.`;
+      const user = `Histórico de receita confirmada (mês: valor em R$):\n${historyStr}\n\nMeses a prever: ${futureKeys.join(", ")}.\n\nRetorne JSON no formato exato:\n{\n  "forecast": [{"month":"YYYY-MM","base":number,"optimistic":number,"pessimistic":number}],\n  "narrative": "2 a 4 frases em português explicando a projeção, sazonalidade e principais riscos/oportunidades"\n}\nRegras: exatamente 3 itens em forecast, na ordem dos meses solicitados; optimistic >= base >= pessimistic >= 0.`;
+      const raw = await completeText(me.tenantId, system, user, 1500);
+      const parsed = extractJson(raw);
+      const arr = parsed?.forecast;
+      if (Array.isArray(arr) && arr.length >= 3) {
+        forecast = futureKeys.map((key, i) => {
+          const item = (arr[i] ?? {}) as Record<string, unknown>;
+          let base = Math.round(Number(item.base));
+          if (!Number.isFinite(base) || base < 0) base = baseline[i].base;
+          let optimistic = Math.round(Number(item.optimistic));
+          if (!Number.isFinite(optimistic) || optimistic < base) optimistic = Math.round(base * 1.2);
+          let pessimistic = Math.round(Number(item.pessimistic));
+          if (!Number.isFinite(pessimistic) || pessimistic > base || pessimistic < 0) pessimistic = Math.round(base * 0.8);
+          return { month: key, base, optimistic, pessimistic };
+        });
+        source = "ai";
+      }
+      if (typeof parsed?.narrative === "string" && parsed.narrative.trim()) {
+        narrative = parsed.narrative.trim();
+      }
+    } catch (err) {
+      console.error("[insights/revenue-forecast] AI step failed, using computed baseline", err);
+    }
+
+    if (!narrative) {
+      const total = forecast.reduce((a, f) => a + f.base, 0);
+      narrative = `Projeção baseada na média e tendência recentes. Receita estimada (cenário base) de ${fmtBRL(total)} nos próximos 3 meses. Configure a IA da agência para análises mais detalhadas.`;
+    }
+
+    const data: RevenueForecastResponse = { history, forecast, narrative, source, generatedAt: new Date().toISOString() };
+    forecastCache.set(me.tenantId, { at: Date.now(), data });
+    res.json(data);
+  } catch (err) {
+    console.error("[insights/revenue-forecast]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+async function futureTripsOccupancy(tenantId: string): Promise<OccupancyTrip[]> {
+  const now = new Date();
+  const rows = await db
+    .select({
+      id: tripsTable.id, name: tripsTable.name, destination: tripsTable.destination,
+      departureDate: tripsTable.departureDate, totalCapacity: tripsTable.totalCapacity,
+      availableSeats: tripsTable.availableSeats,
+    })
+    .from(tripsTable)
+    .where(and(
+      eq(tripsTable.tenantId, tenantId),
+      eq(tripsTable.status, TRIP_STATUS.PUBLISHED),
+      gte(tripsTable.departureDate, now),
+    ))
+    .orderBy(tripsTable.departureDate);
+
+  return rows.map((t) => {
+    const capacity = Number(t.totalCapacity ?? 0);
+    const available = Number(t.availableSeats ?? 0);
+    const occupied = Math.max(0, capacity - available);
+    const fillRate = capacity > 0 ? Math.round((occupied / capacity) * 1000) / 10 : 0;
+    const daysUntil = Math.max(0, Math.ceil((t.departureDate.getTime() - now.getTime()) / 86400000));
+    const risk: "red" | "yellow" | "green" = fillRate >= 80 ? "green" : fillRate >= 60 ? "yellow" : "red";
+    return {
+      id: t.id, name: t.name, destination: t.destination,
+      departureDate: t.departureDate.toISOString(), daysUntil,
+      capacity, occupied, availableSeats: available, fillRate, risk, comment: null,
+    };
+  });
+}
+
+// ─── GET /insights/occupancy-risk ─────────────────────────────────────────────
+router.get("/insights/occupancy-risk", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role === ROLES.SALES || me.role === ROLES.CLIENT) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const cached = occupancyCache.get(me.tenantId);
+    if (cached && Date.now() - cached.at < ADVANCED_CACHE_TTL_MS) {
+      res.json(cached.data);
+      return;
+    }
+
+    const trips = await futureTripsOccupancy(me.tenantId);
+    const counts = { red: 0, yellow: 0, green: 0 };
+    for (const t of trips) counts[t.risk]++;
+
+    let summary = "";
+    const atRisk = trips.filter((t) => t.risk !== "green").slice(0, 20);
+
+    if (trips.length > 0) {
+      try {
+        const agencyName = await tenantName(me.tenantId);
+        const listStr = atRisk
+          .map((t) => `id=${t.id} | ${t.name} (${t.destination}) | ocupação ${t.fillRate}% | ${t.daysUntil} dias p/ partida | ${t.availableSeats} vagas livres`)
+          .join("\n");
+        const system = `Você é um consultor de operações de uma agência de turismo brasileira (${agencyName}). Para cada viagem em risco de não lotar, gere um comentário curto (1 frase, máx 18 palavras) com a ação mais relevante para vender as vagas restantes, considerando dias até a partida e taxa de ocupação. Responda APENAS JSON válido.`;
+        const user = `Viagens em risco:\n${listStr || "(nenhuma em risco)"}\n\nTotais: ${counts.red} em risco alto (vermelho), ${counts.yellow} em atenção (amarelo), ${counts.green} saudáveis (verde).\n\nRetorne JSON:\n{\n  "comments": {"<id da viagem>": "comentário curto"},\n  "summary": "2 a 3 frases em português sobre o panorama de ocupação e prioridades"\n}`;
+        const raw = await completeText(me.tenantId, system, user, 1500);
+        const parsed = extractJson(raw);
+        const comments = parsed?.comments;
+        if (comments && typeof comments === "object") {
+          const cmap = comments as Record<string, unknown>;
+          for (const t of trips) {
+            const c = cmap[t.id];
+            if (typeof c === "string" && c.trim()) t.comment = c.trim();
+          }
+        }
+        if (typeof parsed?.summary === "string" && parsed.summary.trim()) summary = parsed.summary.trim();
+      } catch (err) {
+        console.error("[insights/occupancy-risk] AI step failed", err);
+      }
+    }
+
+    if (!summary) {
+      summary = trips.length === 0
+        ? "Nenhuma viagem futura publicada no momento."
+        : `${trips.length} viagens futuras: ${counts.red} em risco alto, ${counts.yellow} em atenção e ${counts.green} saudáveis.`;
+    }
+
+    const data: OccupancyRiskResponse = { trips, summary, counts, generatedAt: new Date().toISOString() };
+    occupancyCache.set(me.tenantId, { at: Date.now(), data });
+    res.json(data);
+  } catch (err) {
+    console.error("[insights/occupancy-risk]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── POST /insights/simulator ─────────────────────────────────────────────────
+router.post("/insights/simulator", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role === ROLES.SALES || me.role === ROLES.CLIENT) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const body = req.body as { leadsChangePct?: number; priceChangePct?: number; conversionChangePct?: number };
+    const clamp = (v: unknown, min: number, max: number) => {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return 0;
+      return Math.max(min, Math.min(max, n));
+    };
+    const leadsChangePct = clamp(body.leadsChangePct, -100, 200);
+    const priceChangePct = clamp(body.priceChangePct, -50, 50);
+    const conversionChangePct = clamp(body.conversionChangePct, -100, 200);
+
+    const summary = await buildInsightsSummary(me.tenantId, "month");
+    const baselineRevenue = Math.round(summary.executive.totalRevenue);
+    const leads = summary.commercial.totalLeads;
+    const conversion = summary.commercial.conversionRate;
+    const avgTicket = summary.commercial.avgTicket;
+
+    const naive = Math.max(0, Math.round(
+      baselineRevenue * (1 + leadsChangePct / 100) * (1 + conversionChangePct / 100) * (1 + priceChangePct / 100),
+    ));
+
+    let projectedRevenue = naive;
+    let reasoning = "";
+    let source: "ai" | "computed" = "computed";
+
+    try {
+      const agencyName = await tenantName(me.tenantId);
+      const system = `Você é um analista de receita de uma agência de turismo brasileira (${agencyName}). Estime o impacto na receita do PRÓXIMO MÊS a partir de variações nas variáveis do funil. Considere que aumentos de preço podem reduzir a conversão (elasticidade) e que mais leads sem capacidade operacional têm retorno decrescente. Responda APENAS JSON válido.`;
+      const user = `Baseline mensal atual:\n- Receita: ${baselineRevenue}\n- Leads no período: ${leads}\n- Taxa de conversão: ${conversion}%\n- Ticket médio: ${avgTicket}\n\nVariações simuladas:\n- Leads: ${leadsChangePct > 0 ? "+" : ""}${leadsChangePct}%\n- Preço (ticket): ${priceChangePct > 0 ? "+" : ""}${priceChangePct}%\n- Conversão: ${conversionChangePct > 0 ? "+" : ""}${conversionChangePct}%\n\nRetorne JSON:\n{\n  "projectedRevenue": number (receita projetada do próximo mês em R$, inteiro),\n  "reasoning": "2 a 4 frases em português explicando o raciocínio, premissas de elasticidade e principais riscos"\n}`;
+      const raw = await completeText(me.tenantId, system, user, 1200);
+      const parsed = extractJson(raw);
+      const p = Number(parsed?.projectedRevenue);
+      if (Number.isFinite(p) && p >= 0) { projectedRevenue = Math.round(p); source = "ai"; }
+      if (typeof parsed?.reasoning === "string" && parsed.reasoning.trim()) reasoning = parsed.reasoning.trim();
+    } catch (err) {
+      console.error("[insights/simulator] AI step failed", err);
+    }
+
+    if (!reasoning) {
+      reasoning = `Projeção determinística combinando as variações informadas sobre a receita base de ${fmtBRL(baselineRevenue)}. Configure a IA da agência para uma análise com elasticidade de preço.`;
+    }
+
+    const deltaRevenue = projectedRevenue - baselineRevenue;
+    const deltaPct = baselineRevenue > 0 ? Math.round((deltaRevenue / baselineRevenue) * 1000) / 10 : 0;
+
+    const data: SimulatorResponse = {
+      baselineRevenue, projectedRevenue, deltaRevenue, deltaPct, reasoning, source,
+      generatedAt: new Date().toISOString(),
+    };
+    res.json(data);
+  } catch (err) {
+    console.error("[insights/simulator]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+function buildExecutiveAssistantPrompt(agencyName: string, data: Awaited<ReturnType<typeof buildInsightsSummary>>): string {
+  const ex = data.executive; const co = data.commercial; const fi = data.financial;
+  const op = data.operational; const re = data.retention; const exp = data.expansion;
+  return `Você é o Assistente Executivo do VisiteCRM — atua como um CFO/COO virtual para a agência de turismo ${agencyName}. Responde perguntas estratégicas e financeiras do gestor com precisão, em português brasileiro.
+
+INSTRUÇÕES:
+- Use exclusivamente os dados fornecidos (snapshot dos últimos ~90 dias) como base factual; nunca invente números.
+- Quando não houver dado suficiente, diga claramente e sugira o que medir.
+- Seja direto e quantitativo: cite valores, margens e tendências. Aponte causa e ação.
+- Formate com markdown quando útil. Limite a ~350 palavras salvo pedido explícito.
+
+SNAPSHOT (últimos ~90 dias):
+- Receita confirmada: ${fmtBRL(ex.totalRevenue)} | Lucro líquido: ${fmtBRL(ex.netProfit)} | Margem: ${ex.profitMargin}%
+- Despesas: ${fmtBRL(fi.totalExpenses)} | Comissões: ${fmtBRL(fi.commissions)} | A receber: ${fmtBRL(fi.receivable)} | Inadimplência: ${fmtBRL(fi.overdue)}
+- Ticket médio: ${fmtBRL(co.avgTicket)} | Reservas confirmadas: ${op.confirmedReservations} | Cancelamentos (churn): ${co.cancellations}
+- NPS médio: ${ex.averageNps != null ? ex.averageNps.toFixed(1) : "sem dados"} | Taxa de retenção: ${re.retentionRate}% | Promotores: ${re.promoterClients}
+- Indicações convertidas: ${re.convertedReferrals} | Viagens ativas: ${op.activeTrips} | Ocupação média: ${ex.occupancyRate}%
+- Top destinos: ${exp.topDestinations.slice(0, 5).map((d) => `${d.name}(${d.count})`).join(", ") || "sem dados"}
+- Receita/viagem: ${fmtBRL(op.revenuePerTrip)} | Crescimento MoM: ${ex.momGrowth != null ? ex.momGrowth + "%" : "n/d"} | YoY: ${ex.yoyGrowth != null ? ex.yoyGrowth + "%" : "n/d"}`;
+}
+
+// ─── POST /insights/ask (streaming) ───────────────────────────────────────────
+router.post("/insights/ask", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role === ROLES.SALES || me.role === ROLES.CLIENT) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const { messages } = req.body as {
+      messages: Array<{ role: "user" | "assistant"; content: string }>;
+    };
+    if (!Array.isArray(messages) || messages.length === 0) {
+      res.status(400).json({ error: "messages is required" });
+      return;
+    }
+
+    const agencyName = await tenantName(me.tenantId);
+    const summaryData = await buildInsightsSummary(me.tenantId, "quarter");
+    const systemPrompt = buildExecutiveAssistantPrompt(agencyName, summaryData);
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+
+    const { client, model, provider } = await getAIClientForTenant(me.tenantId);
+    const useCompletionTokens = provider === "openai";
+
+    const stream = await client.chat.completions.create({
+      model,
+      ...(useCompletionTokens ? { max_completion_tokens: 8192 } : { max_tokens: 8192 }),
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...messages,
+      ],
+      stream: true,
+    });
+
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content;
+      if (content) {
+        res.write(`data: ${JSON.stringify({ content })}\n\n`);
+      }
+    }
+
+    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    res.end();
+  } catch (err) {
+    console.error("[insights/ask]", err);
     if (!res.headersSent) {
       res.status(500).json({ error: "Internal server error" });
     } else {

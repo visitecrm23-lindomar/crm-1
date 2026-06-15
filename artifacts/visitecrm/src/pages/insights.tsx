@@ -1,5 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { useGetInsightsSummary } from "@workspace/api-client-react";
+import {
+  useGetInsightsSummary,
+  useGetRevenueForecast,
+  useGetOccupancyRisk,
+  useRunSimulator,
+} from "@workspace/api-client-react";
 import type { GetInsightsSummaryPeriod } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,7 +19,12 @@ import {
   ShoppingCart, Zap, Package, Heart, Globe,
   ArrowUpRight, ArrowDownRight, Mail, Send, MousePointerClick, CheckCircle2,
   Repeat2, UserCheck, Award, Navigation, Bot, MessageCircle, X, ChevronUp,
+  Sparkles, SlidersHorizontal, AlertTriangle, Loader2, RefreshCw,
 } from "lucide-react";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+} from "recharts";
+import { Slider } from "@/components/ui/slider";
 import { formatCurrency } from "@/lib/utils";
 import { useAuth } from "@clerk/react";
 
@@ -181,7 +191,25 @@ interface ChatMessage {
   content: string;
 }
 
-function InsightsChat({ period }: { period: string }) {
+function StreamingChat({
+  endpoint,
+  extraBody,
+  emptyIcon: EmptyIcon = Bot,
+  emptyTitle,
+  emptySubtitle,
+  suggestions,
+  placeholder,
+  heightClass = "h-[540px]",
+}: {
+  endpoint: string;
+  extraBody?: Record<string, unknown>;
+  emptyIcon?: React.ElementType;
+  emptyTitle: string;
+  emptySubtitle: string;
+  suggestions: string[];
+  placeholder: string;
+  heightClass?: string;
+}) {
   const { getToken } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -207,13 +235,13 @@ function InsightsChat({ period }: { period: string }) {
 
     try {
       const token = await getToken();
-      const response = await fetch("/api/insights/chat", {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ messages: nextMessages, period }),
+        body: JSON.stringify({ messages: nextMessages, ...(extraBody ?? {}) }),
       });
 
       if (!response.ok || !response.body) {
@@ -279,18 +307,18 @@ function InsightsChat({ period }: { period: string }) {
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="flex flex-col h-[540px]">
+    <div className={`flex flex-col ${heightClass}`}>
       {isEmpty ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-5 px-4">
           <div className="p-4 rounded-full bg-primary/10">
-            <Bot className="w-10 h-10 text-primary" />
+            <EmptyIcon className="w-10 h-10 text-primary" />
           </div>
           <div className="text-center">
-            <p className="text-base font-semibold">Assistente de Inteligência Turística</p>
-            <p className="text-sm text-muted-foreground mt-1">Faça perguntas sobre os dados da agência no período selecionado</p>
+            <p className="text-base font-semibold">{emptyTitle}</p>
+            <p className="text-sm text-muted-foreground mt-1">{emptySubtitle}</p>
           </div>
           <div className="flex flex-wrap gap-2 justify-center max-w-xl">
-            {SUGGESTED_QUESTIONS.map((q) => (
+            {suggestions.map((q) => (
               <button
                 key={q}
                 onClick={() => void sendMessage(q)}
@@ -337,7 +365,7 @@ function InsightsChat({ period }: { period: string }) {
       {!isEmpty && messages.length > 0 && (
         <div className="px-4 pb-2">
           <div className="flex flex-wrap gap-1">
-            {SUGGESTED_QUESTIONS.slice(0, 3).map((q) => (
+            {suggestions.slice(0, 3).map((q) => (
               <button
                 key={q}
                 onClick={() => void sendMessage(q)}
@@ -357,7 +385,7 @@ function InsightsChat({ period }: { period: string }) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Pergunte algo sobre os dados da agência..."
+          placeholder={placeholder}
           className="min-h-[40px] max-h-[120px] resize-none text-sm"
           rows={1}
           disabled={isStreaming}
@@ -370,6 +398,382 @@ function InsightsChat({ period }: { period: string }) {
         >
           <Send className="w-4 h-4" />
         </Button>
+      </div>
+    </div>
+  );
+}
+
+const EXECUTIVE_QUESTIONS = [
+  "Resuma a saúde financeira da agência para a diretoria.",
+  "Onde estão os maiores riscos de receita nos próximos meses?",
+  "Quais alavancas devo priorizar para aumentar a margem?",
+  "Como está o fluxo de caixa e a inadimplência?",
+  "Qual a tendência de crescimento e o que a sustenta?",
+  "Que decisões tomar para melhorar a ocupação das viagens?",
+];
+
+const MONTH_NAMES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+function fmtMonthLabel(m: string): string {
+  const [y, mo] = m.split("-");
+  const idx = Number(mo) - 1;
+  if (!y || idx < 0 || idx > 11) return m;
+  return `${MONTH_NAMES[idx]}/${y.slice(2)}`;
+}
+
+function fmtDateBR(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+const RISK_CONFIG: Record<string, { label: string; badge: string; dot: string }> = {
+  red: { label: "Alto risco", badge: "text-red-700 bg-red-50 border-red-200", dot: "bg-red-500" },
+  yellow: { label: "Atenção", badge: "text-yellow-700 bg-yellow-50 border-yellow-200", dot: "bg-yellow-500" },
+  green: { label: "Saudável", badge: "text-green-700 bg-green-50 border-green-200", dot: "bg-green-500" },
+};
+
+const HORIZON_TO_MONTHS: Record<string, number> = { "30": 1, "60": 2, "90": 3 };
+
+function ForecastTab() {
+  const [horizon, setHorizon] = useState<"30" | "60" | "90">("90");
+  const { data, isLoading, isError, refetch, isFetching } = useGetRevenueForecast();
+  const occupancy = useGetOccupancyRisk();
+
+  const months = HORIZON_TO_MONTHS[horizon] ?? 3;
+  const history = (data?.history ?? []).slice(-12);
+  const forecast = (data?.forecast ?? []).slice(0, months);
+
+  const chartData = [
+    ...history.map((h, i) => {
+      const isLast = i === history.length - 1;
+      return {
+        month: fmtMonthLabel(h.month),
+        historico: h.revenue,
+        base: isLast ? h.revenue : null,
+        otimista: isLast ? h.revenue : null,
+        pessimista: isLast ? h.revenue : null,
+      };
+    }),
+    ...forecast.map((f) => ({
+      month: fmtMonthLabel(f.month),
+      historico: null as number | null,
+      base: f.base,
+      otimista: f.optimistic,
+      pessimista: f.pessimistic,
+    })),
+  ];
+
+  const baseTotal = forecast.reduce((s, f) => s + f.base, 0);
+  const optTotal = forecast.reduce((s, f) => s + f.optimistic, 0);
+  const pessTotal = forecast.reduce((s, f) => s + f.pessimistic, 0);
+
+  const occ = occupancy.data;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <SectionHeader
+          icon={Sparkles}
+          title="Previsões com IA"
+          description="Projeção de faturamento e risco de ocupação das próximas viagens"
+        />
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-md border overflow-hidden">
+            {(["30", "60", "90"] as const).map((h) => (
+              <button
+                key={h}
+                onClick={() => setHorizon(h)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  horizon === h ? "bg-primary text-primary-foreground" : "hover:bg-muted text-muted-foreground"
+                }`}
+              >
+                {h} dias
+              </button>
+            ))}
+          </div>
+          <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching} className="gap-1.5">
+            <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
+            Atualizar
+          </Button>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            Previsão de Faturamento
+            {data?.source === "ai" && <Badge variant="secondary" className="text-xs font-normal">IA</Badge>}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <Skeleton className="h-[280px] w-full" />
+          ) : isError ? (
+            <div className="h-[280px] flex flex-col items-center justify-center gap-2 text-muted-foreground">
+              <AlertTriangle className="w-6 h-6" />
+              <p className="text-sm">Não foi possível gerar a previsão.</p>
+              <Button variant="outline" size="sm" onClick={() => void refetch()}>Tentar novamente</Button>
+            </div>
+          ) : chartData.length === 0 ? (
+            <div className="h-[280px] flex items-center justify-center text-sm text-muted-foreground">
+              Sem histórico de receita suficiente para projetar.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={chartData} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="month" fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                  width={48}
+                  tickFormatter={(v: number) => `R$${(v / 1000).toFixed(0)}k`}
+                />
+                <Tooltip
+                  formatter={(value: number, name: string) => [formatCurrency(value), name]}
+                  contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line type="monotone" dataKey="historico" name="Histórico" stroke="var(--primary)" strokeWidth={2} dot={false} connectNulls />
+                <Line type="monotone" dataKey="otimista" name="Otimista" stroke="#10B981" strokeWidth={1.5} strokeDasharray="4 4" dot={false} connectNulls />
+                <Line type="monotone" dataKey="base" name="Base" stroke="#3B82F6" strokeWidth={2} strokeDasharray="6 3" dot={{ r: 3 }} connectNulls />
+                <Line type="monotone" dataKey="pessimista" name="Pessimista" stroke="#EF4444" strokeWidth={1.5} strokeDasharray="4 4" dot={false} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+
+          {!isLoading && !isError && forecast.length > 0 && (
+            <>
+              <div className="grid grid-cols-3 gap-3 mt-4">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Cenário pessimista</p>
+                  <p className="text-lg font-bold text-red-600">{fmtCompact(pessTotal)}</p>
+                </div>
+                <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3">
+                  <p className="text-xs text-muted-foreground">Cenário base</p>
+                  <p className="text-lg font-bold text-blue-600">{fmtCompact(baseTotal)}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Cenário otimista</p>
+                  <p className="text-lg font-bold text-emerald-600">{fmtCompact(optTotal)}</p>
+                </div>
+              </div>
+              {data?.narrative && (
+                <div className="mt-4 flex gap-3 rounded-lg bg-muted/50 p-3">
+                  <Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                  <p className="text-sm text-muted-foreground leading-relaxed">{data.narrative}</p>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" /> Risco de Ocupação — Próximas Viagens
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {occupancy.isLoading ? (
+            <div className="space-y-2">
+              {[0, 1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
+            </div>
+          ) : occupancy.isError ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-8 text-muted-foreground">
+              <AlertTriangle className="w-6 h-6" />
+              <p className="text-sm">Não foi possível carregar o risco de ocupação.</p>
+            </div>
+          ) : !occ || occ.trips.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Nenhuma viagem futura com reservas para analisar.
+            </p>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2 mb-3">
+                <Badge variant="outline" className={RISK_CONFIG.red.badge}>{occ.counts.red} alto risco</Badge>
+                <Badge variant="outline" className={RISK_CONFIG.yellow.badge}>{occ.counts.yellow} em atenção</Badge>
+                <Badge variant="outline" className={RISK_CONFIG.green.badge}>{occ.counts.green} saudáveis</Badge>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-xs text-muted-foreground">
+                      <th className="py-2 pr-3 font-medium">Viagem</th>
+                      <th className="py-2 px-3 font-medium">Embarque</th>
+                      <th className="py-2 px-3 font-medium">Ocupação</th>
+                      <th className="py-2 px-3 font-medium">Risco</th>
+                      <th className="py-2 pl-3 font-medium">Análise IA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {occ.trips.map((t) => {
+                      const rc = RISK_CONFIG[t.risk] ?? RISK_CONFIG.green;
+                      return (
+                        <tr key={t.id} className="border-b last:border-0 align-top">
+                          <td className="py-3 pr-3">
+                            <p className="font-medium">{t.name}</p>
+                            <p className="text-xs text-muted-foreground">{t.destination}</p>
+                          </td>
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            <p>{fmtDateBR(t.departureDate)}</p>
+                            <p className="text-xs text-muted-foreground">em {t.daysUntil} dias</p>
+                          </td>
+                          <td className="py-3 px-3 min-w-[140px]">
+                            <div className="flex items-center justify-between text-xs mb-1">
+                              <span className="font-medium">{t.occupied}/{t.capacity}</span>
+                              <span className="text-muted-foreground">{t.fillRate.toFixed(0)}%</span>
+                            </div>
+                            <div className="w-full bg-muted rounded-full h-2">
+                              <div className={`h-2 rounded-full ${rc.dot}`} style={{ width: `${Math.min(t.fillRate, 100)}%` }} />
+                            </div>
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full border ${rc.badge}`}>
+                              <span className={`w-2 h-2 rounded-full ${rc.dot}`} />
+                              {rc.label}
+                            </span>
+                          </td>
+                          <td className="py-3 pl-3 text-xs text-muted-foreground max-w-[260px]">
+                            {t.comment ?? "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {occ.summary && (
+                <div className="mt-4 flex gap-3 rounded-lg bg-muted/50 p-3">
+                  <Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                  <p className="text-sm text-muted-foreground leading-relaxed">{occ.summary}</p>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function SimuladorTab() {
+  const [leads, setLeads] = useState(0);
+  const [price, setPrice] = useState(0);
+  const [conversion, setConversion] = useState(0);
+  const simulator = useRunSimulator();
+  const result = simulator.data;
+
+  function runSimulation() {
+    simulator.mutate({ leadsChangePct: leads, priceChangePct: price, conversionChangePct: conversion });
+  }
+
+  function reset() {
+    setLeads(0);
+    setPrice(0);
+    setConversion(0);
+    simulator.reset();
+  }
+
+  const sliders = [
+    { label: "Volume de Leads", value: leads, set: setLeads, min: -50, max: 100, color: "text-blue-600" },
+    { label: "Preço / Ticket Médio", value: price, set: setPrice, min: -30, max: 30, color: "text-purple-600" },
+    { label: "Taxa de Conversão", value: conversion, set: setConversion, min: -50, max: 100, color: "text-teal-600" },
+  ];
+
+  const positive = (result?.deltaRevenue ?? 0) >= 0;
+
+  return (
+    <div className="space-y-4">
+      <SectionHeader
+        icon={SlidersHorizontal}
+        title="Simulador de Receita"
+        description="Ajuste as alavancas comerciais e veja o impacto projetado no faturamento"
+      />
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Variáveis da Simulação</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6 pt-2">
+            {sliders.map((s) => (
+              <div key={s.label}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-muted-foreground">{s.label}</span>
+                  <span className={`text-sm font-semibold ${s.color}`}>{s.value > 0 ? "+" : ""}{s.value}%</span>
+                </div>
+                <Slider
+                  value={[s.value]}
+                  min={s.min}
+                  max={s.max}
+                  step={5}
+                  onValueChange={(v) => s.set(v[0] ?? 0)}
+                />
+                <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                  <span>{s.min}%</span>
+                  <span>{s.max > 0 ? "+" : ""}{s.max}%</span>
+                </div>
+              </div>
+            ))}
+            <div className="flex gap-2 pt-1">
+              <Button onClick={runSimulation} disabled={simulator.isPending} className="flex-1 gap-1.5">
+                {simulator.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <SlidersHorizontal className="w-4 h-4" />}
+                Simular impacto
+              </Button>
+              <Button variant="outline" onClick={reset} disabled={simulator.isPending}>Limpar</Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              Impacto Projetado
+              {result?.source === "ai" && <Badge variant="secondary" className="text-xs font-normal">IA</Badge>}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {simulator.isPending ? (
+              <div className="flex flex-col items-center justify-center gap-3 py-12 text-muted-foreground">
+                <Loader2 className="w-7 h-7 animate-spin" />
+                <p className="text-sm">Calculando projeção...</p>
+              </div>
+            ) : simulator.isError ? (
+              <div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
+                <AlertTriangle className="w-6 h-6" />
+                <p className="text-sm">Não foi possível simular. Tente novamente.</p>
+              </div>
+            ) : !result ? (
+              <div className="flex flex-col items-center justify-center gap-2 py-12 text-center text-muted-foreground">
+                <SlidersHorizontal className="w-7 h-7" />
+                <p className="text-sm">Ajuste as variáveis e clique em <span className="font-medium">Simular impacto</span>.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-sm text-muted-foreground">Receita base (mês)</span>
+                  <span className="font-semibold">{fmt(result.baselineRevenue)}</span>
+                </div>
+                <div className="rounded-lg border p-4 text-center">
+                  <p className="text-xs text-muted-foreground">Receita projetada</p>
+                  <p className="text-3xl font-bold mt-1">{fmt(result.projectedRevenue)}</p>
+                  <p className={`text-sm font-medium mt-1 ${positive ? "text-emerald-600" : "text-red-600"}`}>
+                    {positive ? "+" : ""}{fmt(result.deltaRevenue)} ({positive ? "+" : ""}{result.deltaPct.toFixed(1)}%)
+                  </p>
+                </div>
+                {result.reasoning && (
+                  <div className="flex gap-3 rounded-lg bg-muted/50 p-3">
+                    <Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                    <p className="text-sm text-muted-foreground leading-relaxed">{result.reasoning}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
@@ -433,6 +837,9 @@ export default function Insights() {
           <TabsTrigger value="operacional">Operacional</TabsTrigger>
           <TabsTrigger value="retencao">Retenção</TabsTrigger>
           <TabsTrigger value="expansao">Expansão</TabsTrigger>
+          <TabsTrigger value="previsoes" className="gap-1"><Sparkles className="w-3.5 h-3.5" />Previsões</TabsTrigger>
+          <TabsTrigger value="simulador" className="gap-1"><SlidersHorizontal className="w-3.5 h-3.5" />Simulador</TabsTrigger>
+          <TabsTrigger value="assistente" className="gap-1"><Bot className="w-3.5 h-3.5" />Assistente</TabsTrigger>
         </TabsList>
 
         {/* ─── EXECUTIVA ─────────────────────────────────────────────── */}
@@ -921,6 +1328,38 @@ export default function Insights() {
             </div>
           )}
         </TabsContent>
+
+        {/* ─── PREVISÕES ─────────────────────────────────────────────── */}
+        <TabsContent value="previsoes" className="mt-5">
+          <ForecastTab />
+        </TabsContent>
+
+        {/* ─── SIMULADOR ─────────────────────────────────────────────── */}
+        <TabsContent value="simulador" className="mt-5">
+          <SimuladorTab />
+        </TabsContent>
+
+        {/* ─── ASSISTENTE ────────────────────────────────────────────── */}
+        <TabsContent value="assistente" className="mt-5 space-y-4">
+          <SectionHeader
+            icon={Bot}
+            title="Assistente Executivo"
+            description="Converse com seu CFO/COO virtual sobre estratégia, finanças e operação"
+          />
+          <Card className="border-primary/20">
+            <CardContent className="p-0">
+              <StreamingChat
+                endpoint="/api/insights/ask"
+                emptyIcon={Bot}
+                emptyTitle="Assistente Executivo (CFO/COO)"
+                emptySubtitle="Faça perguntas estratégicas com base no panorama dos últimos 90 dias"
+                suggestions={EXECUTIVE_QUESTIONS}
+                placeholder="Pergunte ao seu CFO/COO virtual..."
+                heightClass="h-[600px]"
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {chatOpen && (
@@ -939,7 +1378,15 @@ export default function Insights() {
             </button>
           </CardHeader>
           <CardContent className="p-0 pb-0">
-            <InsightsChat period={period} />
+            <StreamingChat
+              endpoint="/api/insights/chat"
+              extraBody={{ period }}
+              emptyIcon={Bot}
+              emptyTitle="Assistente de Inteligência Turística"
+              emptySubtitle="Faça perguntas sobre os dados da agência no período selecionado"
+              suggestions={SUGGESTED_QUESTIONS}
+              placeholder="Pergunte algo sobre os dados da agência..."
+            />
           </CardContent>
         </Card>
       )}

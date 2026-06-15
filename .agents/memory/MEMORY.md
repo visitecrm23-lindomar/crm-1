@@ -1,5 +1,6 @@
 - [api-zod-manual-edits](api-zod-manual-edits.md) — orval-generated files in lib/api-zod are hand-edited; must update both TS types AND Zod schemas in api.ts together
-- [DB package TypeScript build](db-ts-build.md) — After adding columns to DB schema, run `npx tsc --build` in lib/db and lib/api-zod to refresh .d.ts files used by api-server.
+- [Workspace lib TypeScript build](db-ts-build.md) — Consumers read lib dist/*.d.ts via project references; rebuild with `tsc --build` after a schema column change OR after adding a new exported file (e.g. api-client-react), else TS2305/missing-property.
+- [Clerk e2e testing flag](testing-clerk-auth.md) — runTest on this Clerk app needs `testClerkAuth:true` (else Cloudflare bot wall); reach role-gated pages via a [DB] role/tenant UPDATE + reload.
 - [Marketing NPS naming conflict](marketing-nps-conflict.md) — `npsResponsesTable` already exists in marketing.ts for e-commerce; client travel NPS uses `clientNpsResponsesTable` in nps.ts / table `client_nps_responses`.
 - [Favorites feature pattern](favorites-pattern.md) — FavoritesContext wraps Vitrine (CartProvider > FavoritesProvider); uses useGetMe role check; optimistic toggle.
 - [Manual migration workflow](manual-migration.md) — drizzle-kit is interactive; write SQL + update _journal.json; run `pnpm --filter @workspace/db migrate`.
