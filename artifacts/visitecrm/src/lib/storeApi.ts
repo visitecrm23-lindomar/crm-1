@@ -401,6 +401,7 @@ export interface StoreProduct {
   departureTime?: string | null;
   returnTime?: string | null;
   showSeatMap?: boolean | null;
+  boardingPoints?: Array<{ id: string; name: string; time?: string | null; address?: string | null }> | null;
   type: string;
   name: string;
   slug: string;
@@ -657,6 +658,7 @@ export interface CreateOrderInput {
   paymentMethod?: string;
   notes?: string;
   seats?: string[];
+  boardingLocationId?: string;
 }
 
 export interface ReferralValidation {

@@ -249,6 +249,7 @@ router.get("/public/store/:slug/products", async (req, res, next: NextFunction):
       departureTime: tripsTable.departureTime,
       returnTime: tripsTable.returnTime,
       showSeatMap: tripsTable.showSeatMap,
+      boardingPoints: tripsTable.boardingPoints,
     };
     const whereClause = and(...conditions);
     const limit = limitStr ? Math.min(Number(limitStr) || 20, 200) : undefined;
@@ -344,6 +345,7 @@ router.get("/public/store/:slug/products/:productSlug", async (req, res, next: N
       departureTime: tripsTable.departureTime,
       returnTime: tripsTable.returnTime,
       showSeatMap: tripsTable.showSeatMap,
+      boardingPoints: tripsTable.boardingPoints,
     })
       .from(storeProductsTable)
       .leftJoin(tripsTable, eq(storeProductsTable.tripId, tripsTable.id))
@@ -560,6 +562,7 @@ const CreateOrderBody = z.object({
   ipAddress: z.string().optional(),
   userAgent: z.string().optional(),
   seats: z.array(z.string()).optional(),
+  boardingLocationId: z.string().optional(),
 });
 
 router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): Promise<void> => {

@@ -119,6 +119,16 @@ export function useWizardState({
     setSelectedSeats((prev) => prev.filter((n) => !streamOccupied[String(n)]));
   }, [streamOccupied, sseEventCount]);
 
+  const [selectedBoardingPointId, setSelectedBoardingPointId] = useState<string>("");
+
+  useEffect(() => {
+    if (!product?.boardingPoints) return;
+    const bps = (product.boardingPoints as Array<{ id: string; name: string }>).filter((bp) => bp.name);
+    if (bps.length === 1) {
+      setSelectedBoardingPointId(bps[0].id);
+    }
+  }, [product?.boardingPoints]);
+
   const [referralCode, setReferralCode] = useState(() => localStorage.getItem("referral_code") ?? "");
   const [referralApplied, setReferralApplied] = useState(false);
   const [referralDiscountPct, setReferralDiscountPct] = useState(5);
@@ -406,6 +416,7 @@ export function useWizardState({
         paymentMethod: form.paymentMethod,
         notes: extraNotes || undefined,
         seats: effectiveSeats.length > 0 ? effectiveSeats : undefined,
+        boardingLocationId: selectedBoardingPointId || undefined,
       });
       setCompletedOrder({
         orderNumber: order.orderNumber,
@@ -535,6 +546,8 @@ export function useWizardState({
     toggleSeat,
     toggleLayoutSeat,
     partnerInfo,
+    selectedBoardingPointId,
+    setSelectedBoardingPointId,
   };
 }
 

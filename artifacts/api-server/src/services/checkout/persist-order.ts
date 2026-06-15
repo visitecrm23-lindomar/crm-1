@@ -62,6 +62,7 @@ export interface PersistOrderArgs {
     ipAddress?: string;
     userAgent?: string;
     seats?: string[];
+    boardingLocationId?: string;
   };
   orderId: string;
   orderNumber: string;
@@ -275,6 +276,7 @@ async function writeReservationsAndDeals(
       discountReferralAmount: appliedReferralCode ? promoDiscountAmount.toFixed(2) : undefined,
       expiresAt: reservationExpiresAt,
       ...(reservationNotes ? { notes: reservationNotes } : {}),
+      ...(data.boardingLocationId ? { boardingLocationId: data.boardingLocationId } : {}),
     });
 
     await tx.update(tripsTable).set({

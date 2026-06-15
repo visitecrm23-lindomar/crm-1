@@ -1,6 +1,6 @@
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { ClipboardList, AlertTriangle, Users, Armchair, Calendar, MapPin, Clock } from "lucide-react";
+import { ClipboardList, AlertTriangle, Users, Armchair, Calendar, MapPin, Clock, Bus } from "lucide-react";
 import { PublicStore } from "@/lib/storeApi";
 import { ProductCard } from "./product-card";
 import { StepCouponReferral } from "./coupon-referral";
@@ -22,6 +22,8 @@ export function StepReview({ state, store }: { state: WizardState; store: Public
     form,
     set,
     partnerInfo,
+    selectedBoardingPointId,
+    setSelectedBoardingPointId,
   } = state;
   if (!product) return null;
   return (
@@ -234,6 +236,52 @@ export function StepReview({ state, store }: { state: WizardState; store: Public
             )}
           </div>
         )}
+
+        {(() => {
+          const bps = (product.boardingPoints ?? []).filter((bp) => bp.name);
+          if (bps.length === 0) return null;
+          return (
+            <div className="border rounded-xl p-4 space-y-3">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Bus className="w-4 h-4 text-primary" /> Ponto de Embarque
+              </h3>
+              {bps.length === 1 ? (
+                <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+                  <MapPin className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-blue-900">{bps[0].name}</p>
+                    {bps[0].time && (
+                      <p className="text-blue-700 flex items-center gap-1 mt-0.5">
+                        <Clock className="w-3 h-3" /> {bps[0].time}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {bps.map((bp) => (
+                    <button
+                      key={bp.id}
+                      type="button"
+                      onClick={() => setSelectedBoardingPointId(selectedBoardingPointId === bp.id ? "" : bp.id)}
+                      className={`flex items-start gap-2 px-3 py-2 rounded-lg border-2 text-sm font-medium transition-colors text-left ${
+                        selectedBoardingPointId === bp.id
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:bg-muted"
+                      }`}
+                    >
+                      <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      <span>
+                        {bp.name}
+                        {bp.time && <span className="block text-xs opacity-70">{bp.time}</span>}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         <div className="border rounded-xl p-4 space-y-4">
           <h3 className="text-sm font-semibold">Resumo do Passageiro</h3>

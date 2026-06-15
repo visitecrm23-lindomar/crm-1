@@ -45,10 +45,16 @@ export function StepConfirmation({
     referralDiscountPct,
     couponDiscount,
     couponResult,
+    selectedBoardingPointId,
   } = state;
   if (!product || !completedOrder) return null;
   const totalAmt = parseFloat(completedOrder.totalAmount);
   const startDate = product.departureDate ?? product.startDate;
+  const boardingPoints = (product.boardingPoints ?? []).filter((bp) => bp.name);
+  const selectedBoardingPoint =
+    boardingPoints.length === 1
+      ? boardingPoints[0]
+      : boardingPoints.find((bp) => bp.id === selectedBoardingPointId) ?? null;
 
   function handlePrint() {
     window.print();
@@ -167,6 +173,20 @@ export function StepConfirmation({
                         Assento {s}
                       </span>
                     ))}
+                  </div>
+                </div>
+              )}
+              {selectedBoardingPoint && (
+                <div>
+                  <p className="text-muted-foreground text-xs mb-1">Ponto de Embarque</p>
+                  <div className="flex items-start gap-1.5 p-2.5 bg-blue-50 border border-blue-200 rounded-lg">
+                    <MapPin className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                      <p className="font-semibold text-blue-900">{selectedBoardingPoint.name}</p>
+                      {selectedBoardingPoint.time && (
+                        <p className="text-blue-700 text-xs mt-0.5">🕐 {selectedBoardingPoint.time}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
