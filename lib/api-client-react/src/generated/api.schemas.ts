@@ -3326,6 +3326,22 @@ export type ListClientsParams = {
   sortOrder?: string | null;
   page?: number;
   limit?: number;
+  /**
+   * @nullable
+   */
+  minPurchaseScore?: number | null;
+  /**
+   * @nullable
+   */
+  maxPurchaseScore?: number | null;
+  /**
+   * @nullable
+   */
+  minChurnScore?: number | null;
+  /**
+   * @nullable
+   */
+  maxChurnScore?: number | null;
 };
 
 export type UpdateClientPipelineStageBody = {

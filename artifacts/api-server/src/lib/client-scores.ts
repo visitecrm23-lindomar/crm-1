@@ -57,6 +57,8 @@ export async function calculateScoresForClient(clientId: string, tenantId: strin
     .leftJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
     .where(and(eq(reservationsTable.clientId, clientId), eq(reservationsTable.tenantId, tenantId)));
 
+  if (reservations.length === 0) return;
+
   const completedTrips = reservations.filter(
     (r) => r.status === RESERVATION_STATUS_COMPLETED || r.status === RESERVATION_STATUS_CONFIRMED,
   );

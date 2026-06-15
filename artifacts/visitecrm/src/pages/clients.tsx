@@ -1077,6 +1077,7 @@ export default function Clients() {
   const [filterOrigin, setFilterOrigin] = useState<string>("");
   const [filterDateFrom, setFilterDateFrom] = useState<string>("");
   const [filterDateTo, setFilterDateTo] = useState<string>("");
+  const [filterScoreBand, setFilterScoreBand] = useState<string>("all");
   const [sortBy, setSortBy] = useState<SortField>("createdAt");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -1102,6 +1103,14 @@ export default function Clients() {
   const { data: me } = useGetMe();
   const deleteClientMutation = useDeleteClient();
 
+  const scoreBandFilter = useMemo(() => {
+    if (filterScoreBand === "alta-compra") return { minPurchaseScore: 70 };
+    if (filterScoreBand === "media-compra") return { minPurchaseScore: 40, maxPurchaseScore: 69 };
+    if (filterScoreBand === "baixa-compra") return { maxPurchaseScore: 39 };
+    if (filterScoreBand === "alto-churn") return { minChurnScore: 70 };
+    return {};
+  }, [filterScoreBand]);
+
   const { data: clientsData, isLoading, refetch } = useListClients({
     search: search || undefined,
     status: filterStatus !== "all" ? filterStatus : undefined,
@@ -1117,6 +1126,7 @@ export default function Clients() {
     sortOrder: sortOrder || undefined,
     page,
     limit: LIMIT,
+    ...scoreBandFilter,
   });
 
   const { data: allClients } = useListClients({ limit: 1000, page: 1 });
@@ -1156,12 +1166,12 @@ export default function Clients() {
     setPage(1);
   }, [sortBy]);
 
-  const hasFilters = !!(search || filterStatus !== "all" || filterClassification !== "all" || filterPipelineStage !== "all" || filterCity || filterOrigin || filterTripId !== "all" || filterSellerId !== "all" || filterDateFrom || filterDateTo);
+  const hasFilters = !!(search || filterStatus !== "all" || filterClassification !== "all" || filterPipelineStage !== "all" || filterCity || filterOrigin || filterTripId !== "all" || filterSellerId !== "all" || filterDateFrom || filterDateTo || filterScoreBand !== "all");
 
   const clearFilters = () => {
     setSearch(""); setFilterStatus("all"); setFilterClassification("all");
     setFilterPipelineStage("all"); setFilterCity(""); setFilterOrigin(""); setFilterTripId("all");
-    setFilterSellerId("all"); setFilterDateFrom(""); setFilterDateTo("");
+    setFilterSellerId("all"); setFilterDateFrom(""); setFilterDateTo(""); setFilterScoreBand("all");
     setPage(1);
   };
 
@@ -1305,6 +1315,16 @@ export default function Clients() {
               <Label className="text-xs text-muted-foreground whitespace-nowrap">Até:</Label>
               <Input type="date" value={filterDateTo} onChange={e => { setFilterDateTo(e.target.value); setPage(1); }} className="w-36" />
             </div>
+            <Select value={filterScoreBand} onValueChange={v => { setFilterScoreBand(v); setPage(1); }}>
+              <SelectTrigger className="w-48"><SelectValue placeholder="Faixa de Score IA" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os scores</SelectItem>
+                <SelectItem value="alta-compra">Alta prob. compra (≥70%)</SelectItem>
+                <SelectItem value="media-compra">Média prob. compra (40–69%)</SelectItem>
+                <SelectItem value="baixa-compra">Baixa prob. compra (&lt;40%)</SelectItem>
+                <SelectItem value="alto-churn">Alto risco de churn (≥70%)</SelectItem>
+              </SelectContent>
+            </Select>
             {hasFilters && (
               <Button variant="ghost" size="sm" onClick={clearFilters}>
                 <X className="w-4 h-4 mr-1" /> Limpar filtros
@@ -1326,18 +1346,19 @@ export default function Clients() {
                 <TableHead><SortableHeader label="Gasto Total" field="totalSpent" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></TableHead>
                 <TableHead>Saldo</TableHead>
                 <TableHead><SortableHeader label="Score IA" field="purchaseScore" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></TableHead>
+                <TableHead><SortableHeader label="Risco Churn" field="churnScore" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i}>{Array.from({ length: 11 }).map((__, j) => <TableCell key={j}><Skeleton className="h-8 w-full" /></TableCell>)}</TableRow>
+                  <TableRow key={i}>{Array.from({ length: 12 }).map((__, j) => <TableCell key={j}><Skeleton className="h-8 w-full" /></TableCell>)}</TableRow>
                 ))
               ) : birthdayFilter ? (
                 birthdayClients.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-12 text-muted-foreground">
+                    <TableCell colSpan={12} className="text-center py-12 text-muted-foreground">
                       Nenhum aniversariante hoje.
                     </TableCell>
                   </TableRow>
@@ -1381,6 +1402,15 @@ export default function Clients() {
                           }`}>{client.purchaseScore}%</span>
                         ) : <span className="text-muted-foreground text-xs">—</span>}
                       </TableCell>
+                      <TableCell>
+                        {client.churnScore != null ? (
+                          <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${
+                            client.churnScore >= 70 ? "bg-red-100 text-red-700" :
+                            client.churnScore >= 40 ? "bg-yellow-100 text-yellow-700" :
+                            "bg-green-100 text-green-700"
+                          }`}>{client.churnScore}%</span>
+                        ) : <span className="text-muted-foreground text-xs">—</span>}
+                      </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -1397,7 +1427,7 @@ export default function Clients() {
                 })
               ) : (clientsData?.data ?? []).length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={12} className="text-center py-12 text-muted-foreground">
                     {hasFilters ? "Nenhum cliente encontrado com os filtros aplicados." : "Nenhum cliente cadastrado."}
                   </TableCell>
                 </TableRow>
@@ -1455,6 +1485,15 @@ export default function Clients() {
                             client.purchaseScore >= 40 ? "bg-yellow-100 text-yellow-700" :
                             "bg-red-100 text-red-700"
                           }`}>{client.purchaseScore}%</span>
+                        ) : <span className="text-muted-foreground text-xs">—</span>}
+                      </TableCell>
+                      <TableCell>
+                        {client.churnScore != null ? (
+                          <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${
+                            client.churnScore >= 70 ? "bg-red-100 text-red-700" :
+                            client.churnScore >= 40 ? "bg-yellow-100 text-yellow-700" :
+                            "bg-green-100 text-green-700"
+                          }`}>{client.churnScore}%</span>
                         ) : <span className="text-muted-foreground text-xs">—</span>}
                       </TableCell>
                       <TableCell className="text-right">

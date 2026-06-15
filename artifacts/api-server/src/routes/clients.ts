@@ -93,6 +93,7 @@ router.get("/clients", async (req, res, next: NextFunction): Promise<void> => {
       search, status, pipelineStage, classification,
       city, tripId, sellerId, origin, dateFrom, dateTo, sortBy = "createdAt", sortOrder = "desc",
       page = "1", limit = "20",
+      minPurchaseScore, maxPurchaseScore, minChurnScore, maxChurnScore,
     } = req.query as Record<string, string>;
     const pageNum = parseInt(page) || 1;
     const limitNum = Math.min(parseInt(limit) || 20, 100);
@@ -139,6 +140,12 @@ router.get("/clients", async (req, res, next: NextFunction): Promise<void> => {
     if (dateFrom) conditions.push(sql`${clientsTable.createdAt} >= ${new Date(dateFrom)}` as ReturnType<typeof eq>);
     if (dateTo) conditions.push(sql`${clientsTable.createdAt} <= ${new Date(dateTo)}` as ReturnType<typeof eq>);
     if (me.role !== ROLES.SALES && sellerId) conditions.push(eq(clientsTable.createdById, sellerId));
+    const scoreSubquery = (col: "purchase_score" | "churn_score") =>
+      sql`(SELECT ${sql.raw(col)} FROM client_scores WHERE client_id = ${clientsTable.id} AND tenant_id = ${clientsTable.tenantId})`;
+    if (minPurchaseScore) conditions.push(sql`${scoreSubquery("purchase_score")} >= ${parseInt(minPurchaseScore)}` as ReturnType<typeof eq>);
+    if (maxPurchaseScore) conditions.push(sql`${scoreSubquery("purchase_score")} <= ${parseInt(maxPurchaseScore)}` as ReturnType<typeof eq>);
+    if (minChurnScore) conditions.push(sql`${scoreSubquery("churn_score")} >= ${parseInt(minChurnScore)}` as ReturnType<typeof eq>);
+    if (maxChurnScore) conditions.push(sql`${scoreSubquery("churn_score")} <= ${parseInt(maxChurnScore)}` as ReturnType<typeof eq>);
     if (tripId) {
       const clientIdsInTrip = await db.selectDistinct({ clientId: reservationsTable.clientId })
         .from(reservationsTable)
