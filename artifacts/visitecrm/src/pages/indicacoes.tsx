@@ -356,6 +356,23 @@ export default function Indicacoes() {
     a.click();
   }
 
+  async function copyQrCodeToClipboard(dataUrl: string, code: string) {
+    try {
+      if (navigator.clipboard && typeof ClipboardItem !== "undefined") {
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        toast({ title: "QR-code copiado!", description: "Imagem copiada para a área de transferência." });
+      } else {
+        downloadQrCode(dataUrl, code);
+        toast({ title: "QR-code baixado", description: "Seu navegador não suporta cópia de imagem. O arquivo foi baixado." });
+      }
+    } catch {
+      downloadQrCode(dataUrl, code);
+      toast({ title: "QR-code baixado", description: "Não foi possível copiar a imagem. O arquivo foi baixado." });
+    }
+  }
+
   async function shareQrCodeViaWhatsApp(dataUrl: string, code: string, phone: string, referralLink?: string) {
     if (!canShareQrFile()) {
       window.open(buildWhatsAppQrFallbackUrl(phone, referralLink), "_blank", "noopener,noreferrer");
@@ -1455,6 +1472,14 @@ export default function Indicacoes() {
                     <Download className="w-3.5 h-3.5" />
                     Baixar QR-code
                   </a>
+                  <button
+                    type="button"
+                    onClick={() => copyQrCodeToClipboard(shareData.qrCodeDataUrl, shareReferral?.code ?? "referral")}
+                    className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    Copiar imagem
+                  </button>
                   {isValidWhatsapp(shareReferral?.referrerWhatsapp) && (
                     <button
                       type="button"
@@ -1899,6 +1924,14 @@ export default function Indicacoes() {
                         <p className="text-xs text-muted-foreground leading-snug">
                           Envie o link ou mostre o QR-code ao indicador para que ele compartilhe com amigos.
                         </p>
+                        <button
+                          type="button"
+                          onClick={() => copyQrCodeToClipboard(shareData.qrCodeDataUrl, selectedReferral.code ?? "referral")}
+                          className="mt-2 flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                        >
+                          <Copy className="w-3 h-3" />
+                          Copiar imagem
+                        </button>
                         {isValidWhatsapp(selectedReferral.referrerWhatsapp) && (
                           <button
                             type="button"
