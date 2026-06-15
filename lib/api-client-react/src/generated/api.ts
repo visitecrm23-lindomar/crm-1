@@ -6770,6 +6770,168 @@ export const useUndoCheckInPassenger = <
 };
 
 /**
+ * @summary Check in a free passenger (organizer/guide)
+ */
+export const getCheckInFreePassengerUrl = (id: string, fpId: string) => {
+  return `/api/trips/${id}/free-passengers/${fpId}/check-in`;
+};
+
+export const checkInFreePassenger = async (
+  id: string,
+  fpId: string,
+  options?: RequestInit,
+): Promise<{ id: string; checkedInAt: string | null }> => {
+  return customFetch<{ id: string; checkedInAt: string | null }>(getCheckInFreePassengerUrl(id, fpId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getCheckInFreePassengerMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkInFreePassenger>>,
+    TError,
+    { id: string; fpId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof checkInFreePassenger>>,
+  TError,
+  { id: string; fpId: string },
+  TContext
+> => {
+  const mutationKey = ["checkInFreePassenger"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof checkInFreePassenger>>,
+    { id: string; fpId: string }
+  > = (props) => {
+    const { id, fpId } = props ?? {};
+    return checkInFreePassenger(id, fpId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CheckInFreePassengerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof checkInFreePassenger>>
+>;
+
+export type CheckInFreePassengerMutationError = ErrorType<unknown>;
+
+export const useCheckInFreePassenger = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkInFreePassenger>>,
+    TError,
+    { id: string; fpId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof checkInFreePassenger>>,
+  TError,
+  { id: string; fpId: string },
+  TContext
+> => {
+  return useMutation(getCheckInFreePassengerMutationOptions(options));
+};
+
+/**
+ * @summary Undo check-in for a free passenger (organizer/guide)
+ */
+export const getUndoCheckInFreePassengerUrl = (id: string, fpId: string) => {
+  return `/api/trips/${id}/free-passengers/${fpId}/check-in`;
+};
+
+export const undoCheckInFreePassenger = async (
+  id: string,
+  fpId: string,
+  options?: RequestInit,
+): Promise<{ id: string; checkedInAt: string | null }> => {
+  return customFetch<{ id: string; checkedInAt: string | null }>(getUndoCheckInFreePassengerUrl(id, fpId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getUndoCheckInFreePassengerMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof undoCheckInFreePassenger>>,
+    TError,
+    { id: string; fpId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof undoCheckInFreePassenger>>,
+  TError,
+  { id: string; fpId: string },
+  TContext
+> => {
+  const mutationKey = ["undoCheckInFreePassenger"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof undoCheckInFreePassenger>>,
+    { id: string; fpId: string }
+  > = (props) => {
+    const { id, fpId } = props ?? {};
+    return undoCheckInFreePassenger(id, fpId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UndoCheckInFreePassengerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof undoCheckInFreePassenger>>
+>;
+
+export type UndoCheckInFreePassengerMutationError = ErrorType<unknown>;
+
+export const useUndoCheckInFreePassenger = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof undoCheckInFreePassenger>>,
+    TError,
+    { id: string; fpId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof undoCheckInFreePassenger>>,
+  TError,
+  { id: string; fpId: string },
+  TContext
+> => {
+  return useMutation(getUndoCheckInFreePassengerMutationOptions(options));
+};
+
+/**
  * @summary List payments
  */
 export const getListPaymentsUrl = (params?: ListPaymentsParams) => {

@@ -898,12 +898,13 @@ router.get("/trips/:id/boarding-panel", async (req, res, next: NextFunction): Pr
     if (reservations.length === 0) {
       const [tenantEarly] = await db.select({ name: tenantsTable.name, cnpj: tenantsTable.cnpj }).from(tenantsTable).where(eq(tenantsTable.id, me.tenantId)).limit(1);
       const earlyFreePassengers = Array.isArray(trip.freePassengers) ? (trip.freePassengers as FreePassenger[]) : [];
+      const earlyFreeCheckedIn = earlyFreePassengers.filter(fp => !!fp.checkedInAt).length;
       res.json({
         tripId: trip.id,
         tripName: trip.name,
         departureDate: trip.departureDate.toISOString(),
-        totalPassengers: 0,
-        checkedIn: 0,
+        totalPassengers: earlyFreePassengers.length,
+        checkedIn: earlyFreeCheckedIn,
         passengers: [],
         freePassengers: earlyFreePassengers,
         tenantName: tenantEarly?.name ?? "",
@@ -970,13 +971,14 @@ router.get("/trips/:id/boarding-panel", async (req, res, next: NextFunction): Pr
 
     const checkedIn = boardingPassengers.filter(p => p.checkedInAt !== null).length;
     const tripFreePassengers = Array.isArray(trip.freePassengers) ? (trip.freePassengers as FreePassenger[]) : [];
+    const freeCheckedIn = tripFreePassengers.filter(fp => !!fp.checkedInAt).length;
 
     res.json({
       tripId: trip.id,
       tripName: trip.name,
       departureDate: trip.departureDate.toISOString(),
-      totalPassengers: boardingPassengers.length,
-      checkedIn,
+      totalPassengers: boardingPassengers.length + tripFreePassengers.length,
+      checkedIn: checkedIn + freeCheckedIn,
       passengers: boardingPassengers,
       freePassengers: tripFreePassengers,
       tenantName: tenant?.name ?? "",
@@ -999,6 +1001,55 @@ router.get("/trips/:id/boarding-panel", async (req, res, next: NextFunction): Pr
       tourGuideCpf: trip.tourGuideCpf ?? null,
       tourGuideRegistration: trip.tourGuideRegistration ?? null,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/trips/:id/free-passengers/:fpId/check-in", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+
+    const [trip] = await db.select().from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!trip) { next(new NotFoundError("Trip not found", "NOT_FOUND")); return; }
+
+    const fps: FreePassenger[] = Array.isArray(trip.freePassengers) ? (trip.freePassengers as FreePassenger[]) : [];
+    const idx = fps.findIndex(fp => fp.id === req.params.fpId);
+    if (idx === -1) { next(new NotFoundError("Free passenger not found", "NOT_FOUND")); return; }
+
+    const now = new Date().toISOString();
+    fps[idx] = { ...fps[idx], checkedInAt: now };
+    await db.update(tripsTable).set({ freePassengers: fps }).where(eq(tripsTable.id, trip.id));
+
+    res.json({ id: fps[idx].id, checkedInAt: now });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/trips/:id/free-passengers/:fpId/check-in", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+
+    const [trip] = await db.select().from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!trip) { next(new NotFoundError("Trip not found", "NOT_FOUND")); return; }
+
+    const fps: FreePassenger[] = Array.isArray(trip.freePassengers) ? (trip.freePassengers as FreePassenger[]) : [];
+    const idx = fps.findIndex(fp => fp.id === req.params.fpId);
+    if (idx === -1) { next(new NotFoundError("Free passenger not found", "NOT_FOUND")); return; }
+
+    fps[idx] = { ...fps[idx], checkedInAt: null };
+    await db.update(tripsTable).set({ freePassengers: fps }).where(eq(tripsTable.id, trip.id));
+
+    res.json({ id: fps[idx].id, checkedInAt: null });
   } catch (err) {
     next(err);
   }

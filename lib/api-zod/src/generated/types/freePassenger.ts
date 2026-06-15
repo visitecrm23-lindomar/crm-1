@@ -15,4 +15,5 @@ export interface FreePassenger {
   role: FreePassengerRole;
   /** @nullable */
   seatNumber: string | null;
+  checkedInAt?: string | null;
 }

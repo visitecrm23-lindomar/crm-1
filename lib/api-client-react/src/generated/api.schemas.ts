@@ -489,6 +489,7 @@ export interface FreePassenger {
   whatsapp: string;
   role: "organizer" | "guide";
   seatNumber: string | null;
+  checkedInAt?: string | null;
 }
 
 export interface Trip {

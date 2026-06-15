@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import {
   useGetTripBoardingPanel, useListReservations, useCheckInPassenger, useUndoCheckInPassenger,
-  useSyncTripPassengers, useUpdatePassengerBoarding,
+  useSyncTripPassengers, useUpdatePassengerBoarding, useCheckInFreePassenger, useUndoCheckInFreePassenger,
 } from "@workspace/api-client-react";
 import type { BoardingPassenger } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -48,6 +48,8 @@ export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId
 
   const checkIn = useCheckInPassenger();
   const undoCheckIn = useUndoCheckInPassenger();
+  const checkInFree = useCheckInFreePassenger();
+  const undoCheckInFree = useUndoCheckInFreePassenger();
   const syncPassengers = useSyncTripPassengers();
   const updateBoarding = useUpdatePassengerBoarding();
   const [syncing, setSyncing] = useState(false);
@@ -84,6 +86,26 @@ export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId
   const handleUndoCheckIn = async (p: BoardingPassenger) => {
     try {
       await undoCheckIn.mutateAsync({ reservationId: p.reservationId, id: p.id });
+      await refetch();
+      toast({ title: "Check-in desfeito" });
+    } catch {
+      toast({ title: "Erro ao desfazer check-in", variant: "destructive" });
+    }
+  };
+
+  const handleFreeCheckIn = async (fp: { id: string; name: string }) => {
+    try {
+      await checkInFree.mutateAsync({ id: tripId, fpId: fp.id });
+      await refetch();
+      toast({ title: `${fp.name} embarcou`, description: "Check-in registrado." });
+    } catch {
+      toast({ title: "Erro ao fazer check-in", variant: "destructive" });
+    }
+  };
+
+  const handleFreeUndoCheckIn = async (fp: { id: string; name: string }) => {
+    try {
+      await undoCheckInFree.mutateAsync({ id: tripId, fpId: fp.id });
       await refetch();
       toast({ title: "Check-in desfeito" });
     } catch {
@@ -364,21 +386,51 @@ export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId
                   </div>
                   {filteredFree.map(fp => {
                     const roleLabel = fp.role === "organizer" ? "Organizador" : fp.role === "guide" ? "Guia" : fp.role;
+                    const isFreeCheckedIn = !!fp.checkedInAt;
                     return (
-                      <div key={fp.id} className="p-3 rounded-lg border bg-purple-50 border-purple-200">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {fp.seatNumber && (
-                            <span className="font-mono text-xs bg-gray-100 border border-gray-300 px-2 py-0.5 rounded font-bold">{fp.seatNumber}</span>
-                          )}
-                          <span className="font-medium text-sm">{fp.name}</span>
-                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold border border-purple-200">
-                            <Star className="w-3 h-3" />
-                            Gratuidade
-                          </span>
-                        </div>
-                        <div className="flex gap-3 mt-0.5 flex-wrap text-xs text-muted-foreground">
-                          {fp.cpf && <span>CPF: {fp.cpf}</span>}
-                          <span>{roleLabel}</span>
+                      <div key={fp.id} className={`p-3 rounded-lg border ${isFreeCheckedIn ? "bg-green-50 border-green-200" : "bg-purple-50 border-purple-200"}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {fp.seatNumber && (
+                                <span className="font-mono text-xs bg-gray-100 border border-gray-300 px-2 py-0.5 rounded font-bold">{fp.seatNumber}</span>
+                              )}
+                              <span className="font-medium text-sm">{fp.name}</span>
+                              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold border border-purple-200">
+                                <Star className="w-3 h-3" />
+                                Gratuidade
+                              </span>
+                              {isFreeCheckedIn && (
+                                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold border border-green-200">
+                                  <CheckCircle className="w-3 h-3" />
+                                  {new Date(fp.checkedInAt!).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex gap-3 mt-0.5 flex-wrap text-xs text-muted-foreground">
+                              {fp.cpf && <span>CPF: {fp.cpf}</span>}
+                              <span>{roleLabel}</span>
+                            </div>
+                          </div>
+                          <div className="shrink-0 ml-2">
+                            {isFreeCheckedIn ? (
+                              <Button
+                                size="sm" variant="outline" className="h-8 text-xs text-muted-foreground gap-1"
+                                onClick={() => handleFreeUndoCheckIn(fp)}
+                                disabled={undoCheckInFree.isPending}
+                              >
+                                <RotateCcw className="w-3 h-3" /> Desfazer
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white gap-1"
+                                onClick={() => handleFreeCheckIn(fp)}
+                                disabled={checkInFree.isPending}
+                              >
+                                <LogIn className="w-3 h-3" /> Embarcar
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
