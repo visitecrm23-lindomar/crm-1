@@ -66,9 +66,16 @@ function VoucherContent({ r, qrDataUrl }: { r: Reservation | null | undefined; q
         <div className="mb-4">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Assentos</p>
           <div className="flex flex-wrap gap-1">
-            {r!.seats.map(s => (
-              <span key={s} className="font-mono text-xs bg-gray-100 border border-gray-300 text-gray-800 px-2 py-1 rounded font-bold">{s}</span>
-            ))}
+            {r!.seats.map(s => {
+              const isBrazilian = trip?.numberingType?.includes("brazilian_standard") ?? false;
+              const num = isBrazilian ? parseInt(s.replace(/\D/g, ""), 10) : NaN;
+              const position = isBrazilian && !isNaN(num) ? (num % 2 !== 0 ? " (Janela)" : " (Corredor)") : "";
+              return (
+                <span key={s} className="font-mono text-xs bg-gray-100 border border-gray-300 text-gray-800 px-2 py-1 rounded font-bold">
+                  {s}{position}
+                </span>
+              );
+            })}
           </div>
         </div>
       )}

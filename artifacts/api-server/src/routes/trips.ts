@@ -1141,6 +1141,7 @@ type ManifestPanel = {
   freePassengers: FreePassenger[];
   destinationCity?: string;
   destinationState?: string;
+  numberingType?: string | null;
 };
 
 const AGE_CATEGORY_LABELS_SERVER: Record<string, string> = {
@@ -1150,6 +1151,14 @@ const AGE_CATEGORY_LABELS_SERVER: Record<string, string> = {
   baby: "Gratuidade",
   pcd: "PCD",
 };
+
+function seatWithPosition(seatNumber: string | null, numberingType?: string | null): string {
+  if (!seatNumber) return "—";
+  if (!numberingType?.includes("brazilian_standard")) return seatNumber;
+  const num = parseInt(seatNumber.replace(/\D/g, ""), 10);
+  if (isNaN(num)) return seatNumber;
+  return `${seatNumber} (${num % 2 !== 0 ? "Janela" : "Corredor"})`;
+}
 
 function generateManifestHtml(p: ManifestPanel): string {
   const e = escapeHtmlServer;
@@ -1195,7 +1204,7 @@ function generateManifestHtml(p: ManifestPanel): string {
     const cpfStr = e(formatCpfServer(pass.cpf));
     const nasc = pass.birthDate ? e(new Date(pass.birthDate).toLocaleDateString("pt-BR")) : "—";
     const cat = e(AGE_CATEGORY_LABELS_SERVER[pass.ageCategory] ?? pass.ageCategory);
-    const poltrona = e(pass.seatNumber ?? "—");
+    const poltrona = e(seatWithPosition(pass.seatNumber, p.numberingType));
     const embarque = e(getBpName(pass.boardingLocationId));
     const obsLines = [pass.documentType, pass.specialNeeds, pass.observations].filter(Boolean).map(s => e(s!));
     const obs = obsLines.length > 0 ? obsLines.join(" | ") : "";
@@ -1221,7 +1230,7 @@ function generateManifestHtml(p: ManifestPanel): string {
     const nome = e(fp.name);
     const cpfStr = e(formatCpfServer(fp.cpf));
     const role = e(ROLE_LABEL[fp.role] ?? fp.role);
-    const seat = e(fp.seatNumber ?? "—");
+    const seat = e(seatWithPosition(fp.seatNumber ?? null, p.numberingType));
     return `<tr>
       <td class="num">${String(i + 1).padStart(2, "0")}</td>
       <td>${nome}</td>
@@ -1282,7 +1291,7 @@ function generateManifestHtml(p: ManifestPanel): string {
   td { padding: 3px 5px; border-bottom: 1px solid #e8e8e8; font-size: 10px; vertical-align: top; }
   tr:nth-child(even) td { background: #f8f8f8; }
   .num { width: 22px; text-align: center; }
-  .seat { width: 50px; text-align: center; }
+  .seat { width: 85px; text-align: center; }
   .obs-cell { font-size: 9px; color: #555; max-width: 120px; }
   .crew-table td { border-bottom: 1px solid #e8e8e8; }
   .crew-table td:first-child { font-weight: bold; width: 110px; }
@@ -1439,13 +1448,13 @@ function generateManifestPdf(p: ManifestPanel): Promise<Buffer> {
 
     const colDefs = [
       { label: "Nº", w: 20 },
-      { label: "Nome Completo", w: 120 },
+      { label: "Nome Completo", w: 100 },
       { label: "CPF", w: 72 },
       { label: "Nasc.", w: 48 },
       { label: "Cat.", w: 48 },
-      { label: "Assento", w: 40 },
+      { label: "Assento", w: 65 },
       { label: "Embarque", w: 80 },
-      { label: "Obs.", w: 95 },
+      { label: "Obs.", w: 90 },
     ];
     const totalColW = colDefs.reduce((s, c) => s + c.w, 0);
     const scale = pageWidth / totalColW;
@@ -1472,7 +1481,7 @@ function generateManifestPdf(p: ManifestPanel): Promise<Buffer> {
         formatCpfServer(pass.cpf),
         pass.birthDate ? new Date(pass.birthDate).toLocaleDateString("pt-BR") : "—",
         AGE_LABELS[pass.ageCategory] ?? pass.ageCategory,
-        pass.seatNumber ?? "—",
+        seatWithPosition(pass.seatNumber, p.numberingType),
         getBpName(pass.boardingLocationId),
         [pass.documentType, pass.specialNeeds, pass.observations].filter(Boolean).join(" | ").slice(0, 20),
       ];
@@ -1510,10 +1519,10 @@ function generateManifestPdf(p: ManifestPanel): Promise<Buffer> {
 
       const freeColDefs = [
         { label: "Nº", w: 20 },
-        { label: "Nome Completo", w: 160 },
+        { label: "Nome Completo", w: 140 },
         { label: "CPF", w: 90 },
         { label: "Função", w: 80 },
-        { label: "Assento", w: 50 },
+        { label: "Assento", w: 70 },
       ];
       const freeTotalW = freeColDefs.reduce((s, c) => s + c.w, 0);
       const freeScale = pageWidth / freeTotalW;
@@ -1538,7 +1547,7 @@ function generateManifestPdf(p: ManifestPanel): Promise<Buffer> {
           fp.name.slice(0, 30),
           formatCpfServer(fp.cpf),
           ROLE_LABEL_PDF[fp.role] ?? fp.role,
-          fp.seatNumber ?? "—",
+          seatWithPosition(fp.seatNumber ?? null, p.numberingType),
         ];
         for (let ci = 0; ci < freeCols.length; ci++) {
           doc.font("Helvetica").fontSize(7).fillColor("black").text(rowData[ci], fxOff, y + 2, { width: freeCols[ci].w - 2, lineBreak: false });
@@ -1598,11 +1607,14 @@ router.post("/trips/:id/manifest/send", async (req, res, next: NextFunction): Pr
 
     const reservationIds = reservations.map(r => r.id);
 
-    const [passengers, [tenant]] = await Promise.all([
+    const [passengers, [tenant], [layoutRow]] = await Promise.all([
       reservationIds.length > 0
         ? db.select().from(passengersTable).where(inArray(passengersTable.reservationId, reservationIds))
         : Promise.resolve([]),
       db.select({ name: tenantsTable.name, cnpj: tenantsTable.cnpj }).from(tenantsTable).where(eq(tenantsTable.id, me.tenantId)).limit(1),
+      trip.layoutId
+        ? db.select({ numberingType: vehicleLayoutsTable.numberingType }).from(vehicleLayoutsTable).where(eq(vehicleLayoutsTable.id, trip.layoutId)).limit(1)
+        : Promise.resolve([undefined]),
     ]);
 
     const reservationMap = new Map(reservations.map(r => [r.id, r]));
@@ -1649,6 +1661,7 @@ router.post("/trips/:id/manifest/send", async (req, res, next: NextFunction): Pr
       freePassengers: Array.isArray(trip.freePassengers) ? (trip.freePassengers as FreePassenger[]) : [],
       destinationCity: trip.destinationCity,
       destinationState: trip.destinationState,
+      numberingType: layoutRow?.numberingType ?? null,
     };
 
     const auditMeta: Record<string, string> = { channel, to: channel === "whatsapp" ? to : to.replace(/(.{2}).+(@.+)/, "$1***$2") };

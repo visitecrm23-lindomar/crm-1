@@ -2127,6 +2127,7 @@ export const ListReservationsResponse = zod.object({
         totalCapacity: zod.number(),
         status: zod.string(),
         coverImage: zod.string().nullish(),
+        numberingType: zod.string().nullish(),
       }),
       client: zod.object({
         id: zod.string(),
@@ -2253,6 +2254,7 @@ export const GetReservationResponse = zod.object({
     totalCapacity: zod.number(),
     status: zod.string(),
     coverImage: zod.string().nullish(),
+    numberingType: zod.string().nullish(),
   }),
   client: zod.object({
     id: zod.string(),
@@ -2351,6 +2353,7 @@ export const UpdateReservationResponse = zod.object({
     totalCapacity: zod.number(),
     status: zod.string(),
     coverImage: zod.string().nullish(),
+    numberingType: zod.string().nullish(),
   }),
   client: zod.object({
     id: zod.string(),
@@ -2430,6 +2433,7 @@ export const CheckInReservationResponse = zod.object({
     totalCapacity: zod.number(),
     status: zod.string(),
     coverImage: zod.string().nullish(),
+    numberingType: zod.string().nullish(),
   }),
   client: zod.object({
     id: zod.string(),
