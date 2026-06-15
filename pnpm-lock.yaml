@@ -108,7 +108,7 @@ overrides:
 
 patchedDependencies:
   metro@0.83.7:
-    hash: 1772596c0b547901be741825c696c3fc4bb1c056a310c0239a194ed9341e87be
+    hash: b7739773d03e837669474b24a72c6c2cb84e862d5992390e486c40223a9dd414
     path: patches/metro@0.83.7.patch
 
 importers:
@@ -9208,7 +9208,7 @@ snapshots:
 
   '@expo/metro@54.2.0':
     dependencies:
-      metro: 0.83.7(patch_hash=1772596c0b547901be741825c696c3fc4bb1c056a310c0239a194ed9341e87be)
+      metro: 0.83.7(patch_hash=b7739773d03e837669474b24a72c6c2cb84e862d5992390e486c40223a9dd414)
       metro-babel-transformer: 0.83.7
       metro-cache: 0.83.7
       metro-cache-key: 0.83.7
@@ -10738,7 +10738,7 @@ snapshots:
       '@react-native/dev-middleware': 0.81.5
       debug: 4.4.3
       invariant: 2.2.4
-      metro: 0.83.7(patch_hash=1772596c0b547901be741825c696c3fc4bb1c056a310c0239a194ed9341e87be)
+      metro: 0.83.7(patch_hash=b7739773d03e837669474b24a72c6c2cb84e862d5992390e486c40223a9dd414)
       metro-config: 0.83.7
       metro-core: 0.83.7
       semver: 7.7.4
@@ -13915,7 +13915,7 @@ snapshots:
       connect: 3.7.0
       flow-enums-runtime: 0.0.6
       jest-validate: 29.7.0
-      metro: 0.83.7(patch_hash=1772596c0b547901be741825c696c3fc4bb1c056a310c0239a194ed9341e87be)
+      metro: 0.83.7(patch_hash=b7739773d03e837669474b24a72c6c2cb84e862d5992390e486c40223a9dd414)
       metro-cache: 0.83.7
       metro-core: 0.83.7
       metro-runtime: 0.83.7
@@ -14002,7 +14002,7 @@ snapshots:
       '@babel/parser': 7.29.7
       '@babel/types': 7.29.7
       flow-enums-runtime: 0.0.6
-      metro: 0.83.7(patch_hash=1772596c0b547901be741825c696c3fc4bb1c056a310c0239a194ed9341e87be)
+      metro: 0.83.7(patch_hash=b7739773d03e837669474b24a72c6c2cb84e862d5992390e486c40223a9dd414)
       metro-babel-transformer: 0.83.7
       metro-cache: 0.83.7
       metro-cache-key: 0.83.7
@@ -14015,7 +14015,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  metro@0.83.7(patch_hash=1772596c0b547901be741825c696c3fc4bb1c056a310c0239a194ed9341e87be):
+  metro@0.83.7(patch_hash=b7739773d03e837669474b24a72c6c2cb84e862d5992390e486c40223a9dd414):
     dependencies:
       '@babel/code-frame': 7.29.7
       '@babel/core': 7.29.7
