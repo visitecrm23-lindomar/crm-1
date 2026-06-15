@@ -29,6 +29,7 @@ import Loyalty from "@/pages/loyalty";
 import Nps from "@/pages/nps";
 import Registrations from "@/pages/registrations";
 import Analytics from "@/pages/analytics";
+import Insights from "@/pages/insights";
 import Commissions from "@/pages/commissions";
 import Expenses from "@/pages/expenses";
 import Revenue from "@/pages/revenue";
@@ -339,6 +340,7 @@ function Router() {
       <Route path="/analytics/revenue" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Revenue} />} />
       <Route path="/analytics/historico-comparativo" component={() => <Suspense fallback={null}><RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={HistoricoComparativo} /></Suspense>} />
       <Route path="/analytics/vendedores" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Vendedores} />} />
+      <Route path="/insights" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Insights} />} />
 
       {/* Task 6 pages */}
       <Route path="/vouchers" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Vouchers} />} />

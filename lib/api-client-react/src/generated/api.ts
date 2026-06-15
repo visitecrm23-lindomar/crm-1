@@ -226,6 +226,8 @@ import type {
   ValidatePublicReferralCodeBody,
   Vehicle,
   VehicleLayout,
+  InsightsSummary,
+  GetInsightsSummaryParams,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -19402,3 +19404,83 @@ export const useDeleteTripCost = <
   return useMutation(getDeleteTripCostMutationOptions(options));
 };
 
+
+/**
+ * @summary Get insights summary for all 7 strategic pillars
+ */
+export const getGetInsightsSummaryUrl = (params?: GetInsightsSummaryParams) => {
+  const normalizedParams = new URLSearchParams();
+  if (params?.period !== undefined) {
+    normalizedParams.append("period", params.period.toString());
+  }
+  const queryString = normalizedParams.toString();
+  return `/api/insights/summary${queryString ? `?${queryString}` : ""}`;
+};
+
+export const getInsightsSummary = async (
+  params?: GetInsightsSummaryParams,
+  options?: RequestInit,
+): Promise<InsightsSummary> => {
+  return customFetch<InsightsSummary>(getGetInsightsSummaryUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetInsightsSummaryQueryKey = (params?: GetInsightsSummaryParams) => {
+  return [`/api/insights/summary`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetInsightsSummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getInsightsSummary>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetInsightsSummaryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getInsightsSummary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetInsightsSummaryQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getInsightsSummary>>> = ({
+    signal,
+  }) => getInsightsSummary(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getInsightsSummary>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetInsightsSummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getInsightsSummary>>
+>;
+export type GetInsightsSummaryQueryError = ErrorType<unknown>;
+
+export function useGetInsightsSummary<
+  TData = Awaited<ReturnType<typeof getInsightsSummary>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetInsightsSummaryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getInsightsSummary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetInsightsSummaryQueryOptions(params, options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOptions.queryKey };
+}

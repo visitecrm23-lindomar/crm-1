@@ -3632,3 +3632,140 @@ export interface CreateTripCostBody {
 }
 
 export type UpdateTripCostBody = Partial<CreateTripCostBody>;
+
+export interface InsightsSummaryExecutive {
+  totalRevenue: number;
+  totalRevenuePrev: number;
+  netProfit: number;
+  netProfitPrev: number;
+  totalClients: number;
+  newClients: number;
+  newClientsPrev: number;
+  confirmedReservations: number;
+  confirmedReservationsPrev: number;
+  occupancyRate: number;
+  occupancyRatePrev: number;
+  conversionRate: number;
+  conversionRatePrev: number;
+  averageNps: number | null;
+  averageNpsPrev: number | null;
+  activeTrips: number;
+  profitMargin: number;
+  profitMarginPrev: number;
+}
+
+export interface InsightsSummaryCommercial {
+  openDeals: number;
+  openDealsPrev: number;
+  wonDeals: number;
+  wonDealsPrev: number;
+  pipelineValue: number;
+  pipelineValuePrev: number;
+  avgTicket: number;
+  avgTicketPrev: number;
+  newReservations: number;
+  newReservationsPrev: number;
+  cancellations: number;
+  cancellationsPrev: number;
+  conversionRate: number;
+  conversionRatePrev: number;
+  totalLeads: number;
+  totalLeadsPrev: number;
+}
+
+export interface InsightsSummaryMarketing {
+  newClients: number;
+  newClientsPrev: number;
+  referrals: number;
+  referralsPrev: number;
+  totalLeads: number;
+  totalLeadsPrev: number;
+  conversionRate: number;
+  conversionRatePrev: number;
+}
+
+export interface InsightsSummaryFinancial {
+  totalRevenue: number;
+  totalRevenuePrev: number;
+  totalExpenses: number;
+  totalExpensesPrev: number;
+  netProfit: number;
+  netProfitPrev: number;
+  profitMargin: number;
+  profitMarginPrev: number;
+  receivable: number;
+  payable: number;
+  overdue: number;
+  avgTicket: number;
+  avgTicketPrev: number;
+}
+
+export interface InsightsSummaryOperational {
+  activeTrips: number;
+  newTrips: number;
+  newTripsPrev: number;
+  occupancyRate: number;
+  avgReservationsPerTrip: number;
+  avgReservationsPerTripPrev: number;
+  confirmedReservations: number;
+  confirmedReservationsPrev: number;
+  cancellations: number;
+  cancellationsPrev: number;
+  revenuePerTrip: number;
+  revenuePerTripPrev: number;
+  totalSuppliers: number;
+  newSuppliers: number;
+  newSuppliersPrev: number;
+}
+
+export interface InsightsSummaryRetention {
+  loyaltyMembers: number;
+  loyaltyNewMembers: number;
+  loyaltyNewMembersPrev: number;
+  averageNps: number | null;
+  averageNpsPrev: number | null;
+  retentionRate: number;
+  retentionRatePrev: number;
+  newClients: number;
+  newClientsPrev: number;
+  repeatClients: number;
+  repeatClientsPrev: number;
+  totalClients: number;
+}
+
+export interface InsightsSummaryTopDestination {
+  name: string;
+  count: number;
+}
+
+export interface InsightsSummaryExpansion {
+  newTrips: number;
+  newTripsPrev: number;
+  newSuppliers: number;
+  newSuppliersPrev: number;
+  totalSuppliers: number;
+  revenuePerTrip: number;
+  revenuePerTripPrev: number;
+  topDestinations: InsightsSummaryTopDestination[];
+  avgTicket: number;
+  avgTicketPrev: number;
+  totalRevenue: number;
+  totalRevenuePrev: number;
+}
+
+export interface InsightsSummary {
+  period: string;
+  executive: InsightsSummaryExecutive;
+  commercial: InsightsSummaryCommercial;
+  marketing: InsightsSummaryMarketing;
+  financial: InsightsSummaryFinancial;
+  operational: InsightsSummaryOperational;
+  retention: InsightsSummaryRetention;
+  expansion: InsightsSummaryExpansion;
+}
+
+export type GetInsightsSummaryPeriod = 'month' | 'quarter' | 'year';
+
+export interface GetInsightsSummaryParams {
+  period?: GetInsightsSummaryPeriod;
+}
