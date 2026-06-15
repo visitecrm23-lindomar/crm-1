@@ -13,6 +13,7 @@ import {
   loyaltyMembersTable,
   loyaltyTransactionsTable,
   clientNotificationsTable,
+  clientNpsResponsesTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, sql, inArray, gt, count, isNull } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -182,6 +183,16 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
         )
         .orderBy(asc(tripsTable.departureDate), desc(reservationsTable.createdAt));
 
+      const reservationIds = rows.map((r) => r.id);
+      let npsSubmittedSet = new Set<string>();
+      if (reservationIds.length > 0) {
+        const npsRows = await db
+          .select({ reservationId: clientNpsResponsesTable.reservationId })
+          .from(clientNpsResponsesTable)
+          .where(inArray(clientNpsResponsesTable.reservationId, reservationIds));
+        npsSubmittedSet = new Set(npsRows.map((r) => r.reservationId));
+      }
+
       reservations = rows.map((r) => {
         const total = Number(r.totalValue);
         const paid = Number(r.paidValue);
@@ -207,6 +218,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
             ? (r.tripReturnDate as unknown as Date).toISOString().slice(0, 10)
             : null,
           createdAt: r.createdAt.toISOString(),
+          npsSubmitted: npsSubmittedSet.has(r.id),
         };
       });
 
@@ -404,6 +416,68 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
       stats,
       loyalty,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/client/nps", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== ROLES.CLIENT) {
+      next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE"));
+      return;
+    }
+    const body = z.object({
+      reservationId: z.string().min(1),
+      score: z.number().int().min(0).max(10),
+      comment: z.string().max(2000).nullable().optional(),
+    }).safeParse(req.body);
+    if (!body.success) {
+      next(new ValidationError(String(body.error.message)));
+      return;
+    }
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) {
+      next(new NotFoundError("Perfil de cliente não encontrado", "NOT_FOUND"));
+      return;
+    }
+    const [reservation] = await db
+      .select({ id: reservationsTable.id, tripId: reservationsTable.tripId })
+      .from(reservationsTable)
+      .where(
+        and(
+          eq(reservationsTable.id, body.data.reservationId),
+          eq(reservationsTable.clientId, client.id),
+          eq(reservationsTable.tenantId, me.tenantId),
+        ),
+      )
+      .limit(1);
+    if (!reservation) {
+      next(new NotFoundError("Reserva não encontrada", "NOT_FOUND"));
+      return;
+    }
+    const [existing] = await db
+      .select({ id: clientNpsResponsesTable.id })
+      .from(clientNpsResponsesTable)
+      .where(eq(clientNpsResponsesTable.reservationId, body.data.reservationId))
+      .limit(1);
+    if (existing) {
+      res.status(409).json({ error: "Avaliação já enviada para esta reserva", code: "DUPLICATE_NPS" });
+      return;
+    }
+    const id = generateId();
+    await db.insert(clientNpsResponsesTable).values({
+      id,
+      tenantId: me.tenantId,
+      clientId: client.id,
+      reservationId: body.data.reservationId,
+      tripId: reservation.tripId,
+      score: body.data.score,
+      comment: body.data.comment ?? null,
+    });
+    res.status(201).json({ id });
   } catch (err) {
     next(err);
   }

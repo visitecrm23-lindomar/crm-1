@@ -381,6 +381,113 @@ function ClienteCard({
   );
 }
 
+function NpsCard({ reservation }: { reservation: ClientPortalProfile["reservations"][number] }) {
+  const { toast } = useToast();
+  const [score, setScore] = useState<number | null>(null);
+  const [comment, setComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  async function handleSubmit() {
+    if (score === null) return;
+    setSubmitting(true);
+    try {
+      await clientPortalApi.submitNps({ reservationId: reservation.id, score, comment: comment || null });
+      setSubmitted(true);
+    } catch {
+      toast({ title: "Erro ao enviar avaliação", description: "Tente novamente mais tarde.", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (submitted) {
+    return (
+      <Card className="border-green-200 bg-green-50">
+        <CardContent className="p-4 flex items-center gap-3">
+          <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-green-800">Obrigado pela avaliação!</p>
+            <p className="text-xs text-green-600">Seu feedback é muito importante para nós.</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-start gap-3">
+          <Star className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold">Como foi sua experiência?</p>
+            <p className="text-xs text-muted-foreground">{reservation.tripName}</p>
+          </div>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground mb-2">
+            Em uma escala de 0 a 10, o quanto você recomendaria esta viagem a um amigo?
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {Array.from({ length: 11 }, (_, i) => {
+              const isSelected = score === i;
+              const colorClass =
+                i <= 6
+                  ? isSelected
+                    ? "bg-red-500 text-white border-red-500"
+                    : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
+                  : i <= 8
+                  ? isSelected
+                    ? "bg-yellow-500 text-white border-yellow-500"
+                    : "bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100"
+                  : isSelected
+                  ? "bg-green-500 text-white border-green-500"
+                  : "bg-green-50 text-green-700 border-green-200 hover:bg-green-100";
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setScore(i)}
+                  className={`w-9 h-9 rounded border font-semibold text-sm transition-colors ${colorClass}`}
+                >
+                  {i}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex justify-between text-xs text-muted-foreground mt-1">
+            <span>Nada provável</span>
+            <span>Extremamente provável</span>
+          </div>
+        </div>
+        <textarea
+          placeholder="Conte-nos mais sobre sua experiência (opcional)"
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          className="w-full min-h-[72px] rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
+          maxLength={2000}
+        />
+        <Button
+          size="sm"
+          disabled={score === null || submitting}
+          onClick={handleSubmit}
+          className="w-full"
+        >
+          {submitting ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+              Enviando...
+            </>
+          ) : (
+            "Enviar avaliação"
+          )}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 function InicioTab({
   profile,
   primaryColor,
@@ -411,6 +518,19 @@ function InicioTab({
 
   const pendingBalance = profile.reservations.filter(
     (r) => r.balance > 0 && r.status !== RESERVATION_STATUS.CANCELLED,
+  );
+
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().slice(0, 10);
+
+  const npsTrips = profile.reservations.filter(
+    (r) =>
+      !!r.tripReturnDate &&
+      r.tripReturnDate <= today &&
+      r.tripReturnDate >= thirtyDaysAgoStr &&
+      r.status !== RESERVATION_STATUS.CANCELLED &&
+      !r.npsSubmitted,
   );
 
   const kpis = [
@@ -524,6 +644,17 @@ function InicioTab({
           </div>
           <ArrowRight className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
         </button>
+      )}
+
+      {npsTrips.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            Como foi sua viagem?
+          </h3>
+          {npsTrips.map((r) => (
+            <NpsCard key={r.id} reservation={r} />
+          ))}
+        </div>
       )}
 
       {nextTrip && (

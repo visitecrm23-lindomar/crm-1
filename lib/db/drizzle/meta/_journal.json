@@ -295,6 +295,13 @@
       "when": 1748500000000,
       "tag": "0041_add_show_seat_map",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1750000000000,
+      "tag": "0042_add_reservation_sequences_and_client_nps",
+      "breakpoints": true
     }
   ]
 }

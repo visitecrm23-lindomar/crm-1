@@ -30,3 +30,4 @@ export * from "./sales-goals";
 export * from "./calendar";
 export * from "./trip-costs";
 export * from "./notifications";
+export * from "./nps";

@@ -19,6 +19,7 @@ export interface ClientPortalReservation {
   tripType: string;
   boardingPointName: string | null;
   boardingPointTime: string | null;
+  npsSubmitted: boolean;
 }
 
 export interface ClientLoyaltyTransaction {
@@ -157,4 +158,6 @@ export const clientPortalApi = {
   getNotifications: () => apiReq<ClientNotificationsResponse>("GET", "/client/notifications"),
   markAllNotificationsRead: () => apiReq<void>("POST", "/client/notifications/read-all"),
   getNotificationStreamUrl: () => `${BASE}/api/client/notifications/stream`,
+  submitNps: (data: { reservationId: string; score: number; comment?: string | null }) =>
+    apiReq<{ id: string }>("POST", "/client/nps", data),
 };
