@@ -233,6 +233,42 @@ router.put("/ai-integration", async (req, res): Promise<void> => {
       `Configuração salva (provedor: ${provider}, ativo: ${enabled ? "sim" : "não"}${keyChanged ? ", chave atualizada" : ""}).`,
     );
 
+    // Auto-verify the saved config server-side so the persisted connection
+    // status always reflects what is stored. (Test Connection itself is a
+    // transient probe that never writes status — only Save does, here.) A
+    // provider outage marks status as error but never blocks the save.
+    if (enabled && apiKeyEncrypted) {
+      try {
+        const apiKey = decryptCredential(apiKeyEncrypted);
+        const { client } = buildClientFromConfig({
+          provider,
+          apiKey,
+          baseUrl,
+          model: defaultModel,
+          timeout: 15000,
+          maxRetries: 0,
+        });
+        await client.models.list();
+        await db
+          .update(aiIntegrationsTable)
+          .set({ status: "connected", lastSyncAt: new Date(), lastError: null })
+          .where(eq(aiIntegrationsTable.tenantId, me.tenantId));
+        await writeLog(me, "test", "info", `Conexão verificada após salvar (provedor: ${provider}).`);
+      } catch (testErr) {
+        const message = sanitizeProviderError(testErr);
+        await db
+          .update(aiIntegrationsTable)
+          .set({ status: "error", lastError: message })
+          .where(eq(aiIntegrationsTable.tenantId, me.tenantId));
+        await writeLog(
+          me,
+          "test",
+          "error",
+          `Falha ao verificar conexão após salvar (provedor: ${provider}): ${message}`,
+        );
+      }
+    }
+
     res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "Error saving AI integration");
@@ -241,84 +277,106 @@ router.put("/ai-integration", async (req, res): Promise<void> => {
 });
 
 // ─── POST /ai-integration/test ────────────────────────────────────────────────
-// Tests connectivity using the *saved* configuration and persists the resulting
-// status, so the displayed connection state always reflects what is stored.
-// The admin must save before testing (so we never test unsaved, arbitrary keys
-// or endpoints, and status can never diverge from the persisted config).
+// Tests connectivity using the values the admin currently has in the form —
+// including unsaved key / base URL / model — so credentials can be validated
+// before saving. The test is transient: it NEVER persists the connection
+// status (only Save does, via its own server-side auto-test), so the stored
+// status always reflects the saved configuration and can't diverge from an
+// ad-hoc probe of unsaved values. A test is still recorded in the audit log.
+const testSchema = z.object({
+  provider: z.enum(["openai", "anthropic", "gemini", "custom"]),
+  apiKey: z.string().optional(),
+  baseUrl: z.string().optional(),
+  defaultModel: z.string().optional(),
+});
+
 router.post("/ai-integration/test", async (req, res): Promise<void> => {
   try {
     const me = await requireAiAdmin(req, res);
     if (!me) return;
 
-    const [existing] = await db
-      .select()
-      .from(aiIntegrationsTable)
-      .where(eq(aiIntegrationsTable.tenantId, me.tenantId))
-      .limit(1);
-
-    if (!existing?.apiKeyEncrypted) {
-      res.status(400).json({
-        ok: false,
-        status: "error",
-        message: "Salve uma chave de API antes de testar a conexão.",
-      });
+    const parsed = testSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, status: "error", message: "Dados inválidos." });
       return;
     }
+    const provider = normalizeProvider(parsed.data.provider);
+    const baseUrl = (parsed.data.baseUrl ?? "").trim() || null;
+    const defaultModel = (parsed.data.defaultModel ?? "").trim() || null;
 
-    const provider = normalizeProvider(existing.provider);
+    // Resolve the key to test: a freshly typed key, or — when the field still
+    // holds the masked sentinel / is empty — the saved key.
+    const incomingKey = (parsed.data.apiKey ?? "").trim();
+    const useSavedKey = incomingKey.length === 0 || incomingKey.startsWith(MASK);
+
     let apiKey: string;
-    try {
-      apiKey = decryptCredential(existing.apiKeyEncrypted);
-    } catch {
-      await db
-        .update(aiIntegrationsTable)
-        .set({ status: "error", lastError: "Não foi possível ler a chave salva." })
-        .where(eq(aiIntegrationsTable.tenantId, me.tenantId));
-      res.status(400).json({
-        ok: false,
-        status: "error",
-        message: "Não foi possível ler a chave salva. Salve a chave novamente.",
-      });
-      return;
+    if (useSavedKey) {
+      const [existing] = await db
+        .select()
+        .from(aiIntegrationsTable)
+        .where(eq(aiIntegrationsTable.tenantId, me.tenantId))
+        .limit(1);
+      if (!existing?.apiKeyEncrypted) {
+        res.status(400).json({
+          ok: false,
+          status: "error",
+          message: "Informe uma chave de API para testar a conexão.",
+        });
+        return;
+      }
+      try {
+        apiKey = decryptCredential(existing.apiKeyEncrypted);
+      } catch {
+        res.status(400).json({
+          ok: false,
+          status: "error",
+          message: "Não foi possível ler a chave salva. Informe a chave novamente.",
+        });
+        return;
+      }
+    } else {
+      apiKey = incomingKey;
+    }
+
+    // Reject SSRF-prone base URLs early (mirrors PUT) so the admin gets a clear
+    // message instead of a generic connection failure. The SDK request is also
+    // guarded at connection time via ssrfSafeFetch, so this is defense-in-depth
+    // plus better UX, not the sole control.
+    if (baseUrl) {
+      try {
+        await assertSafeUrl(baseUrl);
+      } catch (urlErr) {
+        const message = urlErr instanceof Error ? urlErr.message : "URL do provedor inválida.";
+        await writeLog(me, "test", "error", `Falha no teste de conexão (provedor: ${provider}): ${message}`);
+        res.status(400).json({ ok: false, status: "error", message });
+        return;
+      }
     }
 
     try {
       // buildClientFromConfig is inside the try so a misconfigured custom
-      // provider (no Base URL) throws here and is recorded as an error status
-      // instead of ever constructing a client that targets OpenAI by default.
+      // provider (no Base URL) throws here instead of ever constructing a
+      // client that targets OpenAI by default.
       const { client } = buildClientFromConfig({
         provider,
         apiKey,
-        baseUrl: existing.baseUrl,
-        model: existing.defaultModel,
+        baseUrl,
+        model: defaultModel,
         timeout: 15000,
         maxRetries: 0,
       });
       // models.list() is a cheap, provider-agnostic connectivity probe across
       // all OpenAI-compatible endpoints (OpenAI, Anthropic, Gemini).
       await client.models.list();
-
-      const now = new Date();
-      await db
-        .update(aiIntegrationsTable)
-        .set({ status: "connected", lastSyncAt: now, lastError: null })
-        .where(eq(aiIntegrationsTable.tenantId, me.tenantId));
       await writeLog(me, "test", "info", `Conexão testada com sucesso (provedor: ${provider}).`);
-
       res.json({
         ok: true,
         status: "connected",
         message: "Conexão estabelecida com sucesso.",
-        lastSyncAt: now.toISOString(),
       });
     } catch (apiErr) {
       const message = sanitizeProviderError(apiErr);
-      await db
-        .update(aiIntegrationsTable)
-        .set({ status: "error", lastError: message })
-        .where(eq(aiIntegrationsTable.tenantId, me.tenantId));
       await writeLog(me, "test", "error", `Falha no teste de conexão (provedor: ${provider}): ${message}`);
-
       res.json({ ok: false, status: "error", message });
     }
   } catch (err) {

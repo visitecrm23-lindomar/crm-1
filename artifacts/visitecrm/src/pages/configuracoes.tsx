@@ -1144,14 +1144,20 @@ function AICard() {
 
   const defaults = AI_PROVIDER_DEFAULTS[provider] ?? AI_PROVIDER_DEFAULTS.openai!;
 
-  // Tests the *saved* configuration. The backend persists the resulting status,
-  // so we reload afterwards to reflect it.
+  // Tests the values currently in the form (including unsaved key / base URL /
+  // model) so credentials can be validated before saving. The test is transient
+  // and never persists status, so we do NOT reload the config afterwards (that
+  // would discard the admin's in-progress edits) — only the audit log refreshes.
   async function performTest() {
     setTesting(true);
     try {
+      const body: Record<string, unknown> = { provider, baseUrl, defaultModel };
+      if (apiKey.trim()) body.apiKey = apiKey.trim();
       const res = await fetch(`${BASE}/api/ai-integration/test`, {
         method: "POST",
         credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
@@ -1159,7 +1165,6 @@ function AICard() {
       } else {
         toast({ title: data.message || "Falha ao conectar", variant: "destructive" });
       }
-      await loadConfig();
       await loadLogs();
     } catch {
       toast({ title: "Falha ao testar conexão", variant: "destructive" });
@@ -1171,7 +1176,6 @@ function AICard() {
   async function handleSave() {
     setSaving(true);
     try {
-      const keyExists = !!apiKey.trim() || hasApiKey;
       const body: Record<string, unknown> = { provider, baseUrl, defaultModel, enabled };
       if (apiKey.trim()) body.apiKey = apiKey.trim();
       const res = await fetch(`${BASE}/api/ai-integration`, {
@@ -1187,10 +1191,10 @@ function AICard() {
       toast({ title: "Configuração de IA salva com sucesso" });
       setApiKey("");
       setDirty(false);
+      // Save auto-verifies server-side and persists the status, so reloading the
+      // config reflects the up-to-date connection state.
       await loadConfig();
       await loadLogs();
-      // Auto-verify the saved config so the connection status is immediately accurate.
-      if (keyExists) await performTest();
     } catch (e) {
       toast({ title: e instanceof Error ? e.message : "Erro ao salvar", variant: "destructive" });
     } finally {
@@ -1199,10 +1203,6 @@ function AICard() {
   }
 
   function handleTestClick() {
-    if (dirty) {
-      toast({ title: "Salve as alterações antes de testar a conexão.", variant: "destructive" });
-      return;
-    }
     void performTest();
   }
 
@@ -1330,6 +1330,12 @@ function AICard() {
             {lastSyncAt && (
               <p className="text-[11px] text-muted-foreground">
                 Última verificação: {new Date(lastSyncAt).toLocaleString("pt-BR")}
+              </p>
+            )}
+
+            {dirty && (
+              <p className="text-[11px] text-amber-600">
+                Alterações não salvas. "Testar Conexão" usa os valores atuais; salve para aplicá-los.
               </p>
             )}
 
