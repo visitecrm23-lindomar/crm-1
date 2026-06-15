@@ -302,6 +302,13 @@
       "when": 1750000000000,
       "tag": "0042_add_reservation_sequences_and_client_nps",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1750100000000,
+      "tag": "0043_add_nps_category_scores",
+      "breakpoints": true
     }
   ]
 }

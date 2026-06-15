@@ -433,6 +433,10 @@ router.post("/client/nps", async (req, res, next: NextFunction): Promise<void> =
       reservationId: z.string().min(1),
       score: z.number().int().min(0).max(10),
       comment: z.string().max(2000).nullable().optional(),
+      scoreTransport: z.number().int().min(1).max(5).nullable().optional(),
+      scoreService: z.number().int().min(1).max(5).nullable().optional(),
+      scoreOrganization: z.number().int().min(1).max(5).nullable().optional(),
+      scoreGuide: z.number().int().min(1).max(5).nullable().optional(),
     }).safeParse(req.body);
     if (!body.success) {
       next(new ValidationError(String(body.error.message)));
@@ -475,6 +479,10 @@ router.post("/client/nps", async (req, res, next: NextFunction): Promise<void> =
       reservationId: body.data.reservationId,
       tripId: reservation.tripId,
       score: body.data.score,
+      scoreTransport: body.data.scoreTransport ?? null,
+      scoreService: body.data.scoreService ?? null,
+      scoreOrganization: body.data.scoreOrganization ?? null,
+      scoreGuide: body.data.scoreGuide ?? null,
       comment: body.data.comment ?? null,
     });
     res.status(201).json({ id });

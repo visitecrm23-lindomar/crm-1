@@ -381,9 +381,62 @@ function ClienteCard({
   );
 }
 
+const STAR_LABELS = ["", "Péssimo", "Ruim", "Regular", "Bom", "Ótimo"];
+
+function StarRating({
+  value,
+  onChange,
+  label,
+  hint,
+}: {
+  value: number | null;
+  onChange: (v: number) => void;
+  label: string;
+  hint?: string;
+}) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  const isActive = (star: number) =>
+    hovered !== null ? star <= hovered : value !== null && star <= value;
+  return (
+    <div className="space-y-1">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-sm">{label}</p>
+        {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      </div>
+      <div className="flex items-center gap-0.5">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button
+            key={star}
+            type="button"
+            onMouseEnter={() => setHovered(star)}
+            onMouseLeave={() => setHovered(null)}
+            onClick={() => onChange(star)}
+            className="p-0.5 transition-transform hover:scale-110 focus:outline-none"
+          >
+            <Star
+              className={`w-6 h-6 transition-colors ${
+                isActive(star)
+                  ? "fill-amber-400 text-amber-400"
+                  : "fill-none text-muted-foreground/30"
+              }`}
+            />
+          </button>
+        ))}
+        {value !== null && value > 0 && (
+          <span className="ml-1.5 text-xs text-muted-foreground">{STAR_LABELS[value]}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function NpsCard({ reservation }: { reservation: ClientPortalProfile["reservations"][number] }) {
   const { toast } = useToast();
   const [score, setScore] = useState<number | null>(null);
+  const [scoreTransport, setScoreTransport] = useState<number | null>(null);
+  const [scoreService, setScoreService] = useState<number | null>(null);
+  const [scoreOrganization, setScoreOrganization] = useState<number | null>(null);
+  const [scoreGuide, setScoreGuide] = useState<number | null>(null);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -392,7 +445,15 @@ function NpsCard({ reservation }: { reservation: ClientPortalProfile["reservatio
     if (score === null) return;
     setSubmitting(true);
     try {
-      await clientPortalApi.submitNps({ reservationId: reservation.id, score, comment: comment || null });
+      await clientPortalApi.submitNps({
+        reservationId: reservation.id,
+        score,
+        scoreTransport: scoreTransport,
+        scoreService: scoreService,
+        scoreOrganization: scoreOrganization,
+        scoreGuide: scoreGuide,
+        comment: comment || null,
+      });
       setSubmitted(true);
     } catch {
       toast({ title: "Erro ao enviar avaliação", description: "Tente novamente mais tarde.", variant: "destructive" });
@@ -460,6 +521,30 @@ function NpsCard({ reservation }: { reservation: ClientPortalProfile["reservatio
             <span>Nada provável</span>
             <span>Extremamente provável</span>
           </div>
+        </div>
+        <div className="space-y-3 pt-2 border-t">
+          <p className="text-xs text-muted-foreground">Avalie cada aspecto da viagem (opcional)</p>
+          <StarRating
+            value={scoreTransport}
+            onChange={setScoreTransport}
+            label="🚌 Transporte/Ônibus"
+          />
+          <StarRating
+            value={scoreService}
+            onChange={setScoreService}
+            label="👥 Atendimento da equipe"
+          />
+          <StarRating
+            value={scoreOrganization}
+            onChange={setScoreOrganization}
+            label="📋 Organização da viagem"
+          />
+          <StarRating
+            value={scoreGuide}
+            onChange={setScoreGuide}
+            label="🎤 Guia/Monitoria"
+            hint="Pule se não houve guia"
+          />
         </div>
         <textarea
           placeholder="Conte-nos mais sobre sua experiência (opcional)"

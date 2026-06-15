@@ -158,6 +158,13 @@ export const clientPortalApi = {
   getNotifications: () => apiReq<ClientNotificationsResponse>("GET", "/client/notifications"),
   markAllNotificationsRead: () => apiReq<void>("POST", "/client/notifications/read-all"),
   getNotificationStreamUrl: () => `${BASE}/api/client/notifications/stream`,
-  submitNps: (data: { reservationId: string; score: number; comment?: string | null }) =>
-    apiReq<{ id: string }>("POST", "/client/nps", data),
+  submitNps: (data: {
+    reservationId: string;
+    score: number;
+    comment?: string | null;
+    scoreTransport?: number | null;
+    scoreService?: number | null;
+    scoreOrganization?: number | null;
+    scoreGuide?: number | null;
+  }) => apiReq<{ id: string }>("POST", "/client/nps", data),
 };
