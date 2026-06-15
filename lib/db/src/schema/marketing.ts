@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, numeric, integer, boolean, json } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, numeric, integer, boolean, json, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -19,6 +19,9 @@ export const campaignsTable = pgTable("campaigns", {
   deliveredCount: integer("delivered_count").notNull().default(0),
   openedCount: integer("opened_count").notNull().default(0),
   clickedCount: integer("clicked_count").notNull().default(0),
+  triggerType: text("trigger_type").notNull().default("manual"),
+  triggerConfig: json("trigger_config").$type<Record<string, unknown>>(),
+  autoEnabled: boolean("auto_enabled").notNull().default(false),
   createdById: text("created_by_id").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
@@ -27,6 +30,25 @@ export const campaignsTable = pgTable("campaigns", {
 export const insertCampaignSchema = createInsertSchema(campaignsTable).omit({ createdAt: true, updatedAt: true });
 export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
 export type Campaign = typeof campaignsTable.$inferSelect;
+
+export const campaignSendsTable = pgTable(
+  "campaign_sends",
+  {
+    id: text("id").primaryKey(),
+    campaignId: text("campaign_id").notNull(),
+    clientId: text("client_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+    status: text("status").notNull().default("sent"),
+    error: text("error"),
+  },
+  (t) => [
+    uniqueIndex("campaign_sends_unique").on(t.campaignId, t.clientId),
+    index("campaign_sends_tenant_idx").on(t.tenantId, t.sentAt),
+  ]
+);
+
+export type CampaignSend = typeof campaignSendsTable.$inferSelect;
 
 export const npsResponsesTable = pgTable("nps_responses", {
   id: text("id").primaryKey(),

@@ -1924,6 +1924,12 @@ export interface Campaign {
   sentCount: number;
   openedCount: number;
   clickedCount: number;
+  deliveredCount?: number;
+  triggerType: string;
+  autoEnabled: boolean;
+  /** @nullable */
+  triggerConfig?: Record<string, unknown> | null;
+  targetSegment?: Record<string, unknown>;
   createdAt: string;
 }
 
@@ -1949,6 +1955,13 @@ export interface UpdateCampaignBody {
   scheduledAt?: string | null;
   /** @nullable */
   content?: string | null;
+  /** @nullable */
+  subject?: string | null;
+  autoEnabled?: boolean;
+  triggerType?: string;
+  /** @nullable */
+  triggerConfig?: Record<string, unknown> | null;
+  targetSegment?: Record<string, unknown>;
 }
 
 export interface NpsResponse {

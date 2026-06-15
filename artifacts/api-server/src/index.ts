@@ -10,6 +10,7 @@ import { runBirthdayCron } from "./lib/birthday";
 import { runExpiredReservationsCron } from "./lib/expired-reservations";
 import { runPipelineTripEndedCron } from "./services/pipeline-automation";
 import { calculateScoresForAllTenants } from "./lib/client-scores";
+import { runCampaignAutomationCron } from "./lib/campaign-automation";
 import { getRedisConnection, fetchUpstashDailyStats, getRedisWarningThresholdPct, maybeSendDailyLimitAlert } from "./lib/redis";
 import { getReminderQueue, closeQueues } from "./queues/index";
 import { startEmailWorker, stopEmailWorker } from "./workers/email.worker";
@@ -152,6 +153,11 @@ applyMigrations()
       cron.schedule("0 3 * * *", () => {
         logger.info("[client-scores] Daily scores cron triggered");
         calculateScoresForAllTenants().catch((err) => logger.error({ err }, "[client-scores] Cron failed"));
+      }, { timezone: "America/Sao_Paulo" });
+
+      cron.schedule("0 8 * * *", () => {
+        logger.info("[campaign-automation] Daily automation cron triggered");
+        runCampaignAutomationCron().catch((err) => logger.error({ err }, "[campaign-automation] Cron failed"));
       }, { timezone: "America/Sao_Paulo" });
 
       // ── Log Upstash daily usage on startup (non-fatal) ──

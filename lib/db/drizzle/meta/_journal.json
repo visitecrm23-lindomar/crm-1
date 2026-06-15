@@ -372,6 +372,13 @@
       "when": 1751000000000,
       "tag": "0052_client_scores",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1751900000000,
+      "tag": "0053_campaign_automation",
+      "breakpoints": true
     }
   ]
 }

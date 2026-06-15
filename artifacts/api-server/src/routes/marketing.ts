@@ -7,6 +7,8 @@ import { requireAuth, getTenantUser } from "../lib/tenant";
 import { z } from "zod";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { STORE_ORDER_STATUS, STORE_PAYMENT_STATUS } from "@workspace/permissions";
+import { resolveSegment } from "../lib/campaign-segment";
+import { getAIClientForTenant } from "../lib/ai-client";
 
 const router = Router();
 
@@ -17,15 +19,45 @@ const CreateCampaignBody = z.object({
   content: z.string(),
   targetSegment: z.record(z.unknown()).optional(),
   scheduledAt: z.string().optional(),
+  triggerType: z.string().optional(),
+  triggerConfig: z.record(z.unknown()).optional(),
+  autoEnabled: z.boolean().optional(),
 });
 
 const UpdateCampaignBody = z.object({
   name: z.string().optional(),
   status: z.string().optional(),
   content: z.string().optional(),
-  subject: z.string().optional(),
+  subject: z.string().optional().nullable(),
   targetSegment: z.record(z.unknown()).optional(),
   scheduledAt: z.string().optional().nullable(),
+  triggerType: z.string().optional(),
+  triggerConfig: z.record(z.unknown()).optional().nullable(),
+  autoEnabled: z.boolean().optional(),
+});
+
+const SegmentPreviewBody = z.object({
+  gender: z.string().optional(),
+  ageMin: z.number().optional(),
+  ageMax: z.number().optional(),
+  inactiveDays: z.number().optional(),
+  tier: z.string().optional(),
+  minPurchaseScore: z.number().optional(),
+  maxChurnScore: z.number().optional(),
+  city: z.string().optional(),
+  origin: z.string().optional(),
+  tag: z.string().optional(),
+  tripId: z.string().optional(),
+  classification: z.string().optional(),
+  status: z.string().optional(),
+  travelPreference: z.string().optional(),
+});
+
+const AiContentBody = z.object({
+  topic: z.string(),
+  destination: z.string().optional(),
+  tone: z.string().optional(),
+  audience: z.string().optional(),
 });
 
 const CreateNpsResponseBody = z.object({
@@ -81,6 +113,9 @@ function formatCampaign(c: typeof campaignsTable.$inferSelect) {
     sentAt: c.sentAt?.toISOString() ?? null,
     recipientsCount: c.recipientsCount, sentCount: c.sentCount,
     deliveredCount: c.deliveredCount, openedCount: c.openedCount, clickedCount: c.clickedCount,
+    triggerType: c.triggerType ?? "manual",
+    triggerConfig: c.triggerConfig ?? null,
+    autoEnabled: c.autoEnabled ?? false,
     createdAt: c.createdAt.toISOString(), updatedAt: c.updatedAt.toISOString(),
   };
 }
@@ -141,6 +176,9 @@ router.post("/campaigns", async (req, res): Promise<void> => {
       content: parsed.data.content,
       targetSegment: parsed.data.targetSegment ?? {},
       scheduledAt: parsed.data.scheduledAt ? new Date(parsed.data.scheduledAt) : null,
+      triggerType: parsed.data.triggerType ?? "manual",
+      triggerConfig: parsed.data.triggerConfig ?? null,
+      autoEnabled: parsed.data.autoEnabled ?? false,
       createdById: me.id,
     });
     const [campaign] = await db.select().from(campaignsTable)
@@ -168,6 +206,9 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
     if (parsed.data.subject !== undefined) updates.subject = parsed.data.subject ?? null;
     if (parsed.data.targetSegment != null) updates.targetSegment = parsed.data.targetSegment;
     if (parsed.data.scheduledAt !== undefined) updates.scheduledAt = parsed.data.scheduledAt ? new Date(parsed.data.scheduledAt) : null;
+    if (parsed.data.triggerType != null) updates.triggerType = parsed.data.triggerType;
+    if (parsed.data.triggerConfig !== undefined) updates.triggerConfig = parsed.data.triggerConfig ?? null;
+    if (parsed.data.autoEnabled !== undefined) updates.autoEnabled = parsed.data.autoEnabled;
     await db.update(campaignsTable).set(updates)
       .where(and(eq(campaignsTable.id, req.params.id), eq(campaignsTable.tenantId, me.tenantId)));
     const [campaign] = await db.select().from(campaignsTable)
@@ -191,6 +232,73 @@ router.delete("/campaigns/:id", async (req, res): Promise<void> => {
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Error deleting campaign");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/campaigns/segment-preview", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    const parsed = SegmentPreviewBody.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    const { count, clientIds } = await resolveSegment(me.tenantId, parsed.data);
+    res.json({ count, clientIds: clientIds.slice(0, 20) });
+  } catch (err) {
+    req.log.error({ err }, "Error previewing segment");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/ai-content", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    const parsed = AiContentBody.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    const { topic, destination, tone, audience } = parsed.data;
+
+    let aiClient: Awaited<ReturnType<typeof getAIClientForTenant>>;
+    try {
+      aiClient = await getAIClientForTenant(me.tenantId);
+    } catch {
+      res.status(402).json({ error: "Configure a integração de IA nas configurações da agência para usar o Criador de Conteúdo." });
+      return;
+    }
+
+    const prompt = `Você é um especialista em marketing de turismo brasileiro. Crie conteúdo de marketing para uma agência de viagens.
+Tema/Destino: ${topic}${destination ? ` — ${destination}` : ""}
+Tom: ${tone || "entusiástico e amigável"}
+Público-alvo: ${audience || "clientes da agência de viagens"}
+
+Retorne um JSON com exatamente estas 3 chaves:
+- "email": HTML completo de e-mail marketing (estrutura simples com <h2>, <p>, <ul> se necessário; inclua variável {nome} no início; foco em conversão)
+- "whatsapp": texto para WhatsApp (máx 300 caracteres, use 1-2 emojis relevantes, tom informal mas profissional, inclua variável {nome})
+- "instagram": legenda para Instagram (máx 200 caracteres + até 5 hashtags relevantes de turismo/destino)
+
+Use linguagem brasileira. Seja específico, criativo e persuasivo.`;
+
+    const response = await aiClient.client.chat.completions.create({
+      model: aiClient.model,
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" },
+      max_tokens: 1500,
+      temperature: 0.75,
+    });
+
+    const raw = response.choices[0]?.message?.content ?? "{}";
+    let parsed2: { email?: string; whatsapp?: string; instagram?: string } = {};
+    try { parsed2 = JSON.parse(raw); } catch { parsed2 = {}; }
+
+    res.json({
+      email: parsed2.email ?? "",
+      whatsapp: parsed2.whatsapp ?? "",
+      instagram: parsed2.instagram ?? "",
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error generating AI content");
     res.status(500).json({ error: "Internal server error" });
   }
 });
