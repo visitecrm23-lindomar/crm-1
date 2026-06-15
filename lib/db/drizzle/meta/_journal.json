@@ -316,6 +316,13 @@
       "when": 1750200000000,
       "tag": "0044_add_client_preference_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1750300000000,
+      "tag": "0045_add_client_favorites",
+      "breakpoints": true
     }
   ]
 }

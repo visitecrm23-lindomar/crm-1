@@ -31,3 +31,4 @@ export * from "./calendar";
 export * from "./trip-costs";
 export * from "./notifications";
 export * from "./nps";
+export * from "./favorites";

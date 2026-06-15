@@ -1,3 +1,6 @@
 - [api-zod-manual-edits](api-zod-manual-edits.md) — orval-generated files in lib/api-zod are hand-edited; must update both TS types AND Zod schemas in api.ts together
 - [DB package TypeScript build](db-ts-build.md) — After adding columns to DB schema, run `npx tsc --build` in lib/db and lib/api-zod to refresh .d.ts files used by api-server.
 - [Marketing NPS naming conflict](marketing-nps-conflict.md) — `npsResponsesTable` already exists in marketing.ts for e-commerce; client travel NPS uses `clientNpsResponsesTable` in nps.ts / table `client_nps_responses`.
+- [Favorites feature pattern](favorites-pattern.md) — FavoritesContext wraps Vitrine (CartProvider > FavoritesProvider); uses useGetMe role check; optimistic toggle.
+- [Manual migration workflow](manual-migration.md) — drizzle-kit is interactive; write SQL + update _journal.json; run `pnpm --filter @workspace/db migrate`.
+- [Store product vs trip favorites](store-favorites-join.md) — Trip favorites store tripId; join via storeProductsTable.tripId to get slug. Product favorites store storeProductsTable.id; join with storesTable for tenantId filter.

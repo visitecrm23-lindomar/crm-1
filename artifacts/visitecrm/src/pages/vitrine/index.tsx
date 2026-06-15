@@ -2,6 +2,7 @@ import { useState, useEffect, Component, ReactNode } from "react";
 import { useParams, Switch, Route, Redirect, useLocation } from "wouter";
 import { publicStoreApi, PublicStore } from "@/lib/storeApi";
 import { CartProvider } from "@/contexts/CartContext";
+import { FavoritesProvider } from "@/contexts/FavoritesContext";
 import VitrineLayout from "./layout";
 import VitrineHome from "./home";
 import VitrineCatalog from "./catalog";
@@ -254,7 +255,9 @@ export default function Vitrine() {
 
   return (
     <CartProvider slug={slug}>
-      <StoreRouter slug={slug} />
+      <FavoritesProvider>
+        <StoreRouter slug={slug} />
+      </FavoritesProvider>
     </CartProvider>
   );
 }

@@ -20,8 +20,9 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Loader2, Search, MapPin, Calendar, Clock, ShoppingCart, Star, SlidersHorizontal, X, MessageCircle, Check, ArrowUpDown } from "lucide-react";
+import { Loader2, Search, MapPin, Calendar, Clock, ShoppingCart, Star, SlidersHorizontal, X, MessageCircle, Check, ArrowUpDown, Heart } from "lucide-react";
 import { ProductQuickView } from "@/components/vitrine/ProductQuickView";
+import { useFavorites } from "@/contexts/FavoritesContext";
 
 function ProductCard({
   product,
@@ -40,6 +41,10 @@ function ProductCard({
 }) {
   const [, navigate] = useLocation();
   const { addItem, openCart } = useCart();
+  const { isFavorited, toggleFavorite } = useFavorites();
+  const favItemType = product.tripId ? "trip" : "product";
+  const favItemId = product.tripId ?? product.id;
+  const isFav = isFavorited(favItemType, favItemId);
   const displayPrice = product.salePrice ?? product.price;
   const hasDiscount = !!product.salePrice;
 
@@ -236,14 +241,24 @@ function ProductCard({
             PROMO
           </span>
         )}
-        {product.isFeatured && !isOutOfStock && (
-          <span
-            className="absolute top-2 right-2 text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1"
-            style={{ backgroundColor: "#FBBF24", color: "#78350f" }}
+        <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+          <button
+            type="button"
+            aria-label={isFav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+            onClick={(e) => { e.stopPropagation(); toggleFavorite(favItemType, favItemId); }}
+            className={`w-7 h-7 rounded-full flex items-center justify-center shadow transition-colors ${isFav ? "bg-red-500 text-white" : "bg-white/90 text-gray-400 hover:text-red-500"}`}
           >
-            <Star className="w-3 h-3" /> Destaque
-          </span>
-        )}
+            <Heart className={`w-3.5 h-3.5 ${isFav ? "fill-current" : ""}`} />
+          </button>
+          {product.isFeatured && !isOutOfStock && (
+            <span
+              className="text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1"
+              style={{ backgroundColor: "#FBBF24", color: "#78350f" }}
+            >
+              <Star className="w-3 h-3" /> Destaque
+            </span>
+          )}
+        </div>
         {hasSlideshow && (
           <div className={`absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1 transition-opacity ${isTouchDevice ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
             {slideImages.map((_, i) => (

@@ -1,6 +1,6 @@
 import { useState, useEffect, type ReactElement } from "react";
 import { useLocation, useSearch } from "wouter";
-import { clientPortalApi, type ClientPortalProfile, type ClientLoyalty, type ClientReferral } from "@/lib/clientPortalApi";
+import { clientPortalApi, type ClientPortalProfile, type ClientLoyalty, type ClientReferral, type FavoritesResponse } from "@/lib/clientPortalApi";
 import QRCode from "qrcode";
 import { useGetMe } from "@workspace/api-client-react";
 import { RESERVATION_STATUS } from "@workspace/permissions";
@@ -2188,7 +2188,169 @@ function PreferenciasTab({
   );
 }
 
-const VALID_PERFIL_TABS = ["inicio", "reservas", "dados", "indicacoes", "fidelidade", "preferencias"];
+function FavoriteCard({
+  name,
+  imageUrl,
+  price,
+  salePrice,
+  destination,
+  link,
+  onRemove,
+}: {
+  name: string;
+  imageUrl: string | null;
+  price: string;
+  salePrice: string | null;
+  destination: string | null;
+  link: string | null;
+  onRemove: () => void;
+}) {
+  const [, navigate] = useLocation();
+  const displayPrice = salePrice ?? price;
+  const hasDiscount = !!salePrice;
+
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <div className="flex gap-3 p-3">
+          <div className="w-20 h-20 shrink-0 rounded-lg overflow-hidden bg-gradient-to-br from-blue-100 to-blue-200">
+            {imageUrl ? (
+              <img src={imageUrl} alt={name} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <MapPin className="w-6 h-6 text-blue-300" />
+              </div>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className="font-semibold text-sm line-clamp-2 leading-tight mb-1">{name}</h4>
+            {destination && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                <MapPin className="w-3 h-3" /> {destination}
+              </div>
+            )}
+            <div className="flex items-center gap-2 mt-auto">
+              {hasDiscount && (
+                <span className="text-xs text-muted-foreground line-through">
+                  R$ {parseFloat(price).toFixed(2)}
+                </span>
+              )}
+              <span className="text-sm font-bold text-primary">
+                R$ {parseFloat(displayPrice).toFixed(2)}
+              </span>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5 shrink-0 justify-center">
+            {link && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs px-3"
+                onClick={() => navigate(link)}
+              >
+                Ver
+              </Button>
+            )}
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7 text-red-400 hover:text-red-600 hover:bg-red-50"
+              onClick={onRemove}
+              title="Remover dos favoritos"
+            >
+              <Heart className="w-4 h-4 fill-current" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function FavoritosTab({ tenantSlug }: { tenantSlug: string | null }) {
+  const { toast } = useToast();
+  const [data, setData] = useState<FavoritesResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    clientPortalApi
+      .getFavorites()
+      .then(setData)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleRemove(itemType: "trip" | "product", itemId: string) {
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        trips: itemType === "trip" ? prev.trips.filter((t) => t.tripId !== itemId) : prev.trips,
+        products: itemType === "product" ? prev.products.filter((p) => p.productId !== itemId) : prev.products,
+      };
+    });
+    try {
+      await clientPortalApi.removeFavorite(itemType, itemId);
+    } catch {
+      clientPortalApi.getFavorites().then(setData).catch(() => {});
+      toast({ title: "Erro ao remover favorito", description: "Tente novamente.", variant: "destructive" });
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-24 w-full rounded-xl" />
+        ))}
+      </div>
+    );
+  }
+
+  const total = (data?.trips.length ?? 0) + (data?.products.length ?? 0);
+
+  if (total === 0) {
+    return (
+      <div className="text-center py-16">
+        <Heart className="w-12 h-12 mx-auto text-muted-foreground/30 mb-4" />
+        <h3 className="font-semibold text-lg mb-1">Nenhum favorito ainda</h3>
+        <p className="text-muted-foreground text-sm max-w-xs mx-auto">
+          Toque no ❤ nos cards da loja para guardar suas viagens preferidas aqui.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {data?.trips.map((trip) => (
+        <FavoriteCard
+          key={trip.favoriteId}
+          name={trip.name}
+          imageUrl={trip.imageUrl}
+          price={trip.price}
+          salePrice={trip.salePrice}
+          destination={trip.destination}
+          link={tenantSlug ? `/loja/${tenantSlug}/produtos/${trip.productSlug}` : null}
+          onRemove={() => handleRemove("trip", trip.tripId)}
+        />
+      ))}
+      {data?.products.map((product) => (
+        <FavoriteCard
+          key={product.favoriteId}
+          name={product.name}
+          imageUrl={product.imageUrl}
+          price={product.price}
+          salePrice={product.salePrice}
+          destination={null}
+          link={tenantSlug ? `/loja/${tenantSlug}/produtos/${product.productSlug}` : null}
+          onRemove={() => handleRemove("product", product.productId)}
+        />
+      ))}
+    </div>
+  );
+}
+
+const VALID_PERFIL_TABS = ["inicio", "reservas", "dados", "indicacoes", "fidelidade", "preferencias", "favoritos"];
 
 export default function PerfilPage() {
   const [, navigate] = useLocation();
@@ -2287,6 +2449,10 @@ export default function PerfilPage() {
             <Heart className="w-4 h-4" />
             Preferências
           </TabsTrigger>
+          <TabsTrigger value="favoritos" className="flex items-center gap-1.5">
+            <Heart className="w-4 h-4 fill-current text-red-400" />
+            Favoritos
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="inicio">
@@ -2336,6 +2502,10 @@ export default function PerfilPage() {
               setProfile((prev) => prev ? { ...prev, client: updated } : prev);
             }}
           />
+        </TabsContent>
+
+        <TabsContent value="favoritos">
+          <FavoritosTab tenantSlug={profile.tenant?.slug ?? null} />
         </TabsContent>
       </Tabs>
     </div>

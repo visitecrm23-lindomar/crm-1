@@ -18,7 +18,9 @@ import {
   Quote,
   Gift,
   X,
+  Heart,
 } from "lucide-react";
+import { useFavorites } from "@/contexts/FavoritesContext";
 
 function ReferralWelcomeBanner({ slug, primaryColor }: { slug: string; primaryColor: string }) {
   const [visible, setVisible] = useState(false);
@@ -90,6 +92,10 @@ function ProductCard({
 }) {
   const [, navigate] = useLocation();
   const { addItem, openCart } = useCart();
+  const { isFavorited, toggleFavorite } = useFavorites();
+  const favItemType = product.tripId ? "trip" : "product";
+  const favItemId = product.tripId ?? product.id;
+  const isFav = isFavorited(favItemType, favItemId);
 
   const displayPrice = product.salePrice ?? product.price;
   const hasDiscount = !!product.salePrice;
@@ -162,14 +168,24 @@ function ProductCard({
             OFERTA
           </div>
         )}
-        {product.isFeatured && (
-          <div
-            className="absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1"
-            style={{ backgroundColor: "#FBBF24", color: "#78350f" }}
+        <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+          <button
+            type="button"
+            aria-label={isFav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+            onClick={(e) => { e.stopPropagation(); toggleFavorite(favItemType, favItemId); }}
+            className={`w-7 h-7 rounded-full flex items-center justify-center shadow transition-colors ${isFav ? "bg-red-500 text-white" : "bg-white/90 text-gray-400 hover:text-red-500"}`}
           >
-            <Star className="w-3 h-3" /> Destaque
-          </div>
-        )}
+            <Heart className={`w-3.5 h-3.5 ${isFav ? "fill-current" : ""}`} />
+          </button>
+          {product.isFeatured && (
+            <div
+              className="px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1"
+              style={{ backgroundColor: "#FBBF24", color: "#78350f" }}
+            >
+              <Star className="w-3 h-3" /> Destaque
+            </div>
+          )}
+        </div>
       </div>
       <div className="p-4">
         <h3

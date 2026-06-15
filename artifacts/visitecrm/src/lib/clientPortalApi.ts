@@ -153,6 +153,32 @@ export interface ClientNotificationsResponse {
   unreadCount: number;
 }
 
+export interface FavoriteTripItem {
+  favoriteId: string;
+  tripId: string;
+  productSlug: string;
+  name: string;
+  imageUrl: string | null;
+  destination: string | null;
+  price: string;
+  salePrice: string | null;
+}
+
+export interface FavoriteProductItem {
+  favoriteId: string;
+  productId: string;
+  productSlug: string;
+  name: string;
+  imageUrl: string | null;
+  price: string;
+  salePrice: string | null;
+}
+
+export interface FavoritesResponse {
+  trips: FavoriteTripItem[];
+  products: FavoriteProductItem[];
+}
+
 export const clientPortalApi = {
   getProfile: () => apiReq<ClientPortalProfile>("GET", "/client/me"),
   updateProfile: (data: {
@@ -186,4 +212,9 @@ export const clientPortalApi = {
     scoreOrganization?: number | null;
     scoreGuide?: number | null;
   }) => apiReq<{ id: string }>("POST", "/client/nps", data),
+  getFavorites: () => apiReq<FavoritesResponse>("GET", "/client/me/favorites"),
+  addFavorite: (itemType: "trip" | "product", itemId: string) =>
+    apiReq<{ id: string }>("POST", "/client/me/favorites", { itemType, itemId }),
+  removeFavorite: (itemType: "trip" | "product", itemId: string) =>
+    apiReq<void>("DELETE", `/client/me/favorites/${itemType}/${itemId}`),
 };

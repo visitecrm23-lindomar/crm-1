@@ -14,6 +14,9 @@ import {
   loyaltyTransactionsTable,
   clientNotificationsTable,
   clientNpsResponsesTable,
+  clientFavoritesTable,
+  storeProductsTable,
+  storesTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, sql, inArray, gt, count, isNull } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -1053,6 +1056,136 @@ router.get("/client/notifications/stream", async (req, res, next: NextFunction):
   } catch (err) {
     next(err);
   }
+});
+
+router.get("/client/me/favorites", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== ROLES.CLIENT) { next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE")); return; }
+
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) { next(new NotFoundError("Perfil de cliente não encontrado", "NOT_FOUND")); return; }
+
+    const [tripFavs, productFavs] = await Promise.all([
+      db
+        .select({
+          favoriteId: clientFavoritesTable.id,
+          tripId: clientFavoritesTable.itemId,
+          productSlug: storeProductsTable.slug,
+          name: storeProductsTable.name,
+          images: storeProductsTable.images,
+          destination: storeProductsTable.destination,
+          price: storeProductsTable.price,
+          salePrice: storeProductsTable.salePrice,
+        })
+        .from(clientFavoritesTable)
+        .innerJoin(storeProductsTable, eq(storeProductsTable.tripId, clientFavoritesTable.itemId))
+        .innerJoin(storesTable, and(eq(storesTable.id, storeProductsTable.storeId), eq(storesTable.tenantId, me.tenantId)))
+        .where(and(
+          eq(clientFavoritesTable.clientId, client.id),
+          eq(clientFavoritesTable.tenantId, me.tenantId),
+          eq(clientFavoritesTable.itemType, "trip"),
+        ))
+        .orderBy(desc(clientFavoritesTable.createdAt)),
+      db
+        .select({
+          favoriteId: clientFavoritesTable.id,
+          productId: clientFavoritesTable.itemId,
+          productSlug: storeProductsTable.slug,
+          name: storeProductsTable.name,
+          images: storeProductsTable.images,
+          price: storeProductsTable.price,
+          salePrice: storeProductsTable.salePrice,
+        })
+        .from(clientFavoritesTable)
+        .innerJoin(storeProductsTable, eq(storeProductsTable.id, clientFavoritesTable.itemId))
+        .innerJoin(storesTable, and(eq(storesTable.id, storeProductsTable.storeId), eq(storesTable.tenantId, me.tenantId)))
+        .where(and(
+          eq(clientFavoritesTable.clientId, client.id),
+          eq(clientFavoritesTable.tenantId, me.tenantId),
+          eq(clientFavoritesTable.itemType, "product"),
+        ))
+        .orderBy(desc(clientFavoritesTable.createdAt)),
+    ]);
+
+    res.json({
+      trips: tripFavs.map((r) => ({
+        favoriteId: r.favoriteId,
+        tripId: r.tripId,
+        productSlug: r.productSlug,
+        name: r.name,
+        imageUrl: (r.images as string[])?.[0] ?? null,
+        destination: r.destination ?? null,
+        price: r.price,
+        salePrice: r.salePrice ?? null,
+      })),
+      products: productFavs.map((r) => ({
+        favoriteId: r.favoriteId,
+        productId: r.productId,
+        productSlug: r.productSlug,
+        name: r.name,
+        imageUrl: (r.images as string[])?.[0] ?? null,
+        price: r.price,
+        salePrice: r.salePrice ?? null,
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
+const AddFavoriteBody = z.object({
+  itemType: z.enum(["trip", "product"]),
+  itemId: z.string().min(1),
+});
+
+router.post("/client/me/favorites", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== ROLES.CLIENT) { next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE")); return; }
+
+    const parsed = AddFavoriteBody.safeParse(req.body);
+    if (!parsed.success) { next(new ValidationError("Dados inválidos", "VALIDATION_ERROR")); return; }
+
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) { next(new NotFoundError("Perfil de cliente não encontrado", "NOT_FOUND")); return; }
+
+    const { itemType, itemId } = parsed.data;
+    const id = generateId();
+
+    await db.insert(clientFavoritesTable).values({
+      id,
+      tenantId: me.tenantId,
+      clientId: client.id,
+      itemType,
+      itemId,
+    }).onConflictDoNothing();
+
+    res.status(201).json({ id, itemType, itemId });
+  } catch (err) { next(err); }
+});
+
+router.delete("/client/me/favorites/:itemType/:itemId", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== ROLES.CLIENT) { next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE")); return; }
+
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) { next(new NotFoundError("Perfil de cliente não encontrado", "NOT_FOUND")); return; }
+
+    const { itemType, itemId } = req.params;
+    if (!itemType || !itemId) { next(new ValidationError("Parâmetros inválidos", "VALIDATION_ERROR")); return; }
+
+    await db.delete(clientFavoritesTable).where(and(
+      eq(clientFavoritesTable.clientId, client.id),
+      eq(clientFavoritesTable.tenantId, me.tenantId),
+      eq(clientFavoritesTable.itemType, itemType),
+      eq(clientFavoritesTable.itemId, itemId),
+    ));
+
+    res.status(204).send();
+  } catch (err) { next(err); }
 });
 
 export default router;
