@@ -37,3 +37,4 @@ export * from "./tenant-integrations";
 export * from "./achievements";
 export * from "./scores";
 export * from "./club";
+export * from "./partners";

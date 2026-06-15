@@ -386,6 +386,13 @@
       "when": 1752000000000,
       "tag": "0054_club_community",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1781533492300,
+      "tag": "0055_marketplace_partners",
+      "breakpoints": true
     }
   ]
 }

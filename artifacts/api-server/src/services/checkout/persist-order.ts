@@ -11,6 +11,9 @@ import {
   tripsTable,
   dealsTable,
   referralsTable,
+  partnersTable,
+  partnerProductsTable,
+  partnerCommissionsTable,
 } from "@workspace/db";
 import { and, eq, sql, inArray } from "drizzle-orm";
 import { generateId, generateVoucherCode } from "../../lib/id";
@@ -91,6 +94,59 @@ export interface PersistOrderArgs {
 
 export interface PersistOrderResult {
   reservationClientId: string | null;
+}
+
+async function writePartnerCommissions(
+  tx: Tx,
+  tenantId: string,
+  orderId: string,
+  orderItemsData: PersistedOrderItem[],
+  fetchedProducts: Map<string, typeof storeProductsTable.$inferSelect>,
+): Promise<void> {
+  const partnerProductTotals = new Map<string, number>();
+  for (const item of orderItemsData) {
+    const product = fetchedProducts.get(item.productId);
+    const ppId = (product as typeof storeProductsTable.$inferSelect & { partnerProductId?: string | null }).partnerProductId;
+    if (!ppId) continue;
+    partnerProductTotals.set(ppId, (partnerProductTotals.get(ppId) ?? 0) + Number(item.total));
+  }
+  if (partnerProductTotals.size === 0) return;
+
+  const ppIds = [...partnerProductTotals.keys()];
+  const partnerProducts = await tx
+    .select({ id: partnerProductsTable.id, partnerId: partnerProductsTable.partnerId })
+    .from(partnerProductsTable)
+    .where(inArray(partnerProductsTable.id, ppIds));
+
+  const partnerIds = [...new Set(partnerProducts.map((p) => p.partnerId))];
+  const partners = await tx
+    .select({ id: partnersTable.id, commissionPct: partnersTable.commissionPct })
+    .from(partnersTable)
+    .where(inArray(partnersTable.id, partnerIds));
+
+  const partnerMap = new Map(partners.map((p) => [p.id, p]));
+  const period = new Date().toISOString().slice(0, 7);
+
+  for (const pp of partnerProducts) {
+    const grossAmount = partnerProductTotals.get(pp.id) ?? 0;
+    if (grossAmount <= 0) continue;
+    const partner = partnerMap.get(pp.partnerId);
+    if (!partner) continue;
+    const agencyPct = Number(partner.commissionPct);
+    const agencyAmount = Math.round(grossAmount * agencyPct) / 100;
+    const partnerAmount = grossAmount - agencyAmount;
+    await tx.insert(partnerCommissionsTable).values({
+      id: generateId(),
+      orderId,
+      partnerId: partner.id,
+      tenantId,
+      grossAmount: grossAmount.toFixed(2),
+      partnerAmount: partnerAmount.toFixed(2),
+      agencyAmount: agencyAmount.toFixed(2),
+      status: "pending",
+      period,
+    });
+  }
 }
 
 async function writeOrderAndItems(tx: Tx, args: PersistOrderArgs, reservationClientId: string | null): Promise<void> {
@@ -269,6 +325,7 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
     }
 
     await writeOrderAndItems(tx, args, reservationClientId);
+    await writePartnerCommissions(tx, args.store.tenantId, args.orderId, args.orderItemsData, args.fetchedProducts);
     await decrementStockAndSales(tx, args);
 
     let firstReservationId: string | null = null;

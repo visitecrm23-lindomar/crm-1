@@ -183,6 +183,7 @@ export const storeProductsTable = pgTable("store_products", {
   metaKeywords: text("meta_keywords"),
 
   tripId: text("trip_id").unique().references(() => tripsTable.id),
+  partnerProductId: text("partner_product_id"),
 
   isFeatured: boolean("is_featured").notNull().default(false),
   order: integer("order").notNull().default(0),

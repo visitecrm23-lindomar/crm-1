@@ -93,6 +93,7 @@ const AGENCY_NAVIGATION: NavItem[] = [
       { name: "Pedidos", href: "/loja/pedidos", icon: ShoppingCart },
       { name: "Cupons", href: "/loja/cupons", icon: Tag },
       { name: "Avaliações", href: "/loja/avaliacoes", icon: MessageCircle },
+      { name: "Parceiros", href: "/loja/parceiros", icon: Building2 },
     ],
   },
   { name: "Indicações", href: "/indicacoes", icon: Share2 },

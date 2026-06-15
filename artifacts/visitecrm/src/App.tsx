@@ -68,9 +68,13 @@ import LojaCategorias from "@/pages/loja/categorias";
 import LojaPedidos from "@/pages/loja/pedidos";
 import LojaCupons from "@/pages/loja/cupons";
 import LojaAvaliacoes from "@/pages/loja/avaliacoes";
+import LojaParceiros from "@/pages/loja/parceiros";
 
 // Public vitrine
 import Vitrine from "@/pages/vitrine";
+
+// Partner portal (public — JWT auth inside)
+import ParceirosPortal from "@/pages/parceiros/index";
 import { ROLES } from "@workspace/permissions";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -378,9 +382,14 @@ function Router() {
       <Route path="/loja/pedidos" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={LojaPedidos} />} />
       <Route path="/loja/cupons" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={LojaCupons} />} />
       <Route path="/loja/avaliacoes" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={LojaAvaliacoes} />} />
+      <Route path="/loja/parceiros" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={LojaParceiros} />} />
 
       {/* Client portal */}
       <Route path="/perfil" component={() => <RoleGate allowedRoles={CLIENTE_ONLY} layout={PortalLayout} signedOutPath="/sign-in?redirect_url=%2Fperfil" fallbackPath="/dashboard" requireTenant={false} component={PerfilPage} />} />
+
+      {/* Partner portal — public, JWT auth inside */}
+      <Route path="/parceiros" component={ParceirosPortal} />
+      <Route path="/parceiros/*" component={ParceirosPortal} />
 
       {/* Public vitrine — must be after admin routes */}
       <Route path="/loja/:slug" component={Vitrine} />
