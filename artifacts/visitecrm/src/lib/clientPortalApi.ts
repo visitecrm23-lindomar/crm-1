@@ -248,6 +248,17 @@ export interface ClientMemoriesResponse {
   memories: ClientMemory[];
 }
 
+export interface DreamDestinationItem {
+  id: string;
+  destinationName: string;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface DreamDestinationsResponse {
+  data: DreamDestinationItem[];
+}
+
 export const clientPortalApi = {
   getProfile: () => apiReq<ClientPortalProfile>("GET", "/client/me"),
   updateProfile: (data: {
@@ -292,4 +303,10 @@ export const clientPortalApi = {
     apiReq<RedeemLoyaltyResponse>("POST", "/client/me/loyalty/redeem", { reservationId, pointsToRedeem }),
   getAchievements: () => apiReq<ClientAchievementsResponse>("GET", "/client/me/achievements"),
   getMemories: () => apiReq<ClientMemoriesResponse>("GET", "/client/me/memories"),
+  getDreamDestinations: () => apiReq<DreamDestinationsResponse>("GET", "/client/me/dream-destinations"),
+  addDreamDestination: (destinationName: string, note?: string) =>
+    apiReq<DreamDestinationItem>("POST", "/client/me/dream-destinations", { destinationName, note }),
+  removeDreamDestination: (id: string) =>
+    apiReq<void>("DELETE", `/client/me/dream-destinations/${id}`),
+  getVoucherUrl: (reservationId: string) => `${BASE}/api/client/reservations/${reservationId}/voucher`,
 };

@@ -1,6 +1,6 @@
 import { useState, useEffect, type ReactElement } from "react";
 import { useLocation, useSearch } from "wouter";
-import { clientPortalApi, type ClientPortalProfile, type ClientLoyalty, type ClientReferral, type FavoritesResponse, type ClientPortalReservation, type ClientLoyaltyTransaction, type ClientAchievementsResponse, type ClientMemoriesResponse } from "@/lib/clientPortalApi";
+import { clientPortalApi, type ClientPortalProfile, type ClientLoyalty, type ClientReferral, type FavoritesResponse, type ClientPortalReservation, type ClientLoyaltyTransaction, type ClientAchievementsResponse, type ClientMemoriesResponse, type DreamDestinationItem } from "@/lib/clientPortalApi";
 import QRCode from "qrcode";
 import { useGetMe } from "@workspace/api-client-react";
 import { RESERVATION_STATUS } from "@workspace/permissions";
@@ -2996,38 +2996,52 @@ function MapaTab() {
   );
 }
 
-function SonhosTab({ profile, onUpdated }: { profile: ClientPortalProfile; onUpdated: (c: ClientPortalProfile["client"]) => void }) {
-  const [destinations, setDestinations] = useState<string[]>(profile.client?.dreamDestinations ?? []);
+function SonhosTab() {
+  const [items, setItems] = useState<DreamDestinationItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [input, setInput] = useState("");
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
-  const persistUpdate = async (next: string[]) => {
+  useEffect(() => {
+    clientPortalApi.getDreamDestinations()
+      .then(d => setItems(d.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const addDestination = async () => {
+    const val = input.trim();
+    if (!val || items.length >= 30 || saving) return;
     setSaving(true);
     try {
-      await clientPortalApi.updatePreferences({ dreamDestinations: next });
-      onUpdated({ ...(profile.client as NonNullable<ClientPortalProfile["client"]>), dreamDestinations: next });
+      const created = await clientPortalApi.addDreamDestination(val);
+      setItems(prev => [created, ...prev]);
+      setInput("");
     } catch {
-      toast({ title: "Erro ao salvar destinos", variant: "destructive" });
+      toast({ title: "Erro ao adicionar destino", variant: "destructive" });
     } finally {
       setSaving(false);
     }
   };
 
-  const addDestination = () => {
-    const val = input.trim();
-    if (!val || destinations.includes(val) || destinations.length >= 30) return;
-    const next = [...destinations, val];
-    setDestinations(next);
-    setInput("");
-    persistUpdate(next);
+  const removeDestination = async (id: string) => {
+    setSaving(true);
+    try {
+      await clientPortalApi.removeDreamDestination(id);
+      setItems(prev => prev.filter(d => d.id !== id));
+    } catch {
+      toast({ title: "Erro ao remover destino", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const removeDestination = (dest: string) => {
-    const next = destinations.filter(d => d !== dest);
-    setDestinations(next);
-    persistUpdate(next);
-  };
+  if (loading) return (
+    <div className="space-y-2">
+      {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-lg" />)}
+    </div>
+  );
 
   return (
     <div className="space-y-5">
@@ -3048,12 +3062,12 @@ function SonhosTab({ profile, onUpdated }: { profile: ClientPortalProfile; onUpd
           disabled={saving}
           className="flex-1"
         />
-        <Button type="button" onClick={addDestination} disabled={!input.trim() || saving} size="sm" className="shrink-0">
+        <Button type="button" onClick={addDestination} disabled={!input.trim() || saving || items.length >= 30} size="sm" className="shrink-0">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Adicionar"}
         </Button>
       </div>
 
-      {destinations.length === 0 ? (
+      {items.length === 0 ? (
         <div className="text-center py-14 border-2 border-dashed border-muted rounded-xl">
           <Globe className="w-12 h-12 mx-auto text-muted-foreground/30 mb-3" />
           <h3 className="font-semibold text-base mb-1">Sua lista está vazia</h3>
@@ -3061,18 +3075,18 @@ function SonhosTab({ profile, onUpdated }: { profile: ClientPortalProfile; onUpd
         </div>
       ) : (
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">{destinations.length} destino{destinations.length !== 1 ? "s" : ""} na lista</p>
-          {destinations.map((dest, i) => (
-            <div key={i} className="flex items-center justify-between rounded-lg border bg-card px-4 py-3 group hover:bg-muted/30 transition-colors">
+          <p className="text-xs text-muted-foreground">{items.length} destino{items.length !== 1 ? "s" : ""} na lista</p>
+          {items.map((dest) => (
+            <div key={dest.id} className="flex items-center justify-between rounded-lg border bg-card px-4 py-3 group hover:bg-muted/30 transition-colors">
               <div className="flex items-center gap-2.5">
                 <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
-                <span className="font-medium text-sm">{dest}</span>
+                <span className="font-medium text-sm">{dest.destinationName}</span>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                onClick={() => removeDestination(dest)}
+                onClick={() => removeDestination(dest.id)}
                 disabled={saving}
               >
                 <span className="text-lg leading-none">×</span>
@@ -3082,6 +3096,52 @@ function SonhosTab({ profile, onUpdated }: { profile: ClientPortalProfile; onUpd
         </div>
       )}
     </div>
+  );
+}
+
+function MemoryCertificate({ memory }: { memory: ClientMemoriesResponse["memories"][number] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 transition-colors"
+      >
+        <Trophy className="w-3 h-3" />
+        Certificado
+      </button>
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-8 text-center space-y-4 border-4 border-amber-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Trophy className="w-12 h-12 mx-auto text-amber-500" />
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1">Certificado de Viagem</p>
+              <h2 className="text-xl font-bold text-gray-900">{memory.tripName}</h2>
+            </div>
+            <div className="bg-amber-50 rounded-xl p-4 space-y-1">
+              <div className="flex items-center justify-center gap-1 text-sm text-amber-800">
+                <MapPin className="w-3.5 h-3.5" />
+                <span>{memory.tripDestination}</span>
+              </div>
+              <p className="text-xs text-amber-600">
+                {formatDateShort(memory.tripDepartureDate)}
+                {memory.tripReturnDate ? ` – ${formatDateShort(memory.tripReturnDate)}` : ""}
+              </p>
+            </div>
+            <p className="text-xs text-gray-500 italic">Confirma que você viveu esta experiência inesquecível.</p>
+            <button className="text-xs text-muted-foreground underline" onClick={() => setOpen(false)}>
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -3172,6 +3232,18 @@ function MemoriasTab() {
                   )}
                 </div>
               )}
+              <div className="flex flex-wrap gap-2 pt-2 border-t mt-1">
+                <a
+                  href={clientPortalApi.getVoucherUrl(memory.reservationId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border bg-card hover:bg-muted transition-colors"
+                >
+                  <Download className="w-3 h-3" />
+                  Baixar Voucher
+                </a>
+                <MemoryCertificate memory={memory} />
+              </div>
             </div>
           </div>
         </Card>
@@ -3377,12 +3449,7 @@ export default function PerfilPage() {
         </TabsContent>
 
         <TabsContent value="sonhos">
-          <SonhosTab
-            profile={profile}
-            onUpdated={(updated) => {
-              setProfile((prev) => prev ? { ...prev, client: updated } : prev);
-            }}
-          />
+          <SonhosTab />
         </TabsContent>
 
         <TabsContent value="memorias">

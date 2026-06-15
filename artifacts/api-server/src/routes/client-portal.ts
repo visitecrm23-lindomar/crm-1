@@ -18,10 +18,12 @@ import {
   storeProductsTable,
   storesTable,
   tripMediaTable,
+  clientAchievementsTable,
+  clientDreamDestinationsTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, sql, inArray, gt, count, isNull, lt } from "drizzle-orm";
 import { z } from "zod/v4";
-import { requireAuth } from "../lib/tenant";
+import { requireAuth, MANAGEMENT_ROLES } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { ROLES, REFERRAL_STATUS, RESERVATION_STATUS } from "@workspace/permissions";
 import { generateVoucherPdf } from "../lib/voucher-pdf";
@@ -1533,6 +1535,67 @@ router.delete("/client/me/favorites/:itemType/:itemId", async (req, res, next: N
   } catch (err) { next(err); }
 });
 
+async function computeAndPersistBadges(
+  tenantId: string,
+  clientRecord: { id: string; birthDate: Date | null; successfulReferrals: number | null },
+): Promise<{
+  badgeConditions: Array<{ key: string; name: string; description: string; earned: boolean; progress?: number; target?: number }>;
+  stats: { totalTrips: number; visitedStates: string[]; uniqueDestinations: string[] };
+}> {
+  const reservationsWithTrips = await db
+    .select({ id: reservationsTable.id, createdAt: reservationsTable.createdAt, tripDestinationState: tripsTable.destinationState, tripDestination: tripsTable.destination })
+    .from(reservationsTable)
+    .innerJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
+    .where(and(eq(reservationsTable.clientId, clientRecord.id), eq(reservationsTable.tenantId, tenantId), inArray(reservationsTable.status, [RESERVATION_STATUS.CONFIRMED])));
+
+  const confirmedCount = reservationsWithTrips.length;
+  const visitedStates = [...new Set(reservationsWithTrips.map(r => r.tripDestinationState).filter((s): s is string => !!s && s.length === 2))];
+  const uniqueDestinations = [...new Set(reservationsWithTrips.map(r => r.tripDestination).filter(Boolean))];
+
+  const [loyaltyProgram] = await db.select({ id: loyaltyProgramsTable.id }).from(loyaltyProgramsTable)
+    .where(and(eq(loyaltyProgramsTable.tenantId, tenantId), eq(loyaltyProgramsTable.isActive, true))).limit(1);
+  let isLoyaltyMember = false;
+  if (loyaltyProgram) {
+    const [member] = await db.select({ id: loyaltyMembersTable.id }).from(loyaltyMembersTable)
+      .where(and(eq(loyaltyMembersTable.tenantId, tenantId), eq(loyaltyMembersTable.programId, loyaltyProgram.id), eq(loyaltyMembersTable.clientId, clientRecord.id))).limit(1);
+    isLoyaltyMember = !!member;
+  }
+
+  const successfulReferrals = clientRecord.successfulReferrals ?? 0;
+  const now = new Date();
+  const isBirthdayMonth = clientRecord.birthDate !== null && clientRecord.birthDate.getMonth() === now.getMonth();
+  const firstConfirmed = reservationsWithTrips.length > 0
+    ? reservationsWithTrips.reduce((a, b) => a.createdAt < b.createdAt ? a : b) : null;
+
+  const conditions = [
+    { key: "primeira_viagem",    name: "Primeira Viagem",       description: "Realizou sua primeira viagem conosco",       earned: confirmedCount >= 1,        earnedAt: firstConfirmed?.createdAt ?? now, progress: Math.min(confirmedCount, 1),       target: 1  as number | undefined },
+    { key: "viajante_frequente", name: "Viajante Frequente",    description: "5 ou mais viagens confirmadas",               earned: confirmedCount >= 5,        earnedAt: now,                              progress: Math.min(confirmedCount, 5),       target: 5  as number | undefined },
+    { key: "explorador",         name: "Explorador",             description: "10 ou mais viagens realizadas",              earned: confirmedCount >= 10,       earnedAt: now,                              progress: Math.min(confirmedCount, 10),      target: 10 as number | undefined },
+    { key: "grande_aventureiro", name: "Grande Aventureiro",    description: "20 ou mais viagens realizadas",              earned: confirmedCount >= 20,       earnedAt: now,                              progress: Math.min(confirmedCount, 20),      target: 20 as number | undefined },
+    { key: "explorador_brasil",  name: "Explorador do Brasil",  description: "Visitou 5 ou mais estados brasileiros",      earned: visitedStates.length >= 5, earnedAt: now,                              progress: Math.min(visitedStates.length, 5), target: 5  as number | undefined },
+    { key: "embaixador",         name: "Embaixador",             description: "Indicou 3 ou mais amigos com sucesso",      earned: successfulReferrals >= 3,  earnedAt: now,                              progress: Math.min(successfulReferrals, 3),  target: 3  as number | undefined },
+    { key: "aniversariante",     name: "Aniversariante do Mês", description: "Parabéns pelo seu aniversário neste mês!", earned: isBirthdayMonth,           earnedAt: now,                              progress: undefined,                         target: undefined },
+    { key: "cliente_fiel",       name: "Cliente Fiel",          description: "Membro ativo do programa de fidelidade",    earned: isLoyaltyMember,           earnedAt: now,                              progress: undefined,                         target: undefined },
+  ];
+
+  for (const c of conditions) {
+    if (c.earned) {
+      await db.insert(clientAchievementsTable).values({
+        id: generateId(),
+        clientId: clientRecord.id,
+        tenantId,
+        badgeKey: c.key,
+        earnedAt: c.earnedAt,
+      }).onConflictDoNothing();
+    }
+  }
+
+  return {
+    badgeConditions: conditions.map(c => ({ key: c.key, name: c.name, description: c.description, earned: c.earned, progress: c.progress, target: c.target })),
+    stats: { totalTrips: confirmedCount, visitedStates, uniqueDestinations },
+  };
+}
+
 router.get("/client/me/achievements", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
@@ -1545,129 +1608,25 @@ router.get("/client/me/achievements", async (req, res, next: NextFunction): Prom
       return;
     }
 
-    const reservationsWithTrips = await db
-      .select({
-        id: reservationsTable.id,
-        status: reservationsTable.status,
-        createdAt: reservationsTable.createdAt,
-        tripDestinationState: tripsTable.destinationState,
-        tripDestination: tripsTable.destination,
-      })
-      .from(reservationsTable)
-      .innerJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
-      .where(and(
-        eq(reservationsTable.clientId, client.id),
-        eq(reservationsTable.tenantId, me.tenantId),
-        inArray(reservationsTable.status, [RESERVATION_STATUS.CONFIRMED]),
-      ));
+    const { badgeConditions, stats } = await computeAndPersistBadges(me.tenantId, client);
 
-    const confirmedCount = reservationsWithTrips.length;
-    const visitedStates = [...new Set(
-      reservationsWithTrips.map(r => r.tripDestinationState).filter((s): s is string => !!s && s.length === 2)
-    )];
-    const uniqueDestinations = [...new Set(
-      reservationsWithTrips.map(r => r.tripDestination).filter(Boolean)
-    )];
+    const persisted = await db
+      .select({ badgeKey: clientAchievementsTable.badgeKey, earnedAt: clientAchievementsTable.earnedAt })
+      .from(clientAchievementsTable)
+      .where(and(eq(clientAchievementsTable.tenantId, me.tenantId), eq(clientAchievementsTable.clientId, client.id)));
+    const persistedMap = new Map(persisted.map(b => [b.badgeKey, b.earnedAt]));
 
-    const [loyaltyProgram] = await db
-      .select({ id: loyaltyProgramsTable.id })
-      .from(loyaltyProgramsTable)
-      .where(and(eq(loyaltyProgramsTable.tenantId, me.tenantId), eq(loyaltyProgramsTable.isActive, true)))
-      .limit(1);
+    const badges = badgeConditions.map(b => ({
+      key: b.key,
+      name: b.name,
+      description: b.description,
+      earned: b.earned,
+      earnedAt: b.earned ? (persistedMap.get(b.key)?.toISOString() ?? null) : null,
+      progress: b.progress,
+      target: b.target,
+    }));
 
-    let isLoyaltyMember = false;
-    if (loyaltyProgram) {
-      const [member] = await db
-        .select({ id: loyaltyMembersTable.id })
-        .from(loyaltyMembersTable)
-        .where(and(
-          eq(loyaltyMembersTable.tenantId, me.tenantId),
-          eq(loyaltyMembersTable.programId, loyaltyProgram.id),
-          eq(loyaltyMembersTable.clientId, client.id),
-        ))
-        .limit(1);
-      isLoyaltyMember = !!member;
-    }
-
-    const successfulReferrals = client.successfulReferrals ?? 0;
-    const now = new Date();
-    const isBirthdayMonth = client.birthDate !== null &&
-      client.birthDate.getMonth() === now.getMonth();
-
-    const firstConfirmed = reservationsWithTrips.length > 0
-      ? reservationsWithTrips.reduce((a, b) => a.createdAt < b.createdAt ? a : b)
-      : null;
-
-    const badges = [
-      {
-        key: "primeira_viagem",
-        name: "Primeira Viagem",
-        description: "Realizou sua primeira viagem conosca",
-        earned: confirmedCount >= 1,
-        earnedAt: confirmedCount >= 1 ? (firstConfirmed?.createdAt?.toISOString() ?? null) : null,
-      },
-      {
-        key: "viajante_frequente",
-        name: "Viajante Frequente",
-        description: "5 ou mais viagens confirmadas",
-        earned: confirmedCount >= 5,
-        earnedAt: null,
-        progress: Math.min(confirmedCount, 5),
-        target: 5,
-      },
-      {
-        key: "explorador",
-        name: "Explorador",
-        description: "10 ou mais viagens realizadas",
-        earned: confirmedCount >= 10,
-        earnedAt: null,
-        progress: Math.min(confirmedCount, 10),
-        target: 10,
-      },
-      {
-        key: "grande_aventureiro",
-        name: "Grande Aventureiro",
-        description: "20 ou mais viagens realizadas",
-        earned: confirmedCount >= 20,
-        earnedAt: null,
-        progress: Math.min(confirmedCount, 20),
-        target: 20,
-      },
-      {
-        key: "explorador_brasil",
-        name: "Explorador do Brasil",
-        description: "Visitou 5 ou mais estados brasileiros",
-        earned: visitedStates.length >= 5,
-        earnedAt: null,
-        progress: Math.min(visitedStates.length, 5),
-        target: 5,
-      },
-      {
-        key: "embaixador",
-        name: "Embaixador",
-        description: "Indicou 3 ou mais amigos com sucesso",
-        earned: successfulReferrals >= 3,
-        earnedAt: null,
-        progress: Math.min(successfulReferrals, 3),
-        target: 3,
-      },
-      {
-        key: "aniversariante",
-        name: "Aniversariante do Mês",
-        description: "Parabéns pelo seu aniversário neste mês!",
-        earned: isBirthdayMonth,
-        earnedAt: null,
-      },
-      {
-        key: "cliente_fiel",
-        name: "Cliente Fiel",
-        description: "Membro ativo do programa de fidelidade",
-        earned: isLoyaltyMember,
-        earnedAt: null,
-      },
-    ];
-
-    res.json({ badges, stats: { totalTrips: confirmedCount, visitedStates, uniqueDestinations } });
+    res.json({ badges, stats });
   } catch (err) { next(err); }
 });
 
@@ -1753,6 +1712,74 @@ router.get("/client/me/memories", async (req, res, next: NextFunction): Promise<
     }));
 
     res.json({ memories });
+  } catch (err) { next(err); }
+});
+
+router.get("/client/me/dream-destinations", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== ROLES.CLIENT) { next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE")); return; }
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) { res.json({ data: [] }); return; }
+    const destinations = await db.select()
+      .from(clientDreamDestinationsTable)
+      .where(and(eq(clientDreamDestinationsTable.tenantId, me.tenantId), eq(clientDreamDestinationsTable.clientId, client.id)))
+      .orderBy(desc(clientDreamDestinationsTable.createdAt));
+    res.json({ data: destinations.map(d => ({ id: d.id, destinationName: d.destinationName, note: d.note, createdAt: d.createdAt.toISOString() })) });
+  } catch (err) { next(err); }
+});
+
+const AddDreamDestinationBody = z.object({
+  destinationName: z.string().min(1).max(200),
+  note: z.string().max(500).optional(),
+});
+
+router.post("/client/me/dream-destinations", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== ROLES.CLIENT) { next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE")); return; }
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) { next(new NotFoundError("Cliente não encontrado", "CLIENT_NOT_FOUND")); return; }
+    const parsed = AddDreamDestinationBody.safeParse(req.body);
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
+    const [countResult] = await db.select({ c: count() }).from(clientDreamDestinationsTable)
+      .where(and(eq(clientDreamDestinationsTable.tenantId, me.tenantId), eq(clientDreamDestinationsTable.clientId, client.id)));
+    if ((countResult?.c ?? 0) >= 30) { next(new ValidationError("Limite de 30 destinos atingido", "LIMIT_EXCEEDED")); return; }
+    const id = generateId();
+    await db.insert(clientDreamDestinationsTable).values({ id, clientId: client.id, tenantId: me.tenantId, destinationName: parsed.data.destinationName, note: parsed.data.note ?? null });
+    res.status(201).json({ id, destinationName: parsed.data.destinationName, note: parsed.data.note ?? null, createdAt: new Date().toISOString() });
+  } catch (err) { next(err); }
+});
+
+router.delete("/client/me/dream-destinations/:id", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== ROLES.CLIENT) { next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE")); return; }
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) { next(new NotFoundError("Cliente não encontrado", "CLIENT_NOT_FOUND")); return; }
+    const [dest] = await db.select({ id: clientDreamDestinationsTable.id })
+      .from(clientDreamDestinationsTable)
+      .where(and(eq(clientDreamDestinationsTable.id, req.params.id), eq(clientDreamDestinationsTable.tenantId, me.tenantId), eq(clientDreamDestinationsTable.clientId, client.id)))
+      .limit(1);
+    if (!dest) { next(new NotFoundError("Destino não encontrado", "NOT_FOUND")); return; }
+    await db.delete(clientDreamDestinationsTable).where(eq(clientDreamDestinationsTable.id, req.params.id));
+    res.status(204).send();
+  } catch (err) { next(err); }
+});
+
+router.get("/admin/clients/:clientId/dream-destinations", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Acesso restrito", "FORBIDDEN_ROLE")); return; }
+    const destinations = await db.select()
+      .from(clientDreamDestinationsTable)
+      .where(and(eq(clientDreamDestinationsTable.tenantId, me.tenantId), eq(clientDreamDestinationsTable.clientId, req.params.clientId)))
+      .orderBy(desc(clientDreamDestinationsTable.createdAt));
+    res.json({ data: destinations.map(d => ({ id: d.id, destinationName: d.destinationName, note: d.note, createdAt: d.createdAt.toISOString() })) });
   } catch (err) { next(err); }
 });
 

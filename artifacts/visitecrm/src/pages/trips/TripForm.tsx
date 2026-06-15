@@ -10,9 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Plus, X, Check, Clock, MapPin, Loader2, Link2, GripVertical, Lock } from "lucide-react";
+import { ArrowLeft, Plus, X, Check, Clock, MapPin, Loader2, Link2, GripVertical, Lock, Camera } from "lucide-react";
 import { TiptapEditor } from "./TiptapEditor";
 import { LayoutMiniPreview, TripCostsTab } from "./TripCostsSection";
 import { formatCurrency } from "./utils";
@@ -22,11 +24,20 @@ import { type TripFormData, EMPTY_FORM, toTripFormData, newBP, newDay } from "./
 import { TripFormPricesTab } from "./TripFormPricesTab";
 import { TripFormTransportTab } from "./TripFormTransportTab";
 
+const TRIP_FORM_API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
 export function TripForm({ tripId }: { tripId?: string }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [tab, setTab] = useState("basico");
   const [form, setForm] = useState<TripFormData>(EMPTY_FORM);
+  const [memoryPhotos, setMemoryPhotos] = useState<Array<{ id: string; url: string; type: string; caption: string | null; createdAt: string }>>([]);
+  const [loadingMedia, setLoadingMedia] = useState(false);
+  const [showAddPhotoDialog, setShowAddPhotoDialog] = useState(false);
+  const [newPhotoUrl, setNewPhotoUrl] = useState<string | undefined>(undefined);
+  const [newPhotoCaption, setNewPhotoCaption] = useState("");
+  const [savingPhoto, setSavingPhoto] = useState(false);
+  const [addingPhoto, setAddingPhoto] = useState(false);
   const [tripLimitError, setTripLimitError] = useState<{ resource: string; current?: number; limit?: number } | null>(null);
   const [seatConflictError, setSeatConflictError] = useState<string | null>(null);
   const dragItem = useRef<{ list: "inclusions" | "exclusions"; idx: number } | null>(null);
@@ -132,6 +143,16 @@ export function TripForm({ tripId }: { tripId?: string }) {
     if (seatConflictError) setSeatConflictError(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.freePassengers]);
+
+  useEffect(() => {
+    if (!tripId) return;
+    setLoadingMedia(true);
+    fetch(`${TRIP_FORM_API_BASE}/api/trips/${tripId}/media`, { credentials: "include" })
+      .then(r => r.json())
+      .then(d => setMemoryPhotos(d.data ?? []))
+      .catch(() => {})
+      .finally(() => setLoadingMedia(false));
+  }, [tripId]);
 
   const set = (k: keyof TripFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(prev => ({ ...prev, [k]: e.target.value }));
@@ -260,6 +281,39 @@ export function TripForm({ tripId }: { tripId?: string }) {
       toast({ title: "Erro ao salvar custos", variant: "destructive" });
     } finally {
       setIsSavingCosts(false);
+    }
+  };
+
+  const handleDeletePhoto = async (photoId: string) => {
+    try {
+      await fetch(`${TRIP_FORM_API_BASE}/api/trips/${tripId}/media/${photoId}`, { method: "DELETE", credentials: "include" });
+      setMemoryPhotos(prev => prev.filter(p => p.id !== photoId));
+      toast({ title: "Foto removida" });
+    } catch {
+      toast({ title: "Erro ao remover foto", variant: "destructive" });
+    }
+  };
+
+  const handleSavePhoto = async () => {
+    if (!newPhotoUrl || !tripId) return;
+    setSavingPhoto(true);
+    try {
+      const res = await fetch(`${TRIP_FORM_API_BASE}/api/trips/${tripId}/media`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: newPhotoUrl, type: "image", caption: newPhotoCaption.trim() || undefined }),
+      });
+      const newPhoto = await res.json();
+      setMemoryPhotos(prev => [...prev, newPhoto]);
+      setShowAddPhotoDialog(false);
+      setNewPhotoUrl(undefined);
+      setNewPhotoCaption("");
+      toast({ title: "Foto adicionada ao álbum!" });
+    } catch {
+      toast({ title: "Erro ao salvar foto", variant: "destructive" });
+    } finally {
+      setSavingPhoto(false);
     }
   };
 
@@ -746,7 +800,84 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 disabled={isPending}
               />
             </div>
+            {tripId && (
+              <div className="border-t pt-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold">Fotos de Memórias do Portal</h3>
+                    <p className="text-xs text-muted-foreground">Fotos que aparecem no álbum de memórias dos clientes desta viagem</p>
+                  </div>
+                  <Button size="sm" variant="outline" type="button" onClick={() => setShowAddPhotoDialog(true)}>
+                    <Camera className="w-4 h-4 mr-1" />Adicionar Foto
+                  </Button>
+                </div>
+                {loadingMedia ? (
+                  <div className="grid grid-cols-4 gap-2">
+                    {[1,2,3,4].map(i => <Skeleton key={i} className="aspect-square rounded-md" />)}
+                  </div>
+                ) : memoryPhotos.length === 0 ? (
+                  <div className="border-2 border-dashed rounded-lg p-6 text-center">
+                    <Camera className="w-8 h-8 mx-auto text-muted-foreground/30 mb-2" />
+                    <p className="text-xs text-muted-foreground">Nenhuma foto. Clique em "Adicionar Foto" para incluir imagens no álbum de memórias.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                    {memoryPhotos.map(photo => (
+                      <div key={photo.id} className="relative group aspect-square">
+                        <img src={photo.url} alt={photo.caption ?? ""} className="w-full h-full object-cover rounded-md border" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="destructive"
+                          className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => handleDeletePhoto(photo.id)}
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                        {photo.caption && (
+                          <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] p-1 truncate rounded-b-md opacity-0 group-hover:opacity-100 transition-opacity">
+                            {photo.caption}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
+          <Dialog open={showAddPhotoDialog} onOpenChange={setShowAddPhotoDialog}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Adicionar Foto de Memória</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <CoverImageUpload
+                  value={newPhotoUrl}
+                  onChange={(url) => setNewPhotoUrl(url)}
+                  onUploadingChange={(u) => setAddingPhoto(u)}
+                  disabled={addingPhoto || savingPhoto}
+                  objectFit="cover"
+                />
+                <div className="space-y-1">
+                  <Label className="text-xs">Legenda (opcional)</Label>
+                  <Input
+                    placeholder="Ex: Vista do pôr do sol na praia"
+                    value={newPhotoCaption}
+                    onChange={(e) => setNewPhotoCaption(e.target.value)}
+                    maxLength={200}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" type="button" onClick={() => { setShowAddPhotoDialog(false); setNewPhotoUrl(undefined); setNewPhotoCaption(""); }}>Cancelar</Button>
+                <Button type="button" disabled={!newPhotoUrl || addingPhoto || savingPhoto} onClick={handleSavePhoto}>
+                  {savingPhoto ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                  Salvar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {tripId && (

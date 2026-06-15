@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import {
   getListClientActivitiesQueryKey,
   getGetClientReferralQueryKey,
@@ -31,13 +31,62 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Phone, Mail, MapPin, Calendar, FileText, Download, Upload, Trash2,
   Star, TrendingUp, Gift, Award, Zap, MessageSquare, Loader2, Plus,
-  CreditCard, CheckSquare, XCircle,
+  CreditCard, CheckSquare, XCircle, Globe,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 
 import { formatCurrency } from "@/lib/utils";
+
+const API_BASE_ADMIN = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+function ClientDreamsTab({ clientId, isOpen }: { clientId: string; isOpen: boolean }) {
+  const [items, setItems] = useState<Array<{ id: string; destinationName: string; note: string | null; createdAt: string }>>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setLoading(true);
+    fetch(`${API_BASE_ADMIN}/api/admin/clients/${clientId}/dream-destinations`, { credentials: "include" })
+      .then(r => r.json())
+      .then(d => setItems(d.data ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [clientId, isOpen]);
+
+  if (loading) {
+    return (
+      <div className="space-y-2 mt-4">
+        {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" />)}
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="text-center py-10 mt-4">
+        <Globe className="w-10 h-10 mx-auto text-muted-foreground/30 mb-2" />
+        <p className="text-sm text-muted-foreground">Nenhum destino dos sonhos registrado pelo cliente.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 mt-4">
+      <p className="text-xs text-muted-foreground mb-3">{items.length} destino{items.length !== 1 ? "s" : ""} na lista de sonhos</p>
+      {items.map(item => (
+        <div key={item.id} className="flex items-start gap-2.5 p-3 rounded-lg border bg-card">
+          <MapPin className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{item.destinationName}</p>
+            {item.note && <p className="text-xs text-muted-foreground mt-0.5">{item.note}</p>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   active:    { label: "Ativo",    color: "bg-green-100 text-green-800 border-green-200" },
@@ -485,6 +534,7 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
   }, [loyaltyTransactions, loyaltyInfo, member]);
 
   const isOpen = open && !!id;
+  const [activeTab, setActiveTab] = useState("data");
 
   return (
     <Dialog open={isOpen} onOpenChange={o => { if (!o) onClose(); }}>
@@ -534,8 +584,8 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
               </Card>
             </div>
 
-            <Tabs defaultValue="data">
-              <TabsList className="grid w-full grid-cols-7">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="grid w-full grid-cols-8">
                 <TabsTrigger value="data">Dados</TabsTrigger>
                 <TabsTrigger value="trips">Viagens</TabsTrigger>
                 <TabsTrigger value="financial">Financeiro</TabsTrigger>
@@ -543,6 +593,7 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                 <TabsTrigger value="referral">Indicações</TabsTrigger>
                 <TabsTrigger value="history">Histórico</TabsTrigger>
                 <TabsTrigger value="documents">Docs</TabsTrigger>
+                <TabsTrigger value="sonhos">Sonhos</TabsTrigger>
               </TabsList>
 
               <TabsContent value="data" className="space-y-3 mt-4">
@@ -736,6 +787,10 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
 
               <TabsContent value="documents" className="mt-4">
                 <ClientDocumentsTab clientId={id} />
+              </TabsContent>
+
+              <TabsContent value="sonhos">
+                <ClientDreamsTab clientId={id} isOpen={activeTab === "sonhos"} />
               </TabsContent>
             </Tabs>
 
