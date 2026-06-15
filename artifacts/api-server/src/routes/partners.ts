@@ -43,7 +43,11 @@ function verifyPassword(password: string, stored: string): boolean {
 // ────── Partner JWT helpers ───────────────────────────────────────────────────
 
 function partnerSecret(): string {
-  return (process.env["CREDENTIAL_ENCRYPTION_KEY"] ?? "dev-fallback-secret") + "_partner_portal_v1";
+  const key = process.env["CREDENTIAL_ENCRYPTION_KEY"];
+  if (!key && process.env.NODE_ENV !== "development") {
+    throw new Error("CREDENTIAL_ENCRYPTION_KEY must be set — partner portal tokens cannot be signed safely without it");
+  }
+  return (key ?? "dev-only-insecure-fallback-do-not-use-in-prod") + "_partner_portal_v1";
 }
 
 export function createPartnerToken(partnerId: string): string {
@@ -463,6 +467,68 @@ router.post("/parceiros", async (req, res, next: NextFunction): Promise<void> =>
   } catch (err) { next(err); }
 });
 
+// GET /api/parceiros/commissions — monthly payout report (MUST be before /:id)
+router.get("/parceiros/commissions", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!MANAGEMENT_ROLES.includes(me.role as never)) { next(new ForbiddenError("Acesso restrito", "FORBIDDEN_ROLE")); return; }
+    const { period } = req.query;
+    const currentPeriod = typeof period === "string" ? period : new Date().toISOString().slice(0, 7);
+
+    const rows = await db
+      .select({
+        partnerId: partnerCommissionsTable.partnerId,
+        partnerName: partnersTable.name,
+        partnerEmail: partnersTable.email,
+        grossAmount: sql<number>`SUM(${partnerCommissionsTable.grossAmount})::float`,
+        partnerAmount: sql<number>`SUM(${partnerCommissionsTable.partnerAmount})::float`,
+        agencyAmount: sql<number>`SUM(${partnerCommissionsTable.agencyAmount})::float`,
+        pendingCount: sql<number>`COUNT(*) FILTER (WHERE ${partnerCommissionsTable.status} = 'pending')::int`,
+        paidCount: sql<number>`COUNT(*) FILTER (WHERE ${partnerCommissionsTable.status} = 'paid')::int`,
+        orderCount: sql<number>`COUNT(DISTINCT ${partnerCommissionsTable.orderId})::int`,
+      })
+      .from(partnerCommissionsTable)
+      .innerJoin(partnersTable, eq(partnersTable.id, partnerCommissionsTable.partnerId))
+      .where(and(eq(partnerCommissionsTable.tenantId, me.tenantId), eq(partnerCommissionsTable.period, currentPeriod)))
+      .groupBy(partnerCommissionsTable.partnerId, partnersTable.name, partnersTable.email);
+
+    if (req.query["export"] === "csv") {
+      const sanitize = (v: string | null | undefined) => {
+        const s = String(v ?? "");
+        const e = s.replace(/"/g, '""');
+        return /^[=+\-@\t]/.test(e) ? `"'${e}"` : `"${e}"`;
+      };
+      const lines = [
+        `RELATÓRIO DE REPASSES — ${currentPeriod}`,
+        "Parceiro,Email,Pedidos,Bruto,Repasse Parceiro,Receita Agência,Pendente,Pago",
+        ...rows.map(r =>
+          `${sanitize(r.partnerName)},${sanitize(r.partnerEmail)},${r.orderCount},${Number(r.grossAmount).toFixed(2)},${Number(r.partnerAmount).toFixed(2)},${Number(r.agencyAmount).toFixed(2)},${r.pendingCount > 0 ? "Sim" : "Não"},${r.paidCount > 0 ? "Parcial" : "Não"}`
+        ),
+      ];
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="repasses-${currentPeriod}.csv"`);
+      res.send("\uFEFF" + lines.join("\r\n"));
+      return;
+    }
+
+    res.json({ data: rows, period: currentPeriod });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/parceiros/commissions/:id/mark-paid (MUST be before /:id)
+router.put("/parceiros/commissions/:id/mark-paid", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!MANAGEMENT_ROLES.includes(me.role as never)) { next(new ForbiddenError("Acesso restrito", "FORBIDDEN_ROLE")); return; }
+    await db.update(partnerCommissionsTable)
+      .set({ status: "paid", paidAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(partnerCommissionsTable.id, req.params.id!), eq(partnerCommissionsTable.tenantId, me.tenantId)));
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
+
 // GET /api/parceiros/:id
 router.get("/parceiros/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
@@ -549,68 +615,6 @@ router.put("/parceiros/:id/products/:pid", async (req, res, next: NextFunction):
     await db.update(partnerProductsTable)
       .set({ status: body.data.status, updatedAt: new Date() })
       .where(and(eq(partnerProductsTable.id, req.params.pid!), eq(partnerProductsTable.tenantId, me.tenantId)));
-    res.status(204).end();
-  } catch (err) { next(err); }
-});
-
-// GET /api/parceiros/commissions — monthly payout report
-router.get("/parceiros/commissions", async (req, res, next: NextFunction): Promise<void> => {
-  try {
-    const me = await requireAuth(req, res);
-    if (!me) return;
-    if (!MANAGEMENT_ROLES.includes(me.role as never)) { next(new ForbiddenError("Acesso restrito", "FORBIDDEN_ROLE")); return; }
-    const { period } = req.query;
-    const currentPeriod = typeof period === "string" ? period : new Date().toISOString().slice(0, 7);
-
-    const rows = await db
-      .select({
-        partnerId: partnerCommissionsTable.partnerId,
-        partnerName: partnersTable.name,
-        partnerEmail: partnersTable.email,
-        grossAmount: sql<number>`SUM(${partnerCommissionsTable.grossAmount})::float`,
-        partnerAmount: sql<number>`SUM(${partnerCommissionsTable.partnerAmount})::float`,
-        agencyAmount: sql<number>`SUM(${partnerCommissionsTable.agencyAmount})::float`,
-        pendingCount: sql<number>`COUNT(*) FILTER (WHERE ${partnerCommissionsTable.status} = 'pending')::int`,
-        paidCount: sql<number>`COUNT(*) FILTER (WHERE ${partnerCommissionsTable.status} = 'paid')::int`,
-        orderCount: sql<number>`COUNT(DISTINCT ${partnerCommissionsTable.orderId})::int`,
-      })
-      .from(partnerCommissionsTable)
-      .innerJoin(partnersTable, eq(partnersTable.id, partnerCommissionsTable.partnerId))
-      .where(and(eq(partnerCommissionsTable.tenantId, me.tenantId), eq(partnerCommissionsTable.period, currentPeriod)))
-      .groupBy(partnerCommissionsTable.partnerId, partnersTable.name, partnersTable.email);
-
-    if (req.query["export"] === "csv") {
-      const sanitize = (v: string | null | undefined) => {
-        const s = String(v ?? "");
-        const e = s.replace(/"/g, '""');
-        return /^[=+\-@\t]/.test(e) ? `"'${e}"` : `"${e}"`;
-      };
-      const lines = [
-        `RELATÓRIO DE REPASSES — ${currentPeriod}`,
-        "Parceiro,Email,Pedidos,Bruto,Repasse Parceiro,Receita Agência,Pendente,Pago",
-        ...rows.map(r =>
-          `${sanitize(r.partnerName)},${sanitize(r.partnerEmail)},${r.orderCount},${Number(r.grossAmount).toFixed(2)},${Number(r.partnerAmount).toFixed(2)},${Number(r.agencyAmount).toFixed(2)},${r.pendingCount > 0 ? "Sim" : "Não"},${r.paidCount > 0 ? "Parcial" : "Não"}`
-        ),
-      ];
-      res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader("Content-Disposition", `attachment; filename="repasses-${currentPeriod}.csv"`);
-      res.send("\uFEFF" + lines.join("\r\n"));
-      return;
-    }
-
-    res.json({ data: rows, period: currentPeriod });
-  } catch (err) { next(err); }
-});
-
-// PUT /api/parceiros/commissions/:id/mark-paid — mark a commission as paid
-router.put("/parceiros/commissions/:id/mark-paid", async (req, res, next: NextFunction): Promise<void> => {
-  try {
-    const me = await requireAuth(req, res);
-    if (!me) return;
-    if (!MANAGEMENT_ROLES.includes(me.role as never)) { next(new ForbiddenError("Acesso restrito", "FORBIDDEN_ROLE")); return; }
-    await db.update(partnerCommissionsTable)
-      .set({ status: "paid", paidAt: new Date(), updatedAt: new Date() })
-      .where(and(eq(partnerCommissionsTable.id, req.params.id!), eq(partnerCommissionsTable.tenantId, me.tenantId)));
     res.status(204).end();
   } catch (err) { next(err); }
 });
