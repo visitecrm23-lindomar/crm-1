@@ -5709,6 +5709,12 @@ export const GetInsightsSummaryResponse = zod.object({
     totalLeadsPrev: zod.number(),
     repeatClients: zod.number(),
     repeatClientsPrev: zod.number(),
+    activeClients: zod.number(),
+    activeClientsPrev: zod.number(),
+    ltv: zod.number(),
+    ltvPrev: zod.number(),
+    cac: zod.number(),
+    cacPrev: zod.number(),
   }),
   marketing: zod.object({
     newClients: zod.number(),
@@ -5731,6 +5737,8 @@ export const GetInsightsSummaryResponse = zod.object({
     totalRecipients: zod.number(),
     openRate: zod.number(),
     clickRate: zod.number(),
+    campaignRoi: zod.number(),
+    campaignsByType: zod.array(zod.object({ type: zod.string(), count: zod.number() })),
   }),
   financial: zod.object({
     totalRevenue: zod.number(),

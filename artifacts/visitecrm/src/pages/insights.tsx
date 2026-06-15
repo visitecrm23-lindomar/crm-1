@@ -273,8 +273,11 @@ export default function Insights() {
             <KpiCard icon={DollarSign} label="Ticket Médio" value={co?.avgTicket ?? 0} prev={co?.avgTicketPrev ?? null} format="compact" color="text-purple-600" loading={isLoading} prevValue={fmtCompact(co?.avgTicketPrev ?? 0)} />
             <KpiCard icon={ShoppingCart} label="Novas Reservas" value={co?.newReservations ?? 0} prev={co?.newReservationsPrev ?? null} format="num" color="text-teal-600" loading={isLoading} prevValue={fmtNum(co?.newReservationsPrev ?? 0)} />
             <KpiCard icon={Zap} label="Taxa de Conversão" value={co?.conversionRate ?? 0} prev={co?.conversionRatePrev ?? null} format="pct" color="text-indigo-600" loading={isLoading} prevValue={fmtPct(co?.conversionRatePrev ?? 0)} />
-            <KpiCard icon={Repeat2} label="Clientes Recorrentes" value={co?.repeatClients ?? 0} prev={co?.repeatClientsPrev ?? null} format="num" color="text-cyan-600" loading={isLoading} prevValue={fmtNum(co?.repeatClientsPrev ?? 0)} sub="compraram ≥2x no período" />
+            <KpiCard icon={Repeat2} label="Clientes Recorrentes" value={co?.repeatClients ?? 0} prev={co?.repeatClientsPrev ?? null} format="num" color="text-cyan-600" loading={isLoading} prevValue={fmtNum(co?.repeatClientsPrev ?? 0)} sub="compraram ≥2x" />
             <KpiCard icon={TrendingDown} label="Cancelamentos" value={co?.cancellations ?? 0} prev={co?.cancellationsPrev ?? null} format="num" color="text-red-600" loading={isLoading} invert prevValue={fmtNum(co?.cancellationsPrev ?? 0)} />
+            <KpiCard icon={UserCheck} label="Clientes Ativos" value={co?.activeClients ?? 0} prev={co?.activeClientsPrev ?? null} format="num" color="text-emerald-600" loading={isLoading} prevValue={fmtNum(co?.activeClientsPrev ?? 0)} sub="com ≥1 reserva confirmada" />
+            <KpiCard icon={TrendingUp} label="LTV Estimado" value={co?.ltv ?? 0} prev={co?.ltvPrev ?? null} format="compact" color="text-purple-600" loading={isLoading} prevValue={fmtCompact(co?.ltvPrev ?? 0)} sub="ticket × freq. de compras" />
+            <KpiCard icon={DollarSign} label="CAC Estimado" value={co?.cac ?? 0} prev={co?.cacPrev ?? null} format="compact" color="text-orange-500" loading={isLoading} invert prevValue={fmtCompact(co?.cacPrev ?? 0)} sub="comissões / novos clientes" />
           </div>
 
           {!isLoading && co && (
@@ -322,6 +325,7 @@ export default function Insights() {
             <KpiCard icon={Send} label="Campanhas Ativas" value={mk?.activeCampaigns ?? 0} format="num" color="text-purple-600" loading={isLoading} sub={`${mk?.newCampaigns ?? 0} criadas no período`} />
             <KpiCard icon={Mail} label="E-mails Enviados" value={mk?.totalSentMessages ?? 0} format="num" color="text-cyan-600" loading={isLoading} sub={`${mk?.sentCampaigns ?? 0} campanhas disparadas`} />
             <KpiCard icon={MousePointerClick} label="Taxa de Abertura" value={mk?.openRate ?? 0} format="pct" color="text-yellow-600" loading={isLoading} sub={`Click rate: ${fmtPct(mk?.clickRate ?? 0)}`} />
+            <KpiCard icon={TrendingUp} label="ROI por Campanha" value={mk?.campaignRoi ?? 0} format="compact" color="text-green-600" loading={isLoading} sub="receita / campanhas enviadas" />
           </div>
 
           {!isLoading && mk && (

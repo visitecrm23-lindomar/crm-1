@@ -3674,6 +3674,17 @@ export interface InsightsSummaryCommercial {
   totalLeadsPrev: number;
   repeatClients: number;
   repeatClientsPrev: number;
+  activeClients: number;
+  activeClientsPrev: number;
+  ltv: number;
+  ltvPrev: number;
+  cac: number;
+  cacPrev: number;
+}
+
+export interface InsightsSummaryCampaignByType {
+  type: string;
+  count: number;
 }
 
 export interface InsightsSummaryMarketing {
@@ -3697,6 +3708,8 @@ export interface InsightsSummaryMarketing {
   totalRecipients: number;
   openRate: number;
   clickRate: number;
+  campaignRoi: number;
+  campaignsByType: InsightsSummaryCampaignByType[];
 }
 
 export interface InsightsSummaryExpenseCategoryBreakdown {

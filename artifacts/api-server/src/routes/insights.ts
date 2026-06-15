@@ -30,10 +30,14 @@ import {
 
 const router = Router();
 
-function getPeriodRange(period: string): {
+interface PeriodRange {
   start: Date; end: Date; prevStart: Date; prevEnd: Date;
-  momStart: Date; momEnd: Date; yoyStart: Date; yoyEnd: Date;
-} {
+  momCurrStart: Date; momCurrEnd: Date;
+  momPrevStart: Date; momPrevEnd: Date;
+  yoyPrevStart: Date; yoyPrevEnd: Date;
+}
+
+function getPeriodRange(period: string): PeriodRange {
   const now = new Date();
   let start: Date;
   let end: Date;
@@ -52,41 +56,36 @@ function getPeriodRange(period: string): {
     prevStart = new Date(now.getFullYear(), qStartMonth - 3, 1);
     prevEnd = new Date(now.getFullYear(), qStartMonth, 0, 23, 59, 59, 999);
   } else {
-    // year
     start = new Date(now.getFullYear(), 0, 1);
     end = now;
     prevStart = new Date(now.getFullYear() - 1, 0, 1);
     prevEnd = new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59, 999);
   }
 
-  // MoM: current month vs last month
-  const momStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const momEnd = now;
+  // MoM: always current calendar month vs previous calendar month
+  const momCurrStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const momCurrEnd = now;
   const momPrevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const momPrevEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
 
-  // YoY: current year vs last year (same day range)
-  const yoyStart = new Date(now.getFullYear(), 0, 1);
-  const yoyEnd = now;
+  // YoY: current YTD vs same-length window last year
   const yoyPrevStart = new Date(now.getFullYear() - 1, 0, 1);
   const yoyPrevEnd = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
-  return { start, end, prevStart, prevEnd, momStart: momPrevStart, momEnd: momPrevEnd, yoyStart: yoyPrevStart, yoyEnd: yoyPrevEnd };
+  return { start, end, prevStart, prevEnd, momCurrStart, momCurrEnd, momPrevStart, momPrevEnd, yoyPrevStart, yoyPrevEnd };
 }
 
 async function revenueInRange(tenantId: string, from: Date, to: Date): Promise<number> {
   const [row] = await db
     .select({ total: sql<number>`coalesce(sum(cast(amount as numeric)), 0)` })
     .from(paymentsTable)
-    .where(
-      and(
-        eq(paymentsTable.tenantId, tenantId),
-        eq(paymentsTable.type, PAYMENT_TYPE.RECEIVABLE),
-        eq(paymentsTable.status, PAYMENT_STATUS.PAID),
-        gte(paymentsTable.paidAt, from),
-        lte(paymentsTable.paidAt, to),
-      ),
-    );
+    .where(and(
+      eq(paymentsTable.tenantId, tenantId),
+      eq(paymentsTable.type, PAYMENT_TYPE.RECEIVABLE),
+      eq(paymentsTable.status, PAYMENT_STATUS.PAID),
+      gte(paymentsTable.paidAt, from),
+      lte(paymentsTable.paidAt, to),
+    ));
   return Number(row?.total ?? 0);
 }
 
@@ -94,13 +93,7 @@ async function expensesInRange(tenantId: string, from: Date, to: Date): Promise<
   const [row] = await db
     .select({ total: sql<number>`coalesce(sum(cast(amount as numeric)), 0)` })
     .from(expensesTable)
-    .where(
-      and(
-        eq(expensesTable.tenantId, tenantId),
-        gte(expensesTable.createdAt, from),
-        lte(expensesTable.createdAt, to),
-      ),
-    );
+    .where(and(eq(expensesTable.tenantId, tenantId), gte(expensesTable.createdAt, from), lte(expensesTable.createdAt, to)));
   return Number(row?.total ?? 0);
 }
 
@@ -116,29 +109,28 @@ router.get("/insights/summary", async (req, res): Promise<void> => {
 
     const tenantId = me.tenantId;
     const period = (req.query.period as string) || "month";
-    const { start, end, prevStart, prevEnd, momStart, momEnd, yoyStart, yoyEnd } = getPeriodRange(period);
+    const { start, end, prevStart, prevEnd, momCurrStart, momCurrEnd, momPrevStart, momPrevEnd, yoyPrevStart, yoyPrevEnd } = getPeriodRange(period);
     const now = new Date();
 
-    // ─── PARALLEL BLOCK 1: Revenue, Expenses ──────────────────────────
-    const [totalRevenue, totalRevenuePrev, totalExpenses, totalExpensesPrev, momRevPrev, yoyRevPrev] = await Promise.all([
+    // ─── BLOCK 1: Revenue + Expenses (period) + MoM/YoY windows ──────
+    const [totalRevenue, totalRevenuePrev, totalExpenses, totalExpensesPrev,
+           momCurrRev, momPrevRev, yoyCurrRev, yoyPrevRev] = await Promise.all([
       revenueInRange(tenantId, start, end),
       revenueInRange(tenantId, prevStart, prevEnd),
       expensesInRange(tenantId, start, end),
       expensesInRange(tenantId, prevStart, prevEnd),
-      revenueInRange(tenantId, momStart, momEnd),
-      revenueInRange(tenantId, yoyStart, yoyEnd),
+      // MoM: current calendar month vs previous calendar month
+      revenueInRange(tenantId, momCurrStart, momCurrEnd),
+      revenueInRange(tenantId, momPrevStart, momPrevEnd),
+      // YoY: current YTD (same as start→now when period=year; else separately)
+      revenueInRange(tenantId, new Date(now.getFullYear(), 0, 1), now),
+      revenueInRange(tenantId, yoyPrevStart, yoyPrevEnd),
     ]);
 
-    const netProfit = totalRevenue - totalExpenses;
-    const netProfitPrev = totalRevenuePrev - totalExpensesPrev;
-    const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
-    const profitMarginPrev = totalRevenuePrev > 0 ? (netProfitPrev / totalRevenuePrev) * 100 : 0;
+    const momGrowth = momPrevRev > 0 ? ((momCurrRev - momPrevRev) / momPrevRev) * 100 : null;
+    const yoyGrowth = yoyPrevRev > 0 ? ((yoyCurrRev - yoyPrevRev) / yoyPrevRev) * 100 : null;
 
-    // MoM/YoY growth (revenue)
-    const momGrowth = momRevPrev > 0 ? ((totalRevenue - momRevPrev) / momRevPrev) * 100 : null;
-    const yoyGrowth = yoyRevPrev > 0 ? ((totalRevenue - yoyRevPrev) / yoyRevPrev) * 100 : null;
-
-    // ─── PARALLEL BLOCK 2: Reservations ───────────────────────────────
+    // ─── BLOCK 2: Reservations ────────────────────────────────────────
     const [resAllCurr, resAllPrev, resConfCurr, resConfPrev, resCancCurr, resCancPrev] = await Promise.all([
       db.select({ cnt: sql<number>`count(*)` }).from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), gte(reservationsTable.createdAt, start), lte(reservationsTable.createdAt, end))),
       db.select({ cnt: sql<number>`count(*)` }).from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), gte(reservationsTable.createdAt, prevStart), lte(reservationsTable.createdAt, prevEnd))),
@@ -155,22 +147,27 @@ router.get("/insights/summary", async (req, res): Promise<void> => {
     const cancellations = Number(resCancCurr[0]?.cnt ?? 0);
     const cancellationsPrev = Number(resCancPrev[0]?.cnt ?? 0);
 
-    // ─── PARALLEL BLOCK 3: Clients ────────────────────────────────────
-    const [clientsNewCurr, clientsNewPrev, clientsTotal] = await Promise.all([
+    // ─── BLOCK 3: Clients ─────────────────────────────────────────────
+    const [clientsNewCurr, clientsNewPrev, clientsTotal, activeClientsCurr, activeClientsPrev] = await Promise.all([
       db.select({ cnt: sql<number>`count(*)` }).from(clientsTable).where(and(eq(clientsTable.tenantId, tenantId), gte(clientsTable.createdAt, start), lte(clientsTable.createdAt, end))),
       db.select({ cnt: sql<number>`count(*)` }).from(clientsTable).where(and(eq(clientsTable.tenantId, tenantId), gte(clientsTable.createdAt, prevStart), lte(clientsTable.createdAt, prevEnd))),
       db.select({ cnt: sql<number>`count(*)` }).from(clientsTable).where(eq(clientsTable.tenantId, tenantId)),
+      // Active clients: had at least 1 confirmed reservation in period
+      db.select({ cnt: sql<number>`count(distinct client_id)` }).from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED), gte(reservationsTable.createdAt, start), lte(reservationsTable.createdAt, end))),
+      db.select({ cnt: sql<number>`count(distinct client_id)` }).from(reservationsTable).where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED), gte(reservationsTable.createdAt, prevStart), lte(reservationsTable.createdAt, prevEnd))),
     ]);
 
     const newClients = Number(clientsNewCurr[0]?.cnt ?? 0);
     const newClientsPrev = Number(clientsNewPrev[0]?.cnt ?? 0);
     const totalClients = Number(clientsTotal[0]?.cnt ?? 0);
+    const activeClients = Number(activeClientsCurr[0]?.cnt ?? 0);
+    const activeClientsPrevCount = Number(activeClientsPrev[0]?.cnt ?? 0);
 
-    // Repeat clients: clients with >= 2 reservations in the period
+    // Repeat clients: clients with >= 2 confirmed reservations in period
     const repeatSubqueryCurr = db
       .select({ clientId: reservationsTable.clientId })
       .from(reservationsTable)
-      .where(and(eq(reservationsTable.tenantId, tenantId), gte(reservationsTable.createdAt, start), lte(reservationsTable.createdAt, end)))
+      .where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED), gte(reservationsTable.createdAt, start), lte(reservationsTable.createdAt, end)))
       .groupBy(reservationsTable.clientId)
       .having(sql`count(*) >= 2`)
       .as("repeat_subq_curr");
@@ -178,7 +175,7 @@ router.get("/insights/summary", async (req, res): Promise<void> => {
     const repeatSubqueryPrev = db
       .select({ clientId: reservationsTable.clientId })
       .from(reservationsTable)
-      .where(and(eq(reservationsTable.tenantId, tenantId), gte(reservationsTable.createdAt, prevStart), lte(reservationsTable.createdAt, prevEnd)))
+      .where(and(eq(reservationsTable.tenantId, tenantId), eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED), gte(reservationsTable.createdAt, prevStart), lte(reservationsTable.createdAt, prevEnd)))
       .groupBy(reservationsTable.clientId)
       .having(sql`count(*) >= 2`)
       .as("repeat_subq_prev");
@@ -190,7 +187,7 @@ router.get("/insights/summary", async (req, res): Promise<void> => {
     const repeatClients = Number(repeatCurr[0]?.cnt ?? 0);
     const repeatClientsPrev = Number(repeatPrev[0]?.cnt ?? 0);
 
-    // ─── PARALLEL BLOCK 4: Deals ──────────────────────────────────────
+    // ─── BLOCK 4: Deals ───────────────────────────────────────────────
     const [openDealsCurr, openDealsPrev, wonDealsCurr, wonDealsPrev] = await Promise.all([
       db.select({ cnt: sql<number>`count(*)`, val: sql<number>`coalesce(sum(cast(value as numeric)), 0)` }).from(dealsTable).where(and(eq(dealsTable.tenantId, tenantId), eq(dealsTable.status, DEAL_STATUS.OPEN), gte(dealsTable.createdAt, start), lte(dealsTable.createdAt, end))),
       db.select({ cnt: sql<number>`count(*)`, val: sql<number>`coalesce(sum(cast(value as numeric)), 0)` }).from(dealsTable).where(and(eq(dealsTable.tenantId, tenantId), eq(dealsTable.status, DEAL_STATUS.OPEN), gte(dealsTable.createdAt, prevStart), lte(dealsTable.createdAt, prevEnd))),
@@ -212,16 +209,15 @@ router.get("/insights/summary", async (req, res): Promise<void> => {
     const avgTicket = confirmedReservations > 0 ? totalRevenue / confirmedReservations : 0;
     const avgTicketPrev = confirmedReservationsPrev > 0 ? totalRevenuePrev / confirmedReservationsPrev : 0;
 
-    // ─── PARALLEL BLOCK 5: Trips ──────────────────────────────────────
+    // ─── BLOCK 5: Trips ───────────────────────────────────────────────
     const [activeTripsData, newTripsCurr, newTripsPrev] = await Promise.all([
-      db.select({ totalCapacity: tripsTable.totalCapacity, availableSeats: tripsTable.availableSeats }).from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, TRIP_STATUS.PUBLISHED))),
+      db.select({ totalCapacity: tripsTable.totalCapacity, availableSeats: tripsTable.availableSeats })
+        .from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), eq(tripsTable.status, TRIP_STATUS.PUBLISHED))),
       db.select({ cnt: sql<number>`count(*)` }).from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), gte(tripsTable.createdAt, start), lte(tripsTable.createdAt, end))),
       db.select({ cnt: sql<number>`count(*)` }).from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), gte(tripsTable.createdAt, prevStart), lte(tripsTable.createdAt, prevEnd))),
     ]);
 
-    let totalCap = 0;
-    let totalOcc = 0;
-    let totalAvailableSeats = 0;
+    let totalCap = 0; let totalOcc = 0; let totalAvailableSeats = 0;
     for (const t of activeTripsData) {
       totalCap += Number(t.totalCapacity ?? 0);
       totalAvailableSeats += Number(t.availableSeats ?? 0);
@@ -236,26 +232,24 @@ router.get("/insights/summary", async (req, res): Promise<void> => {
     const avgReservationsPerTrip = activeTrips > 0 ? newReservations / activeTrips : 0;
     const avgReservationsPerTripPrev = newTripsPrevCount > 0 ? newReservationsPrev / newTripsPrevCount : 0;
 
-    // ─── PARALLEL BLOCK 6: NPS ────────────────────────────────────────
+    // ─── BLOCK 6: NPS ─────────────────────────────────────────────────
     const [npsCurr, npsPrev, npsPromotersCurr, npsPromotersPrev] = await Promise.all([
       db.select({ avg: sql<number>`avg(score)`, cnt: sql<number>`count(*)` }).from(npsResponsesTable).where(and(eq(npsResponsesTable.tenantId, tenantId), gte(npsResponsesTable.createdAt, start), lte(npsResponsesTable.createdAt, end))),
       db.select({ avg: sql<number>`avg(score)` }).from(npsResponsesTable).where(and(eq(npsResponsesTable.tenantId, tenantId), gte(npsResponsesTable.createdAt, prevStart), lte(npsResponsesTable.createdAt, prevEnd))),
-      // Promoters = NPS score >= 9
       db.select({ cnt: sql<number>`count(*)` }).from(npsResponsesTable).where(and(eq(npsResponsesTable.tenantId, tenantId), gte(npsResponsesTable.createdAt, start), lte(npsResponsesTable.createdAt, end), sql`score >= 9`)),
       db.select({ cnt: sql<number>`count(*)` }).from(npsResponsesTable).where(and(eq(npsResponsesTable.tenantId, tenantId), gte(npsResponsesTable.createdAt, prevStart), lte(npsResponsesTable.createdAt, prevEnd), sql`score >= 9`)),
     ]);
 
-    const averageNps = npsCurr[0]?.cnt && Number(npsCurr[0].cnt) > 0 ? Number(npsCurr[0].avg) : null;
+    const averageNps = Number(npsCurr[0]?.cnt ?? 0) > 0 ? Number(npsCurr[0]!.avg) : null;
     const averageNpsPrev = npsPrev[0]?.avg != null ? Number(npsPrev[0].avg) : null;
     const promoterClients = Number(npsPromotersCurr[0]?.cnt ?? 0);
     const promoterClientsPrev = Number(npsPromotersPrev[0]?.cnt ?? 0);
 
-    // ─── PARALLEL BLOCK 7: Loyalty ────────────────────────────────────
+    // ─── BLOCK 7: Loyalty ─────────────────────────────────────────────
     const [loyaltyCurr, loyaltyPrev, loyaltyTotal, loyaltyActive] = await Promise.all([
       db.select({ cnt: sql<number>`count(*)` }).from(loyaltyMembersTable).where(and(eq(loyaltyMembersTable.tenantId, tenantId), gte(loyaltyMembersTable.joinedAt, start), lte(loyaltyMembersTable.joinedAt, end))),
       db.select({ cnt: sql<number>`count(*)` }).from(loyaltyMembersTable).where(and(eq(loyaltyMembersTable.tenantId, tenantId), gte(loyaltyMembersTable.joinedAt, prevStart), lte(loyaltyMembersTable.joinedAt, prevEnd))),
       db.select({ cnt: sql<number>`count(*)` }).from(loyaltyMembersTable).where(eq(loyaltyMembersTable.tenantId, tenantId)),
-      // Active = joined and has made reservation since joining (approximate: joined in last year)
       db.select({ cnt: sql<number>`count(*)` }).from(loyaltyMembersTable).where(and(eq(loyaltyMembersTable.tenantId, tenantId), gte(loyaltyMembersTable.joinedAt, new Date(now.getFullYear() - 1, now.getMonth(), now.getDate())))),
     ]);
 
@@ -263,11 +257,10 @@ router.get("/insights/summary", async (req, res): Promise<void> => {
     const loyaltyNewMembersPrev = Number(loyaltyPrev[0]?.cnt ?? 0);
     const loyaltyMembers = Number(loyaltyTotal[0]?.cnt ?? 0);
     const loyaltyActiveMembers = Number(loyaltyActive[0]?.cnt ?? 0);
-
     const retentionRate = totalClients > 0 ? (repeatClients / totalClients) * 100 : 0;
     const retentionRatePrev = totalClients > 0 ? (repeatClientsPrev / totalClients) * 100 : 0;
 
-    // ─── PARALLEL BLOCK 8: Referrals ──────────────────────────────────
+    // ─── BLOCK 8: Referrals ───────────────────────────────────────────
     const [referralsCurr, referralsPrev, referralsConverted, referralsConvertedPrev] = await Promise.all([
       db.select({ cnt: sql<number>`count(*)` }).from(referralsTable).where(and(eq(referralsTable.tenantId, tenantId), gte(referralsTable.createdAt, start), lte(referralsTable.createdAt, end))),
       db.select({ cnt: sql<number>`count(*)` }).from(referralsTable).where(and(eq(referralsTable.tenantId, tenantId), gte(referralsTable.createdAt, prevStart), lte(referralsTable.createdAt, prevEnd))),
@@ -282,8 +275,9 @@ router.get("/insights/summary", async (req, res): Promise<void> => {
     const referralRate = totalClients > 0 ? (referrals / totalClients) * 100 : 0;
     const referralRatePrev = totalClients > 0 ? (referralsPrevCount / totalClients) * 100 : 0;
 
-    // ─── PARALLEL BLOCK 9: Campaigns (Marketing) ─────────────────────
-    const [campaignsActiveCurr, campaignsSentCurr, campaignsAllCurr, campaignsPrev] = await Promise.all([
+    // ─── BLOCK 9: Campaigns ───────────────────────────────────────────
+    const [campaignsActiveCurr, campaignsSentCurr, campaignsAllCurr, campaignsPrev,
+           campaignsByTypeCurr] = await Promise.all([
       db.select({ cnt: sql<number>`count(*)` }).from(campaignsTable).where(and(eq(campaignsTable.tenantId, tenantId), eq(campaignsTable.status, "active"))),
       db.select({
         cnt: sql<number>`count(*)`,
@@ -295,6 +289,11 @@ router.get("/insights/summary", async (req, res): Promise<void> => {
       }).from(campaignsTable).where(and(eq(campaignsTable.tenantId, tenantId), isNotNull(campaignsTable.sentAt), gte(campaignsTable.sentAt, start), lte(campaignsTable.sentAt, end))),
       db.select({ cnt: sql<number>`count(*)` }).from(campaignsTable).where(and(eq(campaignsTable.tenantId, tenantId), gte(campaignsTable.createdAt, start), lte(campaignsTable.createdAt, end))),
       db.select({ cnt: sql<number>`count(*)` }).from(campaignsTable).where(and(eq(campaignsTable.tenantId, tenantId), gte(campaignsTable.createdAt, prevStart), lte(campaignsTable.createdAt, prevEnd))),
+      // Campaign breakdown by type
+      db.select({ type: campaignsTable.type, cnt: sql<number>`count(*)` })
+        .from(campaignsTable)
+        .where(and(eq(campaignsTable.tenantId, tenantId), gte(campaignsTable.createdAt, start), lte(campaignsTable.createdAt, end)))
+        .groupBy(campaignsTable.type),
     ]);
 
     const activeCampaigns = Number(campaignsActiveCurr[0]?.cnt ?? 0);
@@ -307,12 +306,19 @@ router.get("/insights/summary", async (req, res): Promise<void> => {
     const clickRate = totalSentMessages > 0 ? (totalClickedMessages / totalSentMessages) * 100 : 0;
     const newCampaigns = Number(campaignsAllCurr[0]?.cnt ?? 0);
     const newCampaignsPrev = Number(campaignsPrev[0]?.cnt ?? 0);
+    // Campaign ROI proxy: revenue generated per campaign sent
+    const campaignRoi = sentCampaigns > 0 ? totalRevenue / sentCampaigns : 0;
+    const campaignsByType = campaignsByTypeCurr.map((r) => ({ type: r.type, count: Number(r.cnt) }));
 
-    // ─── PARALLEL BLOCK 10: Financial — commissions + expense categories ──
+    // ─── BLOCK 10: Financial — commissions + expense categories ──────
     const [commCurr, commPrev, expCategoriesCurr, receivable, payable, overdue] = await Promise.all([
       db.select({ total: sql<number>`coalesce(sum(cast(commission_amount as numeric)), 0)` }).from(commissionsTable).where(and(eq(commissionsTable.tenantId, tenantId), gte(commissionsTable.createdAt, start), lte(commissionsTable.createdAt, end))),
       db.select({ total: sql<number>`coalesce(sum(cast(commission_amount as numeric)), 0)` }).from(commissionsTable).where(and(eq(commissionsTable.tenantId, tenantId), gte(commissionsTable.createdAt, prevStart), lte(commissionsTable.createdAt, prevEnd))),
-      db.select({ category: expensesTable.category, total: sql<number>`coalesce(sum(cast(amount as numeric)), 0)` }).from(expensesTable).where(and(eq(expensesTable.tenantId, tenantId), gte(expensesTable.createdAt, start), lte(expensesTable.createdAt, end))).groupBy(expensesTable.category).orderBy(sql`sum(cast(amount as numeric)) desc`),
+      db.select({ category: expensesTable.category, total: sql<number>`coalesce(sum(cast(amount as numeric)), 0)` })
+        .from(expensesTable)
+        .where(and(eq(expensesTable.tenantId, tenantId), gte(expensesTable.createdAt, start), lte(expensesTable.createdAt, end)))
+        .groupBy(expensesTable.category)
+        .orderBy(sql`sum(cast(amount as numeric)) desc`),
       db.select({ total: sql<number>`coalesce(sum(cast(amount as numeric)), 0)` }).from(paymentsTable).where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.type, PAYMENT_TYPE.RECEIVABLE), eq(paymentsTable.status, PAYMENT_STATUS.PENDING))),
       db.select({ total: sql<number>`coalesce(sum(cast(amount as numeric)), 0)` }).from(paymentsTable).where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.type, PAYMENT_TYPE.PAYABLE), eq(paymentsTable.status, PAYMENT_STATUS.PENDING))),
       db.select({ total: sql<number>`coalesce(sum(cast(amount as numeric)), 0)` }).from(paymentsTable).where(and(eq(paymentsTable.tenantId, tenantId), eq(paymentsTable.type, PAYMENT_TYPE.RECEIVABLE), eq(paymentsTable.status, PAYMENT_STATUS.PENDING), lt(paymentsTable.dueDate, now))),
@@ -322,29 +328,38 @@ router.get("/insights/summary", async (req, res): Promise<void> => {
     const commissionsPrev = Number(commPrev[0]?.total ?? 0);
     const expenseCategories = expCategoriesCurr.map((r) => ({ category: r.category, total: Number(r.total) }));
 
-    // ─── PARALLEL BLOCK 11: Suppliers ─────────────────────────────────
+    // netProfit = revenue - operating expenses - commissions paid to agents
+    const netProfit = totalRevenue - totalExpenses - commissions;
+    const netProfitPrev = totalRevenuePrev - totalExpensesPrev - commissionsPrev;
+    const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+    const profitMarginPrev = totalRevenuePrev > 0 ? (netProfitPrev / totalRevenuePrev) * 100 : 0;
+
+    // LTV = avgTicket × (confirmedReservations / activeClients)
+    const avgReservationsPerActiveClient = activeClients > 0 ? confirmedReservations / activeClients : 0;
+    const ltv = avgTicket * avgReservationsPerActiveClient;
+    const avgReservationsPerActiveClientPrev = activeClientsPrevCount > 0 ? confirmedReservationsPrev / activeClientsPrevCount : 0;
+    const ltvPrev = avgTicketPrev * avgReservationsPerActiveClientPrev;
+    // CAC proxy = commissions paid / new clients acquired
+    const cac = newClients > 0 ? commissions / newClients : 0;
+    const cacPrev = newClientsPrev > 0 ? commissionsPrev / newClientsPrev : 0;
+
+    // ─── BLOCK 11: Suppliers ──────────────────────────────────────────
     const [suppliersNewCurr, suppliersNewPrev, suppliersTotal] = await Promise.all([
       db.select({ cnt: sql<number>`count(*)` }).from(suppliersTable).where(and(eq(suppliersTable.tenantId, tenantId), gte(suppliersTable.createdAt, start), lte(suppliersTable.createdAt, end))),
       db.select({ cnt: sql<number>`count(*)` }).from(suppliersTable).where(and(eq(suppliersTable.tenantId, tenantId), gte(suppliersTable.createdAt, prevStart), lte(suppliersTable.createdAt, prevEnd))),
       db.select({ cnt: sql<number>`count(*)` }).from(suppliersTable).where(eq(suppliersTable.tenantId, tenantId)),
     ]);
-
     const newSuppliers = Number(suppliersNewCurr[0]?.cnt ?? 0);
     const newSuppliersPrev = Number(suppliersNewPrev[0]?.cnt ?? 0);
     const totalSuppliers = Number(suppliersTotal[0]?.cnt ?? 0);
 
-    // ─── PARALLEL BLOCK 12: Destinations + Passengers ─────────────────
+    // ─── BLOCK 12: Destinations + Passengers ─────────────────────────
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 86400000);
     const [destTotal, destNew90d, destNewPrev90d, destTopRows, passengersCheckedIn, passengersCheckedInPrev] = await Promise.all([
-      // Total distinct registered destinations
       db.select({ cnt: sql<number>`count(*)` }).from(destinationsTable).where(eq(destinationsTable.tenantId, tenantId)),
-      // New unique trip destinations in last 90 days
       db.select({ destination: tripsTable.destination }).from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), gte(tripsTable.createdAt, ninetyDaysAgo))).groupBy(tripsTable.destination),
-      // New unique trip destinations in prev 90-180 days
       db.select({ destination: tripsTable.destination }).from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), gte(tripsTable.createdAt, new Date(now.getTime() - 180 * 86400000)), lt(tripsTable.createdAt, ninetyDaysAgo))).groupBy(tripsTable.destination),
-      // Top destinations in period
       db.select({ destination: tripsTable.destination, cnt: sql<number>`count(*)` }).from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), gte(tripsTable.createdAt, start), lte(tripsTable.createdAt, end))).groupBy(tripsTable.destination).orderBy(sql`count(*) desc`).limit(5),
-      // Checked-in passengers in period (operational: boarding checklist)
       db.select({ cnt: sql<number>`count(*)` }).from(passengersTable).innerJoin(reservationsTable, eq(passengersTable.reservationId, reservationsTable.id)).where(and(eq(reservationsTable.tenantId, tenantId), isNotNull(passengersTable.checkedInAt), gte(passengersTable.checkedInAt, start), lte(passengersTable.checkedInAt, end))),
       db.select({ cnt: sql<number>`count(*)` }).from(passengersTable).innerJoin(reservationsTable, eq(passengersTable.reservationId, reservationsTable.id)).where(and(eq(reservationsTable.tenantId, tenantId), isNotNull(passengersTable.checkedInAt), gte(passengersTable.checkedInAt, prevStart), lte(passengersTable.checkedInAt, prevEnd))),
     ]);
@@ -356,7 +371,7 @@ router.get("/insights/summary", async (req, res): Promise<void> => {
     const checkedInPassengers = Number(passengersCheckedIn[0]?.cnt ?? 0);
     const checkedInPassengersPrev = Number(passengersCheckedInPrev[0]?.cnt ?? 0);
 
-    // ─── RESPONSE ──────────────────────────────────────────────────────
+    // ─── RESPONSE ─────────────────────────────────────────────────────
     res.json({
       period,
       executive: {
@@ -399,6 +414,12 @@ router.get("/insights/summary", async (req, res): Promise<void> => {
         totalLeadsPrev,
         repeatClients,
         repeatClientsPrev,
+        activeClients,
+        activeClientsPrev: activeClientsPrevCount,
+        ltv: Math.round(ltv * 100) / 100,
+        ltvPrev: Math.round(ltvPrev * 100) / 100,
+        cac: Math.round(cac * 100) / 100,
+        cacPrev: Math.round(cacPrev * 100) / 100,
       },
       marketing: {
         newClients,
@@ -421,18 +442,20 @@ router.get("/insights/summary", async (req, res): Promise<void> => {
         totalRecipients,
         openRate: Math.round(openRate * 10) / 10,
         clickRate: Math.round(clickRate * 10) / 10,
+        campaignRoi: Math.round(campaignRoi * 100) / 100,
+        campaignsByType,
       },
       financial: {
         totalRevenue,
         totalRevenuePrev,
         totalExpenses,
         totalExpensesPrev,
+        commissions,
+        commissionsPrev,
         netProfit,
         netProfitPrev,
         profitMargin: Math.round(profitMargin * 10) / 10,
         profitMarginPrev: Math.round(profitMarginPrev * 10) / 10,
-        commissions,
-        commissionsPrev,
         receivable: Number(receivable[0]?.total ?? 0),
         payable: Number(payable[0]?.total ?? 0),
         overdue: Number(overdue[0]?.total ?? 0),
