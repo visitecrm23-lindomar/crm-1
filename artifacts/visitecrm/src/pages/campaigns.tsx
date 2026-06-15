@@ -654,6 +654,7 @@ interface AutomationConfigState {
   subject: string;
   content: string;
   configValue: number;
+  sendHour: number;
 }
 
 function AutomationConfigDialog({
@@ -672,14 +673,16 @@ function AutomationConfigDialog({
   isSaving: boolean;
 }) {
   const defaultVal = existing?.triggerConfig?.[template.configKey] as number | undefined;
+  const defaultSendHour = existing?.triggerConfig?.["sendHour"] as number | undefined;
   const [subject, setSubject] = useState(existing?.subject ?? template.defaultSubject);
   const [content, setContent] = useState(existing?.content ?? template.defaultContent);
   const [configValue, setConfigValue] = useState<number>(
     defaultVal ?? Object.values(template.defaultConfig)[0]!
   );
+  const [sendHour, setSendHour] = useState<number>(defaultSendHour ?? 8);
 
   const handleSave = () => {
-    onSave({ subject, content, configValue });
+    onSave({ subject, content, configValue, sendHour });
   };
 
   return (
@@ -704,6 +707,22 @@ function AutomationConfigDialog({
               />
               <span className="text-sm text-muted-foreground">{template.configUnit}</span>
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Horário de envio</Label>
+            <Select value={String(sendHour)} onValueChange={(v) => setSendHour(Number(v))}>
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: 24 }, (_, h) => (
+                  <SelectItem key={h} value={String(h)}>
+                    {String(h).padStart(2, "0")}:00
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Horário em que os e-mails serão disparados (fuso de Brasília).</p>
           </div>
           <div className="space-y-2">
             <Label>Assunto do e-mail</Label>
@@ -751,7 +770,7 @@ function AutomationsTab() {
 
   const handleSaveConfig = async (template: AutomationTemplate, data: AutomationConfigState) => {
     const existing = getExisting(template.triggerType);
-    const triggerConfig = { [template.configKey]: data.configValue };
+    const triggerConfig = { [template.configKey]: data.configValue, sendHour: data.sendHour };
 
     if (existing) {
       await updateCampaign.mutateAsync({
@@ -785,7 +804,7 @@ function AutomationsTab() {
       <div>
         <h2 className="text-xl font-semibold">Automações de Marketing</h2>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Campanhas disparadas automaticamente com base no comportamento dos clientes, todos os dias às 8h.
+          Campanhas disparadas automaticamente com base no comportamento dos clientes, no horário configurado em cada automação.
         </p>
       </div>
 
@@ -1006,9 +1025,12 @@ function AiContentTab() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div
-                className="text-sm border rounded-lg p-4 bg-white max-h-72 overflow-y-auto prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: result.email }}
+              <iframe
+                srcDoc={result.email}
+                sandbox=""
+                className="w-full rounded-lg border bg-white"
+                style={{ height: "280px" }}
+                title="Prévia do e-mail"
               />
             </CardContent>
           </Card>

@@ -155,7 +155,7 @@ applyMigrations()
         calculateScoresForAllTenants().catch((err) => logger.error({ err }, "[client-scores] Cron failed"));
       }, { timezone: "America/Sao_Paulo" });
 
-      cron.schedule("0 8 * * *", () => {
+      cron.schedule("0 * * * *", () => {
         logger.info("[campaign-automation] Daily automation cron triggered");
         runCampaignAutomationCron().catch((err) => logger.error({ err }, "[campaign-automation] Cron failed"));
       }, { timezone: "America/Sao_Paulo" });

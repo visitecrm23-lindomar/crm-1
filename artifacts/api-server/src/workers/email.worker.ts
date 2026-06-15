@@ -1,13 +1,13 @@
 import { Worker } from "bullmq";
 import { db, emailLogsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail } from "@workspace/email";
+import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail, sendReminderHtmlEmail } from "@workspace/email";
 import { getRedisConnection, isTransientRedisError, recordTransientRedisError, resetTransientRedisErrors } from "../lib/redis";
 import { logger } from "../lib/logger";
-import type { ReservationEmailJobData, CancellationEmailJobData, BirthdayEmailJobData, NewBookingNotificationEmailJobData, ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData, ReferralBonusReleasedEmailJobData, ReferralWelcomeEmailJobData } from "../queues/index";
+import type { ReservationEmailJobData, CancellationEmailJobData, BirthdayEmailJobData, NewBookingNotificationEmailJobData, ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData, ReferralBonusReleasedEmailJobData, ReferralWelcomeEmailJobData, CampaignEmailJobData } from "../queues/index";
 import type { SendEmailResult } from "@workspace/email";
 
-type EmailJobData = ReservationEmailJobData | CancellationEmailJobData | BirthdayEmailJobData | NewBookingNotificationEmailJobData | ReferralBonusPaidEmailJobData | ReferralConvertedEmailJobData | ReferralExpiredEmailJobData | ReferralExpiringSoonEmailJobData | ReferralBonusReleasedEmailJobData | ReferralWelcomeEmailJobData;
+type EmailJobData = ReservationEmailJobData | CancellationEmailJobData | BirthdayEmailJobData | NewBookingNotificationEmailJobData | ReferralBonusPaidEmailJobData | ReferralConvertedEmailJobData | ReferralExpiredEmailJobData | ReferralExpiringSoonEmailJobData | ReferralBonusReleasedEmailJobData | ReferralWelcomeEmailJobData | CampaignEmailJobData;
 
 let _worker: Worker<EmailJobData> | null = null;
 
@@ -128,6 +128,9 @@ export function startEmailWorker(): Worker<EmailJobData> | null {
             errorMessage: result.error ?? null,
           })
           .where(eq(emailLogsTable.id, emailLogId));
+      } else if (job.name === "campaign-email") {
+        const { to, subject, htmlContent, fromName } = job.data as CampaignEmailJobData;
+        result = await sendReminderHtmlEmail({ to, subject, html: htmlContent, fromName });
       } else {
         const { emailLogId: _e, tenantId: _t, reservationId: _r, ...emailProps } =
           job.data as ReservationEmailJobData;
