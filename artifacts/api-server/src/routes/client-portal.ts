@@ -17,8 +17,9 @@ import {
   clientFavoritesTable,
   storeProductsTable,
   storesTable,
+  tripMediaTable,
 } from "@workspace/db";
-import { eq, and, desc, asc, sql, inArray, gt, count, isNull } from "drizzle-orm";
+import { eq, and, desc, asc, sql, inArray, gt, count, isNull, lt } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
@@ -1529,6 +1530,229 @@ router.delete("/client/me/favorites/:itemType/:itemId", async (req, res, next: N
     ));
 
     res.status(204).send();
+  } catch (err) { next(err); }
+});
+
+router.get("/client/me/achievements", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== ROLES.CLIENT) { next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE")); return; }
+
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) {
+      res.json({ badges: [], stats: { totalTrips: 0, visitedStates: [], uniqueDestinations: [] } });
+      return;
+    }
+
+    const reservationsWithTrips = await db
+      .select({
+        id: reservationsTable.id,
+        status: reservationsTable.status,
+        createdAt: reservationsTable.createdAt,
+        tripDestinationState: tripsTable.destinationState,
+        tripDestination: tripsTable.destination,
+      })
+      .from(reservationsTable)
+      .innerJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
+      .where(and(
+        eq(reservationsTable.clientId, client.id),
+        eq(reservationsTable.tenantId, me.tenantId),
+        inArray(reservationsTable.status, [RESERVATION_STATUS.CONFIRMED]),
+      ));
+
+    const confirmedCount = reservationsWithTrips.length;
+    const visitedStates = [...new Set(
+      reservationsWithTrips.map(r => r.tripDestinationState).filter((s): s is string => !!s && s.length === 2)
+    )];
+    const uniqueDestinations = [...new Set(
+      reservationsWithTrips.map(r => r.tripDestination).filter(Boolean)
+    )];
+
+    const [loyaltyProgram] = await db
+      .select({ id: loyaltyProgramsTable.id })
+      .from(loyaltyProgramsTable)
+      .where(and(eq(loyaltyProgramsTable.tenantId, me.tenantId), eq(loyaltyProgramsTable.isActive, true)))
+      .limit(1);
+
+    let isLoyaltyMember = false;
+    if (loyaltyProgram) {
+      const [member] = await db
+        .select({ id: loyaltyMembersTable.id })
+        .from(loyaltyMembersTable)
+        .where(and(
+          eq(loyaltyMembersTable.tenantId, me.tenantId),
+          eq(loyaltyMembersTable.programId, loyaltyProgram.id),
+          eq(loyaltyMembersTable.clientId, client.id),
+        ))
+        .limit(1);
+      isLoyaltyMember = !!member;
+    }
+
+    const successfulReferrals = client.successfulReferrals ?? 0;
+    const now = new Date();
+    const isBirthdayMonth = client.birthDate !== null &&
+      client.birthDate.getMonth() === now.getMonth();
+
+    const firstConfirmed = reservationsWithTrips.length > 0
+      ? reservationsWithTrips.reduce((a, b) => a.createdAt < b.createdAt ? a : b)
+      : null;
+
+    const badges = [
+      {
+        key: "primeira_viagem",
+        name: "Primeira Viagem",
+        description: "Realizou sua primeira viagem conosca",
+        earned: confirmedCount >= 1,
+        earnedAt: confirmedCount >= 1 ? (firstConfirmed?.createdAt?.toISOString() ?? null) : null,
+      },
+      {
+        key: "viajante_frequente",
+        name: "Viajante Frequente",
+        description: "5 ou mais viagens confirmadas",
+        earned: confirmedCount >= 5,
+        earnedAt: null,
+        progress: Math.min(confirmedCount, 5),
+        target: 5,
+      },
+      {
+        key: "explorador",
+        name: "Explorador",
+        description: "10 ou mais viagens realizadas",
+        earned: confirmedCount >= 10,
+        earnedAt: null,
+        progress: Math.min(confirmedCount, 10),
+        target: 10,
+      },
+      {
+        key: "grande_aventureiro",
+        name: "Grande Aventureiro",
+        description: "20 ou mais viagens realizadas",
+        earned: confirmedCount >= 20,
+        earnedAt: null,
+        progress: Math.min(confirmedCount, 20),
+        target: 20,
+      },
+      {
+        key: "explorador_brasil",
+        name: "Explorador do Brasil",
+        description: "Visitou 5 ou mais estados brasileiros",
+        earned: visitedStates.length >= 5,
+        earnedAt: null,
+        progress: Math.min(visitedStates.length, 5),
+        target: 5,
+      },
+      {
+        key: "embaixador",
+        name: "Embaixador",
+        description: "Indicou 3 ou mais amigos com sucesso",
+        earned: successfulReferrals >= 3,
+        earnedAt: null,
+        progress: Math.min(successfulReferrals, 3),
+        target: 3,
+      },
+      {
+        key: "aniversariante",
+        name: "Aniversariante do Mês",
+        description: "Parabéns pelo seu aniversário neste mês!",
+        earned: isBirthdayMonth,
+        earnedAt: null,
+      },
+      {
+        key: "cliente_fiel",
+        name: "Cliente Fiel",
+        description: "Membro ativo do programa de fidelidade",
+        earned: isLoyaltyMember,
+        earnedAt: null,
+      },
+    ];
+
+    res.json({ badges, stats: { totalTrips: confirmedCount, visitedStates, uniqueDestinations } });
+  } catch (err) { next(err); }
+});
+
+router.get("/client/me/memories", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== ROLES.CLIENT) { next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE")); return; }
+
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) { res.json({ memories: [] }); return; }
+
+    const now = new Date();
+
+    const reservationsWithTrips = await db
+      .select({
+        reservationId: reservationsTable.id,
+        tripId: tripsTable.id,
+        tripName: tripsTable.name,
+        tripDestination: tripsTable.destination,
+        tripDestinationCity: tripsTable.destinationCity,
+        tripDestinationState: tripsTable.destinationState,
+        tripCoverImage: tripsTable.coverImage,
+        tripDepartureDate: tripsTable.departureDate,
+        tripReturnDate: tripsTable.returnDate,
+      })
+      .from(reservationsTable)
+      .innerJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
+      .where(and(
+        eq(reservationsTable.clientId, client.id),
+        eq(reservationsTable.tenantId, me.tenantId),
+        eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED),
+        lt(tripsTable.departureDate, now),
+      ))
+      .orderBy(desc(tripsTable.departureDate));
+
+    if (reservationsWithTrips.length === 0) { res.json({ memories: [] }); return; }
+
+    const tripIds = reservationsWithTrips.map(r => r.tripId);
+    const reservationIds = reservationsWithTrips.map(r => r.reservationId);
+
+    const [npsSubmitted, media] = await Promise.all([
+      db.select({ reservationId: clientNpsResponsesTable.reservationId })
+        .from(clientNpsResponsesTable)
+        .where(and(
+          eq(clientNpsResponsesTable.tenantId, me.tenantId),
+          inArray(clientNpsResponsesTable.reservationId, reservationIds),
+        )),
+      db.select()
+        .from(tripMediaTable)
+        .where(and(
+          eq(tripMediaTable.tenantId, me.tenantId),
+          inArray(tripMediaTable.tripId, tripIds),
+        ))
+        .orderBy(asc(tripMediaTable.createdAt)),
+    ]);
+
+    const npsSet = new Set(npsSubmitted.map(n => n.reservationId));
+    const mediaByTrip = new Map<string, typeof media>();
+    for (const m of media) {
+      if (!mediaByTrip.has(m.tripId)) mediaByTrip.set(m.tripId, []);
+      mediaByTrip.get(m.tripId)!.push(m);
+    }
+
+    const memories = reservationsWithTrips.map(r => ({
+      reservationId: r.reservationId,
+      tripId: r.tripId,
+      tripName: r.tripName,
+      tripDestination: r.tripDestination,
+      tripDestinationCity: r.tripDestinationCity,
+      tripDestinationState: r.tripDestinationState,
+      tripCoverImage: r.tripCoverImage,
+      tripDepartureDate: r.tripDepartureDate.toISOString(),
+      tripReturnDate: r.tripReturnDate?.toISOString() ?? null,
+      npsSubmitted: npsSet.has(r.reservationId),
+      media: (mediaByTrip.get(r.tripId) ?? []).map(m => ({
+        id: m.id,
+        url: m.url,
+        type: m.type,
+        caption: m.caption,
+        createdAt: m.createdAt.toISOString(),
+      })),
+    }));
+
+    res.json({ memories });
   } catch (err) { next(err); }
 });
 

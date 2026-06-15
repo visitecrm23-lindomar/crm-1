@@ -351,6 +351,13 @@
       "when": 1750700000000,
       "tag": "0049_add_tenant_integrations",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1750800000000,
+      "tag": "0050_portal_achievements_media",
+      "breakpoints": true
     }
   ]
 }

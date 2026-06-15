@@ -34,3 +34,4 @@ export * from "./nps";
 export * from "./favorites";
 export * from "./ai-integration";
 export * from "./tenant-integrations";
+export * from "./achievements";

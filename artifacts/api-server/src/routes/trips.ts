@@ -1,10 +1,10 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { addSeatClient, removeSeatClient } from "../lib/seat-sse";
-import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable, auditLogsTable, plansTable } from "@workspace/db";
+import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable, auditLogsTable, plansTable, tripMediaTable } from "@workspace/db";
 import { checkPlanLimit } from "../lib/planLimits";
 import type { LayoutCell, FixedCostItem, VariableCostItem, FreePassenger } from "@workspace/db";
-import { eq, and, ilike, sql, desc, inArray, or } from "drizzle-orm";
+import { eq, and, ilike, sql, desc, asc, inArray, or } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { deleteOrphanedFile } from "../lib/uploadthing";
@@ -1991,6 +1991,84 @@ router.post("/trips/:id/manifest/send", async (req, res, next: NextFunction): Pr
   } catch (err) {
     next(err);
   }
+});
+
+const AddTripMediaBody = z.object({
+  url: z.string().url(),
+  type: z.enum(["image", "video"]).default("image"),
+  caption: z.string().max(500).optional(),
+});
+
+router.get("/trips/:id/media", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    const [trip] = await db.select({ id: tripsTable.id }).from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId))).limit(1);
+    if (!trip) { next(new NotFoundError("Viagem não encontrada", "TRIP_NOT_FOUND")); return; }
+
+    const media = await db.select()
+      .from(tripMediaTable)
+      .where(and(eq(tripMediaTable.tripId, req.params.id), eq(tripMediaTable.tenantId, me.tenantId)))
+      .orderBy(asc(tripMediaTable.createdAt));
+
+    res.json({
+      data: media.map(m => ({
+        id: m.id,
+        url: m.url,
+        type: m.type,
+        caption: m.caption,
+        uploadedByUserId: m.uploadedByUserId,
+        createdAt: m.createdAt.toISOString(),
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
+router.post("/trips/:id/media", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Acesso restrito", "FORBIDDEN_ROLE")); return; }
+
+    const [trip] = await db.select({ id: tripsTable.id }).from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId))).limit(1);
+    if (!trip) { next(new NotFoundError("Viagem não encontrada", "TRIP_NOT_FOUND")); return; }
+
+    const parsed = AddTripMediaBody.safeParse(req.body);
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
+
+    const id = generateId();
+    await db.insert(tripMediaTable).values({
+      id,
+      tripId: req.params.id,
+      tenantId: me.tenantId,
+      url: parsed.data.url,
+      type: parsed.data.type,
+      caption: parsed.data.caption ?? null,
+      uploadedByUserId: me.id,
+    });
+
+    res.status(201).json({ id, url: parsed.data.url, type: parsed.data.type, caption: parsed.data.caption ?? null, createdAt: new Date().toISOString() });
+  } catch (err) { next(err); }
+});
+
+router.delete("/trips/:id/media/:mediaId", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Acesso restrito", "FORBIDDEN_ROLE")); return; }
+
+    const [media] = await db.select()
+      .from(tripMediaTable)
+      .where(and(eq(tripMediaTable.id, req.params.mediaId), eq(tripMediaTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!media || media.tripId !== req.params.id) { next(new NotFoundError("Mídia não encontrada", "NOT_FOUND")); return; }
+
+    await db.delete(tripMediaTable).where(eq(tripMediaTable.id, req.params.mediaId));
+    res.status(204).send();
+  } catch (err) { next(err); }
 });
 
 export default router;

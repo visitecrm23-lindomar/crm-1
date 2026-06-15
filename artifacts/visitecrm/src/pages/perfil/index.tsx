@@ -1,6 +1,6 @@
 import { useState, useEffect, type ReactElement } from "react";
 import { useLocation, useSearch } from "wouter";
-import { clientPortalApi, type ClientPortalProfile, type ClientLoyalty, type ClientReferral, type FavoritesResponse, type ClientPortalReservation, type ClientLoyaltyTransaction } from "@/lib/clientPortalApi";
+import { clientPortalApi, type ClientPortalProfile, type ClientLoyalty, type ClientReferral, type FavoritesResponse, type ClientPortalReservation, type ClientLoyaltyTransaction, type ClientAchievementsResponse, type ClientMemoriesResponse } from "@/lib/clientPortalApi";
 import QRCode from "qrcode";
 import { useGetMe } from "@workspace/api-client-react";
 import { RESERVATION_STATUS } from "@workspace/permissions";
@@ -56,6 +56,10 @@ import {
   MessageCircle,
   Wallet,
   Heart,
+  Trophy,
+  Map,
+  Globe,
+  Camera,
 } from "lucide-react";
 import { formatCurrency as fmtCurrencyLib, formatDateShort } from "@/lib/utils";
 
@@ -2751,7 +2755,432 @@ function FavoritosTab({ tenantSlug }: { tenantSlug: string | null }) {
   );
 }
 
-const VALID_PERFIL_TABS = ["inicio", "reservas", "dados", "indicacoes", "fidelidade", "preferencias", "favoritos"];
+const BADGE_META: Record<string, { name: string; description: string; emoji: string; earnedClass: string }> = {
+  primeira_viagem:    { name: "Primeira Viagem",      description: "Realizou sua primeira viagem conosco",    emoji: "✈️", earnedClass: "bg-blue-50 border-blue-200" },
+  viajante_frequente: { name: "Viajante Frequente",   description: "5 ou mais viagens confirmadas",           emoji: "⭐", earnedClass: "bg-yellow-50 border-yellow-200" },
+  explorador:         { name: "Explorador",            description: "10 ou mais viagens realizadas",           emoji: "🗺️", earnedClass: "bg-green-50 border-green-200" },
+  grande_aventureiro: { name: "Grande Aventureiro",   description: "20 ou mais viagens realizadas",           emoji: "🏆", earnedClass: "bg-purple-50 border-purple-200" },
+  explorador_brasil:  { name: "Explorador do Brasil", description: "Visitou 5 ou mais estados brasileiros",   emoji: "🇧🇷", earnedClass: "bg-emerald-50 border-emerald-200" },
+  embaixador:         { name: "Embaixador",            description: "Indicou 3 ou mais amigos com sucesso",   emoji: "👥", earnedClass: "bg-pink-50 border-pink-200" },
+  aniversariante:     { name: "Aniversariante do Mês",description: "Parabéns pelo seu aniversário neste mês!",emoji: "🎂", earnedClass: "bg-orange-50 border-orange-200" },
+  cliente_fiel:       { name: "Cliente Fiel",         description: "Membro ativo do programa de fidelidade", emoji: "💎", earnedClass: "bg-indigo-50 border-indigo-200" },
+};
+
+function ConquistasTab() {
+  const [data, setData] = useState<ClientAchievementsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    clientPortalApi.getAchievements().then(setData).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}
+      </div>
+    );
+  }
+
+  const earned = (data?.badges ?? []).filter(b => b.earned);
+  const locked = (data?.badges ?? []).filter(b => !b.earned);
+
+  return (
+    <div className="space-y-6">
+      {earned.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+            Conquistas desbloqueadas ({earned.length})
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {earned.map(badge => {
+              const meta = BADGE_META[badge.key] ?? { name: badge.name, description: badge.description, emoji: "🏅", earnedClass: "bg-yellow-50 border-yellow-200" };
+              return (
+                <div key={badge.key} className={`rounded-xl border-2 p-4 text-center space-y-1.5 shadow-sm ${meta.earnedClass}`}>
+                  <div className="text-3xl">{meta.emoji}</div>
+                  <div className="font-semibold text-sm leading-tight">{meta.name}</div>
+                  <div className="text-xs text-muted-foreground leading-tight">{meta.description}</div>
+                  {badge.earnedAt && (
+                    <div className="text-xs text-muted-foreground pt-1 border-t border-black/10">{formatDateShort(badge.earnedAt)}</div>
+                  )}
+                  {badge.target != null && (
+                    <div className="mt-1">
+                      <div className="h-1.5 rounded-full bg-black/10">
+                        <div className="h-1.5 rounded-full bg-current" style={{ width: `${Math.round(((badge.progress ?? 0) / badge.target) * 100)}%` }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {locked.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+            Ainda por desbloquear ({locked.length})
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {locked.map(badge => {
+              const meta = BADGE_META[badge.key] ?? { name: badge.name, description: badge.description, emoji: "🔒", earnedClass: "" };
+              return (
+                <div key={badge.key} className="rounded-xl border-2 border-dashed border-muted p-4 text-center space-y-1.5 bg-muted/30 opacity-60">
+                  <div className="text-3xl grayscale">{meta.emoji}</div>
+                  <div className="font-semibold text-sm leading-tight text-muted-foreground">{meta.name}</div>
+                  <div className="text-xs text-muted-foreground leading-tight">{meta.description}</div>
+                  {badge.target != null && (
+                    <div className="mt-1">
+                      <div className="h-1.5 rounded-full bg-muted">
+                        <div className="h-1.5 rounded-full bg-muted-foreground/40" style={{ width: `${Math.round(((badge.progress ?? 0) / badge.target) * 100)}%` }} />
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">{badge.progress ?? 0}/{badge.target}</div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {earned.length === 0 && locked.length === 0 && (
+        <div className="text-center py-16">
+          <Trophy className="w-12 h-12 mx-auto text-muted-foreground/30 mb-4" />
+          <h3 className="font-semibold text-lg mb-1">Nenhuma conquista ainda</h3>
+          <p className="text-muted-foreground text-sm">Faça sua primeira viagem para começar a desbloquear conquistas!</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const BRAZIL_STATE_GRID = [
+  { uf: "RR", name: "Roraima",              col: 3,  row: 1 },
+  { uf: "AP", name: "Amapá",               col: 6,  row: 1 },
+  { uf: "AM", name: "Amazonas",            col: 2,  row: 2 },
+  { uf: "PA", name: "Pará",               col: 4,  row: 2 },
+  { uf: "MA", name: "Maranhão",           col: 6,  row: 2 },
+  { uf: "PI", name: "Piauí",             col: 7,  row: 2 },
+  { uf: "CE", name: "Ceará",             col: 8,  row: 2 },
+  { uf: "RN", name: "Rio Grande do Norte",col: 9,  row: 2 },
+  { uf: "AC", name: "Acre",              col: 1,  row: 3 },
+  { uf: "RO", name: "Rondônia",          col: 2,  row: 3 },
+  { uf: "TO", name: "Tocantins",         col: 4,  row: 3 },
+  { uf: "BA", name: "Bahia",            col: 6,  row: 3 },
+  { uf: "PB", name: "Paraíba",          col: 8,  row: 3 },
+  { uf: "PE", name: "Pernambuco",       col: 9,  row: 3 },
+  { uf: "AL", name: "Alagoas",          col: 10, row: 3 },
+  { uf: "SE", name: "Sergipe",          col: 10, row: 2 },
+  { uf: "MT", name: "Mato Grosso",      col: 3,  row: 4 },
+  { uf: "GO", name: "Goiás",           col: 5,  row: 4 },
+  { uf: "DF", name: "Distrito Federal", col: 6,  row: 4 },
+  { uf: "MG", name: "Minas Gerais",    col: 7,  row: 4 },
+  { uf: "ES", name: "Espírito Santo",  col: 9,  row: 4 },
+  { uf: "MS", name: "Mato Grosso do Sul", col: 4, row: 5 },
+  { uf: "SP", name: "São Paulo",       col: 6,  row: 5 },
+  { uf: "RJ", name: "Rio de Janeiro",  col: 8,  row: 5 },
+  { uf: "PR", name: "Paraná",         col: 6,  row: 6 },
+  { uf: "SC", name: "Santa Catarina", col: 6,  row: 7 },
+  { uf: "RS", name: "Rio Grande do Sul", col: 6, row: 8 },
+];
+
+function MapaTab() {
+  const [data, setData] = useState<ClientAchievementsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    clientPortalApi.getAchievements().then(setData).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <Skeleton className="h-96 rounded-xl" />;
+
+  const visitedStates = new Set(data?.stats.visitedStates ?? []);
+  const totalTrips = data?.stats.totalTrips ?? 0;
+  const visitedCount = visitedStates.size;
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-3 gap-3">
+        <Card>
+          <CardContent className="pt-4 pb-4 text-center">
+            <div className="text-2xl font-bold text-primary">{totalTrips}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">Viagens realizadas</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-4 text-center">
+            <div className="text-2xl font-bold text-primary">{visitedCount}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">Estados visitados</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-4 text-center">
+            <div className="text-2xl font-bold text-primary">{data?.stats.uniqueDestinations.length ?? 0}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">Destinos únicos</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Map className="w-4 h-4" />
+            Brasil — estados visitados
+          </CardTitle>
+          <CardDescription>
+            {visitedCount} de 27 estados ({Math.round((visitedCount / 27) * 100)}%)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pb-4">
+          <div
+            className="grid gap-1 w-full"
+            style={{ gridTemplateColumns: "repeat(10, minmax(0, 1fr))", gridTemplateRows: "repeat(8, 2rem)" }}
+          >
+            {BRAZIL_STATE_GRID.map(state => {
+              const visited = visitedStates.has(state.uf);
+              return (
+                <div
+                  key={state.uf}
+                  title={state.name}
+                  style={{ gridColumn: state.col, gridRow: state.row }}
+                  className={[
+                    "flex items-center justify-center rounded text-xs font-bold cursor-default select-none transition-all",
+                    visited
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "bg-muted text-muted-foreground",
+                  ].join(" ")}
+                >
+                  {state.uf}
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded bg-primary inline-block" />
+              Visitado
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded bg-muted border inline-block" />
+              Não visitado
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {visitedCount > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Estados que você conheceu</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-1.5">
+              {BRAZIL_STATE_GRID.filter(s => visitedStates.has(s.uf)).map(s => (
+                <span key={s.uf} className="inline-flex items-center gap-1 bg-primary/10 text-primary rounded-full px-2.5 py-0.5 text-xs font-medium">
+                  {s.uf} · {s.name}
+                </span>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {visitedCount === 0 && (
+        <div className="text-center py-8">
+          <p className="text-muted-foreground text-sm">Nenhum estado visitado ainda. Faça sua primeira viagem!</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SonhosTab({ profile, onUpdated }: { profile: ClientPortalProfile; onUpdated: (c: ClientPortalProfile["client"]) => void }) {
+  const [destinations, setDestinations] = useState<string[]>(profile.client?.dreamDestinations ?? []);
+  const [input, setInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  const persistUpdate = async (next: string[]) => {
+    setSaving(true);
+    try {
+      await clientPortalApi.updatePreferences({ dreamDestinations: next });
+      onUpdated({ ...(profile.client as NonNullable<ClientPortalProfile["client"]>), dreamDestinations: next });
+    } catch {
+      toast({ title: "Erro ao salvar destinos", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addDestination = () => {
+    const val = input.trim();
+    if (!val || destinations.includes(val) || destinations.length >= 30) return;
+    const next = [...destinations, val];
+    setDestinations(next);
+    setInput("");
+    persistUpdate(next);
+  };
+
+  const removeDestination = (dest: string) => {
+    const next = destinations.filter(d => d !== dest);
+    setDestinations(next);
+    persistUpdate(next);
+  };
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold mb-1">🌎 Quero Conhecer</h2>
+        <p className="text-sm text-muted-foreground">
+          Salve os destinos dos seus sonhos. Usamos essas informações para criar ofertas personalizadas para você.
+        </p>
+      </div>
+
+      <div className="flex gap-2">
+        <Input
+          placeholder="Ex: Fernando de Noronha, Bariloche, Paris…"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDestination(); } }}
+          maxLength={200}
+          disabled={saving}
+          className="flex-1"
+        />
+        <Button type="button" onClick={addDestination} disabled={!input.trim() || saving} size="sm" className="shrink-0">
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Adicionar"}
+        </Button>
+      </div>
+
+      {destinations.length === 0 ? (
+        <div className="text-center py-14 border-2 border-dashed border-muted rounded-xl">
+          <Globe className="w-12 h-12 mx-auto text-muted-foreground/30 mb-3" />
+          <h3 className="font-semibold text-base mb-1">Sua lista está vazia</h3>
+          <p className="text-muted-foreground text-sm">Adicione destinos que você sonha em conhecer!</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">{destinations.length} destino{destinations.length !== 1 ? "s" : ""} na lista</p>
+          {destinations.map((dest, i) => (
+            <div key={i} className="flex items-center justify-between rounded-lg border bg-card px-4 py-3 group hover:bg-muted/30 transition-colors">
+              <div className="flex items-center gap-2.5">
+                <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="font-medium text-sm">{dest}</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                onClick={() => removeDestination(dest)}
+                disabled={saving}
+              >
+                <span className="text-lg leading-none">×</span>
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MemoriasTab() {
+  const [data, setData] = useState<ClientMemoriesResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    clientPortalApi.getMemories().then(setData).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-36 rounded-xl" />)}
+      </div>
+    );
+  }
+
+  const memories = data?.memories ?? [];
+
+  if (memories.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <Camera className="w-12 h-12 mx-auto text-muted-foreground/30 mb-4" />
+        <h3 className="font-semibold text-lg mb-1">Nenhuma memória ainda</h3>
+        <p className="text-muted-foreground text-sm max-w-xs mx-auto">
+          Suas viagens passadas aparecerão aqui com fotos e recordações.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">{memories.length} viagem{memories.length !== 1 ? "s" : ""} na sua história</p>
+      {memories.map(memory => (
+        <Card key={memory.reservationId} className="overflow-hidden">
+          <div className="flex">
+            {memory.tripCoverImage ? (
+              <div className="w-24 sm:w-32 shrink-0 overflow-hidden bg-muted">
+                <img
+                  src={memory.tripCoverImage}
+                  alt={memory.tripName}
+                  className="w-full h-full object-cover"
+                  style={{ minHeight: "7rem" }}
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+              </div>
+            ) : (
+              <div className="w-24 sm:w-32 shrink-0 bg-muted flex items-center justify-center min-h-28">
+                <Plane className="w-8 h-8 text-muted-foreground/30" />
+              </div>
+            )}
+            <div className="flex-1 p-4 space-y-2 min-w-0">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-sm leading-tight truncate">{memory.tripName}</h3>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                    <MapPin className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{memory.tripDestination}{memory.tripDestinationState ? ` — ${memory.tripDestinationState}` : ""}</span>
+                  </p>
+                </div>
+                {memory.npsSubmitted && (
+                  <span className="inline-flex items-center gap-1 text-xs bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5 shrink-0">
+                    <CheckCircle className="w-3 h-3" />
+                    Avaliado
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {formatDateShort(memory.tripDepartureDate)}
+                {memory.tripReturnDate ? ` → ${formatDateShort(memory.tripReturnDate)}` : ""}
+              </div>
+              {memory.media.length > 0 && (
+                <div className="flex gap-1.5 flex-wrap">
+                  {memory.media.slice(0, 5).map(m => (
+                    <a key={m.id} href={m.url} target="_blank" rel="noopener noreferrer"
+                      className="block w-10 h-10 rounded overflow-hidden bg-muted border hover:ring-2 hover:ring-primary transition-all">
+                      <img src={m.url} alt={m.caption ?? ""} className="w-full h-full object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                    </a>
+                  ))}
+                  {memory.media.length > 5 && (
+                    <div className="w-10 h-10 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground border">
+                      +{memory.media.length - 5}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+const VALID_PERFIL_TABS = ["inicio", "reservas", "dados", "indicacoes", "fidelidade", "preferencias", "favoritos", "conquistas", "mapa", "sonhos", "memorias"];
 
 export default function PerfilPage() {
   const [, navigate] = useLocation();
@@ -2855,6 +3284,22 @@ export default function PerfilPage() {
             <Heart className="w-4 h-4 fill-current text-red-400" />
             Favoritos
           </TabsTrigger>
+          <TabsTrigger value="conquistas" className="flex items-center gap-1.5">
+            <Trophy className="w-4 h-4" />
+            Conquistas
+          </TabsTrigger>
+          <TabsTrigger value="mapa" className="flex items-center gap-1.5">
+            <Map className="w-4 h-4" />
+            Mapa
+          </TabsTrigger>
+          <TabsTrigger value="sonhos" className="flex items-center gap-1.5">
+            <Globe className="w-4 h-4" />
+            Sonhos
+          </TabsTrigger>
+          <TabsTrigger value="memorias" className="flex items-center gap-1.5">
+            <Camera className="w-4 h-4" />
+            Memórias
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="inicio">
@@ -2921,6 +3366,27 @@ export default function PerfilPage() {
 
         <TabsContent value="favoritos">
           <FavoritosTab tenantSlug={profile.tenant?.slug ?? null} />
+        </TabsContent>
+
+        <TabsContent value="conquistas">
+          <ConquistasTab />
+        </TabsContent>
+
+        <TabsContent value="mapa">
+          <MapaTab />
+        </TabsContent>
+
+        <TabsContent value="sonhos">
+          <SonhosTab
+            profile={profile}
+            onUpdated={(updated) => {
+              setProfile((prev) => prev ? { ...prev, client: updated } : prev);
+            }}
+          />
+        </TabsContent>
+
+        <TabsContent value="memorias">
+          <MemoriasTab />
         </TabsContent>
       </Tabs>
     </div>

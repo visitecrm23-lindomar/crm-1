@@ -203,6 +203,51 @@ export interface RedeemLoyaltyResponse {
   newAvailablePoints: number;
 }
 
+export interface ClientBadge {
+  key: string;
+  name: string;
+  description: string;
+  earned: boolean;
+  earnedAt: string | null;
+  progress?: number;
+  target?: number;
+}
+
+export interface ClientAchievementsResponse {
+  badges: ClientBadge[];
+  stats: {
+    totalTrips: number;
+    visitedStates: string[];
+    uniqueDestinations: string[];
+  };
+}
+
+export interface TripMediaItem {
+  id: string;
+  url: string;
+  type: string;
+  caption: string | null;
+  createdAt: string;
+}
+
+export interface ClientMemory {
+  reservationId: string;
+  tripId: string;
+  tripName: string;
+  tripDestination: string;
+  tripDestinationCity: string;
+  tripDestinationState: string;
+  tripCoverImage: string | null;
+  tripDepartureDate: string;
+  tripReturnDate: string | null;
+  npsSubmitted: boolean;
+  media: TripMediaItem[];
+}
+
+export interface ClientMemoriesResponse {
+  memories: ClientMemory[];
+}
+
 export const clientPortalApi = {
   getProfile: () => apiReq<ClientPortalProfile>("GET", "/client/me"),
   updateProfile: (data: {
@@ -245,4 +290,6 @@ export const clientPortalApi = {
     apiReq<LoyaltyTransactionsResponse>("GET", `/client/me/loyalty/transactions?page=${page}`),
   redeemLoyaltyPoints: (reservationId: string, pointsToRedeem: number) =>
     apiReq<RedeemLoyaltyResponse>("POST", "/client/me/loyalty/redeem", { reservationId, pointsToRedeem }),
+  getAchievements: () => apiReq<ClientAchievementsResponse>("GET", "/client/me/achievements"),
+  getMemories: () => apiReq<ClientMemoriesResponse>("GET", "/client/me/memories"),
 };
