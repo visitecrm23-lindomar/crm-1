@@ -677,7 +677,8 @@ export default function MyReferralPage({ slug, store }: Props) {
                     { key: "expired",   label: "Expiradas",   count: referrals.filter((r) => r.status === "expired").length },
                     { key: "reversed",  label: "Canceladas",  count: referrals.filter((r) => r.status === "reversed").length },
                   ] as const
-                ).map(({ key, label, count }) => {
+                ).filter(({ key, count }) => key === "all" || count > 0)
+                  .map(({ key, label, count }) => {
                   const isActive = statusFilter === key;
                   return (
                     <button
