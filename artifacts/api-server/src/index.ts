@@ -11,6 +11,7 @@ import { runExpiredReservationsCron } from "./lib/expired-reservations";
 import { runPipelineTripEndedCron } from "./services/pipeline-automation";
 import { calculateScoresForAllTenants } from "./lib/client-scores";
 import { runCampaignAutomationCron } from "./lib/campaign-automation";
+import { runGemeoAlertsCron, runGemeoOpportunitiesCron } from "./lib/gemeo-cron";
 import { getRedisConnection, fetchUpstashDailyStats, getRedisWarningThresholdPct, maybeSendDailyLimitAlert } from "./lib/redis";
 import { getReminderQueue, closeQueues } from "./queues/index";
 import { startEmailWorker, stopEmailWorker } from "./workers/email.worker";
@@ -153,6 +154,16 @@ applyMigrations()
       cron.schedule("0 3 * * *", () => {
         logger.info("[client-scores] Daily scores cron triggered");
         calculateScoresForAllTenants().catch((err) => logger.error({ err }, "[client-scores] Cron failed"));
+      }, { timezone: "America/Sao_Paulo" });
+
+      cron.schedule("0 6 * * *", () => {
+        logger.info("[gemeo-alerts] Daily alerts cron triggered");
+        runGemeoAlertsCron().catch((err) => logger.error({ err }, "[gemeo-alerts] Cron failed"));
+      }, { timezone: "America/Sao_Paulo" });
+
+      cron.schedule("0 7 * * 1", () => {
+        logger.info("[gemeo-opportunities] Weekly opportunities cron triggered");
+        runGemeoOpportunitiesCron().catch((err) => logger.error({ err }, "[gemeo-opportunities] Cron failed"));
       }, { timezone: "America/Sao_Paulo" });
 
       cron.schedule("0 * * * *", () => {

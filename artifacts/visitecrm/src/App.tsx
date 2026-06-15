@@ -30,6 +30,7 @@ import Nps from "@/pages/nps";
 import Registrations from "@/pages/registrations";
 import Analytics from "@/pages/analytics";
 import Insights from "@/pages/insights";
+import GemeoDigital from "@/pages/gemeo";
 import Commissions from "@/pages/commissions";
 import Expenses from "@/pages/expenses";
 import Revenue from "@/pages/revenue";
@@ -75,7 +76,7 @@ import Vitrine from "@/pages/vitrine";
 
 // Partner portal (public — JWT auth inside)
 import ParceirosPortal from "@/pages/parceiros/index";
-import { ROLES } from "@workspace/permissions";
+import { ROLES, ADMIN_ROLES } from "@workspace/permissions";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 const clerkProxyUrl: string =
@@ -348,6 +349,7 @@ function Router() {
       <Route path="/analytics/historico-comparativo" component={() => <Suspense fallback={null}><RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={HistoricoComparativo} /></Suspense>} />
       <Route path="/analytics/vendedores" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Vendedores} />} />
       <Route path="/insights" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Insights} />} />
+      <Route path="/gemeo" component={() => <RoleGate allowedRoles={ADMIN_ROLES as unknown as string[]} layout={Layout} fallbackPath="/dashboard" component={GemeoDigital} />} />
 
       {/* Task 6 pages */}
       <Route path="/vouchers" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Vouchers} />} />

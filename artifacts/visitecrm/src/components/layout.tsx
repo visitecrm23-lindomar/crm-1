@@ -36,6 +36,7 @@ import {
   MessageCircle,
   Gauge,
   BrainCircuit,
+  Activity,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -80,6 +81,7 @@ const AGENCY_NAVIGATION: NavItem[] = [
     children: [
       { name: "Vendedores", href: "/analytics/vendedores", icon: UserCheck },
       { name: "Insights", href: "/insights", icon: BrainCircuit },
+      { name: "Gêmeo Digital", href: "/gemeo", icon: Activity },
     ],
   },
   {
