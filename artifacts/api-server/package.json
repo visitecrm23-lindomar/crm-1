@@ -17,6 +17,7 @@
     "@types/pdfkit": "^0.17.6",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
+    "@workspace/integrations-openai-ai-server": "workspace:*",
     "@workspace/email": "workspace:*",
     "@workspace/permissions": "workspace:*",
     "bullmq": "^5.76.2",

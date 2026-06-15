@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useGetInsightsSummary } from "@workspace/api-client-react";
 import type { GetInsightsSummaryPeriod } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,14 +6,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   TrendingUp, TrendingDown, Minus,
   DollarSign, Users, Target, BarChart2, Map, Star, BrainCircuit,
   ShoppingCart, Zap, Package, Heart, Globe,
   ArrowUpRight, ArrowDownRight, Mail, Send, MousePointerClick, CheckCircle2,
-  Repeat2, UserCheck, Award, Navigation,
+  Repeat2, UserCheck, Award, Navigation, Bot, MessageCircle, X, ChevronUp,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { useAuth } from "@clerk/react";
 
 const fmt = (v: number) => formatCurrency(v);
 const fmtCompact = (v: number) => {
@@ -164,8 +167,217 @@ const PERIOD_LABELS: Record<string, string> = {
   year: "ano anterior",
 };
 
+const SUGGESTED_QUESTIONS = [
+  "Qual a saúde financeira da agência neste período?",
+  "Qual campanha teve melhor desempenho?",
+  "Qual viagem tem risco de baixa ocupação?",
+  "Como está a taxa de retenção de clientes?",
+  "Quais clientes têm maior potencial de recompra?",
+  "Qual é a previsão de faturamento para os próximos 90 dias?",
+];
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+function InsightsChat({ period }: { period: string }) {
+  const { getToken } = useAuth();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isStreaming]);
+
+  async function sendMessage(content: string) {
+    if (!content.trim() || isStreaming) return;
+
+    const userMsg: ChatMessage = { role: "user", content: content.trim() };
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
+    setInput("");
+    setIsStreaming(true);
+
+    const assistantMsg: ChatMessage = { role: "assistant", content: "" };
+    setMessages((prev) => [...prev, assistantMsg]);
+
+    try {
+      const token = await getToken();
+      const response = await fetch("/api/insights/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ messages: nextMessages, period }),
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
+          try {
+            const parsed = JSON.parse(raw) as { content?: string; done?: boolean; error?: string };
+            if (parsed.error) {
+              setMessages((prev) => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { role: "assistant", content: `⚠️ ${parsed.error}` };
+                return updated;
+              });
+            } else if (parsed.content) {
+              setMessages((prev) => {
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                if (last?.role === "assistant") {
+                  updated[updated.length - 1] = { ...last, content: last.content + parsed.content };
+                }
+                return updated;
+              });
+            }
+          } catch {
+            // skip malformed SSE lines
+          }
+        }
+      }
+    } catch {
+      setMessages((prev) => {
+        const updated = [...prev];
+        updated[updated.length - 1] = { role: "assistant", content: "⚠️ Não foi possível conectar ao assistente. Tente novamente." };
+        return updated;
+      });
+    } finally {
+      setIsStreaming(false);
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void sendMessage(input);
+    }
+  }
+
+  const isEmpty = messages.length === 0;
+
+  return (
+    <div className="flex flex-col h-[540px]">
+      {isEmpty ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-5 px-4">
+          <div className="p-4 rounded-full bg-primary/10">
+            <Bot className="w-10 h-10 text-primary" />
+          </div>
+          <div className="text-center">
+            <p className="text-base font-semibold">Assistente de Inteligência Turística</p>
+            <p className="text-sm text-muted-foreground mt-1">Faça perguntas sobre os dados da agência no período selecionado</p>
+          </div>
+          <div className="flex flex-wrap gap-2 justify-center max-w-xl">
+            {SUGGESTED_QUESTIONS.map((q) => (
+              <button
+                key={q}
+                onClick={() => void sendMessage(q)}
+                className="text-xs border rounded-full px-3 py-1.5 hover:bg-primary/5 hover:border-primary/40 transition-colors text-muted-foreground hover:text-foreground"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+          {messages.map((msg, i) => (
+            <div key={i} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+              {msg.role === "assistant" && (
+                <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-1">
+                  <Bot className="w-4 h-4 text-primary" />
+                </div>
+              )}
+              <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed ${
+                msg.role === "user"
+                  ? "bg-primary text-primary-foreground rounded-tr-sm"
+                  : "bg-muted text-foreground rounded-tl-sm"
+              }`}>
+                {msg.content || (isStreaming && i === messages.length - 1 ? (
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </span>
+                ) : "")}
+              </div>
+              {msg.role === "user" && (
+                <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center shrink-0 mt-1">
+                  <Users className="w-3.5 h-3.5 text-primary-foreground" />
+                </div>
+              )}
+            </div>
+          ))}
+          <div ref={bottomRef} />
+        </div>
+      )}
+
+      {!isEmpty && messages.length > 0 && (
+        <div className="px-4 pb-2">
+          <div className="flex flex-wrap gap-1">
+            {SUGGESTED_QUESTIONS.slice(0, 3).map((q) => (
+              <button
+                key={q}
+                onClick={() => void sendMessage(q)}
+                disabled={isStreaming}
+                className="text-xs border rounded-full px-2.5 py-1 hover:bg-primary/5 hover:border-primary/40 transition-colors text-muted-foreground hover:text-foreground disabled:opacity-40"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="border-t px-4 py-3 flex gap-2 items-end">
+        <Textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Pergunte algo sobre os dados da agência..."
+          className="min-h-[40px] max-h-[120px] resize-none text-sm"
+          rows={1}
+          disabled={isStreaming}
+        />
+        <Button
+          size="icon"
+          onClick={() => void sendMessage(input)}
+          disabled={!input.trim() || isStreaming}
+          className="shrink-0"
+        >
+          <Send className="w-4 h-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function Insights() {
   const [period, setPeriod] = useState<GetInsightsSummaryPeriod>("month");
+  const [chatOpen, setChatOpen] = useState(false);
   const { data, isLoading } = useGetInsightsSummary({ period });
   const prevLabel = PERIOD_LABELS[period] ?? "período anterior";
 
@@ -179,7 +391,7 @@ export default function Insights() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <BrainCircuit className="w-6 h-6 text-primary" />
@@ -189,16 +401,27 @@ export default function Insights() {
             Inteligência de negócio em 7 pilares — variações vs. {prevLabel}
           </p>
         </div>
-        <Select value={period} onValueChange={(v) => setPeriod(v as GetInsightsSummaryPeriod)}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="month">Este mês</SelectItem>
-            <SelectItem value="quarter">Último trimestre</SelectItem>
-            <SelectItem value="year">Este ano</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Select value={period} onValueChange={(v) => setPeriod(v as GetInsightsSummaryPeriod)}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="month">Este mês</SelectItem>
+              <SelectItem value="quarter">Último trimestre</SelectItem>
+              <SelectItem value="year">Este ano</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            variant={chatOpen ? "default" : "outline"}
+            size="sm"
+            onClick={() => setChatOpen((v) => !v)}
+            className="gap-1.5"
+          >
+            {chatOpen ? <X className="w-4 h-4" /> : <MessageCircle className="w-4 h-4" />}
+            {chatOpen ? "Fechar IA" : "Perguntar à IA"}
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="executiva">
@@ -699,6 +922,27 @@ export default function Insights() {
           )}
         </TabsContent>
       </Tabs>
+
+      {chatOpen && (
+        <Card className="border-primary/20 shadow-lg">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Bot className="w-4 h-4 text-primary" />
+              Assistente de Inteligência Turística
+              <Badge variant="secondary" className="text-xs font-normal">IA</Badge>
+            </CardTitle>
+            <button
+              onClick={() => setChatOpen(false)}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ChevronUp className="w-4 h-4" />
+            </button>
+          </CardHeader>
+          <CardContent className="p-0 pb-0">
+            <InsightsChat period={period} />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
