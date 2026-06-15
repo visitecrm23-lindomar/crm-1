@@ -75,15 +75,19 @@ router.get("/ai-integration", async (req, res): Promise<void> => {
       .limit(1);
 
     res.json({
+      name: cfg?.name ?? "",
       provider: cfg?.provider ?? "openai",
       baseUrl: cfg?.baseUrl ?? "",
       defaultModel: cfg?.defaultModel ?? "",
+      environment: cfg?.environment ?? "production",
       enabled: cfg?.enabled ?? false,
       status: cfg?.status ?? "disconnected",
       lastError: cfg?.lastError ?? null,
       lastSyncAt: cfg?.lastSyncAt ? cfg.lastSyncAt.toISOString() : null,
       hasApiKey: !!cfg?.apiKeyEncrypted,
       maskedApiKey: maskKey(cfg?.apiKeyEncrypted ?? null),
+      hasAccessToken: !!cfg?.accessTokenEncrypted,
+      maskedAccessToken: maskKey(cfg?.accessTokenEncrypted ?? null),
       providerDefaults: AI_PROVIDER_DEFAULTS,
     });
   } catch (err) {
@@ -122,10 +126,13 @@ router.get("/ai-integration/logs", async (req, res): Promise<void> => {
 });
 
 const putSchema = z.object({
+  name: z.string().optional(),
   provider: z.enum(["openai", "anthropic", "gemini", "custom"]),
   apiKey: z.string().optional(),
+  accessToken: z.string().optional(),
   baseUrl: z.string().optional(),
   defaultModel: z.string().optional(),
+  environment: z.enum(["production", "test"]).optional(),
   enabled: z.boolean().optional(),
 });
 
@@ -155,6 +162,16 @@ router.put("/ai-integration", async (req, res): Promise<void> => {
     const apiKeyEncrypted = keyChanged
       ? encryptCredential(incomingKey)
       : (existing?.apiKeyEncrypted ?? null);
+
+    // Same pattern for the optional access token (used by some providers).
+    const incomingToken = (body.accessToken ?? "").trim();
+    const tokenChanged = incomingToken.length > 0 && !incomingToken.startsWith(MASK);
+    const accessTokenEncrypted = tokenChanged
+      ? encryptCredential(incomingToken)
+      : (existing?.accessTokenEncrypted ?? null);
+
+    const name = (body.name ?? "").trim() || existing?.name || null;
+    const environment = body.environment ?? existing?.environment ?? "production";
 
     const enabled = body.enabled ?? existing?.enabled ?? false;
 
@@ -196,20 +213,25 @@ router.put("/ai-integration", async (req, res): Promise<void> => {
     // disabled config should never display a stale "connected/error" badge.
     const resetStatus =
       keyChanged ||
+      tokenChanged ||
       !existing ||
       !enabled ||
       existing.provider !== provider ||
-      (existing.baseUrl ?? null) !== baseUrl;
+      (existing.baseUrl ?? null) !== baseUrl ||
+      (existing.environment ?? "production") !== environment;
     const status = resetStatus ? "disconnected" : existing.status;
 
     if (existing) {
       await db
         .update(aiIntegrationsTable)
         .set({
+          name,
           provider,
           apiKeyEncrypted,
+          accessTokenEncrypted,
           baseUrl,
           defaultModel,
+          environment,
           enabled,
           status,
           ...(resetStatus ? { lastError: null } : {}),
@@ -219,10 +241,13 @@ router.put("/ai-integration", async (req, res): Promise<void> => {
       await db.insert(aiIntegrationsTable).values({
         id: generateId(),
         tenantId: me.tenantId,
+        name,
         provider,
         apiKeyEncrypted,
+        accessTokenEncrypted,
         baseUrl,
         defaultModel,
+        environment,
         enabled,
         status,
       });
@@ -232,7 +257,7 @@ router.put("/ai-integration", async (req, res): Promise<void> => {
       me,
       "save",
       "info",
-      `Configuração salva (provedor: ${provider}, ativo: ${enabled ? "sim" : "não"}${keyChanged ? ", chave atualizada" : ""}).`,
+      `Configuração salva (provedor: ${provider}, ativo: ${enabled ? "sim" : "não"}${keyChanged ? ", chave atualizada" : ""}${tokenChanged ? ", token atualizado" : ""}).`,
     );
 
     // Auto-verify the saved config server-side so the persisted connection
@@ -383,6 +408,34 @@ router.post("/ai-integration/test", async (req, res): Promise<void> => {
     }
   } catch (err) {
     req.log.error({ err }, "Error testing AI integration");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── POST /ai-integration/revoke ──────────────────────────────────────────────
+// Clears all stored credentials and marks the integration as disconnected.
+// The admin must re-enter credentials to reconnect.
+router.post("/ai-integration/revoke", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAiAdmin(req, res);
+    if (!me) return;
+
+    await db
+      .update(aiIntegrationsTable)
+      .set({
+        apiKeyEncrypted: null,
+        accessTokenEncrypted: null,
+        enabled: false,
+        status: "disconnected",
+        lastError: null,
+      })
+      .where(eq(aiIntegrationsTable.tenantId, me.tenantId));
+
+    await writeLog(me, "revoke", "warn", "Credenciais de IA revogadas e integração desativada.");
+
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Error revoking AI integration");
     res.status(500).json({ error: "Internal server error" });
   }
 });

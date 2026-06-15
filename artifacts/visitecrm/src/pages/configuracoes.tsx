@@ -86,6 +86,7 @@ import {
   Sparkles,
   AlertCircle,
   History,
+  ShieldOff,
 } from "lucide-react";
 import { formatCurrencyBRL } from "@/lib/utils";
 import { ROLES, INVOICE_STATUS } from "@workspace/permissions";
@@ -884,87 +885,487 @@ function PlanTab() {
   );
 }
 
-/* ──────────────────── Integrations Tab ──────────────────── */
-interface IntegrationConfig {
-  key: string;
-  label: string;
-  description: string;
-  fields: { key: string; label: string; type?: string; placeholder?: string }[];
+/* ──────────────────── Status Badge (shared) ─────────────────────────────── */
+function StatusBadge({ status }: { status: string }) {
+  if (status === "connected") {
+    return (
+      <Badge className="text-xs bg-green-50 text-green-700 border border-green-200">
+        <CheckCircle2 className="w-3 h-3 mr-1" />
+        Conectado
+      </Badge>
+    );
+  }
+  if (status === "error") {
+    return (
+      <Badge className="text-xs bg-red-50 text-red-700 border border-red-200">
+        <AlertCircle className="w-3 h-3 mr-1" />
+        Erro
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-xs">
+      Não conectado
+    </Badge>
+  );
 }
 
-const INTEGRATIONS: IntegrationConfig[] = [
-  {
-    key: "whatsapp_evolution",
-    label: "WhatsApp (Evolution API)",
-    description: "Envio de mensagens WhatsApp via Evolution API",
-    fields: [
-      { key: "apiUrl", label: "URL da API", placeholder: "https://evolution.agencia.com" },
-      { key: "apiKey", label: "API Key", type: "password" },
-      { key: "instanceName", label: "Nome da Instância", placeholder: "agencia" },
-    ],
-  },
-  {
-    key: "mercadopago",
-    label: "MercadoPago",
-    description: "Processamento de pagamentos via MercadoPago",
-    fields: [
-      { key: "publicKey", label: "Public Key", placeholder: "APP_USR-..." },
-      { key: "accessToken", label: "Access Token", type: "password" },
-    ],
-  },
-  {
-    key: "google_analytics",
-    label: "Google Analytics",
-    description: "Rastreamento de eventos e conversões",
-    fields: [
-      { key: "measurementId", label: "Measurement ID", placeholder: "G-XXXXXXXXXX" },
-    ],
-  },
-];
+/* ──────────────────── Generic Integration Card (secure API) ─────────────── */
+interface IntegrationFieldDef {
+  key: string;
+  label: string;
+  secret: boolean;
+  optional?: boolean;
+}
+
+interface IntegrationData {
+  type: string;
+  label: string;
+  name: string;
+  config: Record<string, string>;
+  maskedSecrets: Record<string, string | null>;
+  environment: "production" | "test";
+  enabled: boolean;
+  status: string;
+  lastError: string | null;
+  lastSyncAt: string | null;
+  fieldDefs: IntegrationFieldDef[];
+}
+
+interface IntegrationLog {
+  id: string;
+  event: string;
+  level: string;
+  message: string;
+  actorName: string | null;
+  createdAt: string;
+}
+
+function IntegrationCard({ type }: { type: string }) {
+  const { toast } = useToast();
+  const { data: me } = useGetMe();
+  const canManage = me?.role === ROLES.AGENCY_ADMIN || me?.role === ROLES.SUPER_ADMIN;
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [revoking, setRevoking] = useState(false);
+  const [forbidden, setForbidden] = useState(false);
+
+  const [data, setData] = useState<IntegrationData | null>(null);
+  const [formConfig, setFormConfig] = useState<Record<string, string>>({});
+  const [formSecrets, setFormSecrets] = useState<Record<string, string>>({});
+  const [cardName, setCardName] = useState("");
+  const [environment, setEnvironment] = useState<"production" | "test">("production");
+  const [enabled, setEnabled] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [logs, setLogs] = useState<IntegrationLog[]>([]);
+  const [showLogs, setShowLogs] = useState(false);
+
+  const loadConfig = useCallback(async () => {
+    try {
+      const res = await fetch(`${BASE}/api/integrations/${type}`, { credentials: "include" });
+      if (res.status === 403) {
+        setForbidden(true);
+        return;
+      }
+      if (!res.ok) throw new Error("load failed");
+      const d: IntegrationData = await res.json();
+      setData(d);
+      setFormConfig(d.config);
+      setFormSecrets({});
+      setCardName(d.name);
+      setEnvironment(d.environment);
+      setEnabled(d.enabled);
+      setDirty(false);
+    } catch {
+      // silent — card stays in default state
+    } finally {
+      setLoading(false);
+    }
+  }, [type]);
+
+  const loadLogs = useCallback(async () => {
+    try {
+      const res = await fetch(`${BASE}/api/integrations/${type}/logs`, { credentials: "include" });
+      if (!res.ok) return;
+      setLogs(await res.json());
+    } catch {
+      // ignore
+    }
+  }, [type]);
+
+  useEffect(() => {
+    if (!canManage) {
+      setLoading(false);
+      return;
+    }
+    void loadConfig();
+    void loadLogs();
+  }, [canManage, loadConfig, loadLogs]);
+
+  if (!canManage || forbidden) return null;
+
+  const status = data?.status ?? "disconnected";
+  const fieldDefs = data?.fieldDefs ?? [];
+  const configFields = fieldDefs.filter((f) => !f.secret);
+  const secretFields = fieldDefs.filter((f) => f.secret);
+  const hasAnySecret = secretFields.some((f) => !!data?.maskedSecrets[f.key]);
+
+  async function performTest() {
+    setTesting(true);
+    try {
+      const res = await fetch(`${BASE}/api/integrations/${type}/test`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config: formConfig, secrets: formSecrets }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (d.ok) {
+        toast({ title: "Conexão estabelecida com sucesso" });
+      } else {
+        toast({ title: d.message || "Falha ao conectar", variant: "destructive" });
+      }
+      await loadLogs();
+    } catch {
+      toast({ title: "Falha ao testar conexão", variant: "destructive" });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const res = await fetch(`${BASE}/api/integrations/${type}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: cardName,
+          config: formConfig,
+          secrets: formSecrets,
+          environment,
+          enabled,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Erro ao salvar");
+      }
+      toast({ title: "Integração salva com sucesso" });
+      setFormSecrets({});
+      setDirty(false);
+      await loadConfig();
+      await loadLogs();
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Erro ao salvar", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRevoke() {
+    setRevoking(true);
+    try {
+      const res = await fetch(`${BASE}/api/integrations/${type}/revoke`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Erro ao revogar");
+      toast({ title: "Credenciais revogadas com sucesso" });
+      await loadConfig();
+      await loadLogs();
+    } catch {
+      toast({ title: "Erro ao revogar credenciais", variant: "destructive" });
+    } finally {
+      setRevoking(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Wifi className="w-4 h-4 text-muted-foreground" />
+            {data?.label ?? type}
+          </CardTitle>
+          <StatusBadge status={status} />
+        </div>
+        {cardName && <CardDescription className="text-xs">{cardName}</CardDescription>}
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {loading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+            <Loader2 className="w-4 h-4 animate-spin" /> Carregando...
+          </div>
+        ) : (
+          <>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Nome da integração (opcional)</Label>
+              <Input
+                value={cardName}
+                onChange={(e) => {
+                  setCardName(e.target.value);
+                  setDirty(true);
+                }}
+                placeholder="Ex: WhatsApp Principal"
+              />
+            </div>
+
+            {configFields.map((f) => (
+              <div key={f.key} className="space-y-1.5">
+                <Label className="text-xs">
+                  {f.label}
+                  {f.optional ? " (opcional)" : ""}
+                </Label>
+                <Input
+                  value={formConfig[f.key] ?? ""}
+                  onChange={(e) => {
+                    setFormConfig((c) => ({ ...c, [f.key]: e.target.value }));
+                    setDirty(true);
+                  }}
+                />
+              </div>
+            ))}
+
+            {secretFields.map((f) => {
+              const masked = data?.maskedSecrets[f.key];
+              return (
+                <div key={f.key} className="space-y-1.5">
+                  <Label className="text-xs">
+                    {f.label}
+                    {f.optional ? " (opcional)" : ""}
+                  </Label>
+                  <Input
+                    type="password"
+                    value={formSecrets[f.key] ?? ""}
+                    onChange={(e) => {
+                      setFormSecrets((s) => ({ ...s, [f.key]: e.target.value }));
+                      setDirty(true);
+                    }}
+                    placeholder={masked ?? "Insira o valor"}
+                    autoComplete="off"
+                  />
+                  {masked && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Um valor já está salvo. Deixe em branco para mantê-lo.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+
+            <div className="flex items-center justify-between rounded-md border p-2.5">
+              <div className="space-y-0.5">
+                <Label className="text-xs font-medium">Ambiente</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  {environment === "production" ? "Produção" : "Teste (sandbox)"}
+                </p>
+              </div>
+              <Select
+                value={environment}
+                onValueChange={(v) => {
+                  setEnvironment(v as "production" | "test");
+                  setDirty(true);
+                }}
+              >
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="production">Produção</SelectItem>
+                  <SelectItem value="test">Teste</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center justify-between rounded-md border p-2.5">
+              <div className="space-y-0.5">
+                <Label className="text-xs font-medium">Ativar integração</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Quando ativo, a integração é usada pelo sistema.
+                </p>
+              </div>
+              <Switch
+                checked={enabled}
+                onCheckedChange={(v) => {
+                  setEnabled(v);
+                  setDirty(true);
+                }}
+              />
+            </div>
+
+            {status === "error" && data?.lastError && (
+              <div className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded p-2 break-words">
+                {data.lastError}
+              </div>
+            )}
+
+            {data?.lastSyncAt && (
+              <p className="text-[11px] text-muted-foreground">
+                Última verificação: {new Date(data.lastSyncAt).toLocaleString("pt-BR")}
+              </p>
+            )}
+
+            {dirty && (
+              <p className="text-[11px] text-amber-600">
+                Alterações não salvas. "Testar Conexão" usa os valores atuais; salve para aplicá-los.
+              </p>
+            )}
+
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void performTest()}
+                disabled={testing || saving}
+                className="gap-1.5"
+              >
+                {testing ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Wifi className="w-3.5 h-3.5" />
+                )}
+                Testar Conexão
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => void handleSave()}
+                disabled={saving || testing}
+                className="gap-1.5"
+              >
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                Salvar
+              </Button>
+              {hasAnySecret && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={revoking}
+                      className="gap-1.5 text-destructive hover:text-destructive ml-auto"
+                    >
+                      {revoking ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <ShieldOff className="w-3.5 h-3.5" />
+                      )}
+                      Revogar
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Revogar credenciais?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Isso irá apagar permanentemente as credenciais armazenadas e desativar a
+                        integração. Você precisará inserir as credenciais novamente para reconectar.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => void handleRevoke()}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Sim, revogar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setShowLogs((s) => !s);
+                  if (!showLogs) void loadLogs();
+                }}
+                className={`gap-1.5 ${!hasAnySecret ? "ml-auto" : ""}`}
+              >
+                <History className="w-3.5 h-3.5" />
+                {showLogs ? "Ocultar logs" : "Ver logs"}
+              </Button>
+            </div>
+
+            {showLogs && (
+              <div className="border rounded-md divide-y max-h-56 overflow-y-auto">
+                {logs.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground p-3 text-center">
+                    Nenhum registro ainda.
+                  </p>
+                ) : (
+                  logs.map((log) => (
+                    <div key={log.id} className="p-2 text-[11px] flex items-start gap-2">
+                      <span
+                        className={`mt-0.5 inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
+                          log.level === "error"
+                            ? "bg-red-500"
+                            : log.level === "warn"
+                              ? "bg-amber-500"
+                              : "bg-green-500"
+                        }`}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-foreground break-words">{log.message}</p>
+                        <p className="text-muted-foreground">
+                          {new Date(log.createdAt).toLocaleString("pt-BR")}
+                          {log.actorName ? ` • ${log.actorName}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ──────────────────── Integrations Tab ──────────────────────────────────── */
+// MercadoPago stays in the existing system_configs store (untouched per spec).
+const MERCADOPAGO_FIELDS = [
+  { key: "publicKey", label: "Public Key", placeholder: "APP_USR-..." },
+  { key: "accessToken", label: "Access Token", type: "password" },
+] as const;
 
 function IntegrationsTab() {
   const { toast } = useToast();
   const { data: configs = [], refetch } = useListSystemConfigs();
   const upsert = useUpsertSystemConfig();
 
-  const [openIntegration, setOpenIntegration] = useState<IntegrationConfig | null>(null);
-  const [form, setForm] = useState<Record<string, string>>({});
-  const [testing, setTesting] = useState(false);
+  const [mpOpen, setMpOpen] = useState(false);
+  const [mpForm, setMpForm] = useState<Record<string, string>>({});
+  const [mpTesting, setMpTesting] = useState(false);
 
-  function getConfigValue(key: string): Record<string, string> {
-    const cfg = configs.find((c) => c.key === key);
+  function getMpConfig(): Record<string, string> {
+    const cfg = configs.find((c) => c.key === "mercadopago");
     if (!cfg?.value) return {};
     return cfg.value as Record<string, string>;
   }
 
-  function isConfigured(key: string): boolean {
-    const val = getConfigValue(key);
-    return Object.keys(val).length > 0;
+  const mpConfigured = Object.keys(getMpConfig()).length > 0;
+
+  function openMp() {
+    setMpForm(getMpConfig());
+    setMpOpen(true);
   }
 
-  function openModal(integration: IntegrationConfig) {
-    setOpenIntegration(integration);
-    setForm(getConfigValue(integration.key));
-  }
-
-  async function handleSave() {
-    if (!openIntegration) return;
+  async function saveMp() {
     try {
-      await upsert.mutateAsync({ data: { key: openIntegration.key, value: form } });
-      toast({ title: "Integração salva com sucesso" });
-      setOpenIntegration(null);
+      await upsert.mutateAsync({ data: { key: "mercadopago", value: mpForm } });
+      toast({ title: "MercadoPago salvo com sucesso" });
+      setMpOpen(false);
       refetch();
     } catch {
-      toast({ title: "Erro ao salvar integração", variant: "destructive" });
+      toast({ title: "Erro ao salvar MercadoPago", variant: "destructive" });
     }
-  }
-
-  function handleTest() {
-    setTesting(true);
-    setTimeout(() => {
-      setTesting(false);
-      toast({ title: "Conexão testada com sucesso" });
-    }, 1500);
   }
 
   return (
@@ -972,54 +1373,54 @@ function IntegrationsTab() {
       <GoogleCalendarCard />
       <AICard />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {INTEGRATIONS.map((integration) => {
-          const configured = isConfigured(integration.key);
-          return (
-            <Card key={integration.key}>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Wifi className="w-4 h-4 text-muted-foreground" />
-                    {integration.label}
-                  </CardTitle>
-                  {configured ? (
-                    <Badge className="text-xs bg-green-50 text-green-700 border border-green-200">
-                      <CheckCircle2 className="w-3 h-3 mr-1" />
-                      Configurado
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-xs">
-                      Não configurado
-                    </Badge>
-                  )}
-                </div>
-                <CardDescription className="text-xs">{integration.description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button variant="outline" size="sm" onClick={() => openModal(integration)}>
-                  {configured ? "Editar" : "Configurar"}
-                </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
+        <IntegrationCard type="whatsapp_evolution" />
+        <IntegrationCard type="stripe_account" />
+        <IntegrationCard type="google_analytics" />
+
+        {/* MercadoPago — kept in existing system_configs store, no migration */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Wifi className="w-4 h-4 text-muted-foreground" />
+                MercadoPago
+              </CardTitle>
+              {mpConfigured ? (
+                <Badge className="text-xs bg-green-50 text-green-700 border border-green-200">
+                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                  Configurado
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-xs">
+                  Não configurado
+                </Badge>
+              )}
+            </div>
+            <CardDescription className="text-xs">
+              Processamento de pagamentos via MercadoPago
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" size="sm" onClick={openMp}>
+              {mpConfigured ? "Editar" : "Configurar"}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
-      <Dialog open={!!openIntegration} onOpenChange={() => setOpenIntegration(null)}>
+      <Dialog open={mpOpen} onOpenChange={setMpOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{openIntegration?.label}</DialogTitle>
+            <DialogTitle>MercadoPago</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            {openIntegration?.fields.map((field) => (
+            {MERCADOPAGO_FIELDS.map((field) => (
               <div key={field.key} className="space-y-1">
                 <Label>{field.label}</Label>
                 <Input
                   type={field.type ?? "text"}
-                  value={form[field.key] ?? ""}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, [field.key]: e.target.value }))
-                  }
+                  value={mpForm[field.key] ?? ""}
+                  onChange={(e) => setMpForm((f) => ({ ...f, [field.key]: e.target.value }))}
                   placeholder={field.placeholder}
                 />
               </div>
@@ -1028,16 +1429,22 @@ function IntegrationsTab() {
           <DialogFooter className="flex-col gap-2 sm:flex-row">
             <Button
               variant="outline"
-              onClick={handleTest}
-              disabled={testing}
+              onClick={() => {
+                setMpTesting(true);
+                setTimeout(() => {
+                  setMpTesting(false);
+                  toast({ title: "Conexão testada com sucesso" });
+                }, 1500);
+              }}
+              disabled={mpTesting}
               className="sm:mr-auto"
             >
-              {testing ? "Testando..." : "Testar Conexão"}
+              {mpTesting ? "Testando..." : "Testar Conexão"}
             </Button>
-            <Button variant="outline" onClick={() => setOpenIntegration(null)}>
+            <Button variant="outline" onClick={() => setMpOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSave} disabled={upsert.isPending}>
+            <Button onClick={() => void saveMp()} disabled={upsert.isPending}>
               Salvar
             </Button>
           </DialogFooter>
@@ -1067,8 +1474,34 @@ const AI_PROVIDER_OPTIONS: { value: string; label: string }[] = [
 const AI_PROVIDER_DEFAULTS: Record<string, { baseUrl: string; model: string }> = {
   openai: { baseUrl: "https://api.openai.com/v1", model: "gpt-4o" },
   anthropic: { baseUrl: "https://api.anthropic.com/v1", model: "claude-3-5-sonnet-latest" },
-  gemini: { baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-2.0-flash" },
+  gemini: {
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    model: "gemini-2.0-flash",
+  },
   custom: { baseUrl: "", model: "" },
+};
+
+// Curated model lists per provider for the model selector.
+// Custom providers use a free-text input instead.
+const AI_PROVIDER_MODELS: Record<string, { value: string; label: string }[]> = {
+  openai: [
+    { value: "gpt-4o", label: "GPT-4o" },
+    { value: "gpt-4o-mini", label: "GPT-4o Mini" },
+    { value: "o1", label: "o1" },
+    { value: "o3", label: "o3" },
+    { value: "o3-mini", label: "o3-mini" },
+  ],
+  anthropic: [
+    { value: "claude-opus-4-5", label: "Claude Opus" },
+    { value: "claude-3-5-sonnet-latest", label: "Claude 3.5 Sonnet" },
+    { value: "claude-3-5-haiku-latest", label: "Claude 3.5 Haiku" },
+  ],
+  gemini: [
+    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+    { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
+    { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite" },
+  ],
+  custom: [],
 };
 
 function AICard() {
@@ -1079,18 +1512,24 @@ function AICard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [revoking, setRevoking] = useState(false);
   const [forbidden, setForbidden] = useState(false);
 
+  const [aiName, setAiName] = useState("");
   const [provider, setProvider] = useState("openai");
   const [apiKey, setApiKey] = useState("");
+  const [accessToken, setAccessToken] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [defaultModel, setDefaultModel] = useState("");
+  const [environment, setEnvironment] = useState<"production" | "test">("production");
   const [enabled, setEnabled] = useState(false);
   const [status, setStatus] = useState("disconnected");
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [hasApiKey, setHasApiKey] = useState(false);
   const [maskedApiKey, setMaskedApiKey] = useState<string | null>(null);
+  const [hasAccessToken, setHasAccessToken] = useState(false);
+  const [maskedAccessToken, setMaskedAccessToken] = useState<string | null>(null);
   const [logs, setLogs] = useState<AILog[]>([]);
   const [showLogs, setShowLogs] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -1104,15 +1543,19 @@ function AICard() {
       }
       if (!res.ok) throw new Error("load failed");
       const data = await res.json();
+      setAiName(data.name ?? "");
       setProvider(data.provider ?? "openai");
       setBaseUrl(data.baseUrl ?? "");
       setDefaultModel(data.defaultModel ?? "");
+      setEnvironment(data.environment ?? "production");
       setEnabled(data.enabled ?? false);
       setStatus(data.status ?? "disconnected");
       setLastSyncAt(data.lastSyncAt ?? null);
       setLastError(data.lastError ?? null);
       setHasApiKey(data.hasApiKey ?? false);
       setMaskedApiKey(data.maskedApiKey ?? null);
+      setHasAccessToken(data.hasAccessToken ?? false);
+      setMaskedAccessToken(data.maskedAccessToken ?? null);
       setDirty(false);
     } catch {
       // silent — card stays in default state
@@ -1143,16 +1586,14 @@ function AICard() {
   if (!canManage || forbidden) return null;
 
   const defaults = AI_PROVIDER_DEFAULTS[provider] ?? AI_PROVIDER_DEFAULTS.openai!;
+  const modelOptions = AI_PROVIDER_MODELS[provider] ?? [];
 
-  // Tests the values currently in the form (including unsaved key / base URL /
-  // model) so credentials can be validated before saving. The test is transient
-  // and never persists status, so we do NOT reload the config afterwards (that
-  // would discard the admin's in-progress edits) — only the audit log refreshes.
   async function performTest() {
     setTesting(true);
     try {
       const body: Record<string, unknown> = { provider, baseUrl, defaultModel };
       if (apiKey.trim()) body.apiKey = apiKey.trim();
+      if (accessToken.trim()) body.accessToken = accessToken.trim();
       const res = await fetch(`${BASE}/api/ai-integration/test`, {
         method: "POST",
         credentials: "include",
@@ -1176,8 +1617,16 @@ function AICard() {
   async function handleSave() {
     setSaving(true);
     try {
-      const body: Record<string, unknown> = { provider, baseUrl, defaultModel, enabled };
+      const body: Record<string, unknown> = {
+        name: aiName,
+        provider,
+        baseUrl,
+        defaultModel,
+        environment,
+        enabled,
+      };
       if (apiKey.trim()) body.apiKey = apiKey.trim();
+      if (accessToken.trim()) body.accessToken = accessToken.trim();
       const res = await fetch(`${BASE}/api/ai-integration`, {
         method: "PUT",
         credentials: "include",
@@ -1190,9 +1639,8 @@ function AICard() {
       }
       toast({ title: "Configuração de IA salva com sucesso" });
       setApiKey("");
+      setAccessToken("");
       setDirty(false);
-      // Save auto-verifies server-side and persists the status, so reloading the
-      // config reflects the up-to-date connection state.
       await loadConfig();
       await loadLogs();
     } catch (e) {
@@ -1202,8 +1650,22 @@ function AICard() {
     }
   }
 
-  function handleTestClick() {
-    void performTest();
+  async function handleRevoke() {
+    setRevoking(true);
+    try {
+      const res = await fetch(`${BASE}/api/ai-integration/revoke`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Erro ao revogar");
+      toast({ title: "Credenciais de IA revogadas" });
+      await loadConfig();
+      await loadLogs();
+    } catch {
+      toast({ title: "Erro ao revogar credenciais", variant: "destructive" });
+    } finally {
+      setRevoking(false);
+    }
   }
 
   return (
@@ -1214,19 +1676,7 @@ function AICard() {
             <Sparkles className="w-4 h-4 text-purple-500" />
             Inteligência Artificial
           </CardTitle>
-          {status === "connected" ? (
-            <Badge className="text-xs bg-green-50 text-green-700 border border-green-200">
-              <CheckCircle2 className="w-3 h-3 mr-1" />
-              Conectado
-            </Badge>
-          ) : status === "error" ? (
-            <Badge className="text-xs bg-red-50 text-red-700 border border-red-200">
-              <AlertCircle className="w-3 h-3 mr-1" />
-              Erro
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="text-xs">Não conectado</Badge>
-          )}
+          <StatusBadge status={status} />
         </div>
         <CardDescription className="text-xs">
           Configure seu próprio provedor de IA para o assistente de Insights. Sem configuração,
@@ -1241,11 +1691,24 @@ function AICard() {
         ) : (
           <>
             <div className="space-y-1.5">
+              <Label className="text-xs">Nome da integração (opcional)</Label>
+              <Input
+                value={aiName}
+                onChange={(e) => {
+                  setAiName(e.target.value);
+                  setDirty(true);
+                }}
+                placeholder="Ex: OpenAI Produção"
+              />
+            </div>
+
+            <div className="space-y-1.5">
               <Label className="text-xs">Provedor</Label>
               <Select
                 value={provider}
                 onValueChange={(v) => {
                   setProvider(v);
+                  setDefaultModel("");
                   setDirty(true);
                 }}
               >
@@ -1282,6 +1745,25 @@ function AICard() {
             </div>
 
             <div className="space-y-1.5">
+              <Label className="text-xs">Token de Acesso (opcional)</Label>
+              <Input
+                type="password"
+                value={accessToken}
+                onChange={(e) => {
+                  setAccessToken(e.target.value);
+                  setDirty(true);
+                }}
+                placeholder={hasAccessToken ? maskedAccessToken ?? "••••••••" : "Insira o token (se exigido)"}
+                autoComplete="off"
+              />
+              {hasAccessToken && (
+                <p className="text-[11px] text-muted-foreground">
+                  Um token já está salvo. Deixe em branco para mantê-lo.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
               <Label className="text-xs">Base URL {provider === "custom" ? "" : "(opcional)"}</Label>
               <Input
                 value={baseUrl}
@@ -1294,15 +1776,60 @@ function AICard() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Modelo padrão (opcional)</Label>
-              <Input
-                value={defaultModel}
-                onChange={(e) => {
-                  setDefaultModel(e.target.value);
+              <Label className="text-xs">Modelo padrão {provider === "custom" ? "" : "(opcional)"}</Label>
+              {provider === "custom" || modelOptions.length === 0 ? (
+                <Input
+                  value={defaultModel}
+                  onChange={(e) => {
+                    setDefaultModel(e.target.value);
+                    setDirty(true);
+                  }}
+                  placeholder={defaults.model || "ex: gpt-4o"}
+                />
+              ) : (
+                <Select
+                  value={defaultModel || modelOptions[0]?.value || ""}
+                  onValueChange={(v) => {
+                    setDefaultModel(v);
+                    setDirty(true);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {modelOptions.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between rounded-md border p-2.5">
+              <div className="space-y-0.5">
+                <Label className="text-xs font-medium">Ambiente</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  {environment === "production" ? "Produção" : "Teste (sandbox)"}
+                </p>
+              </div>
+              <Select
+                value={environment}
+                onValueChange={(v) => {
+                  setEnvironment(v as "production" | "test");
                   setDirty(true);
                 }}
-                placeholder={defaults.model || "ex: gpt-4o"}
-              />
+              >
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="production">Produção</SelectItem>
+                  <SelectItem value="test">Teste</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex items-center justify-between rounded-md border p-2.5">
@@ -1343,7 +1870,7 @@ function AICard() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={handleTestClick}
+                onClick={() => void performTest()}
                 disabled={testing || saving}
                 className="gap-1.5"
               >
@@ -1354,10 +1881,53 @@ function AICard() {
                 )}
                 Testar Conexão
               </Button>
-              <Button size="sm" onClick={handleSave} disabled={saving || testing} className="gap-1.5">
+              <Button
+                size="sm"
+                onClick={() => void handleSave()}
+                disabled={saving || testing}
+                className="gap-1.5"
+              >
                 {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                 Salvar
               </Button>
+              {(hasApiKey || hasAccessToken) && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={revoking}
+                      className="gap-1.5 text-destructive hover:text-destructive"
+                    >
+                      {revoking ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <ShieldOff className="w-3.5 h-3.5" />
+                      )}
+                      Revogar
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Revogar credenciais de IA?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Isso irá apagar permanentemente a chave de API e o token de acesso
+                        armazenados. O assistente voltará a usar o provedor gerenciado da
+                        plataforma.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => void handleRevoke()}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Sim, revogar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
               <Button
                 size="sm"
                 variant="ghost"
