@@ -95,6 +95,7 @@ export interface ClientPortalProfile {
     travelInterests: string[];
     likesPhotosVideos: boolean | null;
     preferredDestinationTypes: string[];
+    ambassadorOptIn: boolean;
   } | null;
   tenant: {
     id: string;
@@ -309,4 +310,34 @@ export const clientPortalApi = {
   removeDreamDestination: (id: string) =>
     apiReq<void>("DELETE", `/client/me/dream-destinations/${id}`),
   getVoucherUrl: (reservationId: string) => `${BASE}/api/client/reservations/${reservationId}/voucher`,
+  getClubConfig: () => apiReq<{ clubName: string; description: string | null }>("GET", "/club/config"),
+  getClubBenefits: () => apiReq<{ data: ClubBenefit[] }>("GET", "/club/benefits"),
+  getClubRanking: () => apiReq<ClubRankingResponse>("GET", "/club/ranking"),
+  setAmbassadorOptIn: (ambassadorOptIn: boolean) =>
+    apiReq<void>("PATCH", "/client/me/ambassador", { ambassadorOptIn }),
 };
+
+export interface ClubBenefit {
+  id: string;
+  tenantId: string;
+  tier: string;
+  benefitKey: string;
+  label: string;
+  description: string | null;
+  value: string | null;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClubRankingEntry {
+  rank: number;
+  name: string;
+  count: number;
+}
+
+export interface ClubRankingResponse {
+  referrers: ClubRankingEntry[];
+  travelers: ClubRankingEntry[];
+  month: string;
+}

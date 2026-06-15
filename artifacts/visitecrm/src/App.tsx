@@ -47,6 +47,7 @@ import Vendedores from "@/pages/vendedores";
 import MeuPainel from "@/pages/meu-painel";
 import Vouchers from "@/pages/vouchers";
 import Indicacoes from "@/pages/indicacoes";
+import Embaixadores from "@/pages/embaixadores";
 import Configuracoes from "@/pages/configuracoes";
 import Downloads from "@/pages/downloads";
 import AdminDashboard from "@/pages/admin/index";
@@ -345,6 +346,7 @@ function Router() {
       {/* Task 6 pages */}
       <Route path="/vouchers" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Vouchers} />} />
       <Route path="/indicacoes" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Indicacoes} />} />
+      <Route path="/embaixadores" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Embaixadores} />} />
       <Route path="/configuracoes" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Configuracoes} />} />
       <Route path="/downloads" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Downloads} />} />
 

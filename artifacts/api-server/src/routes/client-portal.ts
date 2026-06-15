@@ -420,6 +420,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
             travelInterests: client.travelInterests ?? [],
             likesPhotosVideos: client.likesPhotosVideos ?? null,
             preferredDestinationTypes: client.preferredDestinationTypes ?? [],
+            ambassadorOptIn: client.ambassadorOptIn ?? false,
           }
         : null,
       tenant: tenant
@@ -488,6 +489,34 @@ router.patch("/client/me/preferences", async (req, res, next: NextFunction): Pro
         .set(updates)
         .where(and(eq(clientsTable.id, client.id), eq(clientsTable.tenantId, me.tenantId)));
     }
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch("/client/me/ambassador", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== ROLES.CLIENT) {
+      next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE"));
+      return;
+    }
+    const body = z.object({ ambassadorOptIn: z.boolean() }).safeParse(req.body);
+    if (!body.success) {
+      next(new ValidationError(String(body.error.message)));
+      return;
+    }
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) {
+      next(new NotFoundError("Perfil de cliente não encontrado", "NOT_FOUND"));
+      return;
+    }
+    await db
+      .update(clientsTable)
+      .set({ ambassadorOptIn: body.data.ambassadorOptIn })
+      .where(and(eq(clientsTable.id, client.id), eq(clientsTable.tenantId, me.tenantId)));
     res.status(204).end();
   } catch (err) {
     next(err);

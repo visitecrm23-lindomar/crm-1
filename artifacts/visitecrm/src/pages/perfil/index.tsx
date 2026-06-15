@@ -1,6 +1,6 @@
 import { useState, useEffect, type ReactElement } from "react";
 import { useLocation, useSearch } from "wouter";
-import { clientPortalApi, type ClientPortalProfile, type ClientLoyalty, type ClientReferral, type FavoritesResponse, type ClientPortalReservation, type ClientLoyaltyTransaction, type ClientAchievementsResponse, type ClientMemoriesResponse, type DreamDestinationItem } from "@/lib/clientPortalApi";
+import { clientPortalApi, type ClientPortalProfile, type ClientLoyalty, type ClientReferral, type FavoritesResponse, type ClientPortalReservation, type ClientLoyaltyTransaction, type ClientAchievementsResponse, type ClientMemoriesResponse, type DreamDestinationItem, type ClubBenefit, type ClubRankingResponse } from "@/lib/clientPortalApi";
 import QRCode from "qrcode";
 import { useGetMe } from "@workspace/api-client-react";
 import { RESERVATION_STATUS } from "@workspace/permissions";
@@ -60,6 +60,8 @@ import {
   Map,
   Globe,
   Camera,
+  Crown,
+  Medal,
 } from "lucide-react";
 import { formatCurrency as fmtCurrencyLib, formatDateShort } from "@/lib/utils";
 
@@ -3252,7 +3254,273 @@ function MemoriasTab() {
   );
 }
 
-const VALID_PERFIL_TABS = ["inicio", "reservas", "dados", "indicacoes", "fidelidade", "preferencias", "favoritos", "conquistas", "mapa", "sonhos", "memorias"];
+function maskDisplayName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0] ?? name;
+  return `${parts[0]} ${(parts[parts.length - 1] ?? "").charAt(0).toUpperCase()}.`;
+}
+
+const TIER_LABELS: Record<string, string> = { bronze: "Bronze", silver: "Prata", gold: "Ouro", diamond: "Diamante" };
+const TIER_ICONS: Record<string, string> = { bronze: "🥉", silver: "🥈", gold: "🥇", diamond: "💎" };
+const TIER_COLORS: Record<string, string> = {
+  bronze: "border-amber-200 bg-amber-50",
+  silver: "border-slate-200 bg-slate-50",
+  gold: "border-yellow-200 bg-yellow-50",
+  diamond: "border-cyan-200 bg-cyan-50",
+};
+const TIER_ORDER = ["bronze", "silver", "gold", "diamond"];
+
+function ClubeTab({ profile }: { profile: ClientPortalProfile }) {
+  const { toast } = useToast();
+  const [config, setConfig] = useState<{ clubName: string; description: string | null } | null>(null);
+  const [benefits, setBenefits] = useState<ClubBenefit[]>([]);
+  const [ranking, setRanking] = useState<ClubRankingResponse | null>(null);
+  const [loadingData, setLoadingData] = useState(true);
+  const [optIn, setOptIn] = useState<boolean>(profile.client?.ambassadorOptIn ?? false);
+  const [toggling, setToggling] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [cfg, bnf, rnk] = await Promise.all([
+          clientPortalApi.getClubConfig(),
+          clientPortalApi.getClubBenefits(),
+          clientPortalApi.getClubRanking(),
+        ]);
+        setConfig(cfg);
+        setBenefits(bnf.data);
+        setRanking(rnk);
+      } catch {
+        // club might not be configured yet — silently ignore
+      } finally {
+        setLoadingData(false);
+      }
+    }
+    void load();
+  }, []);
+
+  async function handleToggleOptIn() {
+    const newVal = !optIn;
+    setToggling(true);
+    try {
+      await clientPortalApi.setAmbassadorOptIn(newVal);
+      setOptIn(newVal);
+      toast({
+        title: newVal ? "Você está no ranking de Embaixadores!" : "Você saiu do ranking.",
+        description: newVal ? "Seu nome aparecerá mascarado no leaderboard público." : undefined,
+      });
+    } catch {
+      toast({ title: "Erro ao atualizar configuração", variant: "destructive" });
+    } finally {
+      setToggling(false);
+    }
+  }
+
+  const currentTier = profile.loyalty?.tier ?? "bronze";
+  const tierIndex = TIER_ORDER.indexOf(currentTier);
+  const nextTier = TIER_ORDER[tierIndex + 1];
+  const currentBenefits = benefits.filter((b) => b.tier === currentTier);
+  const nextBenefits = nextTier ? benefits.filter((b) => b.tier === nextTier) : [];
+
+  const month = ranking?.month
+    ? new Date(ranking.month + "-01T12:00:00").toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
+    : "";
+
+  return (
+    <div className="space-y-6">
+      {/* Club header */}
+      <Card className="overflow-hidden">
+        <div className="bg-gradient-to-r from-amber-500 to-yellow-400 p-6 text-white">
+          <div className="flex items-center gap-3">
+            <Crown className="w-8 h-8" />
+            <div>
+              <h2 className="text-xl font-bold">{config?.clubName ?? "Clube Visite"}</h2>
+              {config?.description && (
+                <p className="text-sm opacity-90 mt-0.5">{config.description}</p>
+              )}
+            </div>
+          </div>
+          <div className="mt-4 flex items-center gap-2">
+            <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30">
+              {TIER_ICONS[currentTier]} {TIER_LABELS[currentTier] ?? currentTier}
+            </Badge>
+            <span className="text-sm opacity-75">Seu nível atual</span>
+          </div>
+        </div>
+      </Card>
+
+      {/* Current tier benefits */}
+      {loadingData ? (
+        <div className="space-y-2">
+          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
+        </div>
+      ) : currentBenefits.length > 0 ? (
+        <Card className={`border ${TIER_COLORS[currentTier]}`}>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <span>{TIER_ICONS[currentTier]}</span>
+              Seus benefícios — {TIER_LABELS[currentTier] ?? currentTier}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {currentBenefits.map((b) => (
+                <li key={b.id} className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="text-sm font-medium">{b.label}</span>
+                    {b.value && <Badge variant="outline" className="ml-2 text-xs">{b.value}</Badge>}
+                    {b.description && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{b.description}</p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {/* Next tier preview */}
+      {nextTier && nextBenefits.length > 0 && (
+        <Card className={`border border-dashed ${TIER_COLORS[nextTier]}`}>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <span>{TIER_ICONS[nextTier]}</span>
+                Próximo nível — {TIER_LABELS[nextTier]}
+              </CardTitle>
+              <Badge variant="outline" className="text-xs">Em breve</Badge>
+            </div>
+            <CardDescription className="text-xs">
+              Suba para {TIER_LABELS[nextTier]} e desbloqueie:
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2 opacity-60">
+              {nextBenefits.map((b) => (
+                <li key={b.id} className="flex items-start gap-2">
+                  <Star className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="text-sm font-medium">{b.label}</span>
+                    {b.value && <Badge variant="outline" className="ml-2 text-xs">{b.value}</Badge>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Ambassador opt-in */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Trophy className="w-4 h-4 text-amber-500" />
+            Ranking de Embaixadores
+          </CardTitle>
+          <CardDescription>
+            Apareça no ranking público de top indicadores e viajantes do mês.
+            {profile.client?.name
+              ? ` Seu nome será exibido como "${maskDisplayName(profile.client.name)}" — parcialmente mascarado.`
+              : ""}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">
+                {optIn ? "Participando do ranking" : "Fora do ranking"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {optIn
+                  ? "Seu nome aparece mascarado no leaderboard público"
+                  : "Ative para aparecer entre os top embaixadores"}
+              </p>
+            </div>
+            <Button
+              variant={optIn ? "default" : "outline"}
+              size="sm"
+              onClick={handleToggleOptIn}
+              disabled={toggling}
+              className="gap-1.5 shrink-0"
+            >
+              {toggling ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Crown className="w-3.5 h-3.5" />
+              )}
+              {optIn ? "Sair do ranking" : "Participar"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Ranking leaderboard */}
+      {ranking && (ranking.referrers.length > 0 || ranking.travelers.length > 0) && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Share2 className="w-4 h-4 text-muted-foreground" />
+                Top Indicadores — {month}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {ranking.referrers.length === 0 ? (
+                <p className="text-xs text-muted-foreground px-6 pb-4">Nenhum indicador este mês.</p>
+              ) : (
+                <div className="divide-y">
+                  {ranking.referrers.map((r) => (
+                    <div key={r.rank} className="flex items-center gap-3 px-4 py-2.5">
+                      <span className="text-base w-6 text-center shrink-0">
+                        {r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : r.rank === 3 ? "🥉" : `#${r.rank}`}
+                      </span>
+                      <span className="flex-1 text-sm font-medium truncate">{r.name}</span>
+                      <Badge variant="secondary" className="text-xs tabular-nums shrink-0">
+                        {r.count}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Plane className="w-4 h-4 text-muted-foreground" />
+                Top Viajantes — {month}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {ranking.travelers.length === 0 ? (
+                <p className="text-xs text-muted-foreground px-6 pb-4">Nenhum viajante este mês.</p>
+              ) : (
+                <div className="divide-y">
+                  {ranking.travelers.map((r) => (
+                    <div key={r.rank} className="flex items-center gap-3 px-4 py-2.5">
+                      <span className="text-base w-6 text-center shrink-0">
+                        {r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : r.rank === 3 ? "🥉" : `#${r.rank}`}
+                      </span>
+                      <span className="flex-1 text-sm font-medium truncate">{r.name}</span>
+                      <Badge variant="secondary" className="text-xs tabular-nums shrink-0">
+                        {r.count}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const VALID_PERFIL_TABS = ["inicio", "reservas", "dados", "indicacoes", "fidelidade", "preferencias", "favoritos", "conquistas", "mapa", "sonhos", "memorias", "clube"];
 
 export default function PerfilPage() {
   const [, navigate] = useLocation();
@@ -3372,6 +3640,10 @@ export default function PerfilPage() {
             <Camera className="w-4 h-4" />
             Memórias
           </TabsTrigger>
+          <TabsTrigger value="clube" className="flex items-center gap-1.5">
+            <Crown className="w-4 h-4" />
+            Clube
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="inicio">
@@ -3454,6 +3726,10 @@ export default function PerfilPage() {
 
         <TabsContent value="memorias">
           <MemoriasTab />
+        </TabsContent>
+
+        <TabsContent value="clube">
+          <ClubeTab profile={profile} />
         </TabsContent>
       </Tabs>
     </div>

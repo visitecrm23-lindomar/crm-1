@@ -63,6 +63,7 @@ export const clientsTable = pgTable("clients", {
   lastContactAt: timestamp("last_contact_at", { withTimezone: true }),
   whatsappOptIn: boolean("whatsapp_opt_in").notNull().default(true),
   emailOptIn: boolean("email_opt_in").notNull().default(true),
+  ambassadorOptIn: boolean("ambassador_opt_in").notNull().default(false),
 }, (table) => [
   uniqueIndex("clients_tenant_cpf_unique").on(table.tenantId, table.cpf).where(sql`${table.cpf} IS NOT NULL`),
   uniqueIndex("clients_tenant_referral_code_unique").on(table.tenantId, table.referralCode).where(sql`${table.referralCode} IS NOT NULL`),

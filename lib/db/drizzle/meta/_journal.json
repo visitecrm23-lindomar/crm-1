@@ -379,6 +379,13 @@
       "when": 1751900000000,
       "tag": "0053_campaign_automation",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1752000000000,
+      "tag": "0054_club_community",
+      "breakpoints": true
     }
   ]
 }

@@ -87,6 +87,8 @@ import {
   AlertCircle,
   History,
   ShieldOff,
+  Crown,
+  Star,
 } from "lucide-react";
 import { formatCurrencyBRL } from "@/lib/utils";
 import { ROLES, INVOICE_STATUS } from "@workspace/permissions";
@@ -2955,6 +2957,277 @@ function FeaturesTab() {
   );
 }
 
+/* ──────────────────── Club Config Tab ──────────────────── */
+
+const CLUB_TIERS = [
+  { value: "bronze", label: "Bronze", icon: "🥉" },
+  { value: "silver", label: "Prata", icon: "🥈" },
+  { value: "gold", label: "Ouro", icon: "🥇" },
+  { value: "diamond", label: "Diamante", icon: "💎" },
+] as const;
+
+interface ClubBenefitAdmin {
+  id: string;
+  tier: string;
+  benefitKey: string;
+  label: string;
+  description: string | null;
+  value: string | null;
+  sortOrder: number;
+}
+
+function ClubConfigTab() {
+  const { toast } = useToast();
+  const [clubName, setClubName] = useState("Clube Visite");
+  const [clubDescription, setClubDescription] = useState("");
+  const [benefits, setBenefits] = useState<ClubBenefitAdmin[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [activeTier, setActiveTier] = useState<string>("bronze");
+  const [newLabel, setNewLabel] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [addingBenefit, setAddingBenefit] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [cfgRes, bnfRes] = await Promise.all([
+          fetch(`${BASE}/api/club/config`, { credentials: "include" }),
+          fetch(`${BASE}/api/club/benefits`, { credentials: "include" }),
+        ]);
+        const cfg = await cfgRes.json() as { clubName: string; description: string | null };
+        const bnf = await bnfRes.json() as { data: ClubBenefitAdmin[] };
+        setClubName(cfg.clubName ?? "Clube Visite");
+        setClubDescription(cfg.description ?? "");
+        setBenefits(bnf.data ?? []);
+      } catch {
+        toast({ title: "Erro ao carregar configurações do clube", variant: "destructive" });
+      } finally {
+        setLoading(false);
+      }
+    }
+    void load();
+  }, []);
+
+  async function handleSaveConfig() {
+    setSavingConfig(true);
+    try {
+      await fetch(`${BASE}/api/club/config`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clubName, description: clubDescription || null }),
+      });
+      toast({ title: "Configurações do clube salvas!" });
+    } catch {
+      toast({ title: "Erro ao salvar configurações", variant: "destructive" });
+    } finally {
+      setSavingConfig(false);
+    }
+  }
+
+  async function handleAddBenefit() {
+    if (!newLabel.trim()) return;
+    setAddingBenefit(true);
+    try {
+      const res = await fetch(`${BASE}/api/club/benefits`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tier: activeTier,
+          benefitKey: newLabel.toLowerCase().replace(/\s+/g, "_").slice(0, 100),
+          label: newLabel.trim(),
+          description: newDescription.trim() || null,
+          value: newValue.trim() || null,
+          sortOrder: benefits.filter((b) => b.tier === activeTier).length,
+        }),
+      });
+      const data = await res.json() as { id: string };
+      setBenefits((prev) => [
+        ...prev,
+        {
+          id: data.id,
+          tier: activeTier,
+          benefitKey: newLabel.toLowerCase().replace(/\s+/g, "_").slice(0, 100),
+          label: newLabel.trim(),
+          description: newDescription.trim() || null,
+          value: newValue.trim() || null,
+          sortOrder: prev.filter((b) => b.tier === activeTier).length,
+        },
+      ]);
+      setNewLabel("");
+      setNewValue("");
+      setNewDescription("");
+      toast({ title: "Benefício adicionado!" });
+    } catch {
+      toast({ title: "Erro ao adicionar benefício", variant: "destructive" });
+    } finally {
+      setAddingBenefit(false);
+    }
+  }
+
+  async function handleDeleteBenefit(id: string) {
+    setDeletingId(id);
+    try {
+      await fetch(`${BASE}/api/club/benefits/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      setBenefits((prev) => prev.filter((b) => b.id !== id));
+      toast({ title: "Benefício removido" });
+    } catch {
+      toast({ title: "Erro ao remover benefício", variant: "destructive" });
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  const tierBenefits = benefits.filter((b) => b.tier === activeTier);
+
+  if (loading) {
+    return <div className="py-8 text-center text-sm text-muted-foreground">Carregando configurações do clube...</div>;
+  }
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <div className="space-y-4">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <Crown className="w-4 h-4 text-amber-500" />
+          Identidade do Clube
+        </h3>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label>Nome do Clube</Label>
+            <Input
+              value={clubName}
+              onChange={(e) => setClubName(e.target.value)}
+              placeholder="Ex: Clube Visite Cariri"
+              maxLength={100}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>Descrição <span className="text-xs text-muted-foreground">(opcional)</span></Label>
+            <Input
+              value={clubDescription}
+              onChange={(e) => setClubDescription(e.target.value)}
+              placeholder="Uma frase sobre o clube para os clientes"
+              maxLength={500}
+            />
+          </div>
+          <Button size="sm" onClick={handleSaveConfig} disabled={savingConfig}>
+            {savingConfig ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Salvando...</> : "Salvar"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="border-t pt-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            <Star className="w-4 h-4 text-amber-500" />
+            Benefícios por Nível
+          </h3>
+          <Button size="sm" variant="outline" asChild>
+            <a href="/embaixadores" className="flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5" />
+              Ver Ranking de Embaixadores
+            </a>
+          </Button>
+        </div>
+
+        <Tabs value={activeTier} onValueChange={setActiveTier}>
+          <TabsList>
+            {CLUB_TIERS.map((t) => (
+              <TabsTrigger key={t.value} value={t.value} className="gap-1">
+                <span>{t.icon}</span>
+                {t.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          {CLUB_TIERS.map((t) => (
+            <TabsContent key={t.value} value={t.value} className="space-y-3 mt-4">
+              {tierBenefits.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhum benefício cadastrado para {t.label} ainda.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {tierBenefits.map((b) => (
+                    <div key={b.id} className="flex items-start gap-3 p-3 border rounded-lg bg-card">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium">{b.label}</span>
+                          {b.value && <Badge variant="outline" className="text-xs">{b.value}</Badge>}
+                        </div>
+                        {b.description && (
+                          <p className="text-xs text-muted-foreground mt-0.5">{b.description}</p>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive h-7 w-7 p-0 shrink-0"
+                        onClick={() => handleDeleteBenefit(b.id)}
+                        disabled={deletingId === b.id}
+                      >
+                        {deletingId === b.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5" />
+                        )}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="border rounded-lg p-3 space-y-2 bg-muted/30">
+                <p className="text-xs font-medium text-muted-foreground">Adicionar benefício para {t.label}</p>
+                <Input
+                  placeholder="Ex: 5% de desconto em todas as viagens"
+                  value={newLabel}
+                  onChange={(e) => setNewLabel(e.target.value)}
+                  className="text-sm"
+                  maxLength={200}
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    placeholder="Valor (ex: 5%)"
+                    value={newValue}
+                    onChange={(e) => setNewValue(e.target.value)}
+                    className="text-sm"
+                    maxLength={200}
+                  />
+                  <Input
+                    placeholder="Descrição (opcional)"
+                    value={newDescription}
+                    onChange={(e) => setNewDescription(e.target.value)}
+                    className="text-sm"
+                    maxLength={500}
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  onClick={handleAddBenefit}
+                  disabled={addingBenefit || !newLabel.trim()}
+                >
+                  {addingBenefit ? (
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : null}
+                  + Adicionar
+                </Button>
+              </div>
+            </TabsContent>
+          ))}
+        </Tabs>
+      </div>
+    </div>
+  );
+}
+
 /* ──────────────────── Main Settings Page ──────────────────── */
 export default function Configuracoes() {
   return (
@@ -2997,6 +3270,10 @@ export default function Configuracoes() {
           <TabsTrigger value="features" className="flex items-center gap-1.5">
             <ToggleLeft className="w-3.5 h-3.5" />
             Funcionalidades
+          </TabsTrigger>
+          <TabsTrigger value="clube" className="flex items-center gap-1.5">
+            <Crown className="w-3.5 h-3.5" />
+            Clube
           </TabsTrigger>
         </TabsList>
 
@@ -3105,6 +3382,23 @@ export default function Configuracoes() {
               </CardHeader>
               <CardContent>
                 <FeaturesTab />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="clube">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Crown className="w-4 h-4 text-amber-500" />
+                  Clube Exclusivo
+                </CardTitle>
+                <CardDescription>
+                  Configure o nome, descrição e benefícios por nível do clube de clientes
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ClubConfigTab />
               </CardContent>
             </Card>
           </TabsContent>
