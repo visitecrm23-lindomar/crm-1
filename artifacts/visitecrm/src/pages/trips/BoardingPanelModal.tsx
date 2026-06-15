@@ -172,6 +172,16 @@ export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId
     return map;
   }, [passengers]);
 
+  const boardingPointStats = useMemo(() => {
+    const map = new Map<string, { total: number; checkedIn: number }>();
+    for (const p of passengers) {
+      const key = p.boardingLocationId ?? "__none__";
+      const cur = map.get(key) ?? { total: 0, checkedIn: 0 };
+      map.set(key, { total: cur.total + 1, checkedIn: cur.checkedIn + (p.checkedInAt ? 1 : 0) });
+    }
+    return map;
+  }, [passengers]);
+
   const pct = panel && panel.totalPassengers > 0
     ? Math.round((panel.checkedIn / panel.totalPassengers) * 100)
     : 0;
@@ -237,6 +247,69 @@ export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId
                 />
               </div>
             </div>
+
+            {boardingPoints.length > 0 && (
+              <div className="border rounded-lg p-3 space-y-1.5 bg-background">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Resumo por ponto de embarque</span>
+                </div>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {boardingPoints.map(bp => {
+                    const stats = boardingPointStats.get(bp.id) ?? { total: 0, checkedIn: 0 };
+                    const bpPct = stats.total > 0 ? Math.round((stats.checkedIn / stats.total) * 100) : 0;
+                    return (
+                      <button
+                        key={bp.id}
+                        type="button"
+                        onClick={() => setBoardingFilter(boardingFilter === bp.id ? "__all__" : bp.id)}
+                        className={`flex items-center gap-2 text-left rounded-md border px-3 py-2 transition-colors hover:bg-muted/60 ${boardingFilter === bp.id ? "border-primary bg-primary/5" : "border-border"}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium truncate">{bp.name}{bp.time ? ` · ${bp.time}` : ""}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${bpPct >= 90 ? "bg-green-500" : bpPct >= 50 ? "bg-blue-500" : "bg-amber-500"}`}
+                                style={{ width: `${bpPct}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                              <span className="font-semibold text-green-700">{stats.checkedIn}</span>/{stats.total}
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {boardingPointStats.has("__none__") && (() => {
+                    const stats = boardingPointStats.get("__none__")!;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => setBoardingFilter(boardingFilter === "__none__" ? "__all__" : "__none__")}
+                        className={`flex items-center gap-2 text-left rounded-md border px-3 py-2 transition-colors hover:bg-muted/60 ${boardingFilter === "__none__" ? "border-primary bg-primary/5" : "border-border border-dashed"}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-muted-foreground truncate">— Não definido —</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-gray-400 transition-all"
+                                style={{ width: stats.total > 0 ? `${Math.round((stats.checkedIn / stats.total) * 100)}%` : "0%" }}
+                              />
+                            </div>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                              <span className="font-semibold text-green-700">{stats.checkedIn}</span>/{stats.total}
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
 
             <div className="flex gap-2">
               <div className="relative flex-1">
