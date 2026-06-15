@@ -94,6 +94,24 @@ function daysUntil(dateStr: string | null): number | null {
   return diff;
 }
 
+function daysUntilBirthday(birthDateStr: string | null): number | null {
+  if (!birthDateStr) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const [, monthStr, dayStr] = birthDateStr.split("-");
+  const month = parseInt(monthStr, 10) - 1;
+  const day = parseInt(dayStr, 10);
+  if (isNaN(month) || isNaN(day)) return null;
+  const year = today.getFullYear();
+  let next = new Date(year, month, day);
+  next.setHours(0, 0, 0, 0);
+  if (next.getTime() < today.getTime()) {
+    next = new Date(year + 1, month, day);
+    next.setHours(0, 0, 0, 0);
+  }
+  return Math.round((next.getTime() - today.getTime()) / 86400000);
+}
+
 function ReservationCard({ r, compact = false }: { r: ClientPortalProfile["reservations"][number]; compact?: boolean }) {
   const { toast } = useToast();
   const [downloading, setDownloading] = useState(false);
@@ -574,6 +592,59 @@ function NpsCard({ reservation }: { reservation: ClientPortalProfile["reservatio
   );
 }
 
+function BirthdayBonusCard({
+  daysLeft,
+  storeUrl,
+}: {
+  daysLeft: number;
+  storeUrl: string | null;
+}) {
+  return (
+    <div className="rounded-xl overflow-hidden shadow-md">
+      <div
+        className="p-4 text-white"
+        style={{ background: "linear-gradient(135deg, #ec4899, #f59e0b)" }}
+      >
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+            <Gift className="w-5 h-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-base leading-tight">🎉 Seu aniversário está chegando!</p>
+            <p className="text-sm text-white/90 mt-0.5">
+              {daysLeft === 1
+                ? "Falta apenas 1 dia"
+                : `Faltam apenas ${daysLeft} dias`}{" "}
+              para o seu aniversário e preparamos uma condição especial para você.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-3 rounded-lg bg-white/15 border border-white/25 p-3">
+          <p className="text-sm font-semibold">🎁 Bônus de Aniversário Exclusivo</p>
+          <p className="text-xs text-white/85 mt-1 leading-relaxed">
+            Aproveite benefícios e vantagens especiais para celebrar essa data com uma viagem
+            inesquecível. Fique atento às próximas novidades e garanta sua próxima experiência com
+            condições exclusivas.
+          </p>
+        </div>
+
+        {storeUrl && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-3 w-full border-white/50 text-white bg-white/10 hover:bg-white/20 hover:text-white"
+            onClick={() => (window.location.href = storeUrl)}
+          >
+            Ver Pacotes Especiais
+            <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function InicioTab({
   profile,
   primaryColor,
@@ -609,6 +680,8 @@ function InicioTab({
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().slice(0, 10);
+
+  const bdDays = daysUntilBirthday(profile.client?.birthDate ?? null);
 
   const npsTrips = profile.reservations.filter(
     (r) =>
@@ -712,6 +785,13 @@ function InicioTab({
           </Card>
         ))}
       </div>
+
+      {bdDays !== null && bdDays >= 1 && bdDays <= 90 && (
+        <BirthdayBonusCard
+          daysLeft={bdDays}
+          storeUrl={profile.tenant?.slug ? `/loja/${profile.tenant.slug}/produtos` : null}
+        />
+      )}
 
       {pendingBalance.length > 0 && (
         <button
