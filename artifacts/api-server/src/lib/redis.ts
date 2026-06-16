@@ -1,8 +1,9 @@
 import { Redis } from "ioredis";
 import { logger } from "./logger";
 import { sendRedisAlertEmail, sendRedisRecoveryEmail, sendRedisDailyLimitAlertEmail } from "@workspace/email";
-import { db, platformSettingsTable } from "@workspace/db";
+import { db, platformSettingsTable, redisAlertLogTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { generateId } from "./id";
 
 let _connection: Redis | null = null;
 export let isQueueEnabled = false;
@@ -68,6 +69,29 @@ async function getAlertEmail(): Promise<string | null> {
   return process.env["SUPERADMIN_EMAIL"]?.trim() ?? null;
 }
 
+// Fire-and-forget: log an alert or recovery event to the DB for audit history.
+function logRedisAlert(eventType: string, alertStatus: string | null, emailTo: string | null): void {
+  db.insert(redisAlertLogTable)
+    .values({ id: generateId(), eventType, alertStatus, emailTo, triggeredAt: new Date() })
+    .execute()
+    .catch((err: unknown) => logger.error({ err }, "[redis-alert-log] Failed to log alert event"));
+}
+
+// Check platform settings to see if a specific alert type is enabled.
+// Defaults to enabled on DB error so we never silently drop alerts.
+async function isAlertEnabled(key: "redis_alert_on_degraded" | "redis_alert_on_daily_limit"): Promise<boolean> {
+  try {
+    const [row] = await db
+      .select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, key))
+      .limit(1);
+    return row?.value !== "false";
+  } catch {
+    return true;
+  }
+}
+
 async function maybeFireRedisAlert(): Promise<void> {
   const currentStatus = getRedisStatus();
 
@@ -95,6 +119,12 @@ async function maybeFireRedisAlert(): Promise<void> {
     return;
   }
 
+  const alertEnabled = await isAlertEnabled("redis_alert_on_degraded");
+  if (!alertEnabled) {
+    logger.info("[redis-alert] Degraded/unavailable alerts disabled via platform settings — skipping");
+    return;
+  }
+
   const appUrl = (process.env["APP_URL"] ?? "").trim().replace(/\/$/, "");
   if (!appUrl) {
     logger.warn("[redis-alert] APP_URL not set — alert email will not include a dashboard link");
@@ -112,6 +142,7 @@ async function maybeFireRedisAlert(): Promise<void> {
       _alertInFlight = false;
       if (result.success) {
         _hadActiveAlert = true;
+        logRedisAlert("alert", currentStatus, alertEmail);
         logger.warn({ status: currentStatus, to: alertEmail }, "[redis-alert] Alert email sent");
         // Case B: Redis recovered while we were sending — fire recovery now.
         if (_resetPendingRecovery) {
@@ -153,6 +184,7 @@ async function sendRecoveryEmailIfNeeded(): Promise<void> {
   sendRedisRecoveryEmail({ to: alertEmail, dashboardUrl })
     .then((result) => {
       if (result.success) {
+        logRedisAlert("recovery", null, alertEmail);
         logger.info({ to: alertEmail }, "[redis-recovery] Recovery email sent");
       } else {
         logger.error({ error: result.error }, "[redis-recovery] Failed to send recovery email");
@@ -416,10 +448,16 @@ export function maybeSendDailyLimitAlert(stats: UpstashDailyStats): void {
   // Mark immediately to prevent concurrent duplicate sends; reset on failure.
   _lastDailyLimitAlertAt = Date.now();
 
-  void getAlertEmail().then((alertEmail) => {
+  void getAlertEmail().then(async (alertEmail) => {
     if (!alertEmail) {
       logger.warn("[redis-daily-limit] No alert email configured — skipping daily limit alert email");
       _lastDailyLimitAlertAt = null;
+      return;
+    }
+
+    const dailyLimitEnabled = await isAlertEnabled("redis_alert_on_daily_limit");
+    if (!dailyLimitEnabled) {
+      logger.info("[redis-daily-limit] Daily limit alerts disabled via platform settings — skipping");
       return;
     }
 
@@ -436,6 +474,7 @@ export function maybeSendDailyLimitAlert(stats: UpstashDailyStats): void {
     })
       .then((result) => {
         if (result.success) {
+          logRedisAlert("daily_limit", null, alertEmail);
           logger.warn(
             { usagePct: Math.round(stats.usagePct * 10) / 10, to: alertEmail },
             "[redis-daily-limit] Alert email sent",

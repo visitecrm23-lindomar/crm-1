@@ -143,6 +143,9 @@ function FlagRow({ flag }: { flag: FeatureFlag }) {
   );
 }
 
+const EMAIL_SETTING_KEYS = new Set(["redis_alert_email"]);
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function SettingRow({ setting }: { setting: PlatformSetting }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -150,19 +153,26 @@ function SettingRow({ setting }: { setting: PlatformSetting }) {
   const [value, setValue] = useState(setting.value ?? "");
   const [dirty, setDirty] = useState(false);
 
+  const isEmailSetting = EMAIL_SETTING_KEYS.has(setting.key);
+  const emailError = isEmailSetting && value.trim() !== "" && !EMAIL_REGEX.test(value.trim())
+    ? "Insira um endereço de e-mail válido"
+    : null;
+
   function handleChange(v: string) {
     setValue(v);
     setDirty(v !== (setting.value ?? ""));
   }
 
   async function handleSave() {
+    if (emailError) return;
     try {
       await updateSetting.mutateAsync({ key: setting.key, data: { value } });
       await queryClient.invalidateQueries({ queryKey: getListPlatformSettingsQueryKey() });
       toast({ title: "Configuração salva" });
       setDirty(false);
-    } catch {
-      toast({ title: "Erro ao salvar configuração", variant: "destructive" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : undefined;
+      toast({ title: msg ?? "Erro ao salvar configuração", variant: "destructive" });
     }
   }
 
@@ -181,14 +191,19 @@ function SettingRow({ setting }: { setting: PlatformSetting }) {
       );
     }
     return (
-      <Input
-        value={value}
-        onChange={(e) => handleChange(e.target.value)}
-        className="h-8 text-sm max-w-xs"
-        type={setting.type === "number" ? "number" : "text"}
-      />
+      <div className="flex flex-col gap-1">
+        <Input
+          value={value}
+          onChange={(e) => handleChange(e.target.value)}
+          className={`h-8 text-sm max-w-xs ${emailError ? "border-red-400 focus-visible:ring-red-400" : ""}`}
+          type={isEmailSetting ? "email" : setting.type === "number" ? "number" : "text"}
+        />
+        {emailError && <p className="text-xs text-red-600">{emailError}</p>}
+      </div>
     );
   };
+
+  const canSave = dirty && !emailError;
 
   return (
     <div className="flex items-center gap-4 py-3 px-4 border-b last:border-0">
@@ -199,13 +214,7 @@ function SettingRow({ setting }: { setting: PlatformSetting }) {
       </div>
       <div className="flex items-center gap-3">
         {renderInput()}
-        {dirty && setting.type !== "boolean" && (
-          <Button size="sm" variant="outline" className="h-8" onClick={handleSave} disabled={updateSetting.isPending}>
-            <Save className="w-3 h-3 mr-1" />
-            Salvar
-          </Button>
-        )}
-        {setting.type === "boolean" && dirty && (
+        {canSave && (
           <Button size="sm" variant="outline" className="h-8" onClick={handleSave} disabled={updateSetting.isPending}>
             <Save className="w-3 h-3 mr-1" />
             Salvar

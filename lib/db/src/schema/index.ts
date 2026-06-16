@@ -28,6 +28,7 @@ export * from "./birthday";
 export * from "./vehicle-layouts";
 export * from "./sales-goals";
 export * from "./calendar";
+export * from "./redis";
 export * from "./trip-costs";
 export * from "./notifications";
 export * from "./nps";

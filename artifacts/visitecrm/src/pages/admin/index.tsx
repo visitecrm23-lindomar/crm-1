@@ -1,6 +1,7 @@
+import { useQuery } from "@tanstack/react-query";
 import { useGetAdminStats, useGetSystemHealth, getGetSystemHealthQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, Building2, CheckCircle2, Clock, XCircle, TrendingUp } from "lucide-react";
+import { AlertTriangle, Building2, CheckCircle2, Clock, XCircle, TrendingUp, History } from "lucide-react";
 
 const PLAN_LABELS: Record<string, string> = {
   starter: "Starter",
@@ -210,6 +211,72 @@ export default function AdminDashboard() {
           )}
         </CardContent>
       </Card>
+
+      <RedisAlertLogCard />
     </div>
+  );
+}
+
+interface RedisAlertLogEntry {
+  id: string;
+  eventType: string;
+  alertStatus: string | null;
+  emailTo: string | null;
+  triggeredAt: string;
+}
+
+const EVENT_LABELS: Record<string, string> = {
+  alert: "Alerta enviado",
+  recovery: "Recuperação",
+  daily_limit: "Limite diário",
+};
+
+const STATUS_BADGE: Record<string, string> = {
+  degraded: "bg-amber-100 text-amber-700",
+  unavailable: "bg-red-100 text-red-700",
+};
+
+function RedisAlertLogCard() {
+  const { data: logs, isLoading } = useQuery<RedisAlertLogEntry[]>({
+    queryKey: ["/admin/redis-alert-log"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/redis-alert-log");
+      if (!res.ok) return [];
+      return res.json() as Promise<RedisAlertLogEntry[]>;
+    },
+    staleTime: 60_000,
+  });
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-2 pb-2">
+        <History className="w-4 h-4 text-muted-foreground" />
+        <CardTitle className="text-base">Histórico de Alertas Redis</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Carregando...</p>
+        ) : !logs || logs.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nenhum alerta registrado.</p>
+        ) : (
+          <div className="divide-y">
+            {logs.map((entry) => (
+              <div key={entry.id} className="flex items-center gap-3 py-2 text-sm">
+                <span className="font-medium w-36 shrink-0">{EVENT_LABELS[entry.eventType] ?? entry.eventType}</span>
+                {entry.alertStatus && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[entry.alertStatus] ?? "bg-muted text-muted-foreground"}`}>
+                    {entry.alertStatus}
+                  </span>
+                )}
+                <span className="text-muted-foreground truncate flex-1">{entry.emailTo ?? "—"}</span>
+                <span className="text-muted-foreground shrink-0 text-xs">
+                  {new Date(entry.triggeredAt).toLocaleString("pt-BR")}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
