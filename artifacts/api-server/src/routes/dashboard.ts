@@ -268,7 +268,7 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
       retentionRate,
       tripsThisMonth: Number(tripsThisMonthRow?.count ?? 0),
       conversionRate,
-      profit: Math.round(profit * 100) / 100,
+      profit: roundMoney(profit),
       profitMargin,
     });
   } catch (err) {
@@ -617,7 +617,7 @@ router.get("/dashboard/funnel", async (req, res): Promise<void> => {
         const originClients = allClients.filter(c => (c.origin ?? "Outros") === origin);
         const payersForOrigin = originClients.filter(c => paidClientIds.has(c.id));
         const totalPaid = payersForOrigin.reduce((a, c) => a + (clientPaidAmount[c.id] ?? 0), 0);
-        const avgTicket = payersForOrigin.length > 0 ? Math.round((totalPaid / payersForOrigin.length) * 100) / 100 : 0;
+        const avgTicket = payersForOrigin.length > 0 ? roundMoney(totalPaid / payersForOrigin.length) : 0;
         const conversionPct = data.totalLeads > 0 ? Math.round((data.withPayment / data.totalLeads) * 1000) / 10 : 0;
         return { origin, ...data, avgTicket, conversionPct };
       });

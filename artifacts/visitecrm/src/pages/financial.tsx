@@ -214,7 +214,7 @@ export default function Financial() {
   );
 
   const overdueExpensesSum = useMemo(() =>
-    (allExpensesData?.data ?? []).filter(e => e.status === "overdue").reduce((s, e) => s + Number(e.amount), 0),
+    (allExpensesData?.data ?? []).filter(e => e.status === EXPENSE_STATUS.OVERDUE).reduce((s, e) => s + Number(e.amount), 0),
     [allExpensesData]
   );
 

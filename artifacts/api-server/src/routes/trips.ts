@@ -2024,6 +2024,98 @@ router.post("/trips/:id/manifest/send", async (req, res, next: NextFunction): Pr
   }
 });
 
+router.get("/trips/:id/manifest/pdf", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+
+    const [trip] = await db.select().from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!trip) { next(new NotFoundError("Excursão não encontrada", "NOT_FOUND")); return; }
+
+    const reservations = await db.select().from(reservationsTable)
+      .where(and(
+        eq(reservationsTable.tripId, trip.id),
+        eq(reservationsTable.tenantId, me.tenantId),
+        sql`${reservationsTable.status} NOT IN (${RESERVATION_STATUS.CANCELLED}, ${RESERVATION_STATUS.REFUNDED})`,
+      ));
+
+    const reservationIds = reservations.map(r => r.id);
+
+    const [passengers, [tenant], [layoutRow]] = await Promise.all([
+      reservationIds.length > 0
+        ? db.select().from(passengersTable).where(inArray(passengersTable.reservationId, reservationIds))
+        : Promise.resolve([]),
+      db.select({ name: tenantsTable.name, cnpj: tenantsTable.cnpj }).from(tenantsTable).where(eq(tenantsTable.id, me.tenantId)).limit(1),
+      trip.layoutId
+        ? db.select({ numberingType: vehicleLayoutsTable.numberingType }).from(vehicleLayoutsTable).where(eq(vehicleLayoutsTable.id, trip.layoutId)).limit(1)
+        : Promise.resolve([undefined]),
+    ]);
+
+    const reservationMap = new Map(reservations.map(r => [r.id, r]));
+
+    const manifestPassengers: ManifestPassenger[] = passengers.map(p => {
+      const reservation = reservationMap.get(p.reservationId);
+      const effectiveBoardingLocationId = p.boardingLocationId ?? reservation?.boardingLocationId ?? null;
+      return {
+        name: p.name,
+        cpf: p.cpf ?? null,
+        birthDate: p.birthDate?.toISOString() ?? null,
+        ageCategory: p.ageCategory,
+        seatNumber: p.seatNumber ?? null,
+        boardingLocationId: effectiveBoardingLocationId,
+        documentType: p.documentType ?? null,
+        specialNeeds: p.specialNeeds ?? null,
+        observations: p.observations ?? null,
+      };
+    });
+
+    const panel: ManifestPanel = {
+      tripName: trip.name,
+      departureDate: trip.departureDate.toISOString(),
+      tenantName: tenant?.name ?? "",
+      tenantCnpj: tenant?.cnpj ?? null,
+      manifestNumber: trip.manifestNumber ?? null,
+      vehiclePlate: trip.vehiclePlate ?? null,
+      vehicleType: trip.vehicleType ?? null,
+      driverName: trip.driverName ?? null,
+      driver1Cpf: trip.driver1Cpf ?? null,
+      driver1Cnh: trip.driver1Cnh ?? null,
+      driver1CnhCategory: trip.driver1CnhCategory ?? null,
+      driver1CnhExpiry: trip.driver1CnhExpiry ?? null,
+      driver2Name: trip.driver2Name ?? null,
+      driver2Cpf: trip.driver2Cpf ?? null,
+      driver2Cnh: trip.driver2Cnh ?? null,
+      driver2CnhCategory: trip.driver2CnhCategory ?? null,
+      driver2CnhExpiry: trip.driver2CnhExpiry ?? null,
+      tourGuide: trip.tourGuide ?? null,
+      tourGuideCpf: trip.tourGuideCpf ?? null,
+      tourGuideRegistration: trip.tourGuideRegistration ?? null,
+      boardingPoints: (trip.boardingPoints ?? []) as Array<{ id: string; name: string; time?: string }>,
+      passengers: manifestPassengers,
+      freePassengers: Array.isArray(trip.freePassengers) ? (trip.freePassengers as FreePassenger[]) : [],
+      destinationCity: trip.destinationCity,
+      destinationState: trip.destinationState,
+      numberingType: layoutRow?.numberingType ?? null,
+    };
+
+    const pdfBuffer = await generateManifestPdf(panel);
+
+    const safeName = trip.name.replace(/[^a-zA-Z0-9-_]/g, "_");
+    const filename = `manifesto-${safeName}.pdf`;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
+    res.send(pdfBuffer);
+  } catch (err) {
+    req.log.error({ err }, "Error generating manifest PDF");
+    next(err);
+  }
+});
+
 const AddTripMediaBody = z.object({
   url: z.string().url(),
   type: z.enum(["image", "video"]).default("image"),

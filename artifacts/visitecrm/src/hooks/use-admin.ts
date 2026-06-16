@@ -49,16 +49,6 @@ export interface AdminInvoice {
   updatedAt: string;
 }
 
-export interface FeatureFlag {
-  id: string;
-  key: string;
-  name: string;
-  description: string | null;
-  enabled: boolean;
-  rolloutPercent: number;
-  createdAt: string;
-  updatedAt: string;
-}
 
 export interface AdminUser {
   id: string;
@@ -211,41 +201,6 @@ export function useUpdateInvoice() {
     mutationFn: ({ id, ...data }: { id: string; status?: string; paidAt?: string; notes?: string }) =>
       adminFetch(`/api/admin/invoices/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "invoices"] }),
-  });
-}
-
-// ─── FEATURE FLAGS ────────────────────────────────────────────────────────────
-
-export function useFeatureFlags() {
-  return useQuery<FeatureFlag[]>({
-    queryKey: ["admin", "feature-flags"],
-    queryFn: () => adminFetch("/api/admin/feature-flags"),
-  });
-}
-
-export function useCreateFeatureFlag() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: Omit<FeatureFlag, "id" | "createdAt" | "updatedAt">) =>
-      adminFetch("/api/admin/feature-flags", { method: "POST", body: JSON.stringify(data) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "feature-flags"] }),
-  });
-}
-
-export function useUpdateFeatureFlag() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, ...data }: Partial<FeatureFlag> & { id: string }) =>
-      adminFetch(`/api/admin/feature-flags/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "feature-flags"] }),
-  });
-}
-
-export function useDeleteFeatureFlag() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => adminFetch(`/api/admin/feature-flags/${id}`, { method: "DELETE" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "feature-flags"] }),
   });
 }
 

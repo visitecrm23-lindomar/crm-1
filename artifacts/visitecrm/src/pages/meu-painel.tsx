@@ -34,12 +34,7 @@ import {
   DollarSign, TrendingUp, Award, Target, Gauge, Medal,
   CalendarCheck, Briefcase, Users, Plus,
 } from "lucide-react";
-
-function fmtCurrency(v: number | string | null | undefined) {
-  if (v == null) return "R$ 0,00";
-  const n = typeof v === "string" ? parseFloat(v) : v;
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
+import { formatCurrencyBRL as fmtCurrency } from "@/lib/utils";
 
 function currentMonth() {
   const now = new Date();

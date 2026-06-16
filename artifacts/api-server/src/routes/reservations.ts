@@ -1075,6 +1075,9 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
         // --- Reversal 2: loyalty points used as discount ---
         const loyaltyPointsToRestore = existing.discountLoyaltyPoints ?? 0;
         if (loyaltyPointsToRestore > 0 && existing.clientId) {
+          await tx.execute(
+            sql`SELECT id FROM loyalty_members WHERE tenant_id = ${me.tenantId} AND client_id = ${existing.clientId} LIMIT 1 FOR UPDATE`
+          );
           const [loyaltyMember] = await tx
             .select({ id: loyaltyMembersTable.id, availablePoints: loyaltyMembersTable.availablePoints })
             .from(loyaltyMembersTable)
@@ -1160,6 +1163,9 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
 
           if (referralRecord) {
             const bonusToReverse = Number(referralRecord.bonusAmount);
+            await tx.execute(
+              sql`SELECT id FROM clients WHERE id = ${referralRecord.referrerId} AND tenant_id = ${me.tenantId} FOR UPDATE`
+            );
             await tx.update(clientsTable)
               .set({
                 successfulReferrals: sql`GREATEST(0, COALESCE(successful_referrals, 0) - 1)`,

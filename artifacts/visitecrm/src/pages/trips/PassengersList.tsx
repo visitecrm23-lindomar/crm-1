@@ -294,6 +294,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
           </Select>
           <Button variant="outline" size="sm" onClick={handlePassengersExport} disabled={isLoading || allPassengers.length === 0}><Download className="w-4 h-4 mr-2" />Exportar Passageiros</Button>
           <Button variant="outline" size="sm" onClick={handleCsvExport} disabled={isLoading || allPassengers.length === 0}><Download className="w-4 h-4 mr-2" />CSV</Button>
+          <Button variant="outline" size="sm" onClick={() => { const a = document.createElement("a"); a.href = `/api/trips/${tripId}/manifest/pdf`; a.download = ""; a.click(); }} disabled={isLoading || allPassengers.length === 0}><Download className="w-4 h-4 mr-2" />Exportar Manifesto</Button>
           <Button variant="outline" size="sm" onClick={handlePdfPrint} disabled={isLoading || allPassengers.length === 0}><Download className="w-4 h-4 mr-2" />Imprimir / PDF</Button>
           <Button variant="outline" size="sm" onClick={() => setShareOpen(true)} disabled={isLoading || allPassengers.length === 0}><Share2 className="w-4 h-4 mr-2" />Compartilhar</Button>
           <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing}><RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? "animate-spin" : ""}`} />{isSyncing ? "Sincronizando..." : "Sincronizar"}</Button>

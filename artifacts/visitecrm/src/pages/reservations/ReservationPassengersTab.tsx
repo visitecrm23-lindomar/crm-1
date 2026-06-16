@@ -12,9 +12,11 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, LogIn, Pencil, RotateCcw, Trash2, UserPlus, Users } from "lucide-react";
+import { AlertCircle, CheckCircle, LogIn, Pencil, RotateCcw, Trash2, UserPlus, Users } from "lucide-react";
 import { AGE_CATEGORY_LABELS } from "./constants";
 import { PassengerForm } from "./PassengerForm";
+
+const PLACEHOLDER_NAME = "A preencher";
 
 export function ReservationPassengersTab({ reservationId }: { reservationId: string }) {
   const [addOpen, setAddOpen] = useState(false);
@@ -91,9 +93,20 @@ export function ReservationPassengersTab({ reservationId }: { reservationId: str
 
   const list = (passengers ?? []) as Passenger[];
   const checkedInCount = list.filter(p => p.checkedInAt).length;
+  const placeholderCount = list.filter(p => p.name === PLACEHOLDER_NAME).length;
 
   return (
     <div className="space-y-4 py-2">
+      {placeholderCount > 0 && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <div>
+            <span className="font-semibold">Manifesto incompleto:</span>{" "}
+            {placeholderCount} passageiro(s) com nome "A preencher". Use o botão{" "}
+            <Pencil className="inline w-3 h-3" /> para preencher os dados.
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">{list.length} passageiro(s) cadastrado(s)</p>
@@ -121,10 +134,16 @@ export function ReservationPassengersTab({ reservationId }: { reservationId: str
           {list.map(p => {
             const isCheckedIn = !!p.checkedInAt;
             return (
-              <div key={p.id} className={`flex items-center justify-between p-3 rounded-lg border ${isCheckedIn ? "bg-green-50 border-green-200" : "bg-muted/50"}`}>
+              <div key={p.id} className={`flex items-center justify-between p-3 rounded-lg border ${isCheckedIn ? "bg-green-50 border-green-200" : p.name === PLACEHOLDER_NAME ? "bg-amber-50 border-amber-200" : "bg-muted/50"}`}>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-medium text-sm">{p.name}</p>
+                    <p className={`font-medium text-sm ${p.name === PLACEHOLDER_NAME ? "text-amber-700 italic" : ""}`}>{p.name}</p>
+                    {p.name === PLACEHOLDER_NAME && (
+                      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold border border-amber-200">
+                        <AlertCircle className="w-3 h-3" />
+                        Pendente
+                      </span>
+                    )}
                     {isCheckedIn && (
                       <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold border border-green-200">
                         <CheckCircle className="w-3 h-3" />

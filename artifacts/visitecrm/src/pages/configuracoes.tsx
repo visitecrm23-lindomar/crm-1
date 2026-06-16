@@ -2053,6 +2053,8 @@ function GoogleCalendarCard() {
   if (!canConnect) return null;
 
   const connected = status?.connected ?? false;
+  const calendarStatus = status?.status as string | undefined;
+  const isInvalid = calendarStatus === "invalid";
   const loading = disconnectMutation.isPending || connecting;
   const syncing = syncMutation.isPending;
 
@@ -2064,7 +2066,12 @@ function GoogleCalendarCard() {
             <CalendarDays className="w-4 h-4 text-blue-500" />
             Google Calendar
           </CardTitle>
-          {connected ? (
+          {isInvalid ? (
+            <Badge className="text-xs bg-amber-50 text-amber-700 border border-amber-200">
+              <AlertCircle className="w-3 h-3 mr-1" />
+              Token expirado
+            </Badge>
+          ) : connected ? (
             <Badge className="text-xs bg-green-50 text-green-700 border border-green-200">
               <CheckCircle2 className="w-3 h-3 mr-1" />
               Conectado
@@ -2080,7 +2087,18 @@ function GoogleCalendarCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        {connected && (
+        {isInvalid && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <div>
+              <p className="font-medium">Conexão expirada</p>
+              <p className="mt-0.5 text-amber-700">
+                Sua autorização com o Google Calendar expirou. Reconecte para retomar a sincronização automática.
+              </p>
+            </div>
+          </div>
+        )}
+        {connected && !isInvalid && (
           <div className="text-xs text-muted-foreground space-y-1 bg-muted/40 rounded p-2">
             <p>
               <span className="font-medium">Eventos sincronizados:</span> {status?.eventsCount ?? 0}
@@ -2094,10 +2112,10 @@ function GoogleCalendarCard() {
           </div>
         )}
         <div className="flex flex-wrap gap-2">
-          {!connected ? (
+          {!connected || isInvalid ? (
             <Button size="sm" onClick={handleConnect} disabled={loading} className="gap-1.5">
               {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
-              Conectar com Google
+              {isInvalid ? "Reconectar Google" : "Conectar com Google"}
             </Button>
           ) : (
             <>

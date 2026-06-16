@@ -118,6 +118,15 @@ vi.mock("../lib/activities.js", () => ({
   writeClientActivity: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../lib/loyalty-helpers.js", () => ({
+  calculateTier: vi.fn(() => "bronze"),
+  loyaltyAwardPointsForReservation: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../services/pipeline-automation.js", () => ({
+  moveDealToStage: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("../lib/id.js", () => ({
   generateId: vi.fn(() => "gen-id"),
   generateVoucherCode: vi.fn(() => "VCHR-0001"),
@@ -484,5 +493,112 @@ describe("PATCH /api/reservations/:id — seat-to-passenger reconciliation", () 
     expect(placeholder!.seatNumber).toBe("2B");
 
     expect(capturedDeletes).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Seat bucket counter tests — status transitions (task #95)
+// ---------------------------------------------------------------------------
+
+describe("PATCH /api/reservations/:id — seat bucket transitions", () => {
+  const requireAuthMock = vi.mocked(requireAuth);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    capturedPassengerInserts.length = 0;
+    capturedSets.length = 0;
+    capturedDeletes.length = 0;
+
+    requireAuthMock.mockResolvedValue(FAKE_USER as never);
+    mockLimit.mockResolvedValue([]);
+    mockWhere.mockReturnValue({ limit: mockLimit });
+    mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit });
+    mockSelect.mockReturnValue({ from: mockFrom });
+  });
+
+  it("pending → confirmed: moves seats from reservedSeats to confirmedSeats", async () => {
+    const app = buildApp();
+    const existing = makeReservation({ status: "pending", seats: ["1A", "2B"] });
+    const updated = { ...existing, status: "confirmed" };
+    const primaryPax = makePassenger("pax-1", true, "1A", "João Silva", "111.222.333-44");
+    const placeholder = makePassenger("pax-2", false, "2B");
+
+    mockLimit.mockResolvedValueOnce([existing]);
+    const tx = buildTxMock([[updated], [primaryPax, placeholder]]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+    mockLimit.mockResolvedValueOnce([FAKE_TRIP]).mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app).patch("/api/reservations/res-001").send({ status: "confirmed" });
+    expect(res.status).toBe(200);
+
+    const tripUpdate = capturedSets.find(
+      (s) => Object.prototype.hasOwnProperty.call(s, "confirmedSeats") && Object.prototype.hasOwnProperty.call(s, "reservedSeats"),
+    );
+    expect(tripUpdate).toBeDefined();
+    expect(tripUpdate).toMatchObject({ confirmedSeats: expect.anything(), reservedSeats: expect.anything() });
+  });
+
+  it("confirmed → pending: reverts seats from confirmedSeats back to reservedSeats", async () => {
+    const app = buildApp();
+    const existing = makeReservation({ status: "confirmed", seats: ["1A", "2B"] });
+    const updated = { ...existing, status: "pending" };
+    const primaryPax = makePassenger("pax-1", true, "1A", "João Silva", "111.222.333-44");
+    const placeholder = makePassenger("pax-2", false, "2B");
+
+    mockLimit.mockResolvedValueOnce([existing]);
+    const tx = buildTxMock([[updated], [primaryPax, placeholder]]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+    mockLimit.mockResolvedValueOnce([FAKE_TRIP]).mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app).patch("/api/reservations/res-001").send({ status: "pending" });
+    expect(res.status).toBe(200);
+
+    const tripUpdate = capturedSets.find(
+      (s) => Object.prototype.hasOwnProperty.call(s, "confirmedSeats") && Object.prototype.hasOwnProperty.call(s, "reservedSeats"),
+    );
+    expect(tripUpdate).toBeDefined();
+    expect(tripUpdate).toMatchObject({ confirmedSeats: expect.anything(), reservedSeats: expect.anything() });
+  });
+
+  it("pending → cancelled: releases seats back to availableSeats", async () => {
+    const app = buildApp();
+    const existing = makeReservation({ status: "pending", seats: ["1A", "2B"] });
+    const updated = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+    // Reversal 4 always runs when clientId exists: (1) paymentsTable select → [],
+    // (2) loyaltyMembersTable.limit(1) → null (skip clawback), then reservation re-fetch.
+    const tx = buildTxMock([[], [null], [updated]]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+    mockLimit.mockResolvedValueOnce([FAKE_TRIP]).mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app).patch("/api/reservations/res-001").send({ status: "cancelled" });
+    expect(res.status).toBe(200);
+
+    const tripUpdate = capturedSets.find(
+      (s) => Object.prototype.hasOwnProperty.call(s, "availableSeats"),
+    );
+    expect(tripUpdate).toBeDefined();
+  });
+
+  it("confirmed → cancelled: releases seats back to availableSeats", async () => {
+    const app = buildApp();
+    const existing = makeReservation({ status: "confirmed", seats: ["1A", "2B"] });
+    const updated = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+    // Reversal 4 always runs when clientId exists: (1) paymentsTable select → [],
+    // (2) loyaltyMembersTable.limit(1) → null (skip clawback), then reservation re-fetch.
+    const tx = buildTxMock([[], [null], [updated]]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+    mockLimit.mockResolvedValueOnce([FAKE_TRIP]).mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app).patch("/api/reservations/res-001").send({ status: "cancelled" });
+    expect(res.status).toBe(200);
+
+    const tripUpdate = capturedSets.find(
+      (s) => Object.prototype.hasOwnProperty.call(s, "availableSeats"),
+    );
+    expect(tripUpdate).toBeDefined();
   });
 });

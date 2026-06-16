@@ -15,14 +15,15 @@ import request from "supertest";
 // vi.hoisted: shared mock factories must exist before any vi.mock factory runs
 // ---------------------------------------------------------------------------
 
-const { mockLimit, mockWhere, mockFrom, mockSelect, mockTransaction } = vi.hoisted(() => {
+const { mockLimit, mockWhere, mockFrom, mockSelect, mockTransaction, mockEnqueueConfirmation } = vi.hoisted(() => {
   const mockLimit = vi.fn();
   const mockWhere: ReturnType<typeof vi.fn> = vi.fn(() => ({ limit: mockLimit }));
   const mockFrom = vi.fn(() => ({ where: mockWhere, limit: mockLimit }));
   const mockSelect = vi.fn(() => ({ from: mockFrom }));
   const mockTransaction = vi.fn();
+  const mockEnqueueConfirmation = vi.fn().mockResolvedValue(undefined);
 
-  return { mockLimit, mockWhere, mockFrom, mockSelect, mockTransaction };
+  return { mockLimit, mockWhere, mockFrom, mockSelect, mockTransaction, mockEnqueueConfirmation };
 });
 
 // ---------------------------------------------------------------------------
@@ -51,6 +52,13 @@ vi.mock("@workspace/db", () => ({
   referralsTable: {},
   referralSettingsTable: {},
   referralTrackingTable: {},
+  referralCampaignsTable: {},
+  loyaltyMembersTable: {},
+  loyaltyProgramsTable: {},
+  loyaltyTransactionsTable: {},
+  partnersTable: {},
+  partnerProductsTable: {},
+  partnerCommissionsTable: {},
   dealsTable: {},
   pipelineStagesTable: {},
 }));
@@ -90,9 +98,42 @@ vi.mock("../lib/tenant.js", () => ({
 }));
 
 vi.mock("../queues/email-helpers.js", () => ({
-  enqueueReservationConfirmationEmail: vi.fn().mockResolvedValue(undefined),
+  enqueueReservationConfirmationEmail: mockEnqueueConfirmation,
   enqueueReservationCancellationEmail: vi.fn().mockResolvedValue(undefined),
   enqueueNewBookingNotificationEmail: vi.fn().mockResolvedValue(undefined),
+  dispatchReferralConvertedEmail: vi.fn().mockResolvedValue(undefined),
+  dispatchReferralExpiredEmail: vi.fn().mockResolvedValue(undefined),
+  dispatchReferralBonusReleasedEmail: vi.fn().mockResolvedValue(undefined),
+  sendWelcomeEmail: vi.fn().mockResolvedValue(undefined),
+  enqueueReferralBonusPaidEmail: vi.fn().mockResolvedValue(undefined),
+  enqueueReferralConvertedEmail: vi.fn().mockResolvedValue(undefined),
+  buildEmailPropsFromReservation: vi.fn().mockResolvedValue({}),
+}));
+
+vi.mock("../queues/whatsapp-helpers.js", () => ({
+  dispatchWhatsAppReferralConverted: vi.fn().mockResolvedValue(undefined),
+  dispatchWhatsAppReferralExpired: vi.fn().mockResolvedValue(undefined),
+  dispatchWhatsAppReferralExpiringSoon: vi.fn().mockResolvedValue(undefined),
+  dispatchWhatsAppReferralBonusReleased: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../services/checkout/post-booking.js", () => ({
+  runPostBookingSideEffects: vi.fn().mockImplementation(async (args: {
+    store: { tenantId: string; name: string };
+    customerEmail: string;
+    customerName: string;
+    orderNumber: string;
+  }) => {
+    await mockEnqueueConfirmation({
+      tenantId: args.store.tenantId,
+      subject: `Reserva Confirmada — ${args.orderNumber}`,
+      props: {
+        reservationNumber: args.orderNumber,
+        clientEmail: args.customerEmail,
+        clientName: args.customerName,
+      },
+    });
+  }),
 }));
 
 vi.mock("../lib/id.js", () => ({
@@ -223,10 +264,14 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     // patterns work without extra setup:
     //   `await db.select().from(t).where(...)`           → resolves to []
     //   `await db.select().from(t).where(...).limit(1)`  → calls mockLimit
+    // mockWhere must expose both .limit() and .orderBy().limit() so queries
+    // like `.where(...).orderBy(desc(...)).limit(1)` (used in referral-campaigns
+    // and referral-conversion) chain correctly through mockLimit.
+    const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
     mockWhere.mockReturnValue(
-      Object.assign(Promise.resolve([]), { limit: mockLimit }),
+      Object.assign(Promise.resolve([]), { limit: mockLimit, orderBy: mockOrderBy }),
     );
-    mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit });
+    mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit, orderBy: mockOrderBy });
     mockSelect.mockReturnValue({ from: mockFrom });
 
     mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
@@ -705,8 +750,13 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
       .mockResolvedValueOnce([FAKE_PRODUCT])
       .mockResolvedValueOnce([referrer])
       .mockResolvedValueOnce([refSettings])
-      .mockResolvedValueOnce([])             // referral bonus settings lookup inside transaction
-      .mockResolvedValueOnce([discountedOrder])
+      // Inside recordReferralConversion tx (referral-conversion.ts):
+      .mockResolvedValueOnce([])   // refSettings re-fetch inside tx (line 53)
+      .mockResolvedValueOnce([])   // applyActiveCampaignBonus – no active campaign (referral-campaigns.ts:42)
+      .mockResolvedValueOnce([])   // referrer re-fetch inside tx (line 70)
+      .mockResolvedValueOnce([])   // trackingRow (line 110)
+      .mockResolvedValueOnce([])   // lastReferrerOrder (line 120)
+      .mockResolvedValueOnce([discountedOrder]) // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
@@ -735,5 +785,48 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     expect(res.body).toHaveProperty("orderId");
     expect(res.body).toHaveProperty("orderNumber");
     expect(res.body).toHaveProperty("totalAmount");
+  });
+
+  // ── 8. Post-booking confirmation email (task #22) ─────────────────────────
+
+  it("calls enqueueReservationConfirmationEmail with tenant, customerEmail and orderNumber after a successful trip order", async () => {
+    const tripProduct = { ...FAKE_PRODUCT, tripId: "trip-001" };
+    const availableTrip = { availableSeats: 10 };
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
+      .mockResolvedValueOnce([tripProduct])           // product fetch
+      .mockResolvedValueOnce([availableTrip])         // Phase 1.5 seat check
+      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (loadReservationContext)
+      .mockResolvedValueOnce([])                      // upsertCheckoutClient – no existing client
+      .mockResolvedValueOnce([FAKE_ORDER])            // post-tx order re-fetch
+      .mockResolvedValue([]);
+
+    mockTransaction.mockImplementationOnce(async (cb: (tx: unknown) => Promise<unknown>) => {
+      const tx = buildTxMock();
+      // lockTripsForCheckout reads id/available_seats/type from the execute result
+      (tx.execute as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        rows: [{ id: "trip-001", available_seats: 10, type: "standard" }],
+      });
+      return cb(tx);
+    });
+
+    const res = await request(buildApp())
+      .post("/api/public/store/minha-loja/orders")
+      .send(VALID_BODY);
+
+    expect(res.status).toBe(200);
+
+    await vi.waitFor(() => {
+      expect(mockEnqueueConfirmation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: FAKE_STORE.tenantId,
+          props: expect.objectContaining({
+            clientEmail: VALID_BODY.customerEmail,
+            clientName: VALID_BODY.customerName,
+          }),
+        }),
+      );
+    });
   });
 });

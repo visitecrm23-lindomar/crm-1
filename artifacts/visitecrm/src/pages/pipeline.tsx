@@ -23,10 +23,8 @@ import {
 import { Plus, Search, Trash2, Phone, Calendar, MapPin, X, Pencil, UserPen, Eye, BookOpen, ExternalLink, ShoppingBag } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-
-function formatCurrency(value: number) {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
+import { DEAL_STATUS } from "@workspace/permissions";
+import { formatCurrency } from "@/lib/utils";
 
 const CLASSIFICATION_LABELS: Record<string, string> = {
   lead: "Lead", prospect: "Prospecto", client: "Cliente", vip: "VIP", inactive: "Inativo",
@@ -226,7 +224,7 @@ export default function Pipeline() {
   const [client360Id, setClient360Id] = useState<string | null>(null);
 
   const { data: stages, isLoading: loadingStages, refetch: refetchStages } = useListPipelineStages();
-  const { data: deals, isLoading: loadingDeals, refetch: refetchDeals } = useListDeals({ status: "open" });
+  const { data: deals, isLoading: loadingDeals, refetch: refetchDeals } = useListDeals({ status: DEAL_STATUS.OPEN });
   const { data: allClients, refetch: refetchClients } = useListClients({ limit: 500, page: 1 });
   const { data: tripsData } = useListTrips({ limit: 200 });
   const moveDeal = useMoveDeal();

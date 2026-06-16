@@ -1,12 +1,12 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db, commissionRulesTable, commissionsTable, usersTable } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
-import { requireAuth } from "../lib/tenant";
-import { ADMIN_ROLES } from '../lib/tenant';
+import { requireAuth, ADMIN_ROLES } from "../lib/tenant";
 import { COMMISSION_STATUS } from "@workspace/permissions";
 import { roundMoney } from "../lib/pricing";
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 
 const router = Router();
 
@@ -19,88 +19,87 @@ const CreateRuleBody = z.object({
   isActive: z.boolean().optional(),
 });
 
-router.get("/commission-rules", async (req, res): Promise<void> => {
+router.get("/commission-rules", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const rules = await db.select().from(commissionRulesTable)
       .where(eq(commissionRulesTable.tenantId, me.tenantId))
       .orderBy(desc(commissionRulesTable.createdAt));
     res.json(rules);
   } catch (err) {
     req.log.error({ err }, "Error listing commission rules");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/commission-rules", async (req, res): Promise<void> => {
+router.post("/commission-rules", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateRuleBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(parsed.error.message, "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(commissionRulesTable).values({ id, tenantId: me.tenantId, ...parsed.data });
     const [rule] = await db.select().from(commissionRulesTable).where(eq(commissionRulesTable.id, id)).limit(1);
     res.status(201).json(rule);
   } catch (err) {
     req.log.error({ err }, "Error creating commission rule");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/commission-rules/:id", async (req, res): Promise<void> => {
+router.patch("/commission-rules/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateRuleBody.partial().safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(parsed.error.message, "VALIDATION_ERROR")); return; }
     await db.update(commissionRulesTable).set(parsed.data)
       .where(and(eq(commissionRulesTable.id, req.params.id), eq(commissionRulesTable.tenantId, me.tenantId)));
     const [rule] = await db.select().from(commissionRulesTable)
       .where(and(eq(commissionRulesTable.id, req.params.id), eq(commissionRulesTable.tenantId, me.tenantId))).limit(1);
-    if (!rule) { res.status(404).json({ error: "Not found" }); return; }
+    if (!rule) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(rule);
   } catch (err) {
     req.log.error({ err }, "Error updating commission rule");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/commission-rules/:id", async (req, res): Promise<void> => {
+router.delete("/commission-rules/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     await db.delete(commissionRulesTable)
       .where(and(eq(commissionRulesTable.id, req.params.id), eq(commissionRulesTable.tenantId, me.tenantId)));
     res.status(204).end();
   } catch (err) {
     req.log.error({ err }, "Error deleting commission rule");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/commissions/calculate", async (req, res): Promise<void> => {
+router.get("/commissions/calculate", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
 
     const { sellerId, saleAmount, tripId } = req.query as Record<string, string>;
     if (!sellerId || !saleAmount) {
-      res.status(400).json({ error: "sellerId and saleAmount are required" });
+      next(new ValidationError("sellerId and saleAmount are required", "MISSING_PARAMS"));
       return;
     }
     const amount = parseFloat(saleAmount);
     if (isNaN(amount) || amount <= 0) {
-      res.status(400).json({ error: "saleAmount must be a positive number" });
+      next(new ValidationError("saleAmount must be a positive number", "INVALID_AMOUNT"));
       return;
     }
 
-    // Check commission rules first (trip-specific, then all)
     const rules = await db.select().from(commissionRulesTable)
       .where(and(eq(commissionRulesTable.tenantId, me.tenantId), eq(commissionRulesTable.isActive, true)));
 
@@ -122,7 +121,6 @@ router.get("/commissions/calculate", async (req, res): Promise<void> => {
       return;
     }
 
-    // Fallback: seller's personal commission config
     const [seller] = await db.select({
       commissionType: usersTable.commissionType,
       commissionRate: usersTable.commissionRate,
@@ -131,7 +129,7 @@ router.get("/commissions/calculate", async (req, res): Promise<void> => {
       .where(and(eq(usersTable.id, sellerId), eq(usersTable.tenantId, me.tenantId)))
       .limit(1);
 
-    if (!seller) { res.status(404).json({ error: "Seller not found" }); return; }
+    if (!seller) { next(new NotFoundError("Seller not found", "SELLER_NOT_FOUND")); return; }
 
     const rate = parseFloat(String(seller.commissionRate ?? "0"));
     const fixed = parseFloat(String(seller.commissionFixed ?? "0"));
@@ -152,11 +150,11 @@ router.get("/commissions/calculate", async (req, res): Promise<void> => {
     }
   } catch (err) {
     req.log.error({ err }, "Error calculating commission");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/commissions/my-rank", async (req, res): Promise<void> => {
+router.get("/commissions/my-rank", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -188,16 +186,15 @@ router.get("/commissions/my-rank", async (req, res): Promise<void> => {
     });
   } catch (err) {
     req.log.error({ err }, "Error computing commission rank");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/commissions", async (req, res): Promise<void> => {
+router.get("/commissions", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    // Vendedores can see their own commissions only; admins see all
     let commissions;
     if (ADMIN_ROLES.includes(me.role)) {
       commissions = await db.select().from(commissionsTable)
@@ -214,17 +211,17 @@ router.get("/commissions", async (req, res): Promise<void> => {
     res.json(commissions);
   } catch (err) {
     req.log.error({ err }, "Error listing commissions");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/commissions/:id", async (req, res): Promise<void> => {
+router.patch("/commissions/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = z.object({ status: z.string().optional(), paidAt: z.string().optional() }).safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(parsed.error.message, "VALIDATION_ERROR")); return; }
     const updates: Record<string, unknown> = {};
     if (parsed.data.status) updates.status = parsed.data.status;
     if (parsed.data.paidAt) updates.paidAt = new Date(parsed.data.paidAt);
@@ -232,11 +229,11 @@ router.patch("/commissions/:id", async (req, res): Promise<void> => {
       .where(and(eq(commissionsTable.id, req.params.id), eq(commissionsTable.tenantId, me.tenantId)));
     const [commission] = await db.select().from(commissionsTable)
       .where(and(eq(commissionsTable.id, req.params.id), eq(commissionsTable.tenantId, me.tenantId))).limit(1);
-    if (!commission) { res.status(404).json({ error: "Not found" }); return; }
+    if (!commission) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(commission);
   } catch (err) {
     req.log.error({ err }, "Error updating commission");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

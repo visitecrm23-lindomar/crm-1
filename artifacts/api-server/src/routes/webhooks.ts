@@ -6,6 +6,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { logger } from "../lib/logger";
 import { syncReservationPaymentStatus, paymentExistsForGatewayTx, type DbExecutor } from "../lib/reservation-payments";
+import { enqueueNewBookingNotificationEmail } from "../queues/email-helpers";
 import { decryptOrPassthrough } from "../lib/crypto";
 import { PAYMENT_STATUS, RESERVATION_STATUS, STORE_ORDER_STATUS, STORE_PAYMENT_STATUS } from "@workspace/permissions";
 
@@ -172,8 +173,8 @@ async function handleStripeEvent(event: StripeEvent, store: StoreScope): Promise
     const paymentIntentId = String(obj["id"] ?? "");
     const amountReceived = Number(obj["amount_received"] ?? obj["amount"] ?? 0) / 100;
     if (!paymentIntentId || amountReceived <= 0) return;
-    await db.transaction(async (tx) => {
-      await applyGatewayPayment(tx as unknown as DbExecutor, {
+    const result = await db.transaction(async (tx) => {
+      return applyGatewayPayment(tx as unknown as DbExecutor, {
         store,
         gateway: "stripe",
         transactionId: paymentIntentId,
@@ -182,6 +183,13 @@ async function handleStripeEvent(event: StripeEvent, store: StoreScope): Promise
         paidAt: new Date(),
       });
     });
+    if (result) {
+      for (const reservationId of result.reservationIds) {
+        enqueueNewBookingNotificationEmail(reservationId, result.tenantId).catch((err) =>
+          logger.warn({ err, reservationId }, "[webhooks] Failed to enqueue payment confirmation notification"),
+        );
+      }
+    }
     return;
   }
 
@@ -363,14 +371,14 @@ async function handleMpPayment(store: StoreScope, paymentId: string, payment: Mp
     : "";
 
   if (payment.status === PAYMENT_STATUS.APPROVED) {
-    await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       const tx2 = tx as unknown as DbExecutor;
       const orderId = await resolveOrderForMp(tx2, store, paymentId, externalRef);
       if (!orderId) {
         logger.info({ paymentId, externalRef, slug: store.slug }, "[webhooks/mercadopago] No matching order");
-        return;
+        return null;
       }
-      await applyGatewayPayment(tx2, {
+      return applyGatewayPayment(tx2, {
         store,
         gateway: "mercadopago",
         transactionId: String(payment.id),
@@ -379,6 +387,13 @@ async function handleMpPayment(store: StoreScope, paymentId: string, payment: Mp
         paidAt: payment.date_approved ? new Date(payment.date_approved) : new Date(),
       });
     });
+    if (result) {
+      for (const reservationId of result.reservationIds) {
+        enqueueNewBookingNotificationEmail(reservationId, result.tenantId).catch((err) =>
+          logger.warn({ err, reservationId }, "[webhooks] Failed to enqueue payment confirmation notification"),
+        );
+      }
+    }
   } else if (payment.status === "rejected") {
     await db.transaction(async (tx) => {
       const tx2 = tx as unknown as DbExecutor;
@@ -470,9 +485,14 @@ interface ApplyArgs {
   paidAt: Date;
 }
 
-async function applyGatewayPayment(tx: DbExecutor, args: ApplyArgs): Promise<void> {
+interface ApplyResult {
+  reservationIds: string[];
+  tenantId: string;
+}
+
+async function applyGatewayPayment(tx: DbExecutor, args: ApplyArgs): Promise<ApplyResult | null> {
   const { store, gateway, transactionId, paymentIntentId, amount, paidAt } = args;
-  if (amount <= 0) return;
+  if (amount <= 0) return null;
 
   // Look up the order scoped to this store/tenant so we never accidentally
   // apply a payment from one tenant's gateway to another tenant's order.
@@ -498,13 +518,13 @@ async function applyGatewayPayment(tx: DbExecutor, args: ApplyArgs): Promise<voi
 
   if (!order) {
     logger.info({ paymentIntentId, gateway, slug: store.slug }, "[webhooks] No matching order for paymentIntentId");
-    return;
+    return null;
   }
 
   // Idempotency: if we already recorded this exact gateway transaction, stop.
   if (await paymentExistsForGatewayTx(order.tenantId, gateway, transactionId, tx)) {
     logger.info({ paymentIntentId, gateway, transactionId }, "[webhooks] Duplicate event ignored");
-    return;
+    return null;
   }
 
   if (order.paymentStatus !== STORE_PAYMENT_STATUS.PAID) {
@@ -527,14 +547,14 @@ async function applyGatewayPayment(tx: DbExecutor, args: ApplyArgs): Promise<voi
 
   if (reservations.length === 0) {
     logger.info({ orderId: order.id, paymentIntentId }, "[webhooks] Order has no linked reservations");
-    return;
+    return null;
   }
 
   // Mixed-cart orders may include non-reservation products. Cap the amount
   // allocated to reservation Payment rows at the sum of reservation totals
   // so non-reservation items don't inflate paidValue/balance.
   const totalReservationValue = reservations.reduce((acc, r) => acc + Number(r.totalValue), 0);
-  if (totalReservationValue <= 0) return;
+  if (totalReservationValue <= 0) return null;
   const allocatable = Math.min(amount, totalReservationValue);
 
   let allocated = 0;
@@ -575,6 +595,7 @@ async function applyGatewayPayment(tx: DbExecutor, args: ApplyArgs): Promise<voi
     { orderId: order.id, gateway, transactionId, reservations: reservations.length, amount },
     "[webhooks] Gateway payment applied and reservations synced",
   );
+  return { reservationIds: reservations.map((r) => r.id), tenantId: order.tenantId };
 }
 
 async function markOrderFailed(

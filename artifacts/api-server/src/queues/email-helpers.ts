@@ -351,10 +351,19 @@ async function buildNewBookingNotificationFromReservation(
   if (!row) return null;
 
   const [store] = await db
-    .select({ email: storesTable.email })
+    .select({
+      email: storesTable.email,
+      notificationEmail: storesTable.notificationEmail,
+      orderNotificationEnabled: storesTable.orderNotificationEnabled,
+    })
     .from(storesTable)
     .where(eq(storesTable.tenantId, tenantId))
     .limit(1);
+
+  if (store && store.orderNotificationEnabled === false) {
+    logger.info({ reservationId, tenantId }, "[email-queue] New-booking notification disabled for this store — skipping");
+    return null;
+  }
 
   const dDate = row.departureDate ? new Date(row.departureDate) : null;
   const departureDate = dDate
@@ -373,7 +382,8 @@ async function buildNewBookingNotificationFromReservation(
     );
 
   const recipients: string[] = [];
-  if (store?.email) recipients.push(store.email);
+  const primaryEmail = store?.notificationEmail ?? store?.email ?? null;
+  if (primaryEmail) recipients.push(primaryEmail);
 
   // If the store has no e-mail configured, promote agency admins/managers
   // to the primary "to" list so the notification still goes out.

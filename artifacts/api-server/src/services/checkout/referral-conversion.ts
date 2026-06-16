@@ -13,6 +13,7 @@ import { applyActiveCampaignBonus } from "../../lib/referral-campaigns";
 import { generateId } from "../../lib/id";
 import type { Tx } from "./tx";
 import { REFERRAL_STATUS } from "@workspace/permissions";
+import { roundMoney } from "../../lib/pricing";
 import { computeReferralTier } from "../../lib/referral-tiers";
 import { detectReferralFraud } from "../../lib/referral-fraud";
 import { calculateTier } from "../../lib/loyalty-helpers";
@@ -70,7 +71,7 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
 
   const currentCompleted = referrer?.successfulReferrals ?? 0;
   const { tier } = computeReferralTier(currentCompleted, refSettings?.tiersConfig ?? null);
-  const bonusAmount = Math.round((adjustedBase * tier.bonusMultiplier + fixedExtra) * 100) / 100;
+  const bonusAmount = roundMoney(adjustedBase * tier.bonusMultiplier + fixedExtra);
 
   const referralId = generateId();
 
