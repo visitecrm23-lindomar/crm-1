@@ -33,12 +33,61 @@ export function Voucher({
   const [qrDataUrl, setQrDataUrl] = useState("");
 
   useEffect(() => {
-    if (order.orderNumber) {
-      QRCode.toDataURL(order.orderNumber, { width: 80, margin: 1, errorCorrectionLevel: "M" })
-        .then((url) => setQrDataUrl(url))
-        .catch(() => {});
-    }
-  }, [order.orderNumber]);
+    if (!order.orderNumber) return;
+
+    const QR_SIZE = 160;
+    const LOGO_RATIO = 0.25;
+
+    QRCode.toDataURL(order.orderNumber, {
+      width: QR_SIZE,
+      margin: 1,
+      errorCorrectionLevel: "H",
+    })
+      .then((qrUrl) => {
+        if (!store.logoUrl) {
+          setQrDataUrl(qrUrl);
+          return;
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = QR_SIZE;
+        canvas.height = QR_SIZE;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          setQrDataUrl(qrUrl);
+          return;
+        }
+
+        const qrImg = new Image();
+        qrImg.onload = () => {
+          ctx.drawImage(qrImg, 0, 0, QR_SIZE, QR_SIZE);
+
+          const logoImg = new Image();
+          logoImg.crossOrigin = "anonymous";
+          logoImg.onload = () => {
+            const logoSize = Math.round(QR_SIZE * LOGO_RATIO);
+            const padding = 4;
+            const boxSize = logoSize + padding * 2;
+            const x = (QR_SIZE - boxSize) / 2;
+            const y = (QR_SIZE - boxSize) / 2;
+
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.roundRect(x, y, boxSize, boxSize, 6);
+            ctx.fill();
+
+            ctx.drawImage(logoImg, x + padding, y + padding, logoSize, logoSize);
+            setQrDataUrl(canvas.toDataURL("image/png"));
+          };
+          logoImg.onerror = () => {
+            setQrDataUrl(qrUrl);
+          };
+          logoImg.src = store.logoUrl!;
+        };
+        qrImg.src = qrUrl;
+      })
+      .catch(() => {});
+  }, [order.orderNumber, store.logoUrl]);
 
   const startDate = product.departureDate ?? product.startDate;
   const images = product.images ?? [];
