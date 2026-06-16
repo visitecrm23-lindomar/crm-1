@@ -19,6 +19,36 @@ export function isInvalidGrantError(err: unknown): boolean {
   return false;
 }
 
+export function isTransientCalendarError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const anyErr = err as { code?: number | string; response?: { status?: number }; message?: string };
+  const status = anyErr.response?.status ?? (typeof anyErr.code === "number" ? anyErr.code : undefined);
+  if (status === 429 || status === 500 || status === 502 || status === 503 || status === 504) return true;
+  if (typeof anyErr.message === "string") {
+    const m = anyErr.message.toLowerCase();
+    if (m.includes("rate limit") || m.includes("quota") || m.includes("too many requests") || m.includes("backend error") || m.includes("internal error")) return true;
+  }
+  return false;
+}
+
+export async function withCalendarRetry<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 3,
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (!isTransientCalendarError(err) || attempt === maxAttempts) throw err;
+      const delayMs = Math.min(1000 * 2 ** (attempt - 1), 8000);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastErr;
+}
+
 export async function markCalendarConnectionInvalid(userId: string, reason: string): Promise<void> {
   await db.update(usersTable).set({
     googleCalendarStatus: CALENDAR_STATUS_INVALID,

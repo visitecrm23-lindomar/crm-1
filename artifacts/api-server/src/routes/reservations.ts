@@ -10,7 +10,7 @@ import { CreateReservationBody, UpdateReservationBody, CreatePassengerBody, Upda
 import { z } from "zod/v4";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { writeClientActivity } from "../lib/activities";
-import { enqueueReservationConfirmationEmail, enqueueReservationCancellationEmail } from "../queues/email-helpers";
+import { enqueueReservationConfirmationEmail, enqueueReservationCancellationEmail, enqueueNewBookingNotificationEmail, dispatchReferralReversedEmail } from "../queues/email-helpers";
 import { enqueueCommissionSync } from "../queues/commission-sync-helper";
 import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 import { broadcastSeatUpdate } from "../lib/realtime";
@@ -1031,6 +1031,8 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
     const isBeingConfirmed = parsed.data.status === RESERVATION_STATUS.CONFIRMED && existing.status === RESERVATION_STATUS.PENDING;
     const isBeingDemoted = parsed.data.status === RESERVATION_STATUS.PENDING && wasConfirmed;
 
+    let reversedReferralReferrerId: string | null = null;
+
     const reservation = await db.transaction(async (tx) => {
       if (isBeingCancelled && wasActive) {
         const seatsCount = existing.seats.length;
@@ -1178,6 +1180,8 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
             await tx.update(referralsTable)
               .set({ status: REFERRAL_STATUS.REVERSED, updatedAt: new Date() })
               .where(eq(referralsTable.id, referralRecord.id));
+            // Capture for post-transaction email notification (#28)
+            reversedReferralReferrerId = referralRecord.referrerId;
           }
         }
 
@@ -1509,6 +1513,16 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
     if (parsed.data.status === RESERVATION_STATUS.CANCELLED && wasActive && existing.clientId) {
       enqueueReservationCancellationEmail(req.params.id, me.tenantId)
         .catch((err) => req.log.error({ err }, "Error enqueueing cancellation email"));
+    }
+    // When a fully-paid reservation is confirmed via status change, notify the agency
+    if (isBeingConfirmed) {
+      enqueueNewBookingNotificationEmail(req.params.id, me.tenantId)
+        .catch((err) => req.log.error({ err }, "Error enqueueing agency new-booking notification on reservation confirmation"));
+    }
+    // #28: When a referral is reversed on cancellation, notify the referrer
+    if (reversedReferralReferrerId) {
+      dispatchReferralReversedEmail(reversedReferralReferrerId, me.tenantId)
+        .catch((err) => req.log.error({ err }, "Error enqueueing referral reversal notification email"));
     }
     broadcastSeatUpdate(existing.tripId, me.tenantId).catch(() => {});
     // Sync Google Calendar events after every reservation PATCH.

@@ -31,6 +31,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, DollarSign, Clock, CheckCircle2, AlertCircle, QrCode } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListAdminInvoicesQueryKey } from "@workspace/api-client-react";
+import { formatCurrency as _formatCurrency } from "@/lib/utils";
 
 const STATUS_LABELS: Record<string, string> = {
   paid: "Pago",
@@ -48,7 +49,7 @@ const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | 
 
 function formatCurrency(value: string | number | null) {
   if (value === null || value === undefined) return "R$ 0,00";
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value));
+  return _formatCurrency(Number(value));
 }
 
 function formatDate(dateStr: string | null | undefined) {

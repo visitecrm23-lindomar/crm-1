@@ -15,6 +15,7 @@ import {
 import { getAuth, clerkClient } from "@clerk/express";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { ROLES } from "@workspace/permissions";
+import { AppError, ForbiddenError, NotFoundError, ValidationError, ConflictError } from "../lib/errors";
 
 const router = Router();
 
@@ -31,12 +32,12 @@ function formatUser(u: typeof usersTable.$inferSelect) {
   };
 }
 
-router.get("/users/me", async (req, res): Promise<void> => {
+router.get("/users/me", async (req, res, next): Promise<void> => {
   try {
     const { userId: clerkId } = getAuth(req);
-    if (!clerkId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    if (!clerkId) { next(new AppError("Not authenticated", 401, "UNAUTHENTICATED")); return; }
     const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId)).limit(1);
-    if (!user) { res.status(404).json({ error: "User not found" }); return; }
+    if (!user) { next(new NotFoundError("User not found", "USER_NOT_FOUND")); return; }
     let tenant = null;
     if (user.tenantId) {
       const [t] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, user.tenantId)).limit(1);
@@ -61,8 +62,7 @@ router.get("/users/me", async (req, res): Promise<void> => {
       tenant,
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching user");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -94,13 +94,13 @@ async function resolveInviteForUser(
   return byEmail;
 }
 
-router.post("/users/me/sync", async (req, res): Promise<void> => {
+router.post("/users/me/sync", async (req, res, next): Promise<void> => {
   try {
     const { userId: clerkId } = getAuth(req);
-    if (!clerkId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    if (!clerkId) { next(new AppError("Not authenticated", 401, "UNAUTHENTICATED")); return; }
 
     const parsed = SyncMeBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(parsed.error.message, "VALIDATION_ERROR")); return; }
 
     const { name, avatarUrl } = parsed.data;
 
@@ -155,7 +155,7 @@ router.post("/users/me/sync", async (req, res): Promise<void> => {
       const [newUser] = await db.select().from(usersTable)
         .where(eq(usersTable.id, userId))
         .limit(1);
-      if (!newUser) { res.status(500).json({ error: "Failed to create user" }); return; }
+      if (!newUser) { next(new AppError("Failed to create user", 500, "USER_CREATE_FAILED")); return; }
       res.json(SyncMeResponse.parse({
         id: newUser.id, clerkId: newUser.clerkId, name: newUser.name, email: newUser.email,
         role: newUser.role, avatarUrl: newUser.avatarUrl, isActive: newUser.isActive,
@@ -193,7 +193,7 @@ router.post("/users/me/sync", async (req, res): Promise<void> => {
       await db.update(usersTable).set(updateSet)
         .where(eq(usersTable.clerkId, clerkId));
       const [updatedUser] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId)).limit(1);
-      if (!updatedUser) { res.status(500).json({ error: "User not found after update" }); return; }
+      if (!updatedUser) { next(new NotFoundError("User not found after update", "USER_NOT_FOUND")); return; }
       res.json(SyncMeResponse.parse({
         id: updatedUser.id, clerkId: updatedUser.clerkId, name: updatedUser.name, email: updatedUser.email,
         role: updatedUser.role, avatarUrl: updatedUser.avatarUrl, isActive: updatedUser.isActive,
@@ -202,40 +202,36 @@ router.post("/users/me/sync", async (req, res): Promise<void> => {
       }));
     }
   } catch (err) {
-    req.log.error({ err }, "Error syncing user");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/users", async (req, res): Promise<void> => {
+router.get("/users", async (req, res, next): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     const users = await db.select().from(usersTable).where(eq(usersTable.tenantId, me.tenantId));
     res.json(users.map(formatUser));
   } catch (err) {
-    req.log.error({ err }, "Error listing users");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/users", async (req, res): Promise<void> => {
+router.post("/users", async (req, res, next): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Apenas administradores podem criar usuarios" });
-      return;
+      next(new ForbiddenError("Apenas administradores podem criar usuarios", "FORBIDDEN_ROLE")); return;
     }
     if (me.tenantId && me.role !== ROLES.SUPER_ADMIN) {
       const allowed = await checkPlanLimit(me.tenantId, "users", req, res);
       if (!allowed) return;
     }
     const parsed = CreateUserBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(parsed.error.message, "VALIDATION_ERROR")); return; }
     if (me.role !== ROLES.SUPER_ADMIN && parsed.data.role === ROLES.SUPER_ADMIN) {
-      res.status(403).json({ error: "Forbidden: apenas superadmins podem atribuir a funcao superadmin" });
-      return;
+      next(new ForbiddenError("Forbidden: apenas superadmins podem atribuir a funcao superadmin", "FORBIDDEN_ROLE")); return;
     }
     const userId = generateId();
     const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -252,32 +248,29 @@ router.post("/users", async (req, res): Promise<void> => {
     const [user] = await db.select().from(usersTable)
       .where(and(eq(usersTable.id, userId), eq(usersTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!user) { res.status(500).json({ error: "Failed to create user" }); return; }
+    if (!user) { next(new AppError("Failed to create user", 500, "USER_CREATE_FAILED")); return; }
     res.status(201).json(formatUser(user));
   } catch (err) {
-    req.log.error({ err }, "Error creating user");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/users/:id", async (req, res): Promise<void> => {
+router.patch("/users/:id", async (req, res, next): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     const parsed = UpdateUserBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(parsed.error.message, "VALIDATION_ERROR")); return; }
     const updates: Partial<typeof usersTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.role != null || parsed.data.isActive != null) {
       const adminRoles = ADMIN_ROLES;
       if (!adminRoles.includes(me.role)) {
-        res.status(403).json({ error: "Forbidden: apenas administradores podem alterar funcao ou status" });
-        return;
+        next(new ForbiddenError("Forbidden: apenas administradores podem alterar funcao ou status", "FORBIDDEN_ROLE")); return;
       }
       if (parsed.data.role != null) {
         if (me.role !== ROLES.SUPER_ADMIN && parsed.data.role === ROLES.SUPER_ADMIN) {
-          res.status(403).json({ error: "Forbidden: apenas superadmins podem atribuir a funcao superadmin" });
-          return;
+          next(new ForbiddenError("Forbidden: apenas superadmins podem atribuir a funcao superadmin", "FORBIDDEN_ROLE")); return;
         }
         updates.role = parsed.data.role;
       }
@@ -288,8 +281,7 @@ router.patch("/users/:id", async (req, res): Promise<void> => {
     if (hasCommissionFields) {
       const adminRoles = ADMIN_ROLES;
       if (!adminRoles.includes(me.role)) {
-        res.status(403).json({ error: "Forbidden: apenas administradores podem alterar configuração de comissão" });
-        return;
+        next(new ForbiddenError("Forbidden: apenas administradores podem alterar configuração de comissão", "FORBIDDEN_ROLE")); return;
       }
       if (parsed.data.commissionType != null) updates.commissionType = parsed.data.commissionType;
       if (parsed.data.commissionRate != null) updates.commissionRate = String(parsed.data.commissionRate);
@@ -301,27 +293,25 @@ router.patch("/users/:id", async (req, res): Promise<void> => {
     const [user] = await db.select().from(usersTable)
       .where(and(eq(usersTable.id, req.params.id), eq(usersTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!user) { res.status(404).json({ error: "Not found" }); return; }
+    if (!user) { next(new NotFoundError("Not found", "USER_NOT_FOUND")); return; }
     res.json(formatUser(user));
   } catch (err) {
-    req.log.error({ err }, "Error updating user");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/users/me", async (req, res): Promise<void> => {
+router.delete("/users/me", async (req, res, next): Promise<void> => {
   try {
     const { userId: clerkId } = getAuth(req);
-    if (!clerkId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    if (!clerkId) { next(new AppError("Not authenticated", 401, "UNAUTHENTICATED")); return; }
 
     const [user] = await db.select().from(usersTable)
       .where(eq(usersTable.clerkId, clerkId))
       .limit(1);
-    if (!user) { res.status(404).json({ error: "Usuário não encontrado" }); return; }
+    if (!user) { next(new NotFoundError("Usuário não encontrado", "USER_NOT_FOUND")); return; }
 
     if (user.role !== ROLES.CLIENT) {
-      res.status(403).json({ error: "Apenas clientes podem excluir a própria conta pelo portal." });
-      return;
+      next(new ForbiddenError("Apenas clientes podem excluir a própria conta pelo portal.", "FORBIDDEN_ROLE")); return;
     }
 
     try {
@@ -329,8 +319,7 @@ router.delete("/users/me", async (req, res): Promise<void> => {
     } catch (clerkErr: unknown) {
       const status = (clerkErr as { status?: number })?.status;
       if (status !== 404) {
-        res.status(502).json({ error: "Não foi possível remover a conta de autenticação. Tente novamente." });
-        return;
+        next(new AppError("Não foi possível remover a conta de autenticação. Tente novamente.", 502, "CLERK_DELETE_FAILED")); return;
       }
     }
 
@@ -343,8 +332,7 @@ router.delete("/users/me", async (req, res): Promise<void> => {
 
     res.status(204).end();
   } catch (err) {
-    req.log.error({ err }, "Error deleting user account");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

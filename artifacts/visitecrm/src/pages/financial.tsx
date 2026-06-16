@@ -508,7 +508,7 @@ export default function Financial() {
                   <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value={EXPENSE_STATUS.PENDING}>Pendente</SelectItem>
                   <SelectItem value={EXPENSE_STATUS.PAID}>Pago</SelectItem>
-                  <SelectItem value="overdue">Vencido</SelectItem>
+                  <SelectItem value={EXPENSE_STATUS.OVERDUE}>Vencido</SelectItem>
                 </SelectContent>
               </Select>
               {tab === "expenses" && (

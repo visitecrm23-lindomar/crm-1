@@ -3,10 +3,10 @@ import { eq, and, inArray, isNull } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { getEmailQueue, getCancellationEmailQueue, getNewBookingNotificationEmailQueue, getReferralEmailQueue } from "./index";
 import type { ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData, ReferralBonusReleasedEmailJobData } from "./index";
-import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail } from "@workspace/email";
+import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail, sendReferralTierUpgradeEmail } from "@workspace/email";
 import { ROLES } from "@workspace/permissions";
 import { logger } from "../lib/logger";
-import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps, ReferralWelcomeEmailProps } from "@workspace/email";
+import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps, ReferralWelcomeEmailProps, ReferralTierUpgradeEmailProps } from "@workspace/email";
 import { insertClientNotification } from "../lib/client-notifications";
 import { areWorkersEnabled } from "../lib/redis";
 
@@ -1248,4 +1248,129 @@ export async function resendEmailLog(
   // is preserved and each attempt is independently traceable.
   logger.info({ emailLogId, reservationId: log.reservationId }, "[email-queue] Resend enqueued, exhausted-retry alert resolved");
   return { ok: true };
+}
+
+// ── Referral: indicação revertida por cancelamento (#28) ─────────────────────
+
+export async function dispatchReferralReversedEmail(
+  referrerId: string,
+  tenantId: string,
+): Promise<void> {
+  const [referrer] = await db
+    .select({ name: clientsTable.name, email: clientsTable.email })
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, referrerId), eq(clientsTable.tenantId, tenantId)))
+    .limit(1);
+
+  if (!referrer?.email) {
+    logger.warn({ referrerId, tenantId }, "[email-queue] Referral reversed: referrer has no email — skipping");
+    return;
+  }
+
+  const [tenant] = await db
+    .select({ name: tenantsTable.name, logoUrl: tenantsTable.logoUrl })
+    .from(tenantsTable)
+    .where(eq(tenantsTable.id, tenantId))
+    .limit(1);
+
+  const agencyName = tenant?.name ?? "Agência";
+  const referrerName = referrer.name ?? referrer.email;
+
+  const emailLogId = generateId();
+  const subject = `Atualização sobre sua indicação — ${agencyName}`;
+
+  // Send a simple text-based reversal notification directly via Resend
+  // (no dedicated template needed — just a plain transactional notice)
+  const { Resend } = await import("resend");
+  const apiKey = process.env["RESEND_API_KEY"];
+  let sendResult: { success: boolean; messageId?: string; error?: string } = { success: false, error: "RESEND_API_KEY not configured" };
+  if (apiKey) {
+    const resend = new Resend(apiKey);
+    const firstName = referrerName.split(" ")[0];
+    const htmlBody = `<p>Olá, <strong>${firstName}</strong>!</p>
+<p>Informamos que uma reserva vinculada à sua indicação foi cancelada pela agência <strong>${agencyName}</strong>.</p>
+<p>Infelizmente, com o cancelamento, a indicação correspondente foi revertida e o bônus associado foi descontado do seu saldo.</p>
+<p>Se você tiver dúvidas, entre em contato com a agência.</p>
+<p>Obrigado por continuar indicando!</p>
+<p>— ${agencyName}</p>`;
+    try {
+      const { data, error } = await resend.emails.send({
+        from: `${agencyName} <reservas@resend.visitecrm.com>`,
+        to: [referrer.email],
+        subject,
+        html: htmlBody,
+      });
+      sendResult = error
+        ? { success: false, error: error.message }
+        : { success: true, messageId: data?.id };
+    } catch (err) {
+      sendResult = { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  await db.insert(emailLogsTable).values({
+    id: emailLogId,
+    tenantId,
+    reservationId: null,
+    recipient: referrer.email,
+    subject,
+    status: sendResult.success ? "sent" : "failed",
+    messageId: sendResult.messageId ?? null,
+    errorMessage: sendResult.error ?? null,
+  });
+
+  logger.info({ emailLogId, referrerId, tenantId, success: sendResult.success }, "[email-queue] Referral reversed email sent");
+}
+
+// ── Referral: upgrade de tier (#137) ─────────────────────────────────────────
+
+export async function dispatchReferralTierUpgradeEmail(
+  referrerId: string,
+  tenantId: string,
+  newTierLevel: string,
+  newTierLabel: string,
+  bonusMultiplier: number,
+): Promise<void> {
+  const [referrer] = await db
+    .select({ name: clientsTable.name, email: clientsTable.email })
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, referrerId), eq(clientsTable.tenantId, tenantId)))
+    .limit(1);
+
+  if (!referrer?.email) {
+    logger.warn({ referrerId, tenantId }, "[email-queue] Referral tier upgrade: referrer has no email — skipping");
+    return;
+  }
+
+  const [tenant] = await db
+    .select({ name: tenantsTable.name, logoUrl: tenantsTable.logoUrl })
+    .from(tenantsTable)
+    .where(eq(tenantsTable.id, tenantId))
+    .limit(1);
+
+  const agencyName = tenant?.name ?? "Agência";
+
+  const result = await sendReferralTierUpgradeEmail({
+    referrerName: referrer.name ?? referrer.email,
+    referrerEmail: referrer.email,
+    newTierLabel,
+    newTierLevel,
+    bonusMultiplier,
+    agencyName,
+    agencyLogo: tenant?.logoUrl ?? null,
+  });
+
+  const emailLogId = generateId();
+  await db.insert(emailLogsTable).values({
+    id: emailLogId,
+    tenantId,
+    reservationId: null,
+    recipient: referrer.email,
+    subject: `Você subiu para o nível ${newTierLabel}! — ${agencyName}`,
+    status: result.success ? "sent" : "failed",
+    messageId: result.messageId ?? null,
+    errorMessage: result.error ?? null,
+  });
+
+  logger.info({ emailLogId, referrerId, tenantId, newTierLevel, success: result.success }, "[email-queue] Referral tier upgrade email sent");
 }

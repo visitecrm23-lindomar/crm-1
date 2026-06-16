@@ -12,9 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-
-const formatCurrency = (v: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+import { formatCurrency } from "@/lib/utils";
 
 function GrowthBadge({ value }: { value: number | null | undefined }) {
   if (value == null) return <span className="text-xs text-muted-foreground">—</span>;

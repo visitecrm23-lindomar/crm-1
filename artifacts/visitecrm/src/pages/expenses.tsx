@@ -128,7 +128,7 @@ export default function Expenses() {
   const handleMarkPaid = async (id: string) => {
     await updateExpense.mutateAsync({
       id,
-      data: { status: "paid", paymentDate: new Date().toISOString().split("T")[0] }
+      data: { status: EXPENSE_STATUS.PAID, paymentDate: new Date().toISOString().split("T")[0] }
     });
     refetch();
   };
@@ -233,9 +233,9 @@ export default function Expenses() {
           <SelectTrigger className="w-[140px]"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos os status</SelectItem>
-            <SelectItem value="pending">Pendente</SelectItem>
-            <SelectItem value="paid">Pago</SelectItem>
-            <SelectItem value="overdue">Vencido</SelectItem>
+            <SelectItem value={EXPENSE_STATUS.PENDING}>Pendente</SelectItem>
+            <SelectItem value={EXPENSE_STATUS.PAID}>Pago</SelectItem>
+            <SelectItem value={EXPENSE_STATUS.OVERDUE}>Vencido</SelectItem>
           </SelectContent>
         </Select>
         <Select value={categoryFilter || "all"} onValueChange={v => setCategoryFilter(v === "all" ? "" : v)}>

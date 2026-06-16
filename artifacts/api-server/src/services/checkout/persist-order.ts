@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { dispatchReferralConvertedEmail } from "../../queues/email-helpers";
+import { dispatchReferralConvertedEmail, dispatchReferralTierUpgradeEmail } from "../../queues/email-helpers";
 import { dispatchWhatsAppReferralConverted } from "../../queues/whatsapp-helpers";
 import {
   storesTable,
@@ -24,7 +24,7 @@ import {
 } from "../../lib/reservation-number";
 import { upsertCheckoutClient } from "./checkout-user";
 import { lockTripsForCheckout, lockProductsForCheckout } from "./order-locks";
-import { recordReferralConversion } from "./referral-conversion";
+import { recordReferralConversion, type ReferralConversionResult } from "./referral-conversion";
 import type { Tx } from "./tx";
 import { RESERVATION_STATUS } from "@workspace/permissions";
 
@@ -308,6 +308,7 @@ async function writeReservationsAndDeals(
 
 export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<PersistOrderResult> {
   let reservationClientId: string | null = null;
+  let referralConversionResult: ReferralConversionResult | null = null;
 
   await db.transaction(async (tx) => {
     const lockedTripTypes = await lockTripsForCheckout(tx, {
@@ -348,7 +349,7 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
     }
 
     if (args.appliedReferralCode && args.appliedReferralReferrerId) {
-      await recordReferralConversion(tx, {
+      referralConversionResult = await recordReferralConversion(tx, {
         tenantId: args.store.tenantId,
         referrerId: args.appliedReferralReferrerId,
         referralCode: args.appliedReferralCode,
@@ -410,6 +411,18 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
     ).catch((err) => {
       console.error("[checkout/persist-order] Failed to dispatch referral-converted email:", err);
     });
+
+    if (referralConversionResult?.tierUpgraded) {
+      dispatchReferralTierUpgradeEmail(
+        args.appliedReferralReferrerId,
+        args.store.tenantId,
+        referralConversionResult.newTierLevel,
+        referralConversionResult.newTierLabel,
+        referralConversionResult.bonusMultiplier,
+      ).catch((err) => {
+        console.error("[checkout/persist-order] Failed to dispatch referral tier-upgrade email:", err);
+      });
+    }
 
     dispatchWhatsAppReferralConverted({
       referrerId: args.appliedReferralReferrerId,

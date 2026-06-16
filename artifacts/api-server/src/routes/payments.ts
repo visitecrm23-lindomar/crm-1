@@ -12,6 +12,7 @@ import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { ADMIN_ROLES, MANAGEMENT_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { syncReservationPaymentStatus } from "../lib/reservation-payments";
+import { enqueueNewBookingNotificationEmail } from "../queues/email-helpers";
 import { ROLES, RESERVATION_STATUS, COMMISSION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, type PaymentStatus, type PaymentType, type ExpenseStatus } from "@workspace/permissions";
 import { parsePaymentStatus, parsePaymentType, parseExpenseStatus } from "../lib/status-validators";
 import { moveDealToStage } from "../services/pipeline-automation";
@@ -521,6 +522,10 @@ router.post("/payments", async (req, res, next: NextFunction): Promise<void> => 
       moveDealToStage({ tenantId: me.tenantId, clientId: effectiveClientId, reservationId: parsed.data.reservationId ?? null, targetStageName: "Pagamento Confirmado", forwardOnly: true })
         .catch((err) => req.log.error({ err }, "Error moving deal to Pagamento Confirmado on payment create"));
     }
+    if (parsed.data.reservationId && explicitStatus === PAYMENT_STATUS.PAID && parsed.data.type === PAYMENT_TYPE.RECEIVABLE) {
+      enqueueNewBookingNotificationEmail(parsed.data.reservationId, me.tenantId)
+        .catch((err) => req.log.error({ err }, "Error enqueueing agency new-booking notification on payment creation"));
+    }
   } catch (err) {
     req.log.error({ err }, "Error creating payment");
     next(err);
@@ -619,6 +624,10 @@ router.patch("/payments/:id", async (req, res, next: NextFunction): Promise<void
     res.json(formatPayment(payment));
     CalendarSyncService.syncPayment(req.params.id)
       .catch((err) => req.log.warn({ err, context: "payment.update", paymentId: req.params.id }, "Calendar sync falhou — continuando"));
+    if (payment.reservationId && payment.status === PAYMENT_STATUS.PAID && payment.type === PAYMENT_TYPE.RECEIVABLE) {
+      enqueueNewBookingNotificationEmail(payment.reservationId, me.tenantId)
+        .catch((err) => req.log.error({ err }, "Error enqueueing agency new-booking notification on payment update"));
+    }
   } catch (err) {
     req.log.error({ err }, "Error updating payment");
     next(err);

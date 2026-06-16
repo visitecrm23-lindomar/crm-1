@@ -11,7 +11,9 @@ import { ReferralExpiredEmail, type ReferralExpiredEmailProps } from './template
 import { ReferralExpiringSoonEmail, type ReferralExpiringSoonEmailProps } from './templates/referral-expiring-soon';
 import { ReferralBonusReleasedEmail, type ReferralBonusReleasedEmailProps } from './templates/referral-bonus-released';
 import { ReferralWelcomeEmail, type ReferralWelcomeEmailProps } from './templates/referral-welcome';
+import { ReferralTierUpgradeEmail, type ReferralTierUpgradeEmailProps } from './templates/referral-tier-upgrade';
 export type { ReferralWelcomeEmailProps };
+export type { ReferralTierUpgradeEmailProps };
 
 export type { ReservationCancellationEmailProps };
 
@@ -657,6 +659,35 @@ export async function sendReferralExpiringSoonEmail(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[email] Unexpected error sending referral expiring soon email:', message);
+    return { success: false, error: message };
+  }
+}
+
+export async function sendReferralTierUpgradeEmail(
+  props: ReferralTierUpgradeEmailProps
+): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const { data, error } = await resend.emails.send({
+      from: `${props.agencyName} <reservas@resend.visitecrm.com>`,
+      to: [props.referrerEmail],
+      subject: `Você subiu para o nível ${props.newTierLabel}! — ${props.agencyName}`,
+      react: React.createElement(ReferralTierUpgradeEmail, props),
+    });
+
+    if (error) {
+      console.error('[email] Failed to send referral tier upgrade email:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Unexpected error sending referral tier upgrade email:', message);
     return { success: false, error: message };
   }
 }

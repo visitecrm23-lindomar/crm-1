@@ -131,6 +131,7 @@ function fmtCurrency(v: string | number | null | undefined) {
   const n = typeof v === "string" ? parseFloat(v) : v;
   return _fmtCurrencyLib(isNaN(n) ? 0 : n);
 }
+
 const fmtDate = (v: string | null | undefined) => v ? _formatDate(v) : "—";
 const fmtDateTime = (v: string | null | undefined) => v ? _formatDateTime(v) : "—";
 
@@ -156,6 +157,7 @@ type EnrichedReferral = Referral & {
   referrerWhatsapp?: string | null;
   bonusReleasesAt?: string | null;
   bonusBlocked?: boolean;
+  referrerSuccessfulReferrals?: number | null;
 };
 
 export default function Indicacoes() {
@@ -1287,9 +1289,16 @@ export default function Indicacoes() {
                         <TableCell className="font-mono font-semibold text-primary">{r.code}</TableCell>
                         <TableCell>
                           <div>
-                            <p className="font-medium text-sm leading-tight">
-                              {r.referrerName ?? r.referrerId.slice(0, 8)}
-                            </p>
+                            <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                              <p className="font-medium text-sm leading-tight">
+                                {r.referrerName ?? r.referrerId.slice(0, 8)}
+                              </p>
+                              {(() => {
+                                const conversions = (r as EnrichedReferral).referrerSuccessfulReferrals ?? 0;
+                                const t = computeAdminTier(conversions, settings?.tiersConfig);
+                                return <ReferralTierBadge level={t.level} label={t.label} />;
+                              })()}
+                            </div>
                             {r.referrerEmail && (
                               <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                                 <Mail className="w-2.5 h-2.5 shrink-0" />

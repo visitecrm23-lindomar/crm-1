@@ -39,6 +39,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Search, Hotel, Star, Images, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { GalleryUpload } from "@/components/gallery-upload";
+import { formatCurrency } from "@/lib/utils";
 
 const ACCOMMODATION_TYPES = ["Hotel", "Pousada", "Resort", "Hostel", "Chácara", "Chalé", "Outro"];
 const AMENITY_OPTIONS = [
@@ -56,7 +57,7 @@ const statusLabel: Record<string, string> = { active: "Ativo", inactive: "Inativ
 
 function fmtCurrency(v: number | null | undefined) {
   if (v == null) return "—";
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return formatCurrency(v);
 }
 
 export default function Hospedagens() {

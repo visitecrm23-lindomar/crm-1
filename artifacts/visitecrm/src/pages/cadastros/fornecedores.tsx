@@ -36,6 +36,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Search, Eye } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
 
 const SUPPLIER_TYPES = ["Transporte", "Hospedagem", "Alimentação", "Guia", "Seguro", "Outro"];
 const BANK_OPTIONS = ["Nubank", "Bradesco", "Itaú", "Santander", "Caixa", "BB", "Sicoob", "Outro"];
@@ -49,7 +50,7 @@ const statusLabel: Record<string, string> = {
 };
 
 function fmtCurrency(v: number) {
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return formatCurrency(v);
 }
 
 const expenseStatusLabel: Record<string, string> = {

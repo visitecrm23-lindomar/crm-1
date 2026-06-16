@@ -195,6 +195,7 @@ router.get("/referrals", async (req, res): Promise<void> => {
       referrerClientEmail: clientsTable.email,
       referrerClientWhatsapp: clientsTable.whatsapp,
       referrerClientPhone: clientsTable.phone,
+      referrerSuccessfulReferrals: clientsTable.successfulReferrals,
     }).from(referralsTable)
       .leftJoin(clientsTable, and(
         eq(referralsTable.referrerId, clientsTable.id),
@@ -231,7 +232,7 @@ router.get("/referrals", async (req, res): Promise<void> => {
     }
 
     const BONUS_LOCK_DAYS = 30;
-    const referrals = rows.map(({ referrerClientName, referrerClientEmail, referrerClientWhatsapp, referrerClientPhone, ...r }) => {
+    const referrals = rows.map(({ referrerClientName, referrerClientEmail, referrerClientWhatsapp, referrerClientPhone, referrerSuccessfulReferrals, ...r }) => {
       const tracking = trackingMap.get(r.code);
       const bonusReleasesAt = r.convertedAt
         ? new Date(new Date(r.convertedAt).getTime() + BONUS_LOCK_DAYS * 24 * 60 * 60 * 1000)
@@ -245,6 +246,7 @@ router.get("/referrals", async (req, res): Promise<void> => {
         referrerEmail: referrerClientEmail ?? r.referrerEmail,
         referrerPhone: referrerClientPhone ?? r.referrerPhone,
         referrerWhatsapp: referrerClientWhatsapp ?? null,
+        referrerSuccessfulReferrals: referrerSuccessfulReferrals ?? 0,
         lastVisit: r.lastVisit ?? tracking?.lastVisit ?? null,
         visitsCount: Math.max(r.visitsCount ?? 0, tracking?.visitsCount ?? 0),
         bonusReleasesAt: bonusReleasesAt?.toISOString() ?? null,

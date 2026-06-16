@@ -33,7 +33,14 @@ export interface RecordReferralArgs {
   reservationId?: string | null;
 }
 
-export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs): Promise<void> {
+export interface ReferralConversionResult {
+  tierUpgraded: boolean;
+  newTierLevel: string;
+  newTierLabel: string;
+  bonusMultiplier: number;
+}
+
+export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs): Promise<ReferralConversionResult> {
   const {
     tenantId, referrerId, referralCode, referredClientId,
     customerEmail, customerName, discountAmount, discountValue, discountType,
@@ -134,6 +141,9 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
       .where(eq(referralsTable.id, referralId));
   }
 
+  // Compute tier BEFORE increment to detect upgrade
+  const tierBefore = computeReferralTier(currentCompleted, refSettings?.tiersConfig ?? null);
+
   await tx.update(clientsTable)
     .set({
       totalReferrals: sql`COALESCE(total_referrals, 0) + 1`,
@@ -141,6 +151,11 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
       referralEarnings: sql`COALESCE(referral_earnings, 0) + ${bonusAmount.toFixed(2)}`,
     })
     .where(eq(clientsTable.id, referrerId));
+
+  // Detect tier upgrade: if the new count crosses a tier threshold, fire email
+  const newCompleted = currentCompleted + 1;
+  const tierAfter = computeReferralTier(newCompleted, refSettings?.tiersConfig ?? null);
+  const tierUpgraded = tierAfter.tier.level !== tierBefore.tier.level;
 
   if (referredClientId) {
     await tx.update(clientsTable)
@@ -170,6 +185,14 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
         eq(referralTrackingTable.referralCode, referralCode),
       ));
   }
+
+  // Return tier upgrade info for the caller to dispatch email outside the transaction
+  const conversionResult: ReferralConversionResult = {
+    tierUpgraded,
+    newTierLevel: tierAfter.tier.level,
+    newTierLabel: tierAfter.tier.label,
+    bonusMultiplier: tierAfter.tier.bonusMultiplier,
+  };
 
   const pointsPerReferral = refSettings ? Number(refSettings.pointsPerReferral ?? 0) : 0;
   if (pointsPerReferral > 0) {
@@ -243,4 +266,6 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
       }
     }
   }
+
+  return conversionResult;
 }

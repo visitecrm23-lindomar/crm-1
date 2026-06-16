@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { EXPENSE_CATEGORY_LABELS } from "@/lib/labels";
+import { COMMISSION_STATUS, EXPENSE_STATUS, TRIP_STATUS } from "@workspace/permissions";
 
 const fmt = (v: number) => formatCurrency(v);
 const fmtCompact = (v: number) => {
@@ -168,7 +169,7 @@ export default function Analytics() {
   const { data: summary, isLoading } = useGetDashboardSummary();
   const { data: chartData } = useGetDashboardRevenueChart({ period });
   const { data: paymentSummary } = useGetPaymentsSummary();
-  const { data: tripsData } = useListTrips({ limit: 20, status: "published" });
+  const { data: tripsData } = useListTrips({ limit: 20, status: TRIP_STATUS.PUBLISHED });
   const { data: reservationsData } = useListReservations({ limit: 100 });
   const { data: commissionsRaw } = useListCommissions();
   const { data: expensesAllData } = useListExpenses({ limit: 500 });
@@ -195,7 +196,7 @@ export default function Analytics() {
     commissions.forEach(c => {
       const entry = map.get(c.userId) ?? { userId: c.userId, total: 0, paid: 0 };
       entry.total += parseFloat(c.commissionAmount);
-      if (c.status === "paid") entry.paid += parseFloat(c.commissionAmount);
+      if (c.status === COMMISSION_STATUS.PAID) entry.paid += parseFloat(c.commissionAmount);
       map.set(c.userId, entry);
     });
     return Array.from(map.values())
@@ -227,7 +228,7 @@ export default function Analytics() {
   const expensePaidThisMonth = useMemo(() => {
     const now = new Date();
     return (expensesAllData?.data ?? [])
-      .filter(e => e.status === "paid" && e.paymentDate && new Date(e.paymentDate).getMonth() === now.getMonth() && new Date(e.paymentDate).getFullYear() === now.getFullYear())
+      .filter(e => e.status === EXPENSE_STATUS.PAID && e.paymentDate && new Date(e.paymentDate).getMonth() === now.getMonth() && new Date(e.paymentDate).getFullYear() === now.getFullYear())
       .reduce((s, e) => s + parseFloat(String(e.amount)), 0);
   }, [expensesAllData]);
 

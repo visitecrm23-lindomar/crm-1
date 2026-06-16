@@ -11,7 +11,7 @@ import {
 import { eq, and, type SQL } from "drizzle-orm";
 import { format, addHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { GoogleCalendarService, refreshTokenIfNeeded } from "./calendar-service";
+import { GoogleCalendarService, refreshTokenIfNeeded, withCalendarRetry } from "./calendar-service";
 import { generateId } from "../id";
 import { logger } from "../logger";
 import { RESERVATION_STATUS, PAYMENT_STATUS, TRIP_STATUS } from "@workspace/permissions";
@@ -57,7 +57,7 @@ async function upsertCalendarEvent(
   };
 
   if (existing) {
-    const updated = await service.updateEvent(existing.googleEventId, eventData, logCtx);
+    const updated = await withCalendarRetry(() => service.updateEvent(existing.googleEventId, eventData, logCtx));
     if (updated) {
       await db.update(calendarEventsTable).set({
         title: eventData.summary,
@@ -71,7 +71,7 @@ async function upsertCalendarEvent(
       logger.warn({ ...logCtx, googleEventId: existing.googleEventId }, "calendar-sync: updateEvent failed; DB record kept for retry");
     }
   } else {
-    const googleEvent = await service.createEvent(eventData, logCtx);
+    const googleEvent = await withCalendarRetry(() => service.createEvent(eventData, logCtx));
     if (!googleEvent) {
       logger.warn(logCtx, "calendar-sync: createEvent failed; no DB record persisted");
       return;

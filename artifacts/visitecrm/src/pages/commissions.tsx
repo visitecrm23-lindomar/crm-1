@@ -88,12 +88,12 @@ export default function Commissions() {
   const failedSyncReservations = useMemo(() => failedSyncData?.data ?? [], [failedSyncData]);
 
   const handleApprove = async (id: string) => {
-    await updateCommission.mutateAsync({ id, data: { status: "approved" } });
+    await updateCommission.mutateAsync({ id, data: { status: COMMISSION_STATUS.APPROVED } });
     refetchCommissions();
   };
 
   const handlePay = async (id: string) => {
-    await updateCommission.mutateAsync({ id, data: { status: "paid", paidAt: new Date().toISOString() } });
+    await updateCommission.mutateAsync({ id, data: { status: COMMISSION_STATUS.PAID, paidAt: new Date().toISOString() } });
     refetchCommissions();
   };
 
@@ -282,9 +282,9 @@ export default function Commissions() {
               <SelectTrigger className="w-[160px]"><SelectValue placeholder="Filtrar status" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="pending">Pendente</SelectItem>
-                <SelectItem value="approved">Aprovada</SelectItem>
-                <SelectItem value="paid">Paga</SelectItem>
+                <SelectItem value={COMMISSION_STATUS.PENDING}>Pendente</SelectItem>
+                <SelectItem value={COMMISSION_STATUS.APPROVED}>Aprovada</SelectItem>
+                <SelectItem value={COMMISSION_STATUS.PAID}>Paga</SelectItem>
               </SelectContent>
             </Select>
           )}

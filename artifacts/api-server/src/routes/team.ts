@@ -7,16 +7,16 @@ import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { ADMIN_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
 import { ROLES } from "@workspace/permissions";
+import { ForbiddenError, NotFoundError, ValidationError, ConflictError, AppError } from "../lib/errors";
 
 const router = Router();
 
-router.get("/team/members", async (req, res): Promise<void> => {
+router.get("/team/members", async (req, res, next): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ALL_STAFF_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Acesso negado" });
-      return;
+      next(new ForbiddenError("Acesso negado", "FORBIDDEN_ROLE")); return;
     }
     const members = await db.select().from(usersTable).where(eq(usersTable.tenantId, me.tenantId));
     res.json(members.map(u => ({
@@ -30,18 +30,16 @@ router.get("/team/members", async (req, res): Promise<void> => {
       createdAt: u.createdAt.toISOString(),
     })));
   } catch (err) {
-    req.log.error({ err }, "Error listing team members");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/team/invites", async (req, res): Promise<void> => {
+router.get("/team/invites", async (req, res, next): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Apenas gestores podem ver convites pendentes" });
-      return;
+      next(new ForbiddenError("Apenas gestores podem ver convites pendentes", "FORBIDDEN_ROLE")); return;
     }
     const invites = await db.select().from(invitesTable).where(eq(invitesTable.tenantId, me.tenantId));
     res.json(invites.map(i => ({
@@ -54,8 +52,7 @@ router.get("/team/invites", async (req, res): Promise<void> => {
       createdAt: i.createdAt.toISOString(),
     })));
   } catch (err) {
-    req.log.error({ err }, "Error listing invites");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -64,20 +61,18 @@ const InviteBody = z.object({
   role: z.enum([ROLES.SALES, ROLES.AGENCY_MANAGER, ROLES.SUPPORT]).optional().default(ROLES.SALES),
 });
 
-router.post("/team/invite", async (req, res): Promise<void> => {
+router.post("/team/invite", async (req, res, next): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
 
     if (!ADMIN_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Apenas gestores podem convidar membros" });
-      return;
+      next(new ForbiddenError("Apenas gestores podem convidar membros", "FORBIDDEN_ROLE")); return;
     }
 
     const parsed = InviteBody.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: parsed.error.message });
-      return;
+      next(new ValidationError(parsed.error.message, "VALIDATION_ERROR")); return;
     }
 
     const { email, role } = parsed.data;
@@ -91,8 +86,7 @@ router.post("/team/invite", async (req, res): Promise<void> => {
       .limit(1);
 
     if (existingUser) {
-      res.status(409).json({ error: "Este e-mail já pertence a um membro da equipe" });
-      return;
+      next(new ConflictError("Este e-mail já pertence a um membro da equipe", "CONFLICT")); return;
     }
 
     const now = new Date();
@@ -107,8 +101,7 @@ router.post("/team/invite", async (req, res): Promise<void> => {
       .limit(1);
 
     if (pendingInvite) {
-      res.status(409).json({ error: "Já existe um convite pendente para este e-mail" });
-      return;
+      next(new ConflictError("Já existe um convite pendente para este e-mail", "CONFLICT")); return;
     }
 
     const inviteId = generateId();
@@ -167,19 +160,17 @@ router.post("/team/invite", async (req, res): Promise<void> => {
         : `Convite registrado para ${email}. O convidado deve criar uma conta com este e-mail.`,
     });
   } catch (err) {
-    req.log.error({ err }, "Error inviting team member");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/team/invites/:id", async (req, res): Promise<void> => {
+router.delete("/team/invites/:id", async (req, res, next): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
 
     if (!ADMIN_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Apenas gestores podem cancelar convites" });
-      return;
+      next(new ForbiddenError("Apenas gestores podem cancelar convites", "FORBIDDEN_ROLE")); return;
     }
 
     const [invite] = await db.select()
@@ -201,24 +192,21 @@ router.delete("/team/invites/:id", async (req, res): Promise<void> => {
 
     res.json({ ok: true });
   } catch (err) {
-    req.log.error({ err }, "Error deleting invite");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/team/members/:id", async (req, res): Promise<void> => {
+router.delete("/team/members/:id", async (req, res, next): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
 
     if (!ADMIN_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Apenas gestores podem remover membros" });
-      return;
+      next(new ForbiddenError("Apenas gestores podem remover membros", "FORBIDDEN_ROLE")); return;
     }
 
     if (req.params.id === me.id) {
-      res.status(400).json({ error: "Você não pode remover a si mesmo da equipe" });
-      return;
+      next(new ValidationError("Você não pode remover a si mesmo da equipe", "SELF_REMOVE")); return;
     }
 
     await db.update(usersTable)
@@ -230,8 +218,7 @@ router.delete("/team/members/:id", async (req, res): Promise<void> => {
 
     res.json({ ok: true });
   } catch (err) {
-    req.log.error({ err }, "Error removing team member");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

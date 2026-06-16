@@ -38,6 +38,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Search, Bus, Eye } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
 
 const VEHICLE_TYPES = ["Ônibus", "Micro-ônibus", "Van", "Carro", "Barco", "Avião", "Outro"];
 const AMENITY_OPTIONS = [
@@ -66,7 +67,7 @@ interface VehicleExtra {
 
 function fmtCurrency(v: number | null | undefined) {
   if (v == null) return "—";
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return formatCurrency(v);
 }
 
 const LAYOUT_OPTIONS = [

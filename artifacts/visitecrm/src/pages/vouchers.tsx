@@ -42,9 +42,10 @@ import {
   Users,
   FileText,
 } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
 
 function fmtCurrency(v: number) {
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return formatCurrency(v);
 }
 
 const STATUS_LABELS: Record<string, string> = {

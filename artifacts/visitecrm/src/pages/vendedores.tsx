@@ -54,11 +54,12 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ROLES, COMMISSION_STATUS } from "@workspace/permissions";
+import { formatCurrency } from "@/lib/utils";
 
 function fmtCurrency(v: number | string | null | undefined) {
   if (v == null) return "R$ 0,00";
   const n = typeof v === "string" ? parseFloat(v) : v;
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return formatCurrency(isNaN(n) ? 0 : n);
 }
 
 interface SellerStats {
