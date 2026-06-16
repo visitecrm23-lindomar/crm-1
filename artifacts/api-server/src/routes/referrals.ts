@@ -8,6 +8,7 @@ import { ADMIN_ROLES } from '../lib/tenant';
 import { REFERRAL_STATUS } from "@workspace/permissions";
 import { enqueueReferralBonusPaidEmail, dispatchReferralExpiringSoonEmail } from "../queues/email-helpers";
 import { dispatchWhatsAppReferralBonusPaid } from "../queues/whatsapp-helpers";
+import { sendWhatsAppMessage, interpolateWhatsAppMessage } from "../lib/whatsapp";
 import { DEFAULT_TIERS as DEFAULT_TIERS_CONFIG, computeReferralTier } from "../lib/referral-tiers";
 import type { ReferralTier } from "../lib/referral-tiers";
 
@@ -1571,6 +1572,72 @@ router.get("/referrals/active-campaign", async (req, res): Promise<void> => {
     res.json({ ...campaign, bonusValue: Number(campaign.bonusValue) });
   } catch (err) {
     req.log.error({ err }, "Error fetching active referral campaign");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/referral-settings/whatsapp-test", async (req, res): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const parsed = z.object({
+      phone: z.string().min(8),
+      messageType: z.enum(["converted", "bonusPaid", "share"]),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "Parâmetros inválidos" }); return; }
+
+    const [settings] = await db.select().from(referralSettingsTable)
+      .where(eq(referralSettingsTable.tenantId, me.tenantId)).limit(1);
+
+    const [tenant] = await db.select({ name: tenantsTable.name })
+      .from(tenantsTable).where(eq(tenantsTable.id, me.tenantId)).limit(1);
+
+    const agencyName = tenant?.name ?? "Agência";
+    const bonusValue = parseFloat(String(settings?.bonusValue ?? "10")) || 10;
+    const bonusValFormatted = bonusValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const bonusCurrencyFormatted = bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+    let message: string;
+    const { messageType } = parsed.data;
+
+    if (messageType === "converted") {
+      const template = settings?.whatsappConvertedMessage ??
+        "Boa notícia! {{nome}} usou seu código {{codigo}} e comprou com a {{agencia}}. Seu bônus de R$ {{valor}} está sendo processado.";
+      message = interpolateWhatsAppMessage(template, { nome: "Maria Silva", codigo: "TESTE123", agencia: agencyName, valor: bonusValFormatted });
+    } else if (messageType === "bonusPaid") {
+      const template = settings?.whatsappBonusPaidMessage ??
+        "Seu bônus de R$ {{valor}} foi pago! Obrigado por indicar clientes para a {{agencia}}.";
+      message = interpolateWhatsAppMessage(template, { nome: "João Silva", codigo: "TESTE123", bonus: bonusCurrencyFormatted, valor: bonusValFormatted, agencia: agencyName });
+    } else {
+      const template = settings?.shareMessage ?? "Use meu código de indicação e ganhe desconto na sua viagem!";
+      message = template
+        .replace(/\{\{?nome\}?\}/g, "João")
+        .replace(/\{\{?codigo\}?\}/g, "TESTE123")
+        .replace(/\{\{?link\}?\}/g, "https://exemplo.com.br/ind/TESTE123")
+        .replace(/\{\{?bonus\}?\}/g, bonusCurrencyFormatted);
+    }
+
+    const result = await sendWhatsAppMessage(parsed.data.phone, message);
+
+    if (!result.success) {
+      const error = result.error ?? "unknown_error";
+      let detail: string;
+      if (error === "credentials_not_configured") {
+        detail = "Credenciais Z-API não configuradas. Verifique as variáveis ZAPI_INSTANCE_ID e ZAPI_TOKEN.";
+      } else if (error.startsWith("zapi_")) {
+        detail = `Z-API retornou status ${error.replace("zapi_", "")}. Verifique se o número está correto e a instância está conectada.`;
+      } else {
+        detail = `Erro de rede: ${error}`;
+      }
+      res.status(502).json({ success: false, error, detail });
+      return;
+    }
+
+    res.json({ success: true, phone: parsed.data.phone });
+  } catch (err) {
+    req.log.error({ err }, "Error sending WhatsApp test message");
     res.status(500).json({ error: "Internal server error" });
   }
 });

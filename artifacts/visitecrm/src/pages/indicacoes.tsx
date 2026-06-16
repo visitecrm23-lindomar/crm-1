@@ -86,6 +86,7 @@ import {
   Megaphone,
   Flame,
   Pencil,
+  Send,
 } from "lucide-react";
 import { ReferralAnalyticsCharts } from "@/components/referral-analytics-charts";
 
@@ -171,6 +172,9 @@ export default function Indicacoes() {
 
   const [analyticsPeriod, setAnalyticsPeriod] = useState<ReferralAnalyticsPeriod>(90);
   const { data: analyticsData } = useGetReferralAnalytics(analyticsPeriod);
+
+  const [whatsappTestPhone, setWhatsappTestPhone] = useState("");
+  const [whatsappTestState, setWhatsappTestState] = useState<Record<string, { loading?: boolean; success?: boolean; error?: string }>>({});
 
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -522,6 +526,31 @@ export default function Indicacoes() {
       toast({ title: `${successCount} bônus ${successCount === 1 ? "marcado" : "marcados"} como pago${successCount === 1 ? "" : "s"}!` });
     } else {
       toast({ title: `${successCount} pagos, ${failCount} com erro`, variant: "destructive" });
+    }
+  }
+
+  async function testWhatsappTemplate(messageType: "converted" | "bonusPaid" | "share") {
+    const phone = whatsappTestPhone.trim();
+    if (!phone) {
+      toast({ title: "Informe um número de WhatsApp para teste", variant: "destructive" });
+      return;
+    }
+    setWhatsappTestState(prev => ({ ...prev, [messageType]: { loading: true } }));
+    try {
+      const resp = await fetch("/api/referral-settings/whatsapp-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ phone, messageType }),
+      });
+      const data = await resp.json() as { success: boolean; detail?: string; error?: string };
+      if (data.success) {
+        setWhatsappTestState(prev => ({ ...prev, [messageType]: { success: true } }));
+      } else {
+        setWhatsappTestState(prev => ({ ...prev, [messageType]: { error: data.detail ?? data.error ?? "Erro desconhecido" } }));
+      }
+    } catch {
+      setWhatsappTestState(prev => ({ ...prev, [messageType]: { error: "Falha de conexão" } }));
     }
   }
 
@@ -2189,6 +2218,25 @@ export default function Indicacoes() {
                     .replace(/\{bonus\}/g, fmtCurrency(settings?.bonusValue ?? 10))}
                 </p>
               )}
+              {localSettings.whatsappEnabled && (localSettings.shareMessage as string)?.trim() && (
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  {whatsappTestState.share?.success && (
+                    <p className="text-[11px] text-green-600 flex items-center gap-1 mr-auto"><Check className="w-3 h-3" /> Enviado com sucesso!</p>
+                  )}
+                  {whatsappTestState.share?.error && (
+                    <p className="text-[11px] text-red-500 flex items-center gap-1 mr-auto"><XCircle className="w-3 h-3" /> {whatsappTestState.share.error}</p>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!!whatsappTestState.share?.loading}
+                    onClick={() => void testWhatsappTemplate("share")}
+                    className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground border rounded px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {whatsappTestState.share?.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                    Testar via WhatsApp
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="space-y-3 border rounded-lg p-3 bg-indigo-50/50">
@@ -2271,6 +2319,16 @@ export default function Indicacoes() {
                     />
                     <p className="text-[11px] text-muted-foreground">Número configurado na sua instância Z-API. Apenas para referência — as mensagens são enviadas via Z-API.</p>
                   </div>
+                  <div className="space-y-1 border border-dashed border-muted-foreground/30 rounded-md p-2.5 bg-muted/20">
+                    <Label className="text-[11px] font-medium text-muted-foreground">Número de destino para teste</Label>
+                    <Input
+                      className="h-7 text-xs"
+                      value={whatsappTestPhone}
+                      onChange={(e) => setWhatsappTestPhone(e.target.value)}
+                      placeholder="5511999999999 (DDI+DDD+número)"
+                    />
+                    <p className="text-[10px] text-muted-foreground">Use seu próprio WhatsApp para testar os modelos abaixo.</p>
+                  </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Mensagem — conversão confirmada</Label>
                     <textarea
@@ -2314,6 +2372,23 @@ export default function Indicacoes() {
                         })()}
                       </p>
                     )}
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      {whatsappTestState.converted?.success && (
+                        <p className="text-[11px] text-green-600 flex items-center gap-1 mr-auto"><Check className="w-3 h-3" /> Enviado com sucesso!</p>
+                      )}
+                      {whatsappTestState.converted?.error && (
+                        <p className="text-[11px] text-red-500 flex items-center gap-1 mr-auto"><XCircle className="w-3 h-3" /> {whatsappTestState.converted.error}</p>
+                      )}
+                      <button
+                        type="button"
+                        disabled={!!whatsappTestState.converted?.loading}
+                        onClick={() => void testWhatsappTemplate("converted")}
+                        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground border rounded px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {whatsappTestState.converted?.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                        Testar envio
+                      </button>
+                    </div>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Mensagem — bônus pago</Label>
@@ -2361,6 +2436,23 @@ export default function Indicacoes() {
                         })()}
                       </p>
                     )}
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      {whatsappTestState.bonusPaid?.success && (
+                        <p className="text-[11px] text-green-600 flex items-center gap-1 mr-auto"><Check className="w-3 h-3" /> Enviado com sucesso!</p>
+                      )}
+                      {whatsappTestState.bonusPaid?.error && (
+                        <p className="text-[11px] text-red-500 flex items-center gap-1 mr-auto"><XCircle className="w-3 h-3" /> {whatsappTestState.bonusPaid.error}</p>
+                      )}
+                      <button
+                        type="button"
+                        disabled={!!whatsappTestState.bonusPaid?.loading}
+                        onClick={() => void testWhatsappTemplate("bonusPaid")}
+                        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground border rounded px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {whatsappTestState.bonusPaid?.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                        Testar envio
+                      </button>
+                    </div>
                   </div>
                 </>
               )}
