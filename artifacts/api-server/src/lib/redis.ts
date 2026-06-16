@@ -25,11 +25,27 @@ let _lastKnownStatus: "ok" | "degraded" | "unavailable" = "ok";
 const ALERT_RATE_LIMIT_MS = 60 * 60 * 1000; // 1 hour
 
 // ─── Recovery tracking ────────────────────────────────────────────────────────
-// Set to true when an alert email is successfully queued, reset to false after
-// the recovery email is sent (or attempted).  Prevents duplicate recovery emails
-// when resetTransientRedisErrors() is called more than once per recovery event
-// (e.g. both "connect" and "ready" events fire in quick succession).
+// We need to correctly handle two race orderings between alert delivery and
+// the Redis reconnect:
+//
+//  Case A (normal): alert send resolves BEFORE resetTransientRedisErrors runs.
+//    → _hadActiveAlert becomes true, reset sees it, fires recovery.
+//
+//  Case B (fast reconnect): resetTransientRedisErrors runs WHILE the alert
+//    send is still in-flight (promise not yet resolved).
+//    → _alertInFlight is true, reset sets _resetPendingRecovery = true.
+//    → When the send resolves successfully, recovery is fired immediately.
+//
+//  Case C (alert failure): send fails, reset runs afterward.
+//    → Neither _hadActiveAlert nor _alertInFlight is true → no recovery.
+//
+// _hadActiveAlert: true only after confirmed successful alert delivery.
+// _alertInFlight:  true while the sendRedisAlertEmail promise is pending.
+// _resetPendingRecovery: set by resetTransientRedisErrors when _alertInFlight
+//   is true; causes the alert success path to fire recovery immediately.
 let _hadActiveAlert = false;
+let _alertInFlight = false;
+let _resetPendingRecovery = false;
 let _lastRecoveryEmailSentAt: number | null = null;
 const RECOVERY_EMAIL_DEBOUNCE_MS = 60_000; // 1 minute
 
@@ -86,25 +102,33 @@ async function maybeFireRedisAlert(): Promise<void> {
   const dashboardUrl = appUrl ? `${appUrl}/admin` : null;
 
   // Mark the attempt immediately to prevent concurrent duplicate sends.
-  // Reset on failure so the next error can trigger a retry rather than
-  // suppressing alerts for a full hour when delivery itself failed.
+  // _alertInFlight lets resetTransientRedisErrors() know a send is pending
+  // so it can set _resetPendingRecovery instead of silently dropping recovery.
   _lastAlertSentAt = Date.now();
-  _hadActiveAlert = true;
+  _alertInFlight = true;
 
   sendRedisAlertEmail({ to: alertEmail, status: currentStatus, dashboardUrl })
     .then((result) => {
+      _alertInFlight = false;
       if (result.success) {
+        _hadActiveAlert = true;
         logger.warn({ status: currentStatus, to: alertEmail }, "[redis-alert] Alert email sent");
+        // Case B: Redis recovered while we were sending — fire recovery now.
+        if (_resetPendingRecovery) {
+          _resetPendingRecovery = false;
+          void sendRecoveryEmailIfNeeded();
+        }
       } else {
         logger.error({ status: currentStatus, error: result.error }, "[redis-alert] Failed to send alert email — clearing rate-limit so next error can retry");
         _lastAlertSentAt = null;
-        _hadActiveAlert = false;
+        _resetPendingRecovery = false; // abort deferred recovery — no alert was delivered
       }
     })
     .catch((err) => {
       logger.error({ err }, "[redis-alert] Unexpected error sending alert email — clearing rate-limit so next error can retry");
+      _alertInFlight = false;
       _lastAlertSentAt = null;
-      _hadActiveAlert = false;
+      _resetPendingRecovery = false; // abort deferred recovery — no alert was delivered
     });
 }
 
@@ -149,13 +173,19 @@ export function recordTransientRedisError(): void {
 
 export function resetTransientRedisErrors(): void {
   const wasAlerting = _hadActiveAlert;
+  const wasInFlight = _alertInFlight;
   _consecutiveTransientErrors = 0;
   _lastTransientErrorAt = null;
   _lastKnownStatus = "ok";
 
   if (wasAlerting) {
+    // Case A: alert was confirmed delivered before this reset — send recovery now.
     void sendRecoveryEmailIfNeeded();
+  } else if (wasInFlight) {
+    // Case B: alert send is still in-flight — defer recovery until it resolves.
+    _resetPendingRecovery = true;
   }
+  // Case C: no alert was sent (or it failed) — nothing to recover from.
 }
 
 export function getRedisStatus(): "ok" | "degraded" | "unavailable" {
