@@ -414,6 +414,13 @@
       "when": 1782300000000,
       "tag": "0058_backfill_seat_counters",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1782400000000,
+      "tag": "0059_redis_alert_email_setting",
+      "breakpoints": true
     }
   ]
 }

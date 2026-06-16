@@ -473,6 +473,58 @@ export async function sendRedisAlertEmail(opts: SendRedisAlertEmailOptions): Pro
   }
 }
 
+export interface SendRedisRecoveryEmailOptions {
+  to: string;
+  /** Absolute URL to the admin dashboard. When null the CTA button is omitted. */
+  dashboardUrl: string | null;
+}
+
+export async function sendRedisRecoveryEmail(opts: SendRedisRecoveryEmailOptions): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const dashboardButton = opts.dashboardUrl
+      ? `<p style="margin-top: 24px;">
+          <a href="${opts.dashboardUrl}" style="background: #16a34a; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none;">
+            Acessar o painel de administração
+          </a>
+        </p>`
+      : '';
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+        <h2 style="color: #16a34a;">✅ Infraestrutura Normalizada — Redis Recuperado</h2>
+        <p>O Redis voltou ao estado <strong>normal</strong> após um período de instabilidade.</p>
+        <p>As filas de e-mail, jobs em background e demais funcionalidades dependentes do Redis estão operando normalmente.</p>
+        ${dashboardButton}
+        <p style="margin-top: 24px; color: #6b7280; font-size: 12px;">
+          Horário da recuperação: ${new Date().toISOString()}
+        </p>
+      </div>
+    `;
+
+    const { data, error } = await resend.emails.send({
+      from: 'VisiteCRM <reservas@resend.visitecrm.com>',
+      to: [opts.to],
+      subject: '[VisiteCRM] Redis recuperado — sistema normalizado',
+      html,
+    });
+
+    if (error) {
+      console.error('[email] Failed to send Redis recovery email:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Unexpected error sending Redis recovery email:', message);
+    return { success: false, error: message };
+  }
+}
+
 export async function sendReferralWelcomeEmail(
   props: ReferralWelcomeEmailProps
 ): Promise<SendEmailResult> {

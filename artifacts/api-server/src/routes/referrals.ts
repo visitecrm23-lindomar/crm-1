@@ -161,6 +161,12 @@ router.get("/referrals", async (req, res): Promise<void> => {
     const status = req.query.status as string | undefined;
     const search = req.query.search as string | undefined;
 
+    const validReferralStatuses = Object.values(REFERRAL_STATUS);
+    if (status && !validReferralStatuses.includes(status as (typeof validReferralStatuses)[number])) {
+      res.status(400).json({ error: `Invalid status. Must be one of: ${validReferralStatuses.join(", ")}` });
+      return;
+    }
+
     const conditions = [eq(referralsTable.tenantId, me.tenantId)];
     if (status) conditions.push(eq(referralsTable.status, status));
     if (search) {
@@ -1016,6 +1022,12 @@ router.get("/referrals/export", async (req, res): Promise<void> => {
     const bonusPaidParam = req.query.bonusPaid as string | undefined;
     const fraudFlagParam = req.query.fraudFlag as string | undefined;
     const expiringSoonParam = req.query.expiringSoon as string | undefined;
+
+    const validReferralStatusesExport = Object.values(REFERRAL_STATUS);
+    if (status && status !== "all" && !validReferralStatusesExport.includes(status as (typeof validReferralStatusesExport)[number])) {
+      res.status(400).json({ error: `Invalid status. Must be one of: all, ${validReferralStatusesExport.join(", ")}` });
+      return;
+    }
 
     const conditions = [eq(referralsTable.tenantId, me.tenantId)];
     if (status && status !== "all") conditions.push(eq(referralsTable.status, status));

@@ -2146,6 +2146,104 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     // trips (seats) + clients (referralEarnings) + referrals (status) + commissions (cancel) + reservations = 5
     expect(tx.update).toHaveBeenCalledTimes(5);
   });
+
+  // -------------------------------------------------------------------------
+  it("does not double-apply loyalty refund when a previously refunded reservation is re-refunded (idempotency — refunded path)", async () => {
+    // Simulates: refund → reopen (manual admin action) → refund again.
+    // The second refund detects an existing "refund" loyaltyTransaction
+    // for this reservationId and skips the loyalty restore to prevent drift.
+    const app = buildReservationsApp();
+    const existing = makeReservation({
+      discountLoyaltyPoints: 100,
+      discountLoyaltyAmount: "10",
+      clientId: "client-001",
+    });
+    const refunded = { ...existing, status: "refunded" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] Reversal 2 — loyalty member lookup
+    //   [1] Reversal 2 — idempotency check → returns existing "refund" tx → SKIP
+    //   [2] Reversal 4 — payments lookup (empty)
+    //   [3] Reversal 4 — loyalty member lookup (no member found → skip clawback)
+    //   [4] re-fetch updated reservation
+    const tx = buildTxMock([
+      [{ id: "member-001", availablePoints: 300 }],
+      [{ id: "refund-tx-001" }], // existing refund tx → loyalty restore is skipped
+      [],                         // no payments
+      [],                         // Reversal 4 loyalty member lookup → not found, skip clawback
+      [refunded],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "refunded" });
+
+    expect(res.status).toBe(200);
+    // trips (seat restore) + commissions (cancel) + reservations (status update) = 3 updates
+    // loyaltyMembers is NOT updated a second time (idempotency guard fired)
+    expect(tx.update).toHaveBeenCalledTimes(3);
+    // No new loyalty transactions inserted (refund was skipped)
+    const refundTx = capturedInserts.find(
+      (i) => (i as Record<string, unknown>)["type"] === "refund",
+    );
+    expect(refundTx).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
+  it("cancels store order alongside coupon reversal when storefront reservation with both is refunded", async () => {
+    const app = buildReservationsApp();
+    // Reservation from the storefront that also used a coupon; clientId null → no loyalty/referral
+    const existing = makeReservation({
+      storeOrderId: "ORD-2025-REF-010",
+      discountCouponCode: "STORE20",
+      discountCouponAmount: "20",
+      clientId: null,
+    });
+    const refunded = { ...existing, status: "refunded" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] Reversal 1 — store lookup (for coupon)
+    //   [1] Reversal 1 — coupon lookup
+    //   [2] store order lookup by orderNumber
+    //   [3] re-fetch updated reservation
+    const tx = buildTxMock([
+      [{ id: "store-001" }],
+      [{ id: "coupon-001" }],
+      [{ id: "order-ref-010", status: "confirmed" }],
+      [refunded],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "refunded" });
+
+    expect(res.status).toBe(200);
+    // trips (seats) + storeCoupons (usageCount) + commissions + storeOrders + reservations = 5
+    expect(tx.update).toHaveBeenCalledTimes(5);
+
+    // Both the coupon update and the store order cancel must be present together
+    const couponUpdate = capturedUpdates.find((u) => "usageCount" in u.set);
+    expect(couponUpdate).toBeDefined();
+
+    const storeOrderUpdate = capturedUpdates.find(
+      (u) => u.set.status === "cancelled" && "cancelledAt" in u.set,
+    );
+    expect(storeOrderUpdate).toBeDefined();
+  });
 });
 
 // ---------------------------------------------------------------------------

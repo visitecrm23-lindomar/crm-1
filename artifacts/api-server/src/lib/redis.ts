@@ -1,6 +1,8 @@
 import { Redis } from "ioredis";
 import { logger } from "./logger";
-import { sendRedisAlertEmail, sendRedisDailyLimitAlertEmail } from "@workspace/email";
+import { sendRedisAlertEmail, sendRedisRecoveryEmail, sendRedisDailyLimitAlertEmail } from "@workspace/email";
+import { db, platformSettingsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 let _connection: Redis | null = null;
 export let isQueueEnabled = false;
@@ -22,7 +24,35 @@ let _lastAlertSentAt: number | null = null;
 let _lastKnownStatus: "ok" | "degraded" | "unavailable" = "ok";
 const ALERT_RATE_LIMIT_MS = 60 * 60 * 1000; // 1 hour
 
-function maybeFireRedisAlert(): void {
+// ─── Recovery tracking ────────────────────────────────────────────────────────
+// Set to true when an alert email is successfully queued, reset to false after
+// the recovery email is sent (or attempted).  Prevents duplicate recovery emails
+// when resetTransientRedisErrors() is called more than once per recovery event
+// (e.g. both "connect" and "ready" events fire in quick succession).
+let _hadActiveAlert = false;
+let _lastRecoveryEmailSentAt: number | null = null;
+const RECOVERY_EMAIL_DEBOUNCE_MS = 60_000; // 1 minute
+
+// ─── Alert email recipient ────────────────────────────────────────────────────
+// Reads from the `redis_alert_email` platform setting first; falls back to the
+// SUPERADMIN_EMAIL environment variable.  The DB read is intentionally short-
+// lived: if the DB is unreachable we silently fall back to the env var so that
+// alert delivery is not blocked by a secondary outage.
+async function getAlertEmail(): Promise<string | null> {
+  try {
+    const [row] = await db
+      .select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, "redis_alert_email"))
+      .limit(1);
+    if (row?.value?.trim()) return row.value.trim();
+  } catch {
+    // DB unavailable — fall back to env var
+  }
+  return process.env["SUPERADMIN_EMAIL"]?.trim() ?? null;
+}
+
+async function maybeFireRedisAlert(): Promise<void> {
   const currentStatus = getRedisStatus();
 
   if (currentStatus === "ok") {
@@ -43,9 +73,9 @@ function maybeFireRedisAlert(): void {
     if (Date.now() - _lastAlertSentAt < ALERT_RATE_LIMIT_MS) return;
   }
 
-  const superadminEmail = process.env["SUPERADMIN_EMAIL"]?.trim();
-  if (!superadminEmail) {
-    logger.warn("[redis-alert] SUPERADMIN_EMAIL not set — skipping alert email");
+  const alertEmail = await getAlertEmail();
+  if (!alertEmail) {
+    logger.warn("[redis-alert] No alert email configured (set redis_alert_email in platform settings or SUPERADMIN_EMAIL env) — skipping alert email");
     return;
   }
 
@@ -59,32 +89,73 @@ function maybeFireRedisAlert(): void {
   // Reset on failure so the next error can trigger a retry rather than
   // suppressing alerts for a full hour when delivery itself failed.
   _lastAlertSentAt = Date.now();
+  _hadActiveAlert = true;
 
-  sendRedisAlertEmail({ to: superadminEmail, status: currentStatus, dashboardUrl })
+  sendRedisAlertEmail({ to: alertEmail, status: currentStatus, dashboardUrl })
     .then((result) => {
       if (result.success) {
-        logger.warn({ status: currentStatus, to: superadminEmail }, "[redis-alert] Alert email sent");
+        logger.warn({ status: currentStatus, to: alertEmail }, "[redis-alert] Alert email sent");
       } else {
         logger.error({ status: currentStatus, error: result.error }, "[redis-alert] Failed to send alert email — clearing rate-limit so next error can retry");
         _lastAlertSentAt = null;
+        _hadActiveAlert = false;
       }
     })
     .catch((err) => {
       logger.error({ err }, "[redis-alert] Unexpected error sending alert email — clearing rate-limit so next error can retry");
       _lastAlertSentAt = null;
+      _hadActiveAlert = false;
+    });
+}
+
+async function sendRecoveryEmailIfNeeded(): Promise<void> {
+  if (!_hadActiveAlert) return;
+
+  // Debounce: don't send more than once per minute for rapid consecutive resets
+  const now = Date.now();
+  if (_lastRecoveryEmailSentAt !== null && now - _lastRecoveryEmailSentAt < RECOVERY_EMAIL_DEBOUNCE_MS) {
+    return;
+  }
+
+  _hadActiveAlert = false;
+  _lastRecoveryEmailSentAt = now;
+
+  const alertEmail = await getAlertEmail();
+  if (!alertEmail) return;
+
+  const appUrl = (process.env["APP_URL"] ?? "").trim().replace(/\/$/, "");
+  const dashboardUrl = appUrl ? `${appUrl}/admin` : null;
+
+  sendRedisRecoveryEmail({ to: alertEmail, dashboardUrl })
+    .then((result) => {
+      if (result.success) {
+        logger.info({ to: alertEmail }, "[redis-recovery] Recovery email sent");
+      } else {
+        logger.error({ error: result.error }, "[redis-recovery] Failed to send recovery email");
+        _lastRecoveryEmailSentAt = null; // reset so next recovery can retry
+      }
+    })
+    .catch((err) => {
+      logger.error({ err }, "[redis-recovery] Unexpected error sending recovery email");
+      _lastRecoveryEmailSentAt = null;
     });
 }
 
 export function recordTransientRedisError(): void {
   _consecutiveTransientErrors++;
   _lastTransientErrorAt = Date.now();
-  maybeFireRedisAlert();
+  void maybeFireRedisAlert();
 }
 
 export function resetTransientRedisErrors(): void {
+  const wasAlerting = _hadActiveAlert;
   _consecutiveTransientErrors = 0;
   _lastTransientErrorAt = null;
   _lastKnownStatus = "ok";
+
+  if (wasAlerting) {
+    void sendRecoveryEmailIfNeeded();
+  }
 }
 
 export function getRedisStatus(): "ok" | "degraded" | "unavailable" {
@@ -312,47 +383,49 @@ export function maybeSendDailyLimitAlert(stats: UpstashDailyStats): void {
     if (Date.now() - _lastDailyLimitAlertAt < DAILY_LIMIT_ALERT_RATE_LIMIT_MS) return;
   }
 
-  const superadminEmail = process.env["SUPERADMIN_EMAIL"]?.trim();
-  if (!superadminEmail) {
-    logger.warn("[redis-daily-limit] SUPERADMIN_EMAIL not set — skipping alert email");
-    return;
-  }
-
-  const appUrl = (process.env["APP_URL"] ?? "").trim().replace(/\/$/, "");
-  const dashboardUrl = appUrl ? `${appUrl}/admin` : null;
-
   // Mark immediately to prevent concurrent duplicate sends; reset on failure.
   _lastDailyLimitAlertAt = Date.now();
 
-  sendRedisDailyLimitAlertEmail({
-    to: superadminEmail,
-    usagePct: stats.usagePct,
-    commandCount: stats.commandCount,
-    maxCommands: stats.maxCommands,
-    warningThresholdPct: stats.warningThresholdPct,
-    dashboardUrl,
-  })
-    .then((result) => {
-      if (result.success) {
-        logger.warn(
-          { usagePct: Math.round(stats.usagePct * 10) / 10, to: superadminEmail },
-          "[redis-daily-limit] Alert email sent",
-        );
-      } else {
+  void getAlertEmail().then((alertEmail) => {
+    if (!alertEmail) {
+      logger.warn("[redis-daily-limit] No alert email configured — skipping daily limit alert email");
+      _lastDailyLimitAlertAt = null;
+      return;
+    }
+
+    const appUrl = (process.env["APP_URL"] ?? "").trim().replace(/\/$/, "");
+    const dashboardUrl = appUrl ? `${appUrl}/admin` : null;
+
+    sendRedisDailyLimitAlertEmail({
+      to: alertEmail,
+      usagePct: stats.usagePct,
+      commandCount: stats.commandCount,
+      maxCommands: stats.maxCommands,
+      warningThresholdPct: stats.warningThresholdPct,
+      dashboardUrl,
+    })
+      .then((result) => {
+        if (result.success) {
+          logger.warn(
+            { usagePct: Math.round(stats.usagePct * 10) / 10, to: alertEmail },
+            "[redis-daily-limit] Alert email sent",
+          );
+        } else {
+          logger.error(
+            { error: result.error },
+            "[redis-daily-limit] Failed to send alert email — clearing rate-limit so next check can retry",
+          );
+          _lastDailyLimitAlertAt = null;
+        }
+      })
+      .catch((err) => {
         logger.error(
-          { error: result.error },
-          "[redis-daily-limit] Failed to send alert email — clearing rate-limit so next check can retry",
+          { err },
+          "[redis-daily-limit] Unexpected error sending alert email — clearing rate-limit so next check can retry",
         );
         _lastDailyLimitAlertAt = null;
-      }
-    })
-    .catch((err) => {
-      logger.error(
-        { err },
-        "[redis-daily-limit] Unexpected error sending alert email — clearing rate-limit so next check can retry",
-      );
-      _lastDailyLimitAlertAt = null;
-    });
+      });
+  });
 }
 
 /**
