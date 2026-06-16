@@ -165,6 +165,14 @@ vi.mock("../lib/activities.js", () => ({
   writeClientActivity: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Prevents pipeline-automation's db.select()…orderBy() calls from consuming
+// outer mockLimit slots (moveDealToStage is fire-and-forget in the route and
+// runs concurrently with formatReservation, so without this mock it would
+// shift the outer mockLimit queue and break every clientId-bearing test).
+vi.mock("../services/pipeline-automation.js", () => ({
+  moveDealToStage: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("../lib/id.js", () => ({
   generateId: vi.fn(() => "gen-id"),
   generateVoucherCode: vi.fn(() => "VCHR-0001"),
@@ -1794,6 +1802,161 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     //   trips (seat restore) + commissions (cancel) + reservations (status) = 3
     // loyaltyMembers is deliberately absent — idempotency guard prevented the update
     expect(tx3.update).toHaveBeenCalledTimes(3);
+  });
+
+  // -------------------------------------------------------------------------
+  // Concurrent cancellations — loyalty clawback race guard
+  //
+  // Scenario: two PATCH → cancelled requests race to cancel the same reservation.
+  // Without a row-level lock, both pass the idempotency SELECT (seeing no prior
+  // "cancellation" tx) before either commits, yielding two clawback inserts.
+  //
+  // Gate coordination (makes the test lock-sensitive):
+  //
+  //   tx1.insert.values() pauses until tx2 signals it has called execute(),
+  //   giving tx2 a window to run its idempotency check while tx1 is mid-commit.
+  //
+  //   tx2.execute() releases tx1's gate AND blocks on tx2Gate until tx1 commits.
+  //
+  //   tx2's idempotency select is dynamic: returns [] when tx1HasCommitted=false
+  //   (race window) and [existing tx] when tx1HasCommitted=true (post-lock).
+  //
+  // WITH lock  → tx2.execute() triggers both gates; idempotency check runs after
+  //              tx1 commits (tx1HasCommitted=true) → finds existing tx → skips
+  //              insert → capturedInserts has exactly 1 entry ✓
+  //
+  // WITHOUT lock → tx2 never calls execute(); tx1Gate times out (10 ms); tx2
+  //               ran its idempotency check while tx1HasCommitted=false → saw []
+  //               → also inserted a clawback → capturedInserts has 2 entries → FAIL
+  // -------------------------------------------------------------------------
+  it("concurrent cancellations: only one loyalty clawback is written and points are decremented exactly once (race guard)", async () => {
+    const app = buildReservationsApp();
+
+    const existing = makeReservation({ clientId: "client-001", status: "confirmed" });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    let tx1HasCommitted = false;
+
+    let releaseTx1: () => void;
+    const tx1Gate = new Promise<void>(r => { releaseTx1 = r; });
+
+    let releaseTx2: () => void;
+    const tx2Gate = new Promise<void>(r => { releaseTx2 = r; });
+
+    // tx1 — first to acquire the FOR UPDATE lock, runs the full clawback.
+    // insert.values() pauses (max 10 ms) waiting for tx2 to reach execute(),
+    // ensuring both transactions overlap before tx1 finally commits.
+    let tx1Idx = 0;
+    const tx1SelectQueue: unknown[][] = [
+      [],                                                            // [0] payments
+      [{ id: "member-001", availablePoints: 50, totalPoints: 50 }], // [1] loyaltyMember
+      [],                                                            // [2] idempotency → no prior tx
+      [{ points: 50 }],                                             // [3] earnTransactions
+    ];
+    const tx1 = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      insert: vi.fn().mockImplementation(() => ({
+        values: vi.fn().mockImplementation(async (vals: Record<string, unknown>) => {
+          capturedInserts.push(vals);
+          await Promise.race([tx1Gate, new Promise<void>(r => setTimeout(r, 10))]);
+          return [];
+        }),
+      })),
+      update: vi.fn().mockImplementation(() => ({
+        set: vi.fn().mockImplementation((setArg: Record<string, unknown>) => {
+          capturedUpdates.push({ table: "unknown", set: setArg });
+          return { where: vi.fn().mockResolvedValue([]) };
+        }),
+      })),
+      select: vi.fn().mockImplementation(() => {
+        const idx = tx1Idx++;
+        return makeChain(idx < tx1SelectQueue.length ? tx1SelectQueue[idx] as unknown[] : [cancelled]);
+      }),
+    };
+
+    // tx2 — blocked at execute() until tx1 commits.
+    // Idempotency select is dynamic: reflects the DB state at lock acquisition.
+    //   WITH lock: returns [existing tx] (tx1 has committed)
+    //   WITHOUT lock: returns [] (tx1 still mid-commit → double-insert!)
+    let tx2Idx = 0;
+    const tx2 = {
+      execute: vi.fn().mockImplementation(async () => {
+        releaseTx1();   // unblock tx1's insert.values() gate
+        await tx2Gate;  // wait here until tx1 commits
+      }),
+      insert: vi.fn().mockImplementation(() => ({
+        values: vi.fn().mockImplementation((vals: Record<string, unknown>) => {
+          capturedInserts.push(vals);
+          return Promise.resolve([]);
+        }),
+      })),
+      update: vi.fn().mockImplementation(() => ({
+        set: vi.fn().mockImplementation((setArg: Record<string, unknown>) => {
+          capturedUpdates.push({ table: "unknown", set: setArg });
+          return { where: vi.fn().mockResolvedValue([]) };
+        }),
+      })),
+      select: vi.fn().mockImplementation(() => {
+        const idx = tx2Idx++;
+        if (idx === 0) return makeChain([]);
+        if (idx === 1) return makeChain([{ id: "member-001", availablePoints: 50, totalPoints: 50 }]);
+        if (idx === 2) {
+          // Idempotency: dynamic based on whether tx1 has committed.
+          // tx2.execute() blocked until tx1 committed → tx1HasCommitted=true here (WITH lock).
+          // Without the execute() call tx2 reaches this immediately → tx1HasCommitted=false.
+          return makeChain(tx1HasCommitted ? [{ id: "cancel-tx-001" }] : []);
+        }
+        // idx=3: refetch (WITH lock, idempotency skipped earnTxs)
+        //        OR earnTxs (WITHOUT lock, idempotency returned [] → would insert)
+        if (idx === 3) return makeChain(tx1HasCommitted ? [cancelled] : [{ points: 50 }]);
+        // idx=4: refetch (only WITHOUT lock — after earnTxs was at idx=3)
+        return makeChain([cancelled]);
+      }),
+    };
+
+    let txCallCount = 0;
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => {
+      if (txCallCount++ === 0) {
+        const result = await cb(tx1);
+        tx1HasCommitted = true;
+        releaseTx2(); // tx1 committed; allow tx2 to proceed past execute()
+        return result;
+      }
+      return cb(tx2);
+    });
+
+    // Universal outer-mock: has all fields needed for both trip and client
+    // formatReservation lookups, making the test robust to any interleaving of
+    // the two concurrent requests' outer db.select() calls.
+    const universalMock = { ...FAKE_TRIP, email: "c@example.com", whatsapp: "11999", cpf: null, birthDate: null };
+    mockLimit
+      .mockResolvedValueOnce([existing]) // rRA: request A (or B, whichever resolves first)
+      .mockResolvedValueOnce([existing]) // rRA: request B (or A)
+      .mockResolvedValue([universalMock]); // all formatReservation lookups (trip, client, autoRetryLog)
+
+    const [res1, res2] = await Promise.all([
+      request(app).patch("/api/reservations/res-001").send({ status: "cancelled" }),
+      request(app).patch("/api/reservations/res-001").send({ status: "cancelled" }),
+    ]);
+
+    expect(res1.status).toBe(200);
+    expect(res2.status).toBe(200);
+
+    // Exactly ONE "cancellation" loyalty transaction must be written.
+    // The second concurrent request must detect the clawback via the idempotency
+    // guard (after being serialized by the FOR UPDATE lock) and skip its INSERT.
+    const cancellationTxs = capturedInserts.filter(
+      (i) => (i as Record<string, unknown>)["type"] === "cancellation",
+    );
+    expect(cancellationTxs).toHaveLength(1);
+    expect((cancellationTxs[0] as Record<string, unknown>)["points"]).toBe(-50);
+    expect((cancellationTxs[0] as Record<string, unknown>)["referenceId"]).toBe("res-001");
+
+    // The loyalty member must be updated exactly once (50 → 0).
+    // A second update would indicate the double-deduction bug was not caught.
+    const memberUpdates = capturedUpdates.filter((u) => "availablePoints" in u.set);
+    expect(memberUpdates).toHaveLength(1);
+    expect((memberUpdates[0] as { set: Record<string, unknown> }).set.availablePoints).toBe(0);
   });
 });
 

@@ -1173,6 +1173,16 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
         // clawback both kinds, so we always look up the loyalty member when a clientId
         // exists — not just when payments exist.
         if (existing.clientId) {
+          // Acquire a row-level lock on the loyalty member BEFORE the idempotency
+          // check.  Without this lock, two concurrent cancellation requests can both
+          // pass the idempotency SELECT (seeing no existing "cancellation" transaction)
+          // before either one commits its INSERT, resulting in two clawback transactions
+          // and a double-deduction of points.  The FOR UPDATE lock serializes concurrent
+          // transactions: the second request blocks here until the first commits, then
+          // re-checks the idempotency condition and correctly finds the existing record.
+          await tx.execute(
+            sql`SELECT id FROM loyalty_members WHERE tenant_id = ${me.tenantId} AND client_id = ${existing.clientId} LIMIT 1 FOR UPDATE`
+          );
           const reservationPayments = await tx
             .select({ id: paymentsTable.id })
             .from(paymentsTable)
