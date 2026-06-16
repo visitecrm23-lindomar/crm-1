@@ -285,11 +285,11 @@ router.get("/trips/:tripId/financial-report", async (req, res, next: NextFunctio
       confirmedCount,
       pendingCount,
       cancelledCount,
-      totalRevenue,
-      totalPaid,
-      totalPending,
-      totalExpenses,
-      netProfit,
+      totalRevenue: roundMoney(totalRevenue),
+      totalPaid: roundMoney(totalPaid),
+      totalPending: roundMoney(totalPending),
+      totalExpenses: roundMoney(totalExpenses),
+      netProfit: roundMoney(netProfit),
       revenueByMethod,
       expensesByCategory,
     });
@@ -349,7 +349,14 @@ router.get("/payments/summary", async (req, res, next: NextFunction): Promise<vo
       }
     }
 
-    res.json({ totalReceivable, totalPayable, overdueReceivable, overduePayable, collectedThisMonth, paidThisMonth });
+    res.json({
+      totalReceivable: roundMoney(totalReceivable),
+      totalPayable: roundMoney(totalPayable),
+      overdueReceivable: roundMoney(overdueReceivable),
+      overduePayable: roundMoney(overduePayable),
+      collectedThisMonth: roundMoney(collectedThisMonth),
+      paidThisMonth: roundMoney(paidThisMonth),
+    });
   } catch (err) {
     req.log.error({ err }, "Error fetching payments summary");
     next(err);

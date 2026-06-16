@@ -15,7 +15,7 @@ import { enqueueCommissionSync } from "../queues/commission-sync-helper";
 import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 import { broadcastSeatUpdate } from "../lib/realtime";
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
-import { applyDiscounts, computeBalance, computeEffectiveLoyaltyPoints } from "../lib/pricing";
+import { applyDiscounts, computeBalance, computeEffectiveLoyaltyPoints, roundMoney } from "../lib/pricing";
 import { applyActiveCampaignBonus } from "../lib/referral-campaigns";
 import { calculateTier, loyaltyAwardPointsForReservation } from "../lib/loyalty-helpers";
 import { ROLES, DEAL_STATUS, RESERVATION_STATUS, REFERRAL_STATUS, COMMISSION_STATUS, STORE_ORDER_STATUS, STORE_PAYMENT_STATUS, type ReservationStatus } from "@workspace/permissions";
@@ -224,7 +224,7 @@ router.post("/reservations/validate-coupon", async (req, res, next: NextFunction
     }
     discountAmount = Math.min(discountAmount, subtotal);
 
-    res.json({ valid: true, discountAmount: Math.round(discountAmount * 100) / 100, couponCode: code, message: null });
+    res.json({ valid: true, discountAmount: roundMoney(discountAmount), couponCode: code, message: null });
   } catch (err) {
     next(err);
   }
@@ -601,7 +601,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
         serverCouponAmount = Number(coupon.value);
       }
       if (coupon.maxDiscountAmount != null) serverCouponAmount = Math.min(serverCouponAmount, Number(coupon.maxDiscountAmount));
-      serverCouponAmount = Math.round(Math.min(serverCouponAmount, baseValue) * 100) / 100;
+      serverCouponAmount = roundMoney(Math.min(serverCouponAmount, baseValue));
     }
 
     let serverLoyaltyMemberId: string | null = null;
@@ -631,7 +631,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
       serverLoyaltyMemberId = member.id;
       serverLoyaltyPoints = requestedPoints;
       serverRealPerPoint = Number(program.realPerPoint ?? "0");
-      serverLoyaltyAmount = Math.round(requestedPoints * serverRealPerPoint * 100) / 100;
+      serverLoyaltyAmount = roundMoney(requestedPoints * serverRealPerPoint);
     }
 
     let serverReferralCode: string | null = null;
@@ -668,7 +668,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
       serverReferralReferrerId = referrer.id;
       // Discount for the referred customer (percentage of base value)
       serverReferralDiscountPct = Number(refSettings?.discountValue ?? "5");
-      serverReferralAmount = Math.round((baseValue * (serverReferralDiscountPct / 100)) * 100) / 100;
+      serverReferralAmount = roundMoney(baseValue * (serverReferralDiscountPct / 100));
       // Bonus earned by the referrer
       serverReferralBonusValue = Number(refSettings?.bonusValue ?? "10");
 

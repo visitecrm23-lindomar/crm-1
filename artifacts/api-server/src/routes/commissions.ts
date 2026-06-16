@@ -6,6 +6,7 @@ import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { COMMISSION_STATUS } from "@workspace/permissions";
+import { roundMoney } from "../lib/pricing";
 
 const router = Router();
 
@@ -112,7 +113,7 @@ router.get("/commissions/calculate", async (req, res): Promise<void> => {
         ? (amount * parseFloat(String(rule.value))) / 100
         : parseFloat(String(rule.value));
       res.json({
-        commissionAmount: Math.round(commissionAmount * 100) / 100,
+        commissionAmount: roundMoney(commissionAmount),
         commissionRate: parseFloat(String(rule.value)),
         commissionType: rule.type ?? "percentage",
         source: "rule",
@@ -140,11 +141,11 @@ router.get("/commissions/calculate", async (req, res): Promise<void> => {
     } else if (seller.commissionType === "fixed" && fixed > 0) {
       res.json({ commissionAmount: fixed, commissionRate: null, commissionType: "fixed", source: "seller", saleAmount: amount });
     } else if (seller.commissionType === "hybrid") {
-      const pct = rate > 0 ? Math.round((amount * rate / 100) * 100) / 100 : 0;
-      const commissionAmount = Math.round((pct + fixed) * 100) / 100;
+      const pct = rate > 0 ? roundMoney(amount * rate / 100) : 0;
+      const commissionAmount = roundMoney(pct + fixed);
       res.json({ commissionAmount, commissionRate: rate, commissionType: "hybrid", source: "seller", saleAmount: amount });
     } else if (rate > 0) {
-      const commissionAmount = Math.round((amount * rate / 100) * 100) / 100;
+      const commissionAmount = roundMoney(amount * rate / 100);
       res.json({ commissionAmount, commissionRate: rate, commissionType: "percentage", source: "seller", saleAmount: amount });
     } else {
       res.json({ commissionAmount: 0, commissionRate: 0, commissionType: "percentage", source: "none", saleAmount: amount });

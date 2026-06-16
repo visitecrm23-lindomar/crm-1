@@ -519,6 +519,60 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     expect(res.body).toHaveProperty("totalAmount");
   });
 
+  // ── 5b. Phase 3 trip seat lock (race-condition path inside transaction) ──
+
+  it("returns 409 with INSUFFICIENT_SEATS from Phase 3 seat lock when seats taken mid-checkout", async () => {
+    const tripProduct = { ...FAKE_PRODUCT, tripId: "trip-001" };
+    const availableTrip = { availableSeats: 10 };
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
+      .mockResolvedValueOnce([tripProduct])           // product fetch
+      .mockResolvedValueOnce([availableTrip])         // Phase 1.5 seat check (passes)
+      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (loadReservationContext)
+      .mockResolvedValue([]);
+
+    mockTransaction.mockImplementationOnce(async (cb: (tx: unknown) => Promise<unknown>) => {
+      const tx = buildTxMock();
+      (tx.execute as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        rows: [{ id: "trip-001", available_seats: 0, type: "EX" }],
+      });
+      return cb(tx);
+    });
+
+    const res = await request(buildApp())
+      .post("/api/public/store/minha-loja/orders")
+      .send(VALID_BODY);
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("INSUFFICIENT_SEATS");
+  });
+
+  it("returns 404 with TRIP_NOT_FOUND from Phase 3 seat lock when trip deleted mid-checkout", async () => {
+    const tripProduct = { ...FAKE_PRODUCT, tripId: "trip-001" };
+    const availableTrip = { availableSeats: 10 };
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
+      .mockResolvedValueOnce([tripProduct])           // product fetch
+      .mockResolvedValueOnce([availableTrip])         // Phase 1.5 seat check (passes)
+      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (loadReservationContext)
+      .mockResolvedValue([]);
+
+    mockTransaction.mockImplementationOnce(async (cb: (tx: unknown) => Promise<unknown>) => {
+      const tx = buildTxMock();
+      (tx.execute as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ rows: [] });
+      return cb(tx);
+    });
+
+    const res = await request(buildApp())
+      .post("/api/public/store/minha-loja/orders")
+      .send(VALID_BODY);
+
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe("TRIP_NOT_FOUND");
+  });
+
   // ── 6. Referral code validation ───────────────────────────────────────────
 
   it("does not apply discount when referral code is expired (past expirationDays)", async () => {

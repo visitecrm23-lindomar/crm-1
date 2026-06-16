@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { clientsTable, tripsTable, reservationsTable, paymentsTable, dealsTable, npsResponsesTable, expensesTable, passengersTable, loyaltyMembersTable } from "@workspace/db";
 import { eq, and, gte, lte, lt, desc, sql, inArray } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
+import { roundMoney } from "../lib/pricing";
 import { ROLES, RESERVATION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, DEAL_STATUS, TRIP_STATUS } from "@workspace/permissions";
 
 const router = Router();
@@ -95,9 +96,9 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
         totalClients: Number(clientCount?.count ?? 0),
         newClientsThisMonth: Number(newClientCount?.count ?? 0),
         totalTrips: 0, activeTrips: 0,
-        totalRevenue: Math.round(totalRevenue * 100) / 100,
-        revenueThisMonth: Math.round(revenueThisMonth * 100) / 100,
-        pendingPayments: Math.round(pendingAmount * 100) / 100,
+        totalRevenue: roundMoney(totalRevenue),
+        revenueThisMonth: roundMoney(revenueThisMonth),
+        pendingPayments: roundMoney(pendingAmount),
         totalReservations, confirmedReservations, occupancyRate: 0,
         averageNps: null,
         openDeals: Number(dealCount?.count ?? 0),
@@ -234,9 +235,9 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
       newClientsThisMonth: Number(newClientCount?.count ?? 0),
       totalTrips: Number(tripCount?.count ?? 0),
       activeTrips: Number(activeTripCount?.count ?? 0),
-      totalRevenue: Math.round(totalRevenue * 100) / 100,
-      revenueThisMonth: Math.round(revenueThisMonth * 100) / 100,
-      pendingPayments: Math.round(pendingPaymentsAmt * 100) / 100,
+      totalRevenue: roundMoney(totalRevenue),
+      revenueThisMonth: roundMoney(revenueThisMonth),
+      pendingPayments: roundMoney(pendingPaymentsAmt),
       totalReservations: Number(reservationCount?.count ?? 0),
       confirmedReservations: Number(confirmedReservationCount?.count ?? 0),
       occupancyRate: Math.round(occupancyRate * 10) / 10,
@@ -245,24 +246,24 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
       openDeals: Number(dealCount?.count ?? 0),
       dealsPipelineValue: Number(dealValue?.total ?? 0),
       pipelineLeads: Number(dealCount?.count ?? 0),
-      receivedToday: Math.round(receivedToday * 100) / 100,
-      toReceiveNext3Days: Math.round(toReceiveNext3Days * 100) / 100,
+      receivedToday: roundMoney(receivedToday),
+      toReceiveNext3Days: roundMoney(toReceiveNext3Days),
       reservationsToday: Number(todayReservationCount?.count ?? 0),
-      avgTicket: Math.round(Number(avgTicketRow?.avg ?? 0) * 100) / 100,
+      avgTicket: roundMoney(Number(avgTicketRow?.avg ?? 0)),
       activeClientsCount: Number(activeClientsRow?.count ?? 0),
-      totalExpenses: Math.round(Number(totalExpensesRow?.total ?? 0) * 100) / 100,
+      totalExpenses: roundMoney(Number(totalExpensesRow?.total ?? 0)),
       cancelledReservations: Number(cancelledReservationCount?.count ?? 0),
-      receivedFromActiveTrips: Math.round(receivedFromActiveTrips * 100) / 100,
-      pendingFromActiveTrips: Math.round(pendingFromActiveTrips * 100) / 100,
-      totalPayable: Math.round(totalPayable * 100) / 100,
+      receivedFromActiveTrips: roundMoney(receivedFromActiveTrips),
+      pendingFromActiveTrips: roundMoney(pendingFromActiveTrips),
+      totalPayable: roundMoney(totalPayable),
       avgReservationsPerTrip: Number(activeTripCount?.count ?? 0) > 0
         ? Math.round((Number(confirmedReservationCount?.count ?? 0) / Number(activeTripCount?.count ?? 1)) * 10) / 10
         : 0,
-      totalFaturamento: Math.round(totalFaturamento * 100) / 100,
+      totalFaturamento: roundMoney(totalFaturamento),
       salesThisMonth: Number(salesThisMonthRow?.count ?? 0),
       pendingReservations: Number(pendingReservationsRow?.count ?? 0),
       overduePaymentsCount: Number(overduePaymentsRow?.count ?? 0),
-      overduePayments: Math.round(Number(overduePaymentsRow?.amount ?? 0) * 100) / 100,
+      overduePayments: roundMoney(Number(overduePaymentsRow?.amount ?? 0)),
       loyaltyPointsIssued: Number(loyaltyPointsRow?.total ?? 0),
       retentionRate,
       tripsThisMonth: Number(tripsThisMonthRow?.count ?? 0),

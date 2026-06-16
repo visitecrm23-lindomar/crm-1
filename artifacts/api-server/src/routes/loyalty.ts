@@ -7,6 +7,7 @@ import { requireAuth } from "../lib/tenant";
 import { loyaltyAwardPoints, calculateTier } from "../lib/loyalty-helpers";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { ROLES, PAYMENT_STATUS, PAYMENT_TYPE } from "@workspace/permissions";
+import { roundMoney } from "../lib/pricing";
 
 const router = Router();
 
@@ -133,7 +134,7 @@ router.get("/clients/:clientId/loyalty", async (req, res): Promise<void> => {
     const availablePoints = member.availablePoints ?? 0;
     const realPerPoint = Number(program.realPerPoint ?? "0");
     const minRedeemPoints = program.minRedeemPoints ?? 1;
-    const maxRedeemableAmount = Math.round(availablePoints * realPerPoint * 100) / 100;
+    const maxRedeemableAmount = roundMoney(availablePoints * realPerPoint);
 
     res.json({
       memberId: member.id,
