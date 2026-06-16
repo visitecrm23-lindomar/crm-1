@@ -691,3 +691,48 @@ export async function sendReferralTierUpgradeEmail(
     return { success: false, error: message };
   }
 }
+
+export interface SendReferralReversedEmailProps {
+  referrerName: string;
+  referrerEmail: string;
+  agencyName: string;
+  agencyLogo?: string | null;
+}
+
+export async function sendReferralReversedEmail(
+  props: SendReferralReversedEmailProps
+): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const firstName = props.referrerName.split(' ')[0];
+    const subject = `Atualização sobre sua indicação — ${props.agencyName}`;
+    const htmlBody = `<p>Olá, <strong>${firstName}</strong>!</p>
+<p>Informamos que uma reserva vinculada à sua indicação foi cancelada pela agência <strong>${props.agencyName}</strong>.</p>
+<p>Infelizmente, com o cancelamento, a indicação correspondente foi revertida e o bônus associado foi descontado do seu saldo.</p>
+<p>Se você tiver dúvidas, entre em contato com a agência.</p>
+<p>Obrigado por continuar indicando!</p>
+<p>— ${props.agencyName}</p>`;
+
+    const { data, error } = await resend.emails.send({
+      from: `${props.agencyName} <reservas@resend.visitecrm.com>`,
+      to: [props.referrerEmail],
+      subject,
+      html: htmlBody,
+    });
+
+    if (error) {
+      console.error('[email] Failed to send referral reversed email:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Unexpected error sending referral reversed email:', message);
+    return { success: false, error: message };
+  }
+}

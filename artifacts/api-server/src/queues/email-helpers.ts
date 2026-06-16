@@ -3,7 +3,7 @@ import { eq, and, inArray, isNull } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { getEmailQueue, getCancellationEmailQueue, getNewBookingNotificationEmailQueue, getReferralEmailQueue } from "./index";
 import type { ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData, ReferralBonusReleasedEmailJobData } from "./index";
-import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail, sendReferralTierUpgradeEmail } from "@workspace/email";
+import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail, sendReferralTierUpgradeEmail, sendReferralReversedEmail } from "@workspace/email";
 import { ROLES } from "@workspace/permissions";
 import { logger } from "../lib/logger";
 import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps, ReferralWelcomeEmailProps, ReferralTierUpgradeEmailProps } from "@workspace/email";
@@ -1279,34 +1279,11 @@ export async function dispatchReferralReversedEmail(
   const emailLogId = generateId();
   const subject = `Atualização sobre sua indicação — ${agencyName}`;
 
-  // Send a simple text-based reversal notification directly via Resend
-  // (no dedicated template needed — just a plain transactional notice)
-  const { Resend } = await import("resend");
-  const apiKey = process.env["RESEND_API_KEY"];
-  let sendResult: { success: boolean; messageId?: string; error?: string } = { success: false, error: "RESEND_API_KEY not configured" };
-  if (apiKey) {
-    const resend = new Resend(apiKey);
-    const firstName = referrerName.split(" ")[0];
-    const htmlBody = `<p>Olá, <strong>${firstName}</strong>!</p>
-<p>Informamos que uma reserva vinculada à sua indicação foi cancelada pela agência <strong>${agencyName}</strong>.</p>
-<p>Infelizmente, com o cancelamento, a indicação correspondente foi revertida e o bônus associado foi descontado do seu saldo.</p>
-<p>Se você tiver dúvidas, entre em contato com a agência.</p>
-<p>Obrigado por continuar indicando!</p>
-<p>— ${agencyName}</p>`;
-    try {
-      const { data, error } = await resend.emails.send({
-        from: `${agencyName} <reservas@resend.visitecrm.com>`,
-        to: [referrer.email],
-        subject,
-        html: htmlBody,
-      });
-      sendResult = error
-        ? { success: false, error: error.message }
-        : { success: true, messageId: data?.id };
-    } catch (err) {
-      sendResult = { success: false, error: err instanceof Error ? err.message : String(err) };
-    }
-  }
+  const sendResult = await sendReferralReversedEmail({
+    referrerName,
+    referrerEmail: referrer.email,
+    agencyName,
+  });
 
   await db.insert(emailLogsTable).values({
     id: emailLogId,
