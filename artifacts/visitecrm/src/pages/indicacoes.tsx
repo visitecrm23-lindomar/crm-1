@@ -2276,9 +2276,32 @@ export default function Indicacoes() {
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-y"
                       value={localSettings.whatsappConvertedMessage as string ?? ""}
                       onChange={(e) => setLocalSettings((s) => ({ ...s, whatsappConvertedMessage: e.target.value }))}
-                      placeholder="Boa notícia! {{nome}} usou seu código {{codigo}} e comprou com a {{agencia}}. Seu bônus de R$ {{valor}} está sendo processado."
+                      placeholder="Boa notícia! {nome} usou seu código {codigo} e comprou com a {agencia}. Seu bônus de R$ {valor} está sendo processado."
                     />
-                    <p className="text-[11px] text-muted-foreground">Variáveis: {"{{nome}}"}, {"{{codigo}}"}, {"{{agencia}}"}, {"{{valor}}"}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Variáveis:{" "}
+                      <code className="bg-muted px-1 rounded">{"{nome}"}</code> nome do indicado,{" "}
+                      <code className="bg-muted px-1 rounded">{"{codigo}"}</code> código de indicação,{" "}
+                      <code className="bg-muted px-1 rounded">{"{agencia}"}</code> nome da agência,{" "}
+                      <code className="bg-muted px-1 rounded">{"{valor}"}</code> valor do bônus.
+                    </p>
+                    {(localSettings.whatsappConvertedMessage as string)?.trim() && (
+                      <p className="text-[11px] text-muted-foreground bg-muted/50 border rounded px-2 py-1.5">
+                        <span className="font-medium text-muted-foreground">Pré-visualização:</span>{" "}
+                        {(() => {
+                          const sub = (tpl: string, key: string, value: string) =>
+                            tpl.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value)
+                               .replace(new RegExp(`\\{${key}\\}`, "g"), value);
+                          const valorFormatted = (settings?.bonusValue ?? 10).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                          let msg = localSettings.whatsappConvertedMessage as string;
+                          msg = sub(msg, "nome", "Maria");
+                          msg = sub(msg, "codigo", "JOAO123");
+                          msg = sub(msg, "agencia", "Minha Agência");
+                          msg = sub(msg, "valor", valorFormatted);
+                          return msg;
+                        })()}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Mensagem — bônus pago</Label>
