@@ -181,6 +181,7 @@ export default function MyReferralPage({ slug, store }: Props) {
   );
   const [qrPreviewUrl, setQrPreviewUrl] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
+  const [showQrDialog, setShowQrDialog] = useState(false);
   const { data: activeCampaign } = useGetActiveCampaign();
   const [countdown, setCountdown] = useState<string>("");
 
@@ -345,12 +346,11 @@ export default function MyReferralPage({ slug, store }: Props) {
     }
   }, [shareLink, referralCode, store.name, primaryColor, store.logoUrl]);
 
-  const handleShowQR = useCallback(async () => {
-    if (!shareLink || !referralCode) return;
+  const generateQR = useCallback(async (link: string) => {
     setQrLoading(true);
     try {
       const canvas = document.createElement("canvas");
-      await QRCode.toCanvas(canvas, shareLink, {
+      await QRCode.toCanvas(canvas, link, {
         width: 512,
         margin: 2,
         errorCorrectionLevel: "H",
@@ -385,11 +385,16 @@ export default function MyReferralPage({ slug, store }: Props) {
 
       setQrPreviewUrl(canvas.toDataURL("image/png"));
     } catch {
-      toast({ title: "Erro ao gerar QR Code", description: "Tente novamente em instantes.", variant: "destructive" });
+      // silently ignore – thumbnail simply won't appear
     } finally {
       setQrLoading(false);
     }
-  }, [shareLink, referralCode, primaryColor, store.logoUrl, toast]);
+  }, [primaryColor, store.logoUrl]);
+
+  useEffect(() => {
+    if (!shareLink) return;
+    generateQR(shareLink);
+  }, [shareLink, generateQR]);
 
   const handleDownloadQR = useCallback(() => {
     if (!qrPreviewUrl || !referralCode) return;
@@ -701,20 +706,41 @@ export default function MyReferralPage({ slug, store }: Props) {
             )}
           </div>
 
-          {/* QR Code preview */}
-          <Button
-            variant="outline"
-            className="w-full gap-2"
-            onClick={handleShowQR}
-            disabled={qrLoading}
-          >
-            {qrLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <QrCode className="w-4 h-4" />
+          {/* QR Code inline thumbnail */}
+          <div className="flex items-center gap-3 rounded-xl border p-3 bg-muted/30">
+            <button
+              type="button"
+              aria-label="Ver QR Code completo"
+              className="shrink-0 rounded-lg border bg-white shadow-sm overflow-hidden w-16 h-16 flex items-center justify-center hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
+              onClick={() => setShowQrDialog(true)}
+              disabled={qrLoading || !qrPreviewUrl}
+            >
+              {qrLoading ? (
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              ) : qrPreviewUrl ? (
+                <img src={qrPreviewUrl} alt="QR Code" className="w-full h-full object-contain" />
+              ) : (
+                <QrCode className="w-6 h-6 text-muted-foreground" />
+              )}
+            </button>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium leading-tight">QR Code de indicação</p>
+              <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
+                {qrLoading ? "Gerando..." : qrPreviewUrl ? "Toque para ampliar, baixar ou compartilhar" : "Indisponível"}
+              </p>
+            </div>
+            {qrPreviewUrl && !qrLoading && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="shrink-0 gap-1.5 text-xs"
+                onClick={() => setShowQrDialog(true)}
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                Ver
+              </Button>
             )}
-            Gerar QR Code
-          </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -911,7 +937,7 @@ export default function MyReferralPage({ slug, store }: Props) {
       </Card>
 
       {/* QR Code preview dialog */}
-      <Dialog open={!!qrPreviewUrl} onOpenChange={(open) => { if (!open) setQrPreviewUrl(null); }}>
+      <Dialog open={showQrDialog} onOpenChange={setShowQrDialog}>
         <DialogContent className="max-w-xs w-full">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
