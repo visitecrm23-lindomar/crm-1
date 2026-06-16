@@ -1169,7 +1169,15 @@ router.get("/trips/:id/passengers/export", async (req, res, next: NextFunction):
 
     const safeName = trip.name.replace(/[^a-zA-Z0-9\-_]/g, "_");
     const dateStr = format(new Date(), "yyyy-MM-dd");
-    const filename = `passageiros-${safeName}-${dateStr}.csv`;
+    const statusLabelMap: Record<string, string> = {
+      confirmed: "confirmados",
+      pending: "pendentes",
+      completed: "concluidos",
+      cancelled: "cancelados",
+      all: "todos",
+    };
+    const statusLabel = filterStatus ? (statusLabelMap[filterStatus] ?? filterStatus) : "ativos";
+    const filename = `passageiros-${safeName}-${statusLabel}-${dateStr}.csv`;
 
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);

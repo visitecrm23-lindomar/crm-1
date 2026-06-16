@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useListTrips, useGetTrip, useListReservations, useUpdateReservation } from "@workspace/api-client-react";
@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft, Bus, Edit, X, Check, Download, Send, Plus, DollarSign,
-  List, UserRound, MapPin, ChevronDown, ClipboardCheck, AlertTriangle,
+  List, UserRound, MapPin, ChevronDown, ClipboardCheck, AlertTriangle, ShoppingBag,
 } from "lucide-react";
 import { STATUS_MAP } from "./constants";
 import { formatCurrency, formatDate } from "./utils";
@@ -43,7 +43,16 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
   const [financialReportOpen, setFinancialReportOpen] = useState(false);
   const [client360Id, setClient360Id] = useState<string | null>(null);
   const [showCosts, setShowCosts] = useState(false);
-  const [exportStatusFilter, setExportStatusFilter] = useState("");
+  const [exportStatusFilter, setExportStatusFilterRaw] = useState(
+    () => localStorage.getItem("passengersOverview:exportStatusFilter") ?? ""
+  );
+  const setExportStatusFilter = useCallback((v: string) => {
+    localStorage.setItem("passengersOverview:exportStatusFilter", v);
+    setExportStatusFilterRaw(v);
+  }, []);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
+  const [bulkCancelling, setBulkCancelling] = useState(false);
 
   const { data: allTripsData } = useListTrips({ limit: 100 });
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
@@ -160,6 +169,43 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
     [RESERVATION_STATUS.PENDING]: "Pendente",
     [RESERVATION_STATUS.CANCELLED]: "Cancelado",
     [RESERVATION_STATUS.COMPLETED]: "Concluído",
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const visible = filteredReservations.slice(0, 15).map(r => r.id);
+    const allSelected = visible.every(id => selectedIds.has(id));
+    if (allSelected) {
+      setSelectedIds(prev => { const next = new Set(prev); visible.forEach(id => next.delete(id)); return next; });
+    } else {
+      setSelectedIds(prev => { const next = new Set(prev); visible.forEach(id => next.add(id)); return next; });
+    }
+  };
+
+  const selectedReservations = (reservations?.data ?? []).filter(r => selectedIds.has(r.id));
+  const onlineOrderSelectedCount = selectedReservations.filter(r => r.storeOrderId).length;
+
+  const doSaveBulkCancel = async () => {
+    setBulkCancelling(true);
+    try {
+      await Promise.all(
+        selectedReservations.map(r =>
+          updateReservation.mutateAsync({ id: r.id, data: { status: RESERVATION_STATUS.CANCELLED } })
+        )
+      );
+      setSelectedIds(new Set());
+      setBulkCancelOpen(false);
+      refetchReservations();
+    } finally {
+      setBulkCancelling(false);
+    }
   };
 
 
@@ -390,7 +436,15 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
       <div className="bg-card border rounded-xl p-6 space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className="font-semibold">Lista de Reservas</h3>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
+            {selectedIds.size > 0 && (
+              <Button
+                variant="destructive" size="sm"
+                onClick={() => setBulkCancelOpen(true)}
+              >
+                <X className="w-4 h-4 mr-1" />Cancelar Selecionados ({selectedIds.size})
+              </Button>
+            )}
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-36 h-8"><SelectValue /></SelectTrigger>
               <SelectContent>{Object.entries(STATUS_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
@@ -403,6 +457,15 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
           <table className="w-full text-sm">
             <thead className="border-b">
               <tr>
+                <th className="p-2 w-8">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 accent-primary"
+                    checked={filteredReservations.slice(0, 15).length > 0 && filteredReservations.slice(0, 15).every(r => selectedIds.has(r.id))}
+                    onChange={toggleSelectAll}
+                    aria-label="Selecionar todos"
+                  />
+                </th>
                 {[
                   { key: "name", label: "Passageiro" },
                   { key: "voucher", label: "Nº Reserva" },
@@ -423,10 +486,27 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
             <tbody>
               {filteredReservations.slice(0, 15).map(r => {
                 const isEditing = editingId === r.id;
+                const isSelected = selectedIds.has(r.id);
                 return (
-                  <tr key={r.id} className={`border-b ${isEditing ? "bg-primary/5" : "hover:bg-muted/30"}`}>
+                  <tr key={r.id} className={`border-b ${isEditing ? "bg-primary/5" : isSelected ? "bg-primary/5" : "hover:bg-muted/30"}`}>
+                    <td className="p-2">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 accent-primary"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(r.id)}
+                        aria-label={`Selecionar ${r.client.name}`}
+                      />
+                    </td>
                     <td className="p-2 font-medium">
-                      <button className="hover:underline text-left" onClick={() => setClient360Id(r.client.id)}>{r.client.name}</button>
+                      <div className="flex items-center gap-1.5">
+                        <button className="hover:underline text-left" onClick={() => setClient360Id(r.client.id)}>{r.client.name}</button>
+                        {r.storeOrderId && (
+                          <span title="Reserva originada de pedido online" className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200 text-xs font-medium">
+                            <ShoppingBag className="w-3 h-3" />Online
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="p-2"><code className="text-xs bg-muted px-1.5 py-0.5 rounded">{r.reservationNumber ?? r.voucherCode}</code></td>
                     <td className="p-2">{r.seats.join(", ") || "—"}</td>
@@ -482,7 +562,7 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
                   </tr>
                 );
               })}
-              {!filteredReservations.length && <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">Sem reservas</td></tr>}
+              {!filteredReservations.length && <tr><td colSpan={9} className="text-center py-8 text-muted-foreground">Sem reservas</td></tr>}
             </tbody>
           </table>
         </div>
@@ -541,6 +621,37 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
         tripName={trip?.name}
       />
       <Client360Modal open={!!client360Id} onClose={() => setClient360Id(null)} clientId={client360Id} />
+
+      <AlertDialog open={bulkCancelOpen} onOpenChange={o => { if (!o) setBulkCancelOpen(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar {selectedIds.size} Reserva{selectedIds.size !== 1 ? "s" : ""}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Você está prestes a cancelar {selectedIds.size} reserva{selectedIds.size !== 1 ? "s" : ""}. As vagas serão devolvidas para a viagem. Esta ação não pode ser desfeita facilmente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {onlineOrderSelectedCount > 0 && (
+            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <p>
+                {onlineOrderSelectedCount === 1
+                  ? "1 das reservas selecionadas veio de um pedido online. Cancelá-la também encerrará o pedido do cliente na loja."
+                  : `${onlineOrderSelectedCount} das reservas selecionadas vieram de pedidos online. Cancelá-las também encerrará os pedidos dos clientes na loja.`}
+              </p>
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setBulkCancelOpen(false)}>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={doSaveBulkCancel}
+              disabled={bulkCancelling}
+            >
+              {bulkCancelling ? "Cancelando..." : "Confirmar Cancelamento"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={confirmCancel} onOpenChange={o => { if (!o) setConfirmCancel(false); }}>
         <AlertDialogContent>

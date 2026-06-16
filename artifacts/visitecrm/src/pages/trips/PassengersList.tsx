@@ -51,7 +51,13 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [boardingStatusFilter, setBoardingStatusFilter] = useState("all");
   const [isSyncing, setIsSyncing] = useState(false);
-  const [exportStatusFilter, setExportStatusFilter] = useState("");
+  const [exportStatusFilter, setExportStatusFilterRaw] = useState(
+    () => localStorage.getItem("passengersList:exportStatusFilter") ?? ""
+  );
+  const setExportStatusFilter = (v: string) => {
+    localStorage.setItem("passengersList:exportStatusFilter", v);
+    setExportStatusFilterRaw(v);
+  };
   const [visibleCols, setVisibleCols] = useState<Record<ColKey, boolean>>(ALL_COLS_ON);
 
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
