@@ -40,10 +40,10 @@ export function TripForm({ tripId }: { tripId?: string }) {
   const [addingPhoto, setAddingPhoto] = useState(false);
   const [tripLimitError, setTripLimitError] = useState<{ resource: string; current?: number; limit?: number } | null>(null);
   const [seatConflictError, setSeatConflictError] = useState<string | null>(null);
-  const dragItem = useRef<{ list: "inclusions" | "exclusions"; idx: number } | null>(null);
+  const dragItem = useRef<{ list: "inclusions" | "exclusions" | "itinerary"; idx: number } | null>(null);
   const dragOverItem = useRef<number | null>(null);
 
-  function handleDragStart(list: "inclusions" | "exclusions", idx: number) {
+  function handleDragStart(list: "inclusions" | "exclusions" | "itinerary", idx: number) {
     dragItem.current = { list, idx };
   }
 
@@ -51,19 +51,28 @@ export function TripForm({ tripId }: { tripId?: string }) {
     dragOverItem.current = idx;
   }
 
-  function handleDrop(list: "inclusions" | "exclusions") {
+  function handleDrop(list: "inclusions" | "exclusions" | "itinerary") {
     try {
       if (dragItem.current === null || dragOverItem.current === null) return;
       if (dragItem.current.list !== list) return;
       const from = dragItem.current.idx;
       const to = dragOverItem.current;
       if (from === to) return;
-      setForm(prev => {
-        const items = [...prev[list]];
-        const [moved] = items.splice(from, 1);
-        items.splice(to, 0, moved);
-        return { ...prev, [list]: items };
-      });
+      if (list === "itinerary") {
+        setForm(prev => {
+          const items = [...prev.itinerary];
+          const [moved] = items.splice(from, 1);
+          items.splice(to, 0, moved);
+          return { ...prev, itinerary: items.map((d, i) => ({ ...d, day: i + 1 })) };
+        });
+      } else {
+        setForm(prev => {
+          const items = [...prev[list]];
+          const [moved] = items.splice(from, 1);
+          items.splice(to, 0, moved);
+          return { ...prev, [list]: items };
+        });
+      }
     } finally {
       dragItem.current = null;
       dragOverItem.current = null;
@@ -651,9 +660,21 @@ export function TripForm({ tripId }: { tripId?: string }) {
             </div>
             <div className="space-y-3">
               {form.itinerary.map((day, idx) => (
-                <div key={idx} className="border rounded-lg p-4 space-y-3">
+                <div
+                  key={idx}
+                  className="border rounded-lg p-4 space-y-3"
+                  draggable
+                  onDragStart={() => handleDragStart("itinerary", idx)}
+                  onDragEnter={() => handleDragEnter(idx)}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={() => handleDrop("itinerary")}
+                  onDragEnd={handleDragEnd}
+                >
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold">Dia {day.day}</span>
+                    <div className="flex items-center gap-2">
+                      <GripVertical className="w-4 h-4 shrink-0 text-muted-foreground cursor-grab active:cursor-grabbing" />
+                      <span className="text-sm font-semibold">Dia {day.day}</span>
+                    </div>
                     {form.itinerary.length > 1 && (
                       <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setForm(prev => ({ ...prev, itinerary: prev.itinerary.filter((_, i) => i !== idx).map((d, i) => ({ ...d, day: i + 1 })) }))}>
                         <X className="w-3 h-3" />
