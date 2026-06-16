@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { CoverImageUpload } from "@/components/cover-image-upload";
 import { useToast } from "@/hooks/use-toast";
@@ -32,7 +32,12 @@ import {
   Search,
   Link2,
   AlertTriangle,
+  QrCode,
+  Download,
+  Copy,
+  Share2,
 } from "lucide-react";
+import QRCodeLib from "qrcode";
 
 function slugify(text: string): string {
   return text
@@ -290,6 +295,21 @@ export default function LojaConfiguracoes() {
     setUploadingCount((prev) => (uploading ? prev + 1 : Math.max(0, prev - 1)));
   const [store, setStore] = useState<StoreSettings | null>(null);
   const [form, setForm] = useState<Partial<StoreSettings>>({});
+  const [qrDataUrl, setQrDataUrl] = useState<string>("");
+
+  const generateQr = useCallback(async (slug: string) => {
+    const fullUrl = `${window.location.origin}/loja/${slug}`;
+    try {
+      const dataUrl = await QRCodeLib.toDataURL(fullUrl, {
+        width: 300,
+        margin: 2,
+        color: { dark: "#000000", light: "#ffffff" },
+      });
+      setQrDataUrl(dataUrl);
+    } catch {
+      setQrDataUrl("");
+    }
+  }, []);
 
   useEffect(() => {
     storeApi
@@ -297,10 +317,11 @@ export default function LojaConfiguracoes() {
       .then((s) => {
         setStore(s);
         setForm(s);
+        generateQr(s.slug);
       })
       .catch(() => setStore(null))
       .finally(() => setLoading(false));
-  }, []);
+  }, [generateQr]);
 
   function set(field: string, value: unknown) {
     setForm((p) => ({ ...p, [field]: value }));
@@ -420,6 +441,10 @@ export default function LojaConfiguracoes() {
           <TabsTrigger value="notificacoes">
             <Bell className="w-4 h-4 mr-1.5" />
             Notificações
+          </TabsTrigger>
+          <TabsTrigger value="compartilhar">
+            <Share2 className="w-4 h-4 mr-1.5" />
+            Compartilhar
           </TabsTrigger>
         </TabsList>
 
@@ -1034,6 +1059,91 @@ export default function LojaConfiguracoes() {
                   </div>
                 </>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── COMPARTILHAR ── */}
+        <TabsContent value="compartilhar" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <QrCode className="w-5 h-5" />
+                QR Code da Loja
+              </CardTitle>
+              <CardDescription>
+                Imprima ou compartilhe o QR Code para divulgar sua loja em materiais físicos.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex flex-col items-center gap-4">
+                {qrDataUrl ? (
+                  <div className="p-4 bg-white rounded-xl border shadow-sm inline-block">
+                    <img
+                      src={qrDataUrl}
+                      alt={`QR Code da loja ${store.name}`}
+                      width={220}
+                      height={220}
+                      className="block"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-[236px] h-[236px] rounded-xl border bg-muted flex items-center justify-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+                <div className="text-center space-y-1">
+                  <p className="text-sm font-medium text-muted-foreground">Aponta para:</p>
+                  <a
+                    href={`/loja/${store.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-primary hover:underline flex items-center justify-center gap-1 font-mono"
+                  >
+                    {window.location.origin}/loja/{store.slug}
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Button
+                  variant="default"
+                  disabled={!qrDataUrl}
+                  onClick={() => {
+                    const a = document.createElement("a");
+                    a.href = qrDataUrl;
+                    a.download = `qrcode-loja-${store.slug}.png`;
+                    a.click();
+                  }}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Baixar PNG
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const url = `${window.location.origin}/loja/${store.slug}`;
+                    navigator.clipboard.writeText(url).then(() => {
+                      toast({ title: "Link copiado!", description: url });
+                    });
+                  }}
+                >
+                  <Copy className="w-4 h-4 mr-2" />
+                  Copiar Link
+                </Button>
+              </div>
+
+              <div className="rounded-lg bg-muted/50 border p-4 text-sm text-muted-foreground space-y-1">
+                <p className="font-medium text-foreground">Dicas de uso</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  <li>Imprima em cartões de visita, flyers e banners.</li>
+                  <li>Use em apresentações e propostas para clientes.</li>
+                  <li>Adicione em perfis de redes sociais como link rápido.</li>
+                </ul>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
