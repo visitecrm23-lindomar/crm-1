@@ -1,4 +1,5 @@
 import type { Trip } from "@workspace/api-client-react";
+import { roundMoney } from "@/lib/reservationPricing";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -181,7 +182,7 @@ export function WizardStep2(p: WizardStep2Props) {
                           const pts = parseInt(e.target.value) || 0;
                           const capped = Math.min(pts, p.loyaltyInfo!.availablePoints);
                           p.setLoyaltyPointsToRedeem(capped);
-                          p.setLoyaltyAmountApplied(Math.round(capped * p.loyaltyInfo!.realPerPoint * 100) / 100);
+                          p.setLoyaltyAmountApplied(roundMoney(capped * p.loyaltyInfo!.realPerPoint));
                         }}
                         className="flex-1"
                       />
@@ -218,7 +219,7 @@ export function WizardStep2(p: WizardStep2Props) {
               <div className="pt-2 border-t flex justify-between text-sm font-semibold">
                 <span>Total com desconto:</span>
                 <span className="text-primary">
-                  R$ {(Math.max(0, Math.round((p.totalValue - p.totalDiscount) * 100) / 100)).toFixed(2)}
+                  R$ {(Math.max(0, roundMoney(p.totalValue - p.totalDiscount))).toFixed(2)}
                   <span className="text-muted-foreground line-through text-xs font-normal ml-1">R$ {p.totalValue.toFixed(2)}</span>
                 </span>
               </div>

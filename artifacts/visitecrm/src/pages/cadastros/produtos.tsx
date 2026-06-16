@@ -40,7 +40,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Search, Package, Tag } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrencyBRL as formatCurrency } from "@/lib/utils";
 
 const PRODUCT_COST_KEY = "product_costs";
 
@@ -77,10 +77,6 @@ const PRODUCT_TYPES = [
   "Outro",
 ];
 
-function fmtCurrency(v: number | null | undefined) {
-  if (v == null) return "—";
-  return formatCurrency(v);
-}
 
 function CategoryManager({
   categories,
@@ -421,12 +417,12 @@ export default function Produtos() {
                           <TableCell>
                             <Badge variant="outline">{p.type}</Badge>
                           </TableCell>
-                          <TableCell className="font-mono">{fmtCurrency(p.price)}</TableCell>
+                          <TableCell className="font-mono">{formatCurrency(p.price)}</TableCell>
                           <TableCell className="font-mono text-green-600">
-                            {fmtCurrency(p.promotionalPrice)}
+                            {formatCurrency(p.promotionalPrice)}
                           </TableCell>
                           <TableCell className="font-mono text-sm">
-                            {cost != null ? fmtCurrency(cost) : "—"}
+                            {cost != null ? formatCurrency(cost) : "—"}
                           </TableCell>
                           <TableCell>
                             {p.stock != null ? p.stock : "Ilimitado"}

@@ -14,7 +14,7 @@ import { XCircle } from "lucide-react";
 import { PAYMENT_METHOD_LABELS as PAYMENT_LABELS } from "@/lib/labels";
 import { WizardStep1 } from "./WizardStep1";
 import { WizardStep2 } from "./WizardStep2";
-import { computeReservationTotal } from "@/lib/reservationPricing";
+import { computeReservationTotal, roundMoney } from "@/lib/reservationPricing";
 
 function WizardStepIndicator({ step }: { step: number }) {
   const steps = ["Seleção", "Pagamento", "Confirmação"];
@@ -113,13 +113,13 @@ export function NewReservationWizard({ open, onClose, onSuccess, initialTripId, 
     if (open) { setSelectedTripId(initialTripId ?? ""); setSelectedClientId(initialClientId ?? ""); setTotalValue(initialAmount ?? 0); }
   }, [open, initialTripId, initialClientId, initialAmount]);
 
-  const uiCouponApplied = Math.round(Math.min(couponApplied?.amount ?? 0, totalValue) * 100) / 100;
-  const uiRemaining1 = Math.round((totalValue - uiCouponApplied) * 100) / 100;
-  const uiLoyaltyApplied = Math.round(Math.min(loyaltyAmountApplied, uiRemaining1) * 100) / 100;
-  const uiRemaining2 = Math.round((uiRemaining1 - uiLoyaltyApplied) * 100) / 100;
-  const uiReferralApplied = Math.round(Math.min(referralApplied?.amount ?? 0, uiRemaining2) * 100) / 100;
-  const totalDiscount = Math.round((uiCouponApplied + uiLoyaltyApplied + uiReferralApplied) * 100) / 100;
-  const finalTotal = Math.max(0, Math.round((totalValue - totalDiscount) * 100) / 100);
+  const uiCouponApplied = roundMoney(Math.min(couponApplied?.amount ?? 0, totalValue));
+  const uiRemaining1 = roundMoney(totalValue - uiCouponApplied);
+  const uiLoyaltyApplied = roundMoney(Math.min(loyaltyAmountApplied, uiRemaining1));
+  const uiRemaining2 = roundMoney(uiRemaining1 - uiLoyaltyApplied);
+  const uiReferralApplied = roundMoney(Math.min(referralApplied?.amount ?? 0, uiRemaining2));
+  const totalDiscount = roundMoney(uiCouponApplied + uiLoyaltyApplied + uiReferralApplied);
+  const finalTotal = Math.max(0, roundMoney(totalValue - totalDiscount));
 
   const resetWizard = () => {
     setStep(1); setSelectedTripId(""); setSelectedClientId(""); setBoardingLocationId("");

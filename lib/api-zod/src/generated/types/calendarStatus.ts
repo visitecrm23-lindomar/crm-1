@@ -8,6 +8,8 @@
 
 export interface CalendarStatus {
   connected: boolean;
+  /** Status of the Google Calendar connection: 'connected' | 'invalid' | 'disconnected' */
+  status?: string | null;
   tokenValid?: boolean;
   eventsCount: number;
   /** @nullable */

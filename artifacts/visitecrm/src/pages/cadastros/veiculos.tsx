@@ -38,7 +38,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Search, Bus, Eye } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrencyBRL as formatCurrency } from "@/lib/utils";
 
 const VEHICLE_TYPES = ["Ônibus", "Micro-ônibus", "Van", "Carro", "Barco", "Avião", "Outro"];
 const AMENITY_OPTIONS = [
@@ -65,10 +65,6 @@ interface VehicleExtra {
   layoutNotes?: string;
 }
 
-function fmtCurrency(v: number | null | undefined) {
-  if (v == null) return "—";
-  return formatCurrency(v);
-}
 
 const LAYOUT_OPTIONS = [
   "2+2 (standard)",
@@ -163,7 +159,7 @@ function VehicleDetailModal({
               </div>
               <div>
                 <p className="text-muted-foreground text-xs">Diária</p>
-                <p className="font-medium">{fmtCurrency(vehicle.dailyRate)}</p>
+                <p className="font-medium">{formatCurrency(vehicle.dailyRate)}</p>
               </div>
               <div>
                 <p className="text-muted-foreground text-xs">Status</p>
@@ -489,7 +485,7 @@ export default function Veiculos() {
                   <TableCell>
                     {v.model ? `${v.model}${v.year ? ` (${v.year})` : ""}` : "—"}
                   </TableCell>
-                  <TableCell>{fmtCurrency(v.dailyRate)}</TableCell>
+                  <TableCell>{formatCurrency(v.dailyRate)}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {(v.amenities ?? []).slice(0, 3).map((a) => (

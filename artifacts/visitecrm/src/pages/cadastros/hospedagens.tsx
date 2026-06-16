@@ -39,7 +39,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Search, Hotel, Star, Images, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { GalleryUpload } from "@/components/gallery-upload";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrencyBRL as formatCurrency } from "@/lib/utils";
 
 const ACCOMMODATION_TYPES = ["Hotel", "Pousada", "Resort", "Hostel", "Chácara", "Chalé", "Outro"];
 const AMENITY_OPTIONS = [
@@ -55,10 +55,6 @@ const AMENITY_OPTIONS = [
 const STATUS_OPTIONS = ["active", "inactive"];
 const statusLabel: Record<string, string> = { active: "Ativo", inactive: "Inativo" };
 
-function fmtCurrency(v: number | null | undefined) {
-  if (v == null) return "—";
-  return formatCurrency(v);
-}
 
 export default function Hospedagens() {
   const { toast } = useToast();
@@ -229,7 +225,7 @@ export default function Hospedagens() {
                   </TableCell>
                   <TableCell>{a.contactName ?? "—"}</TableCell>
                   <TableCell>{a.totalRooms ?? "—"}</TableCell>
-                  <TableCell>{fmtCurrency(a.pricePerNight)}</TableCell>
+                  <TableCell>{formatCurrency(a.pricePerNight)}</TableCell>
                   <TableCell>
                     {a.rating != null ? (
                       <div className="flex items-center gap-1">

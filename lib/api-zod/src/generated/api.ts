@@ -5626,6 +5626,7 @@ export const DisconnectCalendarResponse = zod.object({
  */
 export const GetCalendarStatusResponse = zod.object({
   connected: zod.boolean(),
+  status: zod.string().nullish(),
   tokenValid: zod.boolean().optional(),
   eventsCount: zod.number(),
   lastSync: zod.string().nullish(),

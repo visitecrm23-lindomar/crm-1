@@ -36,7 +36,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Search, Eye } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrencyBRL as formatCurrency } from "@/lib/utils";
 
 const SUPPLIER_TYPES = ["Transporte", "Hospedagem", "Alimentação", "Guia", "Seguro", "Outro"];
 const BANK_OPTIONS = ["Nubank", "Bradesco", "Itaú", "Santander", "Caixa", "BB", "Sicoob", "Outro"];
@@ -49,9 +49,6 @@ const statusLabel: Record<string, string> = {
   inactive: "Inativo",
 };
 
-function fmtCurrency(v: number) {
-  return formatCurrency(v);
-}
 
 const expenseStatusLabel: Record<string, string> = {
   pending: "Pendente",
@@ -169,7 +166,7 @@ function SupplierDetailModal({
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">{expenses.length} despesa(s)</span>
-                  <span className="font-bold">Total: {fmtCurrency(totalExpenses)}</span>
+                  <span className="font-bold">Total: {formatCurrency(totalExpenses)}</span>
                 </div>
                 <div className="rounded-md border">
                   <Table>
@@ -190,7 +187,7 @@ function SupplierDetailModal({
                           <TableCell className="text-sm">
                             {new Date(e.dueDate).toLocaleDateString("pt-BR")}
                           </TableCell>
-                          <TableCell className="font-mono text-sm">{fmtCurrency(e.amount)}</TableCell>
+                          <TableCell className="font-mono text-sm">{formatCurrency(e.amount)}</TableCell>
                           <TableCell>
                             <Badge
                               variant={
