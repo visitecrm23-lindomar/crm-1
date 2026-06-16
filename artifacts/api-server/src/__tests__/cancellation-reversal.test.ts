@@ -1958,6 +1958,129 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     expect(memberUpdates).toHaveLength(1);
     expect((memberUpdates[0] as { set: Record<string, unknown> }).set.availablePoints).toBe(0);
   });
+
+  // =========================================================================
+  // Refunded-status mirrors
+  // The isBeingCancelled guard treats "refunded" the same as "cancelled", so
+  // all three financial reversals must fire identically for both statuses.
+  // =========================================================================
+
+  it("decrements coupon usage_count when reservation with a coupon is refunded", async () => {
+    const app = buildReservationsApp();
+    const existing = makeReservation({
+      discountCouponCode: "PROMO10",
+      discountCouponAmount: "50",
+      clientId: null,
+    });
+    const refunded = { ...existing, status: "refunded" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (same as cancelled mirror):
+    //   [0] Reversal 1 — store lookup
+    //   [1] Reversal 1 — coupon lookup
+    //   [2] re-fetch updated reservation
+    const tx = buildTxMock([
+      [{ id: "store-001" }],
+      [{ id: "coupon-001" }],
+      [refunded],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "refunded" });
+
+    expect(res.status).toBe(200);
+    // trips (seats) + storeCoupons (usageCount) + commissions (cancel) + reservations (status)
+    expect(tx.update).toHaveBeenCalledTimes(4);
+  });
+
+  // -------------------------------------------------------------------------
+  it("restores loyalty points when loyalty discount was used and reservation is refunded", async () => {
+    const app = buildReservationsApp();
+    const existing = makeReservation({
+      discountLoyaltyPoints: 200,
+      discountLoyaltyAmount: "20",
+      clientId: "client-001",
+    });
+    const refunded = { ...existing, status: "refunded" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (same as cancelled mirror):
+    //   [0] Reversal 2 — loyalty member lookup
+    //   [1] Reversal 2 — idempotency check (no prior "refund" tx)
+    //   [2] Reversal 4 — payments lookup (empty)
+    //   [3] Reversal 4 — loyalty member lookup (not found → skip clawback)
+    //   [4] re-fetch updated reservation
+    const tx = buildTxMock([
+      [{ id: "member-001", availablePoints: 300 }],
+      [],
+      [],
+      [],
+      [refunded],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "refunded" });
+
+    expect(res.status).toBe(200);
+    const refundTx = capturedInserts.find(
+      (i) => (i as Record<string, unknown>)["type"] === "refund",
+    );
+    expect(refundTx).toBeDefined();
+    expect((refundTx as Record<string, unknown>)["points"]).toBe(200);
+    expect((refundTx as Record<string, unknown>)["referenceType"]).toBe("reservation");
+  });
+
+  // -------------------------------------------------------------------------
+  it("reverses referral bonus when reservation is refunded", async () => {
+    const app = buildReservationsApp();
+    const existing = makeReservation({
+      discountReferralCode: "REF-XYZ",
+      discountReferralAmount: "50",
+      clientId: "client-001",
+    });
+    const refunded = { ...existing, status: "refunded" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (same as cancelled mirror):
+    //   [0] Reversal 3 — referral record lookup
+    //   [1] Reversal 4 — payments lookup (empty)
+    //   [2] Reversal 4 — loyalty member lookup (not found → skip clawback)
+    //   [3] re-fetch updated reservation
+    const tx = buildTxMock([
+      [{ id: "referral-001", referrerId: "referrer-client-001", bonusAmount: "10.00" }],
+      [],
+      [],
+      [refunded],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "refunded" });
+
+    expect(res.status).toBe(200);
+    // trips (seats) + clients (referralEarnings) + referrals (status) + commissions (cancel) + reservations = 5
+    expect(tx.update).toHaveBeenCalledTimes(5);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -7,9 +7,10 @@ import { Client360Modal } from "@/components/client360-modal";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft, Bus, Edit, X, Check, Download, Send, Plus, DollarSign,
-  List, UserRound, MapPin, ChevronDown, ClipboardCheck,
+  List, UserRound, MapPin, ChevronDown, ClipboardCheck, AlertTriangle,
 } from "lucide-react";
 import { STATUS_MAP } from "./constants";
 import { formatCurrency, formatDate } from "./utils";
@@ -34,12 +35,15 @@ interface TripFinancialReport {
 export function PassengersOverview({ tripId: initialTripId }: { tripId: string }) {
   const [tripId, setTripId] = useState(initialTripId);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingStoreOrderId, setEditingStoreOrderId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{ status: string; paymentMethod: string }>({ status: "", paymentMethod: "" });
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "name", dir: "asc" });
   const [statusFilter, setStatusFilter] = useState("all");
   const [financialReportOpen, setFinancialReportOpen] = useState(false);
   const [client360Id, setClient360Id] = useState<string | null>(null);
   const [showCosts, setShowCosts] = useState(false);
+  const [exportStatusFilter, setExportStatusFilter] = useState("");
 
   const { data: allTripsData } = useListTrips({ limit: 100 });
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
@@ -112,19 +116,21 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
 
   const handlePassengersExport = () => {
     const a = document.createElement("a");
-    a.href = `/api/trips/${tripId}/passengers/export`;
+    const params = exportStatusFilter ? `?status=${exportStatusFilter}` : "";
+    a.href = `/api/trips/${tripId}/passengers/export${params}`;
     a.download = "";
     a.click();
   };
 
   const toggleSort = (key: string) => setSort(prev => ({ key, dir: prev.key === key && prev.dir === "asc" ? "desc" : "asc" }));
 
-  const startEdit = (r: { id: string; status: string; paymentMethod?: string | null }) => {
+  const startEdit = (r: { id: string; status: string; paymentMethod?: string | null; storeOrderId?: string | null }) => {
     setEditingId(r.id);
+    setEditingStoreOrderId(r.storeOrderId ?? null);
     setEditForm({ status: r.status, paymentMethod: r.paymentMethod ?? "" });
   };
 
-  const saveEdit = async () => {
+  const doSaveEdit = async () => {
     if (!editingId) return;
     await updateReservation.mutateAsync({
       id: editingId,
@@ -134,7 +140,18 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
       },
     });
     setEditingId(null);
+    setEditingStoreOrderId(null);
+    setConfirmCancel(false);
     refetchReservations();
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    if (editForm.status === RESERVATION_STATUS.CANCELLED && editingStoreOrderId) {
+      setConfirmCancel(true);
+      return;
+    }
+    await doSaveEdit();
   };
 
   const STATUS_LABELS: Record<string, string> = {
@@ -174,6 +191,16 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
               {(allTripsData?.data ?? []).map(t => (
                 <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+          <Select value={exportStatusFilter} onValueChange={setExportStatusFilter}>
+            <SelectTrigger className="w-36 h-9"><SelectValue placeholder="Ativos" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Ativos</SelectItem>
+              <SelectItem value="confirmed">Confirmados</SelectItem>
+              <SelectItem value="pending">Pendentes</SelectItem>
+              <SelectItem value="completed">Concluídos</SelectItem>
+              <SelectItem value="all">Todos</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={handlePassengersExport} disabled={!tripId}><Download className="w-4 h-4 mr-2" />Exportar Passageiros</Button>
@@ -514,6 +541,27 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
         tripName={trip?.name}
       />
       <Client360Modal open={!!client360Id} onClose={() => setClient360Id(null)} clientId={client360Id} />
+
+      <AlertDialog open={confirmCancel} onOpenChange={o => { if (!o) setConfirmCancel(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar Reserva</AlertDialogTitle>
+            <AlertDialogDescription>Tem certeza que deseja cancelar esta reserva? As vagas serão devolvidas para a viagem. Esta ação não pode ser desfeita facilmente.</AlertDialogDescription>
+          </AlertDialogHeader>
+          {editingStoreOrderId && (
+            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <p>Esta reserva veio de um pedido online. Cancelá-la também encerrará o pedido do cliente na loja.</p>
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmCancel(false)}>Voltar</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={doSaveEdit} disabled={updateReservation.isPending}>
+              Confirmar Cancelamento
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

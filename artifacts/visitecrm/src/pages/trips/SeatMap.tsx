@@ -35,6 +35,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   const [showRenumberDialog, setShowRenumberDialog] = useState(false);
   const [isRenumbering, setIsRenumbering] = useState(false);
   const [renumberError, setRenumberError] = useState<string | null>(null);
+  const [exportStatusFilter, setExportStatusFilter] = useState("");
   const regenerateSeatMap = useRegenerateTripSeatMap();
 
   const { data: allTripsData } = useListTrips({ limit: 100 });
@@ -165,7 +166,8 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
 
   const handlePassengersExport = () => {
     const a = document.createElement("a");
-    a.href = `/api/trips/${tripId}/passengers/export`;
+    const params = exportStatusFilter ? `?status=${exportStatusFilter}` : "";
+    a.href = `/api/trips/${tripId}/passengers/export${params}`;
     a.download = "";
     a.click();
   };
@@ -221,6 +223,16 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
               {(allTripsData?.data ?? []).map(t => (
                 <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+          <Select value={exportStatusFilter} onValueChange={setExportStatusFilter}>
+            <SelectTrigger className="w-36 h-9"><SelectValue placeholder="Ativos" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Ativos</SelectItem>
+              <SelectItem value="confirmed">Confirmados</SelectItem>
+              <SelectItem value="pending">Pendentes</SelectItem>
+              <SelectItem value="completed">Concluídos</SelectItem>
+              <SelectItem value="all">Todos</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={handlePassengersExport} disabled={!tripId}><Download className="w-4 h-4 mr-2" />Exportar Passageiros</Button>

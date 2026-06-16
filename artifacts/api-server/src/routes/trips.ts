@@ -19,7 +19,7 @@ import { ptBR } from "date-fns/locale";
 import { z } from "zod";
 import PDFDocument from "pdfkit";
 import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
-import { RESERVATION_STATUS, type TripStatus } from "@workspace/permissions";
+import { RESERVATION_STATUS, type TripStatus, type ReservationStatus } from "@workspace/permissions";
 import { parseTripStatus } from "../lib/status-validators";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 
@@ -1087,12 +1087,26 @@ router.get("/trips/:id/passengers/export", async (req, res, next: NextFunction):
       .limit(1);
     if (!trip) { next(new NotFoundError("Trip not found", "NOT_FOUND")); return; }
 
+    const statusParam = req.query.status as string | undefined;
+    const validStatuses: string[] = [...Object.values(RESERVATION_STATUS), "all"];
+    const filterStatus = statusParam && validStatuses.includes(statusParam) ? statusParam : null;
+
     const reservations = await db.select().from(reservationsTable)
-      .where(and(
-        eq(reservationsTable.tripId, trip.id),
-        eq(reservationsTable.tenantId, me.tenantId),
-        sql`${reservationsTable.status} NOT IN (${RESERVATION_STATUS.CANCELLED}, ${RESERVATION_STATUS.REFUNDED})`,
-      ));
+      .where(
+        filterStatus === "all"
+          ? and(eq(reservationsTable.tripId, trip.id), eq(reservationsTable.tenantId, me.tenantId))
+          : filterStatus
+            ? and(
+                eq(reservationsTable.tripId, trip.id),
+                eq(reservationsTable.tenantId, me.tenantId),
+                eq(reservationsTable.status, filterStatus as ReservationStatus),
+              )
+            : and(
+                eq(reservationsTable.tripId, trip.id),
+                eq(reservationsTable.tenantId, me.tenantId),
+                sql`${reservationsTable.status} NOT IN (${RESERVATION_STATUS.CANCELLED}, ${RESERVATION_STATUS.REFUNDED})`,
+              ),
+      );
 
     const boardingPoints: Array<{ id: string; name: string; time?: string }> =
       Array.isArray(trip.boardingPoints) ? (trip.boardingPoints as Array<{ id: string; name: string; time?: string }>) : [];

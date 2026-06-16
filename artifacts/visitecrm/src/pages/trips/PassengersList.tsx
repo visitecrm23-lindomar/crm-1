@@ -51,6 +51,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [boardingStatusFilter, setBoardingStatusFilter] = useState("all");
   const [isSyncing, setIsSyncing] = useState(false);
+  const [exportStatusFilter, setExportStatusFilter] = useState("");
   const [visibleCols, setVisibleCols] = useState<Record<ColKey, boolean>>(ALL_COLS_ON);
 
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
@@ -180,7 +181,8 @@ export function PassengersList({ tripId }: { tripId: string }) {
 
   const handlePassengersExport = () => {
     const a = document.createElement("a");
-    a.href = `/api/trips/${tripId}/passengers/export`;
+    const params = exportStatusFilter ? `?status=${exportStatusFilter}` : "";
+    a.href = `/api/trips/${tripId}/passengers/export${params}`;
     a.download = "";
     a.click();
   };
@@ -274,6 +276,16 @@ export function PassengersList({ tripId }: { tripId: string }) {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Select value={exportStatusFilter} onValueChange={setExportStatusFilter}>
+            <SelectTrigger className="w-36 h-8"><SelectValue placeholder="Ativos" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Ativos</SelectItem>
+              <SelectItem value="confirmed">Confirmados</SelectItem>
+              <SelectItem value="pending">Pendentes</SelectItem>
+              <SelectItem value="completed">Concluídos</SelectItem>
+              <SelectItem value="all">Todos</SelectItem>
+            </SelectContent>
+          </Select>
           <Button variant="outline" size="sm" onClick={handlePassengersExport} disabled={isLoading || allPassengers.length === 0}><Download className="w-4 h-4 mr-2" />Exportar Passageiros</Button>
           <Button variant="outline" size="sm" onClick={handleCsvExport} disabled={isLoading || allPassengers.length === 0}><Download className="w-4 h-4 mr-2" />CSV</Button>
           <Button variant="outline" size="sm" onClick={handlePdfPrint} disabled={isLoading || allPassengers.length === 0}><Download className="w-4 h-4 mr-2" />Imprimir / PDF</Button>
