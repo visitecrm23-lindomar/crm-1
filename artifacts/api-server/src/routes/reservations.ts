@@ -1117,6 +1117,14 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
         }
 
         // --- Reversal 3: referral bonus credited to referrer ---
+        // Idempotency: both lookup branches filter on `status = COMPLETED`. If the
+        // referral record is already in REVERSED status (meaning this reversal already
+        // ran during a prior cancellation before the reservation was reopened), both
+        // queries return no rows and `referralRecord` stays undefined — so the update
+        // block below is naturally skipped and the referrer's earnings are NOT
+        // double-decremented. This is intentional: the COMPLETED filter acts as the
+        // idempotency guard for re-cancel flows.
+        //
         // Primary lookup: by reservationId (set for all new storefront and CRM bookings).
         // Fallback lookup: by referral code + referredId for older records created before
         // reservationId was saved (storefront orders prior to this fix).

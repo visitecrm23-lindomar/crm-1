@@ -676,6 +676,71 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
   });
 
   // -------------------------------------------------------------------------
+  // Idempotency guard for Reversal 3: when the referral record is already in
+  // REVERSED status (e.g. reservation was cancelled, reopened, then cancelled
+  // again), both lookup branches filter on `status = COMPLETED` and return no
+  // rows. The update block is naturally skipped — referrer earnings are NOT
+  // double-decremented.
+  it("does not double-decrement referrer earnings when referral is already REVERSED (re-cancel idempotency)", async () => {
+    const app = buildReservationsApp();
+    // clientId present → reversal 4 runs (payments → empty)
+    const existing = makeReservation({
+      discountReferralCode: "REF-XYZ",
+      discountReferralAmount: "50",
+      clientId: "client-001",
+    });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] Reversal 3 — primary lookup by reservationId + COMPLETED → [] (already REVERSED)
+    //   [1] Reversal 3 — fallback lookup by code + referredId + COMPLETED → [] (already REVERSED)
+    //   [2] Reversal 4 — payments lookup (empty)
+    //   [3] Reversal 4 — loyalty member lookup (no member found → skip clawback)
+    //   [4] re-fetch updated reservation
+    //
+    // Both Reversal 3 queries return empty because the referral status is already
+    // REVERSED. The `referralRecord` variable stays undefined, so the clients and
+    // referrals tables are never updated — confirming no double-decrement.
+    const tx = buildTxMock([
+      [], // primary lookup → referral already REVERSED, COMPLETED filter returns nothing
+      [], // fallback lookup → same reason
+      [], // no payments
+      [], // Reversal 4 loyalty member lookup → not found, skip clawback
+      [cancelled],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+
+    // trips (seats) + commissions (cancel) + reservations (status) = 3 updates
+    // clients (referralEarnings) and referrals (status) must NOT be updated
+    // because the referral is already REVERSED — no double-decrement.
+    expect(tx.update).toHaveBeenCalledTimes(3);
+
+    // Confirm no referral status update was captured
+    const referralUpdate = capturedUpdates.find(
+      (u) => "status" in u.set && (u.set as Record<string, unknown>)["status"] === "reversed",
+    );
+    expect(referralUpdate).toBeUndefined();
+
+    // Confirm no referralEarnings decrement was captured
+    const earningsUpdate = capturedUpdates.find(
+      (u) => "referralEarnings" in u.set,
+    );
+    expect(earningsUpdate).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
   it("claws back loyalty points earned from payments when reservation is cancelled", async () => {
     const app = buildReservationsApp();
     const existing = makeReservation({ clientId: "client-001" });
