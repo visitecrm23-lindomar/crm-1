@@ -188,6 +188,7 @@ export default function Indicacoes() {
   const [shareReferralId, setShareReferralId] = useState<string | null>(null);
   const [shareReferral, setShareReferral] = useState<EnrichedReferral | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedMessage, setCopiedMessage] = useState(false);
 
   const [campaignsDialogOpen, setCampaignsDialogOpen] = useState(false);
   const [showCampaignForm, setShowCampaignForm] = useState(false);
@@ -409,6 +410,16 @@ export default function Indicacoes() {
       setTimeout(() => setCopiedLink(false), 2000);
     } catch {
       toast({ title: "Não foi possível copiar o link", variant: "destructive" });
+    }
+  }
+
+  async function copyMessage(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedMessage(true);
+      setTimeout(() => setCopiedMessage(false), 2000);
+    } catch {
+      toast({ title: "Não foi possível copiar a mensagem", variant: "destructive" });
     }
   }
 
@@ -1390,7 +1401,7 @@ export default function Indicacoes() {
       </Tabs>
 
       {/* Share Link & QR-Code Dialog */}
-      <Dialog open={shareModalOpen} onOpenChange={(open) => { setShareModalOpen(open); if (!open) { setCopiedLink(false); setShareReferral(null); } }}>
+      <Dialog open={shareModalOpen} onOpenChange={(open) => { setShareModalOpen(open); if (!open) { setCopiedLink(false); setCopiedMessage(false); setShareReferral(null); } }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1443,7 +1454,21 @@ export default function Indicacoes() {
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                       <MessageCircle className="w-3.5 h-3.5" />
                       Mensagem
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => copyMessage(preview)}
+                        className="ml-auto h-6 px-2 shrink-0"
+                      >
+                        {copiedMessage ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </Button>
                     </p>
+                    {copiedMessage && (
+                      <p className="text-xs text-green-600 flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        Mensagem copiada!
+                      </p>
+                    )}
                     <div className="rounded-md border bg-muted/50 px-3 py-2 text-xs text-foreground whitespace-pre-wrap break-words leading-relaxed">
                       {preview}
                     </div>
