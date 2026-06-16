@@ -281,16 +281,69 @@ export default function MyReferralPage({ slug, store }: Props) {
 
   const handleNativeShare = useCallback(async () => {
     if (!shareLink || !navigator.share) return;
+
+    const title = `Indicação — ${store.name}`;
+    const text = `Use meu código ${referralCode} para aproveitar condições especiais em ${store.name}!`;
+
     try {
-      await navigator.share({
-        title: `Indicação — ${store.name}`,
-        text: `Use meu código ${referralCode} para aproveitar condições especiais em ${store.name}!`,
-        url: shareLink,
-      });
+      const probe = new File([], "qr.png", { type: "image/png" });
+      const supportsFiles =
+        typeof navigator.canShare === "function" &&
+        navigator.canShare({ files: [probe] });
+
+      if (supportsFiles) {
+        const canvas = document.createElement("canvas");
+        await QRCode.toCanvas(canvas, shareLink, {
+          width: 512,
+          margin: 2,
+          errorCorrectionLevel: "H",
+          color: {
+            dark: safeQrDarkColor(primaryColor),
+            light: "#FFFFFF",
+          },
+        });
+
+        if (store.logoUrl) {
+          await new Promise<void>((resolve) => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => {
+              const ctx = canvas.getContext("2d");
+              if (!ctx) { resolve(); return; }
+              const logoSize = Math.round(canvas.width * 0.22);
+              const cx = canvas.width / 2;
+              const cy = canvas.height / 2;
+              const halo = logoSize / 2 + 8;
+              ctx.fillStyle = "#FFFFFF";
+              ctx.beginPath();
+              ctx.arc(cx, cy, halo, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.drawImage(img, cx - logoSize / 2, cy - logoSize / 2, logoSize, logoSize);
+              resolve();
+            };
+            img.onerror = () => resolve();
+            img.src = store.logoUrl!;
+          });
+        }
+
+        const dataUrl = canvas.toDataURL("image/png");
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        const file = new File([blob], `qrcode-indicacao-${referralCode}.png`, { type: "image/png" });
+
+        await navigator.share({ title, text, url: shareLink, files: [file] });
+        return;
+      }
+    } catch {
+      // dismissed by user or file share failed — fall through to URL-only
+    }
+
+    try {
+      await navigator.share({ title, text, url: shareLink });
     } catch {
       // dismissed by user
     }
-  }, [shareLink, referralCode, store.name]);
+  }, [shareLink, referralCode, store.name, primaryColor, store.logoUrl]);
 
   const handleShowQR = useCallback(async () => {
     if (!shareLink || !referralCode) return;
