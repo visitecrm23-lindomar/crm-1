@@ -59,7 +59,7 @@ export async function enqueueCommissionSync(reservationId: string, tenantId: str
     if (!areWorkersEnabled()) {
       logger.warn(
         { reservationId, tenantId, jobType: "commission-sync" },
-        "[workers-disabled] ENABLE_WORKERS=false — running commission sync directly instead of queuing",
+        "[workers-disabled] ENABLE_WORKERS=false — running commission sync directly instead of queuing. Set ENABLE_WORKERS=true to enable async processing.",
       );
     }
     await runDirectWithFallback(reservationId, tenantId);

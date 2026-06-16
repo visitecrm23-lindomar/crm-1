@@ -65,7 +65,7 @@ export async function enqueueReservationConfirmationEmail(opts: EnqueueEmailOpts
     if (!areWorkersEnabled()) {
       logger.warn(
         { reservationId, tenantId, jobType: "reservation-confirmation" },
-        "[workers-disabled] ENABLE_WORKERS=false — sending confirmation email directly instead of queuing",
+        "[workers-disabled] ENABLE_WORKERS=false — sending confirmation email directly instead of queuing. Set ENABLE_WORKERS=true to enable async processing.",
       );
     }
     const result = await sendReservationConfirmationEmail(props);
@@ -139,7 +139,7 @@ export async function enqueueReservationCancellationEmail(
     if (!areWorkersEnabled()) {
       logger.warn(
         { reservationId, tenantId, jobType: "reservation-cancellation" },
-        "[workers-disabled] ENABLE_WORKERS=false — sending cancellation email directly instead of queuing",
+        "[workers-disabled] ENABLE_WORKERS=false — sending cancellation email directly instead of queuing. Set ENABLE_WORKERS=true to enable async processing.",
       );
     }
     const result = await sendReservationCancellationEmail(props);
@@ -296,7 +296,7 @@ export async function enqueueNewBookingNotificationEmail(
     if (!areWorkersEnabled()) {
       logger.warn(
         { reservationId, tenantId, jobType: "new-booking-notification" },
-        "[workers-disabled] ENABLE_WORKERS=false — sending new-booking notification directly instead of queuing",
+        "[workers-disabled] ENABLE_WORKERS=false — sending new-booking notification directly instead of queuing. Set ENABLE_WORKERS=true to enable async processing.",
       );
     }
     const result = await sendNewBookingNotificationEmail(props, { to: recipients, cc });
@@ -575,7 +575,7 @@ export async function enqueueReferralBonusPaidEmail(
     if (!areWorkersEnabled()) {
       logger.warn(
         { tenantId, jobType: "referral-bonus-paid" },
-        "[workers-disabled] ENABLE_WORKERS=false — sending referral bonus-paid email directly instead of queuing",
+        "[workers-disabled] ENABLE_WORKERS=false — sending referral bonus-paid email directly instead of queuing. Set ENABLE_WORKERS=true to enable async processing.",
       );
     }
     const result = await sendReferralBonusPaidEmail(props);
@@ -633,7 +633,7 @@ export async function enqueueReferralConvertedEmail(
     if (!areWorkersEnabled()) {
       logger.warn(
         { tenantId, jobType: "referral-converted" },
-        "[workers-disabled] ENABLE_WORKERS=false — sending referral converted email directly instead of queuing",
+        "[workers-disabled] ENABLE_WORKERS=false — sending referral converted email directly instead of queuing. Set ENABLE_WORKERS=true to enable async processing.",
       );
     }
     const result = await sendReferralConvertedEmail(props);
@@ -691,7 +691,7 @@ export async function enqueueReferralExpiredEmail(
     if (!areWorkersEnabled()) {
       logger.warn(
         { tenantId, jobType: "referral-expired" },
-        "[workers-disabled] ENABLE_WORKERS=false — sending referral expired email directly instead of queuing",
+        "[workers-disabled] ENABLE_WORKERS=false — sending referral expired email directly instead of queuing. Set ENABLE_WORKERS=true to enable async processing.",
       );
     }
     const result = await sendReferralExpiredEmail(props);
@@ -839,7 +839,7 @@ export async function enqueueReferralExpiringSoonEmail(
     if (!areWorkersEnabled()) {
       logger.warn(
         { tenantId, jobType: "referral-expiring-soon" },
-        "[workers-disabled] ENABLE_WORKERS=false — sending referral expiring-soon email directly instead of queuing",
+        "[workers-disabled] ENABLE_WORKERS=false — sending referral expiring-soon email directly instead of queuing. Set ENABLE_WORKERS=true to enable async processing.",
       );
     }
     const result = await sendReferralExpiringSoonEmail(props);
@@ -961,7 +961,7 @@ export async function enqueueReferralBonusReleasedEmail(
     if (!areWorkersEnabled()) {
       logger.warn(
         { tenantId, jobType: "referral-bonus-released" },
-        "[workers-disabled] ENABLE_WORKERS=false — sending referral bonus-released email directly instead of queuing",
+        "[workers-disabled] ENABLE_WORKERS=false — sending referral bonus-released email directly instead of queuing. Set ENABLE_WORKERS=true to enable async processing.",
       );
     }
     const result = await sendReferralBonusReleasedEmail(props);
@@ -1068,7 +1068,7 @@ export async function enqueueReferralWelcomeEmail(
     if (!areWorkersEnabled()) {
       logger.warn(
         { tenantId, jobType: "referral-welcome" },
-        "[workers-disabled] ENABLE_WORKERS=false — sending referral welcome email directly instead of queuing",
+        "[workers-disabled] ENABLE_WORKERS=false — sending referral welcome email directly instead of queuing. Set ENABLE_WORKERS=true to enable async processing.",
       );
     }
     const result = await sendReferralWelcomeEmail(props);

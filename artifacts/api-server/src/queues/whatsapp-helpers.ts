@@ -21,7 +21,7 @@ async function enqueueOrSend(phone: string, message: string, tenantId: string): 
     if (!areWorkersEnabled()) {
       logger.warn(
         { phone, tenantId, jobType: "whatsapp-notification" },
-        "[workers-disabled] ENABLE_WORKERS=false — sending WhatsApp message directly instead of queuing",
+        "[workers-disabled] ENABLE_WORKERS=false — sending WhatsApp message directly instead of queuing. Set ENABLE_WORKERS=true to enable async processing.",
       );
     }
     const result = await sendWhatsAppMessage(phone, message);
