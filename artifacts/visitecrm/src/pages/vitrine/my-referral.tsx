@@ -940,13 +940,18 @@ export default function MyReferralPage({ slug, store }: Props) {
                   Baixar
                 </Button>
                 {typeof navigator !== "undefined" &&
-                  "canShare" in navigator &&
-                  navigator.canShare({ files: [new File([], "test.png", { type: "image/png" })] }) && (
-                    <Button variant="outline" className="flex-1 gap-2" onClick={handleShareQR}>
-                      <Share2 className="w-4 h-4" />
-                      Compartilhar
-                    </Button>
-                  )}
+                "canShare" in navigator &&
+                navigator.canShare({ files: [new File([], "test.png", { type: "image/png" })] }) ? (
+                  <Button variant="outline" className="flex-1 gap-2" onClick={handleShareQR}>
+                    <Share2 className="w-4 h-4" />
+                    Compartilhar
+                  </Button>
+                ) : (
+                  <Button variant="outline" className="flex-1 gap-2" onClick={handleCopyLink}>
+                    {linkCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    {linkCopied ? "Copiado!" : "Copiar link"}
+                  </Button>
+                )}
               </div>
             </div>
           )}
