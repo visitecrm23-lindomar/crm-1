@@ -45,8 +45,13 @@ export interface SystemHealthRedis {
   dailyUsage?: SystemHealthRedisDailyUsage;
 }
 
+export interface SystemHealthWorkers {
+  enabled: boolean;
+}
+
 export interface SystemHealth {
   redis: SystemHealthRedis;
+  workers: SystemHealthWorkers;
 }
 
 export interface SuccessResponse {

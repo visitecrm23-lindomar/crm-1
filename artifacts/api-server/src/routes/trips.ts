@@ -14,6 +14,8 @@ import { CreateTripBody, UpdateTripBody } from "@workspace/api-zod";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { sendManifestEmail } from "@workspace/email";
 import { getPdfQueue } from "../queues/index";
+import { areWorkersEnabled } from "../lib/redis";
+import { logger } from "../lib/logger";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { z } from "zod";
@@ -1944,6 +1946,13 @@ router.post("/trips/:id/manifest/send", async (req, res, next: NextFunction): Pr
         });
         res.status(202).json({ success: true, channel: "email", queued: true });
         return;
+      }
+
+      if (!areWorkersEnabled()) {
+        logger.warn(
+          { jobType: "pdf-manifest", tenantId: me.tenantId, tripId: trip.id },
+          "[workers-disabled] ENABLE_WORKERS=false — sending manifest PDF directly instead of queuing. Set ENABLE_WORKERS=true to enable async processing.",
+        );
       }
 
       const result = await sendManifestEmail({

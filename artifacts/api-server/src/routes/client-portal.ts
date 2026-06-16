@@ -33,6 +33,8 @@ import { generateAndAssignReferralCode } from "../lib/referral-code";
 import { dispatchReferralWelcomeEmail } from "../queues/email-helpers";
 import { addClientSseConnection, removeClientSseConnection } from "../lib/client-sse";
 import { getRecentNotifications, getUnreadCount, markAllRead } from "../lib/client-notifications";
+import { areWorkersEnabled } from "../lib/redis";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -1066,6 +1068,11 @@ router.get("/client/reservations/:id/voucher", async (req, res, next: NextFuncti
           userAgent: req.headers["user-agent"] ?? null,
         })
         .catch((err) => req.log.warn({ err }, "[voucher] Failed to enqueue audit job"));
+    } else if (!areWorkersEnabled()) {
+      logger.warn(
+        { jobType: "pdf-voucher", tenantId: me.tenantId, reservationId: row.id },
+        "[workers-disabled] ENABLE_WORKERS=false — PDF voucher audit job skipped. Set ENABLE_WORKERS=true to enable async processing.",
+      );
     }
 
     const safeTrip = row.tripName.replace(/[^a-z0-9]/gi, "_").slice(0, 30);

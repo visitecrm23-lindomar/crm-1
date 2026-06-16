@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "../lib/tenant";
-import { getRedisStatus, fetchUpstashDailyStats } from "../lib/redis";
+import { getRedisStatus, fetchUpstashDailyStats, areWorkersEnabled } from "../lib/redis";
 import { ROLES } from "@workspace/permissions";
 
 const router = Router();
@@ -30,6 +30,9 @@ router.get("/admin/system-health", async (req, res): Promise<void> => {
               },
             }
           : {}),
+      },
+      workers: {
+        enabled: areWorkersEnabled(),
       },
     });
   } catch (err) {

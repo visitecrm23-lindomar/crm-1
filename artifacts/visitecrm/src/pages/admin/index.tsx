@@ -93,6 +93,7 @@ export default function AdminDashboard() {
   const planKeys = Object.keys(stats?.byPlan ?? {});
   const redisStatus = systemHealth?.redis?.status;
   const redisAlert = redisStatus && redisStatus !== "ok" ? REDIS_STATUS_CONFIG[redisStatus] : null;
+  const workersEnabled = systemHealth?.workers?.enabled ?? true;
 
   const redisDailyUsage = systemHealth?.redis?.dailyUsage ?? null;
   const dailyUsageAlert = redisDailyUsage
@@ -127,6 +128,20 @@ export default function AdminDashboard() {
           <div>
             <p className="font-semibold text-sm">{dailyUsageAlert.label}</p>
             <p className="text-sm mt-0.5">{dailyUsageAlert.description}</p>
+          </div>
+        </div>
+      )}
+
+      {!workersEnabled && (
+        <div className="flex items-start gap-3 rounded-lg border px-4 py-3 bg-amber-50 border-amber-300 text-amber-800">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+          <div>
+            <p className="font-semibold text-sm">Workers em segundo plano desativados</p>
+            <p className="text-sm mt-0.5">
+              A variável <code className="font-mono text-xs bg-amber-100 px-1 rounded">ENABLE_WORKERS</code> está como <code className="font-mono text-xs bg-amber-100 px-1 rounded">false</code>.
+              E-mails, PDFs e lembretes automáticos serão processados de forma síncrona. Defina{" "}
+              <code className="font-mono text-xs bg-amber-100 px-1 rounded">ENABLE_WORKERS=true</code> para ativar o processamento assíncrono via filas.
+            </p>
           </div>
         </div>
       )}
