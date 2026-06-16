@@ -558,6 +558,7 @@ export default function Indicacoes() {
   const settingsDiscountPct = settings ? parseFloat(String(settings.discountValue)) : 5;
   const settingsBonusVal = settings ? parseFloat(String(settings.bonusValue)) : 10;
   const isEnabled = settings?.isEnabled ?? true;
+  const tenantName = (me as { tenant?: { name?: string } } | undefined)?.tenant?.name ?? "Minha Agência";
 
   const pendingBonusCount = referrals.filter(r => r.status === REFERRAL_STATUS.COMPLETED && !r.bonusPaid).length;
 
@@ -2278,6 +2279,17 @@ export default function Indicacoes() {
                       onChange={(e) => setLocalSettings((s) => ({ ...s, whatsappConvertedMessage: e.target.value }))}
                       placeholder="Boa notícia! {nome} usou seu código {codigo} e comprou com a {agencia}. Seu bônus de R$ {valor} está sendo processado."
                     />
+                    {(() => {
+                      const len = ((localSettings.whatsappConvertedMessage as string) ?? "").length;
+                      if (len === 0) return null;
+                      const isWarn = len >= 800 && len < 1000;
+                      const isError = len >= 1000;
+                      return (
+                        <p className={`text-[10px] text-right ${isError ? "text-red-500" : isWarn ? "text-amber-500" : "text-muted-foreground"}`}>
+                          {len} caracteres{isError ? " · pode ser recusada pelo WhatsApp" : isWarn ? " · mensagem longa" : ""}
+                        </p>
+                      );
+                    })()}
                     <p className="text-[11px] text-muted-foreground">
                       Variáveis:{" "}
                       <code className="bg-muted px-1 rounded">{"{nome}"}</code> nome do indicado,{" "}
@@ -2296,7 +2308,7 @@ export default function Indicacoes() {
                           let msg = localSettings.whatsappConvertedMessage as string;
                           msg = sub(msg, "nome", "Maria");
                           msg = sub(msg, "codigo", "JOAO123");
-                          msg = sub(msg, "agencia", "Minha Agência");
+                          msg = sub(msg, "agencia", tenantName);
                           msg = sub(msg, "valor", valorFormatted);
                           return msg;
                         })()}
@@ -2311,6 +2323,17 @@ export default function Indicacoes() {
                       onChange={(e) => setLocalSettings((s) => ({ ...s, whatsappBonusPaidMessage: e.target.value }))}
                       placeholder="Seu bônus de R$ {{valor}} foi pago! Obrigado por indicar clientes para a {{agencia}}."
                     />
+                    {(() => {
+                      const len = ((localSettings.whatsappBonusPaidMessage as string) ?? "").length;
+                      if (len === 0) return null;
+                      const isWarn = len >= 800 && len < 1000;
+                      const isError = len >= 1000;
+                      return (
+                        <p className={`text-[10px] text-right ${isError ? "text-red-500" : isWarn ? "text-amber-500" : "text-muted-foreground"}`}>
+                          {len} caracteres{isError ? " · pode ser recusada pelo WhatsApp" : isWarn ? " · mensagem longa" : ""}
+                        </p>
+                      );
+                    })()}
                     <p className="text-[11px] text-muted-foreground">
                       Variáveis:{" "}
                       <code className="bg-muted px-1 rounded">{"{nome}"}</code> nome do indicador,{" "}
@@ -2333,7 +2356,7 @@ export default function Indicacoes() {
                           msg = sub(msg, "codigo", "JOAO123");
                           msg = sub(msg, "bonus", bonusFormatted);
                           msg = sub(msg, "valor", valorFormatted);
-                          msg = sub(msg, "agencia", "Minha Agência");
+                          msg = sub(msg, "agencia", tenantName);
                           return msg;
                         })()}
                       </p>
