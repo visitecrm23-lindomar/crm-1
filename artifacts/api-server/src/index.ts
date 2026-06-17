@@ -173,11 +173,6 @@ applyMigrations()
         runCampaignAutomationCron().catch((err) => logger.error({ err }, "[campaign-automation] Cron failed"));
       }, { timezone: "America/Sao_Paulo" });
 
-      cron.schedule("30 * * * *", () => {
-        logger.info("[nps-dispatch] Hourly NPS dispatch cron triggered");
-        processNpsDispatch().catch((err) => logger.error({ err }, "[nps-dispatch] Cron failed"));
-      }, { timezone: "America/Sao_Paulo" });
-
       // ── Log Upstash daily usage on startup (non-fatal) ──
       fetchUpstashDailyStats()
         .then((stats) => {
@@ -252,6 +247,13 @@ applyMigrations()
           );
         });
         logger.info("[expiry-warning-retry] node-cron fallback registered (every 15 minutes)");
+
+        cron.schedule("30 * * * *", () => {
+          processNpsDispatch().catch((err) =>
+            logger.error({ err }, "[nps-dispatch] node-cron fallback failed"),
+          );
+        });
+        logger.info("[nps-dispatch] node-cron fallback registered (every hour at :30)");
 
         return;
       }

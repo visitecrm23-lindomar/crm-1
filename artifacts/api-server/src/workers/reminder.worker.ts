@@ -1298,22 +1298,23 @@ export async function processNpsDispatch(): Promise<void> {
         if (!row.clientEmail) { skipped++; continue; }
         try {
           const token = generateId() + generateId();
-          await db.insert(npsInvitationsTable).values({
-            id: generateId(),
-            tenantId,
-            clientId: row.clientId!,
-            reservationId: row.reservationId,
-            tripId: row.tripId ?? null,
-            token,
-          }).onConflictDoNothing();
+          const [newInvitation] = await db
+            .insert(npsInvitationsTable)
+            .values({
+              id: generateId(),
+              tenantId,
+              clientId: row.clientId!,
+              reservationId: row.reservationId,
+              tripId: row.tripId ?? null,
+              token,
+            })
+            .onConflictDoNothing()
+            .returning({ id: npsInvitationsTable.id, token: npsInvitationsTable.token });
 
-          const [inserted] = await db
-            .select({ token: npsInvitationsTable.token })
-            .from(npsInvitationsTable)
-            .where(eq(npsInvitationsTable.reservationId, row.reservationId))
-            .limit(1);
-
-          if (!inserted) { skipped++; continue; }
+          if (!newInvitation) {
+            skipped++;
+            continue;
+          }
 
           const result = await sendNpsSurveyEmail({
             clientName: row.clientName ?? "Cliente",
@@ -1323,13 +1324,14 @@ export async function processNpsDispatch(): Promise<void> {
             tripName: row.tripName,
             returnDate: row.returnDate?.toISOString() ?? "",
             surveyBaseUrl: baseUrl,
-            token: inserted.token,
+            token: newInvitation.token,
           });
 
           if (result.success) {
             sent++;
           } else {
-            logger.warn({ tenantId, reservationId: row.reservationId, err: result.error }, "[nps-dispatch] Email failed, invitation recorded");
+            logger.warn({ tenantId, reservationId: row.reservationId, err: result.error }, "[nps-dispatch] Email failed — rolling back invitation for retry");
+            await db.delete(npsInvitationsTable).where(eq(npsInvitationsTable.id, newInvitation.id)).catch(() => {});
             errors++;
           }
         } catch (rowErr) {
