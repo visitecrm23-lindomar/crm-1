@@ -322,6 +322,11 @@ export interface Client {
   nboReasoning?: string | null;
   /** @nullable */
   scoresCalculatedAt?: string | null;
+  /** @nullable */
+  customerCode?: string | null;
+  travelInterests?: string[];
+  /** @nullable */
+  ambassadorOptIn?: boolean | null;
 }
 
 export interface ClientListResponse {
@@ -599,6 +604,8 @@ export interface Trip {
   freePassengers?: FreePassenger[] | null;
   /** @nullable */
   layoutId?: string | null;
+  /** @nullable */
+  showSeatMap?: boolean | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -875,6 +882,8 @@ export interface SeatMap {
   /** Number of columns in the seat layout grid */
   cols?: number;
   seats: Seat[];
+  /** @nullable */
+  numberingType?: string | null;
 }
 
 export type ReservationClient = {
@@ -998,6 +1007,8 @@ export interface CreateReservationBody {
   discountReferralAmount?: number | null;
   /** @nullable */
   discountTotal?: number | null;
+  /** @nullable */
+  firstDueDate?: string | null;
 }
 
 export interface ValidateCouponBody {
@@ -1056,6 +1067,8 @@ export interface UpdateReservationBody {
    * @nullable
    */
   sellerId?: string | null;
+  /** @nullable */
+  firstDueDate?: string | null;
 }
 
 export interface ReservationStats {
@@ -1391,6 +1404,20 @@ export interface Deal {
   clientName?: string | null;
   /** @nullable */
   ownerName?: string | null;
+  /** @nullable */
+  travelReason?: string | null;
+  /** @nullable */
+  clientWhatsapp?: string | null;
+  /** @nullable */
+  clientCity?: string | null;
+  /** @nullable */
+  clientState?: string | null;
+  /** @nullable */
+  clientClassification?: string | null;
+  /** @nullable */
+  clientOutstandingBalance?: number | null;
+  /** @nullable */
+  customerCode?: string | null;
 }
 
 export interface CreateDealBody {
@@ -1459,6 +1486,8 @@ export interface UpdatePipelineBody {
 
 export interface PipelineStage {
   id: string;
+  /** @nullable */
+  pipelineId?: string | null;
   name: string;
   color: string;
   order: number;

@@ -989,7 +989,7 @@ export default function Pipeline() {
   // Fallback: init from stages if pipelines not yet loaded
   useEffect(() => {
     if (!selectedPipelineId && stages?.length) {
-      setSelectedPipelineId(stages[0].pipelineId);
+      setSelectedPipelineId(stages[0].pipelineId ?? null);
     }
   }, [stages, selectedPipelineId]);
 
