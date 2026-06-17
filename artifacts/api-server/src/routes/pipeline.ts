@@ -161,8 +161,11 @@ router.get("/pipeline/stages", async (req, res, next: NextFunction): Promise<voi
     const me = await requireAuth(req, res);
     if (!me) return;
     await ensureDefaultPipeline(me.tenantId);
+    const { pipelineId } = req.query as Record<string, string>;
+    const conditions: ReturnType<typeof eq>[] = [eq(pipelineStagesTable.tenantId, me.tenantId)];
+    if (pipelineId) conditions.push(eq(pipelineStagesTable.pipelineId, pipelineId));
     const stages = await db.select().from(pipelineStagesTable)
-      .where(eq(pipelineStagesTable.tenantId, me.tenantId))
+      .where(and(...conditions))
       .orderBy(asc(pipelineStagesTable.order));
     res.json(stages.map(formatStage));
   } catch (err) {
@@ -381,12 +384,139 @@ router.patch("/pipelines/:id", async (req, res, next: NextFunction): Promise<voi
       next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
       return;
     }
-    const parsed = z.object({ name: z.string().min(1).optional(), isActive: z.boolean().optional() }).safeParse(req.body);
+    const parsed = z.object({
+      name: z.string().min(1).optional(),
+      isActive: z.boolean().optional(),
+      isDefault: z.boolean().optional(),
+    }).safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
+
+    // When setting a pipeline as default, unset all others first
+    if (parsed.data.isDefault === true) {
+      await db.update(pipelinesTable)
+        .set({ isDefault: false })
+        .where(eq(pipelinesTable.tenantId, me.tenantId));
+    }
+
     await db.update(pipelinesTable).set(parsed.data).where(and(eq(pipelinesTable.id, req.params.id), eq(pipelinesTable.tenantId, me.tenantId)));
     const [pipeline] = await db.select().from(pipelinesTable).where(and(eq(pipelinesTable.id, req.params.id), eq(pipelinesTable.tenantId, me.tenantId)));
     if (!pipeline) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(pipeline);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── PIPELINE STAGE CRUD ──────────────────────────────────────────────────────
+
+const CreateStageBody = z.object({
+  name: z.string().min(1),
+  color: z.string().optional().default("#6366F1"),
+  isFinal: z.boolean().optional().default(false),
+  isDefaultWeb: z.boolean().optional().default(false),
+});
+
+const UpdateStageBody = z.object({
+  name: z.string().min(1).optional(),
+  color: z.string().optional(),
+  order: z.number().int().optional(),
+  isFinal: z.boolean().optional(),
+  isDefaultWeb: z.boolean().optional(),
+});
+
+router.post("/pipeline/stages", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+
+    const { pipelineId } = req.query as Record<string, string>;
+    if (!pipelineId) { next(new ValidationError("pipelineId is required", "VALIDATION_ERROR")); return; }
+
+    const [pipeline] = await db.select().from(pipelinesTable)
+      .where(and(eq(pipelinesTable.id, pipelineId), eq(pipelinesTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!pipeline) { next(new NotFoundError("Pipeline not found", "NOT_FOUND")); return; }
+
+    const parsed = CreateStageBody.safeParse(req.body);
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
+
+    // Assign next order value
+    const existing = await db.select({ order: pipelineStagesTable.order })
+      .from(pipelineStagesTable)
+      .where(and(eq(pipelineStagesTable.pipelineId, pipelineId), eq(pipelineStagesTable.tenantId, me.tenantId)));
+    const maxOrder = existing.length > 0 ? Math.max(...existing.map(s => s.order)) : 0;
+
+    const id = generateId();
+    await db.insert(pipelineStagesTable).values({
+      id,
+      tenantId: me.tenantId,
+      pipelineId,
+      name: parsed.data.name,
+      color: parsed.data.color,
+      order: maxOrder + 1,
+      isFinal: parsed.data.isFinal,
+      isDefaultWeb: parsed.data.isDefaultWeb,
+    });
+    const [stage] = await db.select().from(pipelineStagesTable).where(eq(pipelineStagesTable.id, id));
+    res.status(201).json(formatStage(stage));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch("/pipeline/stages/:stageId", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+
+    const [stage] = await db.select().from(pipelineStagesTable)
+      .where(and(eq(pipelineStagesTable.id, req.params.stageId), eq(pipelineStagesTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!stage) { next(new NotFoundError("Stage not found", "NOT_FOUND")); return; }
+
+    const parsed = UpdateStageBody.safeParse(req.body);
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
+
+    await db.update(pipelineStagesTable)
+      .set(parsed.data)
+      .where(and(eq(pipelineStagesTable.id, req.params.stageId), eq(pipelineStagesTable.tenantId, me.tenantId)));
+
+    const [updated] = await db.select().from(pipelineStagesTable).where(eq(pipelineStagesTable.id, req.params.stageId));
+    res.json(formatStage(updated));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/pipeline/stages/:stageId", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+
+    const [stage] = await db.select().from(pipelineStagesTable)
+      .where(and(eq(pipelineStagesTable.id, req.params.stageId), eq(pipelineStagesTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!stage) { next(new NotFoundError("Stage not found", "NOT_FOUND")); return; }
+
+    // Protect: don't delete if there are active deals in this stage
+    const [deal] = await db.select({ id: dealsTable.id }).from(dealsTable)
+      .where(and(
+        eq(dealsTable.stageId, req.params.stageId),
+        eq(dealsTable.tenantId, me.tenantId),
+        eq(dealsTable.status, "open"),
+      ))
+      .limit(1);
+    if (deal) {
+      next(new ValidationError("Não é possível excluir uma etapa com negócios ativos", "STAGE_HAS_ACTIVE_DEALS"));
+      return;
+    }
+
+    await db.delete(pipelineStagesTable)
+      .where(and(eq(pipelineStagesTable.id, req.params.stageId), eq(pipelineStagesTable.tenantId, me.tenantId)));
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }

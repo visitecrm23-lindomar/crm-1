@@ -30,6 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Plus, Search, Trash2, Phone, Calendar, MapPin, X, Pencil, UserPen, Eye, BookOpen,
   ExternalLink, ShoppingBag, ChevronDown, ChevronUp, BarChart2, Loader2, XCircle,
+  Settings2, Star, ChevronRight, ChevronLeft, GripVertical,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -428,6 +429,363 @@ function DroppableColumn({ stage, children }: { stage: PipelineStage; children: 
   );
 }
 
+// ─── Types & Constants ────────────────────────────────────────────────────────
+
+interface PipelineInfo {
+  id: string;
+  name: string;
+  description?: string | null;
+  isDefault: boolean;
+  isActive: boolean;
+  tenantId: string;
+  createdAt: string;
+}
+
+const PRESET_COLORS = [
+  "#6366F1", "#3B82F6", "#0EA5E9", "#10B981", "#06B6D4",
+  "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#6B7280",
+];
+
+// ─── New Pipeline Modal ───────────────────────────────────────────────────────
+
+interface NewPipelineModalProps {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (pipeline: PipelineInfo) => void;
+}
+
+function NewPipelineModal({ open, onClose, onCreated }: NewPipelineModalProps) {
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => { if (open) { setName(""); setError(""); } }, [open]);
+
+  async function handleCreate() {
+    if (!name.trim()) return;
+    setLoading(true);
+    setError("");
+    try {
+      const resp = await fetch(`${API_BASE}/api/pipelines`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim() }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        setError(data.message ?? "Erro ao criar pipeline");
+        return;
+      }
+      const pipeline = await resp.json() as PipelineInfo;
+      onCreated(pipeline);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Novo Pipeline</DialogTitle>
+          <DialogDescription>Crie um pipeline separado para organizar negócios por contexto.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          <div>
+            <Label className="text-sm font-medium">Nome do pipeline</Label>
+            <Input
+              className="mt-1.5"
+              placeholder="Ex: Viagens Internacionais"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleCreate(); }}
+              autoFocus
+            />
+          </div>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
+          <Button onClick={handleCreate} disabled={!name.trim() || loading}>
+            {loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+            Criar Pipeline
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Manage Stages Modal ──────────────────────────────────────────────────────
+
+interface StageRow {
+  id: string;
+  name: string;
+  color: string;
+  order: number;
+  isFinal: boolean;
+  isDefaultWeb: boolean;
+  pipelineId: string;
+  activeDeals?: number;
+  isDirty?: boolean;
+}
+
+interface ManageStagesModalProps {
+  open: boolean;
+  onClose: () => void;
+  pipelineId: string;
+  pipelineName: string;
+  onChanged: () => void;
+}
+
+function ManageStagesModal({ open, onClose, pipelineId, pipelineName, onChanged }: ManageStagesModalProps) {
+  const [rows, setRows] = useState<StageRow[]>([]);
+  const [loadingStages, setLoadingStages] = useState(false);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [addingName, setAddingName] = useState("");
+  const [addingColor, setAddingColor] = useState(PRESET_COLORS[0]);
+  const [adding, setAdding] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [error, setError] = useState("");
+
+  async function loadStages() {
+    setLoadingStages(true);
+    try {
+      const resp = await fetch(`${API_BASE}/api/pipeline/stages?pipelineId=${pipelineId}`, { credentials: "include" });
+      if (!resp.ok) return;
+      const data = await resp.json() as StageRow[];
+      setRows(data.map(s => ({ ...s, isDirty: false })));
+    } finally {
+      setLoadingStages(false);
+    }
+  }
+
+  useEffect(() => {
+    if (open && pipelineId) { loadStages(); setAddOpen(false); setAddingName(""); setError(""); }
+  }, [open, pipelineId]);
+
+  async function saveRow(row: StageRow) {
+    setSaving(row.id);
+    try {
+      await fetch(`${API_BASE}/api/pipeline/stages/${row.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: row.name, color: row.color, order: row.order }),
+      });
+      setRows(prev => prev.map(r => r.id === row.id ? { ...r, isDirty: false } : r));
+      onChanged();
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function deleteRow(id: string) {
+    setDeleting(id);
+    setError("");
+    try {
+      const resp = await fetch(`${API_BASE}/api/pipeline/stages/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        setError(data.message ?? "Não foi possível excluir a etapa");
+        return;
+      }
+      setRows(prev => prev.filter(r => r.id !== id));
+      onChanged();
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  async function addStage() {
+    if (!addingName.trim()) return;
+    setAdding(true);
+    setError("");
+    try {
+      const resp = await fetch(`${API_BASE}/api/pipeline/stages?pipelineId=${pipelineId}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: addingName.trim(), color: addingColor }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        setError(data.message ?? "Erro ao criar etapa");
+        return;
+      }
+      const stage = await resp.json() as StageRow;
+      setRows(prev => [...prev, stage]);
+      setAddingName("");
+      setAddOpen(false);
+      onChanged();
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  function moveRow(idx: number, dir: -1 | 1) {
+    const newRows = [...rows];
+    const targetIdx = idx + dir;
+    if (targetIdx < 0 || targetIdx >= newRows.length) return;
+    const a = { ...newRows[idx], order: newRows[targetIdx].order, isDirty: true };
+    const b = { ...newRows[targetIdx], order: newRows[idx].order, isDirty: true };
+    newRows[idx] = b;
+    newRows[targetIdx] = a;
+    newRows.sort((x, y) => x.order - y.order);
+    setRows(newRows);
+    // Save both
+    setTimeout(() => {
+      saveRow(a);
+      saveRow(b);
+    }, 0);
+  }
+
+  function updateName(id: string, name: string) {
+    setRows(prev => prev.map(r => r.id === id ? { ...r, name, isDirty: true } : r));
+  }
+
+  function updateColor(id: string, color: string) {
+    setRows(prev => prev.map(r => r.id === id ? { ...r, color, isDirty: true } : r));
+    // Save immediately on color change
+    const row = rows.find(r => r.id === id);
+    if (row) saveRow({ ...row, color, isDirty: false });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Settings2 className="w-4 h-4" />
+            Gerenciar Etapas — {pipelineName}
+          </DialogTitle>
+          <DialogDescription>Adicione, renomeie, reordene ou remova etapas do pipeline.</DialogDescription>
+        </DialogHeader>
+
+        {loadingStages ? (
+          <div className="space-y-2 py-2">
+            {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+          </div>
+        ) : (
+          <div className="space-y-1.5 max-h-96 overflow-y-auto py-1 pr-1">
+            {rows.map((row, idx) => (
+              <div key={row.id} className="flex items-center gap-2 rounded-lg border bg-card p-2">
+                <GripVertical className="w-4 h-4 text-muted-foreground shrink-0" />
+                {/* Color dot selector */}
+                <div className="relative group shrink-0">
+                  <div
+                    className="w-5 h-5 rounded-full cursor-pointer border-2 border-transparent hover:border-ring"
+                    style={{ backgroundColor: row.color }}
+                    title="Cor"
+                  />
+                  <div className="absolute z-10 hidden group-hover:flex flex-wrap gap-1 p-2 bg-popover border rounded-lg shadow-lg left-0 top-7 w-32">
+                    {PRESET_COLORS.map(c => (
+                      <button
+                        key={c}
+                        className={`w-5 h-5 rounded-full border-2 ${row.color === c ? "border-ring" : "border-transparent"}`}
+                        style={{ backgroundColor: c }}
+                        onClick={() => updateColor(row.id, c)}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <Input
+                  value={row.name}
+                  onChange={e => updateName(row.id, e.target.value)}
+                  onBlur={() => { if (row.isDirty) saveRow(row); }}
+                  onKeyDown={e => { if (e.key === "Enter" && row.isDirty) saveRow(row); }}
+                  className="h-7 text-sm flex-1"
+                />
+                {saving === row.id && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground shrink-0" />}
+                <div className="flex gap-0.5 shrink-0">
+                  <button
+                    onClick={() => moveRow(idx, -1)}
+                    disabled={idx === 0 || !!saving}
+                    className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30"
+                    title="Mover para cima"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => moveRow(idx, 1)}
+                    disabled={idx === rows.length - 1 || !!saving}
+                    className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30"
+                    title="Mover para baixo"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => { if (confirm(`Excluir a etapa "${row.name}"?`)) deleteRow(row.id); }}
+                    disabled={!!deleting || !!saving}
+                    className="p-1 rounded text-muted-foreground hover:text-destructive disabled:opacity-30"
+                    title="Excluir etapa"
+                  >
+                    {deleting === row.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {/* Add new stage row */}
+            {addOpen ? (
+              <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-2 mt-2">
+                <div className="relative group shrink-0">
+                  <div
+                    className="w-5 h-5 rounded-full cursor-pointer border-2 border-transparent hover:border-ring"
+                    style={{ backgroundColor: addingColor }}
+                  />
+                  <div className="absolute z-10 hidden group-hover:flex flex-wrap gap-1 p-2 bg-popover border rounded-lg shadow-lg left-0 top-7 w-32">
+                    {PRESET_COLORS.map(c => (
+                      <button
+                        key={c}
+                        className={`w-5 h-5 rounded-full border-2 ${addingColor === c ? "border-ring" : "border-transparent"}`}
+                        style={{ backgroundColor: c }}
+                        onClick={() => setAddingColor(c)}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <Input
+                  value={addingName}
+                  onChange={e => setAddingName(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") addStage(); if (e.key === "Escape") setAddOpen(false); }}
+                  placeholder="Nome da etapa..."
+                  className="h-7 text-sm flex-1"
+                  autoFocus
+                />
+                <Button size="sm" className="h-7 px-2" onClick={addStage} disabled={!addingName.trim() || adding}>
+                  {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : "Salvar"}
+                </Button>
+                <button onClick={() => setAddOpen(false)} className="p-1 text-muted-foreground hover:text-foreground">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setAddOpen(true)}
+                className="flex items-center gap-2 w-full rounded-lg border-2 border-dashed p-2 text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors mt-1"
+              >
+                <Plus className="w-4 h-4" /> Nova etapa
+              </button>
+            )}
+          </div>
+        )}
+
+        {error && <p className="text-xs text-destructive mt-1">{error}</p>}
+
+        <DialogFooter>
+          <Button onClick={onClose}>Fechar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Pipeline() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
@@ -441,6 +799,20 @@ export default function Pipeline() {
   const [client360Id, setClient360Id] = useState<string | null>(null);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [pendingLostDeal, setPendingLostDeal] = useState<{ dealId: string; stageId: string } | null>(null);
+  const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null);
+  const [newPipelineOpen, setNewPipelineOpen] = useState(false);
+  const [manageStagesOpen, setManageStagesOpen] = useState(false);
+  const [settingDefault, setSettingDefault] = useState(false);
+
+  const { data: pipelines, refetch: refetchPipelines } = useQuery<PipelineInfo[]>({
+    queryKey: ["pipelines"],
+    queryFn: async () => {
+      const resp = await fetch(`${API_BASE}/api/pipelines`, { credentials: "include" });
+      if (!resp.ok) throw new Error("Failed");
+      return resp.json();
+    },
+    staleTime: 30000,
+  });
 
   const { data: stages, isLoading: loadingStages, refetch: refetchStages } = useListPipelineStages();
   const { data: deals, isLoading: loadingDeals, refetch: refetchDeals } = useListDeals({ status: DEAL_STATUS.OPEN });
@@ -450,6 +822,21 @@ export default function Pipeline() {
   const moveDeal = useMoveDeal();
   const deleteDeal = useDeleteDeal();
   const updateDeal = useUpdateDeal();
+
+  // Initialize selectedPipelineId to default pipeline
+  useEffect(() => {
+    if (!selectedPipelineId && pipelines?.length) {
+      const def = pipelines.find(p => p.isDefault) ?? pipelines[0];
+      setSelectedPipelineId(def.id);
+    }
+  }, [pipelines, selectedPipelineId]);
+
+  // Fallback: init from stages if pipelines not yet loaded
+  useEffect(() => {
+    if (!selectedPipelineId && stages?.length) {
+      setSelectedPipelineId(stages[0].pipelineId);
+    }
+  }, [stages, selectedPipelineId]);
 
   const handleCreateReservation = (deal: Deal) => {
     const params = new URLSearchParams();
@@ -477,12 +864,22 @@ export default function Pipeline() {
     return map;
   }, [tripsData]);
 
+  // Stages visible in the currently selected pipeline
+  const visibleStages = useMemo(() => {
+    if (!selectedPipelineId) return stages ?? [];
+    return (stages ?? []).filter(s => s.pipelineId === selectedPipelineId);
+  }, [stages, selectedPipelineId]);
+
+  const visibleStageIds = useMemo(() => new Set(visibleStages.map(s => s.id)), [visibleStages]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
 
   const filteredDeals = useMemo(() => {
     let d = deals ?? [];
+    // Filter to stages in the selected pipeline
+    if (visibleStageIds.size > 0) d = d.filter(x => visibleStageIds.has(x.stageId));
     if (filterStageId !== "all") d = d.filter(x => x.stageId === filterStageId);
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -513,12 +910,14 @@ export default function Pipeline() {
   }, [deals, search, filterStageId, filterClassification, filterCity, clientsById]);
 
   const perdidoStageId = useMemo(
-    () => stages?.find(s => s.name.toLowerCase() === "perdido")?.id ?? null,
-    [stages],
+    () => visibleStages.find(s => s.name.toLowerCase() === "perdido")?.id ?? null,
+    [visibleStages],
   );
 
   const filteredLostDeals = useMemo(() => {
     let d = lostDealsData ?? [];
+    // Filter to stages in the selected pipeline
+    if (visibleStageIds.size > 0) d = d.filter(x => visibleStageIds.has(x.stageId));
     if (search.trim()) {
       const q = search.toLowerCase();
       d = d.filter(x => {
@@ -605,8 +1004,23 @@ export default function Pipeline() {
 
   const openNew = (stageId?: string) => {
     setEditingClient(null);
-    setDefaultStageId(stageId ?? stages?.[0]?.id);
+    setDefaultStageId(stageId ?? visibleStages[0]?.id);
     setIsModalOpen(true);
+  };
+
+  const handleSetDefault = async (pipelineId: string) => {
+    setSettingDefault(true);
+    try {
+      await fetch(`${API_BASE}/api/pipelines/${pipelineId}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isDefault: true }),
+      });
+      await refetchPipelines();
+    } finally {
+      setSettingDefault(false);
+    }
   };
 
   const closeModal = () => {
@@ -621,20 +1035,82 @@ export default function Pipeline() {
     refetchStages();
   };
 
-  const totalValue = (deals ?? []).reduce((acc, d) => acc + d.value, 0);
+  const totalValue = filteredDeals.reduce((acc, d) => acc + d.value, 0);
   const hasFilters = !!(search || filterStageId !== "all" || filterClassification !== "all" || filterCity);
-  const pipelineId = stages?.[0]?.pipelineId ?? "";
+  const activePipeline = pipelines?.find(p => p.id === selectedPipelineId);
+  const pipelineId = selectedPipelineId ?? "";
 
   return (
     <div className="space-y-5 flex flex-col" style={{ height: "calc(100vh - 120px)" }}>
-      <div className="flex items-center justify-between flex-shrink-0">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Pipeline de Vendas</h1>
-          <p className="text-muted-foreground text-sm">
-            {deals?.length ?? 0} leads · {formatCurrency(totalValue)} no funil
-          </p>
+      <div className="flex items-center justify-between flex-shrink-0 gap-3 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap flex-1 min-w-0">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Pipeline de Vendas</h1>
+            <p className="text-muted-foreground text-sm">
+              {filteredDeals.length} leads · {formatCurrency(totalValue)} no funil
+            </p>
+          </div>
+          {/* Pipeline selector */}
+          {pipelines && pipelines.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <Select
+                value={selectedPipelineId ?? ""}
+                onValueChange={val => { setSelectedPipelineId(val); setFilterStageId("all"); }}
+              >
+                <SelectTrigger className="w-52 h-9 font-medium">
+                  <SelectValue placeholder="Selecionar pipeline" />
+                </SelectTrigger>
+                <SelectContent>
+                  {pipelines.map(p => (
+                    <SelectItem key={p.id} value={p.id}>
+                      <div className="flex items-center gap-2">
+                        {p.isDefault && <Star className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0" />}
+                        <span className="truncate">{p.name}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {/* Set default */}
+              {activePipeline && !activePipeline.isDefault && (
+                <button
+                  onClick={() => handleSetDefault(activePipeline.id)}
+                  disabled={settingDefault}
+                  className="text-xs text-muted-foreground hover:text-amber-500 transition-colors flex items-center gap-1 px-1"
+                  title="Definir como pipeline padrão"
+                >
+                  {settingDefault ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Star className="w-3.5 h-3.5" />}
+                </button>
+              )}
+              {activePipeline?.isDefault && (
+                <span className="text-xs text-amber-500 flex items-center gap-1 px-1">
+                  <Star className="w-3 h-3 fill-amber-500" /> Padrão
+                </span>
+              )}
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
+          {selectedPipelineId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setManageStagesOpen(true)}
+              className="gap-1.5"
+            >
+              <Settings2 className="w-4 h-4" />
+              Etapas
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setNewPipelineOpen(true)}
+            className="gap-1.5"
+          >
+            <Plus className="w-4 h-4" />
+            Pipeline
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -666,7 +1142,7 @@ export default function Pipeline() {
           <SelectTrigger className="w-40"><SelectValue placeholder="Estágio" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos os estágios</SelectItem>
-            {stages?.map(s => (
+            {visibleStages.map(s => (
               <SelectItem key={s.id} value={s.id}>
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
@@ -702,7 +1178,7 @@ export default function Pipeline() {
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="flex gap-3 overflow-x-auto pb-6 flex-1">
-            {stages?.map(stage => {
+            {visibleStages.map(stage => {
               const isLostStage = stage.name.toLowerCase() === "perdido";
               const stageDeals = dealsByStage(stage.id, isLostStage);
               const stageValue = stageDeals.reduce((acc, d) => acc + d.value, 0);
@@ -803,6 +1279,27 @@ export default function Pipeline() {
         onClose={() => setPendingLostDeal(null)}
         onConfirm={handleLostReasonConfirm}
       />
+
+      <NewPipelineModal
+        open={newPipelineOpen}
+        onClose={() => setNewPipelineOpen(false)}
+        onCreated={pipeline => {
+          setNewPipelineOpen(false);
+          refetchPipelines();
+          refetchStages();
+          setSelectedPipelineId(pipeline.id);
+        }}
+      />
+
+      {selectedPipelineId && activePipeline && (
+        <ManageStagesModal
+          open={manageStagesOpen}
+          onClose={() => setManageStagesOpen(false)}
+          pipelineId={selectedPipelineId}
+          pipelineName={activePipeline.name}
+          onChanged={() => { refetchStages(); refetchDeals(); refetchLostDeals(); }}
+        />
+      )}
     </div>
   );
 }
