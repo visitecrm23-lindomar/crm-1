@@ -8,6 +8,7 @@ import {
   tripsTable,
   reservationsTable,
   passengersTable,
+  clientsTable,
 } from "@workspace/db";
 import { eq, and, gt, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -146,8 +147,11 @@ router.get("/guide/trip/:tripId", async (req, res, next: NextFunction): Promise<
           seatNumber: passengersTable.seatNumber, ageCategory: passengersTable.ageCategory,
           reservationId: passengersTable.reservationId, checkedInAt: passengersTable.checkedInAt,
           boardingLocationId: passengersTable.boardingLocationId,
+          customerCode: clientsTable.customerCode,
         })
           .from(passengersTable)
+          .leftJoin(reservationsTable, eq(passengersTable.reservationId, reservationsTable.id))
+          .leftJoin(clientsTable, eq(reservationsTable.clientId, clientsTable.id))
           .where(inArray(passengersTable.reservationId, activeResIds))
       : [];
 

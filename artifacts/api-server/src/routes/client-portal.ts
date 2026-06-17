@@ -423,6 +423,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
             likesPhotosVideos: client.likesPhotosVideos ?? null,
             preferredDestinationTypes: client.preferredDestinationTypes ?? [],
             ambassadorOptIn: client.ambassadorOptIn ?? false,
+            customerCode: client.customerCode ?? null,
           }
         : null,
       tenant: tenant

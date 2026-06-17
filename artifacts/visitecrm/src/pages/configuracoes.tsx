@@ -391,18 +391,22 @@ function AgencyProfileTab() {
         </div>
       </div>
       <div className="space-y-1">
-        <Label>Prefixo de Reservas</Label>
-        <div className="flex items-center gap-2">
-          <Input
-            value={form.reservationPrefix ?? ""}
-            onChange={(e) => setForm((f) => ({ ...f, reservationPrefix: e.target.value.toUpperCase().slice(0, 5) }))}
-            placeholder="Ex: CHQ, AGT..."
-            className="font-mono w-36"
-            maxLength={5}
-          />
-          <span className="text-xs text-muted-foreground">
-            Aparece nos números de reserva: <span className="font-mono font-semibold">{form.reservationPrefix || "CHQ"}-EXC-202604-00001</span>
-          </span>
+        <Label>Prefixo de Reservas e Código de Cliente</Label>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2">
+            <Input
+              value={form.reservationPrefix ?? ""}
+              onChange={(e) => setForm((f) => ({ ...f, reservationPrefix: e.target.value.toUpperCase().slice(0, 5) }))}
+              placeholder="Ex: CHQ, AGT..."
+              className="font-mono w-36"
+              maxLength={5}
+            />
+            <span className="text-xs text-muted-foreground">1–5 letras maiúsculas</span>
+          </div>
+          <div className="text-xs text-muted-foreground space-y-0.5">
+            <p>Reservas: <span className="font-mono font-semibold text-foreground">{form.reservationPrefix || "CLI"}-EXC-202604-00001</span></p>
+            <p>Código de cliente: <span className="font-mono font-semibold text-foreground">{form.reservationPrefix || "CLI"}-{new Date().toISOString().slice(0, 7).replace("-", "")}-00043</span></p>
+          </div>
         </div>
       </div>
       <Button onClick={handleSave} disabled={updateTenant.isPending || uploadingCount > 0}>

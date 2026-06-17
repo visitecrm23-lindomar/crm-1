@@ -322,6 +322,8 @@ function ClienteCard({
   profile: ClientPortalProfile;
   primaryColor: string;
 }) {
+  const { toast } = useToast();
+  const [codeCopied, setCodeCopied] = useState(false);
   const displayName = profile.client?.name ?? profile.user?.name ?? "Viajante";
   const cpf = profile.client?.cpf ?? null;
   const hasLoyalty = !!profile.loyalty;
@@ -329,7 +331,16 @@ function ClienteCard({
   const tierLabel = tierLevel ? (CARD_TIER_LABELS[tierLevel] ?? tierLevel) : null;
   const loyaltyPoints = profile.loyalty?.availablePoints ?? null;
   const referralCode = profile.referral?.code ?? null;
+  const customerCode = profile.client?.customerCode ?? null;
   const agencyName = profile.tenant?.name ?? "VisiteCRM";
+
+  function copyCustomerCode() {
+    if (!customerCode) return;
+    navigator.clipboard.writeText(customerCode).catch(() => {});
+    setCodeCopied(true);
+    toast({ title: "Código copiado!" });
+    setTimeout(() => setCodeCopied(false), 2000);
+  }
 
   const maskedNumber = cpf
     ? `•••• •••• ••• ${cpf.replace(/\D/g, "").slice(-3)}`
@@ -418,6 +429,19 @@ function ClienteCard({
           </svg>
         </div>
       </div>
+      {customerCode && (
+        <button
+          onClick={copyCustomerCode}
+          className="mt-2 mx-auto flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted hover:bg-muted/80 transition-colors group"
+          title="Copiar código de cliente"
+        >
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Cód. cliente</span>
+          <span className="font-mono text-xs font-semibold text-foreground">{customerCode}</span>
+          {codeCopied
+            ? <Check className="w-3 h-3 text-green-500" />
+            : <Copy className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors" />}
+        </button>
+      )}
     </div>
   );
 }

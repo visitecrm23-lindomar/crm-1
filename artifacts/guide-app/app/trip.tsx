@@ -27,6 +27,7 @@ interface ApiPassenger {
   name: string;
   seatNumber: string | null;
   reservationId: string;
+  customerCode?: string | null;
 }
 
 interface ApiCheckin {
@@ -51,6 +52,7 @@ interface Passenger {
   reservationId: string;
   status: "checado" | "ausente" | "pendente";
   checkedInAt: string | null;
+  customerCode?: string | null;
 }
 
 const POLL_MS = 15_000;
@@ -85,6 +87,7 @@ export default function TripScreen() {
         reservationId: p.reservationId,
         status: checkin ? (checkin.status === "present" ? "checado" : "ausente") : "pendente",
         checkedInAt: checkin?.checkedInAt ?? null,
+        customerCode: p.customerCode ?? null,
       };
     });
   }
@@ -249,7 +252,12 @@ export default function TripScreen() {
           ]} />
           <View style={{ flex: 1 }}>
             <Text style={styles.passengerName} numberOfLines={1}>{item.name}</Text>
-            {item.seat ? <Text style={styles.passengerSeat}>Assento {item.seat}</Text> : null}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              {item.seat ? <Text style={styles.passengerSeat}>Assento {item.seat}</Text> : null}
+              {item.customerCode ? (
+                <Text style={styles.passengerCode}>{item.customerCode}</Text>
+              ) : null}
+            </View>
           </View>
           {isChecked ? (
             <View style={styles.badge}>
@@ -560,6 +568,13 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: s.mutedForeground,
     marginTop: 1,
+  },
+  passengerCode: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: s.mutedForeground,
+    marginTop: 1,
+    opacity: 0.7,
   },
   badge: {
     flexDirection: "row",

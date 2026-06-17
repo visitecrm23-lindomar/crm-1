@@ -96,6 +96,7 @@ export interface ClientPortalProfile {
     likesPhotosVideos: boolean | null;
     preferredDestinationTypes: string[];
     ambassadorOptIn: boolean;
+    customerCode: string | null;
   } | null;
   tenant: {
     id: string;
