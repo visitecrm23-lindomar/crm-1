@@ -68,7 +68,7 @@ async function upsertCalendarEvent(
         syncedAt: new Date(),
       }).where(eq(calendarEventsTable.id, existing.id));
     } else {
-      logger.warn({ ...logCtx, googleEventId: existing.googleEventId }, "calendar-sync: updateEvent failed; DB record kept for retry");
+      logger.warn({ ...logCtx, googleEventId: existing.googleEventId }, "calendar-sync: updateEvent permanently failed (auth or data issue); DB record not updated");
     }
   } else {
     const googleEvent = await withCalendarRetry(() => service.createEvent(eventData, logCtx));

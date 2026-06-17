@@ -7,12 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, TrendingDown, Minus, ArrowRight, Download, BarChart3 } from "lucide-react";
-import { formatCurrency as fmtCurrencyLib } from "@/lib/utils";
+import { formatCurrencyBRL as fmtCurrency } from "@/lib/utils";
 import { useState } from "react";
-
-function fmtCurrency(v: number | null | undefined) {
-  return fmtCurrencyLib(v ?? 0);
-}
 
 function MonthLabel(month: string) {
   const [y, m] = month.split("-");

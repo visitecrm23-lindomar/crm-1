@@ -238,6 +238,10 @@ export class GoogleCalendarService {
       });
       return { id: response.data.id! };
     } catch (err) {
+      // Re-throw transient errors (429, 5xx, network) so withCalendarRetry and
+      // BullMQ can retry them with exponential backoff. Only swallow permanent
+      // failures (invalid_grant, 400, etc.) after logging them.
+      if (isTransientCalendarError(err)) throw err;
       await this.handleApiError(err, "createEvent", ctx);
       return null;
     }
@@ -266,6 +270,8 @@ export class GoogleCalendarService {
       });
       return true;
     } catch (err) {
+      // Re-throw transient errors so withCalendarRetry and BullMQ can retry them.
+      if (isTransientCalendarError(err)) throw err;
       await this.handleApiError(err, "updateEvent", { ...ctx, eventId });
       return false;
     }
@@ -280,6 +286,8 @@ export class GoogleCalendarService {
       });
       return true;
     } catch (err) {
+      // Re-throw transient errors so withCalendarRetry and BullMQ can retry them.
+      if (isTransientCalendarError(err)) throw err;
       await this.handleApiError(err, "deleteEvent", { ...ctx, eventId });
       return false;
     }
