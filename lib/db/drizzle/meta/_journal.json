@@ -442,6 +442,13 @@
       "when": 1782400100000,
       "tag": "0062_client_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1782450000000,
+      "tag": "0063_nps_invitations",
+      "breakpoints": true
     }
   ]
 }

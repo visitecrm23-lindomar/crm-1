@@ -7,6 +7,7 @@ import cron from "node-cron";
 import path from "path";
 import { fileURLToPath } from "url";
 import { runBirthdayCron } from "./lib/birthday";
+import { processNpsDispatch } from "./workers/reminder.worker";
 import { runExpiredReservationsCron } from "./lib/expired-reservations";
 import { runPipelineTripEndedCron } from "./services/pipeline-automation";
 import { calculateScoresForAllTenants } from "./lib/client-scores";
@@ -172,6 +173,11 @@ applyMigrations()
         runCampaignAutomationCron().catch((err) => logger.error({ err }, "[campaign-automation] Cron failed"));
       }, { timezone: "America/Sao_Paulo" });
 
+      cron.schedule("30 * * * *", () => {
+        logger.info("[nps-dispatch] Hourly NPS dispatch cron triggered");
+        processNpsDispatch().catch((err) => logger.error({ err }, "[nps-dispatch] Cron failed"));
+      }, { timezone: "America/Sao_Paulo" });
+
       // ── Log Upstash daily usage on startup (non-fatal) ──
       fetchUpstashDailyStats()
         .then((stats) => {
@@ -318,6 +324,12 @@ applyMigrations()
             { pattern: "0 9 * * *", tz: process.env["REMINDER_TZ"] ?? "America/Sao_Paulo" },
             { name: "referral_bonus_release_notification", data: { type: "referral_bonus_release_notification" } },
           ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule referral bonus release notification"));
+
+          await reminderQueue.upsertJobScheduler(
+            "nps-dispatch-hourly",
+            { pattern: "30 * * * *" },
+            { name: "nps_dispatch", data: { type: "nps_dispatch" } },
+          ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule NPS dispatch"));
 
           logger.info("[reminders] Repeatable reminder jobs registered");
         }

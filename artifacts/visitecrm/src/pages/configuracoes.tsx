@@ -2212,21 +2212,86 @@ function NotificationsTab() {
     }
   }
 
+  const npsAutoSend = (configs.find((c) => c.key === "npsAutoSend")?.value ?? false) as boolean;
+  const npsHoursAfterReturn = (configs.find((c) => c.key === "npsHoursAfterReturn")?.value ?? 24) as number;
+  const [npsHoursInput, setNpsHoursInput] = useState<number>(npsHoursAfterReturn);
+
+  useEffect(() => {
+    setNpsHoursInput(npsHoursAfterReturn);
+  }, [npsHoursAfterReturn]);
+
+  async function handleNpsAutoSendToggle(value: boolean) {
+    try {
+      await upsert.mutateAsync({ data: { key: "npsAutoSend", value } });
+      refetch();
+    } catch {
+      toast({ title: "Erro ao salvar configuração", variant: "destructive" });
+    }
+  }
+
+  async function handleNpsHoursSave() {
+    try {
+      await upsert.mutateAsync({ data: { key: "npsHoursAfterReturn", value: npsHoursInput } });
+      refetch();
+      toast({ title: "Configuração salva!" });
+    } catch {
+      toast({ title: "Erro ao salvar configuração", variant: "destructive" });
+    }
+  }
+
   return (
-    <div className="space-y-4 max-w-lg">
-      <p className="text-sm text-muted-foreground">
-        Escolha quais eventos geram notificações no sistema.
-      </p>
-      <div className="rounded-md border divide-y">
-        {NOTIFICATIONS.map((n) => (
-          <div key={n.key} className="flex items-center justify-between px-4 py-3">
-            <Label className="cursor-pointer">{n.label}</Label>
-            <Switch
-              checked={notifConfig[n.key] ?? true}
-              onCheckedChange={(v) => handleToggle(n.key, v)}
+    <div className="space-y-6 max-w-lg">
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Escolha quais eventos geram notificações no sistema.
+        </p>
+        <div className="rounded-md border divide-y">
+          {NOTIFICATIONS.map((n) => (
+            <div key={n.key} className="flex items-center justify-between px-4 py-3">
+              <Label className="cursor-pointer">{n.label}</Label>
+              <Switch
+                checked={notifConfig[n.key] ?? true}
+                onCheckedChange={(v) => handleToggle(n.key, v)}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-md border p-4 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold">Pesquisa NPS automática</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Envie automaticamente uma pesquisa de satisfação para os passageiros após o retorno da viagem.
+          </p>
+        </div>
+        <div className="flex items-center justify-between">
+          <Label className="cursor-pointer text-sm">Ativar envio automático de NPS</Label>
+          <Switch
+            checked={npsAutoSend}
+            onCheckedChange={handleNpsAutoSendToggle}
+          />
+        </div>
+        {npsAutoSend && (
+          <div className="flex items-center gap-3">
+            <Label className="text-sm whitespace-nowrap">Horas após o retorno</Label>
+            <Input
+              type="number"
+              min={1}
+              max={720}
+              value={npsHoursInput}
+              onChange={(e) => setNpsHoursInput(Number(e.target.value))}
+              className="w-24"
             />
+            <Button size="sm" variant="outline" onClick={handleNpsHoursSave}>
+              Salvar
+            </Button>
           </div>
-        ))}
+        )}
+        <p className="text-xs text-muted-foreground">
+          O link da pesquisa é enviado por e-mail. As respostas aparecem no painel{" "}
+          <strong>NPS</strong>.
+        </p>
       </div>
     </div>
   );

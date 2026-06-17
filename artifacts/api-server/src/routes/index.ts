@@ -51,6 +51,7 @@ import partnersRouter from "./partners";
 import guideRouter from "./guide";
 import gemeoRouter from "./gemeo";
 import webhooksRouter from "./webhooks";
+import npsPublicRouter from "./nps";
 
 const router: IRouter = Router();
 
@@ -105,6 +106,7 @@ router.use(partnersRouter);
 router.use(guideRouter);
 router.use(gemeoRouter);
 router.use(webhooksRouter);
+router.use(npsPublicRouter);
 router.use("/uploadthing", uploadthingRouter);
 
 export default router;

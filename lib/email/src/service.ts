@@ -12,6 +12,7 @@ import { ReferralExpiringSoonEmail, type ReferralExpiringSoonEmailProps } from '
 import { ReferralBonusReleasedEmail, type ReferralBonusReleasedEmailProps } from './templates/referral-bonus-released';
 import { ReferralWelcomeEmail, type ReferralWelcomeEmailProps } from './templates/referral-welcome';
 import { ReferralTierUpgradeEmail, type ReferralTierUpgradeEmailProps } from './templates/referral-tier-upgrade';
+import { NpsSurveyEmail, type NpsSurveyEmailProps } from './templates/nps-survey';
 export type { ReferralWelcomeEmailProps };
 export type { ReferralTierUpgradeEmailProps };
 
@@ -736,3 +737,34 @@ export async function sendReferralReversedEmail(
     return { success: false, error: message };
   }
 }
+
+export async function sendNpsSurveyEmail(props: NpsSurveyEmailProps): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const firstName = props.clientName.split(' ')[0];
+
+    const { data, error } = await resend.emails.send({
+      from: `${props.agencyName} <reservas@resend.visitecrm.com>`,
+      to: [props.clientEmail],
+      subject: `${firstName}, como foi sua viagem? Deixe sua avaliação ✈️`,
+      react: React.createElement(NpsSurveyEmail, props),
+    });
+
+    if (error) {
+      console.error('[email] Failed to send NPS survey email:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Unexpected error sending NPS survey email:', message);
+    return { success: false, error: message };
+  }
+}
+
+export type { NpsSurveyEmailProps };

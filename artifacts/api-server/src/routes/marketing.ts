@@ -1,6 +1,6 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
-import { campaignsTable, npsResponsesTable, productsTable, ordersTable, orderItemsTable, clientsTable, reservationsTable } from "@workspace/db";
+import { campaignsTable, npsResponsesTable, clientNpsResponsesTable, productsTable, ordersTable, orderItemsTable, clientsTable, reservationsTable } from "@workspace/db";
 import { eq, and, desc, inArray, avg, sql, or } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -302,17 +302,28 @@ router.get("/nps/summary", async (req, res, next: NextFunction): Promise<void> =
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const responses = await db.select().from(npsResponsesTable)
-      .where(eq(npsResponsesTable.tenantId, me.tenantId));
-    const total = responses.length;
-    const promoters = responses.filter(r => r.classification === "promoter").length;
-    const detractors = responses.filter(r => r.classification === "detractor").length;
+    const [storeResponses, travelResponses] = await Promise.all([
+      db.select({ score: npsResponsesTable.score, classification: npsResponsesTable.classification })
+        .from(npsResponsesTable)
+        .where(eq(npsResponsesTable.tenantId, me.tenantId)),
+      db.select({ score: clientNpsResponsesTable.score })
+        .from(clientNpsResponsesTable)
+        .where(eq(clientNpsResponsesTable.tenantId, me.tenantId)),
+    ]);
+    const travelMapped = travelResponses.map(r => ({
+      score: r.score,
+      classification: r.score >= 9 ? "promoter" : r.score >= 7 ? "passive" : "detractor",
+    }));
+    const all = [...storeResponses, ...travelMapped];
+    const total = all.length;
+    const promoters = all.filter(r => r.classification === "promoter").length;
+    const detractors = all.filter(r => r.classification === "detractor").length;
     const npsScore = total === 0 ? 0 : Math.round(((promoters - detractors) / total) * 100);
-    const avg = total === 0 ? 0 : responses.reduce((s, r) => s + r.score, 0) / total;
+    const avg = total === 0 ? 0 : all.reduce((s, r) => s + r.score, 0) / total;
     res.json({
       total,
       promoters,
-      passives: responses.filter(r => r.classification === "passive").length,
+      passives: all.filter(r => r.classification === "passive").length,
       detractors,
       npsScore,
       averageScore: Math.round(avg * 10) / 10,
@@ -326,46 +337,80 @@ router.get("/nps", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const rows = await db
-      .select({
-        id: npsResponsesTable.id,
-        tenantId: npsResponsesTable.tenantId,
-        userId: npsResponsesTable.userId,
-        orderId: npsResponsesTable.orderId,
-        score: npsResponsesTable.score,
-        classification: npsResponsesTable.classification,
-        feedback: npsResponsesTable.feedback,
-        createdAt: npsResponsesTable.createdAt,
-        clientName: clientsTable.name,
-      })
-      .from(npsResponsesTable)
-      .leftJoin(
-        clientsTable,
-        and(
-          eq(clientsTable.tenantId, npsResponsesTable.tenantId),
-          or(
-            eq(clientsTable.userId, npsResponsesTable.userId),
-            eq(clientsTable.id, npsResponsesTable.userId),
+    const [storeRows, travelRows] = await Promise.all([
+      db
+        .select({
+          id: npsResponsesTable.id,
+          tenantId: npsResponsesTable.tenantId,
+          userId: npsResponsesTable.userId,
+          orderId: npsResponsesTable.orderId,
+          score: npsResponsesTable.score,
+          classification: npsResponsesTable.classification,
+          feedback: npsResponsesTable.feedback,
+          createdAt: npsResponsesTable.createdAt,
+          clientName: clientsTable.name,
+        })
+        .from(npsResponsesTable)
+        .leftJoin(
+          clientsTable,
+          and(
+            eq(clientsTable.tenantId, npsResponsesTable.tenantId),
+            or(
+              eq(clientsTable.userId, npsResponsesTable.userId),
+              eq(clientsTable.id, npsResponsesTable.userId),
+            ),
           ),
-        ),
-      )
-      .where(eq(npsResponsesTable.tenantId, me.tenantId))
-      .orderBy(desc(npsResponsesTable.createdAt));
+        )
+        .where(eq(npsResponsesTable.tenantId, me.tenantId))
+        .orderBy(desc(npsResponsesTable.createdAt)),
+      db
+        .select({
+          id: clientNpsResponsesTable.id,
+          score: clientNpsResponsesTable.score,
+          comment: clientNpsResponsesTable.comment,
+          createdAt: clientNpsResponsesTable.createdAt,
+          clientName: clientsTable.name,
+        })
+        .from(clientNpsResponsesTable)
+        .leftJoin(clientsTable, eq(clientsTable.id, clientNpsResponsesTable.clientId))
+        .where(eq(clientNpsResponsesTable.tenantId, me.tenantId))
+        .orderBy(desc(clientNpsResponsesTable.createdAt)),
+    ]);
+
     const classification = req.query.classification as string | undefined;
+
+    const combined = [
+      ...storeRows.map(r => ({
+        id: r.id,
+        tenantId: r.tenantId,
+        userId: r.userId,
+        orderId: r.orderId,
+        score: r.score,
+        classification: r.classification,
+        feedback: r.feedback,
+        clientName: r.clientName ?? null,
+        createdAt: r.createdAt.toISOString(),
+        source: "store" as const,
+      })),
+      ...travelRows.map(r => ({
+        id: r.id,
+        tenantId: me.tenantId,
+        userId: null as string | null,
+        orderId: null as string | null,
+        score: r.score,
+        classification: (r.score >= 9 ? "promoter" : r.score >= 7 ? "passive" : "detractor") as string,
+        feedback: r.comment ?? null,
+        clientName: r.clientName ?? null,
+        createdAt: r.createdAt.toISOString(),
+        source: "travel" as const,
+      })),
+    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
     const filtered = classification && classification !== "all"
-      ? rows.filter(r => r.classification === classification)
-      : rows;
-    res.json(filtered.map(r => ({
-      id: r.id,
-      tenantId: r.tenantId,
-      userId: r.userId,
-      orderId: r.orderId,
-      score: r.score,
-      classification: r.classification,
-      feedback: r.feedback,
-      clientName: r.clientName ?? null,
-      createdAt: r.createdAt.toISOString(),
-    })));
+      ? combined.filter(r => r.classification === classification)
+      : combined;
+
+    res.json(filtered);
   } catch (err) {
     next(err);
   }

@@ -1,7 +1,7 @@
 import { Worker } from "bullmq";
-import { db, reservationsTable, tripsTable, clientsTable, tenantsTable, paymentsTable, emailLogsTable, storesTable, usersTable, referralsTable, referralSettingsTable } from "@workspace/db";
+import { db, reservationsTable, tripsTable, clientsTable, tenantsTable, paymentsTable, emailLogsTable, storesTable, usersTable, referralsTable, referralSettingsTable, systemConfigsTable, npsInvitationsTable } from "@workspace/db";
 import { eq, and, gt, sql, gte, lt, lte, isNull, isNotNull, notLike, like, inArray, not, exists } from "drizzle-orm";
-import { sendReminderHtmlEmail, sendReservationConfirmationEmail, sendReferralExpiringSoonEmail } from "@workspace/email";
+import { sendReminderHtmlEmail, sendReservationConfirmationEmail, sendReferralExpiringSoonEmail, sendNpsSurveyEmail } from "@workspace/email";
 import { dispatchReferralExpiredEmail, dispatchReferralExpiringSoonEmail, dispatchReferralBonusReleasedEmail } from "../queues/email-helpers";
 import { getRedisConnection, isTransientRedisError, recordTransientRedisError, resetTransientRedisErrors } from "../lib/redis";
 import { logger } from "../lib/logger";
@@ -1211,6 +1211,142 @@ export async function processReferralBonusReleaseNotifications(): Promise<void> 
 }
 
 // ────────────────────────────────────────────────────────────
+// NPS auto-dispatch post-trip
+// ────────────────────────────────────────────────────────────
+
+export async function processNpsDispatch(): Promise<void> {
+  const enabledConfigs = await db
+    .select({ tenantId: systemConfigsTable.tenantId })
+    .from(systemConfigsTable)
+    .where(
+      and(
+        eq(systemConfigsTable.key, "npsAutoSend"),
+        sql`${systemConfigsTable.value}::text = 'true'`,
+      ),
+    );
+
+  if (enabledConfigs.length === 0) return;
+
+  const now = new Date();
+  let sent = 0;
+  let skipped = 0;
+  let errors = 0;
+
+  for (const { tenantId } of enabledConfigs) {
+    try {
+      const [hoursConfig] = await db
+        .select({ value: systemConfigsTable.value })
+        .from(systemConfigsTable)
+        .where(
+          and(
+            eq(systemConfigsTable.tenantId, tenantId),
+            eq(systemConfigsTable.key, "npsHoursAfterReturn"),
+          ),
+        )
+        .limit(1);
+
+      const hoursAfter = Number(hoursConfig?.value ?? 24);
+      const thresholdMs = hoursAfter * 60 * 60 * 1000;
+      const lookbackMs = 48 * 60 * 60 * 1000;
+
+      const cutoff = new Date(now.getTime() - thresholdMs);
+      const lookback = new Date(now.getTime() - thresholdMs - lookbackMs);
+
+      const [tenant] = await db
+        .select({ name: tenantsTable.name, logoUrl: tenantsTable.logoUrl })
+        .from(tenantsTable)
+        .where(eq(tenantsTable.id, tenantId))
+        .limit(1);
+
+      if (!tenant) continue;
+
+      const eligible = await db
+        .select({
+          reservationId: reservationsTable.id,
+          clientId: reservationsTable.clientId,
+          tripId: reservationsTable.tripId,
+          tripName: tripsTable.name,
+          returnDate: tripsTable.returnDate,
+          clientName: clientsTable.name,
+          clientEmail: clientsTable.email,
+        })
+        .from(reservationsTable)
+        .innerJoin(tripsTable, eq(tripsTable.id, reservationsTable.tripId))
+        .innerJoin(clientsTable, eq(clientsTable.id, reservationsTable.clientId))
+        .where(
+          and(
+            eq(reservationsTable.tenantId, tenantId),
+            eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED),
+            isNotNull(tripsTable.returnDate),
+            lt(tripsTable.returnDate, cutoff),
+            gte(tripsTable.returnDate, lookback),
+            isNotNull(clientsTable.email),
+            not(
+              exists(
+                db
+                  .select({ id: npsInvitationsTable.id })
+                  .from(npsInvitationsTable)
+                  .where(eq(npsInvitationsTable.reservationId, reservationsTable.id)),
+              ),
+            ),
+          ),
+        );
+
+      const baseUrl = process.env["API_BASE_URL"] ?? process.env["FRONTEND_URL"] ?? "";
+
+      for (const row of eligible) {
+        if (!row.clientEmail) { skipped++; continue; }
+        try {
+          const token = generateId() + generateId();
+          await db.insert(npsInvitationsTable).values({
+            id: generateId(),
+            tenantId,
+            clientId: row.clientId!,
+            reservationId: row.reservationId,
+            tripId: row.tripId ?? null,
+            token,
+          }).onConflictDoNothing();
+
+          const [inserted] = await db
+            .select({ token: npsInvitationsTable.token })
+            .from(npsInvitationsTable)
+            .where(eq(npsInvitationsTable.reservationId, row.reservationId))
+            .limit(1);
+
+          if (!inserted) { skipped++; continue; }
+
+          const result = await sendNpsSurveyEmail({
+            clientName: row.clientName ?? "Cliente",
+            clientEmail: row.clientEmail,
+            agencyName: tenant.name,
+            agencyLogo: tenant.logoUrl ?? null,
+            tripName: row.tripName,
+            returnDate: row.returnDate?.toISOString() ?? "",
+            surveyBaseUrl: baseUrl,
+            token: inserted.token,
+          });
+
+          if (result.success) {
+            sent++;
+          } else {
+            logger.warn({ tenantId, reservationId: row.reservationId, err: result.error }, "[nps-dispatch] Email failed, invitation recorded");
+            errors++;
+          }
+        } catch (rowErr) {
+          logger.error({ err: rowErr, tenantId, reservationId: row.reservationId }, "[nps-dispatch] Error processing row");
+          errors++;
+        }
+      }
+    } catch (tenantErr) {
+      logger.error({ err: tenantErr, tenantId }, "[nps-dispatch] Error processing tenant");
+      errors++;
+    }
+  }
+
+  logger.info({ sent, skipped, errors }, "[nps-dispatch] Run complete");
+}
+
+// ────────────────────────────────────────────────────────────
 // Worker bootstrap
 // ────────────────────────────────────────────────────────────
 
@@ -1244,6 +1380,8 @@ export function startReminderWorker(): Worker<ReminderJobData> | null {
         await retryFailedExpiryWarningEmails();
       } else if (job.data.type === "referral_bonus_release_notification") {
         await processReferralBonusReleaseNotifications();
+      } else if (job.data.type === "nps_dispatch") {
+        await processNpsDispatch();
       } else {
         logger.warn({ type: job.data.type }, "[reminder-worker] Unknown reminder type");
       }
