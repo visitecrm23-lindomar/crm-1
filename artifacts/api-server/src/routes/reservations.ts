@@ -1514,6 +1514,18 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
     if (parsed.data.status === RESERVATION_STATUS.CANCELLED && wasActive && existing.clientId) {
       enqueueReservationCancellationEmail(req.params.id, me.tenantId)
         .catch((err) => req.log.error({ err }, "Error enqueueing cancellation email"));
+      const loyaltyPointsRefunded = (existing.discountLoyaltyPoints ?? 0) > 0
+        ? (existing.discountLoyaltyPoints ?? 0)
+        : undefined;
+      insertClientNotification(
+        existing.clientId,
+        me.tenantId,
+        "reservation_cancelled",
+        {
+          voucherCode: existing.voucherCode ?? undefined,
+          ...(loyaltyPointsRefunded != null && { loyaltyPointsRefunded }),
+        },
+      ).catch((err) => req.log.error({ err }, "Error inserting cancellation client notification"));
     }
     // When a fully-paid reservation is confirmed via status change, notify the agency
     if (isBeingConfirmed) {

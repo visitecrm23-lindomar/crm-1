@@ -8,13 +8,16 @@ export type ClientNotificationType =
   | "referral_converted"
   | "referral_bonus_released"
   | "referral_bonus_paid"
-  | "referral_link_clicked";
+  | "referral_link_clicked"
+  | "reservation_cancelled";
 
 export interface ClientNotificationPayload {
   referredName?: string;
   referralCode?: string;
   bonusAmount?: number;
   agencyName?: string;
+  voucherCode?: string;
+  loyaltyPointsRefunded?: number;
 }
 
 export const clientNotificationsTable = pgTable(

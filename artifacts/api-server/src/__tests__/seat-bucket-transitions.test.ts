@@ -111,7 +111,7 @@ vi.mock("../lib/tenant.js", () => ({
   requireAuth: vi.fn(),
   getTenantUser: vi.fn(),
   ADMIN_ROLES: ["admin"],
-  MANAGEMENT_ROLES: ["admin", "gerente"],
+  MANAGEMENT_ROLES: ["superadmin", "agencia", "gerente"],
 }));
 
 vi.mock("../routes/payments.js", () => ({
@@ -317,6 +317,7 @@ describe("Seat bucket counters — status transition paths", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLimit.mockReset();
     capturedSets.length = 0;
 
     requireAuthMock.mockResolvedValue(FAKE_USER as never);
@@ -360,7 +361,7 @@ describe("Seat bucket counters — status transition paths", () => {
     const updated = { ...existing, status: RESERVATION_STATUS.CANCELLED };
 
     mockLimit.mockResolvedValueOnce([existing]);
-    const tx = buildTxMock([[updated]]);
+    const tx = buildTxMock([[], [null], [updated]]);
     mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
     mockLimit.mockResolvedValueOnce([FAKE_TRIP]).mockResolvedValueOnce([FAKE_CLIENT]);
 
@@ -386,7 +387,7 @@ describe("Seat bucket counters — status transition paths", () => {
     const updated = { ...existing, status: RESERVATION_STATUS.CANCELLED };
 
     mockLimit.mockResolvedValueOnce([existing]);
-    const tx = buildTxMock([[updated]]);
+    const tx = buildTxMock([[], [null], [updated]]);
     mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
     mockLimit.mockResolvedValueOnce([FAKE_TRIP]).mockResolvedValueOnce([FAKE_CLIENT]);
 
