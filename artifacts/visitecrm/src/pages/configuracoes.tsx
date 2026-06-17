@@ -62,6 +62,8 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
+import { extractApiError } from "@/lib/apiError";
 import {
   Building2,
   CreditCard,
@@ -2835,8 +2837,27 @@ function FeaturesTab() {
       await updateTenant.mutateAsync({ id: tenantId, data: { [key]: value } });
       toast({ title: value ? "Funcionalidade ativada" : "Funcionalidade desativada" });
       await queryClient.invalidateQueries({ queryKey: getGetTenantQueryKey(tenantId) });
-    } catch {
-      toast({ title: "Erro ao salvar configuração", variant: "destructive" });
+    } catch (err) {
+      const is403 = (err as { response?: { status?: number } })?.response?.status === 403;
+      const message = extractApiError(err, "Erro ao salvar configuração");
+      toast({
+        title: message,
+        variant: "destructive",
+        ...(is403 && {
+          action: (
+            <ToastAction
+              altText="Ver plano"
+              onClick={() => {
+                const url = new URL(window.location.href);
+                url.searchParams.set("tab", "plan");
+                window.location.href = url.toString();
+              }}
+            >
+              Ver plano
+            </ToastAction>
+          ),
+        }),
+      });
     }
   }
 
