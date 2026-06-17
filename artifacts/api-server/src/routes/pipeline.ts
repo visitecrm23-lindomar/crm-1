@@ -1,7 +1,7 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { pipelinesTable, pipelineStagesTable, dealsTable, clientsTable, reservationsTable } from "@workspace/db";
-import { eq, and, asc, desc, inArray, sql } from "drizzle-orm";
+import { eq, and, asc, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser, ADMIN_ROLES } from '../lib/tenant';
 import { z } from "zod";
@@ -425,6 +425,7 @@ router.get("/pipeline/:pipelineId/analytics", async (req, res, next: NextFunctio
       value: dealsTable.value,
       lostReason: dealsTable.lostReason,
       createdAt: dealsTable.createdAt,
+      updatedAt: dealsTable.updatedAt,
     }).from(dealsTable)
       .where(and(
         eq(dealsTable.tenantId, me.tenantId),
@@ -452,7 +453,7 @@ router.get("/pipeline/:pipelineId/analytics", async (req, res, next: NextFunctio
       // Avg days uses updatedAt as a proxy for when the deal last moved to this stage
       const avgDays = stageDeals.length > 0
         ? Math.round(
-            stageDeals.reduce((acc, d) => acc + (Date.now() - d.createdAt.getTime()) / 86400000, 0)
+            stageDeals.reduce((acc, d) => acc + (Date.now() - d.updatedAt.getTime()) / 86400000, 0)
             / stageDeals.length
           )
         : 0;

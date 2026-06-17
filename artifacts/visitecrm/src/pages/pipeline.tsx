@@ -172,13 +172,16 @@ function AnalyticsPanel({ pipelineId }: { pipelineId: string }) {
                   }}
                 />
               </div>
-              <div className="text-xs text-muted-foreground text-right shrink-0 w-20">
+              <div className="text-xs text-muted-foreground text-right shrink-0 w-36">
                 <span className="font-semibold text-foreground">{s.count}</span>
                 {s.avgDays > 0 && <span className="text-[10px] ml-1 text-muted-foreground">({s.avgDays}d)</span>}
                 {idx > 0 && (
                   <span className={`ml-1 text-[10px] font-medium ${s.conversionRate >= 50 ? "text-green-600" : s.conversionRate >= 25 ? "text-amber-500" : "text-red-500"}`}>
                     {s.conversionRate}%↓
                   </span>
+                )}
+                {s.value > 0 && (
+                  <span className="block text-[10px] text-primary font-medium">{formatCurrency(s.value)}</span>
                 )}
               </div>
             </div>
