@@ -71,6 +71,7 @@ export function NewReservationWizard({ open, onClose, onSuccess, initialTripId, 
   const [paidValue, setPaidValue] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState("pix");
   const [installments, setInstallments] = useState(1);
+  const [firstDueDate, setFirstDueDate] = useState("");
   const [hasInsurance, setHasInsurance] = useState(false);
   const [notes, setNotes] = useState("");
   const [commissionAmount, setCommissionAmount] = useState<number>(0);
@@ -124,7 +125,7 @@ export function NewReservationWizard({ open, onClose, onSuccess, initialTripId, 
   const resetWizard = () => {
     setStep(1); setSelectedTripId(""); setSelectedClientId(""); setBoardingLocationId("");
     setSelectedSeats([]); setManualSeats(""); setTripComboOpen(false); setClientComboOpen(false);
-    setTotalValue(0); setPaidValue(0); setPaymentMethod("pix"); setInstallments(1);
+    setTotalValue(0); setPaidValue(0); setPaymentMethod("pix"); setInstallments(1); setFirstDueDate("");
     setHasInsurance(false); setNotes(""); setCreateError(null); setCommissionAmount(0); setSellerId("none");
     setCouponCode(""); setCouponApplied(null); setCouponError(null);
     setRedeemLoyalty(false); setLoyaltyPointsToRedeem(0); setLoyaltyAmountApplied(0);
@@ -163,6 +164,7 @@ export function NewReservationWizard({ open, onClose, onSuccess, initialTripId, 
         data: {
           tripId: selectedTripId, clientId: selectedClientId, seats: effectiveSeats,
           totalValue, paidValue: paidValue || undefined, paymentMethod, installments,
+          firstDueDate: firstDueDate || undefined,
           notes: notes || undefined, hasInsurance,
           commissionAmount: commissionAmount > 0 ? commissionAmount : null,
           sellerId: sellerId !== "none" ? sellerId : null,
@@ -191,7 +193,7 @@ export function NewReservationWizard({ open, onClose, onSuccess, initialTripId, 
 
   const step2Props = {
     totalValue, setTotalValue, paidValue, setPaidValue, paymentMethod, setPaymentMethod,
-    installments, setInstallments, notes, setNotes, commissionAmount, setCommissionAmount,
+    installments, setInstallments, firstDueDate, setFirstDueDate, notes, setNotes, commissionAmount, setCommissionAmount,
     sellerId, setSellerId, hasInsurance, setHasInsurance,
     couponCode, setCouponCode, couponApplied, setCouponApplied, couponError, setCouponError, couponLoading,
     redeemLoyalty, setRedeemLoyalty, loyaltyPointsToRedeem, setLoyaltyPointsToRedeem, setLoyaltyAmountApplied,

@@ -33,16 +33,31 @@ async function generateInstallments(
   installmentCount: number,
   firstDueDateStr: string,
 ): Promise<void> {
+  // Preserve paid installments — only delete and regenerate unpaid ones
+  const existing = await db.select().from(reservationInstallmentsTable)
+    .where(eq(reservationInstallmentsTable.reservationId, reservationId))
+    .orderBy(asc(reservationInstallmentsTable.installmentNumber));
+
+  const paidRows = existing.filter(r => r.paidAt != null);
+  const paidAmount = paidRows.reduce((s, r) => s + Number(r.amount), 0);
+
+  // Delete only unpaid installments
   await db.delete(reservationInstallmentsTable)
-    .where(eq(reservationInstallmentsTable.reservationId, reservationId));
+    .where(and(
+      eq(reservationInstallmentsTable.reservationId, reservationId),
+      sql`${reservationInstallmentsTable.paidAt} IS NULL`,
+    ));
 
   const n = Math.max(1, installmentCount);
-  const base = Math.floor((totalValue / n) * 100) / 100;
-  const remainder = Math.round((totalValue - base * n) * 100) / 100;
+  const unpaidCount = Math.max(1, n - paidRows.length);
+  const remainingValue = Math.max(0, totalValue - paidAmount);
+  const base = Math.floor((remainingValue / unpaidCount) * 100) / 100;
+  const remainder = Math.round((remainingValue - base * unpaidCount) * 100) / 100;
+  const startNumber = paidRows.length + 1;
 
   const firstDate = new Date(`${firstDueDateStr}T12:00:00Z`);
   const rows = [];
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < unpaidCount; i++) {
     const dueDate = new Date(firstDate);
     dueDate.setMonth(dueDate.getMonth() + i);
     const amount = i === 0 ? base + remainder : base;
@@ -50,7 +65,7 @@ async function generateInstallments(
       id: generateId(),
       reservationId,
       tenantId,
-      installmentNumber: i + 1,
+      installmentNumber: startNumber + i,
       dueDate,
       amount: amount.toFixed(2),
     });
@@ -1601,6 +1616,7 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
 const UpdateInstallmentBodySchema = z.object({
   paidAmount: z.number().positive().nullish(),
   paidAt: z.string().nullish(),
+  dueDate: z.string().nullish(),
   notes: z.string().nullish(),
 });
 
@@ -1630,6 +1646,62 @@ router.get("/reservations/:id/installments", async (req, res, next: NextFunction
   }
 });
 
+router.get("/reservations/installments/upcoming", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role === "client") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+
+    const days = Math.min(Math.max(parseInt(String(req.query["days"] ?? "7")), 1), 90);
+    const now = new Date();
+    const until = new Date(now);
+    until.setDate(until.getDate() + days);
+    until.setHours(23, 59, 59, 999);
+
+    const rows = await db
+      .select({
+        id: reservationInstallmentsTable.id,
+        reservationId: reservationInstallmentsTable.reservationId,
+        installmentNumber: reservationInstallmentsTable.installmentNumber,
+        dueDate: reservationInstallmentsTable.dueDate,
+        amount: reservationInstallmentsTable.amount,
+        paidAt: reservationInstallmentsTable.paidAt,
+        notes: reservationInstallmentsTable.notes,
+        voucherCode: reservationsTable.voucherCode,
+        clientId: reservationsTable.clientId,
+        clientName: clientsTable.name,
+        tripName: tripsTable.name,
+      })
+      .from(reservationInstallmentsTable)
+      .innerJoin(reservationsTable, eq(reservationInstallmentsTable.reservationId, reservationsTable.id))
+      .leftJoin(clientsTable, eq(reservationsTable.clientId, clientsTable.id))
+      .leftJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
+      .where(and(
+        eq(reservationInstallmentsTable.tenantId, me.tenantId),
+        sql`${reservationInstallmentsTable.paidAt} IS NULL`,
+        sql`${reservationInstallmentsTable.dueDate} >= NOW()`,
+        sql`${reservationInstallmentsTable.dueDate} <= ${until.toISOString()}`,
+      ))
+      .orderBy(asc(reservationInstallmentsTable.dueDate));
+
+    res.json(rows.map(r => ({
+      id: r.id,
+      reservationId: r.reservationId,
+      installmentNumber: r.installmentNumber,
+      dueDate: (r.dueDate as unknown as Date).toISOString(),
+      amount: Number(r.amount),
+      paidAt: r.paidAt ? (r.paidAt as unknown as Date).toISOString() : null,
+      notes: r.notes ?? null,
+      status: "pending",
+      voucherCode: r.voucherCode ?? null,
+      clientName: r.clientName ?? null,
+      tripName: r.tripName ?? null,
+    })));
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.patch("/reservations/installments/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
@@ -1644,8 +1716,15 @@ router.patch("/reservations/installments/:id", async (req, res, next: NextFuncti
       .limit(1);
     if (!installment) { next(new NotFoundError("Installment not found", "NOT_FOUND")); return; }
 
+    // Ensure the caller has access to the parent reservation
+    await requireReservationAccess(me, installment.reservationId);
+
     const updates: Partial<typeof reservationInstallmentsTable.$inferInsert> = {};
     if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
+    if (parsed.data.dueDate !== undefined && parsed.data.dueDate) {
+      const d = new Date(`${parsed.data.dueDate}T12:00:00Z`);
+      if (!isNaN(d.getTime())) updates.dueDate = d;
+    }
     if (parsed.data.paidAmount !== undefined) {
       updates.paidAmount = parsed.data.paidAmount != null ? String(parsed.data.paidAmount) : null;
     }

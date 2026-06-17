@@ -37,6 +37,7 @@ import { formatCurrency } from "@/lib/utils";
 import { PAYMENT_STATUS_LABELS as STATUS_LABELS, PAYMENT_STATUS_COLORS as STATUS_COLORS, PAYMENT_METHOD_LABELS as METHOD_LABELS, EXPENSE_CATEGORY_LABELS } from "@/lib/labels";
 
 const fmt = (v: number | string) => formatCurrency(typeof v === "string" ? parseFloat(v) || 0 : v);
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 const EXPENSE_CATEGORIES: Record<string, string> = EXPENSE_CATEGORY_LABELS;
 
@@ -158,6 +159,12 @@ export default function Financial() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [showUpcomingInstallments, setShowUpcomingInstallments] = useState(false);
+  const [upcomingInstallments, setUpcomingInstallments] = useState<Array<{
+    id: string; reservationId: string; installmentNumber: number; dueDate: string;
+    amount: number; clientName: string | null; tripName: string | null; voucherCode: string | null;
+  }>>([]);
+  const [loadingUpcoming, setLoadingUpcoming] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
   const [isRuleOpen, setIsRuleOpen] = useState(false);
@@ -171,6 +178,14 @@ export default function Financial() {
   const [receiptDataUrl, setReceiptDataUrl] = useState<string | null>(null);
   const [receiptFileName, setReceiptFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchUpcomingInstallments = useCallback(async () => {
+    setLoadingUpcoming(true);
+    try {
+      const res = await fetch(`${BASE}/api/reservations/installments/upcoming?days=7`, { credentials: "include" });
+      if (res.ok) setUpcomingInstallments(await res.json());
+    } catch { /* ignore */ } finally { setLoadingUpcoming(false); }
+  }, []);
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -533,16 +548,17 @@ export default function Financial() {
               </div>
               {tab === "receivable" && (
                 <Button
-                  variant="outline"
+                  variant={showUpcomingInstallments ? "default" : "outline"}
                   size="sm"
-                  className="h-8 text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
+                  className={`h-8 text-xs ${showUpcomingInstallments ? "" : "border-orange-300 text-orange-700 hover:bg-orange-50"}`}
                   onClick={() => {
-                    const today = new Date();
-                    const in7 = new Date(today);
-                    in7.setDate(in7.getDate() + 7);
-                    setDateFrom(today.toISOString().slice(0, 10));
-                    setDateTo(in7.toISOString().slice(0, 10));
-                    setStatusFilter(EXPENSE_STATUS.PENDING);
+                    if (showUpcomingInstallments) {
+                      setShowUpcomingInstallments(false);
+                      setUpcomingInstallments([]);
+                    } else {
+                      setShowUpcomingInstallments(true);
+                      fetchUpcomingInstallments();
+                    }
                   }}
                 >
                   📅 Vencimentos em 7 dias
@@ -557,7 +573,54 @@ export default function Financial() {
           )}
         </div>
 
-        <TabsContent value="receivable" className="mt-4">
+        <TabsContent value="receivable" className="mt-4 space-y-4">
+          {showUpcomingInstallments && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg overflow-hidden">
+              <div className="px-4 py-3 bg-orange-100 border-b border-orange-200 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-orange-800">📅 Parcelas com vencimento nos próximos 7 dias</h3>
+                <span className="text-xs text-orange-600">{upcomingInstallments.length} parcela(s)</span>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Reserva</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Viagem</TableHead>
+                    <TableHead>Parcela</TableHead>
+                    <TableHead>Vencimento</TableHead>
+                    <TableHead>Valor</TableHead>
+                    <TableHead className="text-right">Ação</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loadingUpcoming ? (
+                    Array.from({ length: 3 }).map((_, i) => (
+                      <TableRow key={i}>{Array.from({ length: 7 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
+                    ))
+                  ) : upcomingInstallments.length === 0 ? (
+                    <TableRow><TableCell colSpan={7} className="text-center py-6 text-muted-foreground text-sm">Nenhuma parcela vencendo nos próximos 7 dias.</TableCell></TableRow>
+                  ) : upcomingInstallments.map(inst => (
+                    <TableRow key={inst.id} className="hover:bg-orange-50/50">
+                      <TableCell className="font-mono text-xs">{inst.voucherCode ?? "—"}</TableCell>
+                      <TableCell className="text-sm">{inst.clientName ?? "—"}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground truncate max-w-[140px]">{inst.tripName ?? "—"}</TableCell>
+                      <TableCell className="text-sm text-center">#{inst.installmentNumber}</TableCell>
+                      <TableCell className="text-sm font-medium text-orange-700">{new Date(inst.dueDate).toLocaleDateString("pt-BR")}</TableCell>
+                      <TableCell className="font-semibold text-sm">{fmt(inst.amount)}</TableCell>
+                      <TableCell className="text-right">
+                        <Link href={`/reservations?id=${inst.reservationId}`}>
+                          <Button size="sm" variant="outline" className="h-7 px-2 text-xs">
+                            <ExternalLink className="w-3 h-3 mr-1" /> Ver reserva
+                          </Button>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
           <div className="bg-card rounded-lg border overflow-hidden">
             <Table>
               <TableHeader>

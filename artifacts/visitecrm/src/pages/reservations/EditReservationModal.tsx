@@ -60,6 +60,7 @@ export function EditReservationModal({ reservationId, open, onClose, onSuccess }
     const fd = new FormData(e.currentTarget);
     const totalValueRaw = fd.get("totalValue") as string;
     const installmentsRaw = fd.get("installments") as string;
+    const firstDueDateRaw = (fd.get("firstDueDate") as string || "").trim();
     const seatsRaw = (fd.get("seats") as string || "").trim();
     await updateReservation.mutateAsync({
       id: reservationId,
@@ -69,6 +70,7 @@ export function EditReservationModal({ reservationId, open, onClose, onSuccess }
         notes: (fd.get("notes") as string) || undefined,
         totalValue: totalValueRaw ? parseFloat(totalValueRaw) : undefined,
         installments: installmentsRaw ? parseInt(installmentsRaw) : undefined,
+        firstDueDate: firstDueDateRaw || undefined,
         seats: seatsRaw ? seatsRaw.split(",").map(s => s.trim()).filter(Boolean) : undefined,
         boardingLocationId: boardingLocationId || null,
       }
@@ -127,6 +129,11 @@ export function EditReservationModal({ reservationId, open, onClose, onSuccess }
                 <label className="text-sm font-medium">Parcelas</label>
                 <Input name="installments" type="number" min="1" max="24" defaultValue={data.installments ?? 1} />
               </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">1ª data de vencimento</label>
+              <Input name="firstDueDate" type="date" />
+              <p className="text-xs text-muted-foreground">Preencha para regenerar o cronograma de parcelas (apenas parcelas não pagas serão recriadas).</p>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Assentos</label>

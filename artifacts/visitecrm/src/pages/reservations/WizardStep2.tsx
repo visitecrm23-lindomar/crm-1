@@ -20,6 +20,8 @@ export interface WizardStep2Props {
   setPaymentMethod: (v: string) => void;
   installments: number;
   setInstallments: (v: number) => void;
+  firstDueDate: string;
+  setFirstDueDate: (v: string) => void;
   notes: string;
   setNotes: (v: string) => void;
   commissionAmount: number;
@@ -100,9 +102,16 @@ export function WizardStep2(p: WizardStep2Props) {
         </div>
         <div className="space-y-2">
           <label className="text-sm font-medium">Parcelas</label>
-          <Input type="number" min="1" max="12" value={p.installments} onChange={e => p.setInstallments(parseInt(e.target.value) || 1)} />
+          <Input type="number" min="1" max="24" value={p.installments} onChange={e => p.setInstallments(parseInt(e.target.value) || 1)} />
         </div>
       </div>
+      {p.installments > 1 && (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">1ª data de vencimento</label>
+          <Input type="date" value={p.firstDueDate} onChange={e => p.setFirstDueDate(e.target.value)} />
+          <p className="text-xs text-muted-foreground">Informe para gerar o cronograma de parcelas mensais automaticamente.</p>
+        </div>
+      )}
 
       <div className="space-y-2">
         <label className="text-sm font-medium">Observações</label>
