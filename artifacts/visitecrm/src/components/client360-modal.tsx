@@ -626,6 +626,63 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
   const { toast } = useToast();
   const [recalculating, setRecalculating] = useState(false);
 
+  interface RecommendedTrip {
+    tripId: string;
+    name: string;
+    destination: string;
+    departureDate: string;
+    returnDate: string | null;
+    availableSeats: number;
+    priceAdult: number;
+    reason: string;
+  }
+  const [recommendations, setRecommendations] = useState<RecommendedTrip[]>([]);
+  const [recsLoading, setRecsLoading] = useState(false);
+  const [recsSource, setRecsSource] = useState<string>("");
+  const [creatingDealFor, setCreatingDealFor] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || activeTab !== "ia" || !id) return;
+    setRecsLoading(true);
+    fetch(`${API_BASE_ADMIN}/api/admin/clients/${id}/recommendations`, { credentials: "include" })
+      .then(r => r.json())
+      .then((d: { recommendations?: RecommendedTrip[]; source?: string }) => {
+        setRecommendations(d.recommendations ?? []);
+        setRecsSource(d.source ?? "");
+      })
+      .catch(() => {})
+      .finally(() => setRecsLoading(false));
+  }, [isOpen, activeTab, id]);
+
+  const handleCreateDeal = async (trip: RecommendedTrip) => {
+    setCreatingDealFor(trip.tripId);
+    try {
+      const stagesResp = await fetch(`${API_BASE_ADMIN}/api/admin/pipeline/stages`, { credentials: "include" });
+      if (!stagesResp.ok) throw new Error("Falha ao buscar etapas do pipeline");
+      const stages: Array<{ id: string; name: string; order: number }> = await stagesResp.json();
+      const firstStage = stages.sort((a, b) => a.order - b.order)[0];
+      if (!firstStage) throw new Error("Nenhuma etapa encontrada");
+      const dealResp = await fetch(`${API_BASE_ADMIN}/api/admin/deals`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stageId: firstStage.id,
+          clientId: id,
+          tripId: trip.tripId,
+          title: `${trip.name} — ${client?.name ?? ""}`,
+          value: trip.priceAdult,
+        }),
+      });
+      if (!dealResp.ok) throw new Error("Falha ao criar negócio");
+      toast({ title: "Negócio criado!", description: `"${trip.name}" adicionado ao pipeline.` });
+    } catch (err) {
+      toast({ title: "Erro ao criar negócio", description: err instanceof Error ? err.message : "Tente novamente.", variant: "destructive" });
+    } finally {
+      setCreatingDealFor(null);
+    }
+  };
+
   const handleRecalculate = async () => {
     setRecalculating(true);
     try {
@@ -955,6 +1012,69 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                     )}
                   </>
                 )}
+
+                <div className="border-t pt-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-primary" />
+                    <p className="text-sm font-semibold">Próximas Viagens Recomendadas</p>
+                    {recsSource === "ai" && (
+                      <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">IA</span>
+                    )}
+                    {recsSource === "popular" && (
+                      <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">Populares</span>
+                    )}
+                  </div>
+                  {recsLoading ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-20 w-full" />
+                      <Skeleton className="h-20 w-full" />
+                      <Skeleton className="h-20 w-full" />
+                    </div>
+                  ) : recommendations.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      Nenhuma viagem disponível para recomendar no momento.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {recommendations.map((trip) => (
+                        <div key={trip.tripId} className="p-3 rounded-lg border bg-muted/30 space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="font-medium text-sm truncate">{trip.name}</p>
+                              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                <MapPin className="w-3 h-3 shrink-0" />
+                                {trip.destination}
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="shrink-0 text-xs h-7 px-2"
+                              disabled={creatingDealFor === trip.tripId}
+                              onClick={() => handleCreateDeal(trip)}
+                            >
+                              {creatingDealFor === trip.tripId ? (
+                                <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                              ) : (
+                                <Plus className="w-3 h-3 mr-1" />
+                              )}
+                              Criar negócio
+                            </Button>
+                          </div>
+                          <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {format(parseISO(trip.departureDate), "dd/MM/yyyy", { locale: ptBR })}
+                            </span>
+                            <span>{trip.availableSeats} vagas</span>
+                            <span className="font-semibold text-foreground">{formatCurrency(trip.priceAdult)}</span>
+                          </div>
+                          <p className="text-xs text-blue-700 bg-blue-50 rounded px-2 py-1 italic">{trip.reason}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 {ADMIN_ROLES.includes(me?.role ?? "") && (
                   <div className="pt-2 border-t">

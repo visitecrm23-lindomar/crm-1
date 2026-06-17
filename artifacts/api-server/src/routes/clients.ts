@@ -2,7 +2,7 @@ import { Router, type NextFunction } from "express";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { db } from "@workspace/db";
 import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable, usersTable, paymentsTable, dealsTable, storeOrdersTable, storeReviewsTable, clientScoresTable } from "@workspace/db";
-import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
+import { eq, and, ilike, or, sql, desc, asc, inArray, count } from "drizzle-orm";
 import { generateId, generateReferralCode } from "../lib/id";
 import { generateAndAssignReferralCode } from "../lib/referral-code";
 import { dispatchReferralWelcomeEmail } from "../queues/email-helpers";
@@ -21,6 +21,8 @@ import { ADMIN_ROLES } from '../lib/tenant';
 import { ROLES } from "@workspace/permissions";
 import { clerkClient } from "@clerk/express";
 import { calculateScoresForClient } from "../lib/client-scores";
+import { getRedisConnection } from "../lib/redis";
+import { getAIClientForTenant } from "../lib/ai-client";
 
 const router = Router();
 
@@ -684,6 +686,183 @@ router.post("/clients/:id/recalculate-score", async (req, res, next: NextFunctio
       req.log.warn({ err, clientId: client.id }, "[scores] Background recalculation failed");
     });
     res.status(202).json({ message: "Recálculo de scores iniciado." });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/clients/:clientId/recommendations", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const client = await requireClientAccess(me, req.params.clientId);
+
+    const redis = getRedisConnection();
+    const cacheKey = `recommendations:${me.tenantId}:${client.id}`;
+    if (redis) {
+      const cached = await redis.get(cacheKey).catch(() => null);
+      if (cached) {
+        res.json(JSON.parse(cached));
+        return;
+      }
+    }
+
+    const now = new Date();
+    const availableTrips = await db
+      .select()
+      .from(tripsTable)
+      .where(and(
+        eq(tripsTable.tenantId, me.tenantId),
+        eq(tripsTable.status, "published"),
+        sql`${tripsTable.departureDate} > ${now}`,
+        sql`${tripsTable.availableSeats} > 0`,
+      ))
+      .orderBy(asc(tripsTable.departureDate))
+      .limit(20);
+
+    if (availableTrips.length === 0) {
+      res.json({ recommendations: [], source: "none" });
+      return;
+    }
+
+    const pastReservations = await db
+      .select({ tripId: reservationsTable.tripId })
+      .from(reservationsTable)
+      .where(and(
+        eq(reservationsTable.clientId, client.id),
+        eq(reservationsTable.tenantId, me.tenantId),
+        inArray(reservationsTable.status, ["confirmed", "completed"]),
+      ));
+
+    interface RecommendedTrip {
+      tripId: string;
+      name: string;
+      destination: string;
+      departureDate: string;
+      returnDate: string | null;
+      availableSeats: number;
+      priceAdult: number;
+      reason: string;
+    }
+
+    let result: { recommendations: RecommendedTrip[]; source: string };
+
+    if (pastReservations.length < 2) {
+      const popularRows = await db
+        .select({ tripId: reservationsTable.tripId, cnt: count() })
+        .from(reservationsTable)
+        .where(and(
+          eq(reservationsTable.tenantId, me.tenantId),
+          inArray(reservationsTable.tripId, availableTrips.map(t => t.id)),
+        ))
+        .groupBy(reservationsTable.tripId)
+        .orderBy(desc(count()))
+        .limit(3);
+
+      const popularTripIds = new Set(popularRows.map(p => p.tripId));
+      const top3 = [
+        ...availableTrips.filter(t => popularTripIds.has(t.id)),
+        ...availableTrips.filter(t => !popularTripIds.has(t.id)),
+      ].slice(0, 3);
+
+      result = {
+        recommendations: top3.map(t => ({
+          tripId: t.id,
+          name: t.name,
+          destination: t.destination,
+          departureDate: t.departureDate.toISOString(),
+          returnDate: t.returnDate?.toISOString() ?? null,
+          availableSeats: t.availableSeats,
+          priceAdult: Number(t.priceAdult),
+          reason: "Viagem popular entre os clientes da agência",
+        })),
+        source: "popular",
+      };
+    } else {
+      const pastTripIds = new Set(pastReservations.map(r => r.tripId));
+      const candidateTrips = availableTrips.filter(t => !pastTripIds.has(t.id)).slice(0, 10);
+
+      if (candidateTrips.length === 0) {
+        result = { recommendations: [], source: "none" };
+      } else {
+        const clientProfile = [
+          `Nome: ${client.name}`,
+          client.dreamDestinations?.length ? `Destinos sonhados: ${client.dreamDestinations.join(", ")}` : "",
+          client.travelInterests?.length ? `Interesses: ${client.travelInterests.join(", ")}` : "",
+          client.travelPreference ? `Preferência de viagem: ${client.travelPreference}` : "",
+          client.preferredDestinationTypes?.length ? `Tipos de destino: ${client.preferredDestinationTypes.join(", ")}` : "",
+        ].filter(Boolean).join("\n");
+
+        const tripsList = candidateTrips.map((t, i) =>
+          `${i + 1}. ID: ${t.id} | ${t.name} | ${t.destination} | ${t.departureDate.toLocaleDateString("pt-BR")} | Vagas: ${t.availableSeats} | R$ ${Number(t.priceAdult).toFixed(2)}`
+        ).join("\n");
+
+        const prompt = `Você é consultor de turismo. Analise o perfil do cliente e selecione as 3 melhores viagens para recomendar.
+
+PERFIL:
+${clientProfile}
+
+VIAGENS DISPONÍVEIS:
+${tripsList}
+
+Responda APENAS com JSON válido:
+{"recommendations":[{"tripId":"id","reason":"motivo em português (máx 80 chars)"}]}
+
+Selecione até 3 viagens priorizando destinos sonhados e interesses do cliente.`;
+
+        try {
+          const { client: aiClient, model } = await getAIClientForTenant(me.tenantId);
+          const response = await aiClient.chat.completions.create({
+            model,
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" },
+            max_tokens: 400,
+            temperature: 0.3,
+          });
+          const raw = response.choices[0]?.message?.content ?? "{}";
+          const parsed = JSON.parse(raw) as { recommendations?: Array<{ tripId: string; reason: string }> };
+          const aiRecs = parsed.recommendations ?? [];
+          const tripsById = new Map(candidateTrips.map(t => [t.id, t]));
+          const recommendations: RecommendedTrip[] = aiRecs
+            .filter(r => tripsById.has(r.tripId))
+            .slice(0, 3)
+            .map(r => {
+              const t = tripsById.get(r.tripId)!;
+              return {
+                tripId: t.id,
+                name: t.name,
+                destination: t.destination,
+                departureDate: t.departureDate.toISOString(),
+                returnDate: t.returnDate?.toISOString() ?? null,
+                availableSeats: t.availableSeats,
+                priceAdult: Number(t.priceAdult),
+                reason: r.reason,
+              };
+            });
+          result = { recommendations, source: "ai" };
+        } catch {
+          result = {
+            recommendations: candidateTrips.slice(0, 3).map(t => ({
+              tripId: t.id,
+              name: t.name,
+              destination: t.destination,
+              departureDate: t.departureDate.toISOString(),
+              returnDate: t.returnDate?.toISOString() ?? null,
+              availableSeats: t.availableSeats,
+              priceAdult: Number(t.priceAdult),
+              reason: "Viagem disponível com vagas",
+            })),
+            source: "fallback",
+          };
+        }
+      }
+    }
+
+    if (redis && result.recommendations.length > 0) {
+      await redis.set(cacheKey, JSON.stringify(result), "EX", 86400).catch(() => {});
+    }
+
+    res.json(result);
   } catch (err) {
     next(err);
   }
