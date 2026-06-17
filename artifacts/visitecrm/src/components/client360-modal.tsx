@@ -31,13 +31,14 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Phone, Mail, MapPin, Calendar, FileText, Download, Upload, Trash2,
   Star, TrendingUp, Gift, Award, Zap, MessageSquare, Loader2, Plus,
-  CreditCard, CheckSquare, XCircle, Globe, RefreshCw,
+  CreditCard, CheckSquare, XCircle, Globe, RefreshCw, AlertCircle,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 
 import { formatCurrency } from "@/lib/utils";
+import { useUploadThing } from "@/lib/uploadthing";
 
 const API_BASE_ADMIN = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -259,67 +260,132 @@ function ClientHistoryTab({ clientId, isOpen }: { clientId: string; isOpen: bool
   );
 }
 
-interface StoredDocument {
+interface ServerDocument {
   id: string;
   name: string;
-  type: string;
-  size: number;
-  uploadedAt: string;
-  data: string;
+  url: string;
+  fileKey: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  uploadedById: string;
+  createdAt: string;
 }
 
-function useClientDocuments(clientId: string) {
-  const key = `visite-crm-docs-${clientId}`;
-  const [docs, setDocs] = useState<StoredDocument[]>(() => {
-    try { return JSON.parse(localStorage.getItem(key) ?? "[]"); } catch { return []; }
-  });
-  const save = (updated: StoredDocument[]) => { setDocs(updated); localStorage.setItem(key, JSON.stringify(updated)); };
-  const add = (doc: StoredDocument) => save([doc, ...docs]);
-  const remove = (id: string) => save(docs.filter(d => d.id !== id));
-  return { docs, add, remove };
+function formatDocSize(bytes: number | null | undefined) {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function ClientDocumentsTab({ clientId }: { clientId: string }) {
-  const { docs, add, remove } = useClientDocuments(clientId);
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
+  const [docs, setDocs] = useState<ServerDocument[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const hasLocalData = !!localStorage.getItem(`visite-crm-docs-${clientId}`);
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
+  const { startUpload, isUploading } = useUploadThing("clientDocument", {
+    onClientUploadComplete: async (res) => {
+      if (!res?.[0]) return;
+      const file = res[0];
+      try {
+        const resp = await fetch(`${API_BASE_ADMIN}/api/admin/clients/${clientId}/documents`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: file.name,
+            url: file.ufsUrl,
+            fileKey: file.key,
+            mimeType: file.type,
+            sizeBytes: file.size,
+          }),
+        });
+        if (!resp.ok) throw new Error("Failed to save");
+        const doc: ServerDocument = await resp.json();
+        setDocs(prev => [doc, ...prev]);
+        toast({ title: "Documento enviado com sucesso!" });
+      } catch {
+        toast({ title: "Erro ao salvar documento no servidor", variant: "destructive" });
+      }
+      if (inputRef.current) inputRef.current.value = "";
+    },
+    onUploadError: () => {
+      toast({ title: "Erro ao enviar documento", variant: "destructive" });
+    },
+  });
+
+  useEffect(() => {
+    setLoadingDocs(true);
+    fetch(`${API_BASE_ADMIN}/api/admin/clients/${clientId}/documents`, { credentials: "include" })
+      .then(r => r.json())
+      .then((data: ServerDocument[]) => setDocs(data))
+      .catch(() => {})
+      .finally(() => setLoadingDocs(false));
+  }, [clientId]);
+
+  async function handleDelete(doc: ServerDocument) {
+    setDeletingId(doc.id);
+    try {
+      const resp = await fetch(`${API_BASE_ADMIN}/api/admin/clients/${clientId}/documents/${doc.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error("Failed to delete");
+      setDocs(prev => prev.filter(d => d.id !== doc.id));
+      toast({ title: "Documento removido." });
+    } catch {
+      toast({ title: "Erro ao remover documento", variant: "destructive" });
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    if (files[0].size > 10 * 1024 * 1024) {
       toast({ title: "Arquivo muito grande", description: "Máximo 10 MB.", variant: "destructive" });
       return;
     }
-    setUploading(true);
-    const reader = new FileReader();
-    reader.onload = () => {
-      add({ id: crypto.randomUUID(), name: file.name, type: file.type, size: file.size, uploadedAt: new Date().toISOString(), data: reader.result as string });
-      setUploading(false);
-      toast({ title: "Documento enviado com sucesso!" });
-      if (inputRef.current) inputRef.current.value = "";
-    };
-    reader.onerror = () => { setUploading(false); toast({ title: "Erro ao ler arquivo", variant: "destructive" }); };
-    reader.readAsDataURL(file);
-  }
-
-  function formatSize(bytes: number) {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    startUpload(files);
+    if (inputRef.current) inputRef.current.value = "";
   }
 
   return (
     <div className="space-y-3 mt-2">
+      {hasLocalData && (
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <p className="text-xs">
+            Documentos salvos localmente neste navegador foram encontrados. Re-envie-os aqui para salvá-los no servidor e acessá-los de qualquer dispositivo.
+          </p>
+        </div>
+      )}
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-muted-foreground">{docs.length} documento(s)</p>
-        <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={uploading}>
-          <Upload className="w-4 h-4 mr-2" />{uploading ? "Enviando..." : "Enviar Documento"}
+        <p className="text-sm font-medium text-muted-foreground">
+          {loadingDocs ? "Carregando…" : `${docs.length} documento(s)`}
+        </p>
+        <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={isUploading}>
+          {isUploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+          {isUploading ? "Enviando..." : "Enviar Documento"}
         </Button>
-        <input ref={inputRef} type="file" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" className="hidden" onChange={handleFile} />
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+          className="hidden"
+          onChange={handleFileChange}
+        />
       </div>
-      {docs.length === 0 ? (
+
+      {loadingDocs ? (
+        <div className="space-y-2">
+          {[1, 2].map(i => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}
+        </div>
+      ) : docs.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground text-sm border rounded-lg bg-muted/20">
           <FileText className="w-8 h-8 mx-auto mb-2 opacity-40" />
           Nenhum documento enviado ainda.
@@ -329,18 +395,36 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
           {docs.map(doc => (
             <div key={doc.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
               <div className="w-9 h-9 rounded-md bg-muted flex items-center justify-center shrink-0">
-                {doc.type.startsWith("image/") ? <span className="text-xs font-bold text-blue-600">IMG</span> : <FileText className="w-4 h-4 text-muted-foreground" />}
+                {doc.mimeType?.startsWith("image/")
+                  ? <span className="text-xs font-bold text-blue-600">IMG</span>
+                  : doc.mimeType === "application/pdf"
+                  ? <span className="text-xs font-bold text-red-600">PDF</span>
+                  : <FileText className="w-4 h-4 text-muted-foreground" />}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{doc.name}</p>
-                <p className="text-xs text-muted-foreground">{formatSize(doc.size)} · {format(parseISO(doc.uploadedAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+                <p className="text-xs text-muted-foreground">
+                  {formatDocSize(doc.sizeBytes)}{doc.sizeBytes ? " · " : ""}
+                  {format(parseISO(doc.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                </p>
               </div>
               <div className="flex gap-1 shrink-0">
                 <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                  <a href={doc.data} download={doc.name} title="Baixar"><Download className="w-3.5 h-3.5" /></a>
+                  <a href={doc.url} target="_blank" rel="noopener noreferrer" title="Visualizar / Baixar">
+                    <Download className="w-3.5 h-3.5" />
+                  </a>
                 </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => remove(doc.id)} title="Remover">
-                  <Trash2 className="w-3.5 h-3.5" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-destructive hover:text-destructive"
+                  onClick={() => handleDelete(doc)}
+                  disabled={deletingId === doc.id}
+                  title="Remover"
+                >
+                  {deletingId === doc.id
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <Trash2 className="w-3.5 h-3.5" />}
                 </Button>
               </div>
             </div>

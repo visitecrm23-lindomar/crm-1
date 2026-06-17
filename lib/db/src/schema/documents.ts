@@ -8,6 +8,7 @@ export const documentsTable = pgTable("documents", {
   name: text("name").notNull(),
   type: text("type").notNull(),
   url: text("url").notNull(),
+  fileKey: text("file_key"),
   mimeType: text("mime_type"),
   sizeBytes: integer("size_bytes"),
   entityType: text("entity_type"),

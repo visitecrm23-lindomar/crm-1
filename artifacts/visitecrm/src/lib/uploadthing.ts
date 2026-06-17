@@ -13,6 +13,7 @@ export type OurFileRouter = {
   storeProductImage: AnyFileRoute;
   agencyLogo: AnyFileRoute;
   accommodationGallery: AnyFileRoute;
+  clientDocument: AnyFileRoute;
 };
 
 const url =

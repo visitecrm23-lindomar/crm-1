@@ -71,6 +71,23 @@ export const uploadRouter = {
     .onUploadComplete(async ({ file }) => {
       return { url: file.ufsUrl };
     }),
+
+  clientDocument: f({
+    image: { maxFileSize: "10MB", maxFileCount: 1 },
+    pdf: { maxFileSize: "10MB", maxFileCount: 1 },
+    "application/msword": { maxFileSize: "10MB", maxFileCount: 1 },
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { maxFileSize: "10MB", maxFileCount: 1 },
+    "application/vnd.ms-excel": { maxFileSize: "10MB", maxFileCount: 1 },
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { maxFileSize: "10MB", maxFileCount: 1 },
+  })
+    .middleware(async ({ req }) => {
+      const { userId } = getAuth(req);
+      if (!userId) throw new Error("Unauthorized");
+      return { userId };
+    })
+    .onUploadComplete(async ({ file }) => {
+      return { url: file.ufsUrl, key: file.key, name: file.name, size: file.size };
+    }),
 } satisfies FileRouter;
 
 export const uploadthingRouter = createRouteHandler({ router: uploadRouter });
