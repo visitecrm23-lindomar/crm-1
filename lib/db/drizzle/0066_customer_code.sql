@@ -1,17 +1,19 @@
 ALTER TABLE "clients" ADD COLUMN "customer_code" text;
 ALTER TABLE "tenants" ADD COLUMN "last_client_seq" integer NOT NULL DEFAULT 0;
 
-CREATE UNIQUE INDEX "clients_customer_code_unique" ON "clients" ("customer_code") WHERE "customer_code" IS NOT NULL;
+-- Uniqueness is per-tenant: two agencies can share same prefix, codes are unique within each agency
+CREATE UNIQUE INDEX "clients_customer_code_unique" ON "clients" ("tenant_id", "customer_code") WHERE "customer_code" IS NOT NULL;
 
 -- Backfill existing clients with customer codes based on creation order per tenant
+-- UPPER() applied to reservation_prefix for consistency with runtime generation
 WITH ranked AS (
   SELECT
     c.id,
-    COALESCE(
+    UPPER(COALESCE(
       NULLIF(TRIM(t.reservation_prefix), ''),
-      UPPER(LEFT(t.slug, 3)),
+      LEFT(t.slug, 3),
       'CLI'
-    ) AS prefix,
+    )) AS prefix,
     TO_CHAR(c.created_at, 'YYYYMM') AS yyyymm,
     ROW_NUMBER() OVER (PARTITION BY c.tenant_id ORDER BY c.created_at, c.id) AS seq
   FROM clients c

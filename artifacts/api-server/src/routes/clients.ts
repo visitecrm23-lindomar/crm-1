@@ -314,6 +314,12 @@ router.post("/clients", async (req, res, next: NextFunction): Promise<void> => {
           set: { ...sharedFields, updatedAt: new Date() },
         })
         .returning();
+    }).catch((err: unknown) => {
+      const pgErr = err as { code?: string };
+      if (pgErr?.code === "23505") {
+        throw new AppError("Conflito ao gerar código do cliente — tente novamente", 409, "CUSTOMER_CODE_CONFLICT");
+      }
+      throw err;
     });
 
     if (!upserted) { next(new AppError("Failed to create client", 500, "CLIENT_CREATE_FAILED")); return; }
