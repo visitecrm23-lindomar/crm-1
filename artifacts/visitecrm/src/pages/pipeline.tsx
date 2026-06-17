@@ -30,7 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Plus, Search, Trash2, Phone, Calendar, MapPin, X, Pencil, UserPen, Eye, BookOpen,
   ExternalLink, ShoppingBag, ChevronDown, ChevronUp, BarChart2, Loader2, XCircle,
-  Settings2, Star, ChevronRight, ChevronLeft, GripVertical,
+  Settings2, Star, ChevronRight, ChevronLeft, GripVertical, Plane,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -47,6 +47,8 @@ const LOST_REASONS = [
   "Sem resposta",
   "Outro",
 ];
+
+const TRAVEL_REASON_OPTIONS = ["Lazer", "Aniversário", "Família", "Romance", "Negócios"];
 
 const CLASSIFICATION_LABELS: Record<string, string> = {
   lead: "Lead", prospect: "Prospecto", client: "Cliente", vip: "VIP", inactive: "Inativo",
@@ -114,6 +116,62 @@ function LostReasonModal({ open, onClose, onConfirm }: LostReasonModalProps) {
           >
             {loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
             Confirmar Perda
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Travel Reason Dialog ─────────────────────────────────────────────────────
+
+interface TravelReasonDialogProps {
+  deal: Deal | null;
+  onClose: () => void;
+  onConfirm: (reason: string | null) => Promise<void>;
+}
+
+function TravelReasonDialog({ deal, onClose, onConfirm }: TravelReasonDialogProps) {
+  const [reason, setReason] = useState<string>("none");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (deal) setReason(deal.travelReason ?? "none");
+  }, [deal]);
+
+  async function handleSubmit() {
+    setLoading(true);
+    try { await onConfirm(reason === "none" ? null : reason); } finally { setLoading(false); }
+  }
+
+  return (
+    <Dialog open={!!deal} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Plane className="w-5 h-5 text-blue-500" />
+            Motivo da Viagem
+          </DialogTitle>
+          <DialogDescription>Qual é o motivo desta viagem?</DialogDescription>
+        </DialogHeader>
+        <div className="py-2">
+          <Select value={reason} onValueChange={setReason}>
+            <SelectTrigger>
+              <SelectValue placeholder="Selecionar..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Não especificado</SelectItem>
+              {TRAVEL_REASON_OPTIONS.map(o => (
+                <SelectItem key={o} value={o}>{o}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
+          <Button onClick={handleSubmit} disabled={loading}>
+            {loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+            Salvar
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -241,12 +299,13 @@ interface ClientCardProps {
   onCreateReservation: (deal: Deal) => void;
   onViewReservation: (reservationId: string) => void;
   onMarkLost?: (deal: Deal) => void;
+  onSetTravelReason?: (deal: Deal) => void;
   isFinalStage: boolean;
   isLostStage?: boolean;
   isDragging?: boolean;
 }
 
-function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView360, onDelete, onCreateReservation, onViewReservation, onMarkLost, isFinalStage, isLostStage, isDragging }: ClientCardProps) {
+function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView360, onDelete, onCreateReservation, onViewReservation, onMarkLost, onSetTravelReason, isFinalStage, isLostStage, isDragging }: ClientCardProps) {
   const client = deal.clientId ? clientsById.get(deal.clientId) : undefined;
   const name = client?.name ?? deal.leadName ?? "Lead Desconhecido";
   const whatsapp = client?.whatsapp ?? deal.leadWhatsapp;
@@ -316,6 +375,10 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
                   Ver Reserva
                 </DropdownMenuItem>
               )}
+              <DropdownMenuItem onClick={() => onSetTravelReason?.(deal)}>
+                <Plane className="w-3.5 h-3.5 mr-2" />
+                Motivo da Viagem
+              </DropdownMenuItem>
               {!isLostStage && onMarkLost && (
                 <DropdownMenuItem
                   onClick={() => onMarkLost(deal)}
@@ -357,6 +420,15 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
       {tripName && (
         <div className="mb-1">
           <span className="text-xs bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded truncate inline-block max-w-full">{tripName}</span>
+        </div>
+      )}
+
+      {deal.travelReason && (
+        <div className="mb-1">
+          <span className="text-xs bg-purple-50 text-purple-600 border border-purple-100 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
+            <Plane className="w-2.5 h-2.5 shrink-0" />
+            {deal.travelReason}
+          </span>
         </div>
       )}
 
@@ -408,11 +480,11 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
   );
 }
 
-function DraggableCard({ deal, clientsById, tripsById, onEditClient, onView360, onDelete, onCreateReservation, onViewReservation, onMarkLost, isFinalStage, isLostStage }: Omit<ClientCardProps, "isDragging">) {
+function DraggableCard({ deal, clientsById, tripsById, onEditClient, onView360, onDelete, onCreateReservation, onViewReservation, onMarkLost, onSetTravelReason, isFinalStage, isLostStage }: Omit<ClientCardProps, "isDragging">) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: deal.id });
   return (
     <div ref={setNodeRef} {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing">
-      <ClientCardContent deal={deal} clientsById={clientsById} tripsById={tripsById} onEditClient={onEditClient} onView360={onView360} onDelete={onDelete} onCreateReservation={onCreateReservation} onViewReservation={onViewReservation} onMarkLost={onMarkLost} isFinalStage={isFinalStage} isLostStage={isLostStage} isDragging={isDragging} />
+      <ClientCardContent deal={deal} clientsById={clientsById} tripsById={tripsById} onEditClient={onEditClient} onView360={onView360} onDelete={onDelete} onCreateReservation={onCreateReservation} onViewReservation={onViewReservation} onMarkLost={onMarkLost} onSetTravelReason={onSetTravelReason} isFinalStage={isFinalStage} isLostStage={isLostStage} isDragging={isDragging} />
     </div>
   );
 }
@@ -871,6 +943,7 @@ export default function Pipeline() {
   const [client360Id, setClient360Id] = useState<string | null>(null);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [pendingLostDeal, setPendingLostDeal] = useState<{ dealId: string; stageId: string } | null>(null);
+  const [pendingTravelReasonDeal, setPendingTravelReasonDeal] = useState<Deal | null>(null);
   const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null);
   const [newPipelineOpen, setNewPipelineOpen] = useState(false);
   const [manageStagesOpen, setManageStagesOpen] = useState(false);
@@ -1062,6 +1135,19 @@ export default function Pipeline() {
   const handleMarkLost = (deal: Deal) => {
     if (!perdidoStageId) return;
     setPendingLostDeal({ dealId: deal.id, stageId: perdidoStageId });
+  };
+
+  const handleSetTravelReason = async (reason: string | null) => {
+    if (!pendingTravelReasonDeal) return;
+    await fetch(`${API_BASE}/api/deals/${pendingTravelReasonDeal.id}`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ travelReason: reason }),
+    });
+    setPendingTravelReasonDeal(null);
+    refetchDeals();
+    refetchLostDeals();
   };
 
   const handleDelete = async (dealId: string) => {
@@ -1379,6 +1465,7 @@ export default function Pipeline() {
                         onCreateReservation={handleCreateReservation}
                         onViewReservation={handleViewReservation}
                         onMarkLost={handleMarkLost}
+                        onSetTravelReason={setPendingTravelReasonDeal}
                         isFinalStage={stage.isFinal}
                         isLostStage={isLostStage}
                       />
@@ -1415,6 +1502,7 @@ export default function Pipeline() {
                   onDelete={() => {}}
                   onCreateReservation={() => {}}
                   onViewReservation={() => {}}
+                  onSetTravelReason={() => {}}
                   isFinalStage={false}
                 />
               </div>
@@ -1437,6 +1525,12 @@ export default function Pipeline() {
         open={!!pendingLostDeal}
         onClose={() => setPendingLostDeal(null)}
         onConfirm={handleLostReasonConfirm}
+      />
+
+      <TravelReasonDialog
+        deal={pendingTravelReasonDeal}
+        onClose={() => setPendingTravelReasonDeal(null)}
+        onConfirm={handleSetTravelReason}
       />
 
       <NewPipelineModal

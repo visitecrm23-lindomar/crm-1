@@ -24,6 +24,7 @@ const CreateDealBody = z.object({
   reservationId: z.string().optional(),
   expectedCloseDate: z.string().optional(),
   status: z.string().optional(),
+  travelReason: z.string().optional(),
 });
 
 const UpdateDealBody = z.object({
@@ -34,6 +35,7 @@ const UpdateDealBody = z.object({
   expectedCloseDate: z.string().optional().nullable(),
   stageId: z.string().optional(),
   lostReason: z.string().optional().nullable(),
+  travelReason: z.string().optional().nullable(),
   reservationId: z.string().optional().nullable(),
   tripId: z.string().optional().nullable(),
 });
@@ -120,7 +122,7 @@ function formatDeal(d: typeof dealsTable.$inferSelect, seats: string[] = [], res
     title: d.title, description: d.description, value: Number(d.value),
     status: d.status, ownerId: d.ownerId,
     leadName: d.leadName, leadEmail: d.leadEmail, leadWhatsapp: d.leadWhatsapp,
-    tripId: d.tripId, lostReason: d.lostReason,
+    tripId: d.tripId, lostReason: d.lostReason, travelReason: d.travelReason ?? null,
     reservationId: d.reservationId ?? null,
     reservationNumber,
     source: d.source ?? "manual",
@@ -236,6 +238,7 @@ router.post("/deals", async (req, res, next: NextFunction): Promise<void> => {
       tripId: parsed.data.tripId ?? null,
       reservationId: parsed.data.reservationId ?? null,
       expectedCloseDate: parsed.data.expectedCloseDate ? new Date(parsed.data.expectedCloseDate) : null,
+      travelReason: parsed.data.travelReason ?? null,
     });
 
     const [deal] = await db.select().from(dealsTable)
@@ -274,6 +277,7 @@ router.patch("/deals/:id", async (req, res, next: NextFunction): Promise<void> =
     if (parsed.data.value != null) updates.value = String(parsed.data.value);
     if (parsed.data.status != null) updates.status = parseDealStatus(parsed.data.status);
     if (parsed.data.lostReason !== undefined) updates.lostReason = parsed.data.lostReason ?? null;
+    if (parsed.data.travelReason !== undefined) updates.travelReason = parsed.data.travelReason ?? null;
     if (parsed.data.expectedCloseDate !== undefined) {
       updates.expectedCloseDate = parsed.data.expectedCloseDate ? new Date(parsed.data.expectedCloseDate) : null;
     }

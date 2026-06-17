@@ -32,6 +32,8 @@ export interface Deal {
   status: DealStatus;
   /** @nullable */
   lostReason?: string | null;
+  /** @nullable */
+  travelReason?: string | null;
   source: string;
   autoCreated: boolean;
   seats: string[];

@@ -2880,6 +2880,7 @@ export const ListDealsResponseItem = zod.object({
   expectedCloseDate: zod.string().nullish(),
   status: zod.enum(["open", "won", "lost"]),
   lostReason: zod.string().nullish(),
+  travelReason: zod.string().nullish(),
   source: zod.string(),
   autoCreated: zod.boolean(),
   seats: zod.array(zod.string()),
@@ -2908,6 +2909,7 @@ export const CreateDealBody = zod.object({
   tripId: zod.string().nullish(),
   reservationId: zod.string().nullish(),
   expectedCloseDate: zod.string().nullish(),
+  travelReason: zod.string().nullish(),
 });
 
 /**
@@ -2933,6 +2935,7 @@ export const GetDealResponse = zod.object({
   expectedCloseDate: zod.string().nullish(),
   status: zod.enum(["open", "won", "lost"]),
   lostReason: zod.string().nullish(),
+  travelReason: zod.string().nullish(),
   source: zod.string(),
   autoCreated: zod.boolean(),
   seats: zod.array(zod.string()),
@@ -2958,6 +2961,7 @@ export const UpdateDealBody = zod.object({
   value: zod.number().nullish(),
   status: zod.union([zod.enum(["open", "won", "lost"]), zod.null()]).optional(),
   lostReason: zod.string().nullish(),
+  travelReason: zod.string().nullish(),
   description: zod.string().nullish(),
   expectedCloseDate: zod.string().nullish(),
   reservationId: zod.string().nullish(),
@@ -2980,6 +2984,7 @@ export const UpdateDealResponse = zod.object({
   expectedCloseDate: zod.string().nullish(),
   status: zod.enum(["open", "won", "lost"]),
   lostReason: zod.string().nullish(),
+  travelReason: zod.string().nullish(),
   source: zod.string(),
   autoCreated: zod.boolean(),
   seats: zod.array(zod.string()),
@@ -3030,6 +3035,7 @@ export const MoveDealResponse = zod.object({
   expectedCloseDate: zod.string().nullish(),
   status: zod.enum(["open", "won", "lost"]),
   lostReason: zod.string().nullish(),
+  travelReason: zod.string().nullish(),
   source: zod.string(),
   autoCreated: zod.boolean(),
   seats: zod.array(zod.string()),

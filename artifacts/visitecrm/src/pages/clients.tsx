@@ -530,6 +530,7 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId,
                 leadName: form.name,
                 leadWhatsapp: form.whatsapp,
                 ...(createdReservationId ? { reservationId: createdReservationId } : {}),
+                ...(form.travelReason !== "none" ? { travelReason: form.travelReason } : {}),
               },
             });
           }
