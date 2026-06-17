@@ -49,4 +49,7 @@ export interface CreateClientBody {
   internalRating?: number | null;
   /** @nullable */
   companyNps?: number | null;
+  travelInterests?: string[];
+  /** @nullable */
+  ambassadorOptIn?: boolean | null;
 }

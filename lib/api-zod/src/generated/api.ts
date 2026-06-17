@@ -805,6 +805,8 @@ export const ListClientsResponse = zod.object({
       foodPreferences: zod.string().nullish(),
       internalRating: zod.number().nullish(),
       companyNps: zod.number().nullish(),
+      travelInterests: zod.array(zod.string()),
+      ambassadorOptIn: zod.boolean().nullish(),
       isNew: zod.boolean().nullish(),
       message: zod.string().nullish(),
     }),
@@ -842,6 +844,8 @@ export const CreateClientBody = zod.object({
   foodPreferences: zod.string().nullish(),
   internalRating: zod.number().nullish(),
   companyNps: zod.number().nullish(),
+  travelInterests: zod.array(zod.string()).optional(),
+  ambassadorOptIn: zod.boolean().nullish(),
 });
 
 /**
@@ -887,6 +891,8 @@ export const GetClientResponse = zod.object({
   foodPreferences: zod.string().nullish(),
   internalRating: zod.number().nullish(),
   companyNps: zod.number().nullish(),
+  travelInterests: zod.array(zod.string()),
+  ambassadorOptIn: zod.boolean().nullish(),
   isNew: zod.boolean().nullish(),
   message: zod.string().nullish(),
 });
@@ -928,6 +934,8 @@ export const UpdateClientBody = zod.object({
   foodPreferences: zod.string().nullish(),
   internalRating: zod.number().nullish(),
   companyNps: zod.number().nullish(),
+  travelInterests: zod.array(zod.string()).nullish(),
+  ambassadorOptIn: zod.boolean().nullish(),
 });
 
 export const UpdateClientResponse = zod.object({
@@ -966,6 +974,8 @@ export const UpdateClientResponse = zod.object({
   foodPreferences: zod.string().nullish(),
   internalRating: zod.number().nullish(),
   companyNps: zod.number().nullish(),
+  travelInterests: zod.array(zod.string()),
+  ambassadorOptIn: zod.boolean().nullish(),
   isNew: zod.boolean().nullish(),
   message: zod.string().nullish(),
 });
@@ -1045,6 +1055,8 @@ export const UpdateClientPipelineStageResponse = zod.object({
   foodPreferences: zod.string().nullish(),
   internalRating: zod.number().nullish(),
   companyNps: zod.number().nullish(),
+  travelInterests: zod.array(zod.string()),
+  ambassadorOptIn: zod.boolean().nullish(),
   isNew: zod.boolean().nullish(),
   message: zod.string().nullish(),
 });

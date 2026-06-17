@@ -65,4 +65,8 @@ export interface UpdateClientBody {
   internalRating?: number | null;
   /** @nullable */
   companyNps?: number | null;
+  /** @nullable */
+  travelInterests?: string[] | null;
+  /** @nullable */
+  ambassadorOptIn?: boolean | null;
 }

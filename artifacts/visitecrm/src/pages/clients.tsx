@@ -241,6 +241,7 @@ const MARITAL_OPTIONS = ["Solteiro(a)", "Casado(a)", "Divorciado(a)", "Viúvo(a)
 const TRAVEL_TYPE_OPTIONS = ["Casal", "Bate-volta", "Excursão", "Trilha", "Corporativo"];
 const ROOM_TYPE_OPTIONS = ["Quarto Casal", "Quarto Triplo", "Quarto Quádruplo", "Quarto Compartilhado", "Não se aplica"];
 const TRAVEL_REASON_OPTIONS = ["Lazer", "Aniversário", "Família", "Romance", "Negócios"];
+const TRAVEL_INTERESTS_OPTIONS = ["Gastronomia", "Natureza", "Cultura e história", "Compras", "Aventura", "Religiosidade", "Descanso", "Ecoturismo", "Arte e música", "Fotografia"];
 const PAYMENT_METHOD_OPTIONS = ["Dinheiro", "PIX", "Cartão Débito", "Cartão Crédito", "Boleto", "Transferência"];
 const INTERNAL_RATING_LABELS: Record<number, string> = { 1: "Difícil", 2: "Neutro", 3: "Fácil", 4: "Ótimo", 5: "Excelente" };
 
@@ -297,6 +298,7 @@ interface ClientFormData {
   musicalPreferences: string; foodPreferences: string;
   dreamDestinations: string; tags: string;
   npsScore: string; companyFeedback: string;
+  travelInterests: string[]; ambassadorOptIn: boolean;
 }
 
 const EMPTY_CLIENT: ClientFormData = {
@@ -310,6 +312,7 @@ const EMPTY_CLIENT: ClientFormData = {
   professionalArea: "", favoriteDrink: "", musicalPreferences: "", foodPreferences: "",
   dreamDestinations: "", tags: "",
   npsScore: "", companyFeedback: "",
+  travelInterests: [], ambassadorOptIn: false,
 };
 
 function clientToForm(c: Client): ClientFormData {
@@ -329,6 +332,8 @@ function clientToForm(c: Client): ClientFormData {
     dreamDestinations: (c.dreamDestinations ?? []).join(", "), tags: (c.tags ?? []).join(", "),
     npsScore: c.companyNps != null ? String(c.companyNps) : (c.npsScore != null ? String(c.npsScore) : ""),
     companyFeedback: c.companyFeedback ?? "",
+    travelInterests: c.travelInterests ?? [],
+    ambassadorOptIn: c.ambassadorOptIn ?? false,
   };
 }
 
@@ -469,6 +474,8 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId,
       pipelineStage: form.pipelineStage !== "none" ? form.pipelineStage : undefined,
       classification: form.classification || undefined,
       status: form.status || undefined,
+      travelInterests: form.travelInterests.length > 0 ? form.travelInterests : [],
+      ambassadorOptIn: form.ambassadorOptIn,
     };
 
     try {
@@ -972,6 +979,31 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId,
                 <Input placeholder="vip, família, aventura, praia" value={form.tags} onChange={e => set("tags")(e.target.value)} />
                 <p className="text-xs text-muted-foreground">Separe as tags com vírgula</p>
               </div>
+              <div className="col-span-2 space-y-2">
+                <Label>Interesses de Viagem</Label>
+                <p className="text-xs text-muted-foreground -mt-1">Selecione todos que se aplicam</p>
+                <div className="flex flex-wrap gap-2">
+                  {TRAVEL_INTERESTS_OPTIONS.map(interest => (
+                    <button
+                      key={interest}
+                      type="button"
+                      onClick={() => setForm(prev => ({
+                        ...prev,
+                        travelInterests: prev.travelInterests.includes(interest)
+                          ? prev.travelInterests.filter(x => x !== interest)
+                          : [...prev.travelInterests, interest],
+                      }))}
+                      className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                        form.travelInterests.includes(interest)
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-background border-border hover:bg-muted"
+                      }`}
+                    >
+                      {interest}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </TabsContent>
 
@@ -1025,6 +1057,17 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId,
             <div className="space-y-2">
               <Label>Comentário sobre a Agência</Label>
               <Textarea placeholder="O que o cliente disse sobre a experiência com a agência..." rows={5} value={form.companyFeedback} onChange={e => set("companyFeedback")(e.target.value)} />
+            </div>
+            <div className="flex items-center gap-3 pt-1">
+              <Checkbox
+                id="ambassadorOptIn"
+                checked={form.ambassadorOptIn}
+                onCheckedChange={v => setForm(prev => ({ ...prev, ambassadorOptIn: !!v }))}
+              />
+              <div>
+                <Label htmlFor="ambassadorOptIn" className="cursor-pointer">Participante do Programa de Embaixadores</Label>
+                <p className="text-xs text-muted-foreground">Cliente optou por participar do programa de indicações</p>
+              </div>
             </div>
           </TabsContent>
         </Tabs>

@@ -64,6 +64,9 @@ export interface Client {
   internalRating?: number | null;
   /** @nullable */
   companyNps?: number | null;
+  travelInterests: string[];
+  /** @nullable */
+  ambassadorOptIn?: boolean | null;
   /** @nullable */
   isNew?: boolean | null;
   /** @nullable */
