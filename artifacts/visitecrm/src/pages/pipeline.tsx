@@ -454,12 +454,31 @@ interface NewPipelineModalProps {
   onCreated: (pipeline: PipelineInfo) => void;
 }
 
+const DEFAULT_PIPELINE_STAGES = [
+  { name: "Lead", color: "#6366F1" },
+  { name: "Vitrine", color: "#3B82F6" },
+  { name: "Reserva Criada", color: "#0EA5E9" },
+  { name: "Pagamento Confirmado", color: "#10B981" },
+  { name: "Em Viagem", color: "#06B6D4" },
+  { name: "Pós Viagem", color: "#6B7280" },
+  { name: "Perdido", color: "#EF4444" },
+];
+
 function NewPipelineModal({ open, onClose, onCreated }: NewPipelineModalProps) {
   const [name, setName] = useState("");
+  const [initialStages, setInitialStages] = useState(DEFAULT_PIPELINE_STAGES.map(s => ({ ...s })));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [newStageName, setNewStageName] = useState("");
 
-  useEffect(() => { if (open) { setName(""); setError(""); } }, [open]);
+  useEffect(() => {
+    if (open) {
+      setName("");
+      setError("");
+      setInitialStages(DEFAULT_PIPELINE_STAGES.map(s => ({ ...s })));
+      setNewStageName("");
+    }
+  }, [open]);
 
   async function handleCreate() {
     if (!name.trim()) return;
@@ -478,20 +497,38 @@ function NewPipelineModal({ open, onClose, onCreated }: NewPipelineModalProps) {
         return;
       }
       const pipeline = await resp.json() as PipelineInfo;
+
+      // Create initial stages
+      for (let i = 0; i < initialStages.length; i++) {
+        const s = initialStages[i];
+        await fetch(`${API_BASE}/api/pipeline/stages?pipelineId=${pipeline.id}`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: s.name, color: s.color }),
+        });
+      }
+
       onCreated(pipeline);
     } finally {
       setLoading(false);
     }
   }
 
+  function addStage() {
+    if (!newStageName.trim()) return;
+    setInitialStages(prev => [...prev, { name: newStageName.trim(), color: PRESET_COLORS[prev.length % PRESET_COLORS.length] }]);
+    setNewStageName("");
+  }
+
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Novo Pipeline</DialogTitle>
           <DialogDescription>Crie um pipeline separado para organizar negócios por contexto.</DialogDescription>
         </DialogHeader>
-        <div className="space-y-3 py-1">
+        <div className="space-y-4 py-1">
           <div>
             <Label className="text-sm font-medium">Nome do pipeline</Label>
             <Input
@@ -503,6 +540,41 @@ function NewPipelineModal({ open, onClose, onCreated }: NewPipelineModalProps) {
               autoFocus
             />
           </div>
+
+          <div>
+            <Label className="text-sm font-medium">Etapas iniciais</Label>
+            <p className="text-xs text-muted-foreground mb-2">Personalize antes de criar — você pode editar depois.</p>
+            <div className="space-y-1 max-h-52 overflow-y-auto pr-1">
+              {initialStages.map((s, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <div
+                    className="w-3 h-3 rounded-full shrink-0"
+                    style={{ backgroundColor: s.color }}
+                  />
+                  <span className="text-sm flex-1 truncate">{s.name}</span>
+                  <button
+                    onClick={() => setInitialStages(prev => prev.filter((_, i) => i !== idx))}
+                    className="p-0.5 text-muted-foreground hover:text-destructive shrink-0"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+              <div className="flex items-center gap-2 mt-1">
+                <Input
+                  value={newStageName}
+                  onChange={e => setNewStageName(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") addStage(); }}
+                  placeholder="+ Nova etapa..."
+                  className="h-7 text-sm"
+                />
+                {newStageName.trim() && (
+                  <Button size="sm" className="h-7 px-2 shrink-0" onClick={addStage}>Adicionar</Button>
+                )}
+              </div>
+            </div>
+          </div>
+
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
         <DialogFooter>
@@ -803,6 +875,9 @@ export default function Pipeline() {
   const [newPipelineOpen, setNewPipelineOpen] = useState(false);
   const [manageStagesOpen, setManageStagesOpen] = useState(false);
   const [settingDefault, setSettingDefault] = useState(false);
+  const [renamingPipeline, setRenamingPipeline] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [deletingPipelineLoading, setDeletingPipelineLoading] = useState(false);
 
   const { data: pipelines, refetch: refetchPipelines } = useQuery<PipelineInfo[]>({
     queryKey: ["pipelines"],
@@ -907,7 +982,7 @@ export default function Pipeline() {
       });
     }
     return d;
-  }, [deals, search, filterStageId, filterClassification, filterCity, clientsById]);
+  }, [deals, search, filterStageId, filterClassification, filterCity, clientsById, visibleStageIds]);
 
   const perdidoStageId = useMemo(
     () => visibleStages.find(s => s.name.toLowerCase() === "perdido")?.id ?? null,
@@ -930,7 +1005,7 @@ export default function Pipeline() {
       });
     }
     return d;
-  }, [lostDealsData, search, clientsById]);
+  }, [lostDealsData, search, clientsById, visibleStageIds]);
 
   const dealsByStage = (stageId: string, isLost: boolean) =>
     isLost ? filteredLostDeals.filter(d => d.stageId === stageId) : filteredDeals.filter(d => d.stageId === stageId);
@@ -1006,6 +1081,40 @@ export default function Pipeline() {
     setEditingClient(null);
     setDefaultStageId(stageId ?? visibleStages[0]?.id);
     setIsModalOpen(true);
+  };
+
+  const handleRenamePipeline = async () => {
+    if (!selectedPipelineId || !renameValue.trim()) return;
+    await fetch(`${API_BASE}/api/pipelines/${selectedPipelineId}`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: renameValue.trim() }),
+    });
+    await refetchPipelines();
+    setRenamingPipeline(false);
+  };
+
+  const handleDeletePipeline = async () => {
+    if (!selectedPipelineId) return;
+    if (!confirm(`Excluir o pipeline "${activePipeline?.name}"? Isso também excluirá todas as etapas (sem negócios ativos).`)) return;
+    setDeletingPipelineLoading(true);
+    try {
+      const resp = await fetch(`${API_BASE}/api/pipelines/${selectedPipelineId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        alert(data.message ?? "Não foi possível excluir o pipeline");
+        return;
+      }
+      setSelectedPipelineId(null);
+      await refetchPipelines();
+      await refetchStages();
+    } finally {
+      setDeletingPipelineLoading(false);
+    }
   };
 
   const handleSetDefault = async (pipelineId: string) => {
@@ -1086,6 +1195,55 @@ export default function Pipeline() {
                 <span className="text-xs text-amber-500 flex items-center gap-1 px-1">
                   <Star className="w-3 h-3 fill-amber-500" /> Padrão
                 </span>
+              )}
+              {/* Rename / Delete pipeline */}
+              {activePipeline && (
+                renamingPipeline ? (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      value={renameValue}
+                      onChange={e => setRenameValue(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") handleRenamePipeline();
+                        if (e.key === "Escape") setRenamingPipeline(false);
+                      }}
+                      className="h-7 text-sm w-44"
+                      autoFocus
+                    />
+                    <Button size="sm" className="h-7 px-2" onClick={handleRenamePipeline}>OK</Button>
+                    <button onClick={() => setRenamingPipeline(false)} className="p-1 text-muted-foreground hover:text-foreground">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="p-1 text-muted-foreground hover:text-foreground rounded" title="Opções do pipeline">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-44">
+                      <DropdownMenuItem onClick={() => { setRenameValue(activePipeline.name); setRenamingPipeline(true); }}>
+                        <Pencil className="w-3.5 h-3.5 mr-2" />
+                        Renomear
+                      </DropdownMenuItem>
+                      {!activePipeline.isDefault && (
+                        <DropdownMenuItem onClick={() => handleSetDefault(activePipeline.id)}>
+                          <Star className="w-3.5 h-3.5 mr-2" />
+                          Definir como Padrão
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem
+                        onClick={handleDeletePipeline}
+                        disabled={deletingPipelineLoading}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        {deletingPipelineLoading ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 mr-2" />}
+                        Excluir Pipeline
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )
               )}
             </div>
           )}

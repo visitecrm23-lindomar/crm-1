@@ -391,7 +391,13 @@ router.patch("/pipelines/:id", async (req, res, next: NextFunction): Promise<voi
     }).safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
 
-    // When setting a pipeline as default, unset all others first
+    // Validate target pipeline exists first before any mutations
+    const [targetPipeline] = await db.select().from(pipelinesTable)
+      .where(and(eq(pipelinesTable.id, req.params.id), eq(pipelinesTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!targetPipeline) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
+
+    // When setting a pipeline as default, unset all others first (target already validated)
     if (parsed.data.isDefault === true) {
       await db.update(pipelinesTable)
         .set({ isDefault: false })
@@ -516,6 +522,52 @@ router.delete("/pipeline/stages/:stageId", async (req, res, next: NextFunction):
 
     await db.delete(pipelineStagesTable)
       .where(and(eq(pipelineStagesTable.id, req.params.stageId), eq(pipelineStagesTable.tenantId, me.tenantId)));
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/pipelines/:id", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+
+    const [pipeline] = await db.select().from(pipelinesTable)
+      .where(and(eq(pipelinesTable.id, req.params.id), eq(pipelinesTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!pipeline) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
+
+    // Protect: don't delete the only remaining pipeline
+    const allPipelines = await db.select({ id: pipelinesTable.id })
+      .from(pipelinesTable).where(eq(pipelinesTable.tenantId, me.tenantId));
+    if (allPipelines.length <= 1) {
+      next(new ValidationError("Não é possível excluir o único pipeline da agência", "LAST_PIPELINE"));
+      return;
+    }
+
+    // Protect: don't delete if any stage has active open deals
+    const stagesOfPipeline = await db.select({ id: pipelineStagesTable.id })
+      .from(pipelineStagesTable)
+      .where(and(eq(pipelineStagesTable.pipelineId, req.params.id), eq(pipelineStagesTable.tenantId, me.tenantId)));
+
+    if (stagesOfPipeline.length > 0) {
+      const [activeDeal] = await db.select({ id: dealsTable.id }).from(dealsTable)
+        .where(and(
+          inArray(dealsTable.stageId, stagesOfPipeline.map(s => s.id)),
+          eq(dealsTable.tenantId, me.tenantId),
+          eq(dealsTable.status, "open"),
+        ))
+        .limit(1);
+      if (activeDeal) {
+        next(new ValidationError("Não é possível excluir um pipeline com negócios ativos", "PIPELINE_HAS_ACTIVE_DEALS"));
+        return;
+      }
+    }
+
+    await db.delete(pipelinesTable)
+      .where(and(eq(pipelinesTable.id, req.params.id), eq(pipelinesTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) {
     next(err);

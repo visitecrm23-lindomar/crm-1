@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { CoverImageUpload } from "@/components/cover-image-upload";
 import { storeApi } from "@/lib/storeApi";
 import { useUser } from "@clerk/react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   useGetTenant,
   getGetTenantQueryKey,
@@ -89,6 +89,14 @@ import {
   ShieldOff,
   Crown,
   Star,
+  GitBranch,
+  Plus,
+  Pencil,
+  X,
+  Settings2,
+  GripVertical,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { formatCurrencyBRL } from "@/lib/utils";
 import { ROLES, INVOICE_STATUS } from "@workspace/permissions";
@@ -3311,6 +3319,345 @@ function ClubConfigTab() {
   );
 }
 
+/* ──────────────────── Pipeline Settings Tab ──────────────────── */
+const PIPELINE_PRESET_COLORS = [
+  "#6366F1","#3B82F6","#0EA5E9","#10B981","#06B6D4",
+  "#F59E0B","#EF4444","#8B5CF6","#EC4899","#6B7280",
+];
+
+type PipelineCfg = { id: string; name: string; isDefault: boolean; createdAt: string };
+type StageCfg = { id: string; name: string; color: string; position: number; pipelineId: string };
+
+function PipelineSettingsTab() {
+  const { toast } = useToast();
+
+  const { data: pipelines, refetch: refetchPipelines } = useQuery<PipelineCfg[]>({
+    queryKey: ["cfg-pipelines"],
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/api/pipelines`, { credentials: "include" });
+      if (!r.ok) throw new Error("Erro ao carregar pipelines");
+      return r.json();
+    },
+  });
+
+  const [activePipelineId, setActivePipelineId] = useState<string | null>(null);
+  const activePipeline = pipelines?.find(p => p.id === activePipelineId) ?? pipelines?.[0];
+
+  const { data: stages, refetch: refetchStages } = useQuery<StageCfg[]>({
+    queryKey: ["cfg-stages", activePipeline?.id],
+    enabled: !!activePipeline?.id,
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/api/pipeline/stages?pipelineId=${activePipeline!.id}`, { credentials: "include" });
+      if (!r.ok) throw new Error("Erro ao carregar etapas");
+      return r.json();
+    },
+  });
+
+  // Pipeline CRUD state
+  const [creatingPipeline, setCreatingPipeline] = useState(false);
+  const [newPipelineName, setNewPipelineName] = useState("");
+  const [renamingPipelineId, setRenamingPipelineId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [loadingAction, setLoadingAction] = useState<string | null>(null);
+
+  // Stage CRUD state
+  const [newStageName, setNewStageName] = useState("");
+  const [newStageColor, setNewStageColor] = useState(PIPELINE_PRESET_COLORS[0]);
+  const [editingStageId, setEditingStageId] = useState<string | null>(null);
+  const [editingStageValue, setEditingStageValue] = useState("");
+
+  async function createPipeline() {
+    if (!newPipelineName.trim()) return;
+    setLoadingAction("create-pipeline");
+    try {
+      const r = await fetch(`${BASE}/api/pipelines`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newPipelineName.trim() }),
+      });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); toast({ title: "Erro", description: d.message, variant: "destructive" }); return; }
+      const p: PipelineCfg = await r.json();
+      setNewPipelineName("");
+      setCreatingPipeline(false);
+      setActivePipelineId(p.id);
+      await refetchPipelines();
+    } finally { setLoadingAction(null); }
+  }
+
+  async function renamePipeline(id: string) {
+    if (!renameValue.trim()) return;
+    setLoadingAction(`rename-${id}`);
+    try {
+      await fetch(`${BASE}/api/pipelines/${id}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: renameValue.trim() }),
+      });
+      setRenamingPipelineId(null);
+      await refetchPipelines();
+    } finally { setLoadingAction(null); }
+  }
+
+  async function setDefault(id: string) {
+    setLoadingAction(`default-${id}`);
+    try {
+      const r = await fetch(`${BASE}/api/pipelines/${id}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isDefault: true }),
+      });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); toast({ title: "Erro", description: d.message, variant: "destructive" }); return; }
+      await refetchPipelines();
+    } finally { setLoadingAction(null); }
+  }
+
+  async function deletePipeline(id: string) {
+    setLoadingAction(`delete-${id}`);
+    try {
+      const r = await fetch(`${BASE}/api/pipelines/${id}`, { method: "DELETE", credentials: "include" });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); toast({ title: "Erro", description: d.message, variant: "destructive" }); return; }
+      if (activePipeline?.id === id) setActivePipelineId(null);
+      await refetchPipelines();
+    } finally { setLoadingAction(null); }
+  }
+
+  async function addStage() {
+    if (!newStageName.trim() || !activePipeline) return;
+    setLoadingAction("add-stage");
+    try {
+      await fetch(`${BASE}/api/pipeline/stages?pipelineId=${activePipeline.id}`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newStageName.trim(), color: newStageColor }),
+      });
+      setNewStageName("");
+      await refetchStages();
+    } finally { setLoadingAction(null); }
+  }
+
+  async function renameStage(stageId: string) {
+    if (!editingStageValue.trim()) return;
+    setLoadingAction(`rename-stage-${stageId}`);
+    try {
+      await fetch(`${BASE}/api/pipeline/stages/${stageId}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editingStageValue.trim() }),
+      });
+      setEditingStageId(null);
+      await refetchStages();
+    } finally { setLoadingAction(null); }
+  }
+
+  async function deleteStage(stageId: string) {
+    setLoadingAction(`delete-stage-${stageId}`);
+    try {
+      const r = await fetch(`${BASE}/api/pipeline/stages/${stageId}`, { method: "DELETE", credentials: "include" });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); toast({ title: "Erro", description: d.message, variant: "destructive" }); return; }
+      await refetchStages();
+    } finally { setLoadingAction(null); }
+  }
+
+  const sortedStages = [...(stages ?? [])].sort((a, b) => a.position - b.position);
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Left: Pipeline list */}
+      <div className="md:col-span-1 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Pipelines</h3>
+          <Button size="sm" variant="outline" className="gap-1 h-7 px-2 text-xs" onClick={() => setCreatingPipeline(true)}>
+            <Plus className="w-3 h-3" /> Novo
+          </Button>
+        </div>
+
+        {creatingPipeline && (
+          <div className="flex items-center gap-1">
+            <Input
+              value={newPipelineName}
+              onChange={e => setNewPipelineName(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") createPipeline(); if (e.key === "Escape") setCreatingPipeline(false); }}
+              placeholder="Nome do pipeline"
+              className="h-7 text-sm"
+              autoFocus
+            />
+            <Button size="sm" className="h-7 px-2 shrink-0" onClick={createPipeline} disabled={loadingAction === "create-pipeline"}>
+              {loadingAction === "create-pipeline" ? <Loader2 className="w-3 h-3 animate-spin" /> : "OK"}
+            </Button>
+            <button onClick={() => setCreatingPipeline(false)} className="p-1 text-muted-foreground hover:text-foreground">
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
+        <div className="space-y-1">
+          {pipelines?.map(p => (
+            <div
+              key={p.id}
+              className={`group flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${(activePipeline?.id === p.id) ? "border-primary bg-primary/5" : "border-transparent hover:border-border hover:bg-muted/50"}`}
+              onClick={() => setActivePipelineId(p.id)}
+            >
+              {renamingPipelineId === p.id ? (
+                <div className="flex items-center gap-1 flex-1" onClick={e => e.stopPropagation()}>
+                  <Input
+                    value={renameValue}
+                    onChange={e => setRenameValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") renamePipeline(p.id); if (e.key === "Escape") setRenamingPipelineId(null); }}
+                    className="h-6 text-xs flex-1"
+                    autoFocus
+                  />
+                  <Button size="sm" className="h-6 px-1.5 text-xs shrink-0" onClick={() => renamePipeline(p.id)}>OK</Button>
+                  <button onClick={() => setRenamingPipelineId(null)} className="p-0.5 text-muted-foreground"><X className="w-3 h-3" /></button>
+                </div>
+              ) : (
+                <>
+                  <GitBranch className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-sm flex-1 truncate">{p.name}</span>
+                  {p.isDefault && <Badge variant="secondary" className="text-xs px-1.5 py-0 h-4 shrink-0">Padrão</Badge>}
+                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
+                    <button
+                      onClick={() => { setRenameValue(p.name); setRenamingPipelineId(p.id); }}
+                      className="p-0.5 text-muted-foreground hover:text-foreground rounded"
+                      title="Renomear"
+                    ><Pencil className="w-3 h-3" /></button>
+                    {!p.isDefault && (
+                      <button
+                        onClick={() => setDefault(p.id)}
+                        disabled={loadingAction === `default-${p.id}`}
+                        className="p-0.5 text-muted-foreground hover:text-amber-500 rounded"
+                        title="Definir como padrão"
+                      >
+                        {loadingAction === `default-${p.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Star className="w-3 h-3" />}
+                      </button>
+                    )}
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <button className="p-0.5 text-muted-foreground hover:text-destructive rounded" title="Excluir">
+                          {loadingAction === `delete-${p.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                        </button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Excluir pipeline "{p.name}"?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Isso excluirá permanentemente todas as etapas deste pipeline. Negócios ativos impedem a exclusão.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => deletePipeline(p.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            Excluir
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Right: Stage management for selected pipeline */}
+      <div className="md:col-span-2 space-y-3">
+        {activePipeline ? (
+          <>
+            <div className="flex items-center gap-2">
+              <Settings2 className="w-4 h-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold">Etapas — {activePipeline.name}</h3>
+            </div>
+
+            <div className="space-y-1">
+              {sortedStages.map((s, idx) => (
+                <div key={s.id} className="group flex items-center gap-2 p-2 rounded-lg border bg-card">
+                  <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
+                  <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                  {editingStageId === s.id ? (
+                    <div className="flex items-center gap-1 flex-1">
+                      <Input
+                        value={editingStageValue}
+                        onChange={e => setEditingStageValue(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter") renameStage(s.id); if (e.key === "Escape") setEditingStageId(null); }}
+                        className="h-6 text-xs flex-1"
+                        autoFocus
+                      />
+                      <Button size="sm" className="h-6 px-1.5 text-xs shrink-0" onClick={() => renameStage(s.id)}>OK</Button>
+                      <button onClick={() => setEditingStageId(null)} className="p-0.5 text-muted-foreground"><X className="w-3 h-3" /></button>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="text-sm flex-1 truncate">{s.name}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">#{idx + 1}</span>
+                      <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0">
+                        <button
+                          onClick={() => { setEditingStageValue(s.name); setEditingStageId(s.id); }}
+                          className="p-0.5 text-muted-foreground hover:text-foreground rounded"
+                        ><Pencil className="w-3 h-3" /></button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <button className="p-0.5 text-muted-foreground hover:text-destructive rounded">
+                              {loadingAction === `delete-stage-${s.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                            </button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Excluir etapa "{s.name}"?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Etapas com negócios ativos não podem ser excluídas.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => deleteStage(s.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                Excluir
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Add stage */}
+            <div className="flex items-center gap-2 pt-1">
+              <div className="flex items-center gap-1 flex-1">
+                <Input
+                  value={newStageName}
+                  onChange={e => setNewStageName(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") addStage(); }}
+                  placeholder="Nome da nova etapa..."
+                  className="h-8 text-sm"
+                />
+                <div className="relative shrink-0">
+                  <input
+                    type="color"
+                    value={newStageColor}
+                    onChange={e => setNewStageColor(e.target.value)}
+                    className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                  />
+                  <div className="w-8 h-8 rounded border flex items-center justify-center" style={{ backgroundColor: newStageColor }} />
+                </div>
+              </div>
+              <Button size="sm" className="h-8 gap-1 shrink-0" onClick={addStage} disabled={!newStageName.trim() || loadingAction === "add-stage"}>
+                {loadingAction === "add-stage" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                Adicionar
+              </Button>
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
+            Selecione um pipeline à esquerda
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ──────────────────── Main Settings Page ──────────────────── */
 export default function Configuracoes() {
   return (
@@ -3357,6 +3704,10 @@ export default function Configuracoes() {
           <TabsTrigger value="clube" className="flex items-center gap-1.5">
             <Crown className="w-3.5 h-3.5" />
             Clube
+          </TabsTrigger>
+          <TabsTrigger value="pipelines" className="flex items-center gap-1.5">
+            <GitBranch className="w-3.5 h-3.5" />
+            Pipelines
           </TabsTrigger>
         </TabsList>
 
@@ -3482,6 +3833,23 @@ export default function Configuracoes() {
               </CardHeader>
               <CardContent>
                 <ClubConfigTab />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="pipelines">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <GitBranch className="w-4 h-4" />
+                  Pipelines de Vendas
+                </CardTitle>
+                <CardDescription>
+                  Gerencie os pipelines e etapas do CRM da sua agência
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <PipelineSettingsTab />
               </CardContent>
             </Card>
           </TabsContent>
