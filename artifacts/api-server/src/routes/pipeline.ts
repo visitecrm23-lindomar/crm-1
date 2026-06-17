@@ -398,6 +398,7 @@ router.get("/pipeline/:pipelineId/analytics", async (req, res, next: NextFunctio
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (me.role === ROLES.CLIENT) { next(new AppError("Forbidden", 403, "FORBIDDEN")); return; }
 
     const [pipeline] = await db.select().from(pipelinesTable)
       .where(and(eq(pipelinesTable.id, req.params.pipelineId), eq(pipelinesTable.tenantId, me.tenantId)))

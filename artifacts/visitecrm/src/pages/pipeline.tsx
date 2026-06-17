@@ -549,7 +549,16 @@ export default function Pipeline() {
       setPendingLostDeal({ dealId, stageId: targetStageId });
       return;
     }
-    await moveDeal.mutateAsync({ id: dealId, data: { stageId: targetStageId } });
+
+    // If dragging OUT of "Perdido", reset status back to open
+    if (deal.status === DEAL_STATUS.LOST) {
+      await updateDeal.mutateAsync({
+        id: dealId,
+        data: { stageId: targetStageId, status: DEAL_STATUS.OPEN as "open", lostReason: null },
+      });
+    } else {
+      await moveDeal.mutateAsync({ id: dealId, data: { stageId: targetStageId } });
+    }
     refetchDeals();
     refetchLostDeals();
     refetchStages();
