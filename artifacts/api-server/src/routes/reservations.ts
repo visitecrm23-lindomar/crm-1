@@ -52,7 +52,7 @@ async function generateInstallments(
   const unpaidCount = Math.max(1, n - paidRows.length);
   const remainingValue = Math.max(0, totalValue - paidAmount);
   const base = Math.floor((remainingValue / unpaidCount) * 100) / 100;
-  const remainder = Math.round((remainingValue - base * unpaidCount) * 100) / 100;
+  const remainder = roundMoney(remainingValue - base * unpaidCount);
   const startNumber = paidRows.length + 1;
 
   const firstDate = new Date(`${firstDueDateStr}T12:00:00Z`);
@@ -1891,6 +1891,8 @@ router.patch("/reservations/:reservationId/passengers/:id", async (req, res, nex
     const updates: Partial<typeof passengersTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.cpf !== undefined) updates.cpf = parsed.data.cpf ?? null;
+    if (parsed.data.rg !== undefined) updates.rg = parsed.data.rg ?? null;
+    if (parsed.data.birthDate !== undefined) updates.birthDate = parsed.data.birthDate ? new Date(parsed.data.birthDate) : null;
     if (parsed.data.seatNumber !== undefined) updates.seatNumber = parsed.data.seatNumber ?? null;
     if (parsed.data.ageCategory != null) updates.ageCategory = parsed.data.ageCategory;
     await db.update(passengersTable).set(updates)

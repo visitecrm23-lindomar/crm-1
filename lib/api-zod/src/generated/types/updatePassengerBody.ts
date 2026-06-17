@@ -12,6 +12,10 @@ export interface UpdatePassengerBody {
   /** @nullable */
   cpf?: string | null;
   /** @nullable */
+  rg?: string | null;
+  /** @nullable */
+  birthDate?: string | null;
+  /** @nullable */
   seatNumber?: string | null;
   /** @nullable */
   ageCategory?: string | null;

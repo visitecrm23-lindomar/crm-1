@@ -1087,7 +1087,11 @@ router.get("/trips/:id/passengers/export", async (req, res, next: NextFunction):
 
     const statusParam = req.query.status as string | undefined;
     const validStatuses: string[] = [...Object.values(RESERVATION_STATUS), "all"];
-    const filterStatus = statusParam && validStatuses.includes(statusParam) ? statusParam : null;
+    if (statusParam && !validStatuses.includes(statusParam)) {
+      next(new ValidationError(`Status inválido: "${statusParam}". Valores permitidos: ${validStatuses.join(", ")}`, "INVALID_STATUS"));
+      return;
+    }
+    const filterStatus = statusParam ?? null;
 
     const reservations = await db.select().from(reservationsTable)
       .where(

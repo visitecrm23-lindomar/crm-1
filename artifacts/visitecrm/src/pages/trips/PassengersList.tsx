@@ -368,7 +368,15 @@ export function PassengersList({ tripId }: { tripId: string }) {
                       {visibleCols.nome && (
                         <td className="p-3 font-medium whitespace-nowrap">
                           <div className="flex items-center gap-1.5">
-                            {p.name}
+                            {p.name === "A preencher" ? (
+                              <span className="italic text-amber-600 text-sm">A preencher</span>
+                            ) : p.name}
+                            {p.name === "A preencher" && (
+                              <span title="Clique no lápis para preencher os dados deste passageiro"
+                                className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 cursor-help text-xs font-normal">
+                                Pendente
+                              </span>
+                            )}
                             {!!(p.observations || p.specialNeeds) && (
                               <span title={[p.specialNeeds, p.observations].filter(Boolean).join(" | ")}
                                 className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 cursor-help">

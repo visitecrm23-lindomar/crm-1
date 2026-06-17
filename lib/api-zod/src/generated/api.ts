@@ -2525,6 +2525,8 @@ export const UpdatePassengerParams = zod.object({
 export const UpdatePassengerBody = zod.object({
   name: zod.string().nullish(),
   cpf: zod.string().nullish(),
+  rg: zod.string().nullish(),
+  birthDate: zod.string().nullish(),
   seatNumber: zod.string().nullish(),
   ageCategory: zod.string().nullish(),
 });
