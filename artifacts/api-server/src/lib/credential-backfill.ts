@@ -1,6 +1,6 @@
-import { db, storesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
-import { encryptCredential, isEncrypted } from "./crypto";
+import { db, storesTable, tenantIntegrationsTable } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
+import { encryptCredential, decryptCredential, isEncrypted } from "./crypto";
 import { logger } from "./logger";
 
 // One-shot, idempotent migration: walks every store row and encrypts any
@@ -39,5 +39,86 @@ export async function backfillEncryptedCredentials(): Promise<void> {
 
   if (updated > 0) {
     logger.info({ updated }, "[credential-backfill] Encrypted plaintext gateway credentials");
+  }
+
+  // ── MercadoPago system_configs → tenant_integrations migration backfill ──
+  // Migration 0069 copies the raw accessToken into config._mig_accessToken so
+  // that SQL can do the row move without an encryption library. This backfill
+  // encrypts and promotes that temp field into secrets_encrypted, then clears it.
+  // Non-fatal: if tenant_integrations doesn't exist yet (fresh environment that
+  // hasn't run migrations) we skip gracefully rather than aborting boot.
+  try {
+    await backfillMercadoPagoMigratedSecrets();
+  } catch (err) {
+    logger.warn(
+      { err },
+      "[credential-backfill] MercadoPago migration backfill skipped — tenant_integrations may not exist yet",
+    );
+  }
+}
+
+// Idempotent: only touches rows that still have the `_mig_accessToken` temp
+// field in their config. Safe to call multiple times.
+async function backfillMercadoPagoMigratedSecrets(): Promise<void> {
+  const rows = await db
+    .select({
+      id: tenantIntegrationsTable.id,
+      tenantId: tenantIntegrationsTable.tenantId,
+      config: tenantIntegrationsTable.config,
+      secretsEncrypted: tenantIntegrationsTable.secretsEncrypted,
+    })
+    .from(tenantIntegrationsTable)
+    .where(eq(tenantIntegrationsTable.type, "mercadopago"));
+
+  let promoted = 0;
+  for (const row of rows) {
+    const config = (row.config ?? {}) as Record<string, string>;
+    const rawToken = config["_mig_accessToken"];
+
+    if (!rawToken) continue;
+
+    // Merge with any already-stored secrets (keeps the function idempotent).
+    let existingSecrets: Record<string, string> = {};
+    if (row.secretsEncrypted) {
+      try {
+        const plain = decryptCredential(row.secretsEncrypted);
+        const parsed: unknown = JSON.parse(plain);
+        if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+          existingSecrets = parsed as Record<string, string>;
+        }
+      } catch {
+        // Corrupted blob — start fresh; admin must re-enter secrets.
+      }
+    }
+
+    const resolvedSecrets: Record<string, string> = {
+      ...existingSecrets,
+      accessToken: rawToken,
+    };
+
+    const newSecretsEncrypted = encryptCredential(JSON.stringify(resolvedSecrets));
+
+    // Remove the temp migration field from config before saving.
+    const cleanConfig: Record<string, string> = { ...config };
+    delete cleanConfig["_mig_accessToken"];
+
+    await db
+      .update(tenantIntegrationsTable)
+      .set({ config: cleanConfig, secretsEncrypted: newSecretsEncrypted })
+      .where(
+        and(
+          eq(tenantIntegrationsTable.id, row.id),
+          eq(tenantIntegrationsTable.tenantId, row.tenantId),
+        ),
+      );
+
+    promoted++;
+  }
+
+  if (promoted > 0) {
+    logger.info(
+      { promoted },
+      "[credential-backfill] Promoted MercadoPago accessToken from system_configs migration",
+    );
   }
 }

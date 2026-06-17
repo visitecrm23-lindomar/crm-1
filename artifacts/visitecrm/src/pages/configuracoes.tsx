@@ -1343,45 +1343,8 @@ function IntegrationCard({ type }: { type: string }) {
 }
 
 /* ──────────────────── Integrations Tab ──────────────────────────────────── */
-// MercadoPago stays in the existing system_configs store (untouched per spec).
-const MERCADOPAGO_FIELDS = [
-  { key: "publicKey", label: "Public Key", placeholder: "APP_USR-..." },
-  { key: "accessToken", label: "Access Token", type: "password" },
-] as const;
 
 function IntegrationsTab() {
-  const { toast } = useToast();
-  const { data: configs = [], refetch } = useListSystemConfigs();
-  const upsert = useUpsertSystemConfig();
-
-  const [mpOpen, setMpOpen] = useState(false);
-  const [mpForm, setMpForm] = useState<Record<string, string>>({});
-  const [mpTesting, setMpTesting] = useState(false);
-
-  function getMpConfig(): Record<string, string> {
-    const cfg = configs.find((c) => c.key === "mercadopago");
-    if (!cfg?.value) return {};
-    return cfg.value as Record<string, string>;
-  }
-
-  const mpConfigured = Object.keys(getMpConfig()).length > 0;
-
-  function openMp() {
-    setMpForm(getMpConfig());
-    setMpOpen(true);
-  }
-
-  async function saveMp() {
-    try {
-      await upsert.mutateAsync({ data: { key: "mercadopago", value: mpForm } });
-      toast({ title: "MercadoPago salvo com sucesso" });
-      setMpOpen(false);
-      refetch();
-    } catch {
-      toast({ title: "Erro ao salvar MercadoPago", variant: "destructive" });
-    }
-  }
-
   return (
     <div className="space-y-4">
       <GoogleCalendarCard />
@@ -1389,81 +1352,9 @@ function IntegrationsTab() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <IntegrationCard type="whatsapp_evolution" />
         <IntegrationCard type="stripe_account" />
+        <IntegrationCard type="mercadopago" />
         <IntegrationCard type="google_analytics" />
-
-        {/* MercadoPago — kept in existing system_configs store, no migration */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Wifi className="w-4 h-4 text-muted-foreground" />
-                MercadoPago
-              </CardTitle>
-              {mpConfigured ? (
-                <Badge className="text-xs bg-green-50 text-green-700 border border-green-200">
-                  <CheckCircle2 className="w-3 h-3 mr-1" />
-                  Configurado
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="text-xs">
-                  Não configurado
-                </Badge>
-              )}
-            </div>
-            <CardDescription className="text-xs">
-              Processamento de pagamentos via MercadoPago
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" size="sm" onClick={openMp}>
-              {mpConfigured ? "Editar" : "Configurar"}
-            </Button>
-          </CardContent>
-        </Card>
       </div>
-
-      <Dialog open={mpOpen} onOpenChange={setMpOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>MercadoPago</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            {MERCADOPAGO_FIELDS.map((field) => (
-              <div key={field.key} className="space-y-1">
-                <Label>{field.label}</Label>
-                <Input
-                  type={field.type ?? "text"}
-                  value={mpForm[field.key] ?? ""}
-                  onChange={(e) => setMpForm((f) => ({ ...f, [field.key]: e.target.value }))}
-                  placeholder={field.placeholder}
-                />
-              </div>
-            ))}
-          </div>
-          <DialogFooter className="flex-col gap-2 sm:flex-row">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setMpTesting(true);
-                setTimeout(() => {
-                  setMpTesting(false);
-                  toast({ title: "Conexão testada com sucesso" });
-                }, 1500);
-              }}
-              disabled={mpTesting}
-              className="sm:mr-auto"
-            >
-              {mpTesting ? "Testando..." : "Testar Conexão"}
-            </Button>
-            <Button variant="outline" onClick={() => setMpOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={() => void saveMp()} disabled={upsert.isPending}>
-              Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

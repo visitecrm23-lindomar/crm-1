@@ -231,6 +231,54 @@ const REGISTRY: Record<string, RegistryEntry> = {
     },
   },
 
+  // ── MercadoPago ─────────────────────────────────────────────────────────────
+  // Fixed host (api.mercadopago.com) — no SSRF risk.
+  // publicKey (APP_USR-…) is non-secret (safe to embed in frontend JS).
+  // accessToken is a secret and is stored encrypted.
+  mercadopago: {
+    label: "MercadoPago",
+    fields: [
+      { key: "publicKey", label: "Public Key (APP_USR-…)", secret: false, optional: true },
+      { key: "accessToken", label: "Access Token", secret: true },
+    ],
+    async testConnection(_config, secrets) {
+      const accessToken = secrets.accessToken?.trim();
+      if (!accessToken) {
+        return { ok: false, message: "Informe o Access Token do MercadoPago." };
+      }
+
+      try {
+        const res = await fetch("https://api.mercadopago.com/v1/payment_methods", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal: AbortSignal.timeout(12000),
+        });
+
+        if (res.ok) {
+          return { ok: true, message: "Conta MercadoPago autenticada com sucesso." };
+        }
+        if (res.status === 401) {
+          return {
+            ok: false,
+            message: "Access Token inválido ou expirado (HTTP 401).",
+          };
+        }
+        if (res.status === 403) {
+          return {
+            ok: false,
+            message: "Access Token sem permissão para acessar a API (HTTP 403).",
+          };
+        }
+        return { ok: false, message: `Falha na conexão com MercadoPago (HTTP ${res.status}).` };
+      } catch (err) {
+        const name = (err as { name?: string } | null)?.name;
+        if (name === "AbortError" || name === "TimeoutError") {
+          return { ok: false, message: "Tempo de conexão esgotado." };
+        }
+        return { ok: false, message: "Não foi possível conectar ao MercadoPago." };
+      }
+    },
+  },
+
   // ── Google Analytics ────────────────────────────────────────────────────────
   // Real GA Data API calls require OAuth / service-account token exchange which
   // is impractical in a lightweight ping. We do structural / format validation

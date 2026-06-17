@@ -484,6 +484,13 @@
       "when": 1782770000000,
       "tag": "0068_customer_code_global_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1782780000000,
+      "tag": "0069_mercadopago_tenant_integrations",
+      "breakpoints": true
     }
   ]
 }
