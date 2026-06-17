@@ -2907,6 +2907,12 @@ export const ListDealsResponseItem = zod.object({
   stageColor: zod.string().nullish(),
   clientName: zod.string().nullish(),
   ownerName: zod.string().nullish(),
+  clientWhatsapp: zod.string().nullish(),
+  clientCity: zod.string().nullish(),
+  clientState: zod.string().nullish(),
+  clientClassification: zod.string().nullish(),
+  clientOutstandingBalance: zod.number().nullish(),
+  customerCode: zod.string().nullish(),
 });
 export const ListDealsResponse = zod.array(ListDealsResponseItem);
 
@@ -2954,6 +2960,12 @@ export const GetDealResponse = zod.object({
   travelReason: zod.string().nullish(),
   source: zod.string(),
   autoCreated: zod.boolean(),
+  clientWhatsapp: zod.string().nullish(),
+  clientCity: zod.string().nullish(),
+  clientState: zod.string().nullish(),
+  clientClassification: zod.string().nullish(),
+  clientOutstandingBalance: zod.number().nullish(),
+  customerCode: zod.string().nullish(),
   seats: zod.array(zod.string()),
   reservationNumber: zod.string().nullish(),
   createdAt: zod.string(),

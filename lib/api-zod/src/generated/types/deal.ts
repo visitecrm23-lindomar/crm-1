@@ -49,4 +49,16 @@ export interface Deal {
   clientName?: string | null;
   /** @nullable */
   ownerName?: string | null;
+  /** @nullable */
+  clientWhatsapp?: string | null;
+  /** @nullable */
+  clientCity?: string | null;
+  /** @nullable */
+  clientState?: string | null;
+  /** @nullable */
+  clientClassification?: string | null;
+  /** @nullable */
+  clientOutstandingBalance?: number | null;
+  /** @nullable */
+  customerCode?: string | null;
 }

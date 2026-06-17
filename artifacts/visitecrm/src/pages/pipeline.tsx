@@ -306,13 +306,13 @@ interface ClientCardProps {
 }
 
 function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView360, onDelete, onCreateReservation, onViewReservation, onMarkLost, onSetTravelReason, isFinalStage, isLostStage, isDragging }: ClientCardProps) {
-  const client = deal.clientId ? clientsById.get(deal.clientId) : undefined;
-  const name = client?.name ?? deal.leadName ?? "Lead Desconhecido";
-  const whatsapp = client?.whatsapp ?? deal.leadWhatsapp;
-  const city = client?.addressCity;
-  const state = client?.addressState;
+  const clientFromMap = deal.clientId ? clientsById.get(deal.clientId) : undefined;
+  const name = deal.clientName ?? deal.leadName ?? "Lead Desconhecido";
+  const whatsapp = deal.clientWhatsapp ?? deal.leadWhatsapp;
+  const city = deal.clientCity;
+  const state = deal.clientState;
   const dealValue = deal.value ?? 0;
-  const outstanding = client?.outstandingBalance ?? 0;
+  const outstanding = deal.clientOutstandingBalance ?? 0;
   const hasOutstanding = outstanding > 0;
   const tripName = deal.tripId ? tripsById.get(deal.tripId) : undefined;
   const initials = name.charAt(0).toUpperCase();
@@ -352,16 +352,23 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-[180px]">
-              {client ? (
+              {deal.clientId ? (
                 <>
-                  <DropdownMenuItem onClick={() => onView360(client.id)}>
+                  <DropdownMenuItem onClick={() => onView360(deal.clientId!)}>
                     <Eye className="w-3.5 h-3.5 mr-2" />
                     Ver 360°
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onEditClient(client)}>
-                    <UserPen className="w-3.5 h-3.5 mr-2" />
-                    Editar Cliente
-                  </DropdownMenuItem>
+                  {clientFromMap ? (
+                    <DropdownMenuItem onClick={() => onEditClient(clientFromMap)}>
+                      <UserPen className="w-3.5 h-3.5 mr-2" />
+                      Editar Cliente
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem disabled className="text-muted-foreground">
+                      <UserPen className="w-3.5 h-3.5 mr-2" />
+                      Editar Cliente
+                    </DropdownMenuItem>
+                  )}
                 </>
               ) : (
                 <DropdownMenuItem disabled className="text-muted-foreground">
@@ -444,9 +451,9 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
             </Badge>
           )}
         </div>
-        {(client?.totalSpent ?? 0) > 0 && (
+        {(clientFromMap?.totalSpent ?? 0) > 0 && (
           <p className="text-xs text-green-600 font-medium mt-1">
-            Pago: {formatCurrency(client?.totalSpent ?? 0)}
+            Pago: {formatCurrency(clientFromMap?.totalSpent ?? 0)}
           </p>
         )}
         {isLostStage && deal.lostReason && (
@@ -1032,30 +1039,27 @@ export default function Pipeline() {
     if (search.trim()) {
       const q = search.toLowerCase();
       d = d.filter(x => {
-        const client = x.clientId ? clientsById.get(x.clientId) : undefined;
         return x.title.toLowerCase().includes(q) ||
-          (client?.name ?? "").toLowerCase().includes(q) ||
+          (x.clientName ?? "").toLowerCase().includes(q) ||
           (x.leadName ?? "").toLowerCase().includes(q) ||
           (x.leadWhatsapp ?? "").includes(q) ||
-          (client?.whatsapp ?? "").includes(q);
+          (x.clientWhatsapp ?? "").includes(q);
       });
     }
     if (filterClassification !== "all") {
       d = d.filter(x => {
         if (!x.clientId) return false;
-        const c = clientsById.get(x.clientId);
-        return c?.classification === filterClassification;
+        return x.clientClassification === filterClassification;
       });
     }
     if (filterCity) {
       d = d.filter(x => {
         if (!x.clientId) return true;
-        const c = clientsById.get(x.clientId);
-        return (c?.addressCity ?? "").toLowerCase().includes(filterCity.toLowerCase());
+        return (x.clientCity ?? "").toLowerCase().includes(filterCity.toLowerCase());
       });
     }
     return d;
-  }, [deals, search, filterStageId, filterClassification, filterCity, clientsById, visibleStageIds]);
+  }, [deals, search, filterStageId, filterClassification, filterCity, visibleStageIds]);
 
   const perdidoStageId = useMemo(
     () => visibleStages.find(s => s.name.toLowerCase() === "perdido")?.id ?? null,
@@ -1069,16 +1073,15 @@ export default function Pipeline() {
     if (search.trim()) {
       const q = search.toLowerCase();
       d = d.filter(x => {
-        const client = x.clientId ? clientsById.get(x.clientId) : undefined;
         return x.title.toLowerCase().includes(q) ||
-          (client?.name ?? "").toLowerCase().includes(q) ||
+          (x.clientName ?? "").toLowerCase().includes(q) ||
           (x.leadName ?? "").toLowerCase().includes(q) ||
           (x.leadWhatsapp ?? "").includes(q) ||
-          (client?.whatsapp ?? "").includes(q);
+          (x.clientWhatsapp ?? "").includes(q);
       });
     }
     return d;
-  }, [lostDealsData, search, clientsById, visibleStageIds]);
+  }, [lostDealsData, search, visibleStageIds]);
 
   const dealsByStage = (stageId: string, isLost: boolean) =>
     isLost ? filteredLostDeals.filter(d => d.stageId === stageId) : filteredDeals.filter(d => d.stageId === stageId);

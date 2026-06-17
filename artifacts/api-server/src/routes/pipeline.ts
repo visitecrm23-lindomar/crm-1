@@ -192,10 +192,36 @@ router.get("/deals", async (req, res, next: NextFunction): Promise<void> => {
     if (me.role === ROLES.SALES) conditions.push(eq(dealsTable.ownerId, me.id));
     const deals = await db.select().from(dealsTable)
       .where(and(...conditions)).orderBy(desc(dealsTable.createdAt));
+
+    const uniqueClientIds = [...new Set(deals.map(d => d.clientId).filter(Boolean) as string[])];
+    const clientRows = uniqueClientIds.length > 0
+      ? await db.select({
+          id: clientsTable.id,
+          name: clientsTable.name,
+          whatsapp: clientsTable.whatsapp,
+          addressCity: clientsTable.addressCity,
+          addressState: clientsTable.addressState,
+          classification: clientsTable.classification,
+          outstandingBalance: clientsTable.outstandingBalance,
+          customerCode: clientsTable.customerCode,
+        }).from(clientsTable).where(inArray(clientsTable.id, uniqueClientIds))
+      : [];
+    const clientMap = new Map(clientRows.map(c => [c.id, c]));
+
     const resInfoMap = await getReservationInfoForDeals(deals, me.tenantId);
     res.json(deals.map(d => {
       const info = d.reservationId ? resInfoMap.get(d.reservationId) : undefined;
-      return formatDeal(d, info?.seats ?? [], info?.reservationNumber ?? null);
+      const client = d.clientId ? clientMap.get(d.clientId) : undefined;
+      return {
+        ...formatDeal(d, info?.seats ?? [], info?.reservationNumber ?? null),
+        clientName: client?.name ?? null,
+        clientWhatsapp: client?.whatsapp ?? null,
+        clientCity: client?.addressCity ?? null,
+        clientState: client?.addressState ?? null,
+        clientClassification: client?.classification ?? null,
+        clientOutstandingBalance: client ? Number(client.outstandingBalance ?? 0) : null,
+        customerCode: client?.customerCode ?? null,
+      };
     }));
   } catch (err) {
     next(err);
