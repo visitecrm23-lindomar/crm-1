@@ -1,10 +1,9 @@
 import { Router, type NextFunction } from "express";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { db } from "@workspace/db";
-import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable, usersTable, paymentsTable, dealsTable, storeOrdersTable, storeReviewsTable, clientScoresTable, documentsTable } from "@workspace/db";
+import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable, usersTable, paymentsTable, dealsTable, storeOrdersTable, storeReviewsTable, clientScoresTable } from "@workspace/db";
 import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
 import { generateId, generateReferralCode } from "../lib/id";
-import { utapi, extractVerifiedUploadThingKey } from "../lib/uploadthing";
 import { generateAndAssignReferralCode } from "../lib/referral-code";
 import { dispatchReferralWelcomeEmail } from "../queues/email-helpers";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -670,107 +669,6 @@ router.post("/clients/:clientId/referral/generate", async (req, res, next: NextF
     });
 
     res.json({ code });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.get("/clients/:clientId/documents", async (req, res, next: NextFunction): Promise<void> => {
-  try {
-    const me = await requireAuth(req, res);
-    if (!me) return;
-    await requireClientAccess(me, req.params.clientId);
-    const docs = await db.select().from(documentsTable)
-      .where(and(
-        eq(documentsTable.tenantId, me.tenantId),
-        eq(documentsTable.entityType, "client"),
-        eq(documentsTable.entityId, req.params.clientId),
-      ))
-      .orderBy(desc(documentsTable.createdAt));
-    res.json(docs.map(d => ({
-      id: d.id,
-      name: d.name,
-      url: d.url,
-      fileKey: d.fileKey,
-      mimeType: d.mimeType,
-      sizeBytes: d.sizeBytes,
-      uploadedById: d.uploadedById,
-      createdAt: d.createdAt.toISOString(),
-    })));
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post("/clients/:clientId/documents", async (req, res, next: NextFunction): Promise<void> => {
-  try {
-    const me = await requireAuth(req, res);
-    if (!me) return;
-    await requireClientAccess(me, req.params.clientId);
-    const { name, url, fileKey, mimeType, sizeBytes } = req.body as {
-      name?: string; url?: string; fileKey?: string; mimeType?: string; sizeBytes?: number;
-    };
-    if (!name || !url) { next(new ValidationError("name and url are required", "VALIDATION_ERROR")); return; }
-    const id = generateId();
-    await db.insert(documentsTable).values({
-      id,
-      tenantId: me.tenantId,
-      name,
-      url,
-      fileKey: fileKey ?? null,
-      mimeType: mimeType ?? null,
-      sizeBytes: sizeBytes ?? null,
-      type: "client_document",
-      entityType: "client",
-      entityId: req.params.clientId,
-      uploadedById: me.id,
-    });
-    const [doc] = await db.select().from(documentsTable).where(eq(documentsTable.id, id)).limit(1);
-    if (!doc) { next(new AppError("Failed to create document", 500, "DOC_CREATE_FAILED")); return; }
-    res.status(201).json({
-      id: doc.id,
-      name: doc.name,
-      url: doc.url,
-      fileKey: doc.fileKey,
-      mimeType: doc.mimeType,
-      sizeBytes: doc.sizeBytes,
-      uploadedById: doc.uploadedById,
-      createdAt: doc.createdAt.toISOString(),
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.delete("/clients/:clientId/documents/:docId", async (req, res, next: NextFunction): Promise<void> => {
-  try {
-    const me = await requireAuth(req, res);
-    if (!me) return;
-    await requireClientAccess(me, req.params.clientId);
-    const [doc] = await db.select().from(documentsTable)
-      .where(and(
-        eq(documentsTable.id, req.params.docId),
-        eq(documentsTable.tenantId, me.tenantId),
-        eq(documentsTable.entityType, "client"),
-        eq(documentsTable.entityId, req.params.clientId),
-      ))
-      .limit(1);
-    if (!doc) { next(new NotFoundError("Document not found", "DOC_NOT_FOUND")); return; }
-    // Delete from UploadThing if we have the key
-    if (doc.fileKey) {
-      try { await utapi.deleteFiles(doc.fileKey); } catch (err) {
-        req.log?.warn({ err, fileKey: doc.fileKey }, "[documents] Failed to delete file from UploadThing");
-      }
-    } else if (doc.url) {
-      const key = extractVerifiedUploadThingKey(doc.url);
-      if (key) {
-        try { await utapi.deleteFiles(key); } catch (err) {
-          req.log?.warn({ err, key }, "[documents] Failed to delete file from UploadThing via URL key");
-        }
-      }
-    }
-    await db.delete(documentsTable).where(eq(documentsTable.id, doc.id));
-    res.json({ success: true });
   } catch (err) {
     next(err);
   }

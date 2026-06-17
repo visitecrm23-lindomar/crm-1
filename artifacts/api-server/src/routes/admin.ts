@@ -1,12 +1,12 @@
 import { Router, type NextFunction } from "express";
-import { db, tenantsTable, usersTable, auditLogsTable, plansTable, invoicesTable, featureFlagsTable, storesTable, storeProductsTable, storeCategoriesTable, storeOrderItemsTable, storeReviewsTable, tripsTable, productCategoriesTable, productImagesTable, vehiclesTable, accommodationsTable, destinationsTable, clientsTable } from "@workspace/db";
+import { db, tenantsTable, usersTable, auditLogsTable, plansTable, invoicesTable, featureFlagsTable, storesTable, storeProductsTable, storeCategoriesTable, storeOrderItemsTable, storeReviewsTable, tripsTable, productCategoriesTable, productImagesTable, vehiclesTable, accommodationsTable, destinationsTable, clientsTable, documentsTable } from "@workspace/db";
 import { eq, desc, asc, count, sql, and, gte, lte, ne } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { getAuth } from "@clerk/express";
-import { utapi } from "../lib/uploadthing";
+import { utapi, extractVerifiedUploadThingKey } from "../lib/uploadthing";
 import { collectReferencedUploadThingKeys } from "../lib/collectReferencedUploadThingKeys";
 import { ROLES, PAYMENT_STATUS } from "@workspace/permissions";
 
@@ -686,6 +686,102 @@ router.post("/admin/maintenance/orphaned-files", async (req, res, next: NextFunc
       ...(failedKeys.length ? { failedKeys } : {}),
       ...(skippedKeys.length ? { skippedKeys } : {}),
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── CLIENT DOCUMENTS ────────────────────────────────────────────────────────
+
+router.get("/admin/clients/:clientId/documents", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const docs = await db.select().from(documentsTable)
+      .where(and(
+        eq(documentsTable.tenantId, me.tenantId),
+        eq(documentsTable.entityType, "client"),
+        eq(documentsTable.entityId, req.params.clientId),
+      ))
+      .orderBy(desc(documentsTable.createdAt));
+    res.json(docs.map(d => ({
+      id: d.id,
+      name: d.name,
+      url: d.url,
+      fileKey: d.fileKey,
+      mimeType: d.mimeType,
+      sizeBytes: d.sizeBytes,
+      uploadedById: d.uploadedById,
+      createdAt: d.createdAt.toISOString(),
+    })));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/clients/:clientId/documents", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const { name, url, mimeType, sizeBytes } = req.body as {
+      name?: string; url?: string; mimeType?: string; sizeBytes?: number;
+    };
+    if (!name || !url) { next(new ValidationError("name and url are required", "VALIDATION_ERROR")); return; }
+    // Derive fileKey from the trusted UploadThing URL — never trust client-supplied key
+    const fileKey = extractVerifiedUploadThingKey(url);
+    const id = generateId();
+    await db.insert(documentsTable).values({
+      id,
+      tenantId: me.tenantId,
+      name,
+      url,
+      fileKey,
+      mimeType: mimeType ?? null,
+      sizeBytes: sizeBytes ?? null,
+      type: "client_document",
+      entityType: "client",
+      entityId: req.params.clientId,
+      uploadedById: me.id,
+    });
+    const [doc] = await db.select().from(documentsTable).where(eq(documentsTable.id, id)).limit(1);
+    if (!doc) { next(new AppError("Failed to create document", 500, "DOC_CREATE_FAILED")); return; }
+    res.status(201).json({
+      id: doc.id,
+      name: doc.name,
+      url: doc.url,
+      fileKey: doc.fileKey,
+      mimeType: doc.mimeType,
+      sizeBytes: doc.sizeBytes,
+      uploadedById: doc.uploadedById,
+      createdAt: doc.createdAt.toISOString(),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/admin/clients/:clientId/documents/:docId", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const [doc] = await db.select().from(documentsTable)
+      .where(and(
+        eq(documentsTable.id, req.params.docId),
+        eq(documentsTable.tenantId, me.tenantId),
+        eq(documentsTable.entityType, "client"),
+        eq(documentsTable.entityId, req.params.clientId),
+      ))
+      .limit(1);
+    if (!doc) { next(new NotFoundError("Document not found", "DOC_NOT_FOUND")); return; }
+    // Always derive the key from the stored URL (trusted source)
+    const key = doc.fileKey ?? extractVerifiedUploadThingKey(doc.url);
+    if (key) {
+      try { await utapi.deleteFiles(key); } catch (delErr) {
+        req.log?.warn({ err: delErr, key }, "[documents] Failed to delete file from UploadThing");
+      }
+    }
+    await db.delete(documentsTable).where(eq(documentsTable.id, doc.id));
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }

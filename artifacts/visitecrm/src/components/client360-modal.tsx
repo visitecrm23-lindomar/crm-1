@@ -298,7 +298,6 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
           body: JSON.stringify({
             name: file.name,
             url: file.ufsUrl,
-            fileKey: file.key,
             mimeType: file.type,
             sizeBytes: file.size,
           }),
@@ -320,9 +319,13 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
   useEffect(() => {
     setLoadingDocs(true);
     fetch(`${API_BASE_ADMIN}/api/admin/clients/${clientId}/documents`, { credentials: "include" })
-      .then(r => r.json())
-      .then((data: ServerDocument[]) => setDocs(data))
-      .catch(() => {})
+      .then(async r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        return Array.isArray(data) ? data as ServerDocument[] : [];
+      })
+      .then(setDocs)
+      .catch(() => setDocs([]))
       .finally(() => setLoadingDocs(false));
   }, [clientId]);
 
