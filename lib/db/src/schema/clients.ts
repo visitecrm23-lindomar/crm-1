@@ -68,7 +68,7 @@ export const clientsTable = pgTable("clients", {
 }, (table) => [
   uniqueIndex("clients_tenant_cpf_unique").on(table.tenantId, table.cpf).where(sql`${table.cpf} IS NOT NULL`),
   uniqueIndex("clients_tenant_referral_code_unique").on(table.tenantId, table.referralCode).where(sql`${table.referralCode} IS NOT NULL`),
-  uniqueIndex("clients_customer_code_unique").on(table.tenantId, table.customerCode).where(sql`${table.customerCode} IS NOT NULL`),
+  uniqueIndex("clients_customer_code_unique").on(table.customerCode).where(sql`${table.customerCode} IS NOT NULL`),
 ]);
 
 export const insertClientSchema = createInsertSchema(clientsTable).omit({ createdAt: true, updatedAt: true });
