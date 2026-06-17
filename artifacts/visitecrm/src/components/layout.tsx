@@ -37,6 +37,9 @@ import {
   Gauge,
   BrainCircuit,
   Activity,
+  History,
+  Wallet,
+  Award,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -82,6 +85,8 @@ const AGENCY_NAVIGATION: NavItem[] = [
       { name: "Vendedores", href: "/analytics/vendedores", icon: UserCheck },
       { name: "Insights", href: "/insights", icon: BrainCircuit },
       { name: "Gêmeo Digital", href: "/gemeo", icon: Activity },
+      { name: "Histórico Comparativo", href: "/analytics/historico-comparativo", icon: History },
+      { name: "Receita", href: "/analytics/revenue", icon: Wallet },
     ],
   },
   {
@@ -99,6 +104,7 @@ const AGENCY_NAVIGATION: NavItem[] = [
     ],
   },
   { name: "Indicações", href: "/indicacoes", icon: Share2 },
+  { name: "Embaixadores", href: "/embaixadores", icon: Award },
   { name: "Downloads", href: "/downloads", icon: Download },
   { name: "Configurações", href: "/configuracoes", icon: Settings },
 ];
