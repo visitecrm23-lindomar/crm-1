@@ -1,5 +1,5 @@
 import { Worker } from "bullmq";
-import { db, reservationsTable, tripsTable, clientsTable, tenantsTable, paymentsTable, emailLogsTable, storesTable, usersTable, referralsTable, referralSettingsTable, systemConfigsTable, npsInvitationsTable } from "@workspace/db";
+import { db, reservationsTable, tripsTable, clientsTable, tenantsTable, paymentsTable, emailLogsTable, storesTable, usersTable, referralsTable, referralSettingsTable, systemConfigsTable, npsInvitationsTable, reservationInstallmentsTable } from "@workspace/db";
 import { eq, and, gt, sql, gte, lt, lte, isNull, isNotNull, notLike, like, inArray, not, exists } from "drizzle-orm";
 import { sendReminderHtmlEmail, sendReservationConfirmationEmail, sendReferralExpiringSoonEmail, sendNpsSurveyEmail } from "@workspace/email";
 import { dispatchReferralExpiredEmail, dispatchReferralExpiringSoonEmail, dispatchReferralBonusReleasedEmail } from "../queues/email-helpers";
@@ -1211,6 +1211,107 @@ export async function processReferralBonusReleaseNotifications(): Promise<void> 
 }
 
 // ────────────────────────────────────────────────────────────
+// D-3 Installment due-date reminder
+// ────────────────────────────────────────────────────────────
+
+export async function processInstallmentDueReminders(): Promise<void> {
+  const now = new Date();
+  const d3Start = new Date(now);
+  d3Start.setDate(d3Start.getDate() + 3);
+  d3Start.setHours(0, 0, 0, 0);
+
+  const d3End = new Date(d3Start);
+  d3End.setHours(23, 59, 59, 999);
+
+  const rows = await db
+    .select({
+      installmentId: reservationInstallmentsTable.id,
+      installmentNumber: reservationInstallmentsTable.installmentNumber,
+      dueDate: reservationInstallmentsTable.dueDate,
+      amount: reservationInstallmentsTable.amount,
+      reservationId: reservationsTable.id,
+      reservationNumber: reservationsTable.reservationNumber,
+      voucherCode: reservationsTable.voucherCode,
+      installments: reservationsTable.installments,
+      tenantId: reservationsTable.tenantId,
+      tripName: tripsTable.name,
+      tripDestination: tripsTable.destination,
+      departureDate: tripsTable.departureDate,
+      clientName: clientsTable.name,
+      clientEmail: clientsTable.email,
+      agencyName: tenantsTable.name,
+      agencyPhone: tenantsTable.whatsapp,
+    })
+    .from(reservationInstallmentsTable)
+    .innerJoin(reservationsTable, eq(reservationInstallmentsTable.reservationId, reservationsTable.id))
+    .innerJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
+    .innerJoin(clientsTable, eq(reservationsTable.clientId, clientsTable.id))
+    .innerJoin(tenantsTable, eq(reservationsTable.tenantId, tenantsTable.id))
+    .where(
+      and(
+        isNull(reservationInstallmentsTable.paidAt),
+        gte(reservationInstallmentsTable.dueDate, d3Start),
+        lt(reservationInstallmentsTable.dueDate, d3End),
+      ),
+    );
+
+  logger.info({ count: rows.length }, "[reminder:installment] Found installments for D-3 reminder");
+
+  let sent = 0;
+  let failed = 0;
+
+  for (const row of rows) {
+    if (!row.clientEmail) continue;
+
+    const amount = Number(row.amount ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    const dueStr = row.dueDate
+      ? (row.dueDate as unknown as Date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+      : "Em 3 dias";
+    const depDate = row.departureDate
+      ? (row.departureDate as unknown as Date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+      : "";
+    const whatsappNum = (row.agencyPhone ?? "").replace(/\D/g, "");
+    const contactLink = whatsappNum ? `<a href="https://wa.me/${whatsappNum}">WhatsApp</a>` : "a agência";
+    const instLabel = row.installments > 1 ? `Parcela ${row.installmentNumber} de ${row.installments}` : "Pagamento";
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333">
+  <h2 style="color:#DC2626">📅 ${escapeHtml(instLabel)} vencendo em 3 dias</h2>
+  <p>Olá, <strong>${escapeHtml(row.clientName)}</strong>!</p>
+  <p>Sua <strong>${escapeHtml(instLabel)}</strong> da reserva para <strong>${escapeHtml(row.tripName ?? row.tripDestination ?? "")}</strong> vence em breve.</p>
+  <table style="width:100%;border-collapse:collapse;margin:16px 0">
+    <tr style="background:#FEF2F2"><td style="padding:10px;border:1px solid #FCA5A5;font-weight:bold">Vencimento</td><td style="padding:10px;border:1px solid #FCA5A5">${dueStr}</td></tr>
+    <tr><td style="padding:10px;border:1px solid #e5e7eb;font-weight:bold">Valor da Parcela</td><td style="padding:10px;border:1px solid #e5e7eb">${amount}</td></tr>
+    ${row.reservationNumber ? `<tr style="background:#f9fafb"><td style="padding:10px;border:1px solid #e5e7eb;font-weight:bold">Reserva</td><td style="padding:10px;border:1px solid #e5e7eb">${escapeHtml(row.reservationNumber)}</td></tr>` : ""}
+    ${depDate ? `<tr><td style="padding:10px;border:1px solid #e5e7eb;font-weight:bold">Data de Saída</td><td style="padding:10px;border:1px solid #e5e7eb">${depDate}</td></tr>` : ""}
+  </table>
+  <p>Por favor, entre em contato via ${contactLink} para efetuar o pagamento antes do vencimento.</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+  <p style="font-size:12px;color:#9ca3af">Esta é uma mensagem automática de <strong>${escapeHtml(row.agencyName)}</strong>. Não responda a este e-mail.</p>
+</body>
+</html>`;
+
+    const result = await sendReminderHtmlEmail({
+      to: row.clientEmail,
+      subject: `📅 ${instLabel} vence em ${dueStr} — ${row.tripDestination ?? row.tripName}`,
+      html,
+      fromName: row.agencyName,
+    });
+    if (result.success) {
+      sent++;
+      logger.info({ installmentId: row.installmentId, email: row.clientEmail }, "[reminder:installment] Sent D-3 reminder");
+    } else {
+      failed++;
+      logger.error({ error: result.error, installmentId: row.installmentId }, "[reminder:installment] Failed to send D-3 reminder");
+    }
+  }
+
+  logger.info({ total: rows.length, sent, failed }, "[reminder:installment] D-3 run complete");
+}
+
+// ────────────────────────────────────────────────────────────
 // NPS auto-dispatch post-trip
 // ────────────────────────────────────────────────────────────
 
@@ -1384,6 +1485,8 @@ export function startReminderWorker(): Worker<ReminderJobData> | null {
         await processReferralBonusReleaseNotifications();
       } else if (job.data.type === "nps_dispatch") {
         await processNpsDispatch();
+      } else if (job.data.type === "installment_due_reminder") {
+        await processInstallmentDueReminders();
       } else {
         logger.warn({ type: job.data.type }, "[reminder-worker] Unknown reminder type");
       }

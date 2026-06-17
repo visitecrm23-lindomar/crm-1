@@ -100,3 +100,19 @@ export const reservationSequencesTable = pgTable("reservation_sequences", {
 }, (t) => [
   primaryKey({ columns: [t.tenantId, t.yearMonth, t.typeCode] }),
 ]);
+
+export const reservationInstallmentsTable = pgTable("reservation_installments", {
+  id: text("id").primaryKey(),
+  reservationId: text("reservation_id").notNull().references(() => reservationsTable.id, { onDelete: "cascade" }),
+  tenantId: text("tenant_id").notNull().references(() => tenantsTable.id, { onDelete: "cascade" }),
+  installmentNumber: integer("installment_number").notNull(),
+  dueDate: timestamp("due_date", { withTimezone: true }).notNull(),
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+  paidAmount: numeric("paid_amount", { precision: 10, scale: 2 }),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export type ReservationInstallment = typeof reservationInstallmentsTable.$inferSelect;

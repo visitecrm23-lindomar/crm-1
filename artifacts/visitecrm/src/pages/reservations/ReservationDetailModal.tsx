@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle, DollarSign, Tag, Mail, RefreshCcw, Check, XCircle, Clock, Send } from "lucide-react";
 import { STATUS_COLORS, STATUS_LABELS, METHOD_LABELS, fmt } from "./constants";
 import { ReservationPassengersTab } from "./ReservationPassengersTab";
+import { ReservationInstallmentsTab } from "./ReservationInstallmentsTab";
 import { Button } from "@/components/ui/button";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -125,9 +126,10 @@ export function ReservationDetailModal({ reservationId, open, onClose }: {
           </div>
         ) : data ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="details">Detalhes</TabsTrigger>
               <TabsTrigger value="passengers">Passageiros</TabsTrigger>
+              <TabsTrigger value="installments">Parcelas</TabsTrigger>
               <TabsTrigger value="payments">Pagamentos</TabsTrigger>
               <TabsTrigger value="emails">E-mails</TabsTrigger>
             </TabsList>
@@ -222,6 +224,10 @@ export function ReservationDetailModal({ reservationId, open, onClose }: {
 
             <TabsContent value="passengers">
               <ReservationPassengersTab reservationId={reservationId} />
+            </TabsContent>
+
+            <TabsContent value="installments">
+              <ReservationInstallmentsTab reservationId={reservationId} />
             </TabsContent>
 
             <TabsContent value="payments" className="space-y-4 mt-4">

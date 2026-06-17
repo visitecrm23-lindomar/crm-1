@@ -449,6 +449,13 @@
       "when": 1782450000000,
       "tag": "0063_nps_invitations",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1782550000000,
+      "tag": "0064_reservation_installments",
+      "breakpoints": true
     }
   ]
 }

@@ -7,7 +7,7 @@ import cron from "node-cron";
 import path from "path";
 import { fileURLToPath } from "url";
 import { runBirthdayCron } from "./lib/birthday";
-import { processNpsDispatch } from "./workers/reminder.worker";
+import { processNpsDispatch, processInstallmentDueReminders } from "./workers/reminder.worker";
 import { runExpiredReservationsCron } from "./lib/expired-reservations";
 import { runPipelineTripEndedCron } from "./services/pipeline-automation";
 import { calculateScoresForAllTenants } from "./lib/client-scores";
@@ -255,6 +255,13 @@ applyMigrations()
         });
         logger.info("[nps-dispatch] node-cron fallback registered (every hour at :30)");
 
+        cron.schedule("0 8 * * *", () => {
+          processInstallmentDueReminders().catch((err) =>
+            logger.error({ err }, "[installment-due-reminder] node-cron fallback failed"),
+          );
+        }, { timezone: "America/Sao_Paulo" });
+        logger.info("[installment-due-reminder] node-cron fallback registered (daily 08:00)");
+
         return;
       }
 
@@ -332,6 +339,12 @@ applyMigrations()
             { pattern: "30 * * * *" },
             { name: "nps_dispatch", data: { type: "nps_dispatch" } },
           ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule NPS dispatch"));
+
+          await reminderQueue.upsertJobScheduler(
+            "installment-due-reminder-daily",
+            { pattern: process.env["REMINDER_CRON"] ?? "0 8 * * *", tz: process.env["REMINDER_TZ"] ?? "America/Sao_Paulo" },
+            { name: "installment_due_reminder", data: { type: "installment_due_reminder" } },
+          ).catch((err) => logger.error({ err }, "[reminders] Failed to schedule installment due reminder"));
 
           logger.info("[reminders] Repeatable reminder jobs registered");
         }

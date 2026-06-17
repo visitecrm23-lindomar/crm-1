@@ -1,6 +1,6 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
-import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, storeOrdersTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, referralSettingsTable, referralCampaignsTable, dealsTable, pipelineStagesTable, tenantsTable, emailLogsTable, paymentsTable, commissionsTable, vehicleLayoutsTable } from "@workspace/db";
+import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, storeOrdersTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, referralSettingsTable, referralCampaignsTable, dealsTable, pipelineStagesTable, tenantsTable, emailLogsTable, paymentsTable, commissionsTable, vehicleLayoutsTable, reservationInstallmentsTable } from "@workspace/db";
 import { eq, and, sql, desc, asc, inArray, or, ilike } from "drizzle-orm";
 import { generateId, generateVoucherCode } from "../lib/id";
 import { getTenantReservationPrefix, tripTypeToCode, getYearMonth, nextReservationSequence, buildReservationNumber } from "../lib/reservation-number";
@@ -25,6 +25,40 @@ import { moveDealToStage } from "../services/pipeline-automation";
 
 
 const router = Router();
+
+async function generateInstallments(
+  reservationId: string,
+  tenantId: string,
+  totalValue: number,
+  installmentCount: number,
+  firstDueDateStr: string,
+): Promise<void> {
+  await db.delete(reservationInstallmentsTable)
+    .where(eq(reservationInstallmentsTable.reservationId, reservationId));
+
+  const n = Math.max(1, installmentCount);
+  const base = Math.floor((totalValue / n) * 100) / 100;
+  const remainder = Math.round((totalValue - base * n) * 100) / 100;
+
+  const firstDate = new Date(`${firstDueDateStr}T12:00:00Z`);
+  const rows = [];
+  for (let i = 0; i < n; i++) {
+    const dueDate = new Date(firstDate);
+    dueDate.setMonth(dueDate.getMonth() + i);
+    const amount = i === 0 ? base + remainder : base;
+    rows.push({
+      id: generateId(),
+      reservationId,
+      tenantId,
+      installmentNumber: i + 1,
+      dueDate,
+      amount: amount.toFixed(2),
+    });
+  }
+  if (rows.length > 0) {
+    await db.insert(reservationInstallmentsTable).values(rows);
+  }
+}
 
 async function syncClientDeal(clientId: string, tenantId: string, tripId: string, totalValue: number, ownerId: string, reservationId?: string | null): Promise<void> {
   const [client] = await db.select({ name: clientsTable.name })
@@ -876,6 +910,10 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
     if (!reservation) { next(new AppError("Failed to create reservation", 500, "RESERVATION_CREATE_FAILED")); return; }
     const formatted = await formatReservation(reservation);
     res.status(201).json(formatted);
+    if (parsed.data.firstDueDate && (parsed.data.installments ?? 1) >= 1) {
+      generateInstallments(id, me.tenantId, Number(reservation.totalValue), parsed.data.installments ?? 1, parsed.data.firstDueDate)
+        .catch((err) => req.log.error({ err }, "Error generating installments on reservation create"));
+    }
     broadcastSeatUpdate(reservation.tripId, me.tenantId).catch(() => {});
     CalendarSyncService.syncTrip(reservation.tripId)
       .catch((err) => req.log.warn({ err, context: "reservation.create", tripId: reservation.tripId, reservationId: id }, "Calendar sync falhou — continuando"));
@@ -1509,6 +1547,12 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
     }
     const formatted = await formatReservation(reservation);
     res.json(formatted);
+    if (parsed.data.firstDueDate) {
+      const instCount = parsed.data.installments ?? reservation.installments ?? 1;
+      const total = parsed.data.totalValue != null ? parsed.data.totalValue : Number(reservation.totalValue);
+      generateInstallments(req.params.id, me.tenantId, total, instCount, parsed.data.firstDueDate)
+        .catch((err) => req.log.error({ err }, "Error regenerating installments on reservation update"));
+    }
     // Send cancellation email only on a true active → cancelled transition
     // (not for "refunded", not for repeated patches on already-cancelled reservations)
     if (parsed.data.status === RESERVATION_STATUS.CANCELLED && wasActive && existing.clientId) {
@@ -1549,6 +1593,104 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
       CalendarSyncService.syncTrip(existing.tripId)
         .catch((err) => req.log.error({ err }, "Error syncing Google Calendar after reservation update"));
     }
+  } catch (err) {
+    next(err);
+  }
+});
+
+const UpdateInstallmentBodySchema = z.object({
+  paidAmount: z.number().positive().nullish(),
+  paidAt: z.string().nullish(),
+  notes: z.string().nullish(),
+});
+
+router.get("/reservations/:id/installments", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    await requireReservationAccess(me, req.params.id);
+    const rows = await db.select().from(reservationInstallmentsTable)
+      .where(eq(reservationInstallmentsTable.reservationId, req.params.id))
+      .orderBy(asc(reservationInstallmentsTable.installmentNumber));
+    const now = new Date();
+    const formatted = rows.map(r => ({
+      id: r.id,
+      reservationId: r.reservationId,
+      installmentNumber: r.installmentNumber,
+      dueDate: (r.dueDate as unknown as Date).toISOString(),
+      amount: Number(r.amount),
+      paidAmount: r.paidAmount != null ? Number(r.paidAmount) : null,
+      paidAt: r.paidAt ? (r.paidAt as unknown as Date).toISOString() : null,
+      notes: r.notes ?? null,
+      status: r.paidAt != null ? "paid" : (r.dueDate as unknown as Date) < now ? "overdue" : "pending",
+    }));
+    res.json(formatted);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch("/reservations/installments/:id", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role === "client") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+
+    const parsed = UpdateInstallmentBodySchema.safeParse(req.body);
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
+
+    const [installment] = await db.select().from(reservationInstallmentsTable)
+      .where(and(eq(reservationInstallmentsTable.id, req.params.id), eq(reservationInstallmentsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!installment) { next(new NotFoundError("Installment not found", "NOT_FOUND")); return; }
+
+    const updates: Partial<typeof reservationInstallmentsTable.$inferInsert> = {};
+    if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
+    if (parsed.data.paidAmount !== undefined) {
+      updates.paidAmount = parsed.data.paidAmount != null ? String(parsed.data.paidAmount) : null;
+    }
+    if (parsed.data.paidAt !== undefined) {
+      updates.paidAt = parsed.data.paidAt ? new Date(parsed.data.paidAt) : null;
+    }
+    if (parsed.data.paidAmount != null && !parsed.data.paidAt && !installment.paidAt) {
+      updates.paidAt = new Date();
+    }
+
+    await db.update(reservationInstallmentsTable)
+      .set(updates)
+      .where(eq(reservationInstallmentsTable.id, req.params.id));
+
+    const allInstallments = await db.select().from(reservationInstallmentsTable)
+      .where(eq(reservationInstallmentsTable.reservationId, installment.reservationId));
+    const totalPaid = allInstallments.reduce((sum, r) => {
+      const pa = r.id === req.params.id ? (parsed.data.paidAmount ?? (updates.paidAt ? Number(r.amount) : null)) : (r.paidAt ? Number(r.paidAmount ?? r.amount) : null);
+      return sum + (pa ?? 0);
+    }, 0);
+
+    const [reservation] = await db.select({ totalValue: reservationsTable.totalValue })
+      .from(reservationsTable).where(eq(reservationsTable.id, installment.reservationId)).limit(1);
+    if (reservation) {
+      const total = Number(reservation.totalValue);
+      const newBalance = Math.max(0, total - totalPaid);
+      await db.update(reservationsTable)
+        .set({ paidValue: totalPaid.toFixed(2), balance: newBalance.toFixed(2) })
+        .where(eq(reservationsTable.id, installment.reservationId));
+    }
+
+    const [updated] = await db.select().from(reservationInstallmentsTable)
+      .where(eq(reservationInstallmentsTable.id, req.params.id)).limit(1);
+    const now = new Date();
+    res.json({
+      id: updated.id,
+      reservationId: updated.reservationId,
+      installmentNumber: updated.installmentNumber,
+      dueDate: (updated.dueDate as unknown as Date).toISOString(),
+      amount: Number(updated.amount),
+      paidAmount: updated.paidAmount != null ? Number(updated.paidAmount) : null,
+      paidAt: updated.paidAt ? (updated.paidAt as unknown as Date).toISOString() : null,
+      notes: updated.notes ?? null,
+      status: updated.paidAt != null ? "paid" : (updated.dueDate as unknown as Date) < now ? "overdue" : "pending",
+    });
   } catch (err) {
     next(err);
   }

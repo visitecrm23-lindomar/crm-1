@@ -60,7 +60,7 @@ export interface ReferralWelcomeEmailJobData extends ReferralWelcomeEmailProps {
 }
 
 export interface ReminderJobData {
-  type: "boarding_reminder" | "payment_reminder" | "expired_reservations_cleanup" | "failed_email_retry" | "referral_expiry_notification" | "referral_expiry_warning" | "expiry_warning_email_retry" | "referral_bonus_release_notification" | "nps_dispatch";
+  type: "boarding_reminder" | "payment_reminder" | "expired_reservations_cleanup" | "failed_email_retry" | "referral_expiry_notification" | "referral_expiry_warning" | "expiry_warning_email_retry" | "referral_bonus_release_notification" | "nps_dispatch" | "installment_due_reminder";
 }
 
 export interface PdfManifestJobData {

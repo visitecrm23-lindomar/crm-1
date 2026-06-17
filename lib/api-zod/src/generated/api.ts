@@ -2167,6 +2167,7 @@ export const CreateReservationBody = zod.object({
   totalValue: zod.number(),
   paymentMethod: zod.string().nullish(),
   installments: zod.number().optional(),
+  firstDueDate: zod.string().nullish().describe("ISO date (YYYY-MM-DD) for the first installment due date"),
   commissionPercentage: zod.number().nullish(),
   commissionAmount: zod
     .number()
@@ -2303,6 +2304,7 @@ export const UpdateReservationBody = zod.object({
   seats: zod.array(zod.string()).nullish(),
   totalValue: zod.number().nullish(),
   installments: zod.number().nullish(),
+  firstDueDate: zod.string().nullish().describe("ISO date (YYYY-MM-DD) for the first installment due date — triggers regeneration of installments"),
   boardingLocationId: zod.string().nullish(),
   commissionAmount: zod
     .number()

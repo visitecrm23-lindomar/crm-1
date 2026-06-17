@@ -531,6 +531,23 @@ export default function Financial() {
                 <span className="text-muted-foreground text-xs">até</span>
                 <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-32 h-8 text-sm" />
               </div>
+              {tab === "receivable" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
+                  onClick={() => {
+                    const today = new Date();
+                    const in7 = new Date(today);
+                    in7.setDate(in7.getDate() + 7);
+                    setDateFrom(today.toISOString().slice(0, 10));
+                    setDateTo(in7.toISOString().slice(0, 10));
+                    setStatusFilter(EXPENSE_STATUS.PENDING);
+                  }}
+                >
+                  📅 Vencimentos em 7 dias
+                </Button>
+              )}
               {(statusFilter || categoryFilter || dateFrom || dateTo) && (
                 <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => { setStatusFilter(""); setCategoryFilter(""); setDateFrom(""); setDateTo(""); }}>
                   Limpar
