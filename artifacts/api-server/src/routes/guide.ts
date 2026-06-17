@@ -1,5 +1,6 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
+import { emitBoardingUpdate } from "../lib/boarding-sse";
 import {
   tripGuideTokensTable,
   tripCheckinsTable,
@@ -201,6 +202,7 @@ router.post("/guide/trip/:tripId/checkins", async (req, res, next: NextFunction)
       .set({ checkedInAt: status === "present" ? checkedInAt : null })
       .where(eq(passengersTable.id, passengerId));
 
+    emitBoardingUpdate(guide.tripId);
     res.status(201).json({ success: true, passengerId, status, checkedInAt: checkedInAt.toISOString() });
   } catch (err) { next(err); }
 });

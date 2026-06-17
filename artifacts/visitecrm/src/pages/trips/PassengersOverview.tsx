@@ -253,6 +253,9 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
           <Link href={`/trips/${tripId}/passengers`}><Button variant="outline"><List className="w-4 h-4 mr-2" />Lista ANTT</Button></Link>
           <Link href={`/trips/${tripId}/seat-map`}><Button variant="outline"><Bus className="w-4 h-4 mr-2" />Mapa de Assentos</Button></Link>
           <Link href={`/trips/${tripId}/checkin-panel`}><Button variant="outline" className="border-green-300 text-green-700 hover:bg-green-50"><ClipboardCheck className="w-4 h-4 mr-2" />Check-in ao Vivo</Button></Link>
+          {trip && !["cancelled", "draft"].includes(trip.status) && (
+            <Link href={`/trips/${tripId}/boarding-control`}><Button className="bg-blue-700 hover:bg-blue-800 text-white gap-2"><Bus className="w-4 h-4" />Central de Embarque</Button></Link>
+          )}
           <Link href={`/trips/${tripId}/edit`}><Button variant="outline"><Edit className="w-4 h-4 mr-2" />Editar Viagem</Button></Link>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { addSeatClient, removeSeatClient } from "../lib/seat-sse";
+import { addBoardingClient, removeBoardingClient, emitBoardingUpdate } from "../lib/boarding-sse";
 import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable, auditLogsTable, plansTable, tripMediaTable, tripCheckinsTable, tripGuideLocationsTable } from "@workspace/db";
 import { checkPlanLimit } from "../lib/planLimits";
 import type { LayoutCell, FixedCostItem, VariableCostItem, FreePassenger } from "@workspace/db";
@@ -2247,6 +2248,7 @@ router.post("/trips/:id/checkins", async (req, res, next: NextFunction): Promise
       .set({ checkedInAt: status === "present" ? checkedInAt : null })
       .where(eq(passengersTable.id, passengerId));
 
+    emitBoardingUpdate(req.params.id!);
     res.status(201).json({ success: true, passengerId, status, checkedInAt: checkedInAt.toISOString() });
   } catch (err) { next(err); }
 });
@@ -2270,7 +2272,170 @@ router.delete("/trips/:id/checkins/:passengerId", async (req, res, next: NextFun
     await db.update(passengersTable)
       .set({ checkedInAt: null })
       .where(eq(passengersTable.id, req.params.passengerId!));
+    emitBoardingUpdate(req.params.id!);
     res.status(204).send();
+  } catch (err) { next(err); }
+});
+
+// ─── Boarding live status + SSE stream ────────────────────────────────────────
+
+router.get("/trips/:id/boarding-live", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    const [trip] = await db.select({
+      id: tripsTable.id,
+      name: tripsTable.name,
+      status: tripsTable.status,
+      departureDate: tripsTable.departureDate,
+      boardingPoints: tripsTable.boardingPoints,
+      freePassengers: tripsTable.freePassengers,
+    })
+      .from(tripsTable)
+      .where(and(eq(tripsTable.id, req.params.id!), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!trip) { next(new NotFoundError("Viagem não encontrada", "TRIP_NOT_FOUND")); return; }
+
+    const reservations = await db.select({ id: reservationsTable.id, status: reservationsTable.status })
+      .from(reservationsTable)
+      .where(and(
+        eq(reservationsTable.tripId, trip.id),
+        eq(reservationsTable.tenantId, me.tenantId),
+        sql`${reservationsTable.status} NOT IN (${RESERVATION_STATUS.CANCELLED}, ${RESERVATION_STATUS.REFUNDED})`,
+      ));
+
+    const activeResIds = reservations.map(r => r.id);
+    const passengers = activeResIds.length > 0
+      ? await db.select({
+          id: passengersTable.id,
+          name: passengersTable.name,
+          seatNumber: passengersTable.seatNumber,
+          boardingLocationId: passengersTable.boardingLocationId,
+          reservationId: passengersTable.reservationId,
+          checkedInAt: passengersTable.checkedInAt,
+        }).from(passengersTable).where(inArray(passengersTable.reservationId, activeResIds))
+      : [];
+
+    const checkins = await db.select()
+      .from(tripCheckinsTable)
+      .where(and(eq(tripCheckinsTable.tripId, trip.id), eq(tripCheckinsTable.tenantId, me.tenantId)));
+
+    const checkinMap = new Map(checkins.map(c => [c.passengerId, c]));
+
+    const boardingPoints = (Array.isArray(trip.boardingPoints) ? trip.boardingPoints : []) as Array<{ id: string; name: string; time?: string }>;
+    const bpMap = new Map(boardingPoints.map(bp => [bp.id, bp]));
+
+    const freePassengers = (Array.isArray(trip.freePassengers) ? trip.freePassengers : []) as FreePassenger[];
+
+    let checkedIn = 0;
+    let absent = 0;
+    const absentPassengers: Array<{ id: string; name: string; seatNumber: string | null; boardingLocationId: string | null; boardingLocationName: string | null; isFree: boolean }> = [];
+
+    for (const p of passengers) {
+      const c = checkinMap.get(p.id);
+      if (c?.status === "present") {
+        checkedIn++;
+      } else if (c?.status === "absent") {
+        absent++;
+        absentPassengers.push({
+          id: p.id,
+          name: p.name,
+          seatNumber: p.seatNumber ?? null,
+          boardingLocationId: p.boardingLocationId ?? null,
+          boardingLocationName: p.boardingLocationId ? (bpMap.get(p.boardingLocationId)?.name ?? null) : null,
+          isFree: false,
+        });
+      } else {
+        absentPassengers.push({
+          id: p.id,
+          name: p.name,
+          seatNumber: p.seatNumber ?? null,
+          boardingLocationId: p.boardingLocationId ?? null,
+          boardingLocationName: p.boardingLocationId ? (bpMap.get(p.boardingLocationId)?.name ?? null) : null,
+          isFree: false,
+        });
+      }
+    }
+
+    let freeCheckedIn = 0;
+    for (const fp of freePassengers) {
+      if (fp.checkedInAt) {
+        freeCheckedIn++;
+      } else {
+        absentPassengers.push({
+          id: fp.id,
+          name: fp.name,
+          seatNumber: fp.seatNumber ?? null,
+          boardingLocationId: null,
+          boardingLocationName: null,
+          isFree: true,
+        });
+      }
+    }
+
+    const totalCheckedIn = checkedIn + freeCheckedIn;
+    const total = passengers.length + freePassengers.length;
+    const pending = total - totalCheckedIn - absent;
+
+    const [guideLocation] = await db.select()
+      .from(tripGuideLocationsTable)
+      .where(and(
+        eq(tripGuideLocationsTable.tripId, trip.id),
+        eq(tripGuideLocationsTable.tenantId, me.tenantId),
+      ))
+      .limit(1);
+
+    res.json({
+      tripId: trip.id,
+      tripName: trip.name,
+      status: trip.status,
+      departureDate: trip.departureDate.toISOString(),
+      checkedIn: totalCheckedIn,
+      absent,
+      pending,
+      total,
+      absentPassengers,
+      guideLocation: guideLocation
+        ? {
+            lat: guideLocation.lat,
+            lng: guideLocation.lng,
+            guideName: guideLocation.guideName ?? null,
+            updatedAt: guideLocation.recordedAt.toISOString(),
+          }
+        : null,
+      boardingPoints,
+    });
+  } catch (err) { next(err); }
+});
+
+router.get("/trips/:id/boarding-live/stream", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    const tripId = req.params.id!;
+    const [trip] = await db.select({ id: tripsTable.id })
+      .from(tripsTable)
+      .where(and(eq(tripsTable.id, tripId), eq(tripsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!trip) { next(new NotFoundError("Viagem não encontrada", "TRIP_NOT_FOUND")); return; }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    addBoardingClient(tripId, res);
+    const ping = setInterval(() => {
+      try { res.write(": ping\n\n"); } catch { clearInterval(ping); }
+    }, 30000);
+
+    req.on("close", () => {
+      clearInterval(ping);
+      removeBoardingClient(tripId, res);
+    });
   } catch (err) { next(err); }
 });
 
