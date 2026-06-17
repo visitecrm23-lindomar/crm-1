@@ -62,11 +62,11 @@ export async function sendWhatsAppMessage(
 /**
  * Replaces template variables in a message string.
  * Supports both single-brace ({nome}) and double-brace ({{nome}}) syntax.
- * Supported variables: nome, codigo, bonus, valor, agencia
+ * Supported variables: nome, codigo, bonus, valor, agencia, link
  */
 export function interpolateWhatsAppMessage(
   template: string,
-  vars: { nome?: string; codigo?: string; bonus?: string; valor?: string; agencia?: string },
+  vars: { nome?: string; codigo?: string; bonus?: string; valor?: string; agencia?: string; link?: string },
 ): string {
   const replace = (tpl: string, key: string, value: string) =>
     tpl
@@ -79,5 +79,6 @@ export function interpolateWhatsAppMessage(
   result = replace(result, "bonus", vars.bonus ?? "");
   result = replace(result, "valor", vars.valor ?? "");
   result = replace(result, "agencia", vars.agencia ?? "");
+  result = replace(result, "link", vars.link ?? "");
   return result;
 }

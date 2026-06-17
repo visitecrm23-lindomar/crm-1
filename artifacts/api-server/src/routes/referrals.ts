@@ -1144,6 +1144,76 @@ router.get("/referrals/export", async (req, res, next: NextFunction): Promise<vo
   }
 });
 
+router.post("/referral-settings/test-whatsapp", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const parsed = z.object({
+      type: z.enum(["converted", "bonusPaid", "share"]),
+      message: z.string().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const { sendWhatsAppMessage, interpolateWhatsAppMessage } = await import("../lib/whatsapp");
+
+    const [settings] = await db.select().from(referralSettingsTable)
+      .where(eq(referralSettingsTable.tenantId, me.tenantId)).limit(1);
+
+    const phone = settings?.whatsappPhoneNumber;
+    if (!phone) {
+      res.status(400).json({ error: "whatsapp_not_configured" });
+      return;
+    }
+
+    const [tenant] = await db.select().from(tenantsTable)
+      .where(eq(tenantsTable.id, me.tenantId)).limit(1);
+    const agencyName = tenant?.name ?? "Minha Agência";
+
+    const bonusFormatted = (settings?.bonusValue != null ? Number(settings.bonusValue) : 10)
+      .toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    let template = parsed.data.message ?? "";
+    if (!template.trim()) {
+      if (parsed.data.type === "converted") {
+        template = settings?.whatsappConvertedMessage ?? "";
+      } else if (parsed.data.type === "bonusPaid") {
+        template = settings?.whatsappBonusPaidMessage ?? "";
+      } else {
+        template = settings?.shareMessage ?? "";
+      }
+    }
+    if (!template.trim()) {
+      res.status(400).json({ error: "empty_template" });
+      return;
+    }
+
+    const vars =
+      parsed.data.type === "converted"
+        ? { nome: "Maria", codigo: "JOAO123", agencia: agencyName, valor: bonusFormatted }
+        : parsed.data.type === "bonusPaid"
+        ? { nome: "João", codigo: "JOAO123", bonus: `R$ ${bonusFormatted}`, valor: bonusFormatted, agencia: agencyName }
+        : { nome: "João", codigo: "JOAO123", link: "https://exemplo.com.br/ind/JOAO123", bonus: `R$ ${bonusFormatted}` };
+
+    const message = interpolateWhatsAppMessage(template, vars);
+    const result = await sendWhatsAppMessage(phone, message);
+
+    if (!result.success) {
+      if (result.error === "credentials_not_configured") {
+        res.status(400).json({ error: "credentials_not_configured" });
+      } else {
+        res.status(502).json({ error: result.error ?? "send_failed" });
+      }
+      return;
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/referral-settings", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);

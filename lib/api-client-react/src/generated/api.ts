@@ -14830,6 +14830,84 @@ export const useUpdateReferral = <
 /**
  * @summary Pay referral bonus and send confirmation email
  */
+export const getTestWhatsAppMessageUrl = () => {
+  return `/api/referral-settings/test-whatsapp`;
+};
+
+export const testWhatsAppMessage = async (
+  body: { type: "converted" | "bonusPaid" | "share"; message?: string },
+  options?: RequestInit,
+): Promise<{ success: boolean }> => {
+  return customFetch<{ success: boolean }>(getTestWhatsAppMessageUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(body),
+  });
+};
+
+export const getTestWhatsAppMessageMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof testWhatsAppMessage>>,
+    TError,
+    { body: { type: "converted" | "bonusPaid" | "share"; message?: string } },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof testWhatsAppMessage>>,
+  TError,
+  { body: { type: "converted" | "bonusPaid" | "share"; message?: string } },
+  TContext
+> => {
+  const mutationKey = ["testWhatsAppMessage"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof testWhatsAppMessage>>,
+    { body: { type: "converted" | "bonusPaid" | "share"; message?: string } }
+  > = (props) => {
+    const { body } = props ?? {};
+    return testWhatsAppMessage(body, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TestWhatsAppMessageMutationResult = NonNullable<
+  Awaited<ReturnType<typeof testWhatsAppMessage>>
+>;
+export type TestWhatsAppMessageMutationError = ErrorType<unknown>;
+
+export const useTestWhatsAppMessage = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof testWhatsAppMessage>>,
+    TError,
+    { body: { type: "converted" | "bonusPaid" | "share"; message?: string } },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof testWhatsAppMessage>>,
+  TError,
+  { body: { type: "converted" | "bonusPaid" | "share"; message?: string } },
+  TContext
+> => {
+  return useMutation(getTestWhatsAppMessageMutationOptions(options));
+};
+
 export const getPayReferralBonusUrl = (id: string) => {
   return `/api/referrals/${id}/pay-bonus`;
 };

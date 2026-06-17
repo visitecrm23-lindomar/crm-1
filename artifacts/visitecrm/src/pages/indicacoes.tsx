@@ -17,6 +17,7 @@ import {
   useCreateReferralCampaign,
   useDeleteReferralCampaign,
   useUpdateReferralCampaign,
+  useTestWhatsAppMessage,
 } from "@workspace/api-client-react";
 import type { Referral, ReferralSettings, ReferralTierConfig, ReferralAnalyticsPeriod, ReferralCampaign } from "@workspace/api-client-react";
 import { REFERRAL_STATUS } from "@workspace/permissions";
@@ -165,6 +166,7 @@ export default function Indicacoes() {
   const updateSettings = useUpdateReferralSettings();
   const payBonus = usePayReferralBonus();
   const resendWarning = useResendExpiryWarning();
+  const testWhatsApp = useTestWhatsAppMessage();
   const { data: me } = useGetMe();
 
   const [analyticsPeriod, setAnalyticsPeriod] = useState<ReferralAnalyticsPeriod>(90);
@@ -266,6 +268,37 @@ export default function Indicacoes() {
       setSettingsModalOpen(false);
     } catch {
       toast({ title: "Erro ao salvar configurações", variant: "destructive" });
+    }
+  }
+
+  async function sendWhatsAppTest(type: "converted" | "bonusPaid" | "share") {
+    const message = type === "converted"
+      ? (localSettings.whatsappConvertedMessage as string | undefined) ?? ""
+      : type === "bonusPaid"
+      ? (localSettings.whatsappBonusPaidMessage as string | undefined) ?? ""
+      : (localSettings.shareMessage as string | undefined) ?? "";
+    if (!message.trim()) {
+      toast({ title: "Preencha o texto da mensagem antes de testar", variant: "destructive" });
+      return;
+    }
+    if (type !== "share" && !(localSettings.whatsappPhoneNumber as string | undefined)?.trim()) {
+      toast({ title: "Configure o número WhatsApp da agência antes de testar", variant: "destructive" });
+      return;
+    }
+    try {
+      await testWhatsApp.mutateAsync({ body: { type, message } });
+      toast({ title: "Mensagem de teste enviada!", description: "Verifique o WhatsApp configurado na agência." });
+    } catch (err: unknown) {
+      const apiError = (err as { data?: { error?: string } })?.data?.error;
+      if (apiError === "credentials_not_configured") {
+        toast({ title: "Credenciais Z-API não configuradas", description: "Configure ZAPI_INSTANCE_ID e ZAPI_TOKEN no servidor.", variant: "destructive" });
+      } else if (apiError === "whatsapp_not_configured") {
+        toast({ title: "Número WhatsApp não configurado", description: "Salve as configurações com um número válido primeiro.", variant: "destructive" });
+      } else if (apiError === "empty_template") {
+        toast({ title: "Mensagem vazia", variant: "destructive" });
+      } else {
+        toast({ title: "Erro ao enviar mensagem de teste", variant: "destructive" });
+      }
     }
   }
 
@@ -2204,6 +2237,17 @@ export default function Indicacoes() {
                 onChange={(e) => setLocalSettings((s) => ({ ...s, shareMessage: e.target.value }))}
                 placeholder="Use meu código e ganhe desconto na sua viagem!"
               />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs text-green-700 border-green-400 hover:bg-green-50"
+                disabled={testWhatsApp.isPending}
+                onClick={() => sendWhatsAppTest("share")}
+              >
+                {testWhatsApp.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <MessageCircle className="w-3 h-3 mr-1" />}
+                Testar mensagem
+              </Button>
               <p className="text-xs text-muted-foreground">
                 Variáveis disponíveis:{" "}
                 <code className="bg-muted px-1 rounded">{"{nome}"}</code> nome do indicador,{" "}
