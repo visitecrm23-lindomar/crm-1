@@ -99,6 +99,7 @@ import {
   GripVertical,
   ChevronLeft,
   ChevronRight,
+  XCircle,
 } from "lucide-react";
 import { formatCurrencyBRL } from "@/lib/utils";
 import { ROLES, INVOICE_STATUS } from "@workspace/permissions";
@@ -600,6 +601,12 @@ function CardPaymentModal({ invoice, clientSecret, onClose, onSuccess }: CardPay
   );
 }
 
+const FEATURE_LABELS: Record<string, string> = {
+  referrals: "Programa de Indicação",
+  coupons: "Cupons de Desconto",
+  seatMap: "Mapa de Assentos",
+};
+
 function PlanTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -779,68 +786,99 @@ function PlanTab() {
         </div>
       </div>
 
-      <div className={`grid gap-4 ${plans.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
-        {(plans.length > 0 ? plans : [
-          { id: "starter", name: "Starter", slug: "starter", monthlyPrice: "0", annualPrice: "0", maxUsers: 3, maxClients: 500, maxTrips: 20, features: [], isActive: true, isFeatured: false, sortOrder: 1, trialDays: 0, createdAt: "", updatedAt: "", description: null },
-        ] as PlanPublic[]).map((plan) => {
-          const isCurrentPlan = plan.slug === subData?.tenant?.planId || plan.id === subData?.tenant?.planId;
-          const price = selectedCycle === "annual" ? Number(plan.annualPrice) : Number(plan.monthlyPrice);
-          const monthlyEquiv = selectedCycle === "annual" && Number(plan.annualPrice) > 0
-            ? (Number(plan.annualPrice) / 12).toFixed(0)
-            : null;
-          return (
-            <Card
-              key={plan.id}
-              className={isCurrentPlan ? "border-primary ring-1 ring-primary" : ""}
-            >
-              {plan.isFeatured && (
-                <div className="text-center py-1 bg-primary text-primary-foreground text-xs font-medium rounded-t-lg -mt-px mx-px">
-                  Mais popular
-                </div>
-              )}
-              <CardHeader>
-                <CardTitle className="text-base">{plan.name}</CardTitle>
-                <CardDescription className="text-lg font-bold text-foreground">
-                  {price === 0
-                    ? "Grátis"
-                    : selectedCycle === "annual"
-                      ? <>{formatCurrencyBRL(plan.annualPrice)}/ano {monthlyEquiv && <span className="text-xs font-normal text-muted-foreground">(≈ R$ {monthlyEquiv}/mês)</span>}</>
-                      : `${formatCurrencyBRL(plan.monthlyPrice)}/mês`
-                  }
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-1 text-sm text-muted-foreground">
-                <p>Até {plan.maxClients.toLocaleString("pt-BR")} clientes</p>
-                <p>Até {plan.maxTrips.toLocaleString("pt-BR")} viagens</p>
-                <p>Até {plan.maxUsers} usuários</p>
-                {plan.trialDays > 0 && (
-                  <p className="text-primary font-medium">{plan.trialDays} dias grátis</p>
-                )}
-              </CardContent>
-              {!isCurrentPlan && (
-                <div className="px-6 pb-4">
-                  <Button
-                    className="w-full"
-                    variant={plan.isFeatured ? "default" : "outline"}
-                    onClick={() => handleUpgrade(plan)}
-                    disabled={upgrade.isPending}
-                  >
-                    {upgrade.isPending ? "Processando..." : price === 0 ? "Mudar para Starter" : "Fazer upgrade"}
-                  </Button>
-                </div>
-              )}
-              {isCurrentPlan && (
-                <div className="px-6 pb-4">
-                  <div className="flex items-center justify-center gap-1 text-sm text-primary font-medium">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Plano atual
-                  </div>
-                </div>
-              )}
-            </Card>
-          );
-        })}
-      </div>
+      {(() => {
+        const visiblePlans = plans.length > 0 ? plans : [
+          { id: "starter", name: "Starter", slug: "starter", monthlyPrice: "0", annualPrice: "0", maxUsers: 3, maxClients: 500, maxTrips: 20, features: [], supportedFeatures: [], isActive: true, isFeatured: false, sortOrder: 1, trialDays: 0, createdAt: "", updatedAt: "", description: null },
+        ] as PlanPublic[];
+
+        // Union of all advanced features across every visible plan, in a stable order.
+        const allFeatureSlugs = [
+          ...new Set(visiblePlans.flatMap((p) => p.supportedFeatures ?? [])),
+        ].filter((slug) => slug in FEATURE_LABELS);
+
+        return (
+          <div className={`grid gap-4 ${visiblePlans.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+            {visiblePlans.map((plan) => {
+              const isCurrentPlan = plan.slug === subData?.tenant?.planId || plan.id === subData?.tenant?.planId;
+              const price = selectedCycle === "annual" ? Number(plan.annualPrice) : Number(plan.monthlyPrice);
+              const monthlyEquiv = selectedCycle === "annual" && Number(plan.annualPrice) > 0
+                ? (Number(plan.annualPrice) / 12).toFixed(0)
+                : null;
+              const planFeatures = new Set(plan.supportedFeatures ?? []);
+              return (
+                <Card
+                  key={plan.id}
+                  className={isCurrentPlan ? "border-primary ring-1 ring-primary" : ""}
+                >
+                  {plan.isFeatured && (
+                    <div className="text-center py-1 bg-primary text-primary-foreground text-xs font-medium rounded-t-lg -mt-px mx-px">
+                      Mais popular
+                    </div>
+                  )}
+                  <CardHeader>
+                    <CardTitle className="text-base">{plan.name}</CardTitle>
+                    <CardDescription className="text-lg font-bold text-foreground">
+                      {price === 0
+                        ? "Grátis"
+                        : selectedCycle === "annual"
+                          ? <>{formatCurrencyBRL(plan.annualPrice)}/ano {monthlyEquiv && <span className="text-xs font-normal text-muted-foreground">(≈ R$ {monthlyEquiv}/mês)</span>}</>
+                          : `${formatCurrencyBRL(plan.monthlyPrice)}/mês`
+                      }
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-1 text-sm text-muted-foreground">
+                    <p>Até {plan.maxClients.toLocaleString("pt-BR")} clientes</p>
+                    <p>Até {plan.maxTrips.toLocaleString("pt-BR")} viagens</p>
+                    <p>Até {plan.maxUsers} usuários</p>
+                    {plan.trialDays > 0 && (
+                      <p className="text-primary font-medium">{plan.trialDays} dias grátis</p>
+                    )}
+                    {allFeatureSlugs.length > 0 && (
+                      <div className="pt-2 mt-2 border-t space-y-1">
+                        {allFeatureSlugs.map((slug) => {
+                          const included = planFeatures.has(slug);
+                          return (
+                            <div
+                              key={slug}
+                              className={`flex items-center gap-1.5 text-xs ${included ? "text-foreground" : "text-muted-foreground/50"}`}
+                            >
+                              {included
+                                ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                                : <XCircle className="w-3.5 h-3.5 shrink-0" />
+                              }
+                              {FEATURE_LABELS[slug]}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                  {!isCurrentPlan && (
+                    <div className="px-6 pb-4">
+                      <Button
+                        className="w-full"
+                        variant={plan.isFeatured ? "default" : "outline"}
+                        onClick={() => handleUpgrade(plan)}
+                        disabled={upgrade.isPending}
+                      >
+                        {upgrade.isPending ? "Processando..." : price === 0 ? "Mudar para Starter" : "Fazer upgrade"}
+                      </Button>
+                    </div>
+                  )}
+                  {isCurrentPlan && (
+                    <div className="px-6 pb-4">
+                      <div className="flex items-center justify-center gap-1 text-sm text-primary font-medium">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Plano atual
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {subData?.invoices && subData.invoices.length > 0 && (
         <div>
