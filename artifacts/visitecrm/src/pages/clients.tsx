@@ -27,7 +27,7 @@ import {
 import {
   Plus, Search, Users, TrendingUp, UserCheck, MoreHorizontal,
   MapPin, Download, Upload, ChevronLeft, ChevronRight,
-  X, ArrowUpDown, ArrowUp, ArrowDown, AlertCircle, Trash2
+  X, ArrowUpDown, ArrowUp, ArrowDown, AlertCircle, Trash2, Copy
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -78,9 +78,9 @@ function downloadCsv(rows: string[][], filename: string) {
 }
 
 function exportClientsCsv(clients: Client[]) {
-  const headers = ["Nome", "E-mail", "WhatsApp", "Telefone", "CPF", "Nascimento", "Gênero", "Cidade", "Estado", "Instagram", "Classificação", "Status", "Pipeline", "Total Gasto", "Saldo Devedor", "Tags", "Destinos Sonhados", "Observações", "Cadastrado em"];
+  const headers = ["Código", "Nome", "E-mail", "WhatsApp", "Telefone", "CPF", "Nascimento", "Gênero", "Cidade", "Estado", "Instagram", "Classificação", "Status", "Pipeline", "Total Gasto", "Saldo Devedor", "Tags", "Destinos Sonhados", "Observações", "Cadastrado em"];
   const rows = clients.map(c => [
-    c.name, c.email, c.whatsapp, c.phone ?? "", c.cpf ?? "",
+    c.customerCode ?? "", c.name, c.email, c.whatsapp, c.phone ?? "", c.cpf ?? "",
     c.birthDate ? format(parseISO(c.birthDate), "dd/MM/yyyy") : "",
     c.gender ?? "", c.addressCity ?? "", c.addressState ?? "", c.instagram ?? "",
     c.classification ?? "", c.status ?? "", c.pipelineStage ?? "",
@@ -566,7 +566,23 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId,
     <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEditing ? `Editar: ${editClient?.name}` : "Novo Cliente"}</DialogTitle>
+          <div className="flex items-center gap-3 flex-wrap">
+            <DialogTitle>{isEditing ? `Editar: ${editClient?.name}` : "Novo Cliente"}</DialogTitle>
+            {isEditing && editClient?.customerCode && (
+              <button
+                type="button"
+                className="flex items-center gap-1 font-mono text-xs px-2 py-0.5 rounded bg-muted border hover:bg-muted/70 transition-colors text-muted-foreground"
+                title="Copiar código do cliente"
+                onClick={() => {
+                  navigator.clipboard.writeText(editClient.customerCode!);
+                  toast({ title: "Código copiado!" });
+                }}
+              >
+                {editClient.customerCode}
+                <Copy className="w-3 h-3 ml-0.5" />
+              </button>
+            )}
+          </div>
         </DialogHeader>
 
         {limitError && (
@@ -1386,6 +1402,7 @@ export default function Clients() {
             <TableHeader>
               <TableRow>
                 <TableHead><SortableHeader label="Cliente" field="name" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></TableHead>
+                <TableHead>Código</TableHead>
                 <TableHead>Contato</TableHead>
                 <TableHead>Localidade</TableHead>
                 <TableHead>Origem</TableHead>
@@ -1402,12 +1419,12 @@ export default function Clients() {
             <TableBody>
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i}>{Array.from({ length: 12 }).map((__, j) => <TableCell key={j}><Skeleton className="h-8 w-full" /></TableCell>)}</TableRow>
+                  <TableRow key={i}>{Array.from({ length: 13 }).map((__, j) => <TableCell key={j}><Skeleton className="h-8 w-full" /></TableCell>)}</TableRow>
                 ))
               ) : birthdayFilter ? (
                 birthdayClients.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center py-12 text-muted-foreground">
+                    <TableCell colSpan={13} className="text-center py-12 text-muted-foreground">
                       Nenhum aniversariante hoje.
                     </TableCell>
                   </TableRow>
@@ -1425,6 +1442,18 @@ export default function Clients() {
                             <p className="text-xs text-muted-foreground">{client.email}</p>
                           </div>
                         </button>
+                      </TableCell>
+                      <TableCell>
+                        {client.customerCode ? (
+                          <button
+                            type="button"
+                            className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-muted border hover:bg-muted/70 transition-colors text-muted-foreground"
+                            title="Copiar código"
+                            onClick={() => { navigator.clipboard.writeText(client.customerCode!); toast({ title: "Código copiado!" }); }}
+                          >
+                            {client.customerCode}
+                          </button>
+                        ) : <span className="text-muted-foreground text-xs">—</span>}
                       </TableCell>
                       <TableCell className="text-sm">{client.whatsapp}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{[client.addressCity, client.addressState].filter(Boolean).join(", ") || "—"}</TableCell>
@@ -1476,7 +1505,7 @@ export default function Clients() {
                 })
               ) : (clientsData?.data ?? []).length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={13} className="text-center py-12 text-muted-foreground">
                     {hasFilters ? "Nenhum cliente encontrado com os filtros aplicados." : "Nenhum cliente cadastrado."}
                   </TableCell>
                 </TableRow>
@@ -1495,6 +1524,18 @@ export default function Clients() {
                             <p className="text-xs text-muted-foreground truncate max-w-[160px]">{client.email}</p>
                           </div>
                         </button>
+                      </TableCell>
+                      <TableCell>
+                        {client.customerCode ? (
+                          <button
+                            type="button"
+                            className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-muted border hover:bg-muted/70 transition-colors text-muted-foreground"
+                            title="Copiar código"
+                            onClick={() => { navigator.clipboard.writeText(client.customerCode!); toast({ title: "Código copiado!" }); }}
+                          >
+                            {client.customerCode}
+                          </button>
+                        ) : <span className="text-muted-foreground text-xs">—</span>}
                       </TableCell>
                       <TableCell>
                         <p className="text-sm">{client.whatsapp}</p>

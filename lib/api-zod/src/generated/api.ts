@@ -807,6 +807,7 @@ export const ListClientsResponse = zod.object({
       companyNps: zod.number().nullish(),
       travelInterests: zod.array(zod.string()),
       ambassadorOptIn: zod.boolean().nullish(),
+      customerCode: zod.string().nullish(),
       isNew: zod.boolean().nullish(),
       message: zod.string().nullish(),
     }),
@@ -893,6 +894,7 @@ export const GetClientResponse = zod.object({
   companyNps: zod.number().nullish(),
   travelInterests: zod.array(zod.string()),
   ambassadorOptIn: zod.boolean().nullish(),
+  customerCode: zod.string().nullish(),
   isNew: zod.boolean().nullish(),
   message: zod.string().nullish(),
 });
@@ -976,6 +978,7 @@ export const UpdateClientResponse = zod.object({
   companyNps: zod.number().nullish(),
   travelInterests: zod.array(zod.string()),
   ambassadorOptIn: zod.boolean().nullish(),
+  customerCode: zod.string().nullish(),
   isNew: zod.boolean().nullish(),
   message: zod.string().nullish(),
 });
@@ -1057,6 +1060,7 @@ export const UpdateClientPipelineStageResponse = zod.object({
   companyNps: zod.number().nullish(),
   travelInterests: zod.array(zod.string()),
   ambassadorOptIn: zod.boolean().nullish(),
+  customerCode: zod.string().nullish(),
   isNew: zod.boolean().nullish(),
   message: zod.string().nullish(),
 });

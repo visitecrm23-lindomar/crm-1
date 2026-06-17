@@ -68,6 +68,8 @@ export interface Client {
   /** @nullable */
   ambassadorOptIn?: boolean | null;
   /** @nullable */
+  customerCode?: string | null;
+  /** @nullable */
   isNew?: boolean | null;
   /** @nullable */
   message?: string | null;

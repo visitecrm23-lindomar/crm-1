@@ -1,7 +1,7 @@
 import { Router, type NextFunction } from "express";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { db } from "@workspace/db";
-import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable, usersTable, paymentsTable, dealsTable, storeOrdersTable, storeReviewsTable, clientScoresTable, loyaltyMembersTable } from "@workspace/db";
+import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable, usersTable, paymentsTable, dealsTable, storeOrdersTable, storeReviewsTable, clientScoresTable, loyaltyMembersTable, tenantsTable } from "@workspace/db";
 import { eq, and, ilike, or, sql, desc, asc, inArray, count } from "drizzle-orm";
 import { generateId, generateReferralCode } from "../lib/id";
 import { generateAndAssignReferralCode } from "../lib/referral-code";
@@ -86,6 +86,7 @@ function formatClient(c: typeof clientsTable.$inferSelect, extra?: { isNew?: boo
     scoresCalculatedAt: extra?.scores?.calculatedAt?.toISOString() ?? null,
     travelInterests: c.travelInterests ?? [],
     ambassadorOptIn: c.ambassadorOptIn ?? null,
+    customerCode: c.customerCode ?? null,
   };
 }
 
@@ -131,6 +132,7 @@ router.get("/clients", async (req, res, next: NextFunction): Promise<void> => {
         ilike(clientsTable.name, `%${search}%`),
         ilike(clientsTable.email, `%${search}%`),
         ilike(clientsTable.whatsapp, `%${search}%`),
+        ilike(clientsTable.customerCode, `%${search}%`),
         searchClean.length >= 3 ? ilike(clientsTable.cpf, `%${searchClean}%`) : undefined,
       ) as ReturnType<typeof eq>);
     }
@@ -275,20 +277,44 @@ router.post("/clients", async (req, res, next: NextFunction): Promise<void> => {
     };
 
     const id = generateId();
-    const [upserted] = await db.insert(clientsTable)
-      .values({
-        id,
-        tenantId: me.tenantId,
-        cpf: cleanedCpf,
-        ...sharedFields,
-        createdById: me.id,
-      })
-      .onConflictDoUpdate({
-        target: [clientsTable.tenantId, clientsTable.cpf],
-        targetWhere: sql`${clientsTable.cpf} IS NOT NULL`,
-        set: { ...sharedFields, updatedAt: new Date() },
-      })
-      .returning();
+    const [upserted] = await db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select({ id: clientsTable.id })
+        .from(clientsTable)
+        .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.cpf, cleanedCpf)))
+        .limit(1);
+
+      let customerCode: string | null = null;
+      if (!existing) {
+        const [tenantRow] = await tx
+          .update(tenantsTable)
+          .set({ lastClientSeq: sql`${tenantsTable.lastClientSeq} + 1` })
+          .where(eq(tenantsTable.id, me.tenantId))
+          .returning({ lastClientSeq: tenantsTable.lastClientSeq, reservationPrefix: tenantsTable.reservationPrefix, slug: tenantsTable.slug });
+        const seq = tenantRow?.lastClientSeq ?? 1;
+        const rawPrefix = tenantRow?.reservationPrefix?.trim() || tenantRow?.slug?.slice(0, 3) || "CLI";
+        const prefix = rawPrefix.toUpperCase();
+        const now = new Date();
+        const yyyymm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
+        customerCode = `${prefix}-${yyyymm}-${String(seq).padStart(5, "0")}`;
+      }
+
+      return await tx.insert(clientsTable)
+        .values({
+          id,
+          tenantId: me.tenantId,
+          cpf: cleanedCpf,
+          ...sharedFields,
+          createdById: me.id,
+          customerCode,
+        })
+        .onConflictDoUpdate({
+          target: [clientsTable.tenantId, clientsTable.cpf],
+          targetWhere: sql`${clientsTable.cpf} IS NOT NULL`,
+          set: { ...sharedFields, updatedAt: new Date() },
+        })
+        .returning();
+    });
 
     if (!upserted) { next(new AppError("Failed to create client", 500, "CLIENT_CREATE_FAILED")); return; }
 
