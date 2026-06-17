@@ -1,7 +1,7 @@
 import { Router, type NextFunction } from "express";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { db } from "@workspace/db";
-import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable, usersTable, paymentsTable, dealsTable, storeOrdersTable, storeReviewsTable, clientScoresTable } from "@workspace/db";
+import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable, usersTable, paymentsTable, dealsTable, storeOrdersTable, storeReviewsTable, clientScoresTable, loyaltyMembersTable } from "@workspace/db";
 import { eq, and, ilike, or, sql, desc, asc, inArray, count } from "drizzle-orm";
 import { generateId, generateReferralCode } from "../lib/id";
 import { generateAndAssignReferralCode } from "../lib/referral-code";
@@ -759,11 +759,12 @@ router.get("/clients/:clientId/recommendations", async (req, res, next: NextFunc
         .orderBy(desc(count()))
         .limit(3);
 
-      const popularTripIds = new Set(popularRows.map(p => p.tripId));
+      // Sort available trips by actual reservation count (popularRows already sorted by count)
+      const tripsById = new Map(availableTrips.map(t => [t.id, t]));
       const top3 = [
-        ...availableTrips.filter(t => popularTripIds.has(t.id)),
-        ...availableTrips.filter(t => !popularTripIds.has(t.id)),
-      ].slice(0, 3);
+        ...popularRows.map(p => tripsById.get(p.tripId)).filter(Boolean),
+        ...availableTrips.filter(t => !popularRows.find(p => p.tripId === t.id)),
+      ].slice(0, 3) as typeof availableTrips;
 
       result = {
         recommendations: top3.map(t => ({
@@ -785,12 +786,36 @@ router.get("/clients/:clientId/recommendations", async (req, res, next: NextFunc
       if (candidateTrips.length === 0) {
         result = { recommendations: [], source: "none" };
       } else {
+        // Enrich client profile: loyalty tier + historical price range
+        const [loyaltyMember] = await db
+          .select({ tier: loyaltyMembersTable.tier, totalPoints: loyaltyMembersTable.totalPoints, availablePoints: loyaltyMembersTable.availablePoints })
+          .from(loyaltyMembersTable)
+          .where(and(eq(loyaltyMembersTable.clientId, client.id), eq(loyaltyMembersTable.tenantId, me.tenantId)))
+          .limit(1);
+
+        const paidPayments = await db
+          .select({ amount: paymentsTable.amount })
+          .from(paymentsTable)
+          .where(and(
+            eq(paymentsTable.clientId, client.id),
+            eq(paymentsTable.tenantId, me.tenantId),
+            eq(paymentsTable.status, "paid"),
+          ))
+          .limit(20);
+
+        const prices = paidPayments.map(p => Number(p.amount)).filter(v => v > 0);
+        const avgPrice = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : null;
+        const minPrice = prices.length ? Math.min(...prices) : null;
+        const maxPrice = prices.length ? Math.max(...prices) : null;
+
         const clientProfile = [
           `Nome: ${client.name}`,
           client.dreamDestinations?.length ? `Destinos sonhados: ${client.dreamDestinations.join(", ")}` : "",
-          client.travelInterests?.length ? `Interesses: ${client.travelInterests.join(", ")}` : "",
-          client.travelPreference ? `Preferência de viagem: ${client.travelPreference}` : "",
-          client.preferredDestinationTypes?.length ? `Tipos de destino: ${client.preferredDestinationTypes.join(", ")}` : "",
+          client.travelInterests?.length ? `Interesses de viagem: ${client.travelInterests.join(", ")}` : "",
+          client.travelPreference ? `Preferência: ${client.travelPreference}` : "",
+          client.preferredDestinationTypes?.length ? `Tipos de destino preferidos: ${client.preferredDestinationTypes.join(", ")}` : "",
+          loyaltyMember ? `Fidelidade: tier ${loyaltyMember.tier} (${loyaltyMember.availablePoints} pts disponíveis)` : "",
+          avgPrice != null ? `Histórico de compras: média R$ ${avgPrice.toFixed(0)}, faixa R$ ${minPrice?.toFixed(0)}–${maxPrice?.toFixed(0)}` : "",
         ].filter(Boolean).join("\n");
 
         const tripsList = candidateTrips.map((t, i) =>
@@ -799,7 +824,7 @@ router.get("/clients/:clientId/recommendations", async (req, res, next: NextFunc
 
         const prompt = `Você é consultor de turismo. Analise o perfil do cliente e selecione as 3 melhores viagens para recomendar.
 
-PERFIL:
+PERFIL DO CLIENTE:
 ${clientProfile}
 
 VIAGENS DISPONÍVEIS:
@@ -808,7 +833,7 @@ ${tripsList}
 Responda APENAS com JSON válido:
 {"recommendations":[{"tripId":"id","reason":"motivo em português (máx 80 chars)"}]}
 
-Selecione até 3 viagens priorizando destinos sonhados e interesses do cliente.`;
+Selecione até 3 viagens priorizando destinos sonhados, interesses e compatibilidade com a faixa de preço histórica.`;
 
         try {
           const { client: aiClient, model } = await getAIClientForTenant(me.tenantId);
@@ -822,12 +847,12 @@ Selecione até 3 viagens priorizando destinos sonhados e interesses do cliente.`
           const raw = response.choices[0]?.message?.content ?? "{}";
           const parsed = JSON.parse(raw) as { recommendations?: Array<{ tripId: string; reason: string }> };
           const aiRecs = parsed.recommendations ?? [];
-          const tripsById = new Map(candidateTrips.map(t => [t.id, t]));
+          const tripsByIdMap = new Map(candidateTrips.map(t => [t.id, t]));
           const recommendations: RecommendedTrip[] = aiRecs
-            .filter(r => tripsById.has(r.tripId))
+            .filter(r => tripsByIdMap.has(r.tripId))
             .slice(0, 3)
             .map(r => {
-              const t = tripsById.get(r.tripId)!;
+              const t = tripsByIdMap.get(r.tripId)!;
               return {
                 tripId: t.id,
                 name: t.name,
@@ -858,7 +883,8 @@ Selecione até 3 viagens priorizando destinos sonhados e interesses do cliente.`
       }
     }
 
-    if (redis && result.recommendations.length > 0) {
+    // Cache all outcomes for 24h to prevent repeated AI calls (including empty/fallback)
+    if (redis) {
       await redis.set(cacheKey, JSON.stringify(result), "EX", 86400).catch(() => {});
     }
 

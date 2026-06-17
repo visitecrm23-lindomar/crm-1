@@ -21,13 +21,16 @@ import {
   useGetMe,
 } from "@workspace/api-client-react";
 import { RESERVATION_STATUS, REFERRAL_STATUS, PAYMENT_STATUS, ADMIN_ROLES } from "@workspace/permissions";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Phone, Mail, MapPin, Calendar, FileText, Download, Upload, Trash2,
   Star, TrendingUp, Gift, Award, Zap, MessageSquare, Loader2, Plus,
@@ -639,7 +642,14 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
   const [recommendations, setRecommendations] = useState<RecommendedTrip[]>([]);
   const [recsLoading, setRecsLoading] = useState(false);
   const [recsSource, setRecsSource] = useState<string>("");
-  const [creatingDealFor, setCreatingDealFor] = useState<string | null>(null);
+
+  const [dealDialogTrip, setDealDialogTrip] = useState<RecommendedTrip | null>(null);
+  const [dealTitle, setDealTitle] = useState("");
+  const [dealValue, setDealValue] = useState<number>(0);
+  const [dealStageId, setDealStageId] = useState<string>("");
+  const [dealStages, setDealStages] = useState<Array<{ id: string; name: string; order: number }>>([]);
+  const [dealStagesLoading, setDealStagesLoading] = useState(false);
+  const [dealSubmitting, setDealSubmitting] = useState(false);
 
   useEffect(() => {
     if (!isOpen || activeTab !== "ia" || !id) return;
@@ -654,32 +664,49 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
       .finally(() => setRecsLoading(false));
   }, [isOpen, activeTab, id]);
 
-  const handleCreateDeal = async (trip: RecommendedTrip) => {
-    setCreatingDealFor(trip.tripId);
+  const openDealDialog = async (trip: RecommendedTrip) => {
+    setDealDialogTrip(trip);
+    setDealTitle(`${trip.name} — ${client?.name ?? ""}`);
+    setDealValue(trip.priceAdult);
+    setDealStageId("");
+    setDealStagesLoading(true);
     try {
-      const stagesResp = await fetch(`${API_BASE_ADMIN}/api/admin/pipeline/stages`, { credentials: "include" });
-      if (!stagesResp.ok) throw new Error("Falha ao buscar etapas do pipeline");
-      const stages: Array<{ id: string; name: string; order: number }> = await stagesResp.json();
-      const firstStage = stages.sort((a, b) => a.order - b.order)[0];
-      if (!firstStage) throw new Error("Nenhuma etapa encontrada");
-      const dealResp = await fetch(`${API_BASE_ADMIN}/api/admin/deals`, {
+      const resp = await fetch(`${API_BASE_ADMIN}/api/admin/pipeline/stages`, { credentials: "include" });
+      if (!resp.ok) throw new Error();
+      const stages: Array<{ id: string; name: string; order: number }> = await resp.json();
+      const sorted = stages.sort((a, b) => a.order - b.order);
+      setDealStages(sorted);
+      setDealStageId(sorted[0]?.id ?? "");
+    } catch {
+      setDealStages([]);
+    } finally {
+      setDealStagesLoading(false);
+    }
+  };
+
+  const handleConfirmDeal = async () => {
+    if (!dealDialogTrip || !dealStageId) return;
+    setDealSubmitting(true);
+    try {
+      const resp = await fetch(`${API_BASE_ADMIN}/api/admin/deals`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          stageId: firstStage.id,
+          stageId: dealStageId,
           clientId: id,
-          tripId: trip.tripId,
-          title: `${trip.name} — ${client?.name ?? ""}`,
-          value: trip.priceAdult,
+          tripId: dealDialogTrip.tripId,
+          title: dealTitle,
+          value: dealValue,
         }),
       });
-      if (!dealResp.ok) throw new Error("Falha ao criar negócio");
-      toast({ title: "Negócio criado!", description: `"${trip.name}" adicionado ao pipeline.` });
+      if (!resp.ok) throw new Error("Falha ao criar negócio");
+      toast({ title: "Negócio criado!", description: `"${dealDialogTrip.name}" adicionado ao pipeline.` });
+      setDealDialogTrip(null);
     } catch (err) {
       toast({ title: "Erro ao criar negócio", description: err instanceof Error ? err.message : "Tente novamente.", variant: "destructive" });
     } finally {
-      setCreatingDealFor(null);
+      setDealSubmitting(false);
     }
   };
 
@@ -1050,14 +1077,9 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                               size="sm"
                               variant="outline"
                               className="shrink-0 text-xs h-7 px-2"
-                              disabled={creatingDealFor === trip.tripId}
-                              onClick={() => handleCreateDeal(trip)}
+                              onClick={() => openDealDialog(trip)}
                             >
-                              {creatingDealFor === trip.tripId ? (
-                                <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                              ) : (
-                                <Plus className="w-3 h-3 mr-1" />
-                              )}
+                              <Plus className="w-3 h-3 mr-1" />
                               Criar negócio
                             </Button>
                           </div>
@@ -1086,6 +1108,54 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                 )}
               </TabsContent>
             </Tabs>
+
+            <Dialog open={!!dealDialogTrip} onOpenChange={o => { if (!o) setDealDialogTrip(null); }}>
+              <DialogContent className="max-w-sm">
+                <DialogHeader>
+                  <DialogTitle>Criar negócio no pipeline</DialogTitle>
+                </DialogHeader>
+                {dealDialogTrip && (
+                  <div className="space-y-4 py-1">
+                    <div className="p-3 rounded-lg bg-muted/50 text-sm space-y-1">
+                      <p className="font-medium">{dealDialogTrip.name}</p>
+                      <p className="text-xs text-muted-foreground">{dealDialogTrip.destination} · {format(parseISO(dealDialogTrip.departureDate), "dd/MM/yyyy", { locale: ptBR })}</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="deal-title" className="text-xs">Título do negócio</Label>
+                      <Input id="deal-title" value={dealTitle} onChange={e => setDealTitle(e.target.value)} className="h-8 text-sm" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="deal-value" className="text-xs">Valor (R$)</Label>
+                      <Input id="deal-value" type="number" value={dealValue} onChange={e => setDealValue(Number(e.target.value))} className="h-8 text-sm" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Etapa do pipeline</Label>
+                      {dealStagesLoading ? (
+                        <Skeleton className="h-8 w-full" />
+                      ) : (
+                        <Select value={dealStageId} onValueChange={setDealStageId}>
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue placeholder="Selecione a etapa" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {dealStages.map(s => (
+                              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <DialogFooter className="gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setDealDialogTrip(null)}>Cancelar</Button>
+                  <Button size="sm" onClick={handleConfirmDeal} disabled={dealSubmitting || !dealStageId || !dealTitle.trim()}>
+                    {dealSubmitting ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Plus className="w-3 h-3 mr-1" />}
+                    Criar negócio
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
             <div className="border-t pt-3 mt-2 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
