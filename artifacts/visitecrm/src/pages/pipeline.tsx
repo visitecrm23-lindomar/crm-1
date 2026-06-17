@@ -123,7 +123,7 @@ function LostReasonModal({ open, onClose, onConfirm }: LostReasonModalProps) {
 // ─── Analytics Panel ──────────────────────────────────────────────────────────
 
 interface AnalyticsData {
-  stages: { stageId: string; stageName: string; color: string; count: number; value: number; avgDays: number; conversionRate: number }[];
+  stages: { stageId: string; stageName: string; color: string; count: number; value: number; avgDays: number; conversionRate: number; cumulativeRate: number }[];
   lostReasons: { reason: string; count: number }[];
   totalPipeline: number;
   totalLost: number;
@@ -159,12 +159,12 @@ function AnalyticsPanel({ pipelineId }: { pipelineId: string }) {
       <div>
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Funil de Conversão</p>
         <div className="space-y-2">
-          {data.stages.map(s => (
+          {data.stages.map((s, idx) => (
             <div key={s.stageId} className="flex items-center gap-3">
-              <div className="w-32 truncate text-xs font-medium shrink-0">{s.stageName}</div>
+              <div className="w-28 truncate text-xs font-medium shrink-0">{s.stageName}</div>
               <div className="flex-1 bg-muted rounded-full h-5 overflow-hidden">
                 <div
-                  className="h-full rounded-full flex items-center px-2 transition-all"
+                  className="h-full rounded-full transition-all"
                   style={{
                     width: `${Math.max((s.count / maxCount) * 100, 4)}%`,
                     backgroundColor: s.color,
@@ -172,9 +172,14 @@ function AnalyticsPanel({ pipelineId }: { pipelineId: string }) {
                   }}
                 />
               </div>
-              <div className="text-xs text-muted-foreground w-14 shrink-0 text-right">
+              <div className="text-xs text-muted-foreground text-right shrink-0 w-20">
                 <span className="font-semibold text-foreground">{s.count}</span>
-                {s.avgDays > 0 && <span className="text-[10px] ml-1">({s.avgDays}d)</span>}
+                {s.avgDays > 0 && <span className="text-[10px] ml-1 text-muted-foreground">({s.avgDays}d)</span>}
+                {idx > 0 && (
+                  <span className={`ml-1 text-[10px] font-medium ${s.conversionRate >= 50 ? "text-green-600" : s.conversionRate >= 25 ? "text-amber-500" : "text-red-500"}`}>
+                    {s.conversionRate}%↓
+                  </span>
+                )}
               </div>
             </div>
           ))}

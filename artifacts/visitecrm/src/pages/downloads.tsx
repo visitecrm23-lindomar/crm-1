@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useListClients, useListReservations, useListPayments, useListTrips, useListReferrals, useListCommissions } from "@workspace/api-client-react";
+import { useListClients, useListReservations, useListPayments, useListTrips, useListReferrals, useListCommissions, useListDeals } from "@workspace/api-client-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -90,6 +90,8 @@ export default function Downloads() {
   const { data: tripsData } = useListTrips({ limit: 1000 });
   const { data: referralsData } = useListReferrals();
   const { data: commissionsData } = useListCommissions();
+  const { data: openDealsData } = useListDeals({ status: "open" });
+  const { data: lostDealsData } = useListDeals({ status: "lost" });
 
   function exportClients() {
     const clients = clientsData?.data ?? [];
@@ -202,6 +204,29 @@ export default function Downloads() {
     toast({ title: `${commissions.length} comissões exportadas!` });
   }
 
+  function exportPipelineDeals() {
+    const open = openDealsData ?? [];
+    const lost = lostDealsData ?? [];
+    const allDeals = [...open, ...lost];
+    if (!allDeals.length) { toast({ title: "Sem negócios no pipeline para exportar" }); return; }
+    const headers = ["Título", "Status", "Estágio", "Valor (R$)", "Motivo de Perda", "Cliente / Lead", "WhatsApp", "Viagem", "Data de Fechamento Esperada", "Origem", "Criado em"];
+    const rows = allDeals.map(d => [
+      d.title,
+      d.status === "lost" ? "Perdido" : d.status === "won" ? "Ganho" : "Aberto",
+      d.stageName ?? "",
+      fmtCur(d.value),
+      d.lostReason ?? "",
+      d.clientName ?? d.leadName ?? "",
+      d.leadWhatsapp ?? "",
+      d.tripId ?? "",
+      fmtDate(d.expectedCloseDate ?? undefined),
+      d.source ?? "",
+      fmtDate(d.createdAt),
+    ]);
+    downloadCsv([headers, ...rows], `pipeline_${format(new Date(), "yyyyMMdd")}.csv`);
+    toast({ title: `${allDeals.length} negócios exportados!` });
+  }
+
   const exports = [
     {
       label: "Clientes",
@@ -244,6 +269,12 @@ export default function Downloads() {
       description: "Relatório de comissões por vendedor e por período",
       icon: DollarSign,
       formats: [{ label: "CSV", format: "csv", action: exportCommissions }],
+    },
+    {
+      label: "Pipeline de Negócios",
+      description: "Leads, negócios abertos e perdidos com motivo de perda",
+      icon: BarChart2,
+      formats: [{ label: "CSV", format: "csv", action: exportPipelineDeals }],
     },
   ];
 

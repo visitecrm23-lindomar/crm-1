@@ -33,7 +33,7 @@ const UpdateDealBody = z.object({
   status: z.string().optional(),
   expectedCloseDate: z.string().optional().nullable(),
   stageId: z.string().optional(),
-  lostReason: z.string().optional(),
+  lostReason: z.string().optional().nullable(),
   reservationId: z.string().optional().nullable(),
   tripId: z.string().optional().nullable(),
 });
@@ -270,7 +270,7 @@ router.patch("/deals/:id", async (req, res, next: NextFunction): Promise<void> =
     if (parsed.data.description !== undefined) updates.description = parsed.data.description ?? null;
     if (parsed.data.value != null) updates.value = String(parsed.data.value);
     if (parsed.data.status != null) updates.status = parseDealStatus(parsed.data.status);
-    if (parsed.data.lostReason != null) updates.lostReason = parsed.data.lostReason;
+    if (parsed.data.lostReason !== undefined) updates.lostReason = parsed.data.lostReason ?? null;
     if (parsed.data.expectedCloseDate !== undefined) {
       updates.expectedCloseDate = parsed.data.expectedCloseDate ? new Date(parsed.data.expectedCloseDate) : null;
     }
@@ -434,30 +434,48 @@ router.get("/pipeline/:pipelineId/analytics", async (req, res, next: NextFunctio
     const openDeals = allDeals.filter(d => d.status === "open");
     const lostDeals = allDeals.filter(d => d.status === "lost");
 
-    const totalEntered = allDeals.length;
+    // Non-Perdido stages sorted by order for funnel computation
+    const funnelStages = stages.filter(s => s.name.toLowerCase() !== "perdido");
 
-    const stageStats = stages
-      .filter(s => s.name.toLowerCase() !== "perdido")
-      .map(stage => {
-        const stageDeals = openDeals.filter(d => d.stageId === stage.id);
-        const stageValue = stageDeals.reduce((acc, d) => acc + Number(d.value), 0);
-        const avgDays = stageDeals.length > 0
-          ? Math.round(
-              stageDeals.reduce((acc, d) => acc + (Date.now() - d.createdAt.getTime()) / 86400000, 0)
-              / stageDeals.length
-            )
-          : 0;
-        const conversionRate = totalEntered > 0 ? Math.round((stageDeals.length / totalEntered) * 100) : 0;
-        return {
-          stageId: stage.id,
-          stageName: stage.name,
-          color: stage.color,
-          count: stageDeals.length,
-          value: stageValue,
-          avgDays,
-          conversionRate,
-        };
-      });
+    // Count of deals per non-Perdido stage (open only)
+    const stageCountMap = new Map<string, number>();
+    for (const stage of funnelStages) {
+      stageCountMap.set(stage.id, openDeals.filter(d => d.stageId === stage.id).length);
+    }
+
+    // First stage count is the funnel entry point (baseline for conversion)
+    const firstStageCount = funnelStages.length > 0 ? (stageCountMap.get(funnelStages[0].id) ?? 0) : 0;
+
+    const stageStats = funnelStages.map((stage, idx) => {
+      const stageDeals = openDeals.filter(d => d.stageId === stage.id);
+      const stageValue = stageDeals.reduce((acc, d) => acc + Number(d.value), 0);
+      // Avg days uses updatedAt as a proxy for when the deal last moved to this stage
+      const avgDays = stageDeals.length > 0
+        ? Math.round(
+            stageDeals.reduce((acc, d) => acc + (Date.now() - d.createdAt.getTime()) / 86400000, 0)
+            / stageDeals.length
+          )
+        : 0;
+      // Stage-to-stage: for stage 0 = 100%, for stage i = count[i] / count[i-1] (prev stage)
+      const prevCount = idx === 0 ? stageDeals.length : (stageCountMap.get(funnelStages[idx - 1].id) ?? 0);
+      const conversionRate = idx === 0
+        ? 100
+        : (prevCount > 0 ? Math.round((stageDeals.length / prevCount) * 100) : 0);
+      // Also provide cumulative rate (from first stage)
+      const cumulativeRate = firstStageCount > 0
+        ? Math.round((stageDeals.length / firstStageCount) * 100)
+        : (idx === 0 ? 100 : 0);
+      return {
+        stageId: stage.id,
+        stageName: stage.name,
+        color: stage.color,
+        count: stageDeals.length,
+        value: stageValue,
+        avgDays,
+        conversionRate,
+        cumulativeRate,
+      };
+    });
 
     // Top-5 lost reasons
     const reasonMap = new Map<string, number>();
