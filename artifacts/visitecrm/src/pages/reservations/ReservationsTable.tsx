@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { STATUS_COLORS, STATUS_LABELS, METHOD_LABELS } from "./constants";
 import { RESERVATION_STATUS } from "@workspace/permissions";
+import { formatCurrency } from "@/lib/utils";
 
 interface ReservationsTableProps {
   reservations: Reservation[];
@@ -56,7 +57,6 @@ export function ReservationsTable({
   page, setPage, total, totalPages,
   onViewDetail, onEdit, onPayment, onVoucher, onCheckin, onCancel, setClient360Id,
 }: ReservationsTableProps) {
-  const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
   const { isCliente } = usePermissions();
 
   return (
@@ -220,9 +220,9 @@ export function ReservationsTable({
                       {r.seats.length > 3 && <span className="text-xs text-muted-foreground">+{r.seats.length - 3}</span>}
                     </div>
                   </TableCell>
-                  <TableCell className="font-medium text-sm">{fmt(r.totalValue)}</TableCell>
-                  <TableCell className="text-sm text-green-700">{fmt(r.paidValue)}</TableCell>
-                  <TableCell className={`text-sm font-medium ${r.balance > 0 ? "text-destructive" : "text-green-700"}`}>{fmt(r.balance)}</TableCell>
+                  <TableCell className="font-medium text-sm">{formatCurrency(r.totalValue)}</TableCell>
+                  <TableCell className="text-sm text-green-700">{formatCurrency(r.paidValue)}</TableCell>
+                  <TableCell className={`text-sm font-medium ${r.balance > 0 ? "text-destructive" : "text-green-700"}`}>{formatCurrency(r.balance)}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{METHOD_LABELS[r.paymentMethod ?? ""] ?? r.paymentMethod ?? "—"}</TableCell>
                   <TableCell>
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[r.status] ?? "bg-gray-100 text-gray-800"}`}>

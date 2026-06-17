@@ -11,6 +11,7 @@ import { z } from "zod/v4";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { writeClientActivity } from "../lib/activities";
 import { enqueueReservationConfirmationEmail, enqueueReservationCancellationEmail, enqueueNewBookingNotificationEmail, dispatchReferralReversedEmail } from "../queues/email-helpers";
+import { insertClientNotification } from "../lib/client-notifications";
 import { enqueueCommissionSync } from "../queues/commission-sync-helper";
 import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 import { broadcastSeatUpdate } from "../lib/realtime";
