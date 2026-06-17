@@ -1,7 +1,7 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { pipelinesTable, pipelineStagesTable, dealsTable, clientsTable, reservationsTable } from "@workspace/db";
-import { eq, and, asc, desc, inArray } from "drizzle-orm";
+import { eq, and, asc, desc, inArray, sql } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser, ADMIN_ROLES } from '../lib/tenant';
 import { z } from "zod";
@@ -47,6 +47,7 @@ const DEFAULT_STAGES = [
   { name: "Pagamento Confirmado", order: 4, color: "#10B981", isFinal: false, isDefaultWeb: false },
   { name: "Em Viagem", order: 5, color: "#06B6D4", isFinal: false, isDefaultWeb: false },
   { name: "Pós Viagem", order: 6, color: "#6B7280", isFinal: true, isDefaultWeb: false },
+  { name: "Perdido", order: 7, color: "#EF4444", isFinal: false, isDefaultWeb: false },
 ];
 
 const STAGE_RENAMES: { oldName: string; newName: string }[] = [
@@ -63,6 +64,21 @@ async function ensureDefaultPipeline(tenantId: string): Promise<string> {
       await db.update(pipelineStagesTable)
         .set({ name: r.newName })
         .where(and(eq(pipelineStagesTable.tenantId, tenantId), eq(pipelineStagesTable.name, r.oldName)));
+    }
+    // Add "Perdido" stage if missing
+    const hasPerdido = existing.some(s => s.name.toLowerCase() === "perdido");
+    if (!hasPerdido) {
+      const pipelineId = existing[0].pipelineId;
+      await db.insert(pipelineStagesTable).values({
+        id: generateId(),
+        tenantId,
+        pipelineId,
+        name: "Perdido",
+        order: 7,
+        color: "#EF4444",
+        isFinal: false,
+        isDefaultWeb: false,
+      }).onConflictDoNothing();
     }
     return existing[0].pipelineId;
   }
@@ -371,6 +387,96 @@ router.patch("/pipelines/:id", async (req, res, next: NextFunction): Promise<voi
     const [pipeline] = await db.select().from(pipelinesTable).where(and(eq(pipelinesTable.id, req.params.id), eq(pipelinesTable.tenantId, me.tenantId)));
     if (!pipeline) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(pipeline);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── PIPELINE ANALYTICS ───────────────────────────────────────────────────────
+
+router.get("/pipeline/:pipelineId/analytics", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    const [pipeline] = await db.select().from(pipelinesTable)
+      .where(and(eq(pipelinesTable.id, req.params.pipelineId), eq(pipelinesTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!pipeline) { next(new NotFoundError("Pipeline not found", "NOT_FOUND")); return; }
+
+    const stages = await db.select().from(pipelineStagesTable)
+      .where(and(
+        eq(pipelineStagesTable.pipelineId, req.params.pipelineId),
+        eq(pipelineStagesTable.tenantId, me.tenantId),
+      ))
+      .orderBy(asc(pipelineStagesTable.order));
+
+    if (stages.length === 0) {
+      res.json({ stages: [], lostReasons: [], totalPipeline: 0, totalLost: 0 });
+      return;
+    }
+
+    const stageIds = stages.map(s => s.id);
+    const allDeals = await db.select({
+      id: dealsTable.id,
+      stageId: dealsTable.stageId,
+      status: dealsTable.status,
+      value: dealsTable.value,
+      lostReason: dealsTable.lostReason,
+      createdAt: dealsTable.createdAt,
+    }).from(dealsTable)
+      .where(and(
+        eq(dealsTable.tenantId, me.tenantId),
+        inArray(dealsTable.stageId, stageIds),
+      ));
+
+    const openDeals = allDeals.filter(d => d.status === "open");
+    const lostDeals = allDeals.filter(d => d.status === "lost");
+
+    const totalEntered = allDeals.length;
+
+    const stageStats = stages
+      .filter(s => s.name.toLowerCase() !== "perdido")
+      .map(stage => {
+        const stageDeals = openDeals.filter(d => d.stageId === stage.id);
+        const stageValue = stageDeals.reduce((acc, d) => acc + Number(d.value), 0);
+        const avgDays = stageDeals.length > 0
+          ? Math.round(
+              stageDeals.reduce((acc, d) => acc + (Date.now() - d.createdAt.getTime()) / 86400000, 0)
+              / stageDeals.length
+            )
+          : 0;
+        const conversionRate = totalEntered > 0 ? Math.round((stageDeals.length / totalEntered) * 100) : 0;
+        return {
+          stageId: stage.id,
+          stageName: stage.name,
+          color: stage.color,
+          count: stageDeals.length,
+          value: stageValue,
+          avgDays,
+          conversionRate,
+        };
+      });
+
+    // Top-5 lost reasons
+    const reasonMap = new Map<string, number>();
+    for (const d of lostDeals) {
+      const reason = d.lostReason ?? "Não informado";
+      reasonMap.set(reason, (reasonMap.get(reason) ?? 0) + 1);
+    }
+    const lostReasons = Array.from(reasonMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([reason, count]) => ({ reason, count }));
+
+    const totalPipeline = openDeals.reduce((acc, d) => acc + Number(d.value), 0);
+
+    res.json({
+      stages: stageStats,
+      lostReasons,
+      totalPipeline,
+      totalLost: lostDeals.length,
+    });
   } catch (err) {
     next(err);
   }

@@ -8,6 +8,7 @@
 
 export interface PipelineStage {
   id: string;
+  pipelineId: string;
   name: string;
   color: string;
   order: number;

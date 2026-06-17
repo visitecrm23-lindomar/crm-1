@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
   DndContext, closestCenter, DragOverlay, useSensor, useSensors, PointerSensor,
@@ -7,9 +7,10 @@ import {
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import {
   useListPipelineStages, useListDeals, useMoveDeal,
-  useDeleteDeal, useListClients, useListTrips,
+  useDeleteDeal, useListClients, useListTrips, useUpdateDeal,
 } from "@workspace/api-client-react";
 import type { Deal, PipelineStage, Client } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { ClientModal } from "./clients";
 import { Client360Modal } from "@/components/client360-modal";
 import { Button } from "@/components/ui/button";
@@ -20,15 +21,206 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Search, Trash2, Phone, Calendar, MapPin, X, Pencil, UserPen, Eye, BookOpen, ExternalLink, ShoppingBag } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Plus, Search, Trash2, Phone, Calendar, MapPin, X, Pencil, UserPen, Eye, BookOpen,
+  ExternalLink, ShoppingBag, ChevronDown, ChevronUp, BarChart2, Loader2, XCircle,
+} from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { DEAL_STATUS } from "@workspace/permissions";
 import { formatCurrency } from "@/lib/utils";
 
+const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const LOST_REASONS = [
+  "Preço",
+  "Destino indisponível",
+  "Preferiu concorrente",
+  "Cliente desistiu",
+  "Sem resposta",
+  "Outro",
+];
+
 const CLASSIFICATION_LABELS: Record<string, string> = {
   lead: "Lead", prospect: "Prospecto", client: "Cliente", vip: "VIP", inactive: "Inativo",
 };
+
+// ─── Lost Reason Modal ────────────────────────────────────────────────────────
+
+interface LostReasonModalProps {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: (reason: string, obs: string) => Promise<void>;
+}
+
+function LostReasonModal({ open, onClose, onConfirm }: LostReasonModalProps) {
+  const [reason, setReason] = useState("");
+  const [obs, setObs] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (open) { setReason(""); setObs(""); }
+  }, [open]);
+
+  async function handleSubmit() {
+    if (!reason) return;
+    setLoading(true);
+    try { await onConfirm(reason, obs); } finally { setLoading(false); }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <XCircle className="w-5 h-5 text-destructive" />
+            Motivo da Perda
+          </DialogTitle>
+          <DialogDescription>Por que este negócio não foi fechado?</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-1">
+          <RadioGroup value={reason} onValueChange={setReason} className="gap-2">
+            {LOST_REASONS.map(r => (
+              <div key={r} className="flex items-center gap-2.5">
+                <RadioGroupItem value={r} id={`lr-${r}`} />
+                <Label htmlFor={`lr-${r}`} className="cursor-pointer font-normal">{r}</Label>
+              </div>
+            ))}
+          </RadioGroup>
+          <div>
+            <Label className="text-sm font-medium">Observação (opcional)</Label>
+            <Textarea
+              value={obs}
+              onChange={e => setObs(e.target.value)}
+              placeholder="Detalhe adicional sobre a perda..."
+              className="mt-1.5"
+              rows={2}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={!reason || loading}
+            className="bg-red-600 hover:bg-red-700 text-white"
+          >
+            {loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+            Confirmar Perda
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Analytics Panel ──────────────────────────────────────────────────────────
+
+interface AnalyticsData {
+  stages: { stageId: string; stageName: string; color: string; count: number; value: number; avgDays: number; conversionRate: number }[];
+  lostReasons: { reason: string; count: number }[];
+  totalPipeline: number;
+  totalLost: number;
+}
+
+function AnalyticsPanel({ pipelineId }: { pipelineId: string }) {
+  const { data, isLoading } = useQuery<AnalyticsData>({
+    queryKey: ["pipeline-analytics", pipelineId],
+    queryFn: async () => {
+      const resp = await fetch(`${API_BASE}/api/pipeline/${pipelineId}/analytics`, { credentials: "include" });
+      if (!resp.ok) throw new Error("Failed");
+      return resp.json();
+    },
+    enabled: !!pipelineId,
+    staleTime: 60000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex gap-4 py-4">
+        {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 flex-1 rounded-lg" />)}
+      </div>
+    );
+  }
+  if (!data) return null;
+
+  const maxCount = Math.max(...(data.stages.map(s => s.count)), 1);
+  const maxLostCount = Math.max(...(data.lostReasons.map(r => r.count)), 1);
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 py-2">
+      {/* Conversion Funnel */}
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Funil de Conversão</p>
+        <div className="space-y-2">
+          {data.stages.map(s => (
+            <div key={s.stageId} className="flex items-center gap-3">
+              <div className="w-32 truncate text-xs font-medium shrink-0">{s.stageName}</div>
+              <div className="flex-1 bg-muted rounded-full h-5 overflow-hidden">
+                <div
+                  className="h-full rounded-full flex items-center px-2 transition-all"
+                  style={{
+                    width: `${Math.max((s.count / maxCount) * 100, 4)}%`,
+                    backgroundColor: s.color,
+                    opacity: 0.85,
+                  }}
+                />
+              </div>
+              <div className="text-xs text-muted-foreground w-14 shrink-0 text-right">
+                <span className="font-semibold text-foreground">{s.count}</span>
+                {s.avgDays > 0 && <span className="text-[10px] ml-1">({s.avgDays}d)</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Summary + Lost Reasons */}
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-lg border bg-card p-3">
+            <p className="text-xs text-muted-foreground">Em negociação</p>
+            <p className="text-lg font-bold text-primary">{formatCurrency(data.totalPipeline)}</p>
+          </div>
+          <div className="rounded-lg border bg-card p-3">
+            <p className="text-xs text-muted-foreground">Negócios perdidos</p>
+            <p className="text-lg font-bold text-destructive">{data.totalLost}</p>
+          </div>
+        </div>
+        {data.lostReasons.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Principais Motivos de Perda</p>
+            <div className="space-y-1.5">
+              {data.lostReasons.map(r => (
+                <div key={r.reason} className="flex items-center gap-2">
+                  <div className="flex-1 text-xs truncate">{r.reason}</div>
+                  <div className="w-24 bg-muted rounded-full h-3 overflow-hidden">
+                    <div
+                      className="h-full bg-red-400 rounded-full"
+                      style={{ width: `${(r.count / maxLostCount) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-medium w-5 text-right">{r.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {data.lostReasons.length === 0 && (
+          <p className="text-xs text-muted-foreground italic">Nenhum negócio perdido registrado ainda.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Card Components ──────────────────────────────────────────────────────────
 
 interface ClientCardProps {
   deal: Deal;
@@ -39,11 +231,13 @@ interface ClientCardProps {
   onDelete: (id: string) => void;
   onCreateReservation: (deal: Deal) => void;
   onViewReservation: (reservationId: string) => void;
+  onMarkLost?: (deal: Deal) => void;
   isFinalStage: boolean;
+  isLostStage?: boolean;
   isDragging?: boolean;
 }
 
-function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView360, onDelete, onCreateReservation, onViewReservation, isFinalStage, isDragging }: ClientCardProps) {
+function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView360, onDelete, onCreateReservation, onViewReservation, onMarkLost, isFinalStage, isLostStage, isDragging }: ClientCardProps) {
   const client = deal.clientId ? clientsById.get(deal.clientId) : undefined;
   const name = client?.name ?? deal.leadName ?? "Lead Desconhecido";
   const whatsapp = client?.whatsapp ?? deal.leadWhatsapp;
@@ -113,6 +307,15 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
                   Ver Reserva
                 </DropdownMenuItem>
               )}
+              {!isLostStage && onMarkLost && (
+                <DropdownMenuItem
+                  onClick={() => onMarkLost(deal)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <XCircle className="w-3.5 h-3.5 mr-2" />
+                  Marcar como Perdido
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
           <button onClick={() => onDelete(deal.id)} className="p-1 text-muted-foreground hover:text-destructive rounded">
@@ -165,7 +368,13 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
             Pago: {formatCurrency(client?.totalSpent ?? 0)}
           </p>
         )}
-        {isFinalStage && !hasReservation && (
+        {isLostStage && deal.lostReason && (
+          <div className="mt-2 flex items-center gap-1.5 px-2 py-1 rounded bg-red-50 border border-red-100">
+            <XCircle className="w-3 h-3 text-red-500 shrink-0" />
+            <span className="text-xs text-red-600 font-medium truncate">{deal.lostReason}</span>
+          </div>
+        )}
+        {isFinalStage && !hasReservation && !isLostStage && (
           <Button
             size="sm"
             variant="outline"
@@ -190,11 +399,11 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
   );
 }
 
-function DraggableCard({ deal, clientsById, tripsById, onEditClient, onView360, onDelete, onCreateReservation, onViewReservation, isFinalStage }: Omit<ClientCardProps, "isDragging">) {
+function DraggableCard({ deal, clientsById, tripsById, onEditClient, onView360, onDelete, onCreateReservation, onViewReservation, onMarkLost, isFinalStage, isLostStage }: Omit<ClientCardProps, "isDragging">) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: deal.id });
   return (
     <div ref={setNodeRef} {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing">
-      <ClientCardContent deal={deal} clientsById={clientsById} tripsById={tripsById} onEditClient={onEditClient} onView360={onView360} onDelete={onDelete} onCreateReservation={onCreateReservation} onViewReservation={onViewReservation} isFinalStage={isFinalStage} isDragging={isDragging} />
+      <ClientCardContent deal={deal} clientsById={clientsById} tripsById={tripsById} onEditClient={onEditClient} onView360={onView360} onDelete={onDelete} onCreateReservation={onCreateReservation} onViewReservation={onViewReservation} onMarkLost={onMarkLost} isFinalStage={isFinalStage} isLostStage={isLostStage} isDragging={isDragging} />
     </div>
   );
 }
@@ -222,13 +431,17 @@ export default function Pipeline() {
   const [defaultStageId, setDefaultStageId] = useState<string | undefined>(undefined);
   const [activeDragDeal, setActiveDragDeal] = useState<Deal | null>(null);
   const [client360Id, setClient360Id] = useState<string | null>(null);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [pendingLostDeal, setPendingLostDeal] = useState<{ dealId: string; stageId: string } | null>(null);
 
   const { data: stages, isLoading: loadingStages, refetch: refetchStages } = useListPipelineStages();
   const { data: deals, isLoading: loadingDeals, refetch: refetchDeals } = useListDeals({ status: DEAL_STATUS.OPEN });
+  const { data: lostDealsData, refetch: refetchLostDeals } = useListDeals({ status: DEAL_STATUS.LOST });
   const { data: allClients, refetch: refetchClients } = useListClients({ limit: 500, page: 1 });
   const { data: tripsData } = useListTrips({ limit: 200 });
   const moveDeal = useMoveDeal();
   const deleteDeal = useDeleteDeal();
+  const updateDeal = useUpdateDeal();
 
   const handleCreateReservation = (deal: Deal) => {
     const params = new URLSearchParams();
@@ -291,10 +504,33 @@ export default function Pipeline() {
     return d;
   }, [deals, search, filterStageId, filterClassification, filterCity, clientsById]);
 
-  const dealsByStage = (stageId: string) => filteredDeals.filter(d => d.stageId === stageId);
+  const perdidoStageId = useMemo(
+    () => stages?.find(s => s.name.toLowerCase() === "perdido")?.id ?? null,
+    [stages],
+  );
+
+  const filteredLostDeals = useMemo(() => {
+    let d = lostDealsData ?? [];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      d = d.filter(x => {
+        const client = x.clientId ? clientsById.get(x.clientId) : undefined;
+        return x.title.toLowerCase().includes(q) ||
+          (client?.name ?? "").toLowerCase().includes(q) ||
+          (x.leadName ?? "").toLowerCase().includes(q) ||
+          (x.leadWhatsapp ?? "").includes(q) ||
+          (client?.whatsapp ?? "").includes(q);
+      });
+    }
+    return d;
+  }, [lostDealsData, search, clientsById]);
+
+  const dealsByStage = (stageId: string, isLost: boolean) =>
+    isLost ? filteredLostDeals.filter(d => d.stageId === stageId) : filteredDeals.filter(d => d.stageId === stageId);
 
   const handleDragStart = (event: DragStartEvent) => {
-    const deal = (deals ?? []).find(d => d.id === event.active.id);
+    const allDeals = [...(deals ?? []), ...(lostDealsData ?? [])];
+    const deal = allDeals.find(d => d.id === event.active.id);
     setActiveDragDeal(deal ?? null);
   };
 
@@ -304,17 +540,44 @@ export default function Pipeline() {
     if (!over) return;
     const dealId = active.id as string;
     const targetStageId = over.id as string;
-    const deal = (deals ?? []).find(d => d.id === dealId);
+    const allDeals = [...(deals ?? []), ...(lostDealsData ?? [])];
+    const deal = allDeals.find(d => d.id === dealId);
     if (!deal || deal.stageId === targetStageId) return;
+
+    const targetStage = stages?.find(s => s.id === targetStageId);
+    if (targetStage?.name.toLowerCase() === "perdido") {
+      setPendingLostDeal({ dealId, stageId: targetStageId });
+      return;
+    }
     await moveDeal.mutateAsync({ id: dealId, data: { stageId: targetStageId } });
     refetchDeals();
+    refetchLostDeals();
     refetchStages();
+  };
+
+  const handleLostReasonConfirm = async (reason: string, obs: string) => {
+    if (!pendingLostDeal) return;
+    const lostReason = obs.trim() ? `${reason} — ${obs.trim()}` : reason;
+    await updateDeal.mutateAsync({
+      id: pendingLostDeal.dealId,
+      data: { stageId: pendingLostDeal.stageId, status: DEAL_STATUS.LOST as "lost", lostReason },
+    });
+    setPendingLostDeal(null);
+    refetchDeals();
+    refetchLostDeals();
+    refetchStages();
+  };
+
+  const handleMarkLost = (deal: Deal) => {
+    if (!perdidoStageId) return;
+    setPendingLostDeal({ dealId: deal.id, stageId: perdidoStageId });
   };
 
   const handleDelete = async (dealId: string) => {
     if (!confirm("Remover este lead do pipeline?")) return;
     await deleteDeal.mutateAsync({ id: dealId });
     refetchDeals();
+    refetchLostDeals();
     refetchStages();
   };
 
@@ -343,6 +606,7 @@ export default function Pipeline() {
 
   const totalValue = (deals ?? []).reduce((acc, d) => acc + d.value, 0);
   const hasFilters = !!(search || filterStageId !== "all" || filterClassification !== "all" || filterCity);
+  const pipelineId = stages?.[0]?.pipelineId ?? "";
 
   return (
     <div className="space-y-5 flex flex-col" style={{ height: "calc(100vh - 120px)" }}>
@@ -353,10 +617,28 @@ export default function Pipeline() {
             {deals?.length ?? 0} leads · {formatCurrency(totalValue)} no funil
           </p>
         </div>
-        <Button onClick={() => openNew()}>
-          <Plus className="w-4 h-4 mr-2" /> Novo Lead
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAnalyticsOpen(v => !v)}
+            className="gap-1.5"
+          >
+            <BarChart2 className="w-4 h-4" />
+            Analytics
+            {analyticsOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </Button>
+          <Button onClick={() => openNew()}>
+            <Plus className="w-4 h-4 mr-2" /> Novo Lead
+          </Button>
+        </div>
       </div>
+
+      {analyticsOpen && pipelineId && (
+        <div className="flex-shrink-0 rounded-xl border bg-card p-4 shadow-sm">
+          <AnalyticsPanel pipelineId={pipelineId} />
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
         <div className="relative flex-1 min-w-[180px]">
@@ -404,19 +686,30 @@ export default function Pipeline() {
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="flex gap-3 overflow-x-auto pb-6 flex-1">
             {stages?.map(stage => {
-              const stageDeals = dealsByStage(stage.id);
+              const isLostStage = stage.name.toLowerCase() === "perdido";
+              const stageDeals = dealsByStage(stage.id, isLostStage);
               const stageValue = stageDeals.reduce((acc, d) => acc + d.value, 0);
               return (
-                <div key={stage.id} className="w-64 shrink-0 flex flex-col rounded-xl border bg-muted/30">
+                <div
+                  key={stage.id}
+                  className={`w-64 shrink-0 flex flex-col rounded-xl border bg-muted/30 ${isLostStage ? "border-red-200 bg-red-50/30" : ""}`}
+                >
                   <div className="flex items-center justify-between px-3 pt-3 pb-2 flex-shrink-0">
                     <div className="flex items-center gap-2">
                       <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: stage.color }} />
                       <span className="text-sm font-semibold">{stage.name}</span>
-                      <Badge variant="secondary" className="text-xs px-1.5 h-5">{stageDeals.length}</Badge>
+                      <Badge
+                        variant={isLostStage ? "destructive" : "secondary"}
+                        className="text-xs px-1.5 h-5"
+                      >
+                        {stageDeals.length}
+                      </Badge>
                     </div>
-                    <button onClick={() => openNew(stage.id)} className="text-muted-foreground hover:text-primary p-1 rounded">
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
+                    {!isLostStage && (
+                      <button onClick={() => openNew(stage.id)} className="text-muted-foreground hover:text-primary p-1 rounded">
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                   {stageValue > 0 && (
                     <p className="px-3 pb-1.5 text-xs text-muted-foreground">{formatCurrency(stageValue)}</p>
@@ -434,16 +727,24 @@ export default function Pipeline() {
                         onDelete={handleDelete}
                         onCreateReservation={handleCreateReservation}
                         onViewReservation={handleViewReservation}
+                        onMarkLost={handleMarkLost}
                         isFinalStage={stage.isFinal}
+                        isLostStage={isLostStage}
                       />
                     ))}
-                    {stageDeals.length === 0 && (
+                    {stageDeals.length === 0 && !isLostStage && (
                       <button
                         onClick={() => openNew(stage.id)}
                         className="flex items-center justify-center h-16 rounded-lg border-2 border-dashed text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors w-full"
                       >
                         + Adicionar lead
                       </button>
+                    )}
+                    {stageDeals.length === 0 && isLostStage && (
+                      <div className="flex flex-col items-center justify-center h-16 text-xs text-muted-foreground gap-1">
+                        <XCircle className="w-4 h-4 opacity-40" />
+                        <span>Nenhum negócio perdido</span>
+                      </div>
                     )}
                   </DroppableColumn>
                 </div>
@@ -479,6 +780,12 @@ export default function Pipeline() {
         defaultStageId={defaultStageId}
       />
       <Client360Modal open={!!client360Id} onClose={() => setClient360Id(null)} clientId={client360Id} />
+
+      <LostReasonModal
+        open={!!pendingLostDeal}
+        onClose={() => setPendingLostDeal(null)}
+        onConfirm={handleLostReasonConfirm}
+      />
     </div>
   );
 }

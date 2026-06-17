@@ -3089,6 +3089,7 @@ export const UpdatePipelineResponse = zod.object({
  */
 export const ListPipelineStagesResponseItem = zod.object({
   id: zod.string(),
+  pipelineId: zod.string(),
   name: zod.string(),
   color: zod.string(),
   order: zod.number(),
