@@ -63,6 +63,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { extractApiError } from "@/lib/apiError";
 import {
   Building2,
@@ -99,7 +100,6 @@ import {
   GripVertical,
   ChevronLeft,
   ChevronRight,
-  XCircle,
 } from "lucide-react";
 import { formatCurrencyBRL } from "@/lib/utils";
 import { ROLES, INVOICE_STATUS } from "@workspace/permissions";
@@ -796,7 +796,16 @@ function PlanTab() {
           ...new Set(visiblePlans.flatMap((p) => p.supportedFeatures ?? [])),
         ].filter((slug) => slug in FEATURE_LABELS);
 
+        // For each feature, find the cheapest plan (by monthlyPrice) that includes it.
+        const sortedByPrice = [...visiblePlans].sort((a, b) => Number(a.monthlyPrice) - Number(b.monthlyPrice));
+        const minPlanForFeature: Record<string, string> = {};
+        for (const slug of allFeatureSlugs) {
+          const minPlan = sortedByPrice.find((p) => (p.supportedFeatures ?? []).includes(slug));
+          if (minPlan) minPlanForFeature[slug] = minPlan.name;
+        }
+
         return (
+          <TooltipProvider>
           <div className={`grid gap-4 ${visiblePlans.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
             {visiblePlans.map((plan) => {
               const isCurrentPlan = plan.slug === subData?.tenant?.planId || plan.id === subData?.tenant?.planId;
@@ -837,15 +846,26 @@ function PlanTab() {
                       <div className="pt-2 mt-2 border-t space-y-1">
                         {allFeatureSlugs.map((slug) => {
                           const included = planFeatures.has(slug);
+                          const minPlanName = minPlanForFeature[slug];
                           return (
                             <div
                               key={slug}
                               className={`flex items-center gap-1.5 text-xs ${included ? "text-foreground" : "text-muted-foreground/50"}`}
                             >
-                              {included
-                                ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
-                                : <XCircle className="w-3.5 h-3.5 shrink-0" />
-                              }
+                              {included ? (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                              ) : (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Lock className="w-3.5 h-3.5 shrink-0 cursor-default" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {minPlanName
+                                      ? `Disponível a partir do plano ${minPlanName}`
+                                      : "Não disponível neste plano"}
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
                               {FEATURE_LABELS[slug]}
                             </div>
                           );
@@ -877,6 +897,7 @@ function PlanTab() {
               );
             })}
           </div>
+          </TooltipProvider>
         );
       })()}
 
