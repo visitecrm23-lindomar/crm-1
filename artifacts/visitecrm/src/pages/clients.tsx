@@ -1150,6 +1150,7 @@ export default function Clients() {
   const [editClient, setEditClient] = useState<Client | null>(null);
   const [viewClientId, setViewClientId] = useState<string | null>(null);
   const [deleteClient, setDeleteClient] = useState<Client | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [birthdayFilter, setBirthdayFilter] = useState(() => {
     const params = new URLSearchParams(searchStr);
     return params.get("filter") === "birthday";
@@ -1250,6 +1251,7 @@ export default function Clients() {
       await deleteClientMutation.mutateAsync({ id: deleteClient.id });
       toast({ title: "Cliente excluído com sucesso" });
       setDeleteClient(null);
+      setDeleteConfirmText("");
       refetch();
     } catch {
       toast({ title: "Erro ao excluir cliente", variant: "destructive" });
@@ -1644,7 +1646,7 @@ export default function Clients() {
       <Client360Modal open={!!viewClientId} onClose={() => setViewClientId(null)} clientId={viewClientId} />
       <CsvImportModal open={isImportOpen} onClose={() => setIsImportOpen(false)} onImported={() => refetch()} />
 
-      <AlertDialog open={!!deleteClient} onOpenChange={open => { if (!open) setDeleteClient(null); }}>
+      <AlertDialog open={!!deleteClient} onOpenChange={open => { if (!open) { setDeleteClient(null); setDeleteConfirmText(""); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir cliente?</AlertDialogTitle>
@@ -1656,11 +1658,24 @@ export default function Clients() {
               <span className="block mt-2 text-destructive font-medium">O histórico de reservas e pagamentos é preservado. Esta ação não pode ser desfeita.</span>
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="px-1 py-2">
+            <Label htmlFor="delete-client-confirm" className="text-sm mb-1.5 block">
+              Para confirmar, digite <span className="font-semibold">EXCLUIR</span> abaixo:
+            </Label>
+            <Input
+              id="delete-client-confirm"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder="EXCLUIR"
+              disabled={deleteClientMutation.isPending}
+              autoComplete="off"
+            />
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteClientMutation.isPending}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteConfirm}
-              disabled={deleteClientMutation.isPending}
+              disabled={deleteClientMutation.isPending || deleteConfirmText !== "EXCLUIR"}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleteClientMutation.isPending ? "Excluindo..." : "Excluir cliente"}
