@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import {
   clientsTable,
@@ -19,6 +19,8 @@ import {
 } from "@workspace/db";
 import { eq, and, gte, lte, lt, sql, isNotNull } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
+import { roundMoney } from "../lib/pricing";
 import {
   ROLES,
   RESERVATION_STATUS,
@@ -322,13 +324,13 @@ async function buildInsightsSummary(tenantId: string, period: string) {
     },
     commercial: {
       openDeals, openDealsPrev: openDealsPrevCount, wonDeals, wonDealsPrev: wonDealsPrevCount,
-      pipelineValue, pipelineValuePrev, avgTicket: Math.round(avgTicket * 100) / 100,
-      avgTicketPrev: Math.round(avgTicketPrev * 100) / 100, newReservations, newReservationsPrev,
+      pipelineValue, pipelineValuePrev, avgTicket: roundMoney(avgTicket),
+      avgTicketPrev: roundMoney(avgTicketPrev), newReservations, newReservationsPrev,
       cancellations, cancellationsPrev, conversionRate: Math.round(conversionRate * 10) / 10,
       conversionRatePrev: Math.round(conversionRatePrev * 10) / 10, totalLeads, totalLeadsPrev,
       repeatClients, repeatClientsPrev, activeClients, activeClientsPrev: activeClientsPrevCount,
-      ltv: Math.round(ltv * 100) / 100, ltvPrev: Math.round(ltvPrev * 100) / 100,
-      cac: Math.round(cac * 100) / 100, cacPrev: Math.round(cacPrev * 100) / 100,
+      ltv: roundMoney(ltv), ltvPrev: roundMoney(ltvPrev),
+      cac: roundMoney(cac), cacPrev: roundMoney(cacPrev),
     },
     marketing: {
       newClients, newClientsPrev, referrals, referralsPrev: referralsPrevCount,
@@ -337,15 +339,15 @@ async function buildInsightsSummary(tenantId: string, period: string) {
       activeCampaigns, newCampaigns, newCampaignsPrev, sentCampaigns, totalSentMessages,
       totalOpenedMessages, totalClickedMessages, totalRecipients,
       openRate: Math.round(openRate * 10) / 10, clickRate: Math.round(clickRate * 10) / 10,
-      campaignRoi: Math.round(campaignRoi * 100) / 100, campaignsByType,
+      campaignRoi: roundMoney(campaignRoi), campaignsByType,
     },
     financial: {
       totalRevenue, totalRevenuePrev, totalExpenses, totalExpensesPrev, commissions, commissionsPrev,
       netProfit, netProfitPrev, profitMargin: Math.round(profitMargin * 10) / 10,
       profitMarginPrev: Math.round(profitMarginPrev * 10) / 10,
       receivable: Number(receivable[0]?.total ?? 0), payable: Number(payable[0]?.total ?? 0),
-      overdue: Number(overdue[0]?.total ?? 0), avgTicket: Math.round(avgTicket * 100) / 100,
-      avgTicketPrev: Math.round(avgTicketPrev * 100) / 100, expenseCategories,
+      overdue: Number(overdue[0]?.total ?? 0), avgTicket: roundMoney(avgTicket),
+      avgTicketPrev: roundMoney(avgTicketPrev), expenseCategories,
     },
     operational: {
       activeTrips, newTrips, newTripsPrev: newTripsPrevCount,
@@ -353,7 +355,7 @@ async function buildInsightsSummary(tenantId: string, period: string) {
       avgReservationsPerTrip: Math.round(avgReservationsPerTrip * 10) / 10,
       avgReservationsPerTripPrev: Math.round(avgReservationsPerTripPrev * 10) / 10,
       confirmedReservations, confirmedReservationsPrev, cancellations, cancellationsPrev,
-      revenuePerTrip: Math.round(revenuePerTrip * 100) / 100, revenuePerTripPrev: Math.round(revenuePerTripPrev * 100) / 100,
+      revenuePerTrip: roundMoney(revenuePerTrip), revenuePerTripPrev: roundMoney(revenuePerTripPrev),
       totalSuppliers, newSuppliers, newSuppliersPrev, checkedInPassengers, checkedInPassengersPrev,
       averageNps, averageNpsPrev,
     },
@@ -368,8 +370,8 @@ async function buildInsightsSummary(tenantId: string, period: string) {
     expansion: {
       newTrips, newTripsPrev: newTripsPrevCount, newDestinations90d, newDestinationsPrev90d,
       totalDestinations, newSuppliers, newSuppliersPrev, totalSuppliers,
-      revenuePerTrip: Math.round(revenuePerTrip * 100) / 100, revenuePerTripPrev: Math.round(revenuePerTripPrev * 100) / 100,
-      topDestinations, avgTicket: Math.round(avgTicket * 100) / 100, avgTicketPrev: Math.round(avgTicketPrev * 100) / 100,
+      revenuePerTrip: roundMoney(revenuePerTrip), revenuePerTripPrev: roundMoney(revenuePerTripPrev),
+      topDestinations, avgTicket: roundMoney(avgTicket), avgTicketPrev: roundMoney(avgTicketPrev),
       totalRevenue, totalRevenuePrev,
       momGrowth: momGrowth !== null ? Math.round(momGrowth * 10) / 10 : null,
       yoyGrowth: yoyGrowth !== null ? Math.round(yoyGrowth * 10) / 10 : null,
@@ -445,12 +447,12 @@ CONTEXTO DA AGÊNCIA:
 }
 
 // ─── GET /insights/summary ────────────────────────────────────────────────────
-router.get("/insights/summary", async (req, res): Promise<void> => {
+router.get("/insights/summary", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role === ROLES.SALES || me.role === ROLES.CLIENT) {
-      res.status(403).json({ error: "Forbidden" });
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
       return;
     }
     const period = (req.query.period as string) || "month";
@@ -458,17 +460,17 @@ router.get("/insights/summary", async (req, res): Promise<void> => {
     res.json(data);
   } catch (err) {
     console.error("[insights/summary]", err);
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
 // ─── POST /insights/chat ──────────────────────────────────────────────────────
-router.post("/insights/chat", async (req, res): Promise<void> => {
+router.post("/insights/chat", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role === ROLES.SALES || me.role === ROLES.CLIENT) {
-      res.status(403).json({ error: "Forbidden" });
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
       return;
     }
 
@@ -478,7 +480,7 @@ router.post("/insights/chat", async (req, res): Promise<void> => {
     };
 
     if (!Array.isArray(messages) || messages.length === 0) {
-      res.status(400).json({ error: "messages is required" });
+      next(new ValidationError("messages is required", "VALIDATION_ERROR"));
       return;
     }
 
@@ -531,7 +533,7 @@ router.post("/insights/chat", async (req, res): Promise<void> => {
   } catch (err) {
     console.error("[insights/chat]", err);
     if (!res.headersSent) {
-      res.status(500).json({ error: "Internal server error" });
+      next(err);
     } else {
       res.write(`data: ${JSON.stringify({ error: "Erro interno. Tente novamente." })}\n\n`);
       res.end();
@@ -668,12 +670,12 @@ async function tenantName(tenantId: string): Promise<string> {
 }
 
 // ─── GET /insights/revenue-forecast ───────────────────────────────────────────
-router.get("/insights/revenue-forecast", async (req, res): Promise<void> => {
+router.get("/insights/revenue-forecast", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role === ROLES.SALES || me.role === ROLES.CLIENT) {
-      res.status(403).json({ error: "Forbidden" });
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
       return;
     }
 
@@ -729,7 +731,7 @@ router.get("/insights/revenue-forecast", async (req, res): Promise<void> => {
     res.json(data);
   } catch (err) {
     console.error("[insights/revenue-forecast]", err);
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -765,12 +767,12 @@ async function futureTripsOccupancy(tenantId: string): Promise<OccupancyTrip[]> 
 }
 
 // ─── GET /insights/occupancy-risk ─────────────────────────────────────────────
-router.get("/insights/occupancy-risk", async (req, res): Promise<void> => {
+router.get("/insights/occupancy-risk", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role === ROLES.SALES || me.role === ROLES.CLIENT) {
-      res.status(403).json({ error: "Forbidden" });
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
       return;
     }
 
@@ -822,17 +824,17 @@ router.get("/insights/occupancy-risk", async (req, res): Promise<void> => {
     res.json(data);
   } catch (err) {
     console.error("[insights/occupancy-risk]", err);
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
 // ─── POST /insights/simulator ─────────────────────────────────────────────────
-router.post("/insights/simulator", async (req, res): Promise<void> => {
+router.post("/insights/simulator", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role === ROLES.SALES || me.role === ROLES.CLIENT) {
-      res.status(403).json({ error: "Forbidden" });
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
       return;
     }
 
@@ -887,7 +889,7 @@ router.post("/insights/simulator", async (req, res): Promise<void> => {
     res.json(data);
   } catch (err) {
     console.error("[insights/simulator]", err);
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -913,12 +915,12 @@ SNAPSHOT (últimos ~90 dias):
 }
 
 // ─── POST /insights/ask (streaming) ───────────────────────────────────────────
-router.post("/insights/ask", async (req, res): Promise<void> => {
+router.post("/insights/ask", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role === ROLES.SALES || me.role === ROLES.CLIENT) {
-      res.status(403).json({ error: "Forbidden" });
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
       return;
     }
 
@@ -926,7 +928,7 @@ router.post("/insights/ask", async (req, res): Promise<void> => {
       messages: Array<{ role: "user" | "assistant"; content: string }>;
     };
     if (!Array.isArray(messages) || messages.length === 0) {
-      res.status(400).json({ error: "messages is required" });
+      next(new ValidationError("messages is required", "VALIDATION_ERROR"));
       return;
     }
 
@@ -964,7 +966,7 @@ router.post("/insights/ask", async (req, res): Promise<void> => {
   } catch (err) {
     console.error("[insights/ask]", err);
     if (!res.headersSent) {
-      res.status(500).json({ error: "Internal server error" });
+      next(err);
     } else {
       res.write(`data: ${JSON.stringify({ error: "Erro interno. Tente novamente." })}\n\n`);
       res.end();

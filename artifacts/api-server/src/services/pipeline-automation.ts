@@ -92,8 +92,8 @@ export async function runPipelineTripEndedCron(): Promise<void> {
     .where(
       and(
         isNotNull(tripsTable.returnDate),
-        lte(tripsTable.returnDate as unknown as Date, now),
-        gte(tripsTable.returnDate as unknown as Date, sevenDaysAgo),
+        lte(sql`${tripsTable.returnDate}`, sql`${now}`),
+        gte(sql`${tripsTable.returnDate}`, sql`${sevenDaysAgo}`),
       ),
     );
 

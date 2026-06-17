@@ -12,6 +12,7 @@ import { hasSeatMapFeature } from "../lib/plan-features";
 import { deriveAgeCategory, getAgeYears } from "../lib/passenger";
 import { CreateTripBody, UpdateTripBody } from "@workspace/api-zod";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
+import { scheduleCalendarSyncTrip, scheduleCalendarDeleteEventsForTrip } from "../lib/google-calendar/schedule-sync";
 import { sendManifestEmail } from "@workspace/email";
 import { getPdfQueue } from "../queues/index";
 import { areWorkersEnabled } from "../lib/redis";
@@ -384,9 +385,7 @@ router.post("/trips", async (req, res, next: NextFunction): Promise<void> => {
       .limit(1);
     if (!trip) { next(new AppError("Failed to create trip", 500, "TRIP_CREATE_FAILED")); return; }
     res.status(201).json(formatTrip(trip));
-    CalendarSyncService.syncTrip(id).catch((err) => {
-      req.log.warn({ err, tripId: id, context: "trips.create" }, "Calendar sync falhou — continuando");
-    });
+    scheduleCalendarSyncTrip(id).catch(() => {});
   } catch (err) {
     next(err);
   }
@@ -582,9 +581,7 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
       await deleteOrphanedFile(oldCoverImage, parsed.data.coverImage, req.log);
     }
     res.json(formatTrip(trip));
-    CalendarSyncService.syncTrip(req.params.id).catch((err) => {
-      req.log.warn({ err, tripId: req.params.id, context: "trips.update" }, "Calendar sync falhou — continuando");
-    });
+    scheduleCalendarSyncTrip(req.params.id).catch(() => {});
   } catch (err) {
     next(err);
   }
@@ -605,9 +602,7 @@ router.delete("/trips/:id", async (req, res, next: NextFunction): Promise<void> 
       await deleteOrphanedFile(existing.coverImage, null, req.log);
     }
     res.json({ success: true });
-    CalendarSyncService.deleteEventsForTrip(req.params.id).catch((err) => {
-      req.log.warn({ err, tripId: req.params.id, context: "trips.delete" }, "Calendar cleanup falhou — continuando");
-    });
+    scheduleCalendarDeleteEventsForTrip(req.params.id).catch(() => {});
   } catch (err) {
     next(err);
   }
@@ -954,7 +949,7 @@ router.get("/trips/:id/boarding-panel", async (req, res, next: NextFunction): Pr
     }
 
     const reservationIds = reservations.map(r => r.id);
-    const clientIds = [...new Set(reservations.map(r => r.clientId))];
+    const clientIds = [...new Set(reservations.map(r => r.clientId).filter((id): id is string => id !== null))];
 
     const [passengers, clients, [tenant]] = await Promise.all([
       db.select().from(passengersTable).where(inArray(passengersTable.reservationId, reservationIds)),
@@ -967,7 +962,7 @@ router.get("/trips/:id/boarding-panel", async (req, res, next: NextFunction): Pr
 
     const boardingPassengers = passengers.map(p => {
       const reservation = reservationMap.get(p.reservationId);
-      const client = reservation ? clientMap.get(reservation.clientId) : undefined;
+      const client = reservation?.clientId ? clientMap.get(reservation.clientId) : undefined;
       const effectiveBoardingLocationId = p.boardingLocationId ?? reservation?.boardingLocationId ?? null;
       return {
         id: p.id,
@@ -1226,14 +1221,14 @@ router.post("/trips/:id/sync-passengers", async (req, res, next: NextFunction): 
       return;
     }
 
-    const clientIds = [...new Set(reservationsNeedingPassenger.map(r => r.clientId))];
+    const clientIds = [...new Set(reservationsNeedingPassenger.map(r => r.clientId).filter((id): id is string => id !== null))];
     const clients = await db.select().from(clientsTable)
       .where(inArray(clientsTable.id, clientIds));
     const clientMap = new Map(clients.map(c => [c.id, c]));
 
     let created = 0;
     for (const r of reservationsNeedingPassenger) {
-      const client = clientMap.get(r.clientId);
+      const client = r.clientId ? clientMap.get(r.clientId) : undefined;
       if (!client) continue;
       const inserted = await db.insert(passengersTable).values({
         id: generateId(),

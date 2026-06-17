@@ -123,6 +123,12 @@ vi.mock("@workspace/db", () => ({
   referralTrackingTable: {},
   paymentsTable: {},
   commissionsTable: {},
+  clientNpsResponsesTable: {},
+  clientFavoritesTable: {},
+  tripMediaTable: {},
+  clientAchievementsTable: {},
+  clientDreamDestinationsTable: {},
+  clientNotificationsTable: {},
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -149,6 +155,52 @@ vi.mock("../lib/tenant.js", () => ({
   MANAGEMENT_ROLES: ["admin", "manager"],
 }));
 
+vi.mock("../queues/email-helpers.js", () => ({
+  dispatchReferralWelcomeEmail: vi.fn().mockResolvedValue(undefined),
+  enqueueReferralBonusPaidEmail: vi.fn().mockResolvedValue(undefined),
+  sendWelcomeEmail: vi.fn().mockResolvedValue(undefined),
+  enqueueReservationConfirmationEmail: vi.fn().mockResolvedValue(undefined),
+  enqueueReservationCancellationEmail: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../queues/index.js", () => ({
+  getPdfQueue: vi.fn().mockReturnValue({ add: vi.fn().mockResolvedValue(undefined) }),
+}));
+
+vi.mock("../lib/client-sse.js", () => ({
+  addClientSseConnection: vi.fn(),
+  removeClientSseConnection: vi.fn(),
+}));
+
+vi.mock("../lib/client-notifications.js", () => ({
+  getRecentNotifications: vi.fn().mockResolvedValue([]),
+  getUnreadCount: vi.fn().mockResolvedValue(0),
+  markAllRead: vi.fn().mockResolvedValue(undefined),
+  insertClientNotification: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../lib/redis.js", () => ({
+  areWorkersEnabled: vi.fn().mockResolvedValue(false),
+  getRedis: vi.fn().mockReturnValue(null),
+}));
+
+vi.mock("../lib/referral-code.js", () => ({
+  generateAndAssignReferralCode: vi.fn().mockResolvedValue("REF-TEST"),
+}));
+
+vi.mock("../lib/voucher-pdf.js", () => ({
+  generateVoucherPdf: vi.fn().mockResolvedValue(Buffer.from("fake-pdf")),
+}));
+
+vi.mock("../lib/referral-tiers.js", () => ({
+  computeReferralTier: vi.fn().mockReturnValue({
+    tier: { level: "bronze", label: "Bronze", bonusMultiplier: 1, minReferrals: 0 },
+    nextTier: null,
+    progress: 0,
+  }),
+  DEFAULT_TIERS: [],
+}));
+
 // ---------------------------------------------------------------------------
 // Import route + helpers AFTER all mocks
 // ---------------------------------------------------------------------------
@@ -156,6 +208,7 @@ vi.mock("../lib/tenant.js", () => ({
 import { requireAuth } from "../lib/tenant.js";
 import clientPortalRouter from "../routes/client-portal.js";
 import { errorHandler } from "../middlewares/errorHandler.js";
+import { computeReferralTier } from "../lib/referral-tiers.js";
 
 // ---------------------------------------------------------------------------
 // App builder
@@ -243,7 +296,11 @@ function setupDefaultDbMocks() {
   // select chain
   mockSelect.mockReturnValue({ from: mockFrom });
   mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit, innerJoin: mockInnerJoin });
-  mockWhere.mockReturnValue({ limit: mockLimit, groupBy: mockGroupBy, orderBy: mockOrderBy });
+  // mockWhere returns a thenable (resolves to []) that also exposes chain methods so that
+  // both `await db.select().from(X).where(Y)` and `db.select().from(X).where(Y).limit(1)` work.
+  mockWhere.mockReturnValue(
+    Object.assign(Promise.resolve([]), { limit: mockLimit, groupBy: mockGroupBy, orderBy: mockOrderBy }),
+  );
   mockInnerJoin.mockReturnValue({ where: mockInnerJoinWhere });
   mockInnerJoinWhere.mockReturnValue({ orderBy: mockOrderBy });
   mockLimit.mockResolvedValue([]);
@@ -254,6 +311,13 @@ function setupDefaultDbMocks() {
   mockUpdate.mockReturnValue({ set: mockSet });
   mockSet.mockReturnValue({ where: mockSetWhere });
   mockSetWhere.mockResolvedValue([]);
+
+  // re-establish computeReferralTier after vi.resetAllMocks() clears it
+  vi.mocked(computeReferralTier).mockReturnValue({
+    tier: { level: "bronze", label: "Bronze", bonusMultiplier: 1, minReferrals: 0 },
+    nextTier: null,
+    progress: 0,
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -1,11 +1,11 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db, loyaltyProgramsTable, loyaltyMembersTable, loyaltyTransactionsTable, clientsTable, paymentsTable } from "@workspace/db";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
-import { requireAuth } from "../lib/tenant";
+import { requireAuth, ADMIN_ROLES } from '../lib/tenant';
 import { loyaltyAwardPoints, calculateTier } from "../lib/loyalty-helpers";
-import { ADMIN_ROLES } from '../lib/tenant';
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { ROLES, PAYMENT_STATUS, PAYMENT_TYPE } from "@workspace/permissions";
 import { roundMoney } from "../lib/pricing";
 
@@ -36,7 +36,7 @@ const CreateTransactionBody = z.object({
   referenceType: z.string().optional(),
 });
 
-router.get("/loyalty-programs", async (req, res): Promise<void> => {
+router.get("/loyalty-programs", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -45,48 +45,45 @@ router.get("/loyalty-programs", async (req, res): Promise<void> => {
       .orderBy(desc(loyaltyProgramsTable.createdAt));
     res.json(programs);
   } catch (err) {
-    req.log.error({ err }, "Error listing loyalty programs");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/loyalty-programs", async (req, res): Promise<void> => {
+router.post("/loyalty-programs", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateProgramBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(loyaltyProgramsTable).values({ id, tenantId: me.tenantId, ...parsed.data });
     const [prog] = await db.select().from(loyaltyProgramsTable).where(eq(loyaltyProgramsTable.id, id)).limit(1);
     res.status(201).json(prog);
   } catch (err) {
-    req.log.error({ err }, "Error creating loyalty program");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/loyalty-programs/:id", async (req, res): Promise<void> => {
+router.patch("/loyalty-programs/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateProgramBody.partial().safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     await db.update(loyaltyProgramsTable).set(parsed.data)
       .where(and(eq(loyaltyProgramsTable.id, req.params.id), eq(loyaltyProgramsTable.tenantId, me.tenantId)));
     const [prog] = await db.select().from(loyaltyProgramsTable)
       .where(and(eq(loyaltyProgramsTable.id, req.params.id), eq(loyaltyProgramsTable.tenantId, me.tenantId))).limit(1);
-    if (!prog) { res.status(404).json({ error: "Not found" }); return; }
+    if (!prog) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(prog);
   } catch (err) {
-    req.log.error({ err }, "Error updating loyalty program");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/clients/:clientId/loyalty", async (req, res): Promise<void> => {
+router.get("/clients/:clientId/loyalty", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -98,7 +95,7 @@ router.get("/clients/:clientId/loyalty", async (req, res): Promise<void> => {
         .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.userId, me.id)))
         .limit(1);
       if (!ownClient || ownClient.id !== clientId) {
-        res.status(403).json({ error: "Forbidden" });
+        next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
         return;
       }
     } else if (me.role === ROLES.SALES) {
@@ -107,7 +104,7 @@ router.get("/clients/:clientId/loyalty", async (req, res): Promise<void> => {
         .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.id, clientId)))
         .limit(1);
       if (!targetClient || targetClient.createdById !== me.id) {
-        res.status(403).json({ error: "Forbidden" });
+        next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
         return;
       }
     }
@@ -119,7 +116,7 @@ router.get("/clients/:clientId/loyalty", async (req, res): Promise<void> => {
       )).limit(1);
 
     if (!member) {
-      res.status(404).json({ error: "Client is not a loyalty member" });
+      next(new NotFoundError("Client is not a loyalty member", "MEMBER_NOT_FOUND"));
       return;
     }
 
@@ -127,7 +124,7 @@ router.get("/clients/:clientId/loyalty", async (req, res): Promise<void> => {
       .where(eq(loyaltyProgramsTable.id, member.programId)).limit(1);
 
     if (!program) {
-      res.status(404).json({ error: "Loyalty program not found" });
+      next(new NotFoundError("Loyalty program not found", "PROGRAM_NOT_FOUND"));
       return;
     }
 
@@ -146,12 +143,11 @@ router.get("/clients/:clientId/loyalty", async (req, res): Promise<void> => {
       maxRedeemableAmount,
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching client loyalty info");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/loyalty-members", async (req, res): Promise<void> => {
+router.get("/loyalty-members", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -160,29 +156,27 @@ router.get("/loyalty-members", async (req, res): Promise<void> => {
       .orderBy(desc(loyaltyMembersTable.joinedAt));
     res.json(members);
   } catch (err) {
-    req.log.error({ err }, "Error listing loyalty members");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/loyalty-members", async (req, res): Promise<void> => {
+router.post("/loyalty-members", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateMemberBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(loyaltyMembersTable).values({ id, tenantId: me.tenantId, ...parsed.data });
     const [member] = await db.select().from(loyaltyMembersTable).where(eq(loyaltyMembersTable.id, id)).limit(1);
     res.status(201).json(member);
   } catch (err) {
-    req.log.error({ err }, "Error creating loyalty member");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/loyalty-transactions", async (req, res): Promise<void> => {
+router.get("/loyalty-transactions", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -191,33 +185,31 @@ router.get("/loyalty-transactions", async (req, res): Promise<void> => {
       .orderBy(desc(loyaltyTransactionsTable.createdAt));
     res.json(transactions);
   } catch (err) {
-    req.log.error({ err }, "Error listing loyalty transactions");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/loyalty-transactions", async (req, res): Promise<void> => {
+router.post("/loyalty-transactions", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateTransactionBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(loyaltyTransactionsTable).values({ id, tenantId: me.tenantId, ...parsed.data });
     const [tx] = await db.select().from(loyaltyTransactionsTable).where(eq(loyaltyTransactionsTable.id, id)).limit(1);
     res.status(201).json(tx);
   } catch (err) {
-    req.log.error({ err }, "Error creating loyalty transaction");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/loyalty/sync", async (req, res): Promise<void> => {
+router.post("/loyalty/sync", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const members = await db
       .select()
@@ -281,8 +273,7 @@ router.post("/loyalty/sync", async (req, res): Promise<void> => {
 
     res.json({ membersUpdated: updatedMemberIds.size, transactionsCreated });
   } catch (err) {
-    req.log.error({ err }, "Error syncing loyalty points");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

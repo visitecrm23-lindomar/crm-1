@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import {
   storesTable,
@@ -18,6 +18,7 @@ import { z } from "zod/v4";
 import { UTApi } from "uploadthing/server";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { deleteOrphanedFile, deleteOrphanedImages } from "../lib/uploadthing";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { STORE_ORDER_STATUS, STORE_PAYMENT_STATUS } from "@workspace/permissions";
@@ -212,15 +213,15 @@ const InitStoreBody = z.object({
   paymentMethods: z.array(z.string()).optional(),
 });
 
-router.post("/store/init", async (req, res): Promise<void> => {
+router.post("/store/init", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const existing = await getStoreForTenant(me.tenantId);
-    if (existing) { res.status(409).json({ error: "Store already exists", store: redactStore(existing as unknown as Record<string, unknown>) }); return; }
+    if (existing) { next(new ConflictError("Store already exists", "CONFLICT")); return; }
     const parsed = InitStoreBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(storesTable).values({
       id,
@@ -236,35 +237,33 @@ router.post("/store/init", async (req, res): Promise<void> => {
   } catch (err: unknown) {
     const dbErr = err as { code?: string };
     if (dbErr?.code === "23505") {
-      res.status(409).json({ error: "Slug já está em uso. Escolha outro URL para sua loja." });
+      next(new ConflictError("Slug já está em uso. Escolha outro URL para sua loja.", "CONFLICT"));
       return;
     }
-    req.log.error({ err }, "Error initializing store");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/store/settings", async (req, res): Promise<void> => {
+router.get("/store/settings", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const store = await getStoreForTenant(me.tenantId);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     res.json(redactStore(store as unknown as Record<string, unknown>));
   } catch (err) {
-    req.log.error({ err }, "Error getting store settings");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.put("/store/settings", async (req, res): Promise<void> => {
+router.put("/store/settings", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = StoreSettingsBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const existingStore = await getStoreForTenant(me.tenantId);
     if (!existingStore) {
       const id = generateId();
@@ -299,37 +298,35 @@ router.put("/store/settings", async (req, res): Promise<void> => {
       .where(eq(storesTable.tenantId, me.tenantId)).limit(1);
     res.json(redactStore(updated as unknown as Record<string, unknown>));
   } catch (err) {
-    req.log.error({ err }, "Error updating store settings");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/store/categories", async (req, res): Promise<void> => {
+router.get("/store/categories", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const store = await getStoreForTenant(me.tenantId);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const categories = await db.select().from(storeCategoriesTable)
       .where(eq(storeCategoriesTable.storeId, store.id))
       .orderBy(asc(storeCategoriesTable.order));
     res.json(categories);
   } catch (err) {
-    req.log.error({ err }, "Error listing store categories");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/store/categories", async (req, res): Promise<void> => {
+router.post("/store/categories", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const store = await getStoreForTenant(me.tenantId);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const parsed = CategoryBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(storeCategoriesTable).values({
       id, storeId: store.id,
@@ -348,74 +345,70 @@ router.post("/store/categories", async (req, res): Promise<void> => {
       .where(eq(storeCategoriesTable.id, id)).limit(1);
     res.status(201).json(cat);
   } catch (err) {
-    req.log.error({ err }, "Error creating store category");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.put("/store/categories/:id", async (req, res): Promise<void> => {
+router.put("/store/categories/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const store = await getStoreForTenant(me.tenantId);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const parsed = CategoryBody.partial().safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     await db.update(storeCategoriesTable).set(parsed.data as Record<string, unknown>)
       .where(and(eq(storeCategoriesTable.id, req.params.id), eq(storeCategoriesTable.storeId, store.id)));
     const [cat] = await db.select().from(storeCategoriesTable)
       .where(and(eq(storeCategoriesTable.id, req.params.id), eq(storeCategoriesTable.storeId, store.id))).limit(1);
-    if (!cat) { res.status(404).json({ error: "Category not found" }); return; }
+    if (!cat) { next(new NotFoundError("Category not found", "NOT_FOUND")); return; }
     res.json(cat);
   } catch (err) {
-    req.log.error({ err }, "Error updating store category");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/store/categories/:id", async (req, res): Promise<void> => {
+router.delete("/store/categories/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const store = await getStoreForTenant(me.tenantId);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     await db.delete(storeCategoriesTable)
       .where(and(eq(storeCategoriesTable.id, req.params.id), eq(storeCategoriesTable.storeId, store.id)));
     res.status(204).end();
   } catch (err) {
-    req.log.error({ err }, "Error deleting store category");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/store/products", async (req, res): Promise<void> => {
+router.get("/store/products", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const store = await getStoreForTenant(me.tenantId);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const products = await db.select().from(storeProductsTable)
       .where(eq(storeProductsTable.storeId, store.id))
       .orderBy(desc(storeProductsTable.createdAt));
     res.json(products);
   } catch (err) {
-    req.log.error({ err }, "Error listing store products");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/store/products", async (req, res): Promise<void> => {
+router.post("/store/products", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const store = await getStoreForTenant(me.tenantId);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const parsed = ProductBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const id = generateId();
     const data = parsed.data;
     if (data.partnerProductId) {
@@ -423,7 +416,7 @@ router.post("/store/products", async (req, res): Promise<void> => {
         .from(partnerProductsTable)
         .where(and(eq(partnerProductsTable.id, data.partnerProductId), eq(partnerProductsTable.tenantId, me.tenantId)))
         .limit(1);
-      if (!pp) { res.status(400).json({ error: "Produto de parceiro não encontrado" }); return; }
+      if (!pp) { next(new ValidationError(String("Produto de parceiro não encontrado" ), "VALIDATION_ERROR")); return; }
     }
     await db.insert(storeProductsTable).values({
       id,
@@ -475,29 +468,28 @@ router.post("/store/products", async (req, res): Promise<void> => {
       .where(eq(storeProductsTable.id, id)).limit(1);
     res.status(201).json(product);
   } catch (err) {
-    req.log.error({ err }, "Error creating store product");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.put("/store/products/:id", async (req, res): Promise<void> => {
+router.put("/store/products/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const store = await getStoreForTenant(me.tenantId);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const parsed = ProductBody.partial().safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const [existingProduct] = await db.select().from(storeProductsTable)
       .where(and(eq(storeProductsTable.id, req.params.id), eq(storeProductsTable.storeId, store.id))).limit(1);
-    if (!existingProduct) { res.status(404).json({ error: "Product not found" }); return; }
+    if (!existingProduct) { next(new NotFoundError("Product not found", "NOT_FOUND")); return; }
     if (parsed.data.partnerProductId) {
       const [pp] = await db.select({ id: partnerProductsTable.id })
         .from(partnerProductsTable)
         .where(and(eq(partnerProductsTable.id, parsed.data.partnerProductId), eq(partnerProductsTable.tenantId, me.tenantId)))
         .limit(1);
-      if (!pp) { res.status(400).json({ error: "Produto de parceiro não encontrado" }); return; }
+      if (!pp) { next(new ValidationError(String("Produto de parceiro não encontrado" ), "VALIDATION_ERROR")); return; }
     }
     const updates: Record<string, unknown> = { ...parsed.data };
     if (parsed.data.saleStartsAt) updates.saleStartsAt = new Date(parsed.data.saleStartsAt);
@@ -522,21 +514,20 @@ router.put("/store/products/:id", async (req, res): Promise<void> => {
 
     const [product] = await db.select().from(storeProductsTable)
       .where(and(eq(storeProductsTable.id, req.params.id), eq(storeProductsTable.storeId, store.id))).limit(1);
-    if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+    if (!product) { next(new NotFoundError("Product not found", "NOT_FOUND")); return; }
     res.json(product);
   } catch (err) {
-    req.log.error({ err }, "Error updating store product");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/store/products/:id", async (req, res): Promise<void> => {
+router.delete("/store/products/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const store = await getStoreForTenant(me.tenantId);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const [existing] = await db.select({ images: storeProductsTable.images, gallery: storeProductsTable.gallery })
       .from(storeProductsTable)
       .where(and(eq(storeProductsTable.id, req.params.id), eq(storeProductsTable.storeId, store.id)))
@@ -549,18 +540,17 @@ router.delete("/store/products/:id", async (req, res): Promise<void> => {
     }
     res.status(204).end();
   } catch (err) {
-    req.log.error({ err }, "Error deleting store product");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/store/orders", async (req, res): Promise<void> => {
+router.get("/store/orders", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const store = await getStoreForTenant(me.tenantId);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
 
     const { status, paymentStatus, search, dateFrom, dateTo, page: pageStr, limit: limitStr } = req.query;
     const page = pageStr ? Math.max(1, parseInt(pageStr as string)) : 1;
@@ -641,21 +631,20 @@ router.get("/store/orders", async (req, res): Promise<void> => {
 
     res.json({ data: orders, total, page, limit });
   } catch (err) {
-    req.log.error({ err }, "Error listing store orders");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/store/orders/:id", async (req, res): Promise<void> => {
+router.get("/store/orders/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const store = await getStoreForTenant(me.tenantId);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const [order] = await db.select().from(storeOrdersTable)
       .where(and(eq(storeOrdersTable.id, req.params.id), eq(storeOrdersTable.storeId, store.id))).limit(1);
-    if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+    if (!order) { next(new NotFoundError("Order not found", "NOT_FOUND")); return; }
     const rawItems = await db.select().from(storeOrderItemsTable)
       .where(eq(storeOrderItemsTable.orderId, order.id));
     const items = rawItems.map((item) => {
@@ -678,25 +667,24 @@ router.get("/store/orders/:id", async (req, res): Promise<void> => {
     });
     res.json({ ...order, items });
   } catch (err) {
-    req.log.error({ err }, "Error getting store order");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.put("/store/orders/:id/status", async (req, res): Promise<void> => {
+router.put("/store/orders/:id/status", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const store = await getStoreForTenant(me.tenantId);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const parsed = z.object({
       status: z.string().optional(),
       paymentStatus: z.string().optional(),
       fulfillmentStatus: z.string().optional(),
       internalNotes: z.string().optional(),
     }).safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const updates: Record<string, unknown> = {};
     if (parsed.data.status) updates.status = parsed.data.status;
     if (parsed.data.paymentStatus) updates.paymentStatus = parsed.data.paymentStatus;
@@ -711,7 +699,7 @@ router.put("/store/orders/:id/status", async (req, res): Promise<void> => {
       .where(and(eq(storeOrdersTable.id, req.params.id), eq(storeOrdersTable.storeId, store.id)));
     const [order] = await db.select().from(storeOrdersTable)
       .where(and(eq(storeOrdersTable.id, req.params.id), eq(storeOrdersTable.storeId, store.id))).limit(1);
-    if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+    if (!order) { next(new NotFoundError("Order not found", "NOT_FOUND")); return; }
 
     // Auto-create CRM deal as "won" when order transitions to paid or completed (fire-and-forget).
     // Looks up linked reservation by storeOrderId to get tripId + reservationId for full linkage.
@@ -766,37 +754,35 @@ router.put("/store/orders/:id/status", async (req, res): Promise<void> => {
 
     res.json(order);
   } catch (err) {
-    req.log.error({ err }, "Error updating store order status");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/store/coupons", async (req, res): Promise<void> => {
+router.get("/store/coupons", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const store = await getStoreForTenant(me.tenantId);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const coupons = await db.select().from(storeCouponsTable)
       .where(eq(storeCouponsTable.storeId, store.id))
       .orderBy(desc(storeCouponsTable.createdAt));
     res.json(coupons);
   } catch (err) {
-    req.log.error({ err }, "Error listing store coupons");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/store/coupons", async (req, res): Promise<void> => {
+router.post("/store/coupons", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const store = await getStoreForTenant(me.tenantId);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const parsed = CouponBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const id = generateId();
     const data = parsed.data;
     await db.insert(storeCouponsTable).values({
@@ -821,20 +807,19 @@ router.post("/store/coupons", async (req, res): Promise<void> => {
       .where(eq(storeCouponsTable.id, id)).limit(1);
     res.status(201).json(coupon);
   } catch (err) {
-    req.log.error({ err }, "Error creating store coupon");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.put("/store/coupons/:id", async (req, res): Promise<void> => {
+router.put("/store/coupons/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const store = await getStoreForTenant(me.tenantId);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const parsed = CouponBody.partial().safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const updates: Record<string, unknown> = { ...parsed.data };
     if (parsed.data.startsAt) updates.startsAt = new Date(parsed.data.startsAt);
     if (parsed.data.expiresAt) updates.expiresAt = new Date(parsed.data.expiresAt);
@@ -842,59 +827,56 @@ router.put("/store/coupons/:id", async (req, res): Promise<void> => {
       .where(and(eq(storeCouponsTable.id, req.params.id), eq(storeCouponsTable.storeId, store.id)));
     const [coupon] = await db.select().from(storeCouponsTable)
       .where(and(eq(storeCouponsTable.id, req.params.id), eq(storeCouponsTable.storeId, store.id))).limit(1);
-    if (!coupon) { res.status(404).json({ error: "Coupon not found" }); return; }
+    if (!coupon) { next(new NotFoundError("Coupon not found", "NOT_FOUND")); return; }
     res.json(coupon);
   } catch (err) {
-    req.log.error({ err }, "Error updating store coupon");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/store/coupons/:id", async (req, res): Promise<void> => {
+router.delete("/store/coupons/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const store = await getStoreForTenant(me.tenantId);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     await db.delete(storeCouponsTable)
       .where(and(eq(storeCouponsTable.id, req.params.id), eq(storeCouponsTable.storeId, store.id)));
     res.status(204).end();
   } catch (err) {
-    req.log.error({ err }, "Error deleting store coupon");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/store/reviews", async (req, res): Promise<void> => {
+router.get("/store/reviews", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const store = await getStoreForTenant(me.tenantId);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const reviews = await db.select().from(storeReviewsTable)
       .where(eq(storeReviewsTable.storeId, store.id))
       .orderBy(desc(storeReviewsTable.createdAt));
     res.json(reviews);
   } catch (err) {
-    req.log.error({ err }, "Error listing store reviews");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.put("/store/reviews/:id/status", async (req, res): Promise<void> => {
+router.put("/store/reviews/:id/status", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const store = await getStoreForTenant(me.tenantId);
-    if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
     const parsed = z.object({
       status: z.enum(["pending", "approved", "rejected"]),
       reply: z.string().optional(),
     }).safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const updates: Record<string, unknown> = { status: parsed.data.status };
     if (parsed.data.reply) {
       updates.reply = parsed.data.reply;
@@ -904,11 +886,10 @@ router.put("/store/reviews/:id/status", async (req, res): Promise<void> => {
       .where(and(eq(storeReviewsTable.id, req.params.id), eq(storeReviewsTable.storeId, store.id)));
     const [review] = await db.select().from(storeReviewsTable)
       .where(and(eq(storeReviewsTable.id, req.params.id), eq(storeReviewsTable.storeId, store.id))).limit(1);
-    if (!review) { res.status(404).json({ error: "Review not found" }); return; }
+    if (!review) { next(new NotFoundError("Review not found", "NOT_FOUND")); return; }
     res.json(review);
   } catch (err) {
-    req.log.error({ err }, "Error updating review status");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

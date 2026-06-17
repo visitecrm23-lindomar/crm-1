@@ -1,14 +1,13 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { pipelinesTable, pipelineStagesTable, dealsTable, clientsTable, reservationsTable } from "@workspace/db";
 import { eq, and, asc, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
-import { requireAuth, getTenantUser } from "../lib/tenant";
+import { requireAuth, getTenantUser, ADMIN_ROLES } from '../lib/tenant';
 import { z } from "zod";
-import { ADMIN_ROLES } from '../lib/tenant';
 import { ROLES, DEAL_STATUS, type DealStatus } from "@workspace/permissions";
 import { parseDealStatus } from "../lib/status-validators";
-import { AppError } from "../lib/errors";
+import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 
 const router = Router();
 
@@ -130,7 +129,18 @@ async function getReservationInfoForDeals(deals: typeof dealsTable.$inferSelect[
   return infoMap;
 }
 
-router.get("/pipeline/stages", async (req, res): Promise<void> => {
+async function requireDealAccess(me: { id: string; tenantId: string; role: string }, dealId: string): Promise<typeof dealsTable.$inferSelect> {
+  if (me.role === ROLES.CLIENT) {
+    throw new ForbiddenError("Access denied", "FORBIDDEN_ROLE");
+  }
+  const dealConditions: ReturnType<typeof eq>[] = [eq(dealsTable.id, dealId), eq(dealsTable.tenantId, me.tenantId)];
+  if (me.role === ROLES.SALES) dealConditions.push(eq(dealsTable.ownerId, me.id));
+  const [deal] = await db.select().from(dealsTable).where(and(...dealConditions)).limit(1);
+  if (!deal) { throw new NotFoundError("Not found", "NOT_FOUND"); }
+  return deal;
+}
+
+router.get("/pipeline/stages", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -140,18 +150,16 @@ router.get("/pipeline/stages", async (req, res): Promise<void> => {
       .orderBy(asc(pipelineStagesTable.order));
     res.json(stages.map(formatStage));
   } catch (err) {
-    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
-    req.log.error({ err }, "Error listing pipeline stages");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/deals", async (req, res): Promise<void> => {
+router.get("/deals", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role === ROLES.CLIENT) {
-      res.status(403).json({ error: "Access denied" });
+      next(new ForbiddenError("Access denied", "FORBIDDEN_ROLE"));
       return;
     }
     const { stageId, clientId, ownerId, status } = req.query as Record<string, string>;
@@ -169,30 +177,28 @@ router.get("/deals", async (req, res): Promise<void> => {
       return formatDeal(d, info?.seats ?? [], info?.reservationNumber ?? null);
     }));
   } catch (err) {
-    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
-    req.log.error({ err }, "Error listing deals");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/deals", async (req, res): Promise<void> => {
+router.post("/deals", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     const parsed = CreateDealBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
 
     if (parsed.data.clientId) {
       const [client] = await db.select().from(clientsTable)
         .where(and(eq(clientsTable.id, parsed.data.clientId), eq(clientsTable.tenantId, me.tenantId)))
         .limit(1);
-      if (!client) { res.status(400).json({ error: "Client not found or not in tenant" }); return; }
+      if (!client) { next(new ValidationError("Client not found or not in tenant", "CLIENT_NOT_FOUND")); return; }
     }
 
     const [stage] = await db.select().from(pipelineStagesTable)
       .where(and(eq(pipelineStagesTable.id, parsed.data.stageId), eq(pipelineStagesTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!stage) { res.status(400).json({ error: "Stage not found or not in tenant" }); return; }
+    if (!stage) { next(new ValidationError("Stage not found or not in tenant", "STAGE_NOT_FOUND")); return; }
 
     const id = generateId();
     await db.insert(dealsTable).values({
@@ -216,50 +222,32 @@ router.post("/deals", async (req, res): Promise<void> => {
     const [deal] = await db.select().from(dealsTable)
       .where(and(eq(dealsTable.id, id), eq(dealsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!deal) { res.status(500).json({ error: "Failed to create deal" }); return; }
+    if (!deal) { next(new Error("Failed to create deal")); return; }
     res.status(201).json(formatDeal(deal));
   } catch (err) {
-    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
-    req.log.error({ err }, "Error creating deal");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-async function requireDealAccess(me: { id: string; tenantId: string; role: string }, dealId: string, res: import("express").Response): Promise<typeof dealsTable.$inferSelect | null> {
-  if (me.role === ROLES.CLIENT) {
-    res.status(403).json({ error: "Access denied" });
-    return null;
-  }
-  const dealConditions: ReturnType<typeof eq>[] = [eq(dealsTable.id, dealId), eq(dealsTable.tenantId, me.tenantId)];
-  if (me.role === ROLES.SALES) dealConditions.push(eq(dealsTable.ownerId, me.id));
-  const [deal] = await db.select().from(dealsTable).where(and(...dealConditions)).limit(1);
-  if (!deal) { res.status(404).json({ error: "Not found" }); return null; }
-  return deal;
-}
-
-router.get("/deals/:id", async (req, res): Promise<void> => {
+router.get("/deals/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const deal = await requireDealAccess(me, req.params.id, res);
-    if (!deal) return;
+    const deal = await requireDealAccess(me, req.params.id);
     res.json(formatDeal(deal));
   } catch (err) {
-    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
-    req.log.error({ err }, "Error fetching deal");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/deals/:id", async (req, res): Promise<void> => {
+router.patch("/deals/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const existing = await requireDealAccess(me, req.params.id, res);
-    if (!existing) return;
+    await requireDealAccess(me, req.params.id);
 
     const parsed = UpdateDealBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
 
     const updates: Partial<typeof dealsTable.$inferInsert> = {};
     if (parsed.data.title != null) updates.title = parsed.data.title;
@@ -274,7 +262,7 @@ router.patch("/deals/:id", async (req, res): Promise<void> => {
       const [stage] = await db.select().from(pipelineStagesTable)
         .where(and(eq(pipelineStagesTable.id, parsed.data.stageId), eq(pipelineStagesTable.tenantId, me.tenantId)))
         .limit(1);
-      if (!stage) { res.status(400).json({ error: "Stage not found or not in tenant" }); return; }
+      if (!stage) { next(new ValidationError("Stage not found or not in tenant", "STAGE_NOT_FOUND")); return; }
       updates.stageId = parsed.data.stageId;
     }
     if (parsed.data.reservationId !== undefined) {
@@ -289,59 +277,51 @@ router.patch("/deals/:id", async (req, res): Promise<void> => {
     const [deal] = await db.select().from(dealsTable)
       .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!deal) { res.status(404).json({ error: "Not found" }); return; }
+    if (!deal) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(formatDeal(deal));
   } catch (err) {
-    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
-    req.log.error({ err }, "Error updating deal");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/deals/:id/move", async (req, res): Promise<void> => {
+router.patch("/deals/:id/move", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const existing = await requireDealAccess(me, req.params.id, res);
-    if (!existing) return;
+    await requireDealAccess(me, req.params.id);
 
     const parsed = MoveDealBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const [stage] = await db.select().from(pipelineStagesTable)
       .where(and(eq(pipelineStagesTable.id, parsed.data.stageId), eq(pipelineStagesTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!stage) { res.status(400).json({ error: "Stage not found or not in tenant" }); return; }
+    if (!stage) { next(new ValidationError("Stage not found or not in tenant", "STAGE_NOT_FOUND")); return; }
     await db.update(dealsTable).set({ stageId: parsed.data.stageId })
       .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)));
     const [deal] = await db.select().from(dealsTable)
       .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!deal) { res.status(404).json({ error: "Not found" }); return; }
+    if (!deal) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(formatDeal(deal));
   } catch (err) {
-    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
-    req.log.error({ err }, "Error moving deal");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/deals/:id", async (req, res): Promise<void> => {
+router.delete("/deals/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    const existing = await requireDealAccess(me, req.params.id, res);
-    if (!existing) return;
+    await requireDealAccess(me, req.params.id);
     await db.delete(dealsTable)
       .where(and(eq(dealsTable.id, req.params.id), eq(dealsTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) {
-    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
-    req.log.error({ err }, "Error deleting deal");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/pipelines", async (req, res): Promise<void> => {
+router.get("/pipelines", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -354,50 +334,45 @@ router.get("/pipelines", async (req, res): Promise<void> => {
       createdAt: p.createdAt.toISOString(),
     })));
   } catch (err) {
-    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
-    req.log.error({ err }, "Error listing pipelines");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/pipelines", async (req, res): Promise<void> => {
+router.post("/pipelines", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Forbidden" });
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
       return;
     }
     const parsed = z.object({ name: z.string().min(1), description: z.string().optional() }).safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(pipelinesTable).values({ id, tenantId: me.tenantId, name: parsed.data.name, description: parsed.data.description });
     const [pipeline] = await db.select().from(pipelinesTable).where(eq(pipelinesTable.id, id));
     res.status(201).json(pipeline);
   } catch (err) {
-    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
-    req.log.error({ err }, "Error creating pipeline");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/pipelines/:id", async (req, res): Promise<void> => {
+router.patch("/pipelines/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Forbidden" });
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
       return;
     }
     const parsed = z.object({ name: z.string().min(1).optional(), isActive: z.boolean().optional() }).safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     await db.update(pipelinesTable).set(parsed.data).where(and(eq(pipelinesTable.id, req.params.id), eq(pipelinesTable.tenantId, me.tenantId)));
     const [pipeline] = await db.select().from(pipelinesTable).where(and(eq(pipelinesTable.id, req.params.id), eq(pipelinesTable.tenantId, me.tenantId)));
-    res.json(pipeline ?? { error: "Not found" });
+    if (!pipeline) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
+    res.json(pipeline);
   } catch (err) {
-    if (err instanceof AppError) { res.status(err.statusCode).json({ error: err.message }); return; }
-    req.log.error({ err }, "Error updating pipeline");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

@@ -1,9 +1,10 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { messagesTable, messageTemplatesTable, automationsTable, clientsTable, emailLogsTable, reservationsTable } from "@workspace/db";
 import { eq, and, desc, isNotNull, inArray, notLike } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
+import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors"; 
 import { z } from "zod";
 import { ADMIN_ROLES, MANAGEMENT_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
 import { resendEmailLog } from "../queues/email-helpers";
@@ -78,7 +79,7 @@ function formatAutomation(a: typeof automationsTable.$inferSelect) {
   };
 }
 
-router.get("/messages", async (req, res): Promise<void> => {
+router.get("/messages", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -89,23 +90,22 @@ router.get("/messages", async (req, res): Promise<void> => {
       .where(and(...conditions)).orderBy(desc(messagesTable.sentAt));
     res.json(messages.map(formatMessage));
   } catch (err) {
-    req.log.error({ err }, "Error listing messages");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/messages", async (req, res): Promise<void> => {
+router.post("/messages", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     const parsed = CreateMessageBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
 
     if (parsed.data.toClientId) {
       const [client] = await db.select().from(clientsTable)
         .where(and(eq(clientsTable.id, parsed.data.toClientId), eq(clientsTable.tenantId, me.tenantId)))
         .limit(1);
-      if (!client) { res.status(400).json({ error: "Client not found or not in tenant" }); return; }
+      if (!client) { next(new ValidationError(String("Client not found or not in tenant" ), "VALIDATION_ERROR")); return; }
     }
 
     const id = generateId();
@@ -121,15 +121,14 @@ router.post("/messages", async (req, res): Promise<void> => {
     const [message] = await db.select().from(messagesTable)
       .where(and(eq(messagesTable.id, id), eq(messagesTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!message) { res.status(500).json({ error: "Failed to send message" }); return; }
+    if (!message) { next(new AppError("Resource not found", 404, "NOT_FOUND")); return; }
     res.status(201).json(formatMessage(message));
   } catch (err) {
-    req.log.error({ err }, "Error sending message");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/message-templates", async (req, res): Promise<void> => {
+router.get("/message-templates", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -138,18 +137,17 @@ router.get("/message-templates", async (req, res): Promise<void> => {
       .orderBy(desc(messageTemplatesTable.createdAt));
     res.json(templates.map(formatTemplate));
   } catch (err) {
-    req.log.error({ err }, "Error listing templates");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/message-templates", async (req, res): Promise<void> => {
+router.post("/message-templates", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateMessageTemplateBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(messageTemplatesTable).values({
       id,
@@ -164,21 +162,20 @@ router.post("/message-templates", async (req, res): Promise<void> => {
     const [template] = await db.select().from(messageTemplatesTable)
       .where(and(eq(messageTemplatesTable.id, id), eq(messageTemplatesTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!template) { res.status(500).json({ error: "Failed to create template" }); return; }
+    if (!template) { next(new AppError("Resource not found", 404, "NOT_FOUND")); return; }
     res.status(201).json(formatTemplate(template));
   } catch (err) {
-    req.log.error({ err }, "Error creating template");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/message-templates/:id", async (req, res): Promise<void> => {
+router.patch("/message-templates/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = UpdateMessageTemplateBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const updates: Partial<typeof messageTemplatesTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.content != null) updates.content = parsed.data.content;
@@ -189,29 +186,27 @@ router.patch("/message-templates/:id", async (req, res): Promise<void> => {
     const [template] = await db.select().from(messageTemplatesTable)
       .where(and(eq(messageTemplatesTable.id, req.params.id), eq(messageTemplatesTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!template) { res.status(404).json({ error: "Not found" }); return; }
+    if (!template) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(formatTemplate(template));
   } catch (err) {
-    req.log.error({ err }, "Error updating template");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/message-templates/:id", async (req, res): Promise<void> => {
+router.delete("/message-templates/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     await db.delete(messageTemplatesTable)
       .where(and(eq(messageTemplatesTable.id, req.params.id), eq(messageTemplatesTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) {
-    req.log.error({ err }, "Error deleting template");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/automations", async (req, res): Promise<void> => {
+router.get("/automations", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -220,18 +215,17 @@ router.get("/automations", async (req, res): Promise<void> => {
       .orderBy(desc(automationsTable.createdAt));
     res.json(automations.map(formatAutomation));
   } catch (err) {
-    req.log.error({ err }, "Error listing automations");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/automations", async (req, res): Promise<void> => {
+router.post("/automations", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateAutomationBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(automationsTable).values({
       id,
@@ -246,21 +240,20 @@ router.post("/automations", async (req, res): Promise<void> => {
     const [automation] = await db.select().from(automationsTable)
       .where(and(eq(automationsTable.id, id), eq(automationsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!automation) { res.status(500).json({ error: "Failed to create automation" }); return; }
+    if (!automation) { next(new AppError("Resource not found", 404, "NOT_FOUND")); return; }
     res.status(201).json(formatAutomation(automation));
   } catch (err) {
-    req.log.error({ err }, "Error creating automation");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/automations/:id", async (req, res): Promise<void> => {
+router.patch("/automations/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = UpdateAutomationBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const updates: Partial<typeof automationsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.isActive != null) updates.isActive = parsed.data.isActive;
@@ -271,51 +264,48 @@ router.patch("/automations/:id", async (req, res): Promise<void> => {
     const [automation] = await db.select().from(automationsTable)
       .where(and(eq(automationsTable.id, req.params.id), eq(automationsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!automation) { res.status(404).json({ error: "Not found" }); return; }
+    if (!automation) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(formatAutomation(automation));
   } catch (err) {
-    req.log.error({ err }, "Error updating automation");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/automations/:id", async (req, res): Promise<void> => {
+router.delete("/automations/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     await db.delete(automationsTable)
       .where(and(eq(automationsTable.id, req.params.id), eq(automationsTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) {
-    req.log.error({ err }, "Error deleting automation");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/automations/:id/toggle", async (req, res): Promise<void> => {
+router.patch("/automations/:id/toggle", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const [existing] = await db.select().from(automationsTable)
       .where(and(eq(automationsTable.id, req.params.id), eq(automationsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+    if (!existing) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     await db.update(automationsTable).set({ isActive: !existing.isActive })
       .where(and(eq(automationsTable.id, req.params.id), eq(automationsTable.tenantId, me.tenantId)));
     const [automation] = await db.select().from(automationsTable)
       .where(and(eq(automationsTable.id, req.params.id), eq(automationsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!automation) { res.status(404).json({ error: "Not found" }); return; }
+    if (!automation) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(formatAutomation(automation));
   } catch (err) {
-    req.log.error({ err }, "Error toggling automation");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/clients-for-messaging", async (req, res): Promise<void> => {
+router.get("/clients-for-messaging", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -323,19 +313,18 @@ router.get("/clients-for-messaging", async (req, res): Promise<void> => {
       .where(eq(clientsTable.tenantId, me.tenantId));
     res.json(clients.map(c => ({ id: c.id, name: c.name, email: c.email, whatsapp: c.whatsapp })));
   } catch (err) {
-    req.log.error({ err }, "Error listing clients for messaging");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
 // ── Email Logs ──────────────────────────────────────────────────────────────
 
-router.get("/email-logs/failed-summary", async (req, res): Promise<void> => {
+router.get("/email-logs/failed-summary", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!MANAGEMENT_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Forbidden" });
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
       return;
     }
 
@@ -443,12 +432,11 @@ router.get("/email-logs/failed-summary", async (req, res): Promise<void> => {
 
     res.json(result);
   } catch (err) {
-    req.log.error({ err }, "Error fetching failed email summary");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/email-logs", async (req, res): Promise<void> => {
+router.get("/email-logs", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -456,7 +444,7 @@ router.get("/email-logs", async (req, res): Promise<void> => {
     const isReservationScoped = !!reservationId;
     const allowedRoles = isReservationScoped ? ALL_STAFF_ROLES : MANAGEMENT_ROLES;
     if (!allowedRoles.includes(me.role)) {
-      res.status(403).json({ error: "Forbidden" });
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
       return;
     }
     const conditions = [eq(emailLogsTable.tenantId, me.tenantId)];
@@ -469,17 +457,16 @@ router.get("/email-logs", async (req, res): Promise<void> => {
       .limit(200);
     res.json(logs);
   } catch (err) {
-    req.log.error({ err }, "Error listing email logs");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/email-logs/:id/resend", async (req, res): Promise<void> => {
+router.post("/email-logs/:id/resend", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!MANAGEMENT_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Forbidden" });
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
       return;
     }
     const result = await resendEmailLog(req.params.id, me.tenantId);
@@ -490,8 +477,7 @@ router.post("/email-logs/:id/resend", async (req, res): Promise<void> => {
     }
     res.json({ ok: true });
   } catch (err) {
-    req.log.error({ err }, "Error resending email");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

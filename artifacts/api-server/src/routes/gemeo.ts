@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import {
   paymentsTable,
@@ -14,6 +14,7 @@ import {
 } from "@workspace/db";
 import { eq, and, gte, lt, lte, isNull, sql, inArray, ne, desc, asc } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import {
   ADMIN_ROLES,
   PAYMENT_STATUS,
@@ -406,13 +407,12 @@ async function buildMetrics(tenantId: string): Promise<GemeoMetricsPayload> {
 
 // ─── GET /dashboard/gemeo ─────────────────────────────────────────────────────
 
-router.get("/dashboard/gemeo", async (req, res): Promise<void> => {
+router.get("/dashboard/gemeo", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!(ADMIN_ROLES as string[]).includes(me.role)) {
-      res.status(403).json({ error: "Sem permissão" });
-      return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
     const tenantId = me.tenantId;
@@ -427,19 +427,18 @@ router.get("/dashboard/gemeo", async (req, res): Promise<void> => {
     res.json(data);
   } catch (err) {
     console.error("[gemeo/metrics]", err);
-    res.status(500).json({ error: "Erro ao carregar métricas do Gêmeo Digital" });
+    next(err);
   }
 });
 
 // ─── GET /dashboard/gemeo/alerts ─────────────────────────────────────────────
 
-router.get("/dashboard/gemeo/alerts", async (req, res): Promise<void> => {
+router.get("/dashboard/gemeo/alerts", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!(ADMIN_ROLES as string[]).includes(me.role)) {
-      res.status(403).json({ error: "Sem permissão" });
-      return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
     const alerts = await db
@@ -457,19 +456,18 @@ router.get("/dashboard/gemeo/alerts", async (req, res): Promise<void> => {
     res.json({ alerts });
   } catch (err) {
     console.error("[gemeo/alerts]", err);
-    res.status(500).json({ error: "Erro ao carregar alertas" });
+    next(err);
   }
 });
 
 // ─── PATCH /dashboard/gemeo/alerts/:id/dismiss ───────────────────────────────
 
-router.patch("/dashboard/gemeo/alerts/:id/dismiss", async (req, res): Promise<void> => {
+router.patch("/dashboard/gemeo/alerts/:id/dismiss", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!(ADMIN_ROLES as string[]).includes(me.role)) {
-      res.status(403).json({ error: "Sem permissão" });
-      return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
     const { id } = req.params;
@@ -481,26 +479,25 @@ router.patch("/dashboard/gemeo/alerts/:id/dismiss", async (req, res): Promise<vo
       .returning({ id: gemeoAlertsTable.id });
 
     if (!updated) {
-      res.status(404).json({ error: "Alerta não encontrado" });
+      next(new NotFoundError("Alerta não encontrado", "NOT_FOUND"));
       return;
     }
 
     res.json({ success: true });
   } catch (err) {
     console.error("[gemeo/alerts/dismiss]", err);
-    res.status(500).json({ error: "Erro ao dispensar alerta" });
+    next(err);
   }
 });
 
 // ─── GET /dashboard/gemeo/opportunities ──────────────────────────────────────
 
-router.get("/dashboard/gemeo/opportunities", async (req, res): Promise<void> => {
+router.get("/dashboard/gemeo/opportunities", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!(ADMIN_ROLES as string[]).includes(me.role)) {
-      res.status(403).json({ error: "Sem permissão" });
-      return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
     const opportunities = await db
@@ -518,19 +515,18 @@ router.get("/dashboard/gemeo/opportunities", async (req, res): Promise<void> => 
     res.json({ opportunities });
   } catch (err) {
     console.error("[gemeo/opportunities]", err);
-    res.status(500).json({ error: "Erro ao carregar oportunidades" });
+    next(err);
   }
 });
 
 // ─── PATCH /dashboard/gemeo/opportunities/:id/dismiss ────────────────────────
 
-router.patch("/dashboard/gemeo/opportunities/:id/dismiss", async (req, res): Promise<void> => {
+router.patch("/dashboard/gemeo/opportunities/:id/dismiss", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!(ADMIN_ROLES as string[]).includes(me.role)) {
-      res.status(403).json({ error: "Sem permissão" });
-      return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
     const { id } = req.params;
@@ -547,14 +543,14 @@ router.patch("/dashboard/gemeo/opportunities/:id/dismiss", async (req, res): Pro
       .returning({ id: gemeoOpportunitiesTable.id });
 
     if (!updated) {
-      res.status(404).json({ error: "Oportunidade não encontrada" });
+      next(new NotFoundError("Oportunidade não encontrada", "NOT_FOUND"));
       return;
     }
 
     res.json({ success: true });
   } catch (err) {
     console.error("[gemeo/opportunities/dismiss]", err);
-    res.status(500).json({ error: "Erro ao dispensar oportunidade" });
+    next(err);
   }
 });
 

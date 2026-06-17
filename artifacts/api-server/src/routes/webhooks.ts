@@ -9,6 +9,8 @@ import { syncReservationPaymentStatus, paymentExistsForGatewayTx, type DbExecuto
 import { enqueueNewBookingNotificationEmail } from "../queues/email-helpers";
 import { decryptOrPassthrough } from "../lib/crypto";
 import { PAYMENT_STATUS, RESERVATION_STATUS, STORE_ORDER_STATUS, STORE_PAYMENT_STATUS } from "@workspace/permissions";
+import { roundMoney } from "../lib/pricing";
+import { ValidationError } from "../lib/errors";
 
 const router = Router();
 
@@ -105,7 +107,7 @@ router.post("/webhooks/stripe/:storeSlug", async (req, res, next: NextFunction):
   try {
     const store = await resolveStore(req.params["storeSlug"] ?? "");
     if (!store) {
-      res.status(400).json({ error: "Unknown store" });
+      next(new ValidationError("Unknown store", "VALIDATION_ERROR"));
       return;
     }
 
@@ -122,13 +124,13 @@ router.post("/webhooks/stripe/:storeSlug", async (req, res, next: NextFunction):
         { slug: store.slug },
         "[webhooks/stripe] No webhook secret configured (per-store or global) — rejecting",
       );
-      res.status(400).json({ error: "Webhook not configured" });
+      next(new ValidationError("Webhook not configured", "VALIDATION_ERROR"));
       return;
     }
 
     const rawBody = (req as RawBodyRequest).rawBody;
     if (!rawBody) {
-      res.status(400).json({ error: "Missing raw body" });
+      next(new ValidationError("Missing raw body", "VALIDATION_ERROR"));
       return;
     }
 
@@ -138,13 +140,13 @@ router.post("/webhooks/stripe/:storeSlug", async (req, res, next: NextFunction):
         { sigHeader: sigHeader ? "present" : "missing", slug: store.slug },
         "[webhooks/stripe] Invalid signature",
       );
-      res.status(400).json({ error: "Invalid signature" });
+      next(new ValidationError("Invalid signature", "VALIDATION_ERROR"));
       return;
     }
 
     const event = req.body as StripeEvent;
     if (!event || typeof event.id !== "string" || typeof event.type !== "string") {
-      res.status(400).json({ error: "Malformed event" });
+      next(new ValidationError("Malformed event", "VALIDATION_ERROR"));
       return;
     }
 
@@ -159,7 +161,7 @@ router.post("/webhooks/stripe/:storeSlug", async (req, res, next: NextFunction):
         { err, eventId: event.id, eventType: event.type, slug: store.slug },
         "[webhooks/stripe] Processing failure — returning 500 so Stripe retries",
       );
-      res.status(500).json({ error: "Processing failure" });
+      next(err);
     }
   } catch (err) {
     next(err);
@@ -295,13 +297,13 @@ router.post("/webhooks/mercadopago/:storeSlug", async (req, res, next: NextFunct
     const secret = process.env["MP_WEBHOOK_SECRET"];
     if (!secret) {
       logger.warn("[webhooks/mercadopago] MP_WEBHOOK_SECRET not configured — rejecting");
-      res.status(400).json({ error: "Webhook not configured" });
+      next(new ValidationError("Webhook not configured", "VALIDATION_ERROR"));
       return;
     }
 
     const store = await resolveStore(req.params["storeSlug"] ?? "");
     if (!store) {
-      res.status(400).json({ error: "Unknown store" });
+      next(new ValidationError("Unknown store", "VALIDATION_ERROR"));
       return;
     }
 
@@ -312,7 +314,7 @@ router.post("/webhooks/mercadopago/:storeSlug", async (req, res, next: NextFunct
     const eventType = String(body["type"] ?? body["topic"] ?? req.query["type"] ?? req.query["topic"] ?? "");
 
     if (!dataId) {
-      res.status(400).json({ error: "Missing data.id" });
+      next(new ValidationError("Missing data.id", "VALIDATION_ERROR"));
       return;
     }
 
@@ -323,7 +325,7 @@ router.post("/webhooks/mercadopago/:storeSlug", async (req, res, next: NextFunct
         { sigHeader: sigHeader ? "present" : "missing", slug: store.slug },
         "[webhooks/mercadopago] Invalid signature",
       );
-      res.status(400).json({ error: "Invalid signature" });
+      next(new ValidationError("Invalid signature", "VALIDATION_ERROR"));
       return;
     }
 
@@ -339,14 +341,14 @@ router.post("/webhooks/mercadopago/:storeSlug", async (req, res, next: NextFunct
         { slug: store.slug, dataId },
         "[webhooks/mercadopago] Store has no MP access token configured",
       );
-      res.status(400).json({ error: "Store missing MP access token" });
+      next(new ValidationError("Store missing MP access token", "VALIDATION_ERROR"));
       return;
     }
 
     const payment = await fetchMpPayment(dataId, accessToken);
     if (!payment) {
       // MP API failure — ask the provider to retry.
-      res.status(502).json({ error: "Could not fetch payment from MercadoPago" });
+      next(new AppError("MercadoPago API unreachable — retry later", 503, "MP_API_UNAVAILABLE"));
       return;
     }
 
@@ -358,7 +360,7 @@ router.post("/webhooks/mercadopago/:storeSlug", async (req, res, next: NextFunct
         { err, dataId, slug: store.slug },
         "[webhooks/mercadopago] Processing failure — returning 500 so MP retries",
       );
-      res.status(500).json({ error: "Processing failure" });
+      next(err);
     }
   } catch (err) {
     next(err);
@@ -562,9 +564,9 @@ async function applyGatewayPayment(tx: DbExecutor, args: ApplyArgs): Promise<App
     const r = reservations[i]!;
     const isLast = i === reservations.length - 1;
     const share = isLast
-      ? Math.round((allocatable - allocated) * 100) / 100
-      : Math.round((Number(r.totalValue) / totalReservationValue) * allocatable * 100) / 100;
-    allocated = Math.round((allocated + share) * 100) / 100;
+      ? roundMoney(allocatable - allocated)
+      : roundMoney((Number(r.totalValue) / totalReservationValue) * allocatable);
+    allocated = roundMoney(allocated + share);
 
     if (share <= 0) continue;
 

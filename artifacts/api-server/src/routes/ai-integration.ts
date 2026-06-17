@@ -1,8 +1,9 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db, aiIntegrationsTable, aiIntegrationLogsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, ADMIN_ROLES } from "../lib/tenant";
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import type { AuthedUser } from "../lib/tenant";
 import { generateId } from "../lib/id";
 import { encryptCredential, decryptCredential } from "../lib/crypto";
@@ -52,20 +53,20 @@ async function writeLog(
 }
 
 // Admin/owner only, and must belong to a tenant (superadmins have no tenant).
-async function requireAiAdmin(req: import("express").Request, res: import("express").Response): Promise<AuthedUser | null> {
+async function requireAiAdmin(req: import("express").Request, res: import("express").Response, next: import("express").NextFunction): Promise<AuthedUser | null> {
   const me = await requireAuth(req, res);
   if (!me) return null;
   if (!ADMIN_ROLES.includes(me.role) || !me.tenantId) {
-    res.status(403).json({ error: "Forbidden" });
+    next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
     return null;
   }
   return me;
 }
 
 // ─── GET /ai-integration ──────────────────────────────────────────────────────
-router.get("/ai-integration", async (req, res): Promise<void> => {
+router.get("/ai-integration", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const me = await requireAiAdmin(req, res);
+    const me = await requireAiAdmin(req, res, next);
     if (!me) return;
 
     const [cfg] = await db
@@ -91,15 +92,14 @@ router.get("/ai-integration", async (req, res): Promise<void> => {
       providerDefaults: AI_PROVIDER_DEFAULTS,
     });
   } catch (err) {
-    req.log.error({ err }, "Error loading AI integration");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
 // ─── GET /ai-integration/logs ─────────────────────────────────────────────────
-router.get("/ai-integration/logs", async (req, res): Promise<void> => {
+router.get("/ai-integration/logs", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const me = await requireAiAdmin(req, res);
+    const me = await requireAiAdmin(req, res, next);
     if (!me) return;
 
     const rows = await db
@@ -120,8 +120,7 @@ router.get("/ai-integration/logs", async (req, res): Promise<void> => {
       })),
     );
   } catch (err) {
-    req.log.error({ err }, "Error loading AI integration logs");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -137,14 +136,14 @@ const putSchema = z.object({
 });
 
 // ─── PUT /ai-integration ──────────────────────────────────────────────────────
-router.put("/ai-integration", async (req, res): Promise<void> => {
+router.put("/ai-integration", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const me = await requireAiAdmin(req, res);
+    const me = await requireAiAdmin(req, res, next);
     if (!me) return;
 
     const parsed = putSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Dados inválidos", details: parsed.error.issues });
+      next(new ValidationError("Dados inválidos", "VALIDATION_ERROR"));
       return;
     }
     const body = parsed.data;
@@ -177,9 +176,7 @@ router.put("/ai-integration", async (req, res): Promise<void> => {
 
     // Cannot enable a per-tenant provider with no key to use.
     if (enabled && !apiKeyEncrypted) {
-      res.status(400).json({
-        error: "Informe uma chave de API para ativar a configuração de IA.",
-      });
+      next(new ValidationError("Informe uma chave de API para ativar a configuração de IA.", "VALIDATION_ERROR"));
       return;
     }
 
@@ -190,9 +187,7 @@ router.put("/ai-integration", async (req, res): Promise<void> => {
     // URL the SDK would silently target OpenAI and send the key to the wrong
     // provider, so require it explicitly.
     if (provider === "custom" && !baseUrl) {
-      res.status(400).json({
-        error: "Informe a Base URL para um provedor compatível (OpenAI API).",
-      });
+      next(new ValidationError("Informe a Base URL para um provedor compatível (OpenAI API).", "VALIDATION_ERROR"));
       return;
     }
 
@@ -202,9 +197,7 @@ router.put("/ai-integration", async (req, res): Promise<void> => {
       try {
         await assertSafeUrl(baseUrl);
       } catch (urlErr) {
-        res.status(400).json({
-          error: urlErr instanceof Error ? urlErr.message : "URL do provedor inválida.",
-        });
+        next(new ValidationError("URL do provedor inválida.", "VALIDATION_ERROR"));
         return;
       }
     }
@@ -298,8 +291,7 @@ router.put("/ai-integration", async (req, res): Promise<void> => {
 
     res.json({ ok: true });
   } catch (err) {
-    req.log.error({ err }, "Error saving AI integration");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -318,14 +310,14 @@ const testSchema = z.object({
   defaultModel: z.string().optional(),
 });
 
-router.post("/ai-integration/test", async (req, res): Promise<void> => {
+router.post("/ai-integration/test", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const me = await requireAiAdmin(req, res);
+    const me = await requireAiAdmin(req, res, next);
     if (!me) return;
 
     const parsed = testSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ ok: false, status: "error", message: "Dados inválidos." });
+      next(new ValidationError("error", "VALIDATION_ERROR"));
       return;
     }
     const provider = normalizeProvider(parsed.data.provider);
@@ -379,11 +371,7 @@ router.post("/ai-integration/test", async (req, res): Promise<void> => {
       }
 
       if (!resolved) {
-        res.status(400).json({
-          ok: false,
-          status: "error",
-          message: "Informe uma chave de API ou token de acesso para testar a conexão.",
-        });
+        next(new ValidationError("error", "VALIDATION_ERROR"));
         return;
       }
       apiKey = resolved;
@@ -399,7 +387,7 @@ router.post("/ai-integration/test", async (req, res): Promise<void> => {
       } catch (urlErr) {
         const message = urlErr instanceof Error ? urlErr.message : "URL do provedor inválida.";
         await writeLog(me, "test", "error", `Falha no teste de conexão (provedor: ${provider}): ${message}`);
-        res.status(400).json({ ok: false, status: "error", message });
+        next(new ValidationError("error", "VALIDATION_ERROR"));
         return;
       }
     }
@@ -431,17 +419,16 @@ router.post("/ai-integration/test", async (req, res): Promise<void> => {
       res.json({ ok: false, status: "error", message });
     }
   } catch (err) {
-    req.log.error({ err }, "Error testing AI integration");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
 // ─── POST /ai-integration/revoke ──────────────────────────────────────────────
 // Clears all stored credentials and marks the integration as disconnected.
 // The admin must re-enter credentials to reconnect.
-router.post("/ai-integration/revoke", async (req, res): Promise<void> => {
+router.post("/ai-integration/revoke", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const me = await requireAiAdmin(req, res);
+    const me = await requireAiAdmin(req, res, next);
     if (!me) return;
 
     await db
@@ -459,8 +446,7 @@ router.post("/ai-integration/revoke", async (req, res): Promise<void> => {
 
     res.json({ ok: true });
   } catch (err) {
-    req.log.error({ err }, "Error revoking AI integration");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

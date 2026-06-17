@@ -1,8 +1,9 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { paymentsTable, tripsTable, dealsTable, clientsTable, emailLogsTable, reservationsTable } from "@workspace/db";
 import { eq, and, lt, lte, gte, gt, sql, isNotNull, isNull, notLike, inArray } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { AGENCY_STAFF_ROLES } from '../lib/tenant';
 import { PAYMENT_STATUS, PAYMENT_TYPE, DEAL_STATUS, TRIP_STATUS } from "@workspace/permissions";
 
@@ -19,14 +20,13 @@ interface Alert {
   reservationIds?: string[];
 }
 
-router.get("/alerts", async (req, res): Promise<void> => {
+router.get("/alerts", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
 
     if (!(AGENCY_STAFF_ROLES as readonly string[]).includes(me.role)) {
-      res.status(403).json({ error: "Sem permissão" });
-      return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
     const tenantId = me.tenantId;
@@ -355,19 +355,17 @@ router.get("/alerts", async (req, res): Promise<void> => {
 
     res.json({ alerts, count: alerts.length });
   } catch (err) {
-    req.log.error({ err }, "Error fetching alerts");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/alerts/email-retry-exhausted/:reservationId/resolve", async (req, res): Promise<void> => {
+router.post("/alerts/email-retry-exhausted/:reservationId/resolve", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
 
     if (!(AGENCY_STAFF_ROLES as readonly string[]).includes(me.role)) {
-      res.status(403).json({ error: "Sem permissão" });
-      return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
     const { reservationId } = req.params;
@@ -383,7 +381,7 @@ router.post("/alerts/email-retry-exhausted/:reservationId/resolve", async (req, 
       .limit(1);
 
     if (!reservation) {
-      res.status(404).json({ error: "Reserva não encontrada" });
+      next(new NotFoundError("Reserva não encontrada", "NOT_FOUND"));
       return;
     }
 
@@ -402,8 +400,7 @@ router.post("/alerts/email-retry-exhausted/:reservationId/resolve", async (req, 
 
     res.json({ ok: true });
   } catch (err) {
-    req.log.error({ err }, "Error resolving exhausted email alerts");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

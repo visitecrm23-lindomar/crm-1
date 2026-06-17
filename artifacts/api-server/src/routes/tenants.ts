@@ -1,9 +1,10 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db, tenantsTable, usersTable, plansTable, referralSettingsTable, tripsTable } from "@workspace/db";
 import { eq, desc, count, or } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { deleteOrphanedFile } from "../lib/uploadthing";
 import { ROLES } from "@workspace/permissions";
 import { canEnableFeature, getFeatureLabel, getFeatureRequiredPlanLabel, hasSeatMapFeature } from "../lib/plan-features";
@@ -34,11 +35,11 @@ const UpdateTenantBody = z.object({
   referralsEnabled: z.boolean().nullable().optional(),
 });
 
-router.get("/admin/stats", async (req, res): Promise<void> => {
+router.get("/admin/stats", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden: superadmin only" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const [tenants, allPlans] = await Promise.all([
       db.select().from(tenantsTable),
@@ -72,16 +73,15 @@ router.get("/admin/stats", async (req, res): Promise<void> => {
       mrr,
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching admin stats");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/tenants", async (req, res): Promise<void> => {
+router.get("/tenants", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden: superadmin only" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const tenants = await db.select().from(tenantsTable).orderBy(desc(tenantsTable.createdAt));
 
@@ -98,32 +98,30 @@ router.get("/tenants", async (req, res): Promise<void> => {
     const result = tenants.map((t) => ({ ...t, userCount: countMap[t.id] ?? 0 }));
     res.json(result);
   } catch (err) {
-    req.log.error({ err }, "Error listing tenants");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/tenants/:id", async (req, res): Promise<void> => {
+router.get("/tenants/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role !== ROLES.SUPER_ADMIN && me.tenantId !== req.params.id) {
-      res.status(403).json({ error: "Forbidden" }); return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
-    if (!tenant) { res.status(404).json({ error: "Not found" }); return; }
+    if (!tenant) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(tenant);
   } catch (err) {
-    req.log.error({ err }, "Error fetching tenant");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/tenants", async (req, res): Promise<void> => {
+router.post("/tenants", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden: superadmin only" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = z.object({
       name: z.string().min(1),
       slug: z.string().min(1),
@@ -131,29 +129,28 @@ router.post("/tenants", async (req, res): Promise<void> => {
       planId: z.string().optional(),
       status: z.string().optional(),
     }).safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(tenantsTable).values({ id, ...parsed.data });
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, id)).limit(1);
     res.status(201).json(tenant);
   } catch (err) {
-    req.log.error({ err }, "Error creating tenant");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/tenants/:id", async (req, res): Promise<void> => {
+router.patch("/tenants/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     const isAdminOfTenant = (me.role === ROLES.AGENCY_ADMIN || me.role === ROLES.SUPER_ADMIN) && me.tenantId === req.params.id;
     const isSuperadmin = me.role === ROLES.SUPER_ADMIN;
-    if (!isAdminOfTenant && !isSuperadmin) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!isAdminOfTenant && !isSuperadmin) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     if (me.role !== ROLES.SUPER_ADMIN && (req.body.planId || req.body.status !== undefined || req.body.maxUsersOverride !== undefined || req.body.maxClientsOverride !== undefined || req.body.maxTripsOverride !== undefined)) {
-      res.status(403).json({ error: "Forbidden: apenas superadmin pode alterar plano, status ou limites do tenant" }); return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
     const parsed = UpdateTenantBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const { birthdayMessagesEnabled, couponsEnabled, referralsEnabled, ...rest } = parsed.data;
     const updateData: Record<string, unknown> = { ...rest };
     if (me.role !== ROLES.SUPER_ADMIN) {
@@ -179,9 +176,7 @@ router.patch("/tenants/:id", async (req, res): Promise<void> => {
         if (effectiveValue === true && !canEnableFeature(key, planSlug)) {
           const featureLabel = getFeatureLabel(key);
           const requiredPlan = getFeatureRequiredPlanLabel(key);
-          res.status(403).json({
-            error: `O plano atual não inclui "${featureLabel}". Faça upgrade para o plano ${requiredPlan} ou superior para ativar esta funcionalidade.`,
-          });
+          next(new ForbiddenError(`O plano atual não inclui "${featureLabel}". Faça upgrade para o plano ${requiredPlan} ou superior para ativar esta funcionalidade.`, "PLAN_UPGRADE_REQUIRED"));
           return;
         }
       }
@@ -213,14 +208,13 @@ router.patch("/tenants/:id", async (req, res): Promise<void> => {
         .where(eq(referralSettingsTable.tenantId, req.params.id));
     }
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
-    if (!tenant) { res.status(404).json({ error: "Not found" }); return; }
+    if (!tenant) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     if ("logoUrl" in parsed.data) {
       await deleteOrphanedFile(oldLogoUrl, parsed.data.logoUrl, req.log);
     }
     res.json(tenant);
   } catch (err) {
-    req.log.error({ err }, "Error updating tenant");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

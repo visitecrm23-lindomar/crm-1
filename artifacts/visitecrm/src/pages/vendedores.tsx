@@ -54,13 +54,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ROLES, COMMISSION_STATUS } from "@workspace/permissions";
-import { formatCurrency } from "@/lib/utils";
-
-function fmtCurrency(v: number | string | null | undefined) {
-  if (v == null) return "R$ 0,00";
-  const n = typeof v === "string" ? parseFloat(v) : v;
-  return formatCurrency(isNaN(n) ? 0 : n);
-}
+import { formatCurrencyBRL as fmtCurrency } from "@/lib/utils";
 
 interface SellerStats {
   user: UserProfile;

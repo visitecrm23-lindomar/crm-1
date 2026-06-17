@@ -1,8 +1,9 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { paymentsTable, reservationsTable, clientsTable, tripsTable, expensesTable } from "@workspace/db";
 import { eq, and, gte, lte } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import ExcelJS from "exceljs";
 import { jsPDF } from "jspdf";
 import { applyPlugin } from "jspdf-autotable";
@@ -54,14 +55,13 @@ function pdfSection(doc: JsPDFWithAutoTable, title: string, y: number): number {
   return y + 6;
 }
 
-router.post("/reports/export", async (req, res): Promise<void> => {
+router.post("/reports/export", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
 
     if (!MANAGEMENT_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Sem permissão" });
-      return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
     const { reportType, format: fmt, startDate, endDate } = req.body as {
@@ -72,7 +72,7 @@ router.post("/reports/export", async (req, res): Promise<void> => {
     };
 
     if (!reportType || !fmt) {
-      res.status(400).json({ error: "reportType e format são obrigatórios" });
+      next(new ValidationError("reportType e format são obrigatórios", "VALIDATION_ERROR"));
       return;
     }
 
@@ -293,7 +293,7 @@ router.post("/reports/export", async (req, res): Promise<void> => {
       const headers = ["Nº Reserva", "Cliente", "Email", "Viagem", "Destino", "Saída", "Status", "Assentos", "Valor Total", "Valor Pago", "Saldo", "Forma Pgto", "Parcelas", "Criado em", "Confirmado em"];
       const rows = reservations.map(r => {
         const trip = tripMap.get(r.tripId);
-        const client = clientMap.get(r.clientId);
+        const client = r.clientId ? clientMap.get(r.clientId) : undefined;
         return [
           r.reservationNumber ?? r.id.slice(0, 8),
           client?.name ?? "", client?.email ?? "",
@@ -370,7 +370,7 @@ router.post("/reports/export", async (req, res): Promise<void> => {
           head: [["Nº Reserva", "Cliente", "Viagem", "Status", "Assentos", "Total", "Pago", "Criado em"]],
           body: reservations.map(r => {
             const trip = tripMap.get(r.tripId);
-            const client = clientMap.get(r.clientId);
+            const client = r.clientId ? clientMap.get(r.clientId) : undefined;
             return [
               r.reservationNumber ?? r.id.slice(0, 8),
               client?.name ?? "", trip?.name ?? "",
@@ -462,10 +462,9 @@ router.post("/reports/export", async (req, res): Promise<void> => {
       }
     }
 
-    res.status(400).json({ error: "Combinação de reportType e format inválida" });
+    next(new ValidationError("Combinação de reportType e format inválida", "VALIDATION_ERROR"));
   } catch (err) {
-    req.log.error({ err }, "Error generating report");
-    res.status(500).json({ error: "Erro ao gerar relatório" });
+    next(err);
   }
 });
 

@@ -16,6 +16,7 @@ import {
   CreateClientNoteBody,
 } from "@workspace/api-zod";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
+import { scheduleCalendarSyncBirthday } from "../lib/google-calendar/schedule-sync";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { ROLES } from "@workspace/permissions";
 import { clerkClient } from "@clerk/express";
@@ -150,7 +151,7 @@ router.get("/clients", async (req, res, next: NextFunction): Promise<void> => {
       const clientIdsInTrip = await db.selectDistinct({ clientId: reservationsTable.clientId })
         .from(reservationsTable)
         .where(and(eq(reservationsTable.tripId, tripId), eq(reservationsTable.tenantId, me.tenantId)));
-      const ids = clientIdsInTrip.map(r => r.clientId);
+      const ids = clientIdsInTrip.map(r => r.clientId).filter((id): id is string => id !== null);
       conditions.push(ids.length > 0 ? inArray(clientsTable.id, ids) : sql`false` as ReturnType<typeof eq>);
     }
 
@@ -158,8 +159,8 @@ router.get("/clients", async (req, res, next: NextFunction): Promise<void> => {
       : sortBy === "churnScore" ? "churn_score" : null;
     const orderExpr = scoreColName
       ? (sortOrder === "asc"
-        ? sql`(SELECT ${sql.raw(scoreColName)} FROM client_scores WHERE client_id = ${clientsTable.id} AND tenant_id = ${clientsTable.tenantId}) ASC NULLS LAST`
-        : sql`(SELECT ${sql.raw(scoreColName)} FROM client_scores WHERE client_id = ${clientsTable.id} AND tenant_id = ${clientsTable.tenantId}) DESC NULLS LAST`)
+        ? sql`(SELECT ${sql.raw(scoreColName!)} FROM client_scores WHERE client_id = ${clientsTable.id} AND tenant_id = ${clientsTable.tenantId}) ASC NULLS LAST`
+        : sql`(SELECT ${sql.raw(scoreColName!)} FROM client_scores WHERE client_id = ${clientsTable.id} AND tenant_id = ${clientsTable.tenantId}) DESC NULLS LAST`)
       : (() => {
           const col = sortBy === "name" ? clientsTable.name
             : sortBy === "totalSpent" ? clientsTable.totalSpent
@@ -189,7 +190,7 @@ router.get("/clients", async (req, res, next: NextFunction): Promise<void> => {
         .where(and(eq(reservationsTable.tenantId, me.tenantId), inArray(reservationsTable.clientId, clientIds)))
         .orderBy(desc(reservationsTable.createdAt));
       for (const row of lastTrips) {
-        if (!lastTripMap[row.clientId]) lastTripMap[row.clientId] = row.tripName;
+        if (row.clientId && !lastTripMap[row.clientId]) lastTripMap[row.clientId] = row.tripName;
       }
     }
 
@@ -291,9 +292,7 @@ router.post("/clients", async (req, res, next: NextFunction): Promise<void> => {
     res.status(statusCode).json(formatClient(upserted, { isNew, message }));
 
     if (upserted.birthDate) {
-      CalendarSyncService.syncBirthday(upserted.id).catch((err) => {
-        req.log.warn({ err, clientId: upserted.id, context: "clients.upsert" }, "Calendar sync falhou — continuando");
-      });
+      scheduleCalendarSyncBirthday(upserted.id).catch(() => {});
     }
   } catch (err) {
     next(err);
@@ -412,9 +411,7 @@ router.patch("/clients/:id", async (req, res, next: NextFunction): Promise<void>
     res.json(formatClient(client));
 
     if (parsed.data.birthDate !== undefined) {
-      CalendarSyncService.syncBirthday(client.id).catch((err) => {
-        req.log.warn({ err, clientId: client.id, context: "clients.update" }, "Calendar sync falhou — continuando");
-      });
+      scheduleCalendarSyncBirthday(client.id).catch(() => {});
     }
   } catch (err) {
     next(err);

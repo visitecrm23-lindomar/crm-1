@@ -596,15 +596,15 @@ router.patch("/payments/:id", async (req, res, next: NextFunction): Promise<void
     }
     if (payment.status === PAYMENT_STATUS.PAID && payment.type === PAYMENT_TYPE.RECEIVABLE) {
       if (payment.reservationId) {
-        const [res] = await db.select({ clientId: reservationsTable.clientId, totalValue: reservationsTable.totalValue })
+        const [reservationRow] = await db.select({ clientId: reservationsTable.clientId, totalValue: reservationsTable.totalValue })
           .from(reservationsTable)
           .where(and(eq(reservationsTable.id, payment.reservationId), eq(reservationsTable.tenantId, me.tenantId)))
           .limit(1);
-        if (res) {
+        if (reservationRow) {
           await loyaltyAwardPointsForReservation({
-            clientId: res.clientId,
+            clientId: reservationRow.clientId!,
             reservationId: payment.reservationId,
-            amount: res.totalValue,
+            amount: reservationRow.totalValue,
             tenantId: me.tenantId,
           });
         }

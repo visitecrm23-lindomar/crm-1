@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { tripsTable, paymentsTable, clientsTable, systemConfigsTable, reservationsTable } from "@workspace/db";
 import { eq, and, lt, gte, lte, gt } from "drizzle-orm";
@@ -18,7 +18,7 @@ type AlertItem = {
 
 type TripRow = { id: string; name: string; departureDate: Date; totalCapacity: number; availableSeats: number };
 
-router.get("/notifications", async (req, res): Promise<void> => {
+router.get("/notifications", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -222,8 +222,7 @@ router.get("/notifications", async (req, res): Promise<void> => {
 
     res.json({ alerts, total: alerts.length });
   } catch (err) {
-    req.log.error({ err }, "Error fetching notifications");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

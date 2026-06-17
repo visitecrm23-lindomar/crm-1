@@ -28,7 +28,18 @@ const { mockSendEmail, capturedUpdates, updateMocks } = vi.hoisted(() => {
 // Module mocks
 // ---------------------------------------------------------------------------
 
-vi.mock("@workspace/email", () => ({ sendReminderHtmlEmail: mockSendEmail }));
+vi.mock("@workspace/email", () => ({
+  sendReminderHtmlEmail: mockSendEmail,
+  // Mock sendReferralBonusPaidEmail to call the sendReminderHtmlEmail spy directly.
+  // Both functions live in the same service.ts file, so vi.importActual cannot intercept
+  // the internal call. We replicate the contract (to, fromName, html with formatted amount).
+  sendReferralBonusPaidEmail: vi.fn().mockImplementation(
+    async (props: { referrerEmail: string; agencyName: string; bonusAmount: number }) => {
+      const formatted = Number(props.bonusAmount).toFixed(2).replace(".", ",");
+      return mockSendEmail({ to: props.referrerEmail, fromName: props.agencyName, html: `R$ ${formatted}` });
+    },
+  ),
+}));
 
 vi.mock("@workspace/db", () => ({
   db: {
@@ -41,6 +52,9 @@ vi.mock("@workspace/db", () => ({
   tenantsTable:          { id: "id" },
   referralSettingsTable: {},
   referralTrackingTable: {},
+  referralCampaignsTable: {},
+  emailLogsTable: {},
+  reservationsTable: {},
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -51,6 +65,7 @@ vi.mock("drizzle-orm", () => ({
   asc:             vi.fn(() => "asc"),
   ilike:           vi.fn(() => "ilike"),
   count:           vi.fn(() => "count"),
+  inArray:         vi.fn(() => "inArray"),
   sql:             Object.assign(vi.fn(() => "sql"), { raw: vi.fn() }),
   getTableColumns: vi.fn(() => ({})),
 }));
@@ -73,6 +88,39 @@ vi.mock("../lib/logger.js", () => ({
 
 vi.mock("../lib/id.js", () => ({ generateId: vi.fn(() => "gen-id") }));
 
+vi.mock("../queues/index.js", () => ({
+  getEmailQueue: vi.fn().mockReturnValue(null),
+  getCancellationEmailQueue: vi.fn().mockReturnValue(null),
+  getNewBookingNotificationEmailQueue: vi.fn().mockReturnValue(null),
+  getReferralEmailQueue: vi.fn().mockReturnValue(null),
+}));
+
+vi.mock("../lib/redis.js", () => ({
+  areWorkersEnabled: vi.fn().mockReturnValue(false),
+  getRedis: vi.fn().mockReturnValue(null),
+}));
+
+vi.mock("../lib/client-notifications.js", () => ({
+  insertClientNotification: vi.fn().mockResolvedValue(undefined),
+  getRecentNotifications: vi.fn().mockResolvedValue([]),
+  getUnreadCount: vi.fn().mockResolvedValue(0),
+  markAllRead: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../queues/whatsapp-helpers.js", () => ({
+  dispatchWhatsAppReferralBonusPaid: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../lib/whatsapp.js", () => ({
+  sendWhatsAppMessage: vi.fn().mockResolvedValue(undefined),
+  interpolateWhatsAppMessage: vi.fn((template: string) => template),
+}));
+
+vi.mock("../lib/referral-tiers.js", () => ({
+  DEFAULT_TIERS: [],
+  computeReferralTier: vi.fn().mockReturnValue(null),
+}));
+
 // ---------------------------------------------------------------------------
 // Import router AFTER mocks
 // ---------------------------------------------------------------------------
@@ -80,6 +128,7 @@ vi.mock("../lib/id.js", () => ({ generateId: vi.fn(() => "gen-id") }));
 import { requireAuth } from "../lib/tenant.js";
 import { db } from "@workspace/db";
 import referralsRouter from "../routes/referrals.js";
+import { errorHandler } from "../middlewares/errorHandler.js";
 
 // ---------------------------------------------------------------------------
 // Chain builder — thenable stub for drizzle select chains
@@ -90,6 +139,7 @@ interface DbChain extends PromiseLike<unknown[]> {
   where(...args: unknown[]): DbChain;
   leftJoin(table: unknown, cond: unknown): DbChain;
   orderBy(...cols: unknown[]): DbChain;
+  groupBy(...cols: unknown[]): DbChain;
   limit(n: number): DbChain;
   offset(n: number): DbChain;
 }
@@ -101,6 +151,7 @@ function makeChain(data: unknown[]): DbChain {
     where:    vi.fn().mockImplementation(() => makeChain(data)),
     leftJoin: vi.fn().mockImplementation(() => makeChain(data)),
     orderBy:  vi.fn().mockImplementation(() => makeChain(data)),
+    groupBy:  vi.fn().mockImplementation(() => makeChain(data)),
     limit:    vi.fn().mockImplementation(() => makeChain(data)),
     offset:   vi.fn().mockImplementation(() => makeChain(data)),
   } as DbChain;
@@ -120,6 +171,7 @@ function buildApp() {
     next();
   });
   app.use("/api", referralsRouter);
+  app.use(errorHandler);
   return app;
 }
 
@@ -319,7 +371,8 @@ describe("GET /api/referrals — clientsTable JOIN enrichment", () => {
     const row = { ...makeReferral(), referrerClientName: "Maria Live", referrerClientEmail: "maria@live.com", referrerClientWhatsapp: "11977776666", referrerClientPhone: "11988880000" };
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([{ total: "1" }]))
-      .mockImplementationOnce(() => makeChain([row]));
+      .mockImplementationOnce(() => makeChain([row]))
+      .mockImplementationOnce(() => makeChain([]));     // tracking backfill query
 
     const res = await request(buildApp()).get("/api/referrals").send();
 
@@ -337,7 +390,8 @@ describe("GET /api/referrals — clientsTable JOIN enrichment", () => {
     const row = { ...makeReferral({ referrerEmail: "stale@old.com", referrerName: "Nome Antigo" }), referrerClientName: "Nome Novo", referrerClientEmail: "novo@live.com", referrerClientWhatsapp: null, referrerClientPhone: null };
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([{ total: "1" }]))
-      .mockImplementationOnce(() => makeChain([row]));
+      .mockImplementationOnce(() => makeChain([row]))
+      .mockImplementationOnce(() => makeChain([]));     // tracking backfill query
 
     const res = await request(buildApp()).get("/api/referrals").send();
 
@@ -352,7 +406,8 @@ describe("GET /api/referrals — clientsTable JOIN enrichment", () => {
     const row = { ...makeReferral({ referrerName: "Fallback", referrerEmail: "stored@fallback.com", referrerPhone: "11911112222" }), referrerClientName: null, referrerClientEmail: null, referrerClientWhatsapp: null, referrerClientPhone: null };
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([{ total: "1" }]))
-      .mockImplementationOnce(() => makeChain([row]));
+      .mockImplementationOnce(() => makeChain([row]))
+      .mockImplementationOnce(() => makeChain([]));     // tracking backfill query
 
     const res = await request(buildApp()).get("/api/referrals").send();
 

@@ -1,17 +1,17 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { requireAuth } from "../lib/tenant";
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { getRedisStatus, fetchUpstashDailyStats, areWorkersEnabled } from "../lib/redis";
 import { ROLES } from "@workspace/permissions";
 
 const router = Router();
 
-router.get("/admin/system-health", async (req, res): Promise<void> => {
+router.get("/admin/system-health", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role !== ROLES.SUPER_ADMIN) {
-      res.status(403).json({ error: "Forbidden: superadmin only" });
-      return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
     const redisStatus = getRedisStatus();
@@ -36,8 +36,7 @@ router.get("/admin/system-health", async (req, res): Promise<void> => {
       },
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching system health");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

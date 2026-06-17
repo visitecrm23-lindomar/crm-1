@@ -1,31 +1,31 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db, platformSettingsTable, redisAlertLogTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { generateId } from "../lib/id";
 import { ROLES } from "@workspace/permissions";
 
 const router = Router();
 
-router.get("/admin/platform-settings", async (req, res): Promise<void> => {
+router.get("/admin/platform-settings", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const settings = await db.select().from(platformSettingsTable).orderBy(platformSettingsTable.key);
     res.json(settings);
   } catch (err) {
-    req.log.error({ err }, "Error fetching platform settings");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.put("/admin/platform-settings/:key", async (req, res): Promise<void> => {
+router.put("/admin/platform-settings/:key", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const { key } = req.params;
     const { value } = req.body;
@@ -33,7 +33,7 @@ router.put("/admin/platform-settings/:key", async (req, res): Promise<void> => {
     if (key === "redis_alert_email" && value !== null && value !== undefined && String(value).trim() !== "") {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(String(value).trim())) {
-        res.status(400).json({ error: "Endereço de e-mail inválido" });
+        next(new ValidationError("Endereço de e-mail inválido", "VALIDATION_ERROR"));
         return;
       }
     }
@@ -41,7 +41,7 @@ router.put("/admin/platform-settings/:key", async (req, res): Promise<void> => {
     const existing = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, key)).limit(1);
 
     if (existing.length === 0) {
-      res.status(404).json({ error: "Setting not found" });
+      next(new NotFoundError("Setting not found", "NOT_FOUND"));
       return;
     }
 
@@ -53,16 +53,15 @@ router.put("/admin/platform-settings/:key", async (req, res): Promise<void> => {
 
     res.json(updated);
   } catch (err) {
-    req.log.error({ err }, "Error updating platform setting");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/admin/redis-alert-log", async (req, res): Promise<void> => {
+router.get("/admin/redis-alert-log", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const logs = await db
       .select()
@@ -72,8 +71,7 @@ router.get("/admin/redis-alert-log", async (req, res): Promise<void> => {
 
     res.json(logs);
   } catch (err) {
-    req.log.error({ err }, "Error fetching redis alert log");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

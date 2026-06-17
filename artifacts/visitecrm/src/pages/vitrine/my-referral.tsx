@@ -35,6 +35,7 @@ import {
   QrCode,
   Coins,
 } from "lucide-react";
+import { formatCurrencyBRL as formatCurrency } from "@/lib/utils";
 
 interface Props {
   slug: string;
@@ -144,11 +145,6 @@ function safeQrDarkColor(hex: string, fallback = "#111827"): string {
   });
   const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   return luminance > 0.35 ? fallback : hex;
-}
-
-function formatCurrency(value: string | number) {
-  const n = typeof value === "string" ? parseFloat(value) : value;
-  return (isNaN(n) ? 0 : n).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 const VALID_STATUS_FILTERS = ["all", "pending", "confirmed", "expired", "reversed"] as const;

@@ -116,6 +116,14 @@ export interface WhatsAppNotificationJobData {
   tenantId: string;
 }
 
+export interface CalendarSyncJobData {
+  type: "syncTrip" | "syncTripForUser" | "syncPayment" | "syncBirthday" | "deleteEventsForTrip";
+  tripId?: string;
+  paymentId?: string;
+  clientId?: string;
+  actorUserId?: string;
+}
+
 export interface CampaignEmailJobData {
   to: string;
   toName: string;
@@ -133,6 +141,7 @@ const QUEUES = {
   PDF: "pdfs",
   COMMISSION_SYNC: "commission-sync",
   WHATSAPP: "whatsapp-notifications",
+  CALENDAR_SYNC: "calendar-sync",
 } as const;
 
 export type ReferralEmailJobData = ReferralBonusPaidEmailJobData | ReferralConvertedEmailJobData | ReferralExpiredEmailJobData | ReferralExpiringSoonEmailJobData | ReferralBonusReleasedEmailJobData | ReferralWelcomeEmailJobData;
@@ -290,6 +299,26 @@ export function getCommissionSyncQueue(): Queue<CommissionSyncJobData> | null {
   return _commissionSyncQueue;
 }
 
+let _calendarSyncQueue: Queue<CalendarSyncJobData> | null = null;
+
+export function getCalendarSyncQueue(): Queue<CalendarSyncJobData> | null {
+  const conn = getRedisConnection();
+  if (!conn) return null;
+
+  if (!_calendarSyncQueue) {
+    _calendarSyncQueue = new Queue<CalendarSyncJobData>(QUEUES.CALENDAR_SYNC, {
+      connection: conn,
+      defaultJobOptions: {
+        attempts: 5,
+        backoff: { type: "exponential", delay: 30_000 },
+        removeOnComplete: { count: 200 },
+        removeOnFail: { count: 100 },
+      },
+    });
+  }
+  return _calendarSyncQueue;
+}
+
 let _campaignEmailQueue: Queue<CampaignEmailJobData> | null = null;
 
 export function getCampaignEmailQueue(): Queue<CampaignEmailJobData> | null {
@@ -339,6 +368,7 @@ export async function closeQueues(): Promise<void> {
     _reminderQueue?.close().catch(() => {}),
     _pdfQueue?.close().catch(() => {}),
     _commissionSyncQueue?.close().catch(() => {}),
+    _calendarSyncQueue?.close().catch(() => {}),
     _campaignEmailQueue?.close().catch(() => {}),
     _whatsAppQueue?.close().catch(() => {}),
   ]);
@@ -349,6 +379,7 @@ export async function closeQueues(): Promise<void> {
   _reminderQueue = null;
   _pdfQueue = null;
   _commissionSyncQueue = null;
+  _calendarSyncQueue = null;
   _campaignEmailQueue = null;
   _whatsAppQueue = null;
 }

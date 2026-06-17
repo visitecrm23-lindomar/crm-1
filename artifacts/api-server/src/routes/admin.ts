@@ -1,9 +1,10 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db, tenantsTable, usersTable, auditLogsTable, plansTable, invoicesTable, featureFlagsTable, storesTable, storeProductsTable, storeCategoriesTable, storeOrderItemsTable, storeReviewsTable, tripsTable, productCategoriesTable, productImagesTable, vehiclesTable, accommodationsTable, destinationsTable, clientsTable } from "@workspace/db";
 import { eq, desc, asc, count, sql, and, gte, lte, ne } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { getAuth } from "@clerk/express";
 import { utapi } from "../lib/uploadthing";
 import { collectReferencedUploadThingKeys } from "../lib/collectReferencedUploadThingKeys";
@@ -11,9 +12,9 @@ import { ROLES, PAYMENT_STATUS } from "@workspace/permissions";
 
 const router = Router();
 
-function requireSuperAdmin(role: string, res: import("express").Response): boolean {
+function requireSuperAdmin(role: string, res: import("express").Response, next: import("express").NextFunction): boolean {
   if (role !== ROLES.SUPER_ADMIN) {
-    res.status(403).json({ error: "Forbidden: superadmin only" });
+    next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
     return false;
   }
   return true;
@@ -36,11 +37,11 @@ const PlanBody = z.object({
   sortOrder: z.number().int().optional(),
 });
 
-router.get("/admin/plans", async (req, res): Promise<void> => {
+router.get("/admin/plans", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
     const plans = await db.select().from(plansTable).orderBy(asc(plansTable.sortOrder), asc(plansTable.createdAt));
     // For each plan, count tenants
     const tenantCounts = await db
@@ -51,55 +52,51 @@ router.get("/admin/plans", async (req, res): Promise<void> => {
     for (const r of tenantCounts) cmap[r.planId] = r.cnt;
     res.json(plans.map(p => ({ ...p, tenantCount: cmap[p.slug] ?? cmap[p.id] ?? 0 })));
   } catch (err) {
-    req.log.error({ err }, "Error listing plans");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/admin/plans", async (req, res): Promise<void> => {
+router.post("/admin/plans", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
     const parsed = PlanBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(plansTable).values({ id, ...parsed.data });
     const [plan] = await db.select().from(plansTable).where(eq(plansTable.id, id)).limit(1);
     res.status(201).json(plan);
   } catch (err) {
-    req.log.error({ err }, "Error creating plan");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/admin/plans/:id", async (req, res): Promise<void> => {
+router.patch("/admin/plans/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
     const parsed = PlanBody.partial().safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     await db.update(plansTable).set(parsed.data).where(eq(plansTable.id, req.params.id));
     const [plan] = await db.select().from(plansTable).where(eq(plansTable.id, req.params.id)).limit(1);
-    if (!plan) { res.status(404).json({ error: "Plan not found" }); return; }
+    if (!plan) { next(new NotFoundError("Plan not found", "NOT_FOUND")); return; }
     res.json(plan);
   } catch (err) {
-    req.log.error({ err }, "Error updating plan");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/admin/plans/:id", async (req, res): Promise<void> => {
+router.delete("/admin/plans/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
     await db.delete(plansTable).where(eq(plansTable.id, req.params.id));
     res.json({ ok: true });
   } catch (err) {
-    req.log.error({ err }, "Error deleting plan");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -115,11 +112,11 @@ const InvoiceBody = z.object({
   notes: z.string().optional(),
 });
 
-router.get("/admin/invoices", async (req, res): Promise<void> => {
+router.get("/admin/invoices", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
     const { tenantId, status } = req.query as Record<string, string>;
     let query = db.select({
       invoice: invoicesTable,
@@ -136,18 +133,17 @@ router.get("/admin/invoices", async (req, res): Promise<void> => {
     const rows = await query.limit(200);
     res.json(rows.map(r => ({ ...r.invoice, tenantName: r.tenantName, tenantEmail: r.tenantEmail })));
   } catch (err) {
-    req.log.error({ err }, "Error listing invoices");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/admin/invoices", async (req, res): Promise<void> => {
+router.post("/admin/invoices", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
     const parsed = InvoiceBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(invoicesTable).values({
       id,
@@ -162,33 +158,31 @@ router.post("/admin/invoices", async (req, res): Promise<void> => {
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id)).limit(1);
     res.status(201).json(invoice);
   } catch (err) {
-    req.log.error({ err }, "Error creating invoice");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/admin/invoices/:id", async (req, res): Promise<void> => {
+router.patch("/admin/invoices/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
     const UpdateBody = z.object({
       status: z.string().optional(),
       paidAt: z.string().optional(),
       notes: z.string().optional(),
     });
     const parsed = UpdateBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const updateData: Record<string, unknown> = { ...parsed.data };
     if (parsed.data.paidAt) updateData.paidAt = new Date(parsed.data.paidAt);
     if (parsed.data.status === PAYMENT_STATUS.PAID && !parsed.data.paidAt) updateData.paidAt = new Date();
     await db.update(invoicesTable).set(updateData).where(eq(invoicesTable.id, req.params.id));
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
-    if (!invoice) { res.status(404).json({ error: "Not found" }); return; }
+    if (!invoice) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(invoice);
   } catch (err) {
-    req.log.error({ err }, "Error updating invoice");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -202,73 +196,69 @@ const FlagBody = z.object({
   rolloutPercent: z.number().int().min(0).max(100).optional(),
 });
 
-router.get("/admin/feature-flags", async (req, res): Promise<void> => {
+router.get("/admin/feature-flags", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
     const flags = await db.select().from(featureFlagsTable).orderBy(asc(featureFlagsTable.key));
     res.json(flags);
   } catch (err) {
-    req.log.error({ err }, "Error listing feature flags");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/admin/feature-flags", async (req, res): Promise<void> => {
+router.post("/admin/feature-flags", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
     const parsed = FlagBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(featureFlagsTable).values({ id, ...parsed.data });
     const [flag] = await db.select().from(featureFlagsTable).where(eq(featureFlagsTable.id, id)).limit(1);
     res.status(201).json(flag);
   } catch (err) {
-    req.log.error({ err }, "Error creating feature flag");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/admin/feature-flags/:id", async (req, res): Promise<void> => {
+router.patch("/admin/feature-flags/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
     const parsed = FlagBody.partial().safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     await db.update(featureFlagsTable).set(parsed.data).where(eq(featureFlagsTable.id, req.params.id));
     const [flag] = await db.select().from(featureFlagsTable).where(eq(featureFlagsTable.id, req.params.id)).limit(1);
-    if (!flag) { res.status(404).json({ error: "Not found" }); return; }
+    if (!flag) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(flag);
   } catch (err) {
-    req.log.error({ err }, "Error updating feature flag");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/admin/feature-flags/:id", async (req, res): Promise<void> => {
+router.delete("/admin/feature-flags/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
     await db.delete(featureFlagsTable).where(eq(featureFlagsTable.id, req.params.id));
     res.json({ ok: true });
   } catch (err) {
-    req.log.error({ err }, "Error deleting feature flag");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
 // ─── METRICS HISTÓRICAS ────────────────────────────────────────────────────────
 
-router.get("/admin/metrics/growth", async (req, res): Promise<void> => {
+router.get("/admin/metrics/growth", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
 
     const months: { month: string; label: string; new_tenants: number; active: number }[] = [];
     const now = new Date();
@@ -299,16 +289,15 @@ router.get("/admin/metrics/growth", async (req, res): Promise<void> => {
 
     res.json(months);
   } catch (err) {
-    req.log.error({ err }, "Error fetching growth metrics");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/admin/metrics/mrr", async (req, res): Promise<void> => {
+router.get("/admin/metrics/mrr", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
 
     const PLAN_MRR: Record<string, number> = { starter: 0, pro: 297, enterprise: 997 };
     const months: { month: string; label: string; mrr: number }[] = [];
@@ -329,16 +318,15 @@ router.get("/admin/metrics/mrr", async (req, res): Promise<void> => {
 
     res.json(months);
   } catch (err) {
-    req.log.error({ err }, "Error fetching MRR metrics");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/admin/metrics/churn", async (req, res): Promise<void> => {
+router.get("/admin/metrics/churn", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
 
     const months: { month: string; label: string; suspended: number; churnRate: number }[] = [];
     const now = new Date();
@@ -366,18 +354,17 @@ router.get("/admin/metrics/churn", async (req, res): Promise<void> => {
 
     res.json(months);
   } catch (err) {
-    req.log.error({ err }, "Error fetching churn metrics");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
 // ─── ADMIN USERS (todos da plataforma) ───────────────────────────────────────
 
-router.get("/admin/users", async (req, res): Promise<void> => {
+router.get("/admin/users", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
     const { tenantId, role } = req.query as Record<string, string>;
     const rows = await db.select({
       user: usersTable,
@@ -392,18 +379,17 @@ router.get("/admin/users", async (req, res): Promise<void> => {
     if (role) result = result.filter(u => u.role === role);
     res.json(result);
   } catch (err) {
-    req.log.error({ err }, "Error listing admin users");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
 // ─── GLOBAL AUDIT LOGS ────────────────────────────────────────────────────────
 
-router.get("/admin/audit-logs", async (req, res): Promise<void> => {
+router.get("/admin/audit-logs", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
     const { tenantId, entityType, action } = req.query as Record<string, string>;
     const rows = await db.select({
       log: auditLogsTable,
@@ -421,18 +407,17 @@ router.get("/admin/audit-logs", async (req, res): Promise<void> => {
     if (action) result = result.filter(r => r.action === action);
     res.json(result);
   } catch (err) {
-    req.log.error({ err }, "Error listing audit logs");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
 // ─── ADMIN TENANTS LIST ───────────────────────────────────────────────────────
 
-router.get("/admin/tenants", async (req, res): Promise<void> => {
+router.get("/admin/tenants", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
 
     const tenants = await db.select().from(tenantsTable).orderBy(desc(tenantsTable.createdAt));
 
@@ -448,8 +433,7 @@ router.get("/admin/tenants", async (req, res): Promise<void> => {
 
     res.json(tenants.map((t) => ({ ...t, userCount: countMap[t.id] ?? 0 })));
   } catch (err) {
-    req.log.error({ err }, "Error listing admin tenants");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -457,22 +441,22 @@ router.get("/admin/tenants", async (req, res): Promise<void> => {
 // Bootstrap: set role="superadmin" for the calling user if their Clerk ID matches
 // the SUPERADMIN_CLERK_ID environment variable. Safe to call multiple times.
 
-router.post("/admin/sync-superadmin", async (req, res): Promise<void> => {
+router.post("/admin/sync-superadmin", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const { userId: clerkId } = getAuth(req);
-    if (!clerkId) { res.status(401).json({ error: "Not authenticated" }); return; }
+    if (!clerkId) { next(new AppError("Not authenticated", 401, "UNAUTHORIZED")); return; }
 
     const superadminClerkId = process.env.SUPERADMIN_CLERK_ID;
     if (!superadminClerkId) {
-      res.status(503).json({ error: "SUPERADMIN_CLERK_ID not configured" }); return;
+      next(new AppError("SUPERADMIN_CLERK_ID not configured", 500, "SERVER_MISCONFIGURED")); return;
     }
     if (clerkId !== superadminClerkId) {
-      res.status(403).json({ error: "Clerk ID does not match SUPERADMIN_CLERK_ID" }); return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
     const [existing] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId)).limit(1);
     if (!existing) {
-      res.status(404).json({ error: "User not found — sign in first to create your profile, then call this endpoint" }); return;
+      next(new NotFoundError("User not found — sign in first to create your profile, then call this endpoint", "NOT_FOUND")); return;
     }
 
     if (existing.role === ROLES.SUPER_ADMIN) {
@@ -480,23 +464,21 @@ router.post("/admin/sync-superadmin", async (req, res): Promise<void> => {
     }
 
     await db.update(usersTable).set({ role: ROLES.SUPER_ADMIN }).where(eq(usersTable.clerkId, clerkId));
-    req.log.info({ clerkId, userId: existing.id }, "Promoted user to superadmin via sync-superadmin");
     res.json({ ok: true, already: false, userId: existing.id, role: ROLES.SUPER_ADMIN });
   } catch (err) {
-    req.log.error({ err }, "Error syncing superadmin");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
 // ─── TENANT DETAILS + ACTIONS ─────────────────────────────────────────────────
 
-router.get("/admin/tenants/:id/details", async (req, res): Promise<void> => {
+router.get("/admin/tenants/:id/details", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
-    if (!tenant) { res.status(404).json({ error: "Not found" }); return; }
+    if (!tenant) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
 
     const users = await db.select().from(usersTable).where(eq(usersTable.tenantId, req.params.id)).orderBy(desc(usersTable.createdAt));
     const [userCount] = await db.select({ cnt: count() }).from(usersTable).where(eq(usersTable.tenantId, req.params.id));
@@ -505,16 +487,15 @@ router.get("/admin/tenants/:id/details", async (req, res): Promise<void> => {
 
     res.json({ ...tenant, users, userCount: userCount?.cnt ?? 0, logs, invoices });
   } catch (err) {
-    req.log.error({ err }, "Error fetching tenant details");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/admin/tenants/:id/suspend", async (req, res): Promise<void> => {
+router.post("/admin/tenants/:id/suspend", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
     const reason = req.body?.reason as string | undefined;
     await db.update(tenantsTable).set({
       status: "suspended",
@@ -524,16 +505,15 @@ router.post("/admin/tenants/:id/suspend", async (req, res): Promise<void> => {
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
     res.json(tenant);
   } catch (err) {
-    req.log.error({ err }, "Error suspending tenant");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/admin/tenants/:id/activate", async (req, res): Promise<void> => {
+router.post("/admin/tenants/:id/activate", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
     await db.update(tenantsTable).set({
       status: "active",
       suspendedAt: null,
@@ -542,8 +522,7 @@ router.post("/admin/tenants/:id/activate", async (req, res): Promise<void> => {
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
     res.json(tenant);
   } catch (err) {
-    req.log.error({ err }, "Error activating tenant");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -563,11 +542,11 @@ router.post("/admin/tenants/:id/activate", async (req, res): Promise<void> => {
 // extractVerifiedUploadThingKey() filters out non-UploadThing URLs
 // (Clerk avatars, external links) so they are never deleted.
 
-router.post("/admin/cleanup-orphaned-uploadthing-files", async (req, res): Promise<void> => {
+router.post("/admin/cleanup-orphaned-uploadthing-files", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
 
     // dry-run mode: pass ?dryRun=false to actually delete; default is true (safe preview).
     const dryRun = req.query["dryRun"] !== "false";
@@ -611,12 +590,10 @@ router.post("/admin/cleanup-orphaned-uploadthing-files", async (req, res): Promi
         const result = await utapi.deleteFiles(batch);
         deletedCount += result.deletedCount;
       } catch (batchErr) {
-        req.log.warn({ batchErr, batchSize: batch.length }, "Failed to delete a batch of orphaned files");
         failedKeys.push(...batch);
       }
     }
 
-    req.log.info({ deletedCount, failedCount: failedKeys.length }, "Orphaned UploadThing files cleanup complete");
     res.json({
       dryRun: false,
       deleted: deletedCount,
@@ -624,8 +601,7 @@ router.post("/admin/cleanup-orphaned-uploadthing-files", async (req, res): Promi
       ...(verbose ? { failedKeys, orphanedKeys } : {}),
     });
   } catch (err) {
-    req.log.error({ err }, "Error cleaning up orphaned UploadThing files");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -636,11 +612,11 @@ router.post("/admin/cleanup-orphaned-uploadthing-files", async (req, res): Promi
 //   dryRun=false, keys=[...]: delete only the supplied keys
 //   dryRun=false, keys omitted: delete all orphaned files
 // ---------------------------------------------------------------------------
-router.post("/admin/maintenance/orphaned-files", async (req, res): Promise<void> => {
+router.post("/admin/maintenance/orphaned-files", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!requireSuperAdmin(me.role, res)) return;
+    if (!requireSuperAdmin(me.role, res, next)) return;
 
     const dryRun: boolean = req.body.dryRun !== false;
     const suppliedKeys: string[] | undefined = Array.isArray(req.body.keys) ? req.body.keys : undefined;
@@ -699,12 +675,10 @@ router.post("/admin/maintenance/orphaned-files", async (req, res): Promise<void>
         const result = await utapi.deleteFiles(batch);
         deletedCount += result.deletedCount;
       } catch (batchErr) {
-        req.log.warn({ batchErr }, "Failed to delete batch of orphaned files (maintenance)");
         failedKeys.push(...batch);
       }
     }
 
-    req.log.info({ deletedCount, failedCount: failedKeys.length, skippedCount: skippedKeys.length }, "Maintenance orphaned-files cleanup complete");
     res.json({
       dryRun: false,
       deleted: deletedCount,
@@ -713,8 +687,7 @@ router.post("/admin/maintenance/orphaned-files", async (req, res): Promise<void>
       ...(skippedKeys.length ? { skippedKeys } : {}),
     });
   } catch (err) {
-    req.log.error({ err }, "Error in maintenance/orphaned-files");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

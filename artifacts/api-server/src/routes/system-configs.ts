@@ -1,10 +1,11 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { systemConfigsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { ADMIN_ROLES } from '../lib/tenant';
 
 const router = Router();
@@ -24,13 +25,12 @@ const UpsertSystemConfigBody = z.object({
   value: anyJsonValue,
 });
 
-router.get("/system-configs", async (req, res): Promise<void> => {
+router.get("/system-configs", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role as (typeof ADMIN_ROLES)[number])) {
-      res.status(403).json({ error: "Forbidden: apenas administradores podem acessar configurações" });
-      return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
     const configs = await db
       .select()
@@ -38,30 +38,28 @@ router.get("/system-configs", async (req, res): Promise<void> => {
       .where(eq(systemConfigsTable.tenantId, me.tenantId));
     res.json(configs);
   } catch (err) {
-    req.log.error({ err }, "Error listing system configs");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.put("/system-configs", async (req, res): Promise<void> => {
-  return upsertHandler(req, res);
+router.put("/system-configs", async (req, res, next: NextFunction): Promise<void> => {
+  return upsertHandler(req, res, next);
 });
 
-router.post("/system-configs", async (req, res): Promise<void> => {
-  return upsertHandler(req, res);
+router.post("/system-configs", async (req, res, next: NextFunction): Promise<void> => {
+  return upsertHandler(req, res, next);
 });
 
-async function upsertHandler(req: Request, res: Response): Promise<void> {
+async function upsertHandler(req: Request, res: Response, next: import("express").NextFunction): Promise<void> {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role as (typeof ADMIN_ROLES)[number])) {
-      res.status(403).json({ error: "Forbidden: apenas administradores podem alterar configurações" });
-      return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
     const parsed = UpsertSystemConfigBody.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: parsed.error.message });
+      next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR"));
       return;
     }
     const { key, value } = parsed.data;
@@ -104,8 +102,7 @@ async function upsertHandler(req: Request, res: Response): Promise<void> {
       res.status(201).json(created);
     }
   } catch (err) {
-    req.log.error({ err }, "Error upserting system config");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 }
 

@@ -1,14 +1,15 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { clientsTable, tripsTable, reservationsTable, paymentsTable, dealsTable, npsResponsesTable, expensesTable, passengersTable, loyaltyMembersTable } from "@workspace/db";
 import { eq, and, gte, lte, lt, desc, sql, inArray } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 import { roundMoney } from "../lib/pricing";
+import { ForbiddenError } from "../lib/errors";
 import { ROLES, RESERVATION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, DEAL_STATUS, TRIP_STATUS } from "@workspace/permissions";
 
 const router = Router();
 
-router.get("/dashboard/summary", async (req, res): Promise<void> => {
+router.get("/dashboard/summary", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -272,18 +273,17 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
       profitMargin,
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching dashboard summary");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/dashboard/revenue-chart", async (req, res): Promise<void> => {
+router.get("/dashboard/revenue-chart", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
 
     if (me.role === ROLES.CLIENT) {
-      res.status(403).json({ error: "Access denied" });
+      next(new ForbiddenError("Access denied", "FORBIDDEN_ROLE"));
       return;
     }
 
@@ -352,18 +352,17 @@ router.get("/dashboard/revenue-chart", async (req, res): Promise<void> => {
 
     res.json(points);
   } catch (err) {
-    req.log.error({ err }, "Error fetching revenue chart");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/dashboard/charts", async (req, res): Promise<void> => {
+router.get("/dashboard/charts", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
 
     if (me.role === ROLES.CLIENT || me.role === ROLES.SALES) {
-      res.status(403).json({ error: "Access denied" });
+      next(new ForbiddenError("Access denied", "FORBIDDEN_ROLE"));
       return;
     }
 
@@ -557,18 +556,17 @@ router.get("/dashboard/charts", async (req, res): Promise<void> => {
       expensesByMonth,
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching dashboard charts");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/dashboard/funnel", async (req, res): Promise<void> => {
+router.get("/dashboard/funnel", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
 
     if (me.role === ROLES.CLIENT || me.role === ROLES.SALES) {
-      res.status(403).json({ error: "Access denied" });
+      next(new ForbiddenError("Access denied", "FORBIDDEN_ROLE"));
       return;
     }
 
@@ -624,12 +622,11 @@ router.get("/dashboard/funnel", async (req, res): Promise<void> => {
 
     res.json({ totalLeads, withReservation, withConfirmed, withPayment, conversionRate, byOrigin });
   } catch (err) {
-    req.log.error({ err }, "Error fetching dashboard funnel");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/dashboard/upcoming-trips", async (req, res): Promise<void> => {
+router.get("/dashboard/upcoming-trips", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -681,18 +678,17 @@ router.get("/dashboard/upcoming-trips", async (req, res): Promise<void> => {
       status: t.status, coverImage: t.coverImage,
     })));
   } catch (err) {
-    req.log.error({ err }, "Error fetching upcoming trips");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/dashboard/recent-activity", async (req, res): Promise<void> => {
+router.get("/dashboard/recent-activity", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
 
     if (me.role === ROLES.CLIENT) {
-      res.status(403).json({ error: "Access denied" });
+      next(new ForbiddenError("Access denied", "FORBIDDEN_ROLE"));
       return;
     }
 
@@ -739,17 +735,16 @@ router.get("/dashboard/recent-activity", async (req, res): Promise<void> => {
 
     res.json(activities);
   } catch (err) {
-    req.log.error({ err }, "Error fetching recent activity");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/dashboard/comparative", async (req, res): Promise<void> => {
+router.get("/dashboard/comparative", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role === ROLES.CLIENT || me.role === ROLES.SALES) {
-      res.status(403).json({ error: "Access denied" });
+      next(new ForbiddenError("Access denied", "FORBIDDEN_ROLE"));
       return;
     }
 
@@ -805,17 +800,16 @@ router.get("/dashboard/comparative", async (req, res): Promise<void> => {
 
     res.json(result);
   } catch (err) {
-    req.log.error({ err }, "Error fetching dashboard comparative");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/dashboard/top-customers", async (req, res): Promise<void> => {
+router.get("/dashboard/top-customers", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role === ROLES.CLIENT || me.role === ROLES.SALES) {
-      res.status(403).json({ error: "Access denied" });
+      next(new ForbiddenError("Access denied", "FORBIDDEN_ROLE"));
       return;
     }
 
@@ -855,8 +849,7 @@ router.get("/dashboard/top-customers", async (req, res): Promise<void> => {
 
     res.json(result);
   } catch (err) {
-    req.log.error({ err }, "Error fetching top customers");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

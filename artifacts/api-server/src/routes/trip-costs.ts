@@ -1,9 +1,10 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { tripCostsTable, tripsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { ADMIN_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
 import { EXPENSE_STATUS } from "@workspace/permissions";
 
@@ -29,7 +30,7 @@ function formatCost(c: typeof tripCostsTable.$inferSelect) {
   };
 }
 
-router.get("/trips/:id/costs", async (req, res): Promise<void> => {
+router.get("/trips/:id/costs", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -38,7 +39,7 @@ router.get("/trips/:id/costs", async (req, res): Promise<void> => {
       .from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!trip) { res.status(404).json({ error: "Viagem não encontrada" }); return; }
+    if (!trip) { next(new NotFoundError("Viagem não encontrada", "NOT_FOUND")); return; }
 
     const costs = await db.select()
       .from(tripCostsTable)
@@ -83,31 +84,30 @@ router.get("/trips/:id/costs", async (req, res): Promise<void> => {
       },
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching trip costs");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/trips/:id/costs", async (req, res): Promise<void> => {
+router.post("/trips/:id/costs", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ALL_STAFF_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Sem permissão" }); return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
     const [trip] = await db.select({ id: tripsTable.id })
       .from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!trip) { res.status(404).json({ error: "Viagem não encontrada" }); return; }
+    if (!trip) { next(new NotFoundError("Viagem não encontrada", "NOT_FOUND")); return; }
 
     const { category, description, supplierName, amount, status, dueDate, paidAt, notes } = req.body;
     if (!category || !description || amount == null) {
-      res.status(400).json({ error: "Campos obrigatórios: category, description, amount" }); return;
+      next(new ValidationError(String("Campos obrigatórios: category, description, amount" ), "VALIDATION_ERROR")); return;
     }
     if (!CATEGORIES.has(String(category))) {
-      res.status(400).json({ error: `Categoria inválida. Valores permitidos: ${[...CATEGORIES].join(", ")}` }); return;
+      next(new ValidationError(String(`Categoria inválida. Valores permitidos: ${[...CATEGORIES].join(", ")}`), "VALIDATION_ERROR")); return;
     }
 
     const id = generateId();
@@ -128,17 +128,16 @@ router.post("/trips/:id/costs", async (req, res): Promise<void> => {
     const [cost] = await db.select().from(tripCostsTable).where(eq(tripCostsTable.id, id)).limit(1);
     res.status(201).json(formatCost(cost!));
   } catch (err) {
-    req.log.error({ err }, "Error creating trip cost");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.put("/trips/:id/costs/:costId", async (req, res): Promise<void> => {
+router.put("/trips/:id/costs/:costId", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ALL_STAFF_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Sem permissão" }); return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
     const [existing] = await db.select()
@@ -149,13 +148,13 @@ router.put("/trips/:id/costs/:costId", async (req, res): Promise<void> => {
         eq(tripCostsTable.tenantId, me.tenantId),
       ))
       .limit(1);
-    if (!existing) { res.status(404).json({ error: "Custo não encontrado" }); return; }
+    if (!existing) { next(new NotFoundError("Custo não encontrado", "NOT_FOUND")); return; }
 
     const { category, description, supplierName, amount, status, dueDate, paidAt, notes } = req.body;
     const updates: Partial<typeof tripCostsTable.$inferInsert> = {};
     if (category != null) {
       if (!CATEGORIES.has(String(category))) {
-        res.status(400).json({ error: `Categoria inválida. Valores permitidos: ${[...CATEGORIES].join(", ")}` }); return;
+        next(new ValidationError(String(`Categoria inválida. Valores permitidos: ${[...CATEGORIES].join(", ")}`), "VALIDATION_ERROR")); return;
       }
       updates.category = String(category);
     }
@@ -174,17 +173,16 @@ router.put("/trips/:id/costs/:costId", async (req, res): Promise<void> => {
     const [cost] = await db.select().from(tripCostsTable).where(eq(tripCostsTable.id, req.params.costId)).limit(1);
     res.json(formatCost(cost!));
   } catch (err) {
-    req.log.error({ err }, "Error updating trip cost");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/trips/:id/costs/:costId", async (req, res): Promise<void> => {
+router.delete("/trips/:id/costs/:costId", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Sem permissão" }); return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
     const [existing] = await db.select({ id: tripCostsTable.id })
@@ -195,15 +193,14 @@ router.delete("/trips/:id/costs/:costId", async (req, res): Promise<void> => {
         eq(tripCostsTable.tenantId, me.tenantId),
       ))
       .limit(1);
-    if (!existing) { res.status(404).json({ error: "Custo não encontrado" }); return; }
+    if (!existing) { next(new NotFoundError("Custo não encontrado", "NOT_FOUND")); return; }
 
     await db.delete(tripCostsTable)
       .where(eq(tripCostsTable.id, req.params.costId));
 
     res.json({ success: true });
   } catch (err) {
-    req.log.error({ err }, "Error deleting trip cost");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

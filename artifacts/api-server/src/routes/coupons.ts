@@ -1,10 +1,10 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db, couponsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
-import { requireAuth } from "../lib/tenant";
-import { ADMIN_ROLES } from '../lib/tenant';
+import { requireAuth, ADMIN_ROLES } from '../lib/tenant';
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 
 const router = Router();
 
@@ -19,28 +19,27 @@ const CreateCouponBody = z.object({
   validUntil: z.string().optional(),
 });
 
-router.get("/coupons", async (req, res): Promise<void> => {
+router.get("/coupons", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const coupons = await db.select().from(couponsTable)
       .where(eq(couponsTable.tenantId, me.tenantId))
       .orderBy(desc(couponsTable.createdAt));
     res.json(coupons);
   } catch (err) {
-    req.log.error({ err }, "Error listing coupons");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/coupons", async (req, res): Promise<void> => {
+router.post("/coupons", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateCouponBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(couponsTable).values({
       id, tenantId: me.tenantId, code: parsed.data.code, value: parsed.data.value,
@@ -54,18 +53,17 @@ router.post("/coupons", async (req, res): Promise<void> => {
     const [coupon] = await db.select().from(couponsTable).where(eq(couponsTable.id, id)).limit(1);
     res.status(201).json(coupon);
   } catch (err) {
-    req.log.error({ err }, "Error creating coupon");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/coupons/:id", async (req, res): Promise<void> => {
+router.patch("/coupons/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateCouponBody.partial().safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const updates: Record<string, unknown> = {};
     if (parsed.data.code) updates.code = parsed.data.code;
     if (parsed.data.type) updates.type = parsed.data.type;
@@ -78,25 +76,23 @@ router.patch("/coupons/:id", async (req, res): Promise<void> => {
       .where(and(eq(couponsTable.id, req.params.id), eq(couponsTable.tenantId, me.tenantId)));
     const [coupon] = await db.select().from(couponsTable)
       .where(and(eq(couponsTable.id, req.params.id), eq(couponsTable.tenantId, me.tenantId))).limit(1);
-    if (!coupon) { res.status(404).json({ error: "Not found" }); return; }
+    if (!coupon) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(coupon);
   } catch (err) {
-    req.log.error({ err }, "Error updating coupon");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/coupons/:id", async (req, res): Promise<void> => {
+router.delete("/coupons/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     await db.delete(couponsTable)
       .where(and(eq(couponsTable.id, req.params.id), eq(couponsTable.tenantId, me.tenantId)));
     res.status(204).end();
   } catch (err) {
-    req.log.error({ err }, "Error deleting coupon");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

@@ -1,40 +1,38 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db, auditLogsTable, systemConfigsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
-import { requireAuth } from "../lib/tenant";
-import { ADMIN_ROLES } from '../lib/tenant';
+import { requireAuth, ADMIN_ROLES } from '../lib/tenant';
+import { ForbiddenError, ValidationError } from "../lib/errors";
 
 const router = Router();
 
-router.get("/audit-logs", async (req, res): Promise<void> => {
+router.get("/audit-logs", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const logs = await db.select().from(auditLogsTable)
       .where(eq(auditLogsTable.tenantId, me.tenantId))
       .orderBy(desc(auditLogsTable.createdAt))
       .limit(500);
     res.json(logs);
   } catch (err) {
-    req.log.error({ err }, "Error listing audit logs");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/system-configs", async (req, res): Promise<void> => {
+router.get("/system-configs", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const configs = await db.select().from(systemConfigsTable)
       .where(eq(systemConfigsTable.tenantId, me.tenantId));
     res.json(configs);
   } catch (err) {
-    req.log.error({ err }, "Error listing system configs");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -43,13 +41,13 @@ const UpsertConfigBody = z.object({
   value: z.unknown(),
 });
 
-router.put("/system-configs", async (req, res): Promise<void> => {
+router.put("/system-configs", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = UpsertConfigBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const existing = await db.select().from(systemConfigsTable)
       .where(and(eq(systemConfigsTable.tenantId, me.tenantId), eq(systemConfigsTable.key, parsed.data.key))).limit(1);
     if (existing.length > 0) {
@@ -67,8 +65,7 @@ router.put("/system-configs", async (req, res): Promise<void> => {
       .where(and(eq(systemConfigsTable.tenantId, me.tenantId), eq(systemConfigsTable.key, parsed.data.key))).limit(1);
     res.json(config);
   } catch (err) {
-    req.log.error({ err }, "Error upserting system config");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

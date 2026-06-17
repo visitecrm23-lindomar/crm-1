@@ -1,9 +1,10 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db, referralsTable, clientsTable, referralSettingsTable, referralTrackingTable, tenantsTable, emailLogsTable, reservationsTable, referralCampaignsTable } from "@workspace/db";
 import { eq, and, desc, sql, count, ilike, or, inArray, getTableColumns } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { REFERRAL_STATUS } from "@workspace/permissions";
 import { enqueueReferralBonusPaidEmail, dispatchReferralExpiringSoonEmail } from "../queues/email-helpers";
@@ -22,7 +23,7 @@ const CreateReferralBody = z.object({
   bonusAmount: z.string().optional(),
 });
 
-router.get("/referrals/validate/:code", async (req, res): Promise<void> => {
+router.get("/referrals/validate/:code", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -47,12 +48,11 @@ router.get("/referrals/validate/:code", async (req, res): Promise<void> => {
       message: null,
     });
   } catch (err) {
-    req.log.error({ err }, "Error validating referral code");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/referrals/stats", async (req, res): Promise<void> => {
+router.get("/referrals/stats", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -146,12 +146,11 @@ router.get("/referrals/stats", async (req, res): Promise<void> => {
       tierProgress,
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching referral stats");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/referrals", async (req, res): Promise<void> => {
+router.get("/referrals", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -164,7 +163,7 @@ router.get("/referrals", async (req, res): Promise<void> => {
 
     const validReferralStatuses = Object.values(REFERRAL_STATUS);
     if (status && !validReferralStatuses.includes(status as (typeof validReferralStatuses)[number])) {
-      res.status(400).json({ error: `Invalid status. Must be one of: ${validReferralStatuses.join(", ")}` });
+      next(new ValidationError(String(`Invalid status. Must be one of: ${validReferralStatuses.join(", ")}`), "VALIDATION_ERROR"));
       return;
     }
 
@@ -259,17 +258,16 @@ router.get("/referrals", async (req, res): Promise<void> => {
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (err) {
-    req.log.error({ err }, "Error listing referrals");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/referrals", async (req, res): Promise<void> => {
+router.post("/referrals", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     const parsed = CreateReferralBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const id = generateId();
 
     const [refSettings] = await db
@@ -285,16 +283,15 @@ router.post("/referrals", async (req, res): Promise<void> => {
     const [referral] = await db.select().from(referralsTable).where(eq(referralsTable.id, id)).limit(1);
     res.status(201).json(referral);
   } catch (err) {
-    req.log.error({ err }, "Error creating referral");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/referrals/:id", async (req, res): Promise<void> => {
+router.patch("/referrals/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = z.object({
       status: z.string().optional(),
       bonusPaid: z.boolean().optional(),
@@ -303,13 +300,13 @@ router.patch("/referrals/:id", async (req, res): Promise<void> => {
       notes: z.string().optional(),
       expiresAt: z.string().optional(),
     }).safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
 
     const [existing] = await db.select({ expiresAt: referralsTable.expiresAt })
       .from(referralsTable)
       .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+    if (!existing) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (parsed.data.status !== undefined) updates.status = parsed.data.status;
@@ -331,19 +328,18 @@ router.patch("/referrals/:id", async (req, res): Promise<void> => {
       .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)));
     const [referral] = await db.select().from(referralsTable)
       .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId))).limit(1);
-    if (!referral) { res.status(404).json({ error: "Not found" }); return; }
+    if (!referral) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(referral);
   } catch (err) {
-    req.log.error({ err }, "Error updating referral");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/referrals/:id/pay-bonus", async (req, res): Promise<void> => {
+router.post("/referrals/:id/pay-bonus", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const [row] = await db.select({
       ...getTableColumns(referralsTable),
@@ -362,17 +358,17 @@ router.post("/referrals/:id/pay-bonus", async (req, res): Promise<void> => {
       .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
       .limit(1);
 
-    if (!row) { res.status(404).json({ error: "Indicação não encontrada" }); return; }
+    if (!row) { next(new NotFoundError("Indicação não encontrada", "NOT_FOUND")); return; }
     if (row.status === REFERRAL_STATUS.REVERSED) {
-      res.status(422).json({ error: "Bônus revertido por cancelamento da reserva" });
+      next(new AppError("Bônus revertido por cancelamento da reserva", 422, "UNPROCESSABLE"));
       return;
     }
     if (row.status !== REFERRAL_STATUS.COMPLETED) {
-      res.status(422).json({ error: "Bônus só pode ser pago em indicações convertidas" });
+      next(new AppError("Bônus só pode ser pago em indicações convertidas", 422, "UNPROCESSABLE"));
       return;
     }
     if (row.bonusPaid) {
-      res.status(422).json({ error: "Bônus já foi pago anteriormente" });
+      next(new AppError("Bônus já foi pago anteriormente", 422, "UNPROCESSABLE"));
       return;
     }
     if (row.convertedAt) {
@@ -380,7 +376,7 @@ router.post("/referrals/:id/pay-bonus", async (req, res): Promise<void> => {
       lockUntil.setDate(lockUntil.getDate() + 30);
       if (new Date() < lockUntil) {
         const releaseDate = lockUntil.toLocaleDateString("pt-BR");
-        res.status(422).json({ error: `Bônus disponível somente 30 dias após a reserva. Liberação em ${releaseDate}` });
+        next(new AppError(`Bônus disponível somente 30 dias após a reserva. Liberação em ${releaseDate}`, 422, "BONUS_LOCKED")); 
         return;
       }
     }
@@ -415,7 +411,6 @@ router.post("/referrals/:id/pay-bonus", async (req, res): Promise<void> => {
           me.tenantId,
         );
       } catch (emailErr) {
-        req.log.warn({ emailErr }, "Failed to enqueue bonus payment email — bonus still marked as paid");
       }
     }
 
@@ -428,8 +423,7 @@ router.post("/referrals/:id/pay-bonus", async (req, res): Promise<void> => {
       tenantId: me.tenantId,
       tenantName: agencyName,
     }).catch((err) => {
-      req.log.warn({ err }, "Failed to dispatch WhatsApp bonus-paid notification");
-    });
+      });
 
     const [updated] = await db.select({
       ...getTableColumns(referralsTable),
@@ -445,7 +439,7 @@ router.post("/referrals/:id/pay-bonus", async (req, res): Promise<void> => {
       .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
       .limit(1);
 
-    if (!updated) { res.status(404).json({ error: "Not found" }); return; }
+    if (!updated) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
 
     const { referrerClientName, referrerClientEmail, referrerClientWhatsapp, referrerClientPhone, ...rest } = updated;
     res.json({
@@ -456,20 +450,19 @@ router.post("/referrals/:id/pay-bonus", async (req, res): Promise<void> => {
       referrerWhatsapp: referrerClientWhatsapp ?? null,
     });
   } catch (err) {
-    req.log.error({ err }, "Error paying referral bonus");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/referrals/:id/resend-expiry-warning", async (req, res): Promise<void> => {
+router.post("/referrals/:id/resend-expiry-warning", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const windowParam = req.query.window;
     if (windowParam !== "7" && windowParam !== "1") {
-      res.status(400).json({ error: "Parâmetro 'window' inválido — use '7' ou '1'" });
+      next(new ValidationError("Parâmetro 'window' inválido — use '7' ou '1'", "VALIDATION_ERROR"));
       return;
     }
     const windowNum = parseInt(windowParam, 10) as 7 | 1;
@@ -485,34 +478,32 @@ router.post("/referrals/:id/resend-expiry-warning", async (req, res): Promise<vo
       .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
       .limit(1);
 
-    if (!row) { res.status(404).json({ error: "Indicação não encontrada" }); return; }
+    if (!row) { next(new NotFoundError("Indicação não encontrada", "NOT_FOUND")); return; }
     if (!row.expiresAt) {
-      res.status(422).json({ error: "Esta indicação não tem data de expiração" });
+      next(new ValidationError("Esta indicação não tem data de expiração", "UNPROCESSABLE"));
       return;
     }
     if (!row.referrerId) {
-      res.status(422).json({ error: "Indicação sem indicador registrado" });
+      next(new ValidationError("Indicação sem indicador registrado", "UNPROCESSABLE"));
       return;
     }
 
     if (!row.referrerClientEmail) {
-      res.status(422).json({ error: "O indicador não tem e-mail cadastrado — aviso não pode ser enviado" });
+      next(new ValidationError("O indicador não tem e-mail cadastrado — aviso não pode ser enviado", "UNPROCESSABLE"));
       return;
     }
 
     const now = new Date();
     const expiresAt = new Date(row.expiresAt);
     if (expiresAt <= now) {
-      res.status(422).json({ error: "A indicação já expirou" });
+      next(new ValidationError("A indicação já expirou", "UNPROCESSABLE"));
       return;
     }
 
     const msLeft = expiresAt.getTime() - now.getTime();
     const windowMs = windowNum * 24 * 60 * 60 * 1000;
     if (msLeft < windowMs) {
-      res.status(422).json({
-        error: `A janela D-${windowNum} já passou — restam menos de ${windowNum} dia(s) para a expiração`,
-      });
+      next(new AppError(`A janela D-${windowNum} já passou — restam menos de ${windowNum} dia(s) para a expiração`, 422, "WINDOW_PASSED"));
       return;
     }
 
@@ -549,7 +540,7 @@ router.post("/referrals/:id/resend-expiry-warning", async (req, res): Promise<vo
       .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
       .limit(1);
 
-    if (!updated) { res.status(404).json({ error: "Not found" }); return; }
+    if (!updated) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     const { referrerClientName, referrerClientEmail, referrerClientWhatsapp, referrerClientPhone, ...rest } = updated;
     res.json({
       ...rest,
@@ -559,12 +550,11 @@ router.post("/referrals/:id/resend-expiry-warning", async (req, res): Promise<vo
       referrerWhatsapp: referrerClientWhatsapp ?? null,
     });
   } catch (err) {
-    req.log.error({ err }, "Error resending expiry warning email");
-    res.status(500).json({ error: "Falha ao reenviar o aviso de expiração" });
+    next(err);
   }
 });
 
-router.get("/referrals/:id/expiry-email-status", async (req, res): Promise<void> => {
+router.get("/referrals/:id/expiry-email-status", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -580,7 +570,7 @@ router.get("/referrals/:id/expiry-email-status", async (req, res): Promise<void>
       .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
       .limit(1);
 
-    if (!row) { res.status(404).json({ error: "Indicação não encontrada" }); return; }
+    if (!row) { next(new NotFoundError("Indicação não encontrada", "NOT_FOUND")); return; }
 
     const referrerEmail = row.referrerClientEmail;
     if (!referrerEmail) {
@@ -611,12 +601,11 @@ router.get("/referrals/:id/expiry-email-status", async (req, res): Promise<void>
 
     res.json({ d7: toEntry(d7Logs[0]), d1: toEntry(d1Logs[0]) });
   } catch (err) {
-    req.log.error({ err }, "Error fetching referral expiry email status");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/referrals/:id/share", async (req, res): Promise<void> => {
+router.get("/referrals/:id/share", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -631,7 +620,7 @@ router.get("/referrals/:id/share", async (req, res): Promise<void> => {
       .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
       .limit(1);
 
-    if (!row) { res.status(404).json({ error: "Indicação não encontrada" }); return; }
+    if (!row) { next(new NotFoundError("Indicação não encontrada", "NOT_FOUND")); return; }
 
     const frontendBase = (process.env["FRONTEND_URL"] ?? `https://${process.env["REPLIT_DEV_DOMAIN"] ?? "localhost"}`).replace(/\/$/, "");
     const slug = row.tenantSlug ?? me.tenantId;
@@ -642,19 +631,18 @@ router.get("/referrals/:id/share", async (req, res): Promise<void> => {
 
     res.json({ link, qrCodeDataUrl });
   } catch (err) {
-    req.log.error({ err }, "Error generating referral share link");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/referrals/analytics", async (req, res): Promise<void> => {
+router.get("/referrals/analytics", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
 
     const period = parseInt((req.query.period as string) || "90", 10);
     if (![30, 90, 180].includes(period)) {
-      res.status(400).json({ error: "period must be 30, 90, or 180" });
+      next(new ValidationError("period must be 30, 90, or 180", "VALIDATION_ERROR"));
       return;
     }
 
@@ -838,16 +826,15 @@ router.get("/referrals/analytics", async (req, res): Promise<void> => {
       discountGiven: Number(discountRow?.total ?? 0),
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching referral analytics");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/referrals/analytics/export", async (req, res): Promise<void> => {
+router.get("/referrals/analytics/export", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const now = new Date();
     let since: Date;
@@ -858,14 +845,14 @@ router.get("/referrals/analytics/export", async (req, res): Promise<void> => {
     if (startDateParam) {
       const parsed = new Date(startDateParam);
       if (isNaN(parsed.getTime())) {
-        res.status(400).json({ error: "startDate must be a valid ISO date" });
+        next(new ValidationError("startDate must be a valid ISO date", "VALIDATION_ERROR"));
         return;
       }
       since = parsed;
     } else {
       const period = parseInt((req.query.period as string) || "90", 10);
       if (![30, 90, 180].includes(period)) {
-        res.status(400).json({ error: "period must be 30, 90, or 180; or provide startDate/endDate" });
+        next(new ValidationError("period must be 30, 90, or 180; or provide startDate/endDate", "VALIDATION_ERROR"));
         return;
       }
       since = new Date(now.getTime() - period * 24 * 60 * 60 * 1000);
@@ -874,11 +861,11 @@ router.get("/referrals/analytics/export", async (req, res): Promise<void> => {
     if (endDateParam) {
       const parsedEnd = new Date(endDateParam);
       if (isNaN(parsedEnd.getTime())) {
-        res.status(400).json({ error: "endDate must be a valid ISO date" });
+        next(new ValidationError("endDate must be a valid ISO date", "VALIDATION_ERROR"));
         return;
       }
       if (parsedEnd < since) {
-        res.status(400).json({ error: "endDate must be on or after startDate" });
+        next(new ValidationError("endDate must be on or after startDate", "VALIDATION_ERROR"));
         return;
       }
       until = parsedEnd;
@@ -1003,20 +990,19 @@ router.get("/referrals/analytics/export", async (req, res): Promise<void> => {
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.send(Buffer.from(buf));
   } catch (err) {
-    req.log.error({ err }, "Error exporting referral analytics");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/referrals/export", async (req, res): Promise<void> => {
+router.get("/referrals/export", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const format = (req.query.format as string | undefined) ?? "csv";
     if (!["csv", "xlsx", "json"].includes(format)) {
-      res.status(400).json({ error: "format must be csv, xlsx, or json" });
+      next(new ValidationError("format must be csv, xlsx, or json", "VALIDATION_ERROR"));
       return;
     }
 
@@ -1028,7 +1014,7 @@ router.get("/referrals/export", async (req, res): Promise<void> => {
 
     const validReferralStatusesExport = Object.values(REFERRAL_STATUS);
     if (status && status !== "all" && !validReferralStatusesExport.includes(status as (typeof validReferralStatusesExport)[number])) {
-      res.status(400).json({ error: `Invalid status. Must be one of: all, ${validReferralStatusesExport.join(", ")}` });
+      next(new ValidationError(String(`Invalid status. Must be one of: all, ${validReferralStatusesExport.join(", ")}`), "VALIDATION_ERROR"));
       return;
     }
 
@@ -1154,12 +1140,11 @@ router.get("/referrals/export", async (req, res): Promise<void> => {
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.send("\uFEFF" + csv);
   } catch (err) {
-    req.log.error({ err }, "Error exporting referrals");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/referral-settings", async (req, res): Promise<void> => {
+router.get("/referral-settings", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -1198,16 +1183,15 @@ router.get("/referral-settings", async (req, res): Promise<void> => {
     }
     res.json(settings);
   } catch (err) {
-    req.log.error({ err }, "Error fetching referral settings");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/referral-settings", async (req, res): Promise<void> => {
+router.patch("/referral-settings", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const TierSchema = z.object({
       level: z.string(),
       label: z.string(),
@@ -1234,7 +1218,7 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
       bonusReleaseEmailEnabled: z.boolean().optional(),
       pointsPerReferral: z.number().int().min(0).optional(),
     }).safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (parsed.data.isEnabled != null) updates.isEnabled = parsed.data.isEnabled;
@@ -1319,16 +1303,15 @@ router.patch("/referral-settings", async (req, res): Promise<void> => {
 
     res.json(savedSettings);
   } catch (err) {
-    req.log.error({ err }, "Error updating referral settings");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/referrals/campaigns", async (req, res): Promise<void> => {
+router.get("/referrals/campaigns", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const campaigns = await db.select().from(referralCampaignsTable)
       .where(eq(referralCampaignsTable.tenantId, me.tenantId))
@@ -1381,16 +1364,15 @@ router.get("/referrals/campaigns", async (req, res): Promise<void> => {
 
     res.json(result);
   } catch (err) {
-    req.log.error({ err }, "Error listing referral campaigns");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/referrals/campaigns", async (req, res): Promise<void> => {
+router.post("/referrals/campaigns", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const parsed = z.object({
       name: z.string().min(1).max(120),
@@ -1403,12 +1385,12 @@ router.post("/referrals/campaigns", async (req, res): Promise<void> => {
       (d) => d.bonusType !== "multiplier" || d.bonusValue >= 1,
       { message: "Multiplicador deve ser ≥ 1 para não reduzir o bônus base", path: ["bonusValue"] },
     ).safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
 
     const starts = new Date(parsed.data.startsAt);
     const ends = new Date(parsed.data.endsAt);
     if (ends <= starts) {
-      res.status(400).json({ error: "endsAt deve ser após startsAt" }); return;
+      next(new ValidationError(String("endsAt deve ser após startsAt" ), "VALIDATION_ERROR")); return;
     }
 
     const [overlap] = await db.select({ id: referralCampaignsTable.id })
@@ -1420,7 +1402,7 @@ router.post("/referrals/campaigns", async (req, res): Promise<void> => {
       ))
       .limit(1);
     if (overlap) {
-      res.status(409).json({ error: "Já existe uma campanha nesse período. Apenas uma campanha pode estar ativa por vez." });
+      next(new ConflictError("Já existe uma campanha nesse período. Apenas uma campanha pode estar ativa por vez.", "CONFLICT"));
       return;
     }
 
@@ -1442,19 +1424,18 @@ router.post("/referrals/campaigns", async (req, res): Promise<void> => {
   } catch (err) {
     const pgErr = err as { code?: string };
     if (pgErr.code === "23P01") {
-      res.status(409).json({ error: "Já existe uma campanha nesse período. Apenas uma campanha pode estar ativa por vez." });
+      next(new ConflictError("Já existe uma campanha nesse período. Apenas uma campanha pode estar ativa por vez.", "CONFLICT"));
       return;
     }
-    req.log.error({ err }, "Error creating referral campaign");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/referrals/campaigns/:id", async (req, res): Promise<void> => {
+router.delete("/referrals/campaigns/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const [existing] = await db.select({ id: referralCampaignsTable.id })
       .from(referralCampaignsTable)
@@ -1463,7 +1444,7 @@ router.delete("/referrals/campaigns/:id", async (req, res): Promise<void> => {
         eq(referralCampaignsTable.tenantId, me.tenantId),
       ))
       .limit(1);
-    if (!existing) { res.status(404).json({ error: "Campanha não encontrada" }); return; }
+    if (!existing) { next(new NotFoundError("Campanha não encontrada", "NOT_FOUND")); return; }
 
     await db.delete(referralCampaignsTable)
       .where(and(
@@ -1472,16 +1453,15 @@ router.delete("/referrals/campaigns/:id", async (req, res): Promise<void> => {
       ));
     res.status(204).send();
   } catch (err) {
-    req.log.error({ err }, "Error deleting referral campaign");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/referrals/campaigns/:id", async (req, res): Promise<void> => {
+router.patch("/referrals/campaigns/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const [existing] = await db.select().from(referralCampaignsTable)
       .where(and(
@@ -1489,7 +1469,7 @@ router.patch("/referrals/campaigns/:id", async (req, res): Promise<void> => {
         eq(referralCampaignsTable.tenantId, me.tenantId),
       ))
       .limit(1);
-    if (!existing) { res.status(404).json({ error: "Campanha não encontrada" }); return; }
+    if (!existing) { next(new NotFoundError("Campanha não encontrada", "NOT_FOUND")); return; }
 
     const parsed = z.object({
       name: z.string().min(1).max(120).optional(),
@@ -1506,11 +1486,11 @@ router.patch("/referrals/campaigns/:id", async (req, res): Promise<void> => {
       },
       { message: "Multiplicador deve ser ≥ 1 para não reduzir o bônus base", path: ["bonusValue"] },
     ).safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
 
     const starts = parsed.data.startsAt ? new Date(parsed.data.startsAt) : new Date(existing.startsAt);
     const ends = parsed.data.endsAt ? new Date(parsed.data.endsAt) : new Date(existing.endsAt);
-    if (ends <= starts) { res.status(400).json({ error: "endsAt deve ser após startsAt" }); return; }
+    if (ends <= starts) { next(new ValidationError(String("endsAt deve ser após startsAt" ), "VALIDATION_ERROR")); return; }
 
     const [overlap] = await db.select({ id: referralCampaignsTable.id })
       .from(referralCampaignsTable)
@@ -1522,7 +1502,7 @@ router.patch("/referrals/campaigns/:id", async (req, res): Promise<void> => {
       ))
       .limit(1);
     if (overlap) {
-      res.status(409).json({ error: "Já existe uma campanha nesse período. Apenas uma campanha pode estar ativa por vez." });
+      next(new ConflictError("Já existe uma campanha nesse período. Apenas uma campanha pode estar ativa por vez.", "CONFLICT"));
       return;
     }
 
@@ -1547,15 +1527,14 @@ router.patch("/referrals/campaigns/:id", async (req, res): Promise<void> => {
   } catch (err) {
     const pgErr = err as { code?: string };
     if (pgErr.code === "23P01") {
-      res.status(409).json({ error: "Já existe uma campanha nesse período. Apenas uma campanha pode estar ativa por vez." });
+      next(new ConflictError("Já existe uma campanha nesse período. Apenas uma campanha pode estar ativa por vez.", "CONFLICT"));
       return;
     }
-    req.log.error({ err }, "Error updating referral campaign");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/referrals/active-campaign", async (req, res): Promise<void> => {
+router.get("/referrals/active-campaign", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -1573,22 +1552,21 @@ router.get("/referrals/active-campaign", async (req, res): Promise<void> => {
     if (!campaign) { res.json(null); return; }
     res.json({ ...campaign, bonusValue: Number(campaign.bonusValue) });
   } catch (err) {
-    req.log.error({ err }, "Error fetching active referral campaign");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/referral-settings/whatsapp-test", async (req, res): Promise<void> => {
+router.post("/referral-settings/whatsapp-test", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const parsed = z.object({
       phone: z.string().min(8),
       messageType: z.enum(["converted", "bonusPaid", "share"]),
     }).safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: "Parâmetros inválidos" }); return; }
+    if (!parsed.success) { next(new ValidationError(String("Parâmetros inválidos" ), "VALIDATION_ERROR")); return; }
 
     const [settings] = await db.select().from(referralSettingsTable)
       .where(eq(referralSettingsTable.tenantId, me.tenantId)).limit(1);
@@ -1633,14 +1611,13 @@ router.post("/referral-settings/whatsapp-test", async (req, res): Promise<void> 
       } else {
         detail = `Erro de rede: ${error}`;
       }
-      res.status(502).json({ success: false, error, detail });
+      next(new AppError(detail, 422, "WHATSAPP_SEND_FAILED"));
       return;
     }
 
     res.json({ success: true, phone: parsed.data.phone });
   } catch (err) {
-    req.log.error({ err }, "Error sending WhatsApp test message");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

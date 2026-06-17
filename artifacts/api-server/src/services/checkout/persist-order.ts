@@ -308,7 +308,7 @@ async function writeReservationsAndDeals(
 
 export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<PersistOrderResult> {
   let reservationClientId: string | null = null;
-  let referralConversionResult: ReferralConversionResult | null = null;
+  let referralConversionResult: ReferralConversionResult | undefined;
 
   await db.transaction(async (tx) => {
     const lockedTripTypes = await lockTripsForCheckout(tx, {
@@ -412,13 +412,13 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
       console.error("[checkout/persist-order] Failed to dispatch referral-converted email:", err);
     });
 
-    if (referralConversionResult?.tierUpgraded) {
+    if ((referralConversionResult as ReferralConversionResult | undefined)?.tierUpgraded) {
       dispatchReferralTierUpgradeEmail(
         args.appliedReferralReferrerId,
         args.store.tenantId,
-        referralConversionResult.newTierLevel,
-        referralConversionResult.newTierLabel,
-        referralConversionResult.bonusMultiplier,
+        (referralConversionResult as ReferralConversionResult).newTierLevel,
+        (referralConversionResult as ReferralConversionResult).newTierLabel,
+        (referralConversionResult as ReferralConversionResult).bonusMultiplier,
       ).catch((err) => {
         console.error("[checkout/persist-order] Failed to dispatch referral tier-upgrade email:", err);
       });

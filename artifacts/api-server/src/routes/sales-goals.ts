@@ -1,9 +1,10 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db, salesGoalsTable, usersTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors"; 
 import { ADMIN_ROLES } from '../lib/tenant';
 
 const router = Router();
@@ -54,7 +55,7 @@ const UpdateGoalBody = z.object({
   status: z.string().optional(),
 });
 
-router.get("/sales-goals", async (req, res): Promise<void> => {
+router.get("/sales-goals", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -76,25 +77,24 @@ router.get("/sales-goals", async (req, res): Promise<void> => {
 
     res.json(goals.map(formatGoal));
   } catch (err) {
-    req.log.error({ err }, "Error listing sales goals");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/sales-goals", async (req, res): Promise<void> => {
+router.post("/sales-goals", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const parsed = CreateGoalBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
 
     const [user] = await db.select({ id: usersTable.id })
       .from(usersTable)
       .where(and(eq(usersTable.id, parsed.data.userId), eq(usersTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!user) { res.status(400).json({ error: "Usuário não encontrado" }); return; }
+    if (!user) { next(new ValidationError(String("Usuário não encontrado" ), "VALIDATION_ERROR")); return; }
 
     const id = generateId();
     await db.insert(salesGoalsTable).values({
@@ -119,22 +119,21 @@ router.post("/sales-goals", async (req, res): Promise<void> => {
     const [goal] = await db.select().from(salesGoalsTable)
       .where(and(eq(salesGoalsTable.id, id), eq(salesGoalsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!goal) { res.status(500).json({ error: "Failed to create goal" }); return; }
+    if (!goal) { next(new AppError("Resource not found", 404, "NOT_FOUND")); return; }
     res.status(201).json(formatGoal(goal));
   } catch (err) {
-    req.log.error({ err }, "Error creating sales goal");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/sales-goals/:id", async (req, res): Promise<void> => {
+router.patch("/sales-goals/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const parsed = UpdateGoalBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
 
     const updates: Partial<typeof salesGoalsTable.$inferInsert> = {};
     if (parsed.data.goalAmount != null) updates.goalAmount = String(parsed.data.goalAmount);
@@ -152,27 +151,25 @@ router.patch("/sales-goals/:id", async (req, res): Promise<void> => {
     const [goal] = await db.select().from(salesGoalsTable)
       .where(and(eq(salesGoalsTable.id, req.params.id), eq(salesGoalsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!goal) { res.status(404).json({ error: "Not found" }); return; }
+    if (!goal) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(formatGoal(goal));
   } catch (err) {
-    req.log.error({ err }, "Error updating sales goal");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/sales-goals/:id", async (req, res): Promise<void> => {
+router.delete("/sales-goals/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     await db.delete(salesGoalsTable)
       .where(and(eq(salesGoalsTable.id, req.params.id), eq(salesGoalsTable.tenantId, me.tenantId)));
 
     res.status(204).end();
   } catch (err) {
-    req.log.error({ err }, "Error deleting sales goal");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

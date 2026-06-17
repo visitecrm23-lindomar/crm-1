@@ -1,8 +1,9 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db, tenantIntegrationsTable, tenantIntegrationLogsTable } from "@workspace/db";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, ADMIN_ROLES } from "../lib/tenant";
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import type { AuthedUser } from "../lib/tenant";
 import { generateId } from "../lib/id";
 import { encryptCredential, decryptCredential } from "../lib/crypto";
@@ -79,11 +80,12 @@ async function writeLog(
 async function requireIntegrationAdmin(
   req: import("express").Request,
   res: import("express").Response,
+  next: import("express").NextFunction,
 ): Promise<AuthedUser | null> {
   const me = await requireAuth(req, res);
   if (!me) return null;
   if (!ADMIN_ROLES.includes(me.role) || !me.tenantId) {
-    res.status(403).json({ error: "Forbidden" });
+    next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
     return null;
   }
   return me;
@@ -294,16 +296,16 @@ const ALLOWED_TYPES = Object.keys(REGISTRY);
 // Returns the current config with all secret fields masked. Never returns
 // plaintext secrets.
 
-router.get("/integrations/:type", async (req, res): Promise<void> => {
+router.get("/integrations/:type", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const { type } = req.params;
     if (!ALLOWED_TYPES.includes(type)) {
-      res.status(404).json({ error: "Integração não encontrada." });
+      next(new NotFoundError("Integração não encontrada.", "NOT_FOUND"));
       return;
     }
     const entry = REGISTRY[type]!;
 
-    const me = await requireIntegrationAdmin(req, res);
+    const me = await requireIntegrationAdmin(req, res, next);
     if (!me) return;
 
     const [row] = await db
@@ -353,8 +355,7 @@ router.get("/integrations/:type", async (req, res): Promise<void> => {
       })),
     });
   } catch (err) {
-    req.log.error({ err }, "Error loading integration");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -371,21 +372,21 @@ const putSchema = z.object({
   enabled: z.boolean().optional(),
 });
 
-router.put("/integrations/:type", async (req, res): Promise<void> => {
+router.put("/integrations/:type", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const { type } = req.params;
     if (!ALLOWED_TYPES.includes(type)) {
-      res.status(404).json({ error: "Integração não encontrada." });
+      next(new NotFoundError("Integração não encontrada.", "NOT_FOUND"));
       return;
     }
     const entry = REGISTRY[type]!;
 
-    const me = await requireIntegrationAdmin(req, res);
+    const me = await requireIntegrationAdmin(req, res, next);
     if (!me) return;
 
     const parsed = putSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Dados inválidos.", details: parsed.error.issues });
+      next(new ValidationError("Dados inválidos.", "VALIDATION_ERROR"));
       return;
     }
     const body = parsed.data;
@@ -399,9 +400,7 @@ router.put("/integrations/:type", async (req, res): Promise<void> => {
           try {
             await assertSafeUrl(v);
           } catch (urlErr) {
-            res.status(400).json({
-              error: urlErr instanceof Error ? urlErr.message : "URL inválida.",
-            });
+            next(new ValidationError("URL inválida.", "VALIDATION_ERROR"));
             return;
           }
         }
@@ -554,8 +553,7 @@ router.put("/integrations/:type", async (req, res): Promise<void> => {
 
     res.json({ ok: true });
   } catch (err) {
-    req.log.error({ err }, "Error saving integration");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -569,21 +567,21 @@ const testSchema = z.object({
   secrets: z.record(z.string(), z.string()).optional(),
 });
 
-router.post("/integrations/:type/test", async (req, res): Promise<void> => {
+router.post("/integrations/:type/test", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const { type } = req.params;
     if (!ALLOWED_TYPES.includes(type)) {
-      res.status(404).json({ error: "Integração não encontrada." });
+      next(new NotFoundError("Integração não encontrada.", "NOT_FOUND"));
       return;
     }
     const entry = REGISTRY[type]!;
 
-    const me = await requireIntegrationAdmin(req, res);
+    const me = await requireIntegrationAdmin(req, res, next);
     if (!me) return;
 
     const parsed = testSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ ok: false, status: "error", message: "Dados inválidos." });
+      next(new ValidationError("error", "VALIDATION_ERROR"));
       return;
     }
 
@@ -658,8 +656,7 @@ router.post("/integrations/:type/test", async (req, res): Promise<void> => {
 
     res.json({ ok: testResult.ok, status: testResult.ok ? "connected" : "error", message: testResult.message });
   } catch (err) {
-    req.log.error({ err }, "Error testing integration");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -667,16 +664,16 @@ router.post("/integrations/:type/test", async (req, res): Promise<void> => {
 // Irrevocably clears the stored secrets and marks the integration as
 // disconnected. The admin must re-enter credentials to reconnect.
 
-router.post("/integrations/:type/revoke", async (req, res): Promise<void> => {
+router.post("/integrations/:type/revoke", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const { type } = req.params;
     if (!ALLOWED_TYPES.includes(type)) {
-      res.status(404).json({ error: "Integração não encontrada." });
+      next(new NotFoundError("Integração não encontrada.", "NOT_FOUND"));
       return;
     }
     const entry = REGISTRY[type]!;
 
-    const me = await requireIntegrationAdmin(req, res);
+    const me = await requireIntegrationAdmin(req, res, next);
     if (!me) return;
 
     await db
@@ -704,22 +701,21 @@ router.post("/integrations/:type/revoke", async (req, res): Promise<void> => {
 
     res.json({ ok: true });
   } catch (err) {
-    req.log.error({ err }, "Error revoking integration");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
 // ─── GET /integrations/:type/logs ────────────────────────────────────────────
 
-router.get("/integrations/:type/logs", async (req, res): Promise<void> => {
+router.get("/integrations/:type/logs", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const { type } = req.params;
     if (!ALLOWED_TYPES.includes(type)) {
-      res.status(404).json({ error: "Integração não encontrada." });
+      next(new NotFoundError("Integração não encontrada.", "NOT_FOUND"));
       return;
     }
 
-    const me = await requireIntegrationAdmin(req, res);
+    const me = await requireIntegrationAdmin(req, res, next);
     if (!me) return;
 
     const rows = await db
@@ -745,8 +741,7 @@ router.get("/integrations/:type/logs", async (req, res): Promise<void> => {
       })),
     );
   } catch (err) {
-    req.log.error({ err }, "Error loading integration logs");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

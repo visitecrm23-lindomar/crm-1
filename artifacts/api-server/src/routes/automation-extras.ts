@@ -1,10 +1,10 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db, automationActionsTable, automationLogsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
-import { requireAuth } from "../lib/tenant";
-import { ADMIN_ROLES } from '../lib/tenant';
+import { requireAuth, ADMIN_ROLES } from '../lib/tenant';
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 
 const router = Router();
 
@@ -16,28 +16,27 @@ const CreateAutomationActionBody = z.object({
   isActive: z.boolean().optional(),
 });
 
-router.get("/automation-actions", async (req, res): Promise<void> => {
+router.get("/automation-actions", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const actions = await db.select().from(automationActionsTable)
       .where(eq(automationActionsTable.tenantId, me.tenantId))
       .orderBy(automationActionsTable.order);
     res.json(actions);
   } catch (err) {
-    req.log.error({ err }, "Error listing automation actions");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/automation-actions", async (req, res): Promise<void> => {
+router.post("/automation-actions", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateAutomationActionBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(automationActionsTable).values({
       id, tenantId: me.tenantId,
@@ -50,57 +49,53 @@ router.post("/automation-actions", async (req, res): Promise<void> => {
     const [action] = await db.select().from(automationActionsTable).where(eq(automationActionsTable.id, id)).limit(1);
     res.status(201).json(action);
   } catch (err) {
-    req.log.error({ err }, "Error creating automation action");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/automation-actions/:id", async (req, res): Promise<void> => {
+router.patch("/automation-actions/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateAutomationActionBody.partial().omit({ automationId: true }).safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     await db.update(automationActionsTable).set(parsed.data as Record<string, unknown>)
       .where(and(eq(automationActionsTable.id, req.params.id), eq(automationActionsTable.tenantId, me.tenantId)));
     const [action] = await db.select().from(automationActionsTable)
       .where(and(eq(automationActionsTable.id, req.params.id), eq(automationActionsTable.tenantId, me.tenantId))).limit(1);
-    if (!action) { res.status(404).json({ error: "Not found" }); return; }
+    if (!action) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(action);
   } catch (err) {
-    req.log.error({ err }, "Error updating automation action");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/automation-actions/:id", async (req, res): Promise<void> => {
+router.delete("/automation-actions/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     await db.delete(automationActionsTable)
       .where(and(eq(automationActionsTable.id, req.params.id), eq(automationActionsTable.tenantId, me.tenantId)));
     res.status(204).end();
   } catch (err) {
-    req.log.error({ err }, "Error deleting automation action");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/automation-logs", async (req, res): Promise<void> => {
+router.get("/automation-logs", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const logs = await db.select().from(automationLogsTable)
       .where(eq(automationLogsTable.tenantId, me.tenantId))
       .orderBy(desc(automationLogsTable.executedAt))
       .limit(500);
     res.json(logs);
   } catch (err) {
-    req.log.error({ err }, "Error listing automation logs");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

@@ -14,7 +14,7 @@ import {
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, MANAGEMENT_ROLES } from "../lib/tenant";
-import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
+import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { generateId } from "../lib/id";
 
 const router = Router();
@@ -76,15 +76,16 @@ export function verifyPartnerToken(token: string): string | null {
 async function requirePartnerAuth(
   req: Request,
   res: Response,
+  next: import("express").NextFunction,
 ): Promise<{ partnerId: string; tenantId: string; commissionPct: string } | null> {
   const auth = req.headers.authorization;
   if (!auth?.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Partner not authenticated", code: "PARTNER_UNAUTHORIZED" });
+    next(new AppError("Partner not authenticated", 401, "PARTNER_UNAUTHORIZED"));
     return null;
   }
   const partnerId = verifyPartnerToken(auth.slice(7));
   if (!partnerId) {
-    res.status(401).json({ error: "Invalid or expired token", code: "PARTNER_TOKEN_INVALID" });
+    next(new AppError("Invalid or expired token", 401, "PARTNER_TOKEN_INVALID"));
     return null;
   }
   const [partner] = await db
@@ -93,7 +94,7 @@ async function requirePartnerAuth(
     .where(eq(partnersTable.id, partnerId))
     .limit(1);
   if (!partner || partner.status !== "active") {
-    res.status(403).json({ error: "Partner account not active", code: "PARTNER_INACTIVE" });
+    next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
     return null;
   }
   return { partnerId: partner.id, tenantId: partner.tenantId, commissionPct: partner.commissionPct };
@@ -120,7 +121,7 @@ router.post("/partner/login", async (req, res, next: NextFunction): Promise<void
       .where(and(eq(storesTable.slug, body.data.storeSlug), eq(storesTable.isActive, true)))
       .limit(1);
     if (!store) {
-      res.status(401).json({ error: "Agência não encontrada. Verifique o código da agência.", code: "STORE_NOT_FOUND" });
+      next(new AppError("Agência não encontrada. Verifique o código da agência.", 401, "STORE_NOT_FOUND"));
       return;
     }
 
@@ -131,16 +132,14 @@ router.post("/partner/login", async (req, res, next: NextFunction): Promise<void
       .limit(1);
 
     if (!partner || !partner.passwordHash || !verifyPassword(body.data.password, partner.passwordHash)) {
-      res.status(401).json({ error: "Credenciais inválidas", code: "INVALID_CREDENTIALS" });
+      next(new AppError("Credenciais inválidas", 401, "INVALID_CREDENTIALS"));
       return;
     }
     if (partner.status === "suspended") {
-      res.status(403).json({ error: "Conta suspensa", code: "PARTNER_SUSPENDED" });
-      return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
     if (partner.status === "pending") {
-      res.status(403).json({ error: "Conta aguardando aprovação", code: "PARTNER_PENDING" });
-      return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
     const token = createPartnerToken(partner.id);
@@ -161,7 +160,7 @@ router.post("/partner/login", async (req, res, next: NextFunction): Promise<void
 // GET /api/partner/me
 router.get("/partner/me", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const auth = await requirePartnerAuth(req, res);
+    const auth = await requirePartnerAuth(req, res, next);
     if (!auth) return;
     const [partner] = await db.select({
       id: partnersTable.id,
@@ -183,7 +182,7 @@ router.get("/partner/me", async (req, res, next: NextFunction): Promise<void> =>
 // PUT /api/partner/me
 router.put("/partner/me", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const auth = await requirePartnerAuth(req, res);
+    const auth = await requirePartnerAuth(req, res, next);
     if (!auth) return;
     const body = z.object({
       name: z.string().min(1).max(200).optional(),
@@ -207,7 +206,7 @@ router.put("/partner/me", async (req, res, next: NextFunction): Promise<void> =>
 // GET /api/partner/products
 router.get("/partner/products", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const auth = await requirePartnerAuth(req, res);
+    const auth = await requirePartnerAuth(req, res, next);
     if (!auth) return;
     const products = await db.select().from(partnerProductsTable)
       .where(eq(partnerProductsTable.partnerId, auth.partnerId))
@@ -219,7 +218,7 @@ router.get("/partner/products", async (req, res, next: NextFunction): Promise<vo
 // POST /api/partner/products
 router.post("/partner/products", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const auth = await requirePartnerAuth(req, res);
+    const auth = await requirePartnerAuth(req, res, next);
     if (!auth) return;
     const body = z.object({
       type: z.enum(["passeio", "transfer", "experiencia", "ingresso"]),
@@ -259,7 +258,7 @@ router.post("/partner/products", async (req, res, next: NextFunction): Promise<v
 // PUT /api/partner/products/:id
 router.put("/partner/products/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const auth = await requirePartnerAuth(req, res);
+    const auth = await requirePartnerAuth(req, res, next);
     if (!auth) return;
     const [existing] = await db.select({ id: partnerProductsTable.id })
       .from(partnerProductsTable)
@@ -294,7 +293,7 @@ router.put("/partner/products/:id", async (req, res, next: NextFunction): Promis
 // DELETE /api/partner/products/:id
 router.delete("/partner/products/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const auth = await requirePartnerAuth(req, res);
+    const auth = await requirePartnerAuth(req, res, next);
     if (!auth) return;
     await db.delete(partnerProductsTable)
       .where(and(eq(partnerProductsTable.id, req.params.id!), eq(partnerProductsTable.partnerId, auth.partnerId)));
@@ -305,7 +304,7 @@ router.delete("/partner/products/:id", async (req, res, next: NextFunction): Pro
 // GET /api/partner/products/:id/availability
 router.get("/partner/products/:id/availability", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const auth = await requirePartnerAuth(req, res);
+    const auth = await requirePartnerAuth(req, res, next);
     if (!auth) return;
     const [product] = await db.select({ id: partnerProductsTable.id })
       .from(partnerProductsTable)
@@ -322,7 +321,7 @@ router.get("/partner/products/:id/availability", async (req, res, next: NextFunc
 // PUT /api/partner/products/:id/availability — upsert by date
 router.put("/partner/products/:id/availability", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const auth = await requirePartnerAuth(req, res);
+    const auth = await requirePartnerAuth(req, res, next);
     if (!auth) return;
     const [product] = await db.select({ id: partnerProductsTable.id })
       .from(partnerProductsTable)
@@ -358,7 +357,7 @@ router.put("/partner/products/:id/availability", async (req, res, next: NextFunc
 // GET /api/partner/commissions
 router.get("/partner/commissions", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const auth = await requirePartnerAuth(req, res);
+    const auth = await requirePartnerAuth(req, res, next);
     if (!auth) return;
     const { period } = req.query;
     const conditions = [eq(partnerCommissionsTable.partnerId, auth.partnerId)];
@@ -383,7 +382,7 @@ router.get("/partner/commissions", async (req, res, next: NextFunction): Promise
 // GET /api/partner/orders
 router.get("/partner/orders", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const auth = await requirePartnerAuth(req, res);
+    const auth = await requirePartnerAuth(req, res, next);
     if (!auth) return;
     const commissions = await db.select({
       orderId: partnerCommissionsTable.orderId,

@@ -1,9 +1,10 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db, tenantsTable, plansTable, invoicesTable, subscriptionsTable, usersTable, clientsTable, tripsTable } from "@workspace/db";
 import { eq, and, or, count, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { generatePixEMV, generatePixQrCodeUrl } from "../lib/pix";
 import { persistUsageSnapshot } from "../lib/planLimits";
 import { generateInvoiceNumber } from "../lib/invoiceNumber";
@@ -14,14 +15,14 @@ import { hasSeatMapFeature } from "../lib/plan-features";
 
 const router = Router();
 
-router.get("/subscriptions/current", async (req, res): Promise<void> => {
+router.get("/subscriptions/current", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!me.tenantId) { res.status(404).json({ error: "No tenant" }); return; }
+    if (!me.tenantId) { next(new NotFoundError("No tenant", "NOT_FOUND")); return; }
 
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, me.tenantId)).limit(1);
-    if (!tenant) { res.status(404).json({ error: "Tenant not found" }); return; }
+    if (!tenant) { next(new NotFoundError("Tenant not found", "NOT_FOUND")); return; }
 
     const allPlans = await db.select().from(plansTable).where(eq(plansTable.isActive, true)).orderBy(plansTable.sortOrder);
 
@@ -80,8 +81,7 @@ router.get("/subscriptions/current", async (req, res): Promise<void> => {
       invoices,
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching subscription");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -91,17 +91,17 @@ const UpgradeBody = z.object({
   billingCycle: z.enum(["monthly", "annual"]).default("monthly"),
 }).refine(d => d.planId || d.planSlug, { message: "planId or planSlug is required" });
 
-router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
+router.post("/subscriptions/upgrade", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!me.tenantId) { res.status(400).json({ error: "No tenant" }); return; }
+    if (!me.tenantId) { next(new ValidationError(String("No tenant" ), "VALIDATION_ERROR")); return; }
     if (me.role !== ROLES.AGENCY_ADMIN && me.role !== ROLES.SUPER_ADMIN) {
-      res.status(403).json({ error: "Apenas administradores podem alterar o plano" }); return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
     const parsed = UpgradeBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
 
     const planConditions = [
       ...(parsed.data.planId ? [eq(plansTable.id, parsed.data.planId)] : []),
@@ -112,10 +112,10 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
       .from(plansTable)
       .where(planConditions.length === 1 ? planConditions[0] : or(...planConditions))
       .limit(1);
-    if (!newPlan) { res.status(404).json({ error: "Plano não encontrado" }); return; }
+    if (!newPlan) { next(new NotFoundError("Plano não encontrado", "NOT_FOUND")); return; }
 
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, me.tenantId)).limit(1);
-    if (!tenant) { res.status(404).json({ error: "Tenant não encontrado" }); return; }
+    if (!tenant) { next(new NotFoundError("Tenant não encontrado", "NOT_FOUND")); return; }
 
     const isDowngradeToFree = Number(newPlan.monthlyPrice) === 0;
 
@@ -529,25 +529,24 @@ router.post("/subscriptions/upgrade", async (req, res): Promise<void> => {
 
     res.json({ upgraded: false, pendingInvoice: true, plan: newPlan, invoice });
   } catch (err) {
-    req.log.error({ err }, "Error upgrading subscription");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/invoices/:id/pix", async (req, res): Promise<void> => {
+router.post("/invoices/:id/pix", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
 
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
-    if (!invoice) { res.status(404).json({ error: "Fatura não encontrada" }); return; }
+    if (!invoice) { next(new NotFoundError("Fatura não encontrada", "NOT_FOUND")); return; }
 
     if (me.role !== ROLES.SUPER_ADMIN && invoice.tenantId !== me.tenantId) {
-      res.status(403).json({ error: "Forbidden" }); return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
     const pixKey = process.env["PIX_KEY"];
-    if (!pixKey) { res.status(400).json({ error: "PIX não configurado. Entre em contato com o suporte." }); return; }
+    if (!pixKey) { next(new ValidationError(String("PIX não configurado. Entre em contato com o suporte." ), "VALIDATION_ERROR")); return; }
 
     const pixName = process.env["PIX_NAME"] ?? "VisiteCRM";
     const pixCity = process.env["PIX_CITY"] ?? "SAO PAULO";
@@ -574,20 +573,19 @@ router.post("/invoices/:id/pix", async (req, res): Promise<void> => {
     const [updated] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
     res.json(updated);
   } catch (err) {
-    req.log.error({ err }, "Error generating PIX");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/admin/invoices/:id/confirm-payment", async (req, res): Promise<void> => {
+router.post("/admin/invoices/:id/confirm-payment", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden: superadmin only" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
-    if (!invoice) { res.status(404).json({ error: "Fatura não encontrada" }); return; }
-    if (invoice.status === INVOICE_STATUS.PAID) { res.status(400).json({ error: "Fatura já está paga" }); return; }
+    if (!invoice) { next(new NotFoundError("Fatura não encontrada", "NOT_FOUND")); return; }
+    if (invoice.status === INVOICE_STATUS.PAID) { next(new ValidationError(String("Fatura já está paga" ), "VALIDATION_ERROR")); return; }
 
     await db.update(invoicesTable).set({
       status: INVOICE_STATUS.PAID,
@@ -639,28 +637,27 @@ router.post("/admin/invoices/:id/confirm-payment", async (req, res): Promise<voi
     const [updated] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
     res.json(updated);
   } catch (err) {
-    req.log.error({ err }, "Error confirming payment");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/invoices/:id/stripe/checkout", async (req, res): Promise<void> => {
+router.post("/invoices/:id/stripe/checkout", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
 
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
-    if (!invoice) { res.status(404).json({ error: "Fatura não encontrada" }); return; }
+    if (!invoice) { next(new NotFoundError("Fatura não encontrada", "NOT_FOUND")); return; }
     if (me.role !== ROLES.SUPER_ADMIN && invoice.tenantId !== me.tenantId) {
-      res.status(403).json({ error: "Forbidden" }); return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
-    if (invoice.status === INVOICE_STATUS.PAID) { res.status(400).json({ error: "Fatura já está paga" }); return; }
+    if (invoice.status === INVOICE_STATUS.PAID) { next(new ValidationError(String("Fatura já está paga" ), "VALIDATION_ERROR")); return; }
 
     let stripe;
     try {
       stripe = await getUncachableStripeClient();
     } catch {
-      res.status(400).json({ error: "Stripe não configurado. Entre em contato com o suporte." });
+      next(new ValidationError("Stripe não configurado. Entre em contato com o suporte.", "VALIDATION_ERROR"));
       return;
     }
 
@@ -718,25 +715,24 @@ router.post("/invoices/:id/stripe/checkout", async (req, res): Promise<void> => 
 
     res.json({ clientSecret: pi.client_secret!, paymentIntentId: pi.id });
   } catch (err) {
-    req.log.error({ err }, "Error creating Stripe PaymentIntent");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/subscriptions/portal", async (req, res): Promise<void> => {
+router.post("/subscriptions/portal", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!me.tenantId) { res.status(400).json({ error: "No tenant" }); return; }
+    if (!me.tenantId) { next(new ValidationError(String("No tenant" ), "VALIDATION_ERROR")); return; }
     if (me.role !== ROLES.AGENCY_ADMIN && me.role !== ROLES.SUPER_ADMIN) {
-      res.status(403).json({ error: "Apenas administradores podem acessar o portal de cobrança" }); return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
     let stripe;
     try {
       stripe = await getUncachableStripeClient();
     } catch {
-      res.status(400).json({ error: "Stripe não configurado. Entre em contato com o suporte." });
+      next(new ValidationError("Stripe não configurado. Entre em contato com o suporte.", "VALIDATION_ERROR"));
       return;
     }
 
@@ -794,8 +790,7 @@ router.post("/subscriptions/portal", async (req, res): Promise<void> => {
 
     res.json({ portalUrl: portalSession.url });
   } catch (err) {
-    req.log.error({ err }, "Error creating customer portal session");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

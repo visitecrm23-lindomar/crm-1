@@ -19,6 +19,7 @@ import { startReminderWorker, stopReminderWorker, retryFailedBookingEmails, retr
 import { startPdfWorker, stopPdfWorker } from "./workers/pdf.worker";
 import { startCommissionSyncWorker, stopCommissionSyncWorker } from "./workers/commission-sync.worker";
 import { startWhatsAppWorker, stopWhatsAppWorker } from "./workers/whatsapp.worker";
+import { startCalendarSyncWorker, stopCalendarSyncWorker } from "./workers/calendar-sync.worker";
 
 process.on("unhandledRejection", (reason: unknown) => {
   logger.error({ err: reason }, "Unhandled promise rejection — process kept alive");
@@ -108,7 +109,7 @@ async function applyMigrations() {
 // ── Graceful shutdown ──
 const shutdown = async (signal: string) => {
   logger.info({ signal }, "Shutdown signal received");
-  await Promise.all([stopEmailWorker(), stopReminderWorker(), stopPdfWorker(), stopCommissionSyncWorker(), stopWhatsAppWorker(), closeQueues()]);
+  await Promise.all([stopEmailWorker(), stopReminderWorker(), stopPdfWorker(), stopCommissionSyncWorker(), stopWhatsAppWorker(), stopCalendarSyncWorker(), closeQueues()]);
   process.exit(0);
 };
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
@@ -258,6 +259,7 @@ applyMigrations()
           startPdfWorker();
           startCommissionSyncWorker();
           startWhatsAppWorker();
+          startCalendarSyncWorker();
           logger.info("[queue] BullMQ workers started");
         } catch (err) {
           logger.error({ err }, "[queue] Failed to start BullMQ workers — continuing without them");

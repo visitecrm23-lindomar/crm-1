@@ -1,19 +1,19 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db, clientsTable, birthdayMessagesTable, couponsTable, systemConfigsTable } from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { z } from "zod/v4";
-import { requireAuth } from "../lib/tenant";
+import { requireAuth, ADMIN_ROLES } from '../lib/tenant';
 import { generateId } from "../lib/id";
 import { processBirthdayForClient, getBirthdaySettings } from "../lib/birthday";
-import { ADMIN_ROLES } from '../lib/tenant';
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 
 const router = Router();
 
-router.get("/birthday/today", async (req, res): Promise<void> => {
+router.get("/birthday/today", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const today = new Date();
     const month = today.getMonth() + 1;
@@ -50,16 +50,15 @@ router.get("/birthday/today", async (req, res): Promise<void> => {
 
     res.json(result);
   } catch (err) {
-    req.log.error({ err }, "Error listing today birthdays");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/birthday/upcoming", async (req, res): Promise<void> => {
+router.get("/birthday/upcoming", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const days = Math.min(Number(req.query.days) || 7, 60);
     const today = new Date();
@@ -107,16 +106,15 @@ router.get("/birthday/upcoming", async (req, res): Promise<void> => {
 
     res.json(result);
   } catch (err) {
-    req.log.error({ err }, "Error listing upcoming birthdays");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/birthday/history", async (req, res): Promise<void> => {
+router.get("/birthday/history", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const year = req.query.year ? Number(req.query.year) : undefined;
@@ -151,16 +149,15 @@ router.get("/birthday/history", async (req, res): Promise<void> => {
 
     res.json(result);
   } catch (err) {
-    req.log.error({ err }, "Error listing birthday history");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/birthday/stats", async (req, res): Promise<void> => {
+router.get("/birthday/stats", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const year = new Date().getFullYear();
     const today = new Date();
@@ -233,16 +230,15 @@ router.get("/birthday/stats", async (req, res): Promise<void> => {
       revenueGenerated,
     });
   } catch (err) {
-    req.log.error({ err }, "Error getting birthday stats");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/birthday/:clientId/send", async (req, res): Promise<void> => {
+router.post("/birthday/:clientId/send", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const result = await processBirthdayForClient(me.tenantId, req.params.clientId, {
       isManual: true,
@@ -250,24 +246,23 @@ router.post("/birthday/:clientId/send", async (req, res): Promise<void> => {
     });
 
     if (!result.success && result.error === "Client not found") {
-      res.status(404).json({ error: "Client not found" });
+      next(new NotFoundError("Client not found", "CLIENT_NOT_FOUND"));
       return;
     }
 
     res.json({ success: result.success, couponCode: result.couponCode, error: result.error });
   } catch (err) {
-    req.log.error({ err }, "Error sending birthday message");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/birthday/mark-converted", async (req, res): Promise<void> => {
+router.post("/birthday/mark-converted", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const { couponCode } = req.body as { couponCode?: string };
-    if (!couponCode) { res.status(400).json({ error: "couponCode required" }); return; }
+    if (!couponCode) { next(new ValidationError("couponCode required", "VALIDATION_ERROR")); return; }
 
     const [message] = await db
       .select()
@@ -280,7 +275,7 @@ router.post("/birthday/mark-converted", async (req, res): Promise<void> => {
       )
       .limit(1);
 
-    if (!message) { res.status(404).json({ error: "Birthday message not found" }); return; }
+    if (!message) { next(new NotFoundError("Birthday message not found", "NOT_FOUND")); return; }
 
     await db
       .update(birthdayMessagesTable)
@@ -289,22 +284,20 @@ router.post("/birthday/mark-converted", async (req, res): Promise<void> => {
 
     res.json({ success: true });
   } catch (err) {
-    req.log.error({ err }, "Error marking birthday conversion");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/birthday/settings", async (req, res): Promise<void> => {
+router.get("/birthday/settings", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const settings = await getBirthdaySettings(me.tenantId);
     res.json(settings);
   } catch (err) {
-    req.log.error({ err }, "Error getting birthday settings");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
@@ -320,14 +313,14 @@ const BirthdaySettingsBody = z.object({
   senderName: z.string().nullable().optional(),
 });
 
-router.put("/birthday/settings", async (req, res): Promise<void> => {
+router.put("/birthday/settings", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const parsed = BirthdaySettingsBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
 
     const current = await getBirthdaySettings(me.tenantId);
     const updated = { ...current, ...parsed.data };
@@ -354,8 +347,7 @@ router.put("/birthday/settings", async (req, res): Promise<void> => {
 
     res.json(updated);
   } catch (err) {
-    req.log.error({ err }, "Error updating birthday settings");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

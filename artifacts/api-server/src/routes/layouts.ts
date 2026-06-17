@@ -1,9 +1,10 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { vehicleLayoutsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors"; 
 import type { LayoutCell } from "@workspace/db";
 import { CreateLayoutBody, UpdateLayoutBody } from "@workspace/api-zod";
 import { ADMIN_ROLES } from '../lib/tenant';
@@ -33,7 +34,7 @@ function formatLayout(l: typeof vehicleLayoutsTable.$inferSelect) {
   };
 }
 
-router.get("/layouts", async (req, res): Promise<void> => {
+router.get("/layouts", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -44,23 +45,22 @@ router.get("/layouts", async (req, res): Promise<void> => {
 
     res.json(layouts.map(formatLayout));
   } catch (err) {
-    req.log.error({ err }, "Error listing layouts");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/layouts", async (req, res): Promise<void> => {
+router.post("/layouts", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Forbidden" });
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
       return;
     }
 
     const parsed = CreateLayoutBody.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Validation failed", details: parsed.error.flatten() });
+      next(new ValidationError("Validation failed", "VALIDATION_ERROR"));
       return;
     }
     const { name, description, vehicleType, rows, cols, floors, numberingType, cells } = parsed.data;
@@ -83,15 +83,14 @@ router.post("/layouts", async (req, res): Promise<void> => {
       .where(and(eq(vehicleLayoutsTable.id, id), eq(vehicleLayoutsTable.tenantId, me.tenantId)))
       .limit(1);
 
-    if (!layout) { res.status(500).json({ error: "Failed to create layout" }); return; }
+    if (!layout) { next(new AppError("Resource not found", 404, "NOT_FOUND")); return; }
     res.status(201).json(formatLayout(layout));
   } catch (err) {
-    req.log.error({ err }, "Error creating layout");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/layouts/:id", async (req, res): Promise<void> => {
+router.get("/layouts/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -100,31 +99,30 @@ router.get("/layouts/:id", async (req, res): Promise<void> => {
       .where(and(eq(vehicleLayoutsTable.id, req.params.id), eq(vehicleLayoutsTable.tenantId, me.tenantId)))
       .limit(1);
 
-    if (!layout) { res.status(404).json({ error: "Not found" }); return; }
+    if (!layout) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(formatLayout(layout));
   } catch (err) {
-    req.log.error({ err }, "Error fetching layout");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.put("/layouts/:id", async (req, res): Promise<void> => {
+router.put("/layouts/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Forbidden" });
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
       return;
     }
 
     const [existing] = await db.select().from(vehicleLayoutsTable)
       .where(and(eq(vehicleLayoutsTable.id, req.params.id), eq(vehicleLayoutsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+    if (!existing) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
 
     const parsed = UpdateLayoutBody.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Validation failed", details: parsed.error.flatten() });
+      next(new ValidationError("Validation failed", "VALIDATION_ERROR"));
       return;
     }
     const { name, description, vehicleType, rows, cols, floors, numberingType, cells } = parsed.data;
@@ -146,20 +144,19 @@ router.put("/layouts/:id", async (req, res): Promise<void> => {
       .where(and(eq(vehicleLayoutsTable.id, req.params.id), eq(vehicleLayoutsTable.tenantId, me.tenantId)))
       .limit(1);
 
-    if (!layout) { res.status(404).json({ error: "Not found" }); return; }
+    if (!layout) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(formatLayout(layout));
   } catch (err) {
-    req.log.error({ err }, "Error updating layout");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/layouts/:id", async (req, res): Promise<void> => {
+router.delete("/layouts/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Forbidden" });
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
       return;
     }
 
@@ -168,8 +165,7 @@ router.delete("/layouts/:id", async (req, res): Promise<void> => {
 
     res.json({ success: true });
   } catch (err) {
-    req.log.error({ err }, "Error deleting layout");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

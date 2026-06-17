@@ -75,7 +75,7 @@ async function syncClientDeal(clientId: string, tenantId: string, tripId: string
 
 async function formatReservation(r: typeof reservationsTable.$inferSelect) {
   const [trip] = await db.select().from(tripsTable).where(eq(tripsTable.id, r.tripId)).limit(1);
-  const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, r.clientId)).limit(1);
+  const [client] = r.clientId ? await db.select().from(clientsTable).where(eq(clientsTable.id, r.clientId)).limit(1) : [];
   const [autoRetryLog] = await db.select({ id: emailLogsTable.id })
     .from(emailLogsTable)
     .where(and(eq(emailLogsTable.reservationId, r.id), eq(emailLogsTable.isAutoRetry, true)))
@@ -976,7 +976,7 @@ async function requireReservationAccess(
     }
   } else if (me.role === ROLES.SALES) {
     const [clientRecord] = await db.select({ createdById: clientsTable.createdById }).from(clientsTable)
-      .where(and(eq(clientsTable.id, reservation.clientId), eq(clientsTable.tenantId, me.tenantId))).limit(1);
+      .where(and(eq(clientsTable.id, reservation.clientId!), eq(clientsTable.tenantId, me.tenantId))).limit(1);
     if (!clientRecord || clientRecord.createdById !== me.id) {
       throw new NotFoundError("Reservation not found", "RESERVATION_NOT_FOUND");
     }

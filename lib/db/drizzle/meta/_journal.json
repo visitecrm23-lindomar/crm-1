@@ -428,6 +428,13 @@
       "when": 1781620304859,
       "tag": "0060_redis_alert_log",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1781653625044,
+      "tag": "0061_open_the_call",
+      "breakpoints": true
     }
   ]
 }

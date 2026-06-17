@@ -125,12 +125,7 @@ function ReferralTierBadge({ level, label }: { level: string; label: string }) {
   );
 }
 
-import { formatCurrency as _fmtCurrencyLib, formatDate as _formatDate, formatDateTime as _formatDateTime } from "@/lib/utils";
-function fmtCurrency(v: string | number | null | undefined) {
-  if (v == null) return "R$ 0,00";
-  const n = typeof v === "string" ? parseFloat(v) : v;
-  return _fmtCurrencyLib(isNaN(n) ? 0 : n);
-}
+import { formatCurrencyBRL as fmtCurrency, formatDate as _formatDate, formatDateTime as _formatDateTime } from "@/lib/utils";
 
 const fmtDate = (v: string | null | undefined) => v ? _formatDate(v) : "—";
 const fmtDateTime = (v: string | null | undefined) => v ? _formatDateTime(v) : "—";

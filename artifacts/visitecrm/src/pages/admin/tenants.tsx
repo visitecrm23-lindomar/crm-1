@@ -4,7 +4,7 @@ import {
   useUpdateTenant,
   useListPlans,
 } from "@workspace/api-client-react";
-import { useAdminTenants, getAdminTenantsQueryKey, useSyncSuperadmin, type AdminTenant } from "@/hooks/use-admin";
+import { useAdminTenants, getAdminTenantsQueryKey, useSyncSuperadmin, type AdminTenant } from "@/hooks/use-admin-tenants";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

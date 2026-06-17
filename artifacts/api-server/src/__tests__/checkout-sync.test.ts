@@ -153,6 +153,13 @@ vi.mock("../lib/reservation-number.js", () => ({
   tripTypeToCode: vi.fn(() => "EX"),
 }));
 
+vi.mock("../lib/client-notifications.js", () => ({
+  insertClientNotification: vi.fn().mockResolvedValue(undefined),
+  getRecentNotifications: vi.fn().mockResolvedValue([]),
+  getUnreadCount: vi.fn().mockResolvedValue(0),
+  markAllRead: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("../lib/id.js", () => ({
   generateId: vi.fn(() => "gen-id"),
   generateVoucherCode: vi.fn(() => "VCHR-0001"),
@@ -298,14 +305,15 @@ function setupTripLinkedCheckoutQueue() {
   selectQueue.push(
     [FAKE_STORE],                                                 // 1. getActiveStore (db)
     [FAKE_TRIP_PRODUCT],                                          // 2. product fetch (db)
-    [{ availableSeats: 10 }],                                     // 3. trip seats Phase 1.5 (db)
+    [{ availableSeats: 10 }],                                     // 3. trip seats check (db, prepareCheckoutItems)
     [{ id: "user-001" }],                                         // 4. admin user (db, loadReservationContext)
     [],                                                           // 5. pipeline stages (db, loadReservationContext)
     [{ id: "trip-001", name: "Excursão Nordeste" }],              // 6. trip names (db, loadReservationContext)
     [{ id: "client-001", cpf: null, birthDate: null }],           // 7. existing client (tx, upsertCheckoutClient)
-    [FAKE_ORDER],                                                 // 8. post-tx order (db)
-    [],                                                           // 9. post-tx items (db)
-    [],                                                           // 10. IIFE — portal user check (db)
+    [],                                                           // 8. active reservations seat check (tx, persist-order)
+    [FAKE_ORDER],                                                 // 9. post-tx order (db)
+    [],                                                           // 10. post-tx items (db)
+    [],                                                           // 11. portal user check (db, ensurePortalAccount)
   );
 }
 
@@ -314,16 +322,17 @@ function setupNewUserCheckoutQueue() {
   selectQueue.push(
     [FAKE_STORE],                                                 // 1. getActiveStore (db)
     [FAKE_TRIP_PRODUCT],                                          // 2. product fetch (db)
-    [{ availableSeats: 10 }],                                     // 3. trip seats Phase 1.5 (db)
+    [{ availableSeats: 10 }],                                     // 3. trip seats check (db, prepareCheckoutItems)
     [{ id: "user-001" }],                                         // 4. admin user (db, loadReservationContext)
     [],                                                           // 5. pipeline stages (db, loadReservationContext)
     [{ id: "trip-001", name: "Excursão Nordeste" }],              // 6. trip names (db, loadReservationContext)
     [{ id: "client-001", cpf: null, birthDate: null }],           // 7. existing client (tx, upsertCheckoutClient)
-    [FAKE_ORDER],                                                 // 8. post-tx order (db)
-    [],                                                           // 9. post-tx items (db)
-    [],                                                           // 10. portal user check — returns empty → new user
-    [FAKE_RESERVATION],                                           // 11. reservation query for confirmation email
-    [],                                                           // 12. reservation rows for agency notification
+    [],                                                           // 8. active reservations seat check (tx, persist-order)
+    [FAKE_ORDER],                                                 // 9. post-tx order (db)
+    [],                                                           // 10. post-tx items (db)
+    [],                                                           // 11. portal user check — empty → new user (db, ensurePortalAccount)
+    [FAKE_RESERVATION],                                           // 12. reservation query for confirmation email (db, post-booking)
+    [],                                                           // 13. reservation rows for agency notification (db, post-booking)
   );
 }
 

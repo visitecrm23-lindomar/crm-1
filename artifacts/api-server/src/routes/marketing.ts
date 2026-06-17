@@ -1,9 +1,10 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { campaignsTable, npsResponsesTable, productsTable, ordersTable, orderItemsTable, clientsTable, reservationsTable } from "@workspace/db";
 import { eq, and, desc, inArray, avg, sql, or } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
+import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { z } from "zod";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { STORE_ORDER_STATUS, STORE_PAYMENT_STATUS } from "@workspace/permissions";
@@ -144,7 +145,7 @@ function formatOrder(o: typeof ordersTable.$inferSelect) {
   };
 }
 
-router.get("/campaigns", async (req, res): Promise<void> => {
+router.get("/campaigns", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -153,18 +154,17 @@ router.get("/campaigns", async (req, res): Promise<void> => {
       .orderBy(desc(campaignsTable.createdAt));
     res.json(campaigns.map(formatCampaign));
   } catch (err) {
-    req.log.error({ err }, "Error listing campaigns");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/campaigns", async (req, res): Promise<void> => {
+router.post("/campaigns", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateCampaignBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(campaignsTable).values({
       id,
@@ -184,21 +184,20 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     const [campaign] = await db.select().from(campaignsTable)
       .where(and(eq(campaignsTable.id, id), eq(campaignsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!campaign) { res.status(500).json({ error: "Failed to create campaign" }); return; }
+    if (!campaign) { next(new AppError("Resource not found", 404, "NOT_FOUND")); return; }
     res.status(201).json(formatCampaign(campaign));
   } catch (err) {
-    req.log.error({ err }, "Error creating campaign");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/campaigns/:id", async (req, res): Promise<void> => {
+router.patch("/campaigns/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = UpdateCampaignBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const updates: Partial<typeof campaignsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.status != null) updates.status = parsed.data.status;
@@ -214,57 +213,54 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
     const [campaign] = await db.select().from(campaignsTable)
       .where(and(eq(campaignsTable.id, req.params.id), eq(campaignsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+    if (!campaign) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(formatCampaign(campaign));
   } catch (err) {
-    req.log.error({ err }, "Error updating campaign");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/campaigns/:id", async (req, res): Promise<void> => {
+router.delete("/campaigns/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     await db.delete(campaignsTable)
       .where(and(eq(campaignsTable.id, req.params.id), eq(campaignsTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) {
-    req.log.error({ err }, "Error deleting campaign");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/campaigns/segment-preview", async (req, res): Promise<void> => {
+router.post("/campaigns/segment-preview", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = SegmentPreviewBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const { count, clientIds } = await resolveSegment(me.tenantId, parsed.data);
     res.json({ count, clientIds: clientIds.slice(0, 20) });
   } catch (err) {
-    req.log.error({ err }, "Error previewing segment");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/ai-content", async (req, res): Promise<void> => {
+router.post("/ai-content", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = AiContentBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const { topic, destination, tone, audience } = parsed.data;
 
     let aiClient: Awaited<ReturnType<typeof getAIClientForTenant>>;
     try {
       aiClient = await getAIClientForTenant(me.tenantId);
     } catch {
-      res.status(402).json({ error: "Configure a integração de IA nas configurações da agência para usar o Criador de Conteúdo." });
+      next(new AppError("Configure a integração de IA nas configurações da agência para usar o Criador de Conteúdo.", 402, "AI_NOT_CONFIGURED"));
       return;
     }
 
@@ -298,12 +294,11 @@ Use linguagem brasileira. Seja específico, criativo e persuasivo.`;
       instagram: parsed2.instagram ?? "",
     });
   } catch (err) {
-    req.log.error({ err }, "Error generating AI content");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/nps/summary", async (req, res): Promise<void> => {
+router.get("/nps/summary", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -323,12 +318,11 @@ router.get("/nps/summary", async (req, res): Promise<void> => {
       averageScore: Math.round(avg * 10) / 10,
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching NPS summary");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/nps", async (req, res): Promise<void> => {
+router.get("/nps", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -373,17 +367,16 @@ router.get("/nps", async (req, res): Promise<void> => {
       createdAt: r.createdAt.toISOString(),
     })));
   } catch (err) {
-    req.log.error({ err }, "Error listing NPS responses");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/nps/send", async (req, res): Promise<void> => {
+router.post("/nps/send", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     const parsed = SendNpsBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
 
     const { tripId, clientIds } = parsed.data;
     const reservations = await db
@@ -396,7 +389,7 @@ router.post("/nps/send", async (req, res): Promise<void> => {
         ),
       );
 
-    const allClientIds = [...new Set(reservations.map(r => r.clientId))];
+    const allClientIds = [...new Set(reservations.map(r => r.clientId).filter((id): id is string => id !== null))];
     const targetIds = clientIds && clientIds.length > 0
       ? allClientIds.filter(id => clientIds.includes(id))
       : allClientIds;
@@ -424,17 +417,16 @@ router.post("/nps/send", async (req, res): Promise<void> => {
 
     res.json({ links });
   } catch (err) {
-    req.log.error({ err }, "Error sending NPS survey");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/nps", async (req, res): Promise<void> => {
+router.post("/nps", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     const parsed = CreateNpsResponseBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
 
     const id = generateId();
     const classification = parsed.data.score >= 9 ? "promoter" : parsed.data.score >= 7 ? "passive" : "detractor";
@@ -473,15 +465,14 @@ router.post("/nps", async (req, res): Promise<void> => {
     const [nps] = await db.select().from(npsResponsesTable)
       .where(and(eq(npsResponsesTable.id, id), eq(npsResponsesTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!nps) { res.status(500).json({ error: "Failed to create NPS response" }); return; }
+    if (!nps) { next(new AppError("Resource not found", 404, "NOT_FOUND")); return; }
     res.status(201).json({ id: nps.id, score: nps.score, classification: nps.classification });
   } catch (err) {
-    req.log.error({ err }, "Error creating NPS response");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/products", async (req, res): Promise<void> => {
+router.get("/products", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -490,18 +481,17 @@ router.get("/products", async (req, res): Promise<void> => {
       .orderBy(desc(productsTable.createdAt));
     res.json(products.map(formatProduct));
   } catch (err) {
-    req.log.error({ err }, "Error listing products");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/products", async (req, res): Promise<void> => {
+router.post("/products", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateProductBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const id = generateId();
     const slug = parsed.data.slug ?? (parsed.data.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + id.slice(0, 4));
     await db.insert(productsTable).values({
@@ -520,21 +510,20 @@ router.post("/products", async (req, res): Promise<void> => {
     const [product] = await db.select().from(productsTable)
       .where(and(eq(productsTable.id, id), eq(productsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!product) { res.status(500).json({ error: "Failed to create product" }); return; }
+    if (!product) { next(new AppError("Resource not found", 404, "NOT_FOUND")); return; }
     res.status(201).json(formatProduct(product));
   } catch (err) {
-    req.log.error({ err }, "Error creating product");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/products/:id", async (req, res): Promise<void> => {
+router.patch("/products/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = UpdateProductBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const updates: Partial<typeof productsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
     if (parsed.data.price != null) updates.price = String(parsed.data.price);
@@ -548,29 +537,27 @@ router.patch("/products/:id", async (req, res): Promise<void> => {
     const [product] = await db.select().from(productsTable)
       .where(and(eq(productsTable.id, req.params.id), eq(productsTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!product) { res.status(404).json({ error: "Not found" }); return; }
+    if (!product) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(formatProduct(product));
   } catch (err) {
-    req.log.error({ err }, "Error updating product");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.delete("/products/:id", async (req, res): Promise<void> => {
+router.delete("/products/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     await db.delete(productsTable)
       .where(and(eq(productsTable.id, req.params.id), eq(productsTable.tenantId, me.tenantId)));
     res.json({ success: true });
   } catch (err) {
-    req.log.error({ err }, "Error deleting product");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/orders", async (req, res): Promise<void> => {
+router.get("/orders", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -597,17 +584,16 @@ router.get("/orders", async (req, res): Promise<void> => {
       })),
     })));
   } catch (err) {
-    req.log.error({ err }, "Error listing orders");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/orders", async (req, res): Promise<void> => {
+router.post("/orders", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     const parsed = CreateOrderBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
 
     const items = parsed.data.items ?? [];
     let totalAmount = 0;
@@ -616,7 +602,7 @@ router.post("/orders", async (req, res): Promise<void> => {
       const [product] = await db.select().from(productsTable)
         .where(and(eq(productsTable.id, item.productId), eq(productsTable.tenantId, me.tenantId)))
         .limit(1);
-      if (!product) { res.status(400).json({ error: `Product ${item.productId} not found or not in tenant` }); return; }
+      if (!product) { next(new ValidationError(String(`Product ${item.productId} not found or not in tenant`), "VALIDATION_ERROR")); return; }
       const unitPrice = Number(product.promotionalPrice ?? product.price);
       priceMap[item.productId] = unitPrice;
       totalAmount += unitPrice * item.quantity;
@@ -650,22 +636,21 @@ router.post("/orders", async (req, res): Promise<void> => {
     const [order] = await db.select().from(ordersTable)
       .where(and(eq(ordersTable.id, id), eq(ordersTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!order) { res.status(500).json({ error: "Failed to create order" }); return; }
+    if (!order) { next(new AppError("Resource not found", 404, "NOT_FOUND")); return; }
     res.status(201).json(formatOrder(order));
   } catch (err) {
-    req.log.error({ err }, "Error creating order");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/orders/:id", async (req, res): Promise<void> => {
+router.get("/orders/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     const [order] = await db.select().from(ordersTable)
       .where(and(eq(ordersTable.id, req.params.id), eq(ordersTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!order) { res.status(404).json({ error: "Not found" }); return; }
+    if (!order) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     const items = await db.select().from(orderItemsTable).where(eq(orderItemsTable.orderId, req.params.id));
     res.json({
       ...formatOrder(order),
@@ -674,18 +659,17 @@ router.get("/orders/:id", async (req, res): Promise<void> => {
       })),
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching order");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/orders/:id", async (req, res): Promise<void> => {
+router.patch("/orders/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = UpdateOrderBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const updates: Partial<typeof ordersTable.$inferInsert> = {};
     if (parsed.data.status != null) updates.status = parsed.data.status;
     if (parsed.data.paymentStatus != null) updates.paymentStatus = parsed.data.paymentStatus;
@@ -694,11 +678,10 @@ router.patch("/orders/:id", async (req, res): Promise<void> => {
     const [order] = await db.select().from(ordersTable)
       .where(and(eq(ordersTable.id, req.params.id), eq(ordersTable.tenantId, me.tenantId)))
       .limit(1);
-    if (!order) { res.status(404).json({ error: "Not found" }); return; }
+    if (!order) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(formatOrder(order));
   } catch (err) {
-    req.log.error({ err }, "Error updating order");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

@@ -1,7 +1,8 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db, tenantsTable, usersTable, clientsTable, tripsTable, auditLogsTable, reservationsTable, plansTable, emailLogsTable } from "@workspace/db";
 import { eq, desc, and, count, sql } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { ROLES } from "@workspace/permissions";
 
 const router = Router();
@@ -31,11 +32,11 @@ function getMonthBuckets(months = 12) {
   return buckets;
 }
 
-router.get("/admin/metrics/mrr", async (req, res): Promise<void> => {
+router.get("/admin/metrics/mrr", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const [tenants, planPriceMap] = await Promise.all([
       db.select().from(tenantsTable),
@@ -60,16 +61,15 @@ router.get("/admin/metrics/mrr", async (req, res): Promise<void> => {
 
     res.json(series);
   } catch (err) {
-    req.log.error({ err }, "Error fetching MRR metrics");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/admin/metrics/churn", async (req, res): Promise<void> => {
+router.get("/admin/metrics/churn", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const tenants = await db.select().from(tenantsTable);
     const buckets = getMonthBuckets(12);
@@ -92,16 +92,15 @@ router.get("/admin/metrics/churn", async (req, res): Promise<void> => {
 
     res.json(series);
   } catch (err) {
-    req.log.error({ err }, "Error fetching churn metrics");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/admin/metrics/growth", async (req, res): Promise<void> => {
+router.get("/admin/metrics/growth", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const tenants = await db.select().from(tenantsTable);
     const buckets = getMonthBuckets(12);
@@ -123,19 +122,18 @@ router.get("/admin/metrics/growth", async (req, res): Promise<void> => {
 
     res.json(series);
   } catch (err) {
-    req.log.error({ err }, "Error fetching growth metrics");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/tenants/:id/details", async (req, res): Promise<void> => {
+router.get("/tenants/:id/details", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
-    if (!tenant) { res.status(404).json({ error: "Not found" }); return; }
+    if (!tenant) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
 
     const [userCount] = await db.select({ count: count() }).from(usersTable).where(eq(usersTable.tenantId, req.params.id));
     const [clientCount] = await db.select({ count: count() }).from(clientsTable).where(eq(clientsTable.tenantId, req.params.id));
@@ -159,62 +157,58 @@ router.get("/tenants/:id/details", async (req, res): Promise<void> => {
       planMaxTrips: plan?.maxTrips ?? null,
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching tenant details");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/tenants/:id/users", async (req, res): Promise<void> => {
+router.get("/tenants/:id/users", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const users = await db.select().from(usersTable).where(eq(usersTable.tenantId, req.params.id)).orderBy(desc(usersTable.createdAt));
     res.json(users);
   } catch (err) {
-    req.log.error({ err }, "Error fetching tenant users");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/tenants/:id/suspend", async (req, res): Promise<void> => {
+router.post("/tenants/:id/suspend", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     await db.update(tenantsTable).set({ status: "suspended" }).where(eq(tenantsTable.id, req.params.id));
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
-    if (!tenant) { res.status(404).json({ error: "Not found" }); return; }
+    if (!tenant) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(tenant);
   } catch (err) {
-    req.log.error({ err }, "Error suspending tenant");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/tenants/:id/activate", async (req, res): Promise<void> => {
+router.post("/tenants/:id/activate", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     await db.update(tenantsTable).set({ status: "active" }).where(eq(tenantsTable.id, req.params.id));
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
-    if (!tenant) { res.status(404).json({ error: "Not found" }); return; }
+    if (!tenant) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(tenant);
   } catch (err) {
-    req.log.error({ err }, "Error activating tenant");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/admin/users", async (req, res): Promise<void> => {
+router.get("/admin/users", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const users = await db.select({
       id: usersTable.id,
@@ -233,16 +227,15 @@ router.get("/admin/users", async (req, res): Promise<void> => {
 
     res.json(users);
   } catch (err) {
-    req.log.error({ err }, "Error listing all users");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/admin/audit-logs", async (req, res): Promise<void> => {
+router.get("/admin/audit-logs", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const conditions = [];
     if (req.query.tenantId) conditions.push(eq(auditLogsTable.tenantId, req.query.tenantId as string));
@@ -276,16 +269,15 @@ router.get("/admin/audit-logs", async (req, res): Promise<void> => {
     const logs = conditions.length > 0 ? await query.where(and(...conditions)) : await query;
     res.json(logs);
   } catch (err) {
-    req.log.error({ err }, "Error listing audit logs");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.get("/admin/email-jobs/failed-count", async (req, res): Promise<void> => {
+router.get("/admin/email-jobs/failed-count", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const [row] = await db
       .select({ count: count() })
@@ -301,8 +293,7 @@ router.get("/admin/email-jobs/failed-count", async (req, res): Promise<void> => 
 
     res.json({ failedCount: row?.count ?? 0, recent });
   } catch (err) {
-    req.log.error({ err }, "Error fetching failed email count");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

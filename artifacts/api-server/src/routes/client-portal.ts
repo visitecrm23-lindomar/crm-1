@@ -24,7 +24,7 @@ import {
 import { eq, and, desc, asc, sql, inArray, gt, count, isNull, lt } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, MANAGEMENT_ROLES } from "../lib/tenant";
-import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { ROLES, REFERRAL_STATUS, RESERVATION_STATUS } from "@workspace/permissions";
 import { generateVoucherPdf } from "../lib/voucher-pdf";
 import { getPdfQueue } from "../queues/index";
@@ -832,12 +832,11 @@ router.post("/client/me/loyalty/redeem", async (req, res, next: NextFunction): P
         .set({ availablePoints: newAvailablePoints })
         .where(eq(loyaltyMembersTable.id, member.id));
 
-      const txId = generateId("ltx");
+      const txId = generateId();
       await tx.insert(loyaltyTransactionsTable).values({
         id: txId,
         tenantId: me.tenantId,
         memberId: member.id,
-        programId: loyaltyProgram.id,
         type: "redeem",
         points: actualPointsRedeemed,
         description: `Resgate de pontos — Reserva ${lockedReservation.reservationNumber ?? reservation.id.slice(-6).toUpperCase()}`,
@@ -910,7 +909,7 @@ router.post("/client/nps", async (req, res, next: NextFunction): Promise<void> =
       .where(eq(clientNpsResponsesTable.reservationId, body.data.reservationId))
       .limit(1);
     if (existing) {
-      res.status(409).json({ error: "Avaliação já enviada para esta reserva", code: "DUPLICATE_NPS" });
+      next(new ConflictError("Avaliação já enviada para esta reserva", "DUPLICATE_NPS"));
       return;
     }
     const id = generateId();
@@ -1331,7 +1330,7 @@ router.get("/client/notifications/stream", async (req, res, next: NextFunction):
 
     const client = await findClientRecord(me.tenantId, me.id, me.email);
     if (!client) {
-      res.status(404).json({ error: "Client record not found" });
+      next(new NotFoundError("Client record not found", "NOT_FOUND"));
       return;
     }
 

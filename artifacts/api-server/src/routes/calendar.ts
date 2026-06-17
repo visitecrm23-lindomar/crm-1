@@ -1,12 +1,12 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import { usersTable, calendarEventsTable, tripsTable, paymentsTable, clientsTable } from "@workspace/db";
 import { eq, and, count, max } from "drizzle-orm";
-import { requireAuth } from "../lib/tenant";
+import { requireAuth, ALL_STAFF_ROLES } from "../lib/tenant";
 import { generateAuthUrl, verifyState, exchangeCodeForTokens, revokeToken } from "../lib/google-calendar/calendar-service";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
-import { ALL_STAFF_ROLES } from '../lib/tenant';
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 
 const syncBodySchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("all") }),
@@ -19,19 +19,18 @@ const router = Router();
 
 const FRONTEND_URL = process.env["FRONTEND_URL"] ?? `https://${process.env["REPLIT_DEV_DOMAIN"] ?? "localhost"}`;
 
-router.get("/calendar/connect", async (req, res): Promise<void> => {
+router.get("/calendar/connect", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ALL_STAFF_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Apenas agências e vendedores podem conectar o Google Calendar" });
+      next(new ForbiddenError("Apenas agências e vendedores podem conectar o Google Calendar", "FORBIDDEN_ROLE"));
       return;
     }
     const url = generateAuthUrl(me.id);
     res.json({ url });
   } catch (err) {
-    req.log.error({ err }, "Error generating Google Calendar auth URL");
-    res.status(500).json({ error: "Erro ao gerar URL de autorização" });
+    next(err);
   }
 });
 
@@ -48,7 +47,6 @@ router.get("/calendar/callback", async (req, res): Promise<void> => {
     return;
   }
 
-  // Verify HMAC-signed state to prevent CSRF/account-linking attacks
   const userId = verifyState(state);
   if (!userId) {
     res.redirect(`${FRONTEND_URL}/configuracoes?gcal=error&tab=integrations`);
@@ -72,14 +70,11 @@ router.get("/calendar/callback", async (req, res): Promise<void> => {
       googleCalendarEnabled: true,
       googleCalendarStatus: "connected",
     };
-    // Only overwrite refresh_token when Google returns a new one — on reconnect flows
-    // Google omits refresh_token and we must keep the previously stored value.
     if (tokens.refresh_token) {
       updateFields.googleRefreshToken = tokens.refresh_token;
     }
     await db.update(usersTable).set(updateFields).where(eq(usersTable.id, userId));
 
-    // Respond first, then fire-and-forget initial sync for this user only
     res.redirect(`${FRONTEND_URL}/configuracoes?gcal=success&tab=integrations`);
     CalendarSyncService.syncAllForUser(userId).catch((err) => {
       req.log.warn({ err, userId, context: "calendar/callback" }, "Initial syncAllForUser failed — continuing");
@@ -90,7 +85,7 @@ router.get("/calendar/callback", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/calendar/disconnect", async (req, res): Promise<void> => {
+router.post("/calendar/disconnect", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -114,12 +109,11 @@ router.post("/calendar/disconnect", async (req, res): Promise<void> => {
 
     res.json({ success: true, message: "Google Calendar desconectado com sucesso" });
   } catch (err) {
-    req.log.error({ err }, "Error disconnecting Google Calendar");
-    res.status(500).json({ error: "Erro ao desconectar Google Calendar" });
+    next(err);
   }
 });
 
-router.get("/calendar/status", async (req, res): Promise<void> => {
+router.get("/calendar/status", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
@@ -156,23 +150,22 @@ router.get("/calendar/status", async (req, res): Promise<void> => {
       lastSync: lastSyncResult?.lastSync?.toISOString() ?? null,
     });
   } catch (err) {
-    req.log.error({ err }, "Error fetching Google Calendar status");
-    res.status(500).json({ error: "Erro ao verificar status do Google Calendar" });
+    next(err);
   }
 });
 
-router.post("/calendar/sync", async (req, res): Promise<void> => {
+router.post("/calendar/sync", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ALL_STAFF_ROLES.includes(me.role)) {
-      res.status(403).json({ error: "Acesso negado" });
+      next(new ForbiddenError("Acesso negado", "FORBIDDEN_ROLE"));
       return;
     }
 
     const parsed = syncBodySchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Tipo de sincronização inválido", details: parsed.error.flatten() });
+      next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR"));
       return;
     }
     const body = parsed.data;
@@ -182,7 +175,7 @@ router.post("/calendar/sync", async (req, res): Promise<void> => {
         .from(tripsTable)
         .where(and(eq(tripsTable.id, body.id), eq(tripsTable.tenantId, me.tenantId)))
         .limit(1);
-      if (!trip) { res.status(404).json({ error: "Viagem não encontrada" }); return; }
+      if (!trip) { next(new NotFoundError("Viagem não encontrada", "TRIP_NOT_FOUND")); return; }
       await CalendarSyncService.syncTripForUser(body.id, me.id);
       res.json({ success: true, message: "1 evento sincronizado com sucesso", synced: 1 });
     } else if (body.type === "payment") {
@@ -190,7 +183,7 @@ router.post("/calendar/sync", async (req, res): Promise<void> => {
         .from(paymentsTable)
         .where(and(eq(paymentsTable.id, body.id), eq(paymentsTable.tenantId, me.tenantId)))
         .limit(1);
-      if (!payment) { res.status(404).json({ error: "Pagamento não encontrado" }); return; }
+      if (!payment) { next(new NotFoundError("Pagamento não encontrado", "PAYMENT_NOT_FOUND")); return; }
       await CalendarSyncService.syncPaymentForUser(body.id, me.id);
       res.json({ success: true, message: "1 evento sincronizado com sucesso", synced: 1 });
     } else if (body.type === "birthday") {
@@ -198,7 +191,7 @@ router.post("/calendar/sync", async (req, res): Promise<void> => {
         .from(clientsTable)
         .where(and(eq(clientsTable.id, body.id), eq(clientsTable.tenantId, me.tenantId)))
         .limit(1);
-      if (!client) { res.status(404).json({ error: "Cliente não encontrado" }); return; }
+      if (!client) { next(new NotFoundError("Cliente não encontrado", "CLIENT_NOT_FOUND")); return; }
       await CalendarSyncService.syncBirthdayForUser(body.id, me.id);
       res.json({ success: true, message: "1 evento sincronizado com sucesso", synced: 1 });
     } else {
@@ -206,8 +199,7 @@ router.post("/calendar/sync", async (req, res): Promise<void> => {
       res.json({ success: true, message: `${synced} evento(s) sincronizado(s) com sucesso`, synced });
     }
   } catch (err) {
-    req.log.error({ err }, "Error syncing Google Calendar");
-    res.status(500).json({ error: "Erro ao sincronizar eventos" });
+    next(err);
   }
 });
 

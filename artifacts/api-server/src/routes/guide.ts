@@ -13,7 +13,7 @@ import { z } from "zod";
 import { requireAuth, MANAGEMENT_ROLES } from "../lib/tenant";
 import { createGuideJwt, requireGuideAuth } from "../lib/guide-auth";
 import { generateId } from "../lib/id";
-import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
+import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 
 const router = Router();
 
@@ -88,7 +88,7 @@ router.post("/guide/auth", async (req, res, next: NextFunction): Promise<void> =
       ))
       .limit(1);
     if (!row) {
-      res.status(401).json({ error: "Código inválido ou expirado", code: "GUIDE_CODE_INVALID" });
+      next(new AppError("Código inválido ou expirado", 401, "GUIDE_CODE_INVALID"));
       return;
     }
     const jwt = createGuideJwt({ tokenId: row.id, tripId: row.tripId, tenantId: row.tenantId, guideName: row.guideName });
@@ -120,8 +120,7 @@ router.get("/guide/trip/:tripId", async (req, res, next: NextFunction): Promise<
     const guide = await requireGuideAuth(req, res);
     if (!guide) return;
     if (guide.tripId !== req.params.tripId) {
-      res.status(403).json({ error: "Token não autorizado para esta viagem", code: "GUIDE_TRIP_MISMATCH" });
-      return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
     const [trip] = await db.select({
       id: tripsTable.id, name: tripsTable.name, departureDate: tripsTable.departureDate,
@@ -166,8 +165,7 @@ router.post("/guide/trip/:tripId/checkins", async (req, res, next: NextFunction)
     const guide = await requireGuideAuth(req, res);
     if (!guide) return;
     if (guide.tripId !== req.params.tripId) {
-      res.status(403).json({ error: "Token não autorizado para esta viagem", code: "GUIDE_TRIP_MISMATCH" });
-      return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
     const { passengerId, reservationId, notes, status } = z.object({
       passengerId: z.string().min(1),
@@ -212,8 +210,7 @@ router.delete("/guide/trip/:tripId/checkins/:passengerId", async (req, res, next
     const guide = await requireGuideAuth(req, res);
     if (!guide) return;
     if (guide.tripId !== req.params.tripId) {
-      res.status(403).json({ error: "Token não autorizado para esta viagem", code: "GUIDE_TRIP_MISMATCH" });
-      return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
     await db.delete(tripCheckinsTable)
       .where(and(
@@ -235,8 +232,7 @@ router.post("/guide/trip/:tripId/location", async (req, res, next: NextFunction)
     const guide = await requireGuideAuth(req, res);
     if (!guide) return;
     if (guide.tripId !== req.params.tripId) {
-      res.status(403).json({ error: "Token não autorizado para esta viagem", code: "GUIDE_TRIP_MISMATCH" });
-      return;
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
     const { lat, lng } = z.object({ lat: z.number(), lng: z.number() }).parse(req.body);
 

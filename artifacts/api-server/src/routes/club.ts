@@ -36,6 +36,7 @@ function maskName(name: string): string {
 async function resolveClubTenant(
   req: Request,
   res: Response,
+  next: import("express").NextFunction,
 ): Promise<{ tenantId: string; isAdmin: boolean } | null> {
   const slug = req.query["slug"] as string | undefined;
 
@@ -47,7 +48,7 @@ async function resolveClubTenant(
       .limit(1);
 
     if (!tenant) {
-      res.status(404).json({ error: "Agência não encontrada", code: "NOT_FOUND" });
+      next(new NotFoundError("Agência não encontrada", "NOT_FOUND"));
       return null;
     }
     return { tenantId: tenant.id, isAdmin: false };
@@ -80,7 +81,7 @@ function sanitizeCsvCell(value: string | null | undefined): string {
 // GET /club/config — public via ?slug=... or authenticated session
 router.get("/club/config", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const resolved = await resolveClubTenant(req, res);
+    const resolved = await resolveClubTenant(req, res, next);
     if (!resolved) return;
 
     const [config] = await db
@@ -101,7 +102,7 @@ router.get("/club/config", async (req, res, next: NextFunction): Promise<void> =
 // GET /club/benefits — public via ?slug=... or authenticated session
 router.get("/club/benefits", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const resolved = await resolveClubTenant(req, res);
+    const resolved = await resolveClubTenant(req, res, next);
     if (!resolved) return;
 
     const benefits = await db
@@ -121,7 +122,7 @@ router.get("/club/benefits", async (req, res, next: NextFunction): Promise<void>
 // Admin session: all clients, full names
 router.get("/club/ranking", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const resolved = await resolveClubTenant(req, res);
+    const resolved = await resolveClubTenant(req, res, next);
     if (!resolved) return;
     const { tenantId, isAdmin } = resolved;
 

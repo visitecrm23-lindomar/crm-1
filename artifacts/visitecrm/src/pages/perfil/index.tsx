@@ -63,7 +63,7 @@ import {
   Crown,
   Medal,
 } from "lucide-react";
-import { formatCurrency as fmtCurrencyLib, formatDateShort } from "@/lib/utils";
+import { formatCurrencyBRL as fmtCurrency, formatDateShort } from "@/lib/utils";
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   pending:   { label: "Aguardando",  variant: "secondary" },
@@ -89,7 +89,6 @@ function StatusIcon({ status }: { status: string }) {
 }
 
 const fmtDate = (dateStr: string | null) => formatDateShort(dateStr) ?? "A confirmar";
-const fmtCurrency = fmtCurrencyLib;
 
 function daysUntil(dateStr: string | null): number | null {
   if (!dateStr) return null;

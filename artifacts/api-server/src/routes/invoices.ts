@@ -1,9 +1,10 @@
-import { Router } from "express";
+import { Router, type NextFunction } from "express";
 import { db, invoicesTable, tenantsTable, plansTable, subscriptionsTable, tripsTable } from "@workspace/db";
 import { eq, desc, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { ROLES, INVOICE_STATUS, INVOICE_STATUS_VALUES, TENANT_STATUS, SUBSCRIPTION_STATUS } from "@workspace/permissions";
 import { hasSeatMapFeature } from "../lib/plan-features";
 
@@ -65,11 +66,11 @@ const UpdateInvoiceBody = z.object({
   dueDate: z.string().optional(),
 });
 
-router.get("/admin/invoices", async (req, res): Promise<void> => {
+router.get("/admin/invoices", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     let query = db.select({
       id: invoicesTable.id,
@@ -103,10 +104,11 @@ router.get("/admin/invoices", async (req, res): Promise<void> => {
     }
     if (req.query.status) {
       if (!INVOICE_STATUS_VALUES.includes(req.query.status as string)) {
-        res.status(400).json({ error: `Invalid status. Must be one of: ${INVOICE_STATUS_VALUES.join(", ")}` });
+        next(new ValidationError(String(`Invalid status. Must be one of: ${INVOICE_STATUS_VALUES.join(", ")}`), "VALIDATION_ERROR"));
         return;
       }
-      conditions.push(eq(invoicesTable.status, req.query.status as string));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      conditions.push(eq(invoicesTable.status, req.query.status as any));
     }
     if (conditions.length > 0) {
       query = query.where(and(...conditions));
@@ -115,18 +117,17 @@ router.get("/admin/invoices", async (req, res): Promise<void> => {
     const invoices = await query;
     res.json(invoices);
   } catch (err) {
-    req.log.error({ err }, "Error listing invoices");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.post("/admin/invoices", async (req, res): Promise<void> => {
+router.post("/admin/invoices", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = InvoiceBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const id = generateId();
     await db.insert(invoicesTable).values({
       id,
@@ -142,18 +143,17 @@ router.post("/admin/invoices", async (req, res): Promise<void> => {
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id)).limit(1);
     res.status(201).json(invoice);
   } catch (err) {
-    req.log.error({ err }, "Error creating invoice");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 
-router.patch("/admin/invoices/:id", async (req, res): Promise<void> => {
+router.patch("/admin/invoices/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role !== ROLES.SUPER_ADMIN) { res.status(403).json({ error: "Forbidden" }); return; }
+    if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = UpdateInvoiceBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
 
     const update: {
       status?: import("@workspace/permissions").InvoiceStatus;
@@ -184,11 +184,10 @@ router.patch("/admin/invoices/:id", async (req, res): Promise<void> => {
     }
 
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
-    if (!invoice) { res.status(404).json({ error: "Not found" }); return; }
+    if (!invoice) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(invoice);
   } catch (err) {
-    req.log.error({ err }, "Error updating invoice");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 });
 

@@ -42,11 +42,7 @@ import {
   Users,
   FileText,
 } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
-
-function fmtCurrency(v: number) {
-  return formatCurrency(v);
-}
+import { formatCurrencyBRL as fmtCurrency } from "@/lib/utils";
 
 const STATUS_LABELS: Record<string, string> = {
   confirmed: "Confirmada",
