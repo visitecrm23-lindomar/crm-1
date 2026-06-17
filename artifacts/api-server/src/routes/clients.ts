@@ -725,14 +725,46 @@ router.get("/clients/:clientId/recommendations", async (req, res, next: NextFunc
       return;
     }
 
-    const pastReservations = await db
-      .select({ tripId: reservationsTable.tripId })
+    // "Viagens realizadas" = completed OR confirmed with departure already passed
+    const pastReservationRows = await db
+      .select({
+        tripId: reservationsTable.tripId,
+        status: reservationsTable.status,
+        totalValue: reservationsTable.totalValue,
+      })
       .from(reservationsTable)
       .where(and(
         eq(reservationsTable.clientId, client.id),
         eq(reservationsTable.tenantId, me.tenantId),
         inArray(reservationsTable.status, ["confirmed", "completed"]),
       ));
+
+    // Fetch trip data for past reservations to use in AI prompt
+    const pastTripIdList = [...new Set(pastReservationRows.map(r => r.tripId))];
+    const pastTripsData = pastTripIdList.length > 0
+      ? await db
+          .select({
+            id: tripsTable.id,
+            name: tripsTable.name,
+            destination: tripsTable.destination,
+            type: tripsTable.type,
+            category: tripsTable.category,
+            departureDate: tripsTable.departureDate,
+            priceAdult: tripsTable.priceAdult,
+          })
+          .from(tripsTable)
+          .where(and(
+            eq(tripsTable.tenantId, me.tenantId),
+            inArray(tripsTable.id, pastTripIdList),
+          ))
+      : [];
+
+    // Only count trips that truly happened: completed OR departure date already passed
+    const completedOrDeparted = pastReservationRows.filter(r => {
+      if (r.status === "completed") return true;
+      const tripInfo = pastTripsData.find(t => t.id === r.tripId);
+      return tripInfo ? tripInfo.departureDate < now : false;
+    });
 
     interface RecommendedTrip {
       tripId: string;
@@ -747,7 +779,7 @@ router.get("/clients/:clientId/recommendations", async (req, res, next: NextFunc
 
     let result: { recommendations: RecommendedTrip[]; source: string };
 
-    if (pastReservations.length < 2) {
+    if (completedOrDeparted.length < 2) {
       const popularRows = await db
         .select({ tripId: reservationsTable.tripId, cnt: count() })
         .from(reservationsTable)
@@ -780,7 +812,8 @@ router.get("/clients/:clientId/recommendations", async (req, res, next: NextFunc
         source: "popular",
       };
     } else {
-      const pastTripIds = new Set(pastReservations.map(r => r.tripId));
+      // Exclude all trips client already has reservations for (regardless of status)
+      const pastTripIds = new Set(pastTripIdList);
       const candidateTrips = availableTrips.filter(t => !pastTripIds.has(t.id)).slice(0, 10);
 
       if (candidateTrips.length === 0) {
@@ -808,6 +841,15 @@ router.get("/clients/:clientId/recommendations", async (req, res, next: NextFunc
         const minPrice = prices.length ? Math.min(...prices) : null;
         const maxPrice = prices.length ? Math.max(...prices) : null;
 
+        // Build travel history summary from completed/departed trips
+        const travelHistorySummary = pastTripsData.length
+          ? pastTripsData
+              .sort((a, b) => b.departureDate.getTime() - a.departureDate.getTime())
+              .slice(0, 5)
+              .map(t => `- ${t.name} (${t.destination}, ${t.departureDate.toLocaleDateString("pt-BR")}, R$ ${Number(t.priceAdult).toFixed(0)})`)
+              .join("\n")
+          : "";
+
         const clientProfile = [
           `Nome: ${client.name}`,
           client.dreamDestinations?.length ? `Destinos sonhados: ${client.dreamDestinations.join(", ")}` : "",
@@ -815,7 +857,8 @@ router.get("/clients/:clientId/recommendations", async (req, res, next: NextFunc
           client.travelPreference ? `Preferência: ${client.travelPreference}` : "",
           client.preferredDestinationTypes?.length ? `Tipos de destino preferidos: ${client.preferredDestinationTypes.join(", ")}` : "",
           loyaltyMember ? `Fidelidade: tier ${loyaltyMember.tier} (${loyaltyMember.availablePoints} pts disponíveis)` : "",
-          avgPrice != null ? `Histórico de compras: média R$ ${avgPrice.toFixed(0)}, faixa R$ ${minPrice?.toFixed(0)}–${maxPrice?.toFixed(0)}` : "",
+          avgPrice != null ? `Faixa de gasto histórico: média R$ ${avgPrice.toFixed(0)}, min R$ ${minPrice?.toFixed(0)}, max R$ ${maxPrice?.toFixed(0)}` : "",
+          travelHistorySummary ? `Viagens realizadas (mais recentes):\n${travelHistorySummary}` : "",
         ].filter(Boolean).join("\n");
 
         const tripsList = candidateTrips.map((t, i) =>
@@ -833,7 +876,7 @@ ${tripsList}
 Responda APENAS com JSON válido:
 {"recommendations":[{"tripId":"id","reason":"motivo em português (máx 80 chars)"}]}
 
-Selecione até 3 viagens priorizando destinos sonhados, interesses e compatibilidade com a faixa de preço histórica.`;
+Selecione até 3 viagens priorizando: destinos sonhados, histórico de viagens realizadas (padrões e destinos já visitados), interesses declarados, faixa de preço histórica e fidelidade do cliente.`;
 
         try {
           const { client: aiClient, model } = await getAIClientForTenant(me.tenantId);

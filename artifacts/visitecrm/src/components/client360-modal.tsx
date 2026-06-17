@@ -654,13 +654,18 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
   useEffect(() => {
     if (!isOpen || activeTab !== "ia" || !id) return;
     setRecsLoading(true);
+    setRecommendations([]);
+    setRecsSource("");
     fetch(`${API_BASE_ADMIN}/api/admin/clients/${id}/recommendations`, { credentials: "include" })
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error("fetch failed"); return r.json(); })
       .then((d: { recommendations?: RecommendedTrip[]; source?: string }) => {
         setRecommendations(d.recommendations ?? []);
         setRecsSource(d.source ?? "");
       })
-      .catch(() => {})
+      .catch(() => {
+        setRecommendations([]);
+        setRecsSource("");
+      })
       .finally(() => setRecsLoading(false));
   }, [isOpen, activeTab, id]);
 
