@@ -81,6 +81,7 @@ export type ReferralStatus = (typeof REFERRAL_STATUS)[keyof typeof REFERRAL_STAT
 export const STORE_ORDER_STATUS = {
   PENDING: "pending",
   CONFIRMED: "confirmed",
+  PROCESSING: "processing",
   COMPLETED: "completed",
   CANCELLED: "cancelled",
 } as const;

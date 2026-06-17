@@ -58,7 +58,7 @@ async function upsertCalendarEvent(
 
   if (existing) {
     const updated = await withCalendarRetry(() => service.updateEvent(existing.googleEventId, eventData, logCtx));
-    if (updated) {
+    if (updated === true) {
       await db.update(calendarEventsTable).set({
         title: eventData.summary,
         description: eventData.description,
@@ -67,6 +67,32 @@ async function upsertCalendarEvent(
         location: eventData.location,
         syncedAt: new Date(),
       }).where(eq(calendarEventsTable.id, existing.id));
+    } else if (updated === "not-found") {
+      // Event was deleted externally in Google — remove stale DB record and recreate.
+      logger.info({ ...logCtx, googleEventId: existing.googleEventId }, "calendar-sync: stale DB record found; deleting and recreating event");
+      await db.delete(calendarEventsTable).where(eq(calendarEventsTable.id, existing.id));
+      const googleEvent = await withCalendarRetry(() => service.createEvent(eventData, logCtx));
+      if (!googleEvent) {
+        logger.warn(logCtx, "calendar-sync: createEvent after external deletion failed; no DB record persisted");
+        return;
+      }
+      await db.insert(calendarEventsTable).values({
+        id: generateId(),
+        tenantId: record.tenantId,
+        userId: record.userId,
+        clientId: record.clientId,
+        tripId: record.tripId,
+        paymentId: record.paymentId,
+        googleEventId: googleEvent.id,
+        calendarId: "primary",
+        eventType: record.eventType,
+        title: eventData.summary,
+        description: eventData.description,
+        startDate: eventData.startDateTime,
+        endDate: eventData.endDateTime,
+        location: eventData.location,
+        syncedAt: new Date(),
+      });
     } else {
       logger.warn({ ...logCtx, googleEventId: existing.googleEventId }, "calendar-sync: updateEvent permanently failed (auth or data issue); DB record not updated");
     }

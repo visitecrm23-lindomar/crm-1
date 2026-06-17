@@ -45,6 +45,7 @@ import {
   withCalendarRetry,
   isTransientCalendarError,
   isInvalidGrantError,
+  isEventNotFoundError,
 } from "../lib/google-calendar/calendar-service";
 
 function makeService() {
@@ -182,6 +183,33 @@ describe("GoogleCalendarService.updateEvent", () => {
     mockEventsPatch.mockRejectedValue(permanentError("invalid_grant"));
     const svc = makeService();
     await expect(svc.updateEvent("evt-123", {})).resolves.toBe(false);
+  });
+
+  it("returns 'not-found' when Google event was deleted externally (404)", async () => {
+    mockEventsPatch.mockRejectedValue(transientError(404));
+    const svc = makeService();
+    await expect(svc.updateEvent("evt-123", {})).resolves.toBe("not-found");
+  });
+});
+
+// ── isEventNotFoundError ──────────────────────────────────────────────────────
+
+describe("isEventNotFoundError", () => {
+  it("returns true for 404 status", () => {
+    expect(isEventNotFoundError(transientError(404))).toBe(true);
+  });
+
+  it("returns false for 401 status", () => {
+    expect(isEventNotFoundError(transientError(401))).toBe(false);
+  });
+
+  it("returns false for 429 status", () => {
+    expect(isEventNotFoundError(transientError(429))).toBe(false);
+  });
+
+  it("returns false for non-object", () => {
+    expect(isEventNotFoundError("not an error")).toBe(false);
+    expect(isEventNotFoundError(null)).toBe(false);
   });
 });
 

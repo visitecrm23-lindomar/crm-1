@@ -3,6 +3,7 @@ import { useToast } from "@/hooks/use-toast";
 import { storeApi, StoreOrder } from "@/lib/storeApi";
 import { PAYMENT_METHOD_LABELS as PAYMENT_METHODS } from "@/lib/labels";
 import { formatDateTime as formatDate } from "@/lib/utils";
+import { STORE_ORDER_STATUS, STORE_PAYMENT_STATUS } from "@workspace/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -44,18 +45,18 @@ import {
 } from "lucide-react";
 
 const ORDER_STATUSES = [
-  { value: "pending", label: "Pendente", color: "bg-yellow-100 text-yellow-800" },
-  { value: "confirmed", label: "Confirmado", color: "bg-blue-100 text-blue-800" },
-  { value: "processing", label: "Em Processamento", color: "bg-purple-100 text-purple-800" },
-  { value: "completed", label: "Concluído", color: "bg-green-100 text-green-800" },
-  { value: "cancelled", label: "Cancelado", color: "bg-red-100 text-red-800" },
+  { value: STORE_ORDER_STATUS.PENDING, label: "Pendente", color: "bg-yellow-100 text-yellow-800" },
+  { value: STORE_ORDER_STATUS.CONFIRMED, label: "Confirmado", color: "bg-blue-100 text-blue-800" },
+  { value: STORE_ORDER_STATUS.PROCESSING, label: "Em Processamento", color: "bg-purple-100 text-purple-800" },
+  { value: STORE_ORDER_STATUS.COMPLETED, label: "Concluído", color: "bg-green-100 text-green-800" },
+  { value: STORE_ORDER_STATUS.CANCELLED, label: "Cancelado", color: "bg-red-100 text-red-800" },
 ];
 
 const PAYMENT_STATUSES = [
-  { value: "pending", label: "Aguardando" },
-  { value: "paid", label: "Pago" },
-  { value: "refunded", label: "Reembolsado" },
-  { value: "failed", label: "Falhou" },
+  { value: STORE_PAYMENT_STATUS.PENDING, label: "Aguardando" },
+  { value: STORE_PAYMENT_STATUS.PAID, label: "Pago" },
+  { value: STORE_PAYMENT_STATUS.REFUNDED, label: "Reembolsado" },
+  { value: STORE_PAYMENT_STATUS.FAILED, label: "Falhou" },
 ];
 
 const FULFILLMENT_STATUSES = [
@@ -77,9 +78,9 @@ function statusColor(s: string) {
 }
 
 function paymentColor(s: string) {
-  if (s === "paid") return "bg-green-100 text-green-800";
-  if (s === "refunded") return "bg-purple-100 text-purple-800";
-  if (s === "failed") return "bg-red-100 text-red-800";
+  if (s === STORE_PAYMENT_STATUS.PAID) return "bg-green-100 text-green-800";
+  if (s === STORE_PAYMENT_STATUS.REFUNDED) return "bg-purple-100 text-purple-800";
+  if (s === STORE_PAYMENT_STATUS.FAILED) return "bg-red-100 text-red-800";
   return "bg-yellow-100 text-yellow-800";
 }
 

@@ -19,6 +19,13 @@ export function isInvalidGrantError(err: unknown): boolean {
   return false;
 }
 
+export function isEventNotFoundError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const anyErr = err as { code?: number | string; response?: { status?: number } };
+  const status = anyErr.response?.status ?? (typeof anyErr.code === "number" ? anyErr.code : undefined);
+  return status === 404;
+}
+
 export function isTransientCalendarError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   const anyErr = err as { code?: number | string; response?: { status?: number }; message?: string };
@@ -247,7 +254,7 @@ export class GoogleCalendarService {
     }
   }
 
-  async updateEvent(eventId: string, data: Partial<CalendarEventData>, ctx: Record<string, unknown> = {}): Promise<boolean> {
+  async updateEvent(eventId: string, data: Partial<CalendarEventData>, ctx: Record<string, unknown> = {}): Promise<boolean | "not-found"> {
     try {
       const patch: Record<string, unknown> = {};
       if (data.summary) patch.summary = data.summary;
@@ -272,6 +279,11 @@ export class GoogleCalendarService {
     } catch (err) {
       // Re-throw transient errors so withCalendarRetry and BullMQ can retry them.
       if (isTransientCalendarError(err)) throw err;
+      // Detect external deletion: event was removed from Google but DB record still exists.
+      if (isEventNotFoundError(err)) {
+        logger.warn({ ...ctx, eventId }, "calendar-sync: updateEvent event not found (deleted externally)");
+        return "not-found";
+      }
       await this.handleApiError(err, "updateEvent", { ...ctx, eventId });
       return false;
     }

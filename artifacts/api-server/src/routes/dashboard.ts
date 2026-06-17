@@ -347,7 +347,7 @@ router.get("/dashboard/revenue-chart", async (req, res, next: NextFunction): Pro
       const res_count = reservations
         .filter(r => r.createdAt >= startDate && r.createdAt <= endDate).length;
 
-      points.push({ label, revenue: Math.round(revenue), expenses: Math.round(expenses), reservations: res_count });
+      points.push({ label, revenue: roundMoney(revenue), expenses: roundMoney(expenses), reservations: res_count });
     }
 
     res.json(points);
@@ -483,7 +483,7 @@ router.get("/dashboard/charts", async (req, res, next: NextFunction): Promise<vo
       .orderBy(sql`date_trunc('month', ${paymentsTable.paidAt})`);
     const revenueExpMap = new Map(revenueExpRaw.map(r => [
       r.monthStart.substring(0, 7),
-      { revenue: Math.round(Number(r.revenue ?? 0)), expenses: Math.round(Number(r.expenses ?? 0)) },
+      { revenue: roundMoney(Number(r.revenue ?? 0)), expenses: roundMoney(Number(r.expenses ?? 0)) },
     ]));
     const revenueByMonth = months12.map(({ key, label }) => ({ label, value: revenueExpMap.get(key)?.revenue ?? 0 }));
     const expensesByMonth = months12.map(({ key, label }) => ({ label, value: revenueExpMap.get(key)?.expenses ?? 0 }));
@@ -795,7 +795,7 @@ router.get("/dashboard/comparative", async (req, res, next: NextFunction): Promi
         profitGrowth = prevProfit !== 0 ? Math.round(((profit - prevProfit) / Math.abs(prevProfit)) * 1000) / 10 : null;
         reservationsGrowth = prevRes > 0 ? Math.round(((reservations - prevRes) / prevRes) * 1000) / 10 : null;
       }
-      return { month: label, key, revenue: Math.round(revenue), expenses: Math.round(expenses), profit: Math.round(profit), reservations, revenueGrowth, expensesGrowth, profitGrowth, reservationsGrowth };
+      return { month: label, key, revenue: roundMoney(revenue), expenses: roundMoney(expenses), profit: roundMoney(profit), reservations, revenueGrowth, expensesGrowth, profitGrowth, reservationsGrowth };
     });
 
     res.json(result);
