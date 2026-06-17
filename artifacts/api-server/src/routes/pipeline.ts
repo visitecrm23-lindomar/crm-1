@@ -507,16 +507,16 @@ router.delete("/pipeline/stages/:stageId", async (req, res, next: NextFunction):
       .limit(1);
     if (!stage) { next(new NotFoundError("Stage not found", "NOT_FOUND")); return; }
 
-    // Protect: don't delete if there are active deals in this stage
+    // Protect: block if ANY deal references this stage (open or historical)
+    // The FK deals.stageId has no cascade, so DB would reject anyway — give a clear message instead
     const [deal] = await db.select({ id: dealsTable.id }).from(dealsTable)
       .where(and(
         eq(dealsTable.stageId, req.params.stageId),
         eq(dealsTable.tenantId, me.tenantId),
-        eq(dealsTable.status, "open"),
       ))
       .limit(1);
     if (deal) {
-      next(new ValidationError("Não é possível excluir uma etapa com negócios ativos", "STAGE_HAS_ACTIVE_DEALS"));
+      next(new ValidationError("Não é possível excluir uma etapa que possui negócios (ativos ou histórico). Mova ou exclua os negócios primeiro.", "STAGE_HAS_DEALS"));
       return;
     }
 
@@ -540,28 +540,34 @@ router.delete("/pipelines/:id", async (req, res, next: NextFunction): Promise<vo
     if (!pipeline) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
 
     // Protect: don't delete the only remaining pipeline
-    const allPipelines = await db.select({ id: pipelinesTable.id })
+    const allPipelines = await db.select({ id: pipelinesTable.id, isDefault: pipelinesTable.isDefault })
       .from(pipelinesTable).where(eq(pipelinesTable.tenantId, me.tenantId));
     if (allPipelines.length <= 1) {
       next(new ValidationError("Não é possível excluir o único pipeline da agência", "LAST_PIPELINE"));
       return;
     }
 
-    // Protect: don't delete if any stage has active open deals
+    // Protect: don't delete the default pipeline — user must promote another first
+    if (pipeline.isDefault) {
+      next(new ValidationError("Não é possível excluir o pipeline padrão. Defina outro pipeline como padrão antes de excluir este.", "DELETE_DEFAULT_PIPELINE"));
+      return;
+    }
+
+    // Protect: block if ANY deal references a stage of this pipeline (open or historical)
+    // FK deals.stageId has no cascade, so DB would reject anyway — give a clear message instead
     const stagesOfPipeline = await db.select({ id: pipelineStagesTable.id })
       .from(pipelineStagesTable)
       .where(and(eq(pipelineStagesTable.pipelineId, req.params.id), eq(pipelineStagesTable.tenantId, me.tenantId)));
 
     if (stagesOfPipeline.length > 0) {
-      const [activeDeal] = await db.select({ id: dealsTable.id }).from(dealsTable)
+      const [anyDeal] = await db.select({ id: dealsTable.id }).from(dealsTable)
         .where(and(
           inArray(dealsTable.stageId, stagesOfPipeline.map(s => s.id)),
           eq(dealsTable.tenantId, me.tenantId),
-          eq(dealsTable.status, "open"),
         ))
         .limit(1);
-      if (activeDeal) {
-        next(new ValidationError("Não é possível excluir um pipeline com negócios ativos", "PIPELINE_HAS_ACTIVE_DEALS"));
+      if (anyDeal) {
+        next(new ValidationError("Não é possível excluir um pipeline que possui negócios (ativos ou histórico). Mova ou exclua os negócios primeiro.", "PIPELINE_HAS_DEALS"));
         return;
       }
     }

@@ -1429,6 +1429,7 @@ export default function Pipeline() {
         editClient={editingClient}
         onSave={handleSave}
         defaultStageId={defaultStageId}
+        pipelineId={selectedPipelineId}
       />
       <Client360Modal open={!!client360Id} onClose={() => setClient360Id(null)} clientId={client360Id} />
 

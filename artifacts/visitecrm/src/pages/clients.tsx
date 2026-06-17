@@ -374,16 +374,21 @@ interface ClientModalProps {
   editClient?: Client | null;
   onSave: (createReservation?: boolean, savedClientId?: string) => void;
   defaultStageId?: string;
+  pipelineId?: string | null;
 }
 
-export function ClientModal({ open, onClose, editClient, onSave, defaultStageId }: ClientModalProps) {
+export function ClientModal({ open, onClose, editClient, onSave, defaultStageId, pipelineId }: ClientModalProps) {
   const [tab, setTab] = useState("personal");
   const [form, setForm] = useState<ClientFormData>(EMPTY_CLIENT);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [hasSeatMap, setHasSeatMap] = useState<boolean | null>(null);
   const [limitError, setLimitError] = useState<{ resource: string; current?: number; limit?: number } | null>(null);
   const { toast } = useToast();
-  const { data: stages } = useListPipelineStages();
+  const { data: allStages } = useListPipelineStages();
+  // When creating a deal, scope stages to the pipeline the user is currently viewing
+  const stages = pipelineId
+    ? allStages?.filter(s => s.pipelineId === pipelineId)
+    : allStages;
   const { data: tripsData } = useListTrips({ limit: 100 });
   const { data: usersData } = useListUsers();
   const { data: me } = useGetMe();
