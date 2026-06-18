@@ -1164,7 +1164,7 @@ router.get("/referrals/export", async (req, res, next: NextFunction): Promise<vo
 
     const headers = [
       "Código", "Indicador", "E-mail Indicador", "Indicado", "E-mail Indicado",
-      "Status", "Bônus (R$)", "Desconto (R$)", "Bônus Pago", "Visitas", "Última visita",
+      "Status", "Bônus (R$)", "Desconto (R$)", "Bônus Pago", "Notif. Bônus em", "Visitas", "Última visita",
       "Criado em", "Convertido em", "Expira em", "Motivo (suspeita)",
     ];
 
@@ -1178,6 +1178,7 @@ router.get("/referrals/export", async (req, res, next: NextFunction): Promise<vo
       r.bonusAmount ? parseFloat(String(r.bonusAmount)).toFixed(2) : "0.00",
       r.discountAmount ? parseFloat(String(r.discountAmount)).toFixed(2) : "0.00",
       r.bonusPaid ? "Sim" : "Não",
+      r.bonusReleaseNotifiedAt ? new Date(r.bonusReleaseNotifiedAt).toLocaleDateString("pt-BR") : "",
       String(r.visitsCount ?? 0),
       r.lastVisit ? new Date(r.lastVisit).toLocaleDateString("pt-BR") : "",
       r.createdAt ? new Date(r.createdAt).toLocaleDateString("pt-BR") : "",
@@ -1199,6 +1200,7 @@ router.get("/referrals/export", async (req, res, next: NextFunction): Promise<vo
         bonusAmount: r.bonusAmount ? parseFloat(String(r.bonusAmount)).toFixed(2) : "0.00",
         discountAmount: r.discountAmount ? parseFloat(String(r.discountAmount)).toFixed(2) : "0.00",
         bonusPaid: r.bonusPaid ? "Sim" : "Não",
+        bonusReleaseNotifiedAt: r.bonusReleaseNotifiedAt ? new Date(r.bonusReleaseNotifiedAt).toLocaleDateString("pt-BR") : "",
         visitsCount: r.visitsCount ?? 0,
         lastVisit: r.lastVisit ? new Date(r.lastVisit).toLocaleDateString("pt-BR") : "",
         createdAt: r.createdAt ? new Date(r.createdAt).toLocaleDateString("pt-BR") : "",
