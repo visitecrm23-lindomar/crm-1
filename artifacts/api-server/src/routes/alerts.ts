@@ -5,7 +5,8 @@ import { eq, and, lt, lte, gte, gt, sql, isNotNull, isNull, notLike, inArray } f
 import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { AGENCY_STAFF_ROLES } from '../lib/tenant';
-import { PAYMENT_STATUS, PAYMENT_TYPE, DEAL_STATUS, TRIP_STATUS, REFERRAL_STATUS, RESERVATION_STATUS, ROLES } from "@workspace/permissions";
+import { PAYMENT_STATUS, PAYMENT_TYPE, DEAL_STATUS, TRIP_STATUS, REFERRAL_STATUS, ROLES } from "@workspace/permissions";
+import { findReferralReversalGaps } from "../lib/referral-reversal-gaps";
 
 const router = Router();
 
@@ -163,42 +164,9 @@ router.get("/alerts", async (req, res, next: NextFunction): Promise<void> => {
       )),
 
       // 9. Reversão de indicação ignorada por lacuna de dados.
-      // Mirrors the exact Reversal 3 warn-path in reservations.ts:
-      //   byReservation lookup (status=COMPLETED AND reservation_id = r.id) → no row found
-      //   byCode lookup     (status=COMPLETED AND code = discountReferralCode) → row found
-      // DISTINCT ON prevents fanout when multiple COMPLETED referral rows share the same code.
-      tenantId
-        ? db.execute<{
-            reservation_id: string;
-            reservation_number: string | null;
-            referral_code: string;
-            referrer_name: string | null;
-          }>(sql`
-            SELECT DISTINCT ON (r.id)
-              r.id               AS reservation_id,
-              r.reservation_number,
-              ref.code           AS referral_code,
-              ref.referrer_name
-            FROM reservations r
-            INNER JOIN referrals ref ON (
-              ref.tenant_id = ${tenantId}
-              AND ref.code = r.discount_referral_code
-              AND ref.status = ${REFERRAL_STATUS.COMPLETED}
-              AND ref.reversal_warning_acknowledged_at IS NULL
-            )
-            WHERE r.tenant_id = ${tenantId}
-              AND r.status = ${RESERVATION_STATUS.CANCELLED}
-              AND r.discount_referral_code IS NOT NULL
-              AND NOT EXISTS (
-                SELECT 1 FROM referrals r2
-                WHERE r2.tenant_id = ${tenantId}
-                  AND r2.reservation_id = r.id
-                  AND r2.status = ${REFERRAL_STATUS.COMPLETED}
-              )
-            ORDER BY r.id, ref.created_at ASC
-            LIMIT 20
-          `)
-        : Promise.resolve({ rows: [] as Array<{ reservation_id: string; reservation_number: string | null; referral_code: string; referrer_name: string | null }> }),
+      // Detection logic extracted into findReferralReversalGaps (see
+      // lib/referral-reversal-gaps.ts) so it can be unit-tested directly.
+      findReferralReversalGaps(tenantId),
     ]);
 
     const alerts: Alert[] = [];
@@ -403,7 +371,7 @@ router.get("/alerts", async (req, res, next: NextFunction): Promise<void> => {
 
     // 9. Reversões de indicação ignoradas por lacuna de dados
     {
-      const gaps = referralReversalGaps.rows;
+      const gaps = referralReversalGaps;
       if (gaps.length > 0) {
         const MAX_SHOWN = 3;
         const shown = gaps.slice(0, MAX_SHOWN).map((g) => {
