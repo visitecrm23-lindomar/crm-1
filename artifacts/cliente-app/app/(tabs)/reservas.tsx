@@ -4,8 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import React from "react";
 import {
   ActivityIndicator,
+  Linking,
+  Pressable,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -13,7 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
-import { apiFetch, fmtCurrency, fmtDate, daysUntil } from "@/lib/api";
+import { apiFetch, API_BASE, fmtCurrency, fmtDate, daysUntil } from "@/lib/api";
 import type { ClientPortalProfile, ClientPortalReservation } from "@/lib/types";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -42,11 +45,42 @@ function StatusBadge({ status, colors }: { status: string; colors: ReturnType<ty
   );
 }
 
+async function shareVoucher(r: ClientPortalReservation, token: string | null) {
+  const lines: string[] = [
+    `🎟️ Comprovante de Reserva`,
+    `Viagem: ${r.tripName}`,
+    r.tripDestination ? `Destino: ${r.tripDestination}` : null,
+    r.tripDepartureDate ? `Partida: ${fmtDate(r.tripDepartureDate)}` : null,
+    `Passageiros: ${r.seatsCount}`,
+    `Total: ${fmtCurrency(r.totalValue)}`,
+    r.reservationNumber ? `Nº Reserva: ${r.reservationNumber}` : null,
+    r.voucherCode ? `Código: ${r.voucherCode}` : null,
+  ].filter(Boolean) as string[];
+
+  try {
+    await Share.share({ message: lines.join("\n") });
+  } catch {
+  }
+}
+
+async function openVoucherPdf(r: ClientPortalReservation, token: string | null) {
+  if (!token) return;
+  const url = `${API_BASE}/api/client/reservations/${r.id}/voucher`;
+  const supported = await Linking.canOpenURL(url);
+  if (supported) {
+    await Linking.openURL(url);
+  } else {
+    await shareVoucher(r, token);
+  }
+}
+
 function ReservationCard({
   r,
+  token,
   colors,
 }: {
   r: ClientPortalReservation;
+  token: string | null;
   colors: ReturnType<typeof useColors>;
 }) {
   const days = daysUntil(r.tripDepartureDate);
@@ -131,6 +165,34 @@ function ReservationCard({
           #{r.reservationNumber}
         </Text>
       ) : null}
+
+      {/* Voucher actions */}
+      <View style={[styles.voucherRow, { borderTopColor: colors.border }]}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.voucherBtn,
+            { backgroundColor: colors.accent, opacity: pressed ? 0.75 : 1 },
+          ]}
+          onPress={() => shareVoucher(r, token)}
+        >
+          <Feather name="share-2" size={13} color={colors.primary} />
+          <Text style={[styles.voucherBtnText, { color: colors.primary }]}>
+            Compartilhar
+          </Text>
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [
+            styles.voucherBtn,
+            { backgroundColor: colors.primary + "14", opacity: pressed ? 0.75 : 1 },
+          ]}
+          onPress={() => openVoucherPdf(r, token)}
+        >
+          <Feather name="file-text" size={13} color={colors.primary} />
+          <Text style={[styles.voucherBtnText, { color: colors.primary }]}>
+            Ver comprovante
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -147,6 +209,11 @@ export default function ReservasScreen() {
       return apiFetch<ClientPortalProfile>(token, "GET", "/client/me");
     },
   });
+
+  const [token, setToken] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    getToken().then(setToken);
+  }, [getToken]);
 
   const reservations = data?.reservations ?? [];
   const active = reservations.filter((r) => r.status !== "cancelled" && r.status !== "completed");
@@ -205,7 +272,7 @@ export default function ReservasScreen() {
                 Ativas ({active.length})
               </Text>
               {active.map((r) => (
-                <ReservationCard key={r.id} r={r} colors={colors} />
+                <ReservationCard key={r.id} r={r} token={token} colors={colors} />
               ))}
             </View>
           ) : null}
@@ -215,7 +282,7 @@ export default function ReservasScreen() {
                 Histórico ({past.length})
               </Text>
               {past.map((r) => (
-                <ReservationCard key={r.id} r={r} colors={colors} />
+                <ReservationCard key={r.id} r={r} token={token} colors={colors} />
               ))}
             </View>
           ) : null}
@@ -331,6 +398,25 @@ const styles = StyleSheet.create({
   reservationNumber: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
+  },
+  voucherRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingTop: 10,
+    borderTopWidth: 1,
+  },
+  voucherBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  voucherBtnText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
   },
   emptyState: {
     alignItems: "center",

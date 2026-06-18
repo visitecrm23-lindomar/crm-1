@@ -38,6 +38,19 @@ export interface ClientLoyalty {
   recentTransactions: ClientLoyaltyTransaction[];
 }
 
+export interface ClientLoyaltyFull {
+  availablePoints: number;
+  totalPoints: number;
+  tier: string;
+  nextTier: string | null;
+  pointsToNext: number;
+  programName: string;
+  pointsPerReal: number;
+  realPerPoint: number;
+  minRedeemPoints: number;
+  tierBenefits: unknown | null;
+}
+
 export interface ClientReferral {
   id: string;
   referredName: string | null;

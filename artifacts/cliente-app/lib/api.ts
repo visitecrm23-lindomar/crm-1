@@ -2,6 +2,17 @@ export const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
   ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
   : "http://localhost:8080";
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public code?: string
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export async function apiFetch<T>(
   token: string | null,
   method: string,
@@ -26,7 +37,8 @@ export async function apiFetch<T>(
     const msg = (err as Record<string, string>).message
       ?? (err as Record<string, string>).error
       ?? "Erro na requisição";
-    throw new Error(msg);
+    const code = (err as Record<string, string>).code;
+    throw new ApiError(msg, res.status, code);
   }
   if (res.status === 204) return undefined as unknown as T;
   return res.json() as Promise<T>;

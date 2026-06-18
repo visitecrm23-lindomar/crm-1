@@ -50,5 +50,8 @@
     "react-native-worklets": "0.5.1",
     "typescript": "~5.9.2",
     "zod": "catalog:"
+  },
+  "dependencies": {
+    "expo-clipboard": "^56.0.4"
   }
 }

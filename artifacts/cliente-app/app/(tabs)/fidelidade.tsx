@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
 import { apiFetch } from "@/lib/api";
-import type { ClientPortalProfile, ClientLoyaltyTransaction } from "@/lib/types";
+import type { ClientLoyaltyFull, ClientLoyaltyTransaction, LoyaltyTransactionsResponse } from "@/lib/types";
 
 const TIER_LABELS: Record<string, string> = {
   bronze: "Bronze",
@@ -82,20 +82,74 @@ function TransactionItem({
   );
 }
 
+function TierProgressBar({
+  loyalty,
+  colors,
+}: {
+  loyalty: ClientLoyaltyFull;
+  colors: ReturnType<typeof useColors>;
+}) {
+  if (!loyalty.nextTier || loyalty.pointsToNext === 0) {
+    return (
+      <View style={[styles.progressCard, { backgroundColor: "rgba(255,255,255,0.14)" }]}>
+        <Text style={styles.progressText}>🏆 Nível máximo alcançado!</Text>
+      </View>
+    );
+  }
+
+  const nextTierPoints = loyalty.totalPoints + loyalty.pointsToNext;
+  const progress = nextTierPoints > 0 ? Math.min(loyalty.totalPoints / nextTierPoints, 1) : 0;
+  const progressPct = Math.round(progress * 100);
+
+  return (
+    <View style={[styles.progressCard, { backgroundColor: "rgba(255,255,255,0.14)" }]}>
+      <View style={styles.progressHeader}>
+        <Text style={styles.progressText}>
+          Faltam{" "}
+          <Text style={{ fontFamily: "Inter_700Bold" }}>
+            {loyalty.pointsToNext.toLocaleString("pt-BR")} pts
+          </Text>{" "}
+          para {loyalty.nextTier}
+        </Text>
+        <Text style={styles.progressPct}>{progressPct}%</Text>
+      </View>
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
+      </View>
+    </View>
+  );
+}
+
 export default function FidelidadeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { getToken } = useAuth();
 
-  const { data, isLoading, error, refetch, isRefetching } = useQuery<ClientPortalProfile>({
-    queryKey: ["client-profile"],
+  const {
+    data: loyalty,
+    isLoading,
+    error,
+    refetch,
+    isRefetching,
+  } = useQuery<ClientLoyaltyFull | null>({
+    queryKey: ["client-loyalty"],
     queryFn: async () => {
       const token = await getToken();
-      return apiFetch<ClientPortalProfile>(token, "GET", "/client/me");
+      return apiFetch<ClientLoyaltyFull | null>(token, "GET", "/client/me/loyalty");
     },
   });
 
-  const loyalty = data?.loyalty ?? null;
+  const { data: txData } = useQuery<LoyaltyTransactionsResponse>({
+    queryKey: ["client-loyalty-transactions"],
+    queryFn: async () => {
+      const token = await getToken();
+      return apiFetch<LoyaltyTransactionsResponse>(token, "GET", "/client/me/loyalty/transactions?limit=20");
+    },
+    enabled: !!loyalty,
+  });
+
+  const transactions = txData?.data ?? [];
+
   const tier = loyalty?.tier ?? "bronze";
   const tierLabel = TIER_LABELS[tier] ?? tier;
   const tierIcon = TIER_ICONS[tier] ?? "⭐";
@@ -156,6 +210,8 @@ export default function FidelidadeScreen() {
             {tierIcon} {tierLabel}
           </Text>
         </View>
+
+        <TierProgressBar loyalty={loyalty} colors={colors} />
       </View>
 
       {/* Stats row */}
@@ -180,24 +236,21 @@ export default function FidelidadeScreen() {
         </View>
       </View>
 
-      {/* Recent transactions */}
-      {loyalty.recentTransactions.length > 0 ? (
-        <View style={[styles.txCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-            Últimas transações
-          </Text>
-          {loyalty.recentTransactions.map((tx) => (
-            <TransactionItem key={tx.id} tx={tx} colors={colors} />
-          ))}
-        </View>
-      ) : (
-        <View style={[styles.txCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Transações</Text>
+      {/* Transactions */}
+      <View style={[styles.txCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+          Transações{transactions.length > 0 ? ` (${transactions.length})` : ""}
+        </Text>
+        {transactions.length === 0 ? (
           <Text style={[styles.emptyText, { color: colors.mutedForeground, textAlign: "center", paddingVertical: 24 }]}>
             Nenhuma transação ainda.
           </Text>
-        </View>
-      )}
+        ) : (
+          transactions.map((tx) => (
+            <TransactionItem key={tx.id} tx={tx} colors={colors} />
+          ))
+        )}
+      </View>
     </ScrollView>
   );
 }
@@ -265,6 +318,42 @@ const styles = StyleSheet.create({
   tierBadgeText: {
     fontSize: 14,
     fontFamily: "Inter_700Bold",
+  },
+  progressCard: {
+    width: "100%",
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 4,
+    gap: 8,
+  },
+  progressHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  progressText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: "rgba(255,255,255,0.9)",
+    flex: 1,
+    flexWrap: "wrap",
+  },
+  progressPct: {
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+    color: "#ffffff",
+    marginLeft: 8,
+  },
+  progressTrack: {
+    height: 6,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: "#ffffff",
+    borderRadius: 3,
   },
   statsRow: {
     flexDirection: "row",

@@ -174,6 +174,16 @@ export default function SignInScreen() {
           </Pressable>
         </Animated.View>
 
+        <View style={styles.signUpRow}>
+          <Text style={styles.signUpText}>Não tem conta? </Text>
+          <Pressable
+            onPress={() => router.push("/sign-up")}
+            style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+          >
+            <Text style={styles.signUpLink}>Criar conta</Text>
+          </Pressable>
+        </View>
+
         <Text style={styles.hint}>
           Acesse com o e-mail cadastrado na sua agência de viagens.
         </Text>
@@ -291,5 +301,20 @@ const styles = StyleSheet.create({
     color: s.mutedForeground,
     textAlign: "center",
     maxWidth: 280,
+  },
+  signUpRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  signUpText: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    color: s.mutedForeground,
+  },
+  signUpLink: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: s.primary,
   },
 });

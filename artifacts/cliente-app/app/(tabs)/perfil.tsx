@@ -93,6 +93,7 @@ export default function PerfilScreen() {
   const [editing, setEditing] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
+  const [birthDateInput, setBirthDateInput] = useState("");
   const [saving, setSaving] = useState(false);
 
   const { data, isLoading, error, refetch, isRefetching } = useQuery<ClientPortalProfile>({
@@ -115,16 +116,31 @@ export default function PerfilScreen() {
   function startEdit() {
     setNameInput(data?.client?.name ?? data?.user?.name ?? "");
     setPhoneInput(data?.client?.phone ?? "");
+    const bd = data?.client?.birthDate;
+    setBirthDateInput(bd ? new Date(bd + "T00:00:00").toLocaleDateString("pt-BR") : "");
     setEditing(true);
+  }
+
+  function parseBirthDate(input: string): string | null {
+    const cleaned = input.replace(/\D/g, "");
+    if (cleaned.length === 8) {
+      const d = cleaned.slice(0, 2);
+      const m = cleaned.slice(2, 4);
+      const y = cleaned.slice(4, 8);
+      return `${y}-${m}-${d}`;
+    }
+    return null;
   }
 
   async function handleSave() {
     setSaving(true);
     try {
       const token = await getToken();
+      const birthDate = birthDateInput.trim() ? parseBirthDate(birthDateInput) : undefined;
       await apiFetch<unknown>(token, "PATCH", "/client/me", {
         name: nameInput.trim() || undefined,
         phone: phoneInput.trim() || null,
+        ...(birthDate !== undefined ? { birthDate } : {}),
       });
       await queryClient.invalidateQueries({ queryKey: ["client-profile"] });
       setEditing(false);
@@ -221,6 +237,20 @@ export default function PerfilScreen() {
           <InfoRow icon="mail" label="E-mail" value={email} colors={colors} />
           <InfoRow icon="phone" label="Telefone" value={client?.phone} colors={colors} />
           <InfoRow icon="credit-card" label="CPF" value={client?.cpf} colors={colors} />
+          <InfoRow
+            icon="calendar"
+            label="Data de nascimento"
+            value={
+              client?.birthDate
+                ? new Date(client.birthDate + "T00:00:00").toLocaleDateString("pt-BR", {
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric",
+                  })
+                : null
+            }
+            colors={colors}
+          />
           <InfoRow icon="map-pin" label="Cidade" value={
             client?.addressCity
               ? `${client.addressCity}${client.addressState ? ` - ${client.addressState}` : ""}`
@@ -255,6 +285,20 @@ export default function PerfilScreen() {
               placeholder="(11) 99999-9999"
               placeholderTextColor={colors.mutedForeground}
               keyboardType="phone-pad"
+              editable={!saving}
+            />
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Data de nascimento</Text>
+            <TextInput
+              style={[styles.fieldInput, { backgroundColor: colors.muted, color: colors.foreground }]}
+              value={birthDateInput}
+              onChangeText={setBirthDateInput}
+              placeholder="DD/MM/AAAA"
+              placeholderTextColor={colors.mutedForeground}
+              keyboardType="numbers-and-punctuation"
+              maxLength={10}
               editable={!saving}
             />
           </View>

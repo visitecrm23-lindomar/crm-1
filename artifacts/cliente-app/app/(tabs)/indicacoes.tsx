@@ -1,9 +1,11 @@
 import { Feather } from "@expo/vector-icons";
 import { useAuth } from "@clerk/clerk-expo";
 import { useQuery } from "@tanstack/react-query";
-import React from "react";
+import * as Clipboard from "expo-clipboard";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -67,6 +69,8 @@ export default function IndicacoesScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { getToken } = useAuth();
+  const [copied, setCopied] = useState(false);
+
   const { data: profileData, isLoading, error, refetch, isRefetching } = useQuery<ClientPortalProfile>({
     queryKey: ["client-profile"],
     queryFn: async () => {
@@ -88,13 +92,33 @@ export default function IndicacoesScreen() {
   const code = referral?.code ?? null;
   const referrals = referralsData?.data ?? [];
 
-  async function handleShare() {
+  const shareMsg = referral?.shareMessage
+    ?? (code ? `Use meu código ${code} para se cadastrar e ganhar benefícios especiais!` : "");
+
+  async function handleCopy() {
     if (!code) return;
-    const msg = referral?.shareMessage
-      ?? `Use meu código ${code} para se cadastrar e ganhar benefícios especiais!`;
+    await Clipboard.setStringAsync(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  }
+
+  async function handleShare() {
+    if (!shareMsg) return;
     try {
-      await Share.share({ message: msg });
+      await Share.share({ message: shareMsg });
     } catch {
+    }
+  }
+
+  async function handleWhatsApp() {
+    if (!shareMsg) return;
+    const encoded = encodeURIComponent(shareMsg);
+    const url = `whatsapp://send?text=${encoded}`;
+    const canOpen = await Linking.canOpenURL(url);
+    if (canOpen) {
+      await Linking.openURL(url);
+    } else {
+      await handleShare();
     }
   }
 
@@ -136,6 +160,33 @@ export default function IndicacoesScreen() {
         <Text style={styles.codeCardLabel}>Seu código de indicação</Text>
         <Text style={styles.codeValue}>{code ?? "Indisponível"}</Text>
         <View style={styles.codeActions}>
+          {/* Copy button */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.codeBtn,
+              { backgroundColor: copied ? "rgba(255,255,255,0.32)" : "rgba(255,255,255,0.18)", opacity: pressed ? 0.75 : 1 },
+            ]}
+            onPress={handleCopy}
+            disabled={!code}
+          >
+            <Feather name={copied ? "check" : "copy"} size={16} color="#fff" />
+            <Text style={styles.codeBtnText}>{copied ? "Copiado!" : "Copiar"}</Text>
+          </Pressable>
+
+          {/* WhatsApp button */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.codeBtn,
+              { backgroundColor: "rgba(255,255,255,0.18)", opacity: pressed ? 0.75 : 1 },
+            ]}
+            onPress={handleWhatsApp}
+            disabled={!code}
+          >
+            <Feather name="message-circle" size={16} color="#fff" />
+            <Text style={styles.codeBtnText}>WhatsApp</Text>
+          </Pressable>
+
+          {/* Generic share */}
           <Pressable
             style={({ pressed }) => [
               styles.codeBtn,
@@ -259,19 +310,21 @@ const styles = StyleSheet.create({
   },
   codeActions: {
     flexDirection: "row",
-    gap: 10,
+    flexWrap: "wrap",
+    gap: 8,
     marginTop: 6,
+    justifyContent: "center",
   },
   codeBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     borderRadius: 10,
   },
   codeBtnText: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: "Inter_600SemiBold",
     color: "#ffffff",
   },
