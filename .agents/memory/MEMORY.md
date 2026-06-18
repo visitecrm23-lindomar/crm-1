@@ -17,3 +17,4 @@
 - [STORE_ORDER_STATUS PROCESSING](store-order-status.md) — STORE_ORDER_STATUS in permissions has PENDING/CONFIRMED/PROCESSING/COMPLETED/CANCELLED; PROCESSING was added when pedidos.tsx was migrated to typed constants.
 - [Migration journal timestamps](migration-journal-timestamps.md) — legacy 0000–0072 chain squashed into one idempotent `0000_squash_baseline` (low `when` so existing DBs skip it, empty DBs build full 93-table schema); never mutate it; new entries idx1+ must strictly increase `when`.
 - [Referral email status lookup](referral-email-status-lookup.md) — expiry/bonus-release email delivery status filters email_logs by referralId + subject ILIKE (no email-type column); fragile to subject/locale changes; add a type column when schema next changes.
+- [Referral CHECK constraint gap](referral-check-constraint-gap.md) — referrals_crm_requires_reservation_id is in live DBs but missing from Drizzle schema + squash baseline; fresh DBs would silently lack it.
