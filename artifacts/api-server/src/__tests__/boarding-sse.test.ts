@@ -19,8 +19,10 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import type { Response } from "express";
 import {
   addBoardingClient,
+  tryAddBoardingClient,
   removeBoardingClient,
   emitBoardingUpdate,
+  boardingStreamLimits,
 } from "../lib/boarding-sse.js";
 
 // Track every client we register so module-level state never leaks between
@@ -136,5 +138,61 @@ describe("emitBoardingUpdate", () => {
 
     emitBoardingUpdate(tripId);
     expect(client.write).toHaveBeenCalledTimes(1); // not called again
+  });
+});
+
+/**
+ * tryAddBoardingClient enforces the DoS guard: the authenticated boarding-control
+ * stream is held open indefinitely, so we bound concurrent connections per IP
+ * and per trip. These tests register via tryAddBoardingClient (tracking
+ * everything for cleanup) and assert the caps reject excess attempts without
+ * registering them.
+ */
+describe("tryAddBoardingClient — connection caps", () => {
+  function tryRegister(tripId: string, ip: string | null, res?: Response): { ok: boolean; res: Response } {
+    const client = res ?? makeClient();
+    const ok = tryAddBoardingClient(tripId, client, ip);
+    if (ok) registered.push({ tripId, res: client });
+    return { ok, res: client };
+  }
+
+  it("accepts connections up to the per-IP cap, then rejects further ones from the same IP", () => {
+    const ip = "203.0.113.10";
+    for (let i = 0; i < boardingStreamLimits.perIp; i++) {
+      expect(tryRegister(`trip-ip-${i}`, ip).ok).toBe(true);
+    }
+    // One more from the same IP (even on a fresh trip) must be rejected.
+    expect(tryRegister("trip-ip-over", ip).ok).toBe(false);
+  });
+
+  it("frees an IP slot when a client disconnects, allowing a new connection", () => {
+    const ip = "203.0.113.20";
+    const opened: Response[] = [];
+    for (let i = 0; i < boardingStreamLimits.perIp; i++) {
+      const { ok, res } = tryRegister(`trip-free-${i}`, ip);
+      expect(ok).toBe(true);
+      opened.push(res);
+    }
+    // At cap → next is rejected.
+    expect(tryAddBoardingClient("trip-free-over", makeClient(), ip)).toBe(false);
+
+    // Disconnect one → a slot frees up.
+    removeBoardingClient("trip-free-0", opened[0]);
+    expect(tryRegister("trip-free-again", ip).ok).toBe(true);
+  });
+
+  it("does not count connections without an IP against the per-IP cap", () => {
+    for (let i = 0; i < boardingStreamLimits.perIp + 3; i++) {
+      expect(tryRegister(`trip-noip-${i}`, null).ok).toBe(true);
+    }
+  });
+
+  it("rejects connections beyond the per-trip cap regardless of IP", () => {
+    const tripId = "trip-crowded";
+    // Each connection uses a distinct IP so the per-IP cap is never the limiter.
+    for (let i = 0; i < boardingStreamLimits.perTrip; i++) {
+      expect(tryRegister(tripId, `198.51.100.${i}`).ok).toBe(true);
+    }
+    expect(tryRegister(tripId, "198.51.100.250").ok).toBe(false);
   });
 });

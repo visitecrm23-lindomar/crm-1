@@ -1,7 +1,8 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { addSeatClient, removeSeatClient } from "../lib/seat-sse";
-import { addBoardingClient, removeBoardingClient, emitBoardingUpdate } from "../lib/boarding-sse";
+import { tryAddBoardingClient, removeBoardingClient, emitBoardingUpdate } from "../lib/boarding-sse";
+import { getClientIp } from "../lib/get-client-ip";
 import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable, auditLogsTable, plansTable, tripMediaTable, tripCheckinsTable, tripGuideLocationsTable } from "@workspace/db";
 import { checkPlanLimit } from "../lib/planLimits";
 import type { LayoutCell, FixedCostItem, VariableCostItem, FreePassenger } from "@workspace/db";
@@ -2425,13 +2426,18 @@ router.get("/trips/:id/boarding-live/stream", async (req, res, next: NextFunctio
       .limit(1);
     if (!trip) { next(new NotFoundError("Viagem não encontrada", "TRIP_NOT_FOUND")); return; }
 
+    const clientIp = getClientIp(req);
+    if (!tryAddBoardingClient(tripId, res, clientIp)) {
+      next(new AppError("Too many concurrent boarding stream connections", 429, "TOO_MANY_REQUESTS"));
+      return;
+    }
+
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
     res.flushHeaders();
 
-    addBoardingClient(tripId, res);
     const ping = setInterval(() => {
       try { res.write(": ping\n\n"); } catch { clearInterval(ping); }
     }, 30000);

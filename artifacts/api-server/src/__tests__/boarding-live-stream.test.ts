@@ -99,7 +99,7 @@ vi.mock("../lib/seat-sse.js", () => ({
 }));
 
 vi.mock("../lib/boarding-sse.js", () => ({
-  addBoardingClient: vi.fn(),
+  tryAddBoardingClient: vi.fn(() => true),
   removeBoardingClient: vi.fn(),
   emitBoardingUpdate: vi.fn(),
 }));
@@ -177,7 +177,7 @@ vi.mock("../routes/payments.js", () => ({
 }));
 
 import { requireAuth } from "../lib/tenant.js";
-import { addBoardingClient, removeBoardingClient, emitBoardingUpdate } from "../lib/boarding-sse.js";
+import { tryAddBoardingClient, removeBoardingClient, emitBoardingUpdate } from "../lib/boarding-sse.js";
 import { eq } from "drizzle-orm";
 import tripsRouter from "../routes/trips.js";
 import { errorHandler } from "../middlewares/errorHandler.js";
@@ -233,7 +233,7 @@ const FAKE_USER = {
 
 describe("GET /api/trips/:id/boarding-live/stream — boarding-control live SSE", () => {
   const requireAuthMock = vi.mocked(requireAuth);
-  const addBoardingClientMock = vi.mocked(addBoardingClient);
+  const tryAddBoardingClientMock = vi.mocked(tryAddBoardingClient);
   const removeBoardingClientMock = vi.mocked(removeBoardingClient);
   const eqMock = vi.mocked(eq);
 
@@ -242,6 +242,7 @@ describe("GET /api/trips/:id/boarding-live/stream — boarding-control live SSE"
     selectQueue.length = 0;
     requireAuthMock.mockResolvedValue(FAKE_USER as never);
     mockSelect.mockImplementation(() => makeChain(selectQueue.shift() ?? []));
+    tryAddBoardingClientMock.mockReturnValue(true);
   });
 
   it("rejects an unauthenticated request with 401 and registers no client", async () => {
@@ -257,7 +258,7 @@ describe("GET /api/trips/:id/boarding-live/stream — boarding-control live SSE"
 
     expect(res.status).toBe(401);
     expect(res.headers["content-type"]).not.toContain("text/event-stream");
-    expect(addBoardingClientMock).not.toHaveBeenCalled();
+    expect(tryAddBoardingClientMock).not.toHaveBeenCalled();
   });
 
   it("returns 404 and registers no client when the trip does not exist", async () => {
@@ -268,7 +269,7 @@ describe("GET /api/trips/:id/boarding-live/stream — boarding-control live SSE"
 
     expect(res.status).toBe(404);
     expect(res.headers["content-type"]).not.toContain("text/event-stream");
-    expect(addBoardingClientMock).not.toHaveBeenCalled();
+    expect(tryAddBoardingClientMock).not.toHaveBeenCalled();
   });
 
   it("scopes the trip lookup to the caller's tenant so cross-tenant trips are not streamable", async () => {
@@ -278,13 +279,13 @@ describe("GET /api/trips/:id/boarding-live/stream — boarding-control live SSE"
     const res = await request(app).get("/api/trips/foreign-trip/boarding-live/stream");
 
     expect(res.status).toBe(404);
-    expect(addBoardingClientMock).not.toHaveBeenCalled();
+    expect(tryAddBoardingClientMock).not.toHaveBeenCalled();
     // The handler must have filtered by the caller's tenantId; if the predicate
     // were dropped, a foreign trip could be streamed.
     expect(eqMock).toHaveBeenCalledWith("tripsTable.tenantId", FAKE_USER.tenantId);
   });
 
-  it("upgrades to SSE, registers the client via addBoardingClient, and removes it on req close", async () => {
+  it("upgrades to SSE, registers the client via tryAddBoardingClient, and removes it on req close", async () => {
     const app = buildApp();
     selectQueue.push([{ id: "trip-001" }]); // tenant-scoped lookup → found
 
@@ -329,13 +330,26 @@ describe("GET /api/trips/:id/boarding-live/stream — boarding-control live SSE"
         fallback = setTimeout(finish, 2000);
       });
 
-      expect(addBoardingClientMock).toHaveBeenCalledTimes(1);
-      expect(addBoardingClientMock).toHaveBeenCalledWith("trip-001", expect.anything());
+      expect(tryAddBoardingClientMock).toHaveBeenCalledTimes(1);
+      expect(tryAddBoardingClientMock).toHaveBeenCalledWith("trip-001", expect.anything(), expect.anything());
       expect(removeBoardingClientMock).toHaveBeenCalledTimes(1);
       expect(removeBoardingClientMock).toHaveBeenCalledWith("trip-001", expect.anything());
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
+  });
+
+  it("returns 429 (not an SSE upgrade) and registers no client when the connection cap is reached", async () => {
+    const app = buildApp();
+    selectQueue.push([{ id: "trip-001" }]); // tenant-scoped lookup → found
+    tryAddBoardingClientMock.mockReturnValueOnce(false); // limit reached
+
+    const res = await request(app).get("/api/trips/trip-001/boarding-live/stream");
+
+    expect(res.status).toBe(429);
+    expect(res.headers["content-type"]).not.toContain("text/event-stream");
+    expect(tryAddBoardingClientMock).toHaveBeenCalledTimes(1);
+    expect(removeBoardingClientMock).not.toHaveBeenCalled();
   });
 });
 
