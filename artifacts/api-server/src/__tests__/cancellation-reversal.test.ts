@@ -696,18 +696,23 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     // tx select queue (in execution order):
     //   [0] Reversal 3 — primary lookup by reservationId + COMPLETED → [] (already REVERSED)
     //   [1] Reversal 3 — secondary lookup by code + COMPLETED → [] (also empty, already REVERSED)
-    //   [2] Reversal 4 — payments lookup (empty)
-    //   [3] Reversal 4 — loyalty member lookup (no member found → skip clawback)
-    //   [4] re-fetch updated reservation
+    //   [2] Reversal 3 — REVERSED check by code → found (confirms re-cancel path, debug log emitted)
+    //   [3] Reversal 4 — payments lookup (empty)
+    //   [4] Reversal 4 — loyalty member lookup (no member found → skip clawback)
+    //   [5] re-fetch updated reservation
     //
     // The primary lookup returns empty because the referral status is already
     // REVERSED (COMPLETED filter returns nothing). The secondary lookup also
-    // returns empty for the same reason — no warn is emitted.  The `referralRecord`
-    // variable stays undefined, so the clients and referrals tables are never
-    // updated — confirming no double-decrement.
+    // returns empty for the same reason — no warn is emitted.  The third query
+    // finds the REVERSED row so a debug log is emitted instead, allowing
+    // operators to distinguish this expected idempotency path from a missing-
+    // reservation-id data integrity gap.  The `referralRecord` variable stays
+    // undefined, so the clients and referrals tables are never updated —
+    // confirming no double-decrement.
     const tx = buildTxMock([
       [], // primary lookup → referral already REVERSED, COMPLETED filter returns nothing
       [], // secondary lookup → also empty (already REVERSED, idempotency — no warn)
+      [{ id: "referral-rev-001" }], // REVERSED check → found, debug log emitted
       [], // no payments
       [], // Reversal 4 loyalty member lookup → not found, skip clawback
       [cancelled],
@@ -740,6 +745,90 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
       (u) => "referralEarnings" in u.set,
     );
     expect(earningsUpdate).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // Re-cancel path emits a debug log (not a warn) with reason="already_reversed"
+  // when the REVERSED check confirms the referral was already reversed in a
+  // prior cancellation. This lets operators distinguish expected idempotency
+  // from a missing-reservation-id data integrity gap.
+  it("emits a debug log with reason=already_reversed on re-cancel (not a warn)", async () => {
+    const debugArgs: unknown[][] = [];
+    const warnArgs: unknown[][] = [];
+
+    const app = express();
+    app.use(express.json());
+    app.use(
+      (
+        req: express.Request & { log?: Record<string, unknown> },
+        _res: express.Response,
+        next: express.NextFunction,
+      ) => {
+        const noop = (..._a: unknown[]) => {};
+        req.log = {
+          trace: noop,
+          debug: (...args: unknown[]) => { debugArgs.push(args); },
+          info: noop,
+          warn: (...args: unknown[]) => { warnArgs.push(args); },
+          error: noop,
+          fatal: noop,
+        } as never;
+        next();
+      },
+    );
+    app.use("/api", reservationsRouter);
+    app.use(errorHandler);
+
+    const existing = makeReservation({
+      discountReferralCode: "REF-XYZ",
+      discountReferralAmount: "50",
+      clientId: "client-001",
+    });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] Reversal 3 — primary lookup by reservationId + COMPLETED → [] (already REVERSED)
+    //   [1] Reversal 3 — secondary lookup by code + COMPLETED → [] (also empty, already REVERSED)
+    //   [2] Reversal 3 — REVERSED check by code → found → debug log emitted, no warn
+    //   [3] Reversal 4 — payments lookup (empty)
+    //   [4] Reversal 4 — loyalty member lookup → not found, skip clawback
+    //   [5] re-fetch updated reservation
+    const tx = buildTxMock([
+      [],
+      [],
+      [{ id: "referral-rev-001" }],
+      [],
+      [],
+      [cancelled],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+
+    // A debug log with reason="already_reversed" must have been emitted
+    const referralDebug = debugArgs.find(
+      (call) =>
+        typeof call[0] === "object" &&
+        call[0] !== null &&
+        (call[0] as Record<string, unknown>)["reason"] === "already_reversed",
+    );
+    expect(referralDebug).toBeDefined();
+    expect((referralDebug![0] as Record<string, unknown>)["referralCode"]).toBe("REF-XYZ");
+    expect((referralDebug![0] as Record<string, unknown>)["reservationId"]).toBe("res-001");
+    expect((referralDebug![0] as Record<string, unknown>)["tenantId"]).toBe("tenant-001");
+
+    // No warn must have been emitted (re-cancel is expected, not a data gap)
+    expect(warnArgs.length).toBe(0);
   });
 
   // -------------------------------------------------------------------------
@@ -810,7 +899,7 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     // A warn must have been emitted
     expect(warnArgs.length).toBeGreaterThan(0);
 
-    // The warn must include tenantId, referrerId, referralCode, and reservationId
+    // The warn must include tenantId, referrerId, referralCode, reservationId, and reason
     const referralWarn = warnArgs.find(
       (call) =>
         typeof call[0] === "object" &&
@@ -825,6 +914,7 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     expect((referralWarn![0] as Record<string, unknown>)["referralCode"]).toBe("REF-XYZ");
     expect((referralWarn![0] as Record<string, unknown>)["tenantId"]).toBe("tenant-001");
     expect((referralWarn![0] as Record<string, unknown>)["referrerId"]).toBe("referrer-001");
+    expect((referralWarn![0] as Record<string, unknown>)["reason"]).toBe("missing_reservation_id");
 
     // No referral or client update must have run (reversal was skipped)
     const referralUpdate = capturedUpdates.find(

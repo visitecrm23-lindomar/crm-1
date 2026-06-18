@@ -1229,13 +1229,42 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
                   referrerId: byCode.referrerId,
                   referralCode: existing.discountReferralCode,
                   reservationId: req.params.id,
+                  reason: "missing_reservation_id",
                 },
                 "Referral reversal skipped: COMPLETED referral found by code but no record matches reservationId — possible missing reservation_id on referral row",
               );
+            } else {
+              // Both COMPLETED lookups returned nothing.  Distinguish a
+              // re-cancel flow (referral already REVERSED — expected,
+              // idempotent) from a reservation that was never linked to a
+              // referral record (e.g. legacy data, or code applied after
+              // conversion).  A third query checks for the REVERSED row so
+              // operators can tell the two cases apart in logs.
+              const [alreadyReversed] = await tx
+                .select({ id: referralsTable.id })
+                .from(referralsTable)
+                .where(and(
+                  eq(referralsTable.tenantId, me.tenantId),
+                  eq(referralsTable.code, existing.discountReferralCode),
+                  eq(referralsTable.status, REFERRAL_STATUS.REVERSED),
+                ))
+                .limit(1);
+
+              if (alreadyReversed) {
+                req.log.debug(
+                  {
+                    tenantId: me.tenantId,
+                    referralCode: existing.discountReferralCode,
+                    reservationId: req.params.id,
+                    reason: "already_reversed",
+                  },
+                  "Referral reversal skipped: record is already REVERSED — expected re-cancel idempotency, no action needed",
+                );
+              }
+              // else: no referral record in any actionable status — silently
+              // skip (code may have been applied without generating a referral
+              // row, or the row was never created; no bonus to reverse).
             }
-            // else: no COMPLETED referral for this code — already reversed or
-            // never completed.  Silently skip; this is expected in re-cancel
-            // (idempotency) flows.
           }
 
           if (referralRecord) {
