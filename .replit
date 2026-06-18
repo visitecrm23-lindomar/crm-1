@@ -114,7 +114,7 @@ isValidation = true
   [agent]
 stack = "BEST_EFFORT_FALLBACK"
 expertMode = true
-integrations = ["stripe:1.0.0"]
+integrations = ["stripe:1.0.0", "javascript_openai_ai_integrations:2.0.0"]
 
   [postMerge]
 path = "scripts/post-merge.sh"
