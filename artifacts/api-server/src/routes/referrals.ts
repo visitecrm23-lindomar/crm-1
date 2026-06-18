@@ -7,7 +7,7 @@ import { requireAuth } from "../lib/tenant";
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { REFERRAL_STATUS } from "@workspace/permissions";
-import { enqueueReferralBonusPaidEmail, dispatchReferralExpiringSoonEmail } from "../queues/email-helpers";
+import { enqueueReferralBonusPaidEmail, dispatchReferralExpiringSoonEmail, dispatchReferralBonusReleasedEmail } from "../queues/email-helpers";
 import { dispatchWhatsAppReferralBonusPaid } from "../queues/whatsapp-helpers";
 import { sendWhatsAppMessage, interpolateWhatsAppMessage } from "../lib/whatsapp";
 import { DEFAULT_TIERS as DEFAULT_TIERS_CONFIG, computeReferralTier } from "../lib/referral-tiers";
