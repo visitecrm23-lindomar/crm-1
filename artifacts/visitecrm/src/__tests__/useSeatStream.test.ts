@@ -2,6 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { useSeatStream } from "../hooks/useSeatStream.js";
+import {
+  MockEventSource,
+  installMockEventSource,
+  restoreEventSource,
+} from "./eventSourceHarness.js";
 
 // The hook prefixes every URL with import.meta.env.BASE_URL (trailing slash
 // stripped). Mirror that exactly so assertions stay correct regardless of the
@@ -11,57 +16,8 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 type Opts = Parameters<typeof useSeatStream>[0];
 type Result = ReturnType<typeof useSeatStream>;
 
-// jsdom does not provide EventSource, so stub it. Instances are recorded so a
-// test can inspect the URL/options the hook used and drive the event handlers.
-class MockEventSource {
-  static instances: MockEventSource[] = [];
-
-  url: string;
-  withCredentials: boolean;
-  onopen: ((ev: unknown) => void) | null = null;
-  onmessage: ((ev: { data: string }) => void) | null = null;
-  onerror: ((ev: unknown) => void) | null = null;
-  closeCount = 0;
-
-  constructor(url: string, init?: EventSourceInit) {
-    this.url = url;
-    this.withCredentials = Boolean(init?.withCredentials);
-    MockEventSource.instances.push(this);
-  }
-
-  get closed(): boolean {
-    return this.closeCount > 0;
-  }
-
-  close(): void {
-    this.closeCount += 1;
-  }
-
-  emitOpen(): void {
-    this.onopen?.({});
-  }
-
-  emitMessage(data: string): void {
-    this.onmessage?.({ data });
-  }
-
-  emitError(): void {
-    this.onerror?.({});
-  }
-
-  static reset(): void {
-    MockEventSource.instances = [];
-  }
-
-  static last(): MockEventSource {
-    const es = MockEventSource.instances[MockEventSource.instances.length - 1];
-    if (!es) throw new Error("no EventSource was created");
-    return es;
-  }
-}
-
-// React 19's act() requires this flag to flush effects without warnings.
-(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+// MockEventSource (the jsdom EventSource stub) lives in eventSourceHarness.ts —
+// it is shared with the NotificationBell and BoardingControlPage SSE tests.
 
 interface Handle {
   result: { current: Result };
@@ -113,12 +69,8 @@ async function emit(fn: (es: MockEventSource) => void): Promise<void> {
   });
 }
 
-const eventSourceHost = globalThis as unknown as { EventSource?: unknown };
-const originalEventSource = eventSourceHost.EventSource;
-
 beforeEach(() => {
-  MockEventSource.reset();
-  eventSourceHost.EventSource = MockEventSource;
+  installMockEventSource();
 });
 
 afterEach(async () => {
@@ -129,11 +81,7 @@ afterEach(async () => {
   }
   activeRoots.length = 0;
 
-  if (originalEventSource === undefined) {
-    delete eventSourceHost.EventSource;
-  } else {
-    eventSourceHost.EventSource = originalEventSource;
-  }
+  restoreEventSource();
 });
 
 describe("useSeatStream — stream URL selection", () => {

@@ -22,3 +22,4 @@
 - [Vitrine per-tenant theming](vitrine-theming.md) — storefront re-skins via VitrineThemeProvider CSS vars; Cariri palette fallback when store colors == DB defaults; theme inline colors via useVitrineTheme().colors, never raw store.primaryColor.
 - [Referral email status lookup](referral-email-status-lookup.md) — expiry/bonus-release email delivery status filters email_logs by referralId + subject ILIKE (no email-type column); fragile to subject/locale changes; add a type column when schema next changes.
 - [Referral CHECK constraint gap](referral-check-constraint-gap.md) — referrals_crm_requires_reservation_id is in live DBs but missing from Drizzle schema + squash baseline; fresh DBs would silently lack it.
+- [Frontend SSE component tests](frontend-sse-component-tests.md) — shared eventSourceHarness.ts stubs EventSource; mocked hooks (useToast/wouter) MUST return stable refs or effects loop & act() hangs; vitest needs esbuild jsx:automatic for .tsx.
