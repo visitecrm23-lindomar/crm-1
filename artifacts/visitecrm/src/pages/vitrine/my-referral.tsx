@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type ReactElement } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactElement } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useUser } from "@clerk/react";
 import { useGetMe, useGetActiveCampaign } from "@workspace/api-client-react";
@@ -490,6 +490,27 @@ export default function MyReferralPage({ slug, store }: Props) {
   );
 
   const hasBonus = paidBonus > 0 || pendingBonus > 0 || creditUsedBonus > 0;
+
+  // Detect the first time hasBonus transitions false → true within a session
+  const hasBonusInitializedRef = useRef(false);
+  const prevHasBonusRef = useRef<boolean>(false);
+  useEffect(() => {
+    // Wait until referrals have actually loaded before tracking
+    if (loadingReferrals || referrals === null) return;
+    if (!hasBonusInitializedRef.current) {
+      // First settled value — record baseline without firing a toast
+      hasBonusInitializedRef.current = true;
+      prevHasBonusRef.current = hasBonus;
+      return;
+    }
+    if (!prevHasBonusRef.current && hasBonus) {
+      toast({
+        title: "🎉 Primeiro bônus desbloqueado!",
+        description: "Sua indicação foi confirmada e você ganhou seu primeiro bônus. Parabéns!",
+      });
+    }
+    prevHasBonusRef.current = hasBonus;
+  }, [hasBonus, loadingReferrals, referrals, toast]);
 
   const stats = [
     {

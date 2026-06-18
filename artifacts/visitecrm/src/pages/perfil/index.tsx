@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactElement } from "react";
+import { useState, useEffect, useRef, type ReactElement } from "react";
 import { useLocation, useSearch } from "wouter";
 import { clientPortalApi, type ClientPortalProfile, type ClientLoyalty, type ClientReferral, type FavoritesResponse, type ClientPortalReservation, type ClientLoyaltyTransaction, type ClientAchievementsResponse, type ClientMemoriesResponse, type DreamDestinationItem, type ClubBenefit, type ClubRankingResponse } from "@/lib/clientPortalApi";
 import QRCode from "qrcode";
@@ -1662,6 +1662,28 @@ function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
   const paidBonus = (referrals ?? [])
     .filter((r) => isConverted(r.status) && r.bonusPaid)
     .reduce((sum, r) => sum + parseFloat(r.bonusAmount), 0);
+  const hasBonus = pendingBonus > 0 || paidBonus > 0;
+
+  // Detect the first time hasBonus transitions false → true within a session
+  const hasBonusInitializedRef = useRef(false);
+  const prevHasBonusRef = useRef<boolean>(false);
+  useEffect(() => {
+    // Wait until referrals have actually loaded before tracking
+    if (loadingReferrals) return;
+    if (!hasBonusInitializedRef.current) {
+      // First settled value — record baseline without firing a toast
+      hasBonusInitializedRef.current = true;
+      prevHasBonusRef.current = hasBonus;
+      return;
+    }
+    if (!prevHasBonusRef.current && hasBonus) {
+      toast({
+        title: "🎉 Primeiro bônus desbloqueado!",
+        description: "Sua indicação foi confirmada e você ganhou seu primeiro bônus. Parabéns!",
+      });
+    }
+    prevHasBonusRef.current = hasBonus;
+  }, [hasBonus, loadingReferrals, toast]);
 
   function copyCode() {
     if (!code) return;
