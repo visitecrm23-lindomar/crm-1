@@ -1832,7 +1832,7 @@ function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
         );
       })()}
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className={`grid gap-3 ${pendingBonus > 0 || paidBonus > 0 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2"}`}>
         <Card>
           <CardContent className="pt-4 pb-3 text-center">
             <TrendingUp className="w-5 h-5 mx-auto mb-1.5" style={{ color: primaryColor }} />
@@ -1847,24 +1847,38 @@ function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
             <p className="text-xs text-muted-foreground">Confirmadas</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-4 pb-3 text-center">
-            <Clock className="w-5 h-5 mx-auto mb-1.5 text-orange-400" />
-            <p className="text-xl font-bold text-orange-500">
-              {pendingBonus.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-            </p>
-            <p className="text-xs text-muted-foreground">Bônus a receber</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-3 text-center">
-            <Wallet className="w-5 h-5 mx-auto mb-1.5 text-green-500" />
-            <p className="text-xl font-bold text-green-600">
-              {paidBonus.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-            </p>
-            <p className="text-xs text-muted-foreground">Bônus recebido</p>
-          </CardContent>
-        </Card>
+        {pendingBonus > 0 || paidBonus > 0 ? (
+          <>
+            <Card>
+              <CardContent className="pt-4 pb-3 text-center">
+                <Clock className="w-5 h-5 mx-auto mb-1.5 text-orange-400" />
+                <p className="text-xl font-bold text-orange-500">
+                  {pendingBonus.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                </p>
+                <p className="text-xs text-muted-foreground">Bônus a receber</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4 pb-3 text-center">
+                <Wallet className="w-5 h-5 mx-auto mb-1.5 text-green-500" />
+                <p className="text-xl font-bold text-green-600">
+                  {paidBonus.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                </p>
+                <p className="text-xs text-muted-foreground">Bônus recebido</p>
+              </CardContent>
+            </Card>
+          </>
+        ) : (
+          <Card className="col-span-2">
+            <CardContent className="pt-4 pb-3 flex items-center justify-center gap-3 text-center">
+              <Gift className="w-5 h-5 shrink-0 text-muted-foreground/40" />
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Indique amigos e ganhe bônus!</p>
+                <p className="text-xs text-muted-foreground/60">Seus bônus aparecerão aqui assim que suas indicações forem confirmadas.</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Card>

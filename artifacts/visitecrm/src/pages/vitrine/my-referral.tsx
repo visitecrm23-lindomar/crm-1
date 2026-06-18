@@ -489,6 +489,8 @@ export default function MyReferralPage({ slug, store }: Props) {
     { paidBonus: 0, pendingBonus: 0, creditUsedBonus: 0 },
   );
 
+  const hasBonus = paidBonus > 0 || pendingBonus > 0 || creditUsedBonus > 0;
+
   const stats = [
     {
       icon: <Users className="w-5 h-5" />,
@@ -504,13 +506,17 @@ export default function MyReferralPage({ slug, store }: Props) {
       color: "text-green-600",
       bg: "bg-green-50",
     },
-    {
-      icon: <TrendingUp className="w-5 h-5" />,
-      label: "Bônus acumulado",
-      value: formatCurrency(ref.totalEarnings),
-      color: "text-purple-600",
-      bg: "bg-purple-50",
-    },
+    ...(hasBonus
+      ? [
+          {
+            icon: <TrendingUp className="w-5 h-5" />,
+            label: "Bônus acumulado",
+            value: formatCurrency(ref.totalEarnings),
+            color: "text-purple-600",
+            bg: "bg-purple-50",
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -582,7 +588,7 @@ export default function MyReferralPage({ slug, store }: Props) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className={`grid gap-3 ${hasBonus ? "grid-cols-3" : "grid-cols-2"}`}>
         {stats.map((s) => (
           <Card key={s.label} className="text-center">
             <CardContent className="p-4">
