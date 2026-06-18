@@ -110,6 +110,7 @@ export const referralSettingsTable = pgTable("referral_settings", {
   whatsappPhoneNumber: text("whatsapp_phone_number"),
   whatsappConvertedMessage: text("whatsapp_converted_message"),
   whatsappBonusPaidMessage: text("whatsapp_bonus_paid_message"),
+  whatsappReversedMessage: text("whatsapp_reversed_message"),
   expiryWarning7DaysEnabled: boolean("expiry_warning_7_days_enabled").notNull().default(true),
   expiryWarning1DayEnabled: boolean("expiry_warning_1_day_enabled").notNull().default(true),
   bonusReleaseEmailEnabled: boolean("bonus_release_email_enabled").notNull().default(true),

@@ -22,6 +22,7 @@ export interface UpdateReferralSettingsBody {
   whatsappPhoneNumber?: string;
   whatsappConvertedMessage?: string;
   whatsappBonusPaidMessage?: string;
+  whatsappReversedMessage?: string;
   expiryWarning7DaysEnabled?: boolean;
   expiryWarning1DayEnabled?: boolean;
   bonusReleaseEmailEnabled?: boolean;

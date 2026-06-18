@@ -1,6 +1,6 @@
 import { Router, type NextFunction } from "express";
 import { db, referralsTable, clientsTable, referralSettingsTable, referralTrackingTable, tenantsTable, emailLogsTable, reservationsTable, referralCampaignsTable } from "@workspace/db";
-import { eq, and, desc, sql, count, ilike, or, inArray, getTableColumns } from "drizzle-orm";
+import { eq, and, desc, sql, count, ilike, or, inArray, getTableColumns, isNull, isNotNull } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
@@ -703,6 +703,58 @@ router.get("/referrals/:id/expiry-email-status", async (req, res, next: NextFunc
   }
 });
 
+router.get("/referrals/:id/bonus-release-email-status", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    const [row] = await db.select({
+      code: referralsTable.code,
+      referrerClientEmail: clientsTable.email,
+    }).from(referralsTable)
+      .leftJoin(clientsTable, and(
+        eq(referralsTable.referrerId, clientsTable.id),
+        eq(clientsTable.tenantId, me.tenantId),
+      ))
+      .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
+      .limit(1);
+
+    if (!row) { next(new NotFoundError("Indicação não encontrada", "NOT_FOUND")); return; }
+
+    const referrerEmail = row.referrerClientEmail;
+    if (!referrerEmail) {
+      res.json({ bonusRelease: null });
+      return;
+    }
+
+    // The bonus-release email is enqueued with the referral id stamped on the
+    // email log (see enqueueReferralBonusReleasedEmail) and a distinctive
+    // subject ("…disponível para resgate…"). Filter on both so we never pick up
+    // an expiry-warning email (which also stamps referralId) for this referral.
+    const logs = await db.select({
+      id: emailLogsTable.id,
+      subject: emailLogsTable.subject,
+      status: emailLogsTable.status,
+      errorMessage: emailLogsTable.errorMessage,
+      createdAt: emailLogsTable.createdAt,
+    }).from(emailLogsTable)
+      .where(and(
+        eq(emailLogsTable.tenantId, me.tenantId),
+        eq(emailLogsTable.referralId, req.params.id),
+        ilike(emailLogsTable.subject, `%disponível para resgate%`),
+      ))
+      .orderBy(desc(emailLogsTable.createdAt))
+      .limit(50);
+
+    const toEntry = (log: typeof logs[0] | undefined) =>
+      log ? { status: log.status, errorMessage: log.errorMessage ?? null, sentAt: log.createdAt } : null;
+
+    res.json({ bonusRelease: toEntry(logs[0]) });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/referrals/:id/share", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
@@ -1109,6 +1161,7 @@ router.get("/referrals/export", async (req, res, next: NextFunction): Promise<vo
     const bonusPaidParam = req.query.bonusPaid as string | undefined;
     const fraudFlagParam = req.query.fraudFlag as string | undefined;
     const expiringSoonParam = req.query.expiringSoon as string | undefined;
+    const bonusNotifiedParam = req.query.bonusNotified as string | undefined;
 
     const validReferralStatusesExport = Object.values(REFERRAL_STATUS);
     if (status && status !== "all" && !validReferralStatusesExport.includes(status as (typeof validReferralStatusesExport)[number])) {
@@ -1120,6 +1173,8 @@ router.get("/referrals/export", async (req, res, next: NextFunction): Promise<vo
     if (status && status !== "all") conditions.push(eq(referralsTable.status, status));
     if (bonusPaidParam === "false") conditions.push(eq(referralsTable.bonusPaid, false));
     if (fraudFlagParam === "true") conditions.push(eq(referralsTable.fraudFlag, true));
+    if (bonusNotifiedParam === "true") conditions.push(isNotNull(referralsTable.bonusReleaseNotifiedAt));
+    if (bonusNotifiedParam === "false") conditions.push(isNull(referralsTable.bonusReleaseNotifiedAt));
     if (expiringSoonParam === "true") {
       const nowDate = new Date();
       const sevenDays = new Date(nowDate.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -1251,7 +1306,7 @@ router.post("/referral-settings/test-whatsapp", async (req, res, next: NextFunct
     if (!ADMIN_ROLES.includes(me.role)) { res.status(403).json({ error: "Forbidden" }); return; }
 
     const parsed = z.object({
-      type: z.enum(["converted", "bonusPaid", "share"]),
+      type: z.enum(["converted", "bonusPaid", "reversed", "share"]),
       message: z.string().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
@@ -1280,6 +1335,8 @@ router.post("/referral-settings/test-whatsapp", async (req, res, next: NextFunct
         template = settings?.whatsappConvertedMessage ?? "";
       } else if (parsed.data.type === "bonusPaid") {
         template = settings?.whatsappBonusPaidMessage ?? "";
+      } else if (parsed.data.type === "reversed") {
+        template = settings?.whatsappReversedMessage ?? "";
       } else {
         template = settings?.shareMessage ?? "";
       }
@@ -1294,6 +1351,8 @@ router.post("/referral-settings/test-whatsapp", async (req, res, next: NextFunct
         ? { nome: "Maria", codigo: "JOAO123", agencia: agencyName, valor: bonusFormatted }
         : parsed.data.type === "bonusPaid"
         ? { nome: "João", codigo: "JOAO123", bonus: `R$ ${bonusFormatted}`, valor: bonusFormatted, agencia: agencyName }
+        : parsed.data.type === "reversed"
+        ? { nome: "Maria", valor: bonusFormatted, agencia: agencyName, saldo: bonusFormatted }
         : { nome: "João", codigo: "JOAO123", link: "https://exemplo.com.br/ind/JOAO123", bonus: `R$ ${bonusFormatted}` };
 
     const message = interpolateWhatsAppMessage(template, vars);
@@ -1338,6 +1397,7 @@ router.get("/referral-settings", async (req, res, next: NextFunction): Promise<v
         whatsappPhoneNumber: null,
         whatsappConvertedMessage: null,
         whatsappBonusPaidMessage: null,
+        whatsappReversedMessage: null,
         expiryWarning7DaysEnabled: true,
         expiryWarning1DayEnabled: true,
         bonusReleaseEmailEnabled: true,
@@ -1383,6 +1443,7 @@ router.patch("/referral-settings", async (req, res, next: NextFunction): Promise
       whatsappPhoneNumber: z.string().optional(),
       whatsappConvertedMessage: z.string().optional(),
       whatsappBonusPaidMessage: z.string().optional(),
+      whatsappReversedMessage: z.string().optional(),
       expiryWarning7DaysEnabled: z.boolean().optional(),
       expiryWarning1DayEnabled: z.boolean().optional(),
       bonusReleaseEmailEnabled: z.boolean().optional(),
@@ -1405,6 +1466,7 @@ router.patch("/referral-settings", async (req, res, next: NextFunction): Promise
     if (parsed.data.whatsappPhoneNumber !== undefined) updates.whatsappPhoneNumber = parsed.data.whatsappPhoneNumber;
     if (parsed.data.whatsappConvertedMessage !== undefined) updates.whatsappConvertedMessage = parsed.data.whatsappConvertedMessage;
     if (parsed.data.whatsappBonusPaidMessage !== undefined) updates.whatsappBonusPaidMessage = parsed.data.whatsappBonusPaidMessage;
+    if (parsed.data.whatsappReversedMessage !== undefined) updates.whatsappReversedMessage = parsed.data.whatsappReversedMessage;
     if (parsed.data.expiryWarning7DaysEnabled != null) updates.expiryWarning7DaysEnabled = parsed.data.expiryWarning7DaysEnabled;
     if (parsed.data.expiryWarning1DayEnabled != null) updates.expiryWarning1DayEnabled = parsed.data.expiryWarning1DayEnabled;
     if (parsed.data.bonusReleaseEmailEnabled != null) updates.bonusReleaseEmailEnabled = parsed.data.bonusReleaseEmailEnabled;
@@ -1440,6 +1502,7 @@ router.patch("/referral-settings", async (req, res, next: NextFunction): Promise
           whatsappPhoneNumber: (updates.whatsappPhoneNumber as string | undefined) ?? null,
           whatsappConvertedMessage: (updates.whatsappConvertedMessage as string | undefined) ?? null,
           whatsappBonusPaidMessage: (updates.whatsappBonusPaidMessage as string | undefined) ?? null,
+          whatsappReversedMessage: (updates.whatsappReversedMessage as string | undefined) ?? null,
           expiryWarning7DaysEnabled: (updates.expiryWarning7DaysEnabled as boolean | undefined) ?? true,
           expiryWarning1DayEnabled: (updates.expiryWarning1DayEnabled as boolean | undefined) ?? true,
           bonusReleaseEmailEnabled: (updates.bonusReleaseEmailEnabled as boolean | undefined) ?? true,
@@ -1734,7 +1797,7 @@ router.post("/referral-settings/whatsapp-test", async (req, res, next: NextFunct
 
     const parsed = z.object({
       phone: z.string().min(8),
-      messageType: z.enum(["converted", "bonusPaid", "share"]),
+      messageType: z.enum(["converted", "bonusPaid", "reversed", "share"]),
     }).safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String("Parâmetros inválidos" ), "VALIDATION_ERROR")); return; }
 
@@ -1760,6 +1823,10 @@ router.post("/referral-settings/whatsapp-test", async (req, res, next: NextFunct
       const template = settings?.whatsappBonusPaidMessage ??
         "Seu bônus de R$ {{valor}} foi pago! Obrigado por indicar clientes para a {{agencia}}.";
       message = interpolateWhatsAppMessage(template, { nome: "João Silva", codigo: "TESTE123", bonus: bonusCurrencyFormatted, valor: bonusValFormatted, agencia: agencyName });
+    } else if (messageType === "reversed") {
+      const template = settings?.whatsappReversedMessage ??
+        "Olá! A reserva de {{nome}} foi cancelada e o bônus de R$ {{valor}} foi estornado do seu saldo na {{agencia}}. Seu saldo atual é R$ {{saldo}}.";
+      message = interpolateWhatsAppMessage(template, { nome: "Maria Silva", valor: bonusValFormatted, agencia: agencyName, saldo: bonusValFormatted });
     } else {
       const template = settings?.shareMessage ?? "Use meu código de indicação e ganhe desconto na sua viagem!";
       message = template

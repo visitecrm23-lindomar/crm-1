@@ -6,6 +6,7 @@ import { dispatchReferralExpiredEmail, dispatchReferralExpiringSoonEmail, dispat
 import { getRedisConnection, isTransientRedisError, recordTransientRedisError, resetTransientRedisErrors } from "../lib/redis";
 import { logger } from "../lib/logger";
 import { runExpiredReservationsCron } from "../lib/expired-reservations";
+import { sendPushNotification } from "../lib/push-notifications";
 import type { ReminderJobData } from "../queues/index";
 import { RESERVATION_STATUS, PAYMENT_STATUS, ROLES } from "@workspace/permissions";
 import { buildEmailPropsFromReservation } from "../queues/email-helpers";
@@ -49,6 +50,7 @@ async function processBoardingReminders(): Promise<void> {
       boardingPoints: tripsTable.boardingPoints,
       clientName: clientsTable.name,
       clientEmail: clientsTable.email,
+      clientExpoPushToken: clientsTable.expoPushToken,
       agencyName: tenantsTable.name,
     })
     .from(reservationsTable)
@@ -128,6 +130,24 @@ async function processBoardingReminders(): Promise<void> {
         "[reminder:boarding] Failed to send D-1 reminder",
       );
     }
+
+    // #18: Push notification alongside the email when the client has a registered token.
+    // A push failure is logged per-recipient but must NOT abort the batch.
+    if (row.clientExpoPushToken) {
+      try {
+        await sendPushNotification({
+          to: row.clientExpoPushToken,
+          title: "🚌 Embarque amanhã!",
+          body: `Sua viagem para ${row.tripDestination ?? row.tripName} é amanhã, ${depDate}.`,
+          data: { type: "boarding_reminder", reservationId: row.reservationId },
+        });
+      } catch (err) {
+        logger.error(
+          { err, reservationId: row.reservationId },
+          "[reminder:boarding] Failed to send D-1 push notification",
+        );
+      }
+    }
   }
 
   logger.info({ total: rows.length, sent, failed }, "[reminder:boarding] D-1 run complete");
@@ -171,6 +191,7 @@ async function processPaymentReminders(): Promise<void> {
       departureDate: tripsTable.departureDate,
       clientName: clientsTable.name,
       clientEmail: clientsTable.email,
+      clientExpoPushToken: clientsTable.expoPushToken,
       agencyName: tenantsTable.name,
       agencyPhone: tenantsTable.whatsapp,
     })
@@ -274,6 +295,24 @@ async function processPaymentReminders(): Promise<void> {
         { error: paymentResult.error, reservationId: row.reservationId, email: row.clientEmail },
         "[reminder:payment] Failed to send D-3 reminder",
       );
+    }
+
+    // #18: Push notification alongside the email when the client has a registered token.
+    // A push failure is logged per-recipient but must NOT abort the batch.
+    if (row.clientExpoPushToken) {
+      try {
+        await sendPushNotification({
+          to: row.clientExpoPushToken,
+          title: "💰 Pagamento vencendo",
+          body: `Você tem uma parcela de ${paymentAmount} vencendo em ${dueStr}.`,
+          data: { type: "payment_reminder", reservationId: row.reservationId },
+        });
+      } catch (err) {
+        logger.error(
+          { err, reservationId: row.reservationId },
+          "[reminder:payment] Failed to send D-3 push notification",
+        );
+      }
     }
   }
 

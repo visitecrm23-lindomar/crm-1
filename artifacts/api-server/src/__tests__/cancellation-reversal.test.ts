@@ -114,6 +114,7 @@ vi.mock("drizzle-orm", () => ({
   and: vi.fn((...a) => a),
   or: vi.fn((...a) => a),
   inArray: vi.fn(() => "inArray"),
+  notInArray: vi.fn(() => "notInArray"),
   desc: vi.fn(() => "desc"),
   asc: vi.fn(() => "asc"),
   ilike: vi.fn(() => "ilike"),
@@ -917,6 +918,180 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     expect((referralWarn![0] as Record<string, unknown>)["reason"]).toBe("missing_reservation_id");
 
     // No referral or client update must have run (reversal was skipped)
+    const referralUpdate = capturedUpdates.find(
+      (u) => "status" in u.set && (u.set as Record<string, unknown>)["status"] === "reversed",
+    );
+    expect(referralUpdate).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // Final-branch warning: when the primary (by reservationId) and secondary
+  // (by code) COMPLETED lookups are both empty AND no REVERSED row exists, a
+  // referral row stuck in an unexpected status (PENDING/FAILED/etc.) must NOT be
+  // silently skipped. A warn with reason="unexpected_status" is emitted so the
+  // dangling bonus can be manually reversed — but the row is NOT auto-reversed.
+  it("emits a warn (reason=unexpected_status) when only a non-COMPLETED/REVERSED referral row exists in the final branch", async () => {
+    const warnArgs: unknown[][] = [];
+
+    const app = express();
+    app.use(express.json());
+    app.use(
+      (
+        req: express.Request & { log?: Record<string, unknown> },
+        _res: express.Response,
+        next: express.NextFunction,
+      ) => {
+        const noop = (..._a: unknown[]) => {};
+        req.log = {
+          trace: noop,
+          debug: noop,
+          info: noop,
+          warn: (...args: unknown[]) => { warnArgs.push(args); },
+          error: noop,
+          fatal: noop,
+        } as never;
+        next();
+      },
+    );
+    app.use("/api", reservationsRouter);
+    app.use(errorHandler);
+
+    const existing = makeReservation({
+      discountReferralCode: "REF-XYZ",
+      discountReferralAmount: "50",
+      clientId: "client-001",
+    });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] Reversal 3 — primary lookup by reservationId + COMPLETED → [] (no record)
+    //   [1] Reversal 3 — secondary lookup by code + COMPLETED → [] (no record)
+    //   [2] Reversal 3 — REVERSED check by code → [] (no reversed row)
+    //   [3] Reversal 3 — unexpected-status lookup (status NOT IN COMPLETED/REVERSED) → found (PENDING)
+    //   [4] Reversal 4 — payments lookup (empty)
+    //   [5] Reversal 4 — loyalty member lookup → not found, skip clawback
+    //   [6] re-fetch updated reservation
+    const tx = buildTxMock([
+      [], // primary lookup → none
+      [], // secondary lookup → none
+      [], // REVERSED check → none
+      [{ id: "ref-pending-001", status: "pending" }], // unexpected-status row found → warn
+      [], // no payments
+      [], // Reversal 4 loyalty member lookup → not found
+      [cancelled],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+
+    // A warn must have been emitted distinguishing this from the legacy no-row case
+    const unexpectedWarn = warnArgs.find(
+      (call) =>
+        typeof call[0] === "object" &&
+        call[0] !== null &&
+        (call[0] as Record<string, unknown>)["reason"] === "unexpected_status",
+    );
+    expect(unexpectedWarn).toBeDefined();
+    expect((unexpectedWarn![0] as Record<string, unknown>)["referralId"]).toBe("ref-pending-001");
+    expect((unexpectedWarn![0] as Record<string, unknown>)["referralStatus"]).toBe("pending");
+    expect((unexpectedWarn![0] as Record<string, unknown>)["referralCode"]).toBe("REF-XYZ");
+    expect((unexpectedWarn![0] as Record<string, unknown>)["reservationId"]).toBe("res-001");
+    expect((unexpectedWarn![0] as Record<string, unknown>)["tenantId"]).toBe("tenant-001");
+
+    // The unexpected-status row must NOT be auto-reversed
+    const referralUpdate = capturedUpdates.find(
+      (u) => "status" in u.set && (u.set as Record<string, unknown>)["status"] === "reversed",
+    );
+    expect(referralUpdate).toBeUndefined();
+    const earningsUpdate = capturedUpdates.find(
+      (u) => "referralEarnings" in u.set,
+    );
+    expect(earningsUpdate).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // Final-branch legacy case: when NO referral row exists in ANY status
+  // (all four lookups empty), the skip stays fully silent — no warn is emitted.
+  // This is the legitimate legacy case (e.g. a discount code applied without ever
+  // generating a referral row).
+  it("stays silent (no warn) when no referral row exists in any status in the final branch", async () => {
+    const warnArgs: unknown[][] = [];
+
+    const app = express();
+    app.use(express.json());
+    app.use(
+      (
+        req: express.Request & { log?: Record<string, unknown> },
+        _res: express.Response,
+        next: express.NextFunction,
+      ) => {
+        const noop = (..._a: unknown[]) => {};
+        req.log = {
+          trace: noop,
+          debug: noop,
+          info: noop,
+          warn: (...args: unknown[]) => { warnArgs.push(args); },
+          error: noop,
+          fatal: noop,
+        } as never;
+        next();
+      },
+    );
+    app.use("/api", reservationsRouter);
+    app.use(errorHandler);
+
+    const existing = makeReservation({
+      discountReferralCode: "REF-XYZ",
+      discountReferralAmount: "50",
+      clientId: "client-001",
+    });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] Reversal 3 — primary lookup by reservationId + COMPLETED → []
+    //   [1] Reversal 3 — secondary lookup by code + COMPLETED → []
+    //   [2] Reversal 3 — REVERSED check by code → []
+    //   [3] Reversal 3 — unexpected-status lookup → [] (no referral row at all)
+    //   [4] Reversal 4 — payments lookup (empty)
+    //   [5] Reversal 4 — loyalty member lookup → not found, skip clawback
+    //   [6] re-fetch updated reservation
+    const tx = buildTxMock([
+      [], // primary lookup → none
+      [], // secondary lookup → none
+      [], // REVERSED check → none
+      [], // unexpected-status lookup → none (legitimate legacy case)
+      [], // no payments
+      [], // Reversal 4 loyalty member lookup → not found
+      [cancelled],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+
+    // No warn must have been emitted — the silent skip is correct for this case
+    expect(warnArgs.length).toBe(0);
+
+    // No referral reversal must have run
     const referralUpdate = capturedUpdates.find(
       (u) => "status" in u.set && (u.set as Record<string, unknown>)["status"] === "reversed",
     );

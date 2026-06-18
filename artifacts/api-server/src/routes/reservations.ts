@@ -1,7 +1,7 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, storeOrdersTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, referralSettingsTable, referralCampaignsTable, dealsTable, pipelineStagesTable, tenantsTable, emailLogsTable, paymentsTable, commissionsTable, vehicleLayoutsTable, reservationInstallmentsTable } from "@workspace/db";
-import { eq, and, sql, desc, asc, inArray, or, ilike } from "drizzle-orm";
+import { eq, and, sql, desc, asc, inArray, notInArray, or, ilike } from "drizzle-orm";
 import { generateId, generateVoucherCode } from "../lib/id";
 import { getTenantReservationPrefix, tripTypeToCode, getYearMonth, nextReservationSequence, buildReservationNumber } from "../lib/reservation-number";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -15,6 +15,7 @@ import { insertClientNotification } from "../lib/client-notifications";
 import { enqueueCommissionSync } from "../queues/commission-sync-helper";
 import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 import { broadcastSeatUpdate } from "../lib/realtime";
+import { sendPushNotification } from "../lib/push-notifications";
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { applyDiscounts, computeBalance, computeEffectiveLoyaltyPoints, roundMoney } from "../lib/pricing";
 import { applyActiveCampaignBonus } from "../lib/referral-campaigns";
@@ -1260,10 +1261,45 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
                   },
                   "Referral reversal skipped: record is already REVERSED — expected re-cancel idempotency, no action needed",
                 );
+              } else {
+                // Neither a COMPLETED nor a REVERSED referral row exists for
+                // this code.  Before assuming the legitimate legacy case (a
+                // discount code applied without ever generating a referral row),
+                // check for a referral row stuck in some OTHER status (e.g.
+                // PENDING, CONVERTED, EXPIRED — anything but COMPLETED/REVERSED).
+                // Such a row means a referral exists but was never completed, so
+                // the COMPLETED-filtered reversal above silently skipped it and a
+                // bonus could be left dangling/unreversed.  Surface it loudly so
+                // operators can investigate and reverse manually — but do NOT
+                // auto-reverse it here.
+                const [unexpectedStatus] = await tx
+                  .select({ id: referralsTable.id, status: referralsTable.status })
+                  .from(referralsTable)
+                  .where(and(
+                    eq(referralsTable.tenantId, me.tenantId),
+                    eq(referralsTable.code, existing.discountReferralCode),
+                    notInArray(referralsTable.status, [REFERRAL_STATUS.COMPLETED, REFERRAL_STATUS.REVERSED]),
+                  ))
+                  .limit(1);
+
+                if (unexpectedStatus) {
+                  req.log.warn(
+                    {
+                      tenantId: me.tenantId,
+                      referralId: unexpectedStatus.id,
+                      referralStatus: unexpectedStatus.status,
+                      referralCode: existing.discountReferralCode,
+                      reservationId: req.params.id,
+                      reason: "unexpected_status",
+                    },
+                    "Referral reversal skipped: referral row found in an unexpected status (not COMPLETED/REVERSED) — bonus may be left unreversed; investigate and reverse manually",
+                  );
+                }
+                // else: no referral record in ANY status — legitimate legacy
+                // case (code may have been applied without generating a referral
+                // row, or the row was never created; no bonus to reverse).
+                // Silently skip.
               }
-              // else: no referral record in any actionable status — silently
-              // skip (code may have been applied without generating a referral
-              // row, or the row was never created; no bonus to reverse).
             }
           }
 
@@ -1640,6 +1676,27 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
     if (isBeingConfirmed) {
       enqueueNewBookingNotificationEmail(req.params.id, me.tenantId)
         .catch((err) => req.log.error({ err }, "Error enqueueing agency new-booking notification on reservation confirmation"));
+    }
+    // #18: When a reservation is confirmed, push a notification to the client's mobile app
+    if (isBeingConfirmed && existing.clientId) {
+      (async () => {
+        try {
+          const [client] = await db.select({ expoPushToken: clientsTable.expoPushToken })
+            .from(clientsTable)
+            .where(and(eq(clientsTable.id, existing.clientId!), eq(clientsTable.tenantId, me.tenantId)))
+            .limit(1);
+          if (client?.expoPushToken) {
+            await sendPushNotification({
+              to: client.expoPushToken,
+              title: "Reserva confirmada",
+              body: `Sua reserva ${existing.voucherCode ?? ""} foi confirmada. Boa viagem!`.trim(),
+              data: { type: "reservation_confirmed", reservationId: existing.id },
+            });
+          }
+        } catch (err) {
+          req.log.error({ err }, "Error sending push notification on reservation confirmation");
+        }
+      })();
     }
     // #28: When a referral is reversed on cancellation, notify the referrer
     if (reversedReferralInfo) {

@@ -633,3 +633,105 @@ describe("PATCH /api/client/me", () => {
     expect(res.body.birthDate).toBe("1990-05-20");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Tests: POST /api/client/push-token
+// ---------------------------------------------------------------------------
+
+describe("POST /api/client/push-token", () => {
+  const requireAuthMock = vi.mocked(requireAuth);
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    setupDefaultDbMocks();
+  });
+
+  it("returns 401 when the request is unauthenticated", async () => {
+    // Mirror requireAuth's no-auth behavior: it writes the 401 itself and resolves null.
+    requireAuthMock.mockImplementation(async (_req, res) => {
+      res.status(401).json({
+        error: "Not authenticated",
+        code: "UNAUTHORIZED",
+        message: "Not authenticated",
+        requestId: "unknown",
+      });
+      return null;
+    });
+
+    const app = buildClientPortalApp();
+    const res = await request(app)
+      .post("/api/client/push-token")
+      .send({ token: "ExponentPushToken[abc123]" });
+
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe("UNAUTHORIZED");
+    // Handler bails before touching the DB
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when authenticated user has role other than 'cliente'", async () => {
+    requireAuthMock.mockResolvedValue(FAKE_ME_ADMIN as never);
+
+    const app = buildClientPortalApp();
+    const res = await request(app)
+      .post("/api/client/push-token")
+      .send({ token: "ExponentPushToken[abc123]" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("FORBIDDEN_ROLE");
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when token is missing from the body", async () => {
+    requireAuthMock.mockResolvedValue(FAKE_ME_CLIENTE as never);
+
+    const app = buildClientPortalApp();
+    const res = await request(app).post("/api/client/push-token").send({});
+
+    expect(res.status).toBe(400);
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when token is an empty string", async () => {
+    requireAuthMock.mockResolvedValue(FAKE_ME_CLIENTE as never);
+
+    const app = buildClientPortalApp();
+    const res = await request(app).post("/api/client/push-token").send({ token: "" });
+
+    expect(res.status).toBe(400);
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("returns 204 and updates clientsTable.expoPushToken when a valid token is provided", async () => {
+    requireAuthMock.mockResolvedValue(FAKE_ME_CLIENTE as never);
+
+    // findClientRecord: userId lookup hits on the first clientsTable query.
+    mockLimit.mockResolvedValueOnce([FAKE_CLIENT_WITH_USERID]);
+
+    const app = buildClientPortalApp();
+    const res = await request(app)
+      .post("/api/client/push-token")
+      .send({ token: "ExponentPushToken[xyz789]" });
+
+    expect(res.status).toBe(204);
+    // db.update called once to persist the push token
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({ expoPushToken: "ExponentPushToken[xyz789]" }),
+    );
+  });
+
+  it("returns 404 when no client record is found for the authenticated user", async () => {
+    requireAuthMock.mockResolvedValue(FAKE_ME_CLIENTE as never);
+
+    // Default mockLimit.mockResolvedValue([]) makes both findClientRecord lookups miss → null.
+
+    const app = buildClientPortalApp();
+    const res = await request(app)
+      .post("/api/client/push-token")
+      .send({ token: "ExponentPushToken[abc123]" });
+
+    expect(res.status).toBe(404);
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+});

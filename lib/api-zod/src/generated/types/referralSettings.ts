@@ -28,6 +28,8 @@ export interface ReferralSettings {
   whatsappConvertedMessage?: string | null;
   /** @nullable */
   whatsappBonusPaidMessage?: string | null;
+  /** @nullable */
+  whatsappReversedMessage?: string | null;
   expiryWarning7DaysEnabled: boolean;
   expiryWarning1DayEnabled: boolean;
   bonusReleaseEmailEnabled: boolean;

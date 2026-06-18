@@ -135,6 +135,7 @@ export interface ReferralExportFilters {
   bonusPaid?: boolean;
   fraudFlag?: boolean;
   expiringSoon?: boolean;
+  bonusNotified?: boolean;
   format?: "csv" | "xlsx" | "json";
 }
 
@@ -173,6 +174,45 @@ export function useGetReferralExpiryEmailStatus<
 
   const queryFn = ({ signal }: { signal?: AbortSignal }) =>
     getReferralExpiryEmailStatus(id!, { signal, ...requestOptions });
+
+  const query = useQuery({
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  }) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey };
+}
+
+export interface ReferralBonusReleaseEmailStatus {
+  bonusRelease: ReferralExpiryEmailEntry | null;
+}
+
+export const getReferralBonusReleaseEmailStatusUrl = (id: string) =>
+  `/api/referrals/${id}/bonus-release-email-status`;
+
+export const getReferralBonusReleaseEmailStatus = (id: string, options?: RequestInit) =>
+  customFetch<ReferralBonusReleaseEmailStatus>(getReferralBonusReleaseEmailStatusUrl(id), { ...options, method: "GET" });
+
+export const getReferralBonusReleaseEmailStatusQueryKey = (id: string) =>
+  [`/api/referrals/bonus-release-email-status`, id] as const;
+
+export function useGetReferralBonusReleaseEmailStatus<
+  TData = ReferralBonusReleaseEmailStatus,
+  TError = ErrorType<unknown>,
+>(
+  id: string | null | undefined,
+  options?: {
+    query?: UseQueryOptions<ReferralBonusReleaseEmailStatus, TError, TData>;
+    request?: RequestInit;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getReferralBonusReleaseEmailStatusQueryKey(id ?? "");
+
+  const queryFn = ({ signal }: { signal?: AbortSignal }) =>
+    getReferralBonusReleaseEmailStatus(id!, { signal, ...requestOptions });
 
   const query = useQuery({
     queryKey,
@@ -281,6 +321,8 @@ export const getReferralExportUrl = (filters: ReferralExportFilters = {}) => {
   if (filters.bonusPaid === false) params.set("bonusPaid", "false");
   if (filters.fraudFlag === true) params.set("fraudFlag", "true");
   if (filters.expiringSoon === true) params.set("expiringSoon", "true");
+  if (filters.bonusNotified === true) params.set("bonusNotified", "true");
+  if (filters.bonusNotified === false) params.set("bonusNotified", "false");
   if (filters.format && filters.format !== "csv") params.set("format", filters.format);
   const qs = params.toString();
   return qs ? `/api/referrals/export?${qs}` : `/api/referrals/export`;

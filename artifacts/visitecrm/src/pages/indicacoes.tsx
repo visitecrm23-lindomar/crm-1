@@ -10,6 +10,7 @@ import {
   useGetReferralAnalytics,
   useGetReferralShare,
   useGetReferralExpiryEmailStatus,
+  useGetReferralBonusReleaseEmailStatus,
   useResendBonusRelease,
   getReferralExportUrl,
   getReferralAnalyticsExportUrl,
@@ -186,6 +187,7 @@ export default function Indicacoes() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [bonusFilter, setBonusFilter] = useState<"all" | "unpaid">("all");
   const [fraudFilter, setFraudFilter] = useState(false);
+  const [bonusNotifiedFilter, setBonusNotifiedFilter] = useState<"all" | "notified" | "not_notified">("all");
   const [selectedBonusIds, setSelectedBonusIds] = useState<Set<string>>(new Set());
   const [bulkPayDialogOpen, setBulkPayDialogOpen] = useState(false);
   const [bulkPaying, setBulkPaying] = useState(false);
@@ -214,6 +216,7 @@ export default function Indicacoes() {
 
   const expiryEmailStatusId = detailModalOpen && selectedReferral ? selectedReferral.id : null;
   const { data: expiryEmailStatus, refetch: refetchExpiryEmailStatus } = useGetReferralExpiryEmailStatus(expiryEmailStatusId);
+  const { data: bonusReleaseEmailStatus, refetch: refetchBonusReleaseEmailStatus } = useGetReferralBonusReleaseEmailStatus(expiryEmailStatusId);
 
   const [localSettings, setLocalSettings] = useState<Partial<ReferralSettings>>({});
 
@@ -233,6 +236,7 @@ export default function Indicacoes() {
       whatsappPhoneNumber: settings?.whatsappPhoneNumber ?? "",
       whatsappConvertedMessage: settings?.whatsappConvertedMessage ?? "",
       whatsappBonusPaidMessage: settings?.whatsappBonusPaidMessage ?? "",
+      whatsappReversedMessage: settings?.whatsappReversedMessage ?? "",
       expiryWarning7DaysEnabled: settings?.expiryWarning7DaysEnabled ?? true,
       expiryWarning1DayEnabled: settings?.expiryWarning1DayEnabled ?? true,
       bonusReleaseEmailEnabled: settings?.bonusReleaseEmailEnabled ?? true,
@@ -259,6 +263,7 @@ export default function Indicacoes() {
           whatsappPhoneNumber: localSettings.whatsappPhoneNumber as string | undefined,
           whatsappConvertedMessage: localSettings.whatsappConvertedMessage as string | undefined,
           whatsappBonusPaidMessage: localSettings.whatsappBonusPaidMessage as string | undefined,
+          whatsappReversedMessage: localSettings.whatsappReversedMessage as string | undefined,
           expiryWarning7DaysEnabled: localSettings.expiryWarning7DaysEnabled,
           expiryWarning1DayEnabled: localSettings.expiryWarning1DayEnabled,
           bonusReleaseEmailEnabled: localSettings.bonusReleaseEmailEnabled,
@@ -561,7 +566,7 @@ export default function Indicacoes() {
     }
   }
 
-  async function testWhatsappTemplate(messageType: "converted" | "bonusPaid" | "share") {
+  async function testWhatsappTemplate(messageType: "converted" | "bonusPaid" | "reversed" | "share") {
     const phone = whatsappTestPhone.trim();
     if (!phone) {
       toast({ title: "Informe um número de WhatsApp para teste", variant: "destructive" });
@@ -718,6 +723,7 @@ export default function Indicacoes() {
       bonusPaid: bonusFilter === "unpaid" ? false : undefined,
       fraudFlag: fraudFilter ? true : undefined,
       expiringSoon: statusFilter === "expiringSoon" ? true : undefined,
+      bonusNotified: bonusNotifiedFilter === "all" ? undefined : bonusNotifiedFilter === "notified",
     };
   }
 
@@ -871,6 +877,19 @@ export default function Indicacoes() {
               {pendingBonusCount} bônus pendente{pendingBonusCount > 1 ? "s" : ""}
             </Badge>
           )}
+          <Select
+            value={bonusNotifiedFilter}
+            onValueChange={(v) => setBonusNotifiedFilter(v as "all" | "notified" | "not_notified")}
+          >
+            <SelectTrigger className="w-[200px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Notif. bônus: Todos</SelectItem>
+              <SelectItem value="notified">Notificados</SelectItem>
+              <SelectItem value="not_notified">Não notificados</SelectItem>
+            </SelectContent>
+          </Select>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline">
@@ -1839,10 +1858,33 @@ export default function Indicacoes() {
                 <div>
                   <p className="text-muted-foreground">Notif. liberação de bônus</p>
                   {selectedReferral.bonusReleaseNotifiedAt ? (
-                    <p className="text-xs text-green-700 flex items-center gap-1">
-                      <Check className="w-3 h-3" />
-                      {fmtDateTime(selectedReferral.bonusReleaseNotifiedAt)}
-                    </p>
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-green-700 flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        {fmtDateTime(selectedReferral.bonusReleaseNotifiedAt)}
+                      </p>
+                      {bonusReleaseEmailStatus?.bonusRelease && (() => {
+                        const s = bonusReleaseEmailStatus.bonusRelease.status;
+                        if (s === "failed") return (
+                          <p className="text-xs text-red-600 flex items-center gap-1 font-medium">
+                            <XCircle className="w-3 h-3" />
+                            Falha na entrega — contate por outro canal
+                          </p>
+                        );
+                        if (s === "sent") return (
+                          <p className="text-xs text-green-600 flex items-center gap-1">
+                            <Check className="w-3 h-3" />
+                            Entregue
+                          </p>
+                        );
+                        return (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Aguardando entrega
+                          </p>
+                        );
+                      })()}
+                    </div>
                   ) : (
                     <p className="text-xs text-muted-foreground">Não enviado</p>
                   )}
@@ -2125,6 +2167,7 @@ export default function Indicacoes() {
                       onSuccess: (updated) => {
                         setSelectedReferral((prev) => prev ? { ...prev, ...updated } : prev);
                         refetch();
+                        refetchBonusReleaseEmailStatus();
                         toast({ title: "Notificação de liberação de bônus reenviada com sucesso" });
                       },
                       onError: () => toast({ title: "Erro ao reenviar notificação de bônus", variant: "destructive" }),
@@ -2523,6 +2566,67 @@ export default function Indicacoes() {
                         className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground border rounded px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {whatsappTestState.bonusPaid?.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                        Testar envio
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Mensagem de estorno (reversão de bônus)</Label>
+                    <textarea
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-y"
+                      value={localSettings.whatsappReversedMessage as string ?? ""}
+                      onChange={(e) => setLocalSettings((s) => ({ ...s, whatsappReversedMessage: e.target.value }))}
+                      placeholder="Olá! A reserva de {{nome}} foi cancelada e o bônus de R$ {{valor}} foi estornado do seu saldo na {{agencia}}. Seu saldo atual é R$ {{saldo}}."
+                    />
+                    {(() => {
+                      const len = ((localSettings.whatsappReversedMessage as string) ?? "").length;
+                      if (len === 0) return null;
+                      const isWarn = len >= 800 && len < 1000;
+                      const isError = len >= 1000;
+                      return (
+                        <p className={`text-[10px] text-right ${isError ? "text-red-500" : isWarn ? "text-amber-500" : "text-muted-foreground"}`}>
+                          {len} caracteres{isError ? " · pode ser recusada pelo WhatsApp" : isWarn ? " · mensagem longa" : ""}
+                        </p>
+                      );
+                    })()}
+                    <p className="text-[11px] text-muted-foreground">
+                      Variáveis:{" "}
+                      <code className="bg-muted px-1 rounded">{"{nome}"}</code> nome do indicado,{" "}
+                      <code className="bg-muted px-1 rounded">{"{valor}"}</code> valor do bônus estornado,{" "}
+                      <code className="bg-muted px-1 rounded">{"{agencia}"}</code> nome da agência,{" "}
+                      <code className="bg-muted px-1 rounded">{"{saldo}"}</code> saldo atual.
+                    </p>
+                    {(localSettings.whatsappReversedMessage as string)?.trim() && (
+                      <p className="text-[11px] text-muted-foreground bg-muted/50 border rounded px-2 py-1.5">
+                        <span className="font-medium text-muted-foreground">Pré-visualização:</span>{" "}
+                        {(() => {
+                          const sub = (tpl: string, key: string, value: string) =>
+                            tpl.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value)
+                               .replace(new RegExp(`\\{${key}\\}`, "g"), value);
+                          const valorFormatted = (settings?.bonusValue ?? 10).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                          let msg = localSettings.whatsappReversedMessage as string;
+                          msg = sub(msg, "nome", "Maria");
+                          msg = sub(msg, "valor", valorFormatted);
+                          msg = sub(msg, "agencia", tenantName);
+                          msg = sub(msg, "saldo", "0,00");
+                          return msg;
+                        })()}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      {whatsappTestState.reversed?.success && (
+                        <p className="text-[11px] text-green-600 flex items-center gap-1 mr-auto"><Check className="w-3 h-3" /> Enviado com sucesso!</p>
+                      )}
+                      {whatsappTestState.reversed?.error && (
+                        <p className="text-[11px] text-red-500 flex items-center gap-1 mr-auto"><XCircle className="w-3 h-3" /> {whatsappTestState.reversed.error}</p>
+                      )}
+                      <button
+                        type="button"
+                        disabled={!!whatsappTestState.reversed?.loading}
+                        onClick={() => void testWhatsappTemplate("reversed")}
+                        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground border rounded px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {whatsappTestState.reversed?.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
                         Testar envio
                       </button>
                     </div>

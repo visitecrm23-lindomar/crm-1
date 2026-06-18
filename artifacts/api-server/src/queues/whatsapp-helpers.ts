@@ -148,7 +148,10 @@ export async function dispatchWhatsAppReferralReversed(opts: {
   const { referrerId, referredName, bonusAmount, newPendingBalance, tenantId } = opts;
 
   const [settings] = await db
-    .select({ whatsappEnabled: referralSettingsTable.whatsappEnabled })
+    .select({
+      whatsappEnabled: referralSettingsTable.whatsappEnabled,
+      whatsappReversedMessage: referralSettingsTable.whatsappReversedMessage,
+    })
     .from(referralSettingsTable)
     .where(eq(referralSettingsTable.tenantId, tenantId))
     .limit(1);
@@ -170,7 +173,8 @@ export async function dispatchWhatsAppReferralReversed(opts: {
     .where(eq(tenantsTable.id, tenantId))
     .limit(1);
 
-  const message = interpolateWhatsAppMessage(DEFAULT_REVERSED_MESSAGE, {
+  const template = settings.whatsappReversedMessage?.trim() || DEFAULT_REVERSED_MESSAGE;
+  const message = interpolateWhatsAppMessage(template, {
     nome: referredName,
     valor: bonusAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     agencia: tenant?.name ?? "",
