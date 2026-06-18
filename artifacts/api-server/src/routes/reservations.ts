@@ -877,8 +877,12 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
       }
 
       if (serverReferralCode && serverReferralReferrerId && appliedReferralAmount > 0) {
-        // Insert a new completed referral record for this CRM reservation conversion
-        // reservationId is stored so that cancellation can reverse exactly this record
+        // INVARIANT: Every completed referral created on the CRM path MUST carry a
+        // reservationId so that reservation cancellation can find and reverse exactly
+        // this record via reverseReferral(). The variable `id` is the reservation ID
+        // that was just generated for this transaction — it is never null here.
+        // Do NOT insert a completed referral without setting reservationId on this path.
+        if (!id) throw new Error("Assertion failed: reservationId must be set before inserting a completed referral on the CRM path");
         await tx.insert(referralsTable).values({
           id: generateId(),
           tenantId: me.tenantId,

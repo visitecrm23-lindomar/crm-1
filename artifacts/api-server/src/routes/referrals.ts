@@ -279,6 +279,12 @@ router.post("/referrals", async (req, res, next: NextFunction): Promise<void> =>
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + expirationDays);
 
+    // NOTE: This admin endpoint creates a referral invite with status='pending' (schema
+    // default). reservationId is intentionally absent at this stage — it is only set
+    // when the referral is converted (i.e. the referred person completes a purchase),
+    // which happens via the CRM reservation path (reservations.ts) or the store
+    // checkout path (referral-conversion.ts). Do NOT change this insert to set
+    // status='completed' without also supplying a reservationId.
     await db.insert(referralsTable).values({ id, tenantId: me.tenantId, expiresAt, ...parsed.data });
     const [referral] = await db.select().from(referralsTable).where(eq(referralsTable.id, id)).limit(1);
     res.status(201).json(referral);

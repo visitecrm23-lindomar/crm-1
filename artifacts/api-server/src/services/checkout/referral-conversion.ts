@@ -30,6 +30,12 @@ export interface RecordReferralArgs {
   discountType: string;
   referralCookieId?: string;
   conversionIp?: string | null;
+  /**
+   * ID of the first reservation created in the same checkout transaction.
+   * Must be provided when the order includes at least one trip-linked product
+   * so that referral reversal on reservation cancellation can identify this record.
+   * May be null for pure-product (non-trip) store orders where no reservation exists.
+   */
   reservationId?: string | null;
 }
 
@@ -86,6 +92,15 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
   const expiresAt = new Date(conversionAt);
   expiresAt.setDate(expiresAt.getDate() + expirationDays);
 
+  // INVARIANT: reservationId links this completed referral to the first trip reservation
+  // created in the same checkout transaction (firstReservationId from persist-order.ts).
+  // It MAY be null when the store order contains only non-trip products (i.e. no
+  // reservation was created). In that case there is nothing to reverse on cancellation,
+  // so null is intentional and correct.
+  // On the CRM path (reservations.ts) reservationId is always non-null — that path has
+  // a separate assertion to enforce this.
+  // Do NOT change this to always-null or always-undefined; always pass the value
+  // that persist-order.ts provides via args.firstReservationId.
   await tx.insert(referralsTable).values({
     id: referralId,
     tenantId,
