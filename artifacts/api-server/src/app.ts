@@ -75,8 +75,13 @@ if (!process.env["CLERK_SECRET_KEY"]) {
   logger.warn("⚠️  CLERK_SECRET_KEY is not set. Clerk authentication will not work. Re-run Clerk setup to provision keys.");
 }
 
-if (!process.env["CLERK_PROXY_URL"]) {
-  logger.warn("⚠️  CLERK_PROXY_URL is not set. Clerk proxy is disabled. Set it to enable auth proxy.");
+// In development, always derive CLERK_PROXY_URL from the current REPLIT_DEV_DOMAIN
+// so stale secrets or env vars pointing to old Replit URLs don't break auth.
+if (isDev && process.env["REPLIT_DEV_DOMAIN"]) {
+  process.env["CLERK_PROXY_URL"] = `https://${process.env["REPLIT_DEV_DOMAIN"]}/api/__clerk`;
+  logger.info(`[clerkProxy] Dev: CLERK_PROXY_URL set from REPLIT_DEV_DOMAIN → ${process.env["CLERK_PROXY_URL"]}`);
+} else if (!process.env["CLERK_PROXY_URL"]) {
+  logger.warn("⚠️  CLERK_PROXY_URL is not set. Clerk proxy disabled — auth will not work.");
 }
 
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware(isAllowedOrigin));

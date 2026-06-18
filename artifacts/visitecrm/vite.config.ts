@@ -26,9 +26,6 @@ if (!basePath) {
   );
 }
 
-if (!process.env.VITE_CLERK_PROXY_URL && process.env.REPLIT_DEV_DOMAIN && process.env.NODE_ENV !== "production") {
-  process.env.VITE_CLERK_PROXY_URL = `https://${process.env.REPLIT_DEV_DOMAIN}/api/__clerk`;
-}
 
 export default defineConfig({
   base: basePath,

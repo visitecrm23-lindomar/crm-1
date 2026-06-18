@@ -79,9 +79,7 @@ import ParceirosPortal from "@/pages/parceiros/index";
 import { ROLES, ADMIN_ROLES } from "@workspace/permissions";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-const clerkProxyUrl: string =
-  import.meta.env.VITE_CLERK_PROXY_URL ||
-  `${typeof window !== "undefined" ? window.location.origin : ""}/api/__clerk`;
+const clerkProxyUrl: string | undefined = import.meta.env.VITE_CLERK_PROXY_URL || undefined;
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function stripBase(path: string): string {
