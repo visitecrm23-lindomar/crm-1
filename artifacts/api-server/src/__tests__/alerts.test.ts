@@ -247,6 +247,83 @@ describe("POST /api/alerts/referral-reversal-skipped/:reservationId/resolve", ()
 });
 
 // ---------------------------------------------------------------------------
+// Tests: POST /api/alerts/email-retry-exhausted/:reservationId/resolve
+// ---------------------------------------------------------------------------
+
+describe("POST /api/alerts/email-retry-exhausted/:reservationId/resolve", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    updateSetCalls.length = 0;
+
+    requireAuthMock.mockResolvedValue(STAFF_USER as never);
+
+    mockLimit.mockResolvedValue([]);
+    mockWhere.mockImplementation(() => {
+      const arr = [] as unknown[] & { limit: typeof mockLimit };
+      arr.limit = mockLimit;
+      return arr;
+    });
+    mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit });
+    mockSelect.mockReturnValue({ from: mockFrom });
+    mockUpdateWhere.mockResolvedValue([]);
+    mockUpdateSet.mockImplementation((payload: Record<string, unknown>) => {
+      updateSetCalls.push(payload);
+      return { where: mockUpdateWhere };
+    });
+    mockUpdate.mockReturnValue({ set: mockUpdateSet });
+  });
+
+  it("stamps retriesResolvedAt on the tenant's exhausted email_logs rows (success path)", async () => {
+    const app = buildAlertsApp();
+    // Reservation lookup → found in tenant.
+    mockLimit.mockResolvedValueOnce([{ id: "res-001" }]);
+
+    const res = await request(app).post(
+      "/api/alerts/email-retry-exhausted/res-001/resolve",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+
+    // The email_logs UPDATE ran and stamped a resolution timestamp.
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(updateSetCalls).toHaveLength(1);
+    const payload = updateSetCalls[0];
+    expect(payload).toHaveProperty("retriesResolvedAt");
+    expect(payload["retriesResolvedAt"]).toBeInstanceOf(Date);
+  });
+
+  it("returns 404 when the reservation is not found in the caller's tenant", async () => {
+    const app = buildAlertsApp();
+    mockLimit.mockResolvedValueOnce([]); // reservation lookup → not found
+
+    const res = await request(app).post(
+      "/api/alerts/email-retry-exhausted/res-missing/resolve",
+    );
+
+    expect(res.status).toBe(404);
+    expect(res.body).toMatchObject({ code: "NOT_FOUND" });
+    // No resolution write when the reservation is absent.
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 for a non-staff (client) role", async () => {
+    const app = buildAlertsApp();
+    requireAuthMock.mockResolvedValue(CLIENT_USER as never);
+
+    const res = await request(app).post(
+      "/api/alerts/email-retry-exhausted/res-001/resolve",
+    );
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ code: "FORBIDDEN_ROLE" });
+    // Role check happens before any DB access.
+    expect(mockSelect).not.toHaveBeenCalled();
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Tests: GET /api/alerts gap-detection query excludes acknowledged referrals
 // ---------------------------------------------------------------------------
 
