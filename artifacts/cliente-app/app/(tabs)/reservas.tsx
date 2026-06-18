@@ -1,10 +1,12 @@
 import { Feather } from "@expo/vector-icons";
 import { useAuth } from "@clerk/clerk-expo";
 import { useQuery } from "@tanstack/react-query";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 import React from "react";
 import {
   ActivityIndicator,
-  Linking,
+  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -45,7 +47,7 @@ function StatusBadge({ status, colors }: { status: string; colors: ReturnType<ty
   );
 }
 
-async function shareVoucher(r: ClientPortalReservation, token: string | null) {
+async function shareReservationText(r: ClientPortalReservation) {
   const lines: string[] = [
     `🎟️ Comprovante de Reserva`,
     `Viagem: ${r.tripName}`,
@@ -63,14 +65,50 @@ async function shareVoucher(r: ClientPortalReservation, token: string | null) {
   }
 }
 
-async function openVoucherPdf(r: ClientPortalReservation, token: string | null) {
-  if (!token) return;
-  const url = `${API_BASE}/api/client/reservations/${r.id}/voucher`;
-  const supported = await Linking.canOpenURL(url);
-  if (supported) {
-    await Linking.openURL(url);
-  } else {
-    await shareVoucher(r, token);
+async function openVoucherPdf(
+  r: ClientPortalReservation,
+  token: string | null
+): Promise<void> {
+  if (!token) {
+    await shareReservationText(r);
+    return;
+  }
+
+  const cacheDir = FileSystem.cacheDirectory ?? "";
+  const safe = (r.voucherCode ?? r.id).replace(/[^a-zA-Z0-9_-]/g, "_");
+  const localUri = `${cacheDir}voucher_${safe}.pdf`;
+
+  try {
+    const result = await FileSystem.downloadAsync(
+      `${API_BASE}/api/client/reservations/${r.id}/voucher`,
+      localUri,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    if (result.status === 200) {
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(localUri, {
+          mimeType: "application/pdf",
+          dialogTitle: "Comprovante de Reserva",
+          UTI: "com.adobe.pdf",
+        });
+      } else {
+        await shareReservationText(r);
+      }
+    } else {
+      throw new Error(`Status ${result.status}`);
+    }
+  } catch (err) {
+    console.warn("[voucher] download failed:", err);
+    Alert.alert(
+      "Comprovante",
+      "Não foi possível abrir o PDF. Deseja compartilhar os dados da reserva?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Compartilhar", onPress: () => shareReservationText(r) },
+      ]
+    );
   }
 }
 
@@ -173,7 +211,7 @@ function ReservationCard({
             styles.voucherBtn,
             { backgroundColor: colors.accent, opacity: pressed ? 0.75 : 1 },
           ]}
-          onPress={() => shareVoucher(r, token)}
+          onPress={() => shareReservationText(r)}
         >
           <Feather name="share-2" size={13} color={colors.primary} />
           <Text style={[styles.voucherBtnText, { color: colors.primary }]}>

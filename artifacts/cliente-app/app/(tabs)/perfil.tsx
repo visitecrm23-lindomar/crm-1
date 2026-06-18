@@ -2,10 +2,8 @@ import { Feather } from "@expo/vector-icons";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
-import * as Notifications from "expo-notifications";
-import Constants from "expo-constants";
 import { router } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -21,41 +19,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
-import { apiFetch, API_BASE } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import type { ClientPortalProfile } from "@/lib/types";
-
-async function registerPushToken(token: string | null, authToken: string | null): Promise<void> {
-  if (!authToken) return;
-  try {
-    if (Platform.OS === "android") {
-      await Notifications.setNotificationChannelAsync("default", {
-        name: "default",
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-      });
-    }
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    if (existingStatus !== "granted") {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    if (finalStatus !== "granted") return;
-
-    const projectId =
-      Constants.expoConfig?.extra?.eas?.projectId ??
-      Constants.easConfig?.projectId;
-    const pushTokenData = await Notifications.getExpoPushTokenAsync(
-      projectId ? { projectId } : undefined
-    );
-    const pushToken = pushTokenData.data;
-    if (pushToken === token) return;
-
-    await apiFetch<void>(authToken, "POST", "/client/push-token", { token: pushToken });
-  } catch (err) {
-    console.warn("Push token registration failed:", err);
-  }
-}
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
@@ -88,8 +53,6 @@ export default function PerfilScreen() {
   const { getToken, signOut } = useAuth();
   const { user } = useUser();
   const queryClient = useQueryClient();
-  const pushTokenRegistered = useRef(false);
-
   const [editing, setEditing] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
@@ -104,14 +67,6 @@ export default function PerfilScreen() {
     },
   });
 
-  useEffect(() => {
-    if (data?.client && !pushTokenRegistered.current) {
-      pushTokenRegistered.current = true;
-      getToken().then((tok) => {
-        registerPushToken(null, tok);
-      });
-    }
-  }, [data?.client, getToken]);
 
   function startEdit() {
     setNameInput(data?.client?.name ?? data?.user?.name ?? "");

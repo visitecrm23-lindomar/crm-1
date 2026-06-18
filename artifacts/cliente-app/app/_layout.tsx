@@ -8,6 +8,8 @@ import {
 import { ClerkProvider, useAuth } from "@clerk/clerk-expo";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import Constants from "expo-constants";
+import * as Notifications from "expo-notifications";
 import { Stack, router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef, useState } from "react";
@@ -49,6 +51,36 @@ const tokenCache =
       }
     : undefined;
 
+async function registerPushToken(authToken: string): Promise<void> {
+  try {
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("default", {
+        name: "default",
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+      });
+    }
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    let finalStatus = existing;
+    if (existing !== "granted") {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== "granted") return;
+
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      Constants.easConfig?.projectId;
+    const { data: pushToken } = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    );
+
+    await apiFetch<void>(authToken, "POST", "/client/push-token", { token: pushToken });
+  } catch (err) {
+    console.warn("[push-token] registration failed:", err);
+  }
+}
+
 function AuthGate() {
   const { isLoaded, isSignedIn, getToken, signOut } = useAuth();
   const [roleStatus, setRoleStatus] = useState<"idle" | "loading" | "ok" | "denied">("idle");
@@ -69,10 +101,13 @@ function AuthGate() {
     setRoleStatus("loading");
 
     getToken()
-      .then((tok) => apiFetch<ClientPortalProfile>(tok, "GET", "/client/me"))
-      .then(() => {
+      .then(async (tok) => {
+        await apiFetch<ClientPortalProfile>(tok, "GET", "/client/me");
         setRoleStatus("ok");
         router.replace("/(tabs)/reservas");
+        if (tok) {
+          registerPushToken(tok);
+        }
       })
       .catch((err: unknown) => {
         if (err instanceof ApiError && err.status === 403) {
@@ -80,6 +115,9 @@ function AuthGate() {
         } else {
           setRoleStatus("ok");
           router.replace("/(tabs)/reservas");
+          getToken().then((tok) => {
+            if (tok) registerPushToken(tok);
+          });
         }
       });
   }, [isLoaded, isSignedIn, getToken]);
