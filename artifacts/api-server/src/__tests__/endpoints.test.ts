@@ -11,6 +11,8 @@ import { ROLES } from "@workspace/permissions";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 
 // ---------------------------------------------------------------------------
 // vi.hoisted: shared mock builders must exist before any vi.mock factory runs
@@ -148,6 +150,7 @@ vi.mock("../lib/passenger.js", () => ({
 // ---------------------------------------------------------------------------
 
 import { requireAuth } from "../lib/tenant.js";
+import { addSeatClient, removeSeatClient } from "../lib/seat-sse.js";
 import reservationsRouter from "../routes/reservations.js";
 import storePublicRouter from "../routes/store-public.js";
 import { errorHandler } from "../middlewares/errorHandler.js";
@@ -541,5 +544,102 @@ describe("GET /api/public/store/:slug/orders/:orderNumber — email validation a
 
     // Should get past email validation and attempt order fetch (not a 400)
     expect(res.status).not.toBe(400);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: GET /api/public/store/:slug/trips/:tripId/seats/stream (public SSE)
+// ---------------------------------------------------------------------------
+
+describe("GET /api/public/store/:slug/trips/:tripId/seats/stream — public seat-availability SSE", () => {
+  const addSeatClientMock = vi.mocked(addSeatClient);
+  const removeSeatClientMock = vi.mocked(removeSeatClient);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // mockResolvedValueOnce queues survive clearAllMocks, so reset explicitly
+    // (see memory: vitest-mock-queue) and rebuild the select() chain.
+    mockLimit.mockReset();
+    mockWhere.mockReturnValue({ limit: mockLimit });
+    mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit });
+    mockSelect.mockReturnValue({ from: mockFrom });
+  });
+
+  it("returns 404 (not an SSE upgrade) and registers no client when the store slug does not exist", async () => {
+    const app = buildStorePublicApp();
+    mockLimit.mockResolvedValue([]); // getActiveStore → not found
+
+    const res = await request(app)
+      .get("/api/public/store/nonexistent/trips/trip-001/seats/stream");
+
+    expect(res.status).toBe(404);
+    expect(res.headers["content-type"]).not.toContain("text/event-stream");
+    expect(addSeatClientMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 and registers no client when the store exists but the trip does not", async () => {
+    const app = buildStorePublicApp();
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE]) // getActiveStore → found
+      .mockResolvedValueOnce([]);          // trip lookup → not found
+
+    const res = await request(app)
+      .get("/api/public/store/minha-loja/trips/missing/seats/stream");
+
+    expect(res.status).toBe(404);
+    expect(addSeatClientMock).not.toHaveBeenCalled();
+  });
+
+  it("upgrades to SSE, registers the client via addSeatClient, and removes it on req close", async () => {
+    const app = buildStorePublicApp();
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])        // getActiveStore → found
+      .mockResolvedValueOnce([{ id: "trip-001" }]); // trip lookup → found
+
+    // SSE handler never ends the response, so supertest would hang. Drive a
+    // real http client against a listening server and close the socket to
+    // trigger the req "close" cleanup path.
+    const server = app.listen(0);
+    await new Promise<void>((resolve) => server.on("listening", () => resolve()));
+    const { port } = server.address() as AddressInfo;
+
+    await new Promise<void>((resolve) => {
+      const clientReq = http.request(
+        {
+          host: "127.0.0.1",
+          port,
+          path: "/api/public/store/minha-loja/trips/trip-001/seats/stream",
+          method: "GET",
+        },
+        (res) => {
+          expect(res.statusCode).toBe(200);
+          expect(res.headers["content-type"]).toContain("text/event-stream");
+          res.on("data", () => {});
+          // Headers flushed → client is registered; now close the connection.
+          setImmediate(() => clientReq.destroy());
+        },
+      );
+      clientReq.on("error", () => {}); // ignore ECONNRESET from destroy()
+      clientReq.end();
+
+      // Resolve as soon as the cleanup path runs (avoids fixed-timeout flake).
+      const poll = setInterval(() => {
+        if (removeSeatClientMock.mock.calls.length > 0) {
+          clearInterval(poll);
+          resolve();
+        }
+      }, 10);
+      setTimeout(() => {
+        clearInterval(poll);
+        resolve();
+      }, 2000);
+    });
+
+    expect(addSeatClientMock).toHaveBeenCalledTimes(1);
+    expect(addSeatClientMock).toHaveBeenCalledWith("trip-001", expect.anything());
+    expect(removeSeatClientMock).toHaveBeenCalledTimes(1);
+    expect(removeSeatClientMock).toHaveBeenCalledWith("trip-001", expect.anything());
+
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 });
