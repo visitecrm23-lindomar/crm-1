@@ -602,6 +602,57 @@ export default function MyReferralPage({ slug, store }: Props) {
         ))}
       </div>
 
+      {/* First-bonus progress — shown only until the user earns their first bonus */}
+      {!hasBonus && (
+        <Card className="border-dashed">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3 mb-3">
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                style={{ backgroundColor: `${primaryColor}22` }}
+              >
+                <Gift className="w-4 h-4" style={{ color: primaryColor }} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold leading-snug">
+                  {ref.completedReferrals === 0
+                    ? "Faça sua primeira indicação!"
+                    : "Bônus em processamento"}
+                </p>
+                <p className="text-xs text-muted-foreground leading-snug mt-0.5">
+                  {ref.completedReferrals === 0
+                    ? "1 indicação confirmada garante seu primeiro bônus!"
+                    : "Você já tem indicações confirmadas — o bônus será calculado em breve."}
+                </p>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>
+                  {ref.completedReferrals} confirmada{ref.completedReferrals !== 1 ? "s" : ""}
+                </span>
+                <span>Meta: 1 para 1º bônus</span>
+              </div>
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{
+                    width: ref.completedReferrals >= 1 ? "100%" : "0%",
+                    backgroundColor: primaryColor,
+                  }}
+                />
+              </div>
+              {ref.nextTierMin != null && ref.completedReferrals < ref.nextTierMin && (
+                <p className="text-xs text-muted-foreground/60 pt-0.5">
+                  💡 Chegue a {ref.nextTierMin} indicações e alcance o nível{" "}
+                  <strong>{ref.nextTierLabel}</strong> com multiplicador de bônus maior!
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Referral code card */}
       <Card>
         <CardHeader className="pb-3">

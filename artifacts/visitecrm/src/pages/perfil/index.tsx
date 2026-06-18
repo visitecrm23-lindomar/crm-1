@@ -1870,11 +1870,43 @@ function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
           </>
         ) : (
           <Card className="col-span-2">
-            <CardContent className="pt-4 pb-3 flex items-center justify-center gap-3 text-center">
-              <Gift className="w-5 h-5 shrink-0 text-muted-foreground/40" />
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Indique amigos e ganhe bônus!</p>
-                <p className="text-xs text-muted-foreground/60">Seus bônus aparecerão aqui assim que suas indicações forem confirmadas.</p>
+            <CardContent className="pt-4 pb-4 px-4">
+              <div className="flex items-start gap-3 mb-3">
+                <Gift className="w-5 h-5 shrink-0 text-muted-foreground/40 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground leading-snug">
+                    {referral.completedReferrals === 0
+                      ? "Indique amigos e ganhe bônus!"
+                      : "Bônus em processamento"}
+                  </p>
+                  <p className="text-xs text-muted-foreground/60 leading-snug">
+                    {referral.completedReferrals === 0
+                      ? "Falta apenas 1 indicação confirmada para seu primeiro bônus!"
+                      : "Você já tem indicações confirmadas — o bônus será exibido em breve."}
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>
+                    {referral.completedReferrals} confirmada{referral.completedReferrals !== 1 ? "s" : ""}
+                  </span>
+                  <span>Meta: 1 para 1º bônus</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: referral.completedReferrals >= 1 ? "100%" : "0%",
+                      backgroundColor: primaryColor,
+                    }}
+                  />
+                </div>
+                {referral.nextTierMin != null && referral.completedReferrals < referral.nextTierMin && (
+                  <p className="text-xs text-muted-foreground/50 pt-0.5">
+                    Chegue a {referral.nextTierMin} indicações e suba para o nível {referral.nextTierLabel} com bônus ainda maiores!
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
