@@ -5,7 +5,7 @@ import { eq, and, lt, lte, gte, gt, sql, isNotNull, isNull, notLike, inArray } f
 import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { AGENCY_STAFF_ROLES } from '../lib/tenant';
-import { PAYMENT_STATUS, PAYMENT_TYPE, DEAL_STATUS, TRIP_STATUS } from "@workspace/permissions";
+import { PAYMENT_STATUS, PAYMENT_TYPE, DEAL_STATUS, TRIP_STATUS, REFERRAL_STATUS, RESERVATION_STATUS, ROLES } from "@workspace/permissions";
 
 const router = Router();
 
@@ -18,6 +18,12 @@ interface Alert {
   actionHref: string;
   count: number;
   reservationIds?: string[];
+  referralSkips?: Array<{
+    reservationId: string;
+    reservationNumber: string | null;
+    referralCode: string;
+    referrerName: string | null;
+  }>;
 }
 
 router.get("/alerts", async (req, res, next: NextFunction): Promise<void> => {
@@ -25,7 +31,10 @@ router.get("/alerts", async (req, res, next: NextFunction): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    if (!(AGENCY_STAFF_ROLES as readonly string[]).includes(me.role)) {
+    const isAllowedRole =
+      (AGENCY_STAFF_ROLES as readonly string[]).includes(me.role) ||
+      me.role === ROLES.SUPER_ADMIN;
+    if (!isAllowedRole) {
       next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
@@ -50,6 +59,7 @@ router.get("/alerts", async (req, res, next: NextFunction): Promise<void> => {
       staleLeadsRows,
       birthdaysRows,
       exhaustedEmailLogs,
+      referralReversalGaps,
     ] = await Promise.all([
       // 1. Contas a receber vencendo hoje
       db.select({
@@ -151,6 +161,43 @@ router.get("/alerts", async (req, res, next: NextFunction): Promise<void> => {
         notLike(emailLogsTable.subject, "Nova reserva%"),
         notLike(emailLogsTable.subject, "Alerta: Falha no e-mail de confirmação%"),
       )),
+
+      // 9. Reversão de indicação ignorada por lacuna de dados.
+      // Mirrors the exact Reversal 3 warn-path in reservations.ts:
+      //   byReservation lookup (status=COMPLETED AND reservation_id = r.id) → no row found
+      //   byCode lookup     (status=COMPLETED AND code = discountReferralCode) → row found
+      // DISTINCT ON prevents fanout when multiple COMPLETED referral rows share the same code.
+      tenantId
+        ? db.execute<{
+            reservation_id: string;
+            reservation_number: string | null;
+            referral_code: string;
+            referrer_name: string | null;
+          }>(sql`
+            SELECT DISTINCT ON (r.id)
+              r.id               AS reservation_id,
+              r.reservation_number,
+              ref.code           AS referral_code,
+              ref.referrer_name
+            FROM reservations r
+            INNER JOIN referrals ref ON (
+              ref.tenant_id = ${tenantId}
+              AND ref.code = r.discount_referral_code
+              AND ref.status = ${REFERRAL_STATUS.COMPLETED}
+            )
+            WHERE r.tenant_id = ${tenantId}
+              AND r.status = ${RESERVATION_STATUS.CANCELLED}
+              AND r.discount_referral_code IS NOT NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM referrals r2
+                WHERE r2.tenant_id = ${tenantId}
+                  AND r2.reservation_id = r.id
+                  AND r2.status = ${REFERRAL_STATUS.COMPLETED}
+              )
+            ORDER BY r.id, ref.created_at ASC
+            LIMIT 20
+          `)
+        : Promise.resolve({ rows: [] as Array<{ reservation_id: string; reservation_number: string | null; referral_code: string; referrer_name: string | null }> }),
     ]);
 
     const alerts: Alert[] = [];
@@ -349,6 +396,37 @@ router.get("/alerts", async (req, res, next: NextFunction): Promise<void> => {
           actionHref: "/communication?tab=failed-emails",
           count: exhaustedCount,
           reservationIds: exhaustedReservationIds,
+        });
+      }
+    }
+
+    // 9. Reversões de indicação ignoradas por lacuna de dados
+    {
+      const gaps = referralReversalGaps.rows;
+      if (gaps.length > 0) {
+        const MAX_SHOWN = 3;
+        const shown = gaps.slice(0, MAX_SHOWN).map((g) => {
+          const resRef = g.reservation_number ?? g.reservation_id;
+          const referrer = g.referrer_name ?? "indicador desconhecido";
+          return `#${resRef} (cód. ${g.referral_code}, ${referrer})`;
+        });
+        const remainder = gaps.length - shown.length;
+        const description = shown.join("; ") + (remainder > 0 ? ` e mais ${remainder}` : "");
+
+        alerts.push({
+          id: "referral-reversal-skipped",
+          type: "warning",
+          category: "Indicações",
+          title: `${gaps.length} reversão(ões) de bônus de indicação não executada(s)`,
+          description,
+          actionHref: "/indicacoes",
+          count: gaps.length,
+          referralSkips: gaps.map((g) => ({
+            reservationId: g.reservation_id,
+            reservationNumber: g.reservation_number,
+            referralCode: g.referral_code,
+            referrerName: g.referrer_name,
+          })),
         });
       }
     }

@@ -8,6 +8,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useToast } from "@/hooks/use-toast";
 import { ROLES } from "@workspace/permissions";
 
+interface ReferralSkip {
+  reservationId: string;
+  reservationNumber: string | null;
+  referralCode: string;
+  referrerName: string | null;
+}
+
 interface Alert {
   id: string;
   type: "critical" | "warning" | "info";
@@ -17,6 +24,7 @@ interface Alert {
   actionHref: string;
   count: number;
   reservationIds?: string[];
+  referralSkips?: ReferralSkip[];
 }
 
 interface AlertsResponse {
@@ -59,7 +67,12 @@ export function AlertsBell({ userRole }: { userRole?: string }) {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const canSeeAlerts = userRole === ROLES.AGENCY_ADMIN || userRole === ROLES.SALES;
+  const canSeeAlerts =
+    userRole === ROLES.AGENCY_ADMIN ||
+    userRole === ROLES.SALES ||
+    userRole === ROLES.AGENCY_MANAGER ||
+    userRole === ROLES.SUPPORT ||
+    userRole === ROLES.SUPER_ADMIN;
 
   const { data } = useQuery<AlertsResponse>({
     queryKey: ["alerts"],
@@ -179,6 +192,46 @@ export function AlertsBell({ userRole }: { userRole?: string }) {
                         ))}
                       </div>
                     )}
+                  </div>
+                );
+              }
+
+              if (alert.id === "referral-reversal-skipped") {
+                const skips = alert.referralSkips ?? [];
+                return (
+                  <div key={alert.id} className="px-4 py-3">
+                    <div className="flex items-start gap-3">
+                      <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${cfg.className}`} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium leading-snug">{alert.title}</p>
+                          <span className="text-[10px] text-muted-foreground shrink-0">{alert.category}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-snug mt-0.5">
+                          Bônus de indicação pode ter ficado creditado indevidamente. Verifique e corrija manualmente.
+                        </p>
+                        {skips.length > 0 && (
+                          <div className="mt-1.5 flex flex-col gap-0.5">
+                            {skips.map((s) => {
+                              const resRef = s.reservationNumber ?? s.reservationId;
+                              const referrer = s.referrerName ?? "indicador desconhecido";
+                              return (
+                                <p key={s.reservationId} className="text-xs text-muted-foreground leading-snug">
+                                  <span className="font-mono">#{resRef}</span> — cód.{" "}
+                                  <span className="font-mono">{s.referralCode}</span> · {referrer}
+                                </p>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <button
+                          className="text-xs text-primary hover:underline mt-1.5"
+                          onClick={() => { setOpen(false); navigate(alert.actionHref); }}
+                        >
+                          Ver indicações →
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 );
               }
