@@ -112,7 +112,7 @@ args = "pnpm --filter @workspace/db check"
 isValidation = true
 
   [agent]
-  stack = "PNPM_WORKSPACE"
+stack = "BEST_EFFORT_FALLBACK"
 expertMode = true
 integrations = ["stripe:1.0.0"]
 
