@@ -15067,6 +15067,86 @@ export const useResendExpiryWarning = <
 };
 
 /**
+ * @summary Resend the bonus-release notification email for a referral
+ */
+export const getResendBonusReleaseUrl = (id: string) => {
+  return `/api/referrals/${id}/resend-bonus-release`;
+};
+
+export const resendBonusRelease = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Referral> => {
+  return customFetch<Referral>(getResendBonusReleaseUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+  });
+};
+
+export const getResendBonusReleaseMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendBonusRelease>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resendBonusRelease>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["resendBonusRelease"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resendBonusRelease>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+    return resendBonusRelease(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResendBonusReleaseMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resendBonusRelease>>
+>;
+export type ResendBonusReleaseMutationError = ErrorType<unknown>;
+
+export const useResendBonusRelease = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendBonusRelease>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resendBonusRelease>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getResendBonusReleaseMutationOptions(options));
+};
+
+/**
  * @summary List coupons
  */
 export const getListCouponsUrl = () => {

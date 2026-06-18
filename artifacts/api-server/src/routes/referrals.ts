@@ -554,6 +554,98 @@ router.post("/referrals/:id/resend-expiry-warning", async (req, res, next: NextF
   }
 });
 
+router.post("/referrals/:id/resend-bonus-release", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+
+    const [row] = await db.select({
+      ...getTableColumns(referralsTable),
+      referrerClientEmail: clientsTable.email,
+    }).from(referralsTable)
+      .leftJoin(clientsTable, and(
+        eq(referralsTable.referrerId, clientsTable.id),
+        eq(clientsTable.tenantId, me.tenantId),
+      ))
+      .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
+      .limit(1);
+
+    if (!row) { next(new NotFoundError("Indicação não encontrada", "NOT_FOUND")); return; }
+    if (row.status !== REFERRAL_STATUS.COMPLETED) {
+      next(new ValidationError("Reenvio disponível apenas para indicações com status 'concluído'", "UNPROCESSABLE"));
+      return;
+    }
+    if (!row.referrerId) {
+      next(new ValidationError("Indicação sem indicador registrado", "UNPROCESSABLE"));
+      return;
+    }
+    if (!row.referrerClientEmail) {
+      next(new ValidationError("O indicador não tem e-mail cadastrado — notificação não pode ser enviada", "UNPROCESSABLE"));
+      return;
+    }
+
+    const BONUS_LOCK_DAYS = 30;
+    const bonusReleasesAt = row.convertedAt
+      ? new Date(new Date(row.convertedAt).getTime() + BONUS_LOCK_DAYS * 24 * 60 * 60 * 1000)
+      : null;
+    const bonusBlocked = bonusReleasesAt !== null && new Date() < bonusReleasesAt;
+    if (bonusBlocked) {
+      next(new AppError(
+        `O bônus ainda está em período de liberação — disponível em ${bonusReleasesAt!.toLocaleDateString("pt-BR")}`,
+        422,
+        "BONUS_STILL_BLOCKED",
+      ));
+      return;
+    }
+
+    const now = new Date();
+    await db.update(referralsTable)
+      .set({ bonusReleaseNotifiedAt: null, updatedAt: now })
+      .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)));
+
+    const releaseDate = bonusReleasesAt?.toISOString() ?? now.toISOString();
+    await dispatchReferralBonusReleasedEmail(
+      row.referrerId,
+      me.tenantId,
+      parseFloat(String(row.bonusAmount)) || 0,
+      releaseDate,
+      row.id,
+    );
+
+    const sentNow = new Date();
+    await db.update(referralsTable)
+      .set({ bonusReleaseNotifiedAt: sentNow, updatedAt: sentNow })
+      .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)));
+
+    const [updated] = await db.select({
+      ...getTableColumns(referralsTable),
+      referrerClientName: clientsTable.name,
+      referrerClientEmail: clientsTable.email,
+      referrerClientWhatsapp: clientsTable.whatsapp,
+      referrerClientPhone: clientsTable.phone,
+    }).from(referralsTable)
+      .leftJoin(clientsTable, and(
+        eq(referralsTable.referrerId, clientsTable.id),
+        eq(clientsTable.tenantId, me.tenantId),
+      ))
+      .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
+      .limit(1);
+
+    if (!updated) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
+    const { referrerClientName, referrerClientEmail: rEmail, referrerClientWhatsapp, referrerClientPhone, ...rest } = updated;
+    res.json({
+      ...rest,
+      referrerName: referrerClientName ?? rest.referrerName,
+      referrerEmail: rEmail ?? rest.referrerEmail,
+      referrerPhone: referrerClientPhone ?? rest.referrerPhone,
+      referrerWhatsapp: referrerClientWhatsapp ?? null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/referrals/:id/expiry-email-status", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);

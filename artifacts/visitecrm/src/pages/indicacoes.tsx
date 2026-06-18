@@ -10,6 +10,7 @@ import {
   useGetReferralAnalytics,
   useGetReferralShare,
   useGetReferralExpiryEmailStatus,
+  useResendBonusRelease,
   getReferralExportUrl,
   getReferralAnalyticsExportUrl,
   useGetMe,
@@ -166,6 +167,7 @@ export default function Indicacoes() {
   const updateSettings = useUpdateReferralSettings();
   const payBonus = usePayReferralBonus();
   const resendWarning = useResendExpiryWarning();
+  const resendBonus = useResendBonusRelease();
   const testWhatsApp = useTestWhatsAppMessage();
   const { data: me } = useGetMe();
 
@@ -2111,6 +2113,29 @@ export default function Indicacoes() {
                 </>
               );
             })()}
+            {selectedReferral && selectedReferral.status === REFERRAL_STATUS.COMPLETED && !selectedReferral.bonusBlocked && (
+              <Button
+                variant="outline"
+                className="border-blue-400 text-blue-700 hover:bg-blue-50"
+                disabled={resendBonus.isPending}
+                onClick={() => {
+                  resendBonus.mutate(
+                    { id: selectedReferral.id },
+                    {
+                      onSuccess: (updated) => {
+                        setSelectedReferral((prev) => prev ? { ...prev, ...updated } : prev);
+                        refetch();
+                        toast({ title: "Notificação de liberação de bônus reenviada com sucesso" });
+                      },
+                      onError: () => toast({ title: "Erro ao reenviar notificação de bônus", variant: "destructive" }),
+                    },
+                  );
+                }}
+              >
+                <Mail className="w-4 h-4 mr-2" />
+                Reenviar notif. de bônus
+              </Button>
+            )}
             {selectedReferral && selectedReferral.status === REFERRAL_STATUS.COMPLETED && !selectedReferral.bonusPaid && (
               <Button
                 onClick={() => { setDetailModalOpen(false); openPayBonusDialog(selectedReferral); }}
