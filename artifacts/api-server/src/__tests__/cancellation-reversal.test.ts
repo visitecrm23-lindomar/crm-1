@@ -695,16 +695,19 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
 
     // tx select queue (in execution order):
     //   [0] Reversal 3 — primary lookup by reservationId + COMPLETED → [] (already REVERSED)
-    //   [1] Reversal 4 — payments lookup (empty)
-    //   [2] Reversal 4 — loyalty member lookup (no member found → skip clawback)
-    //   [3] re-fetch updated reservation
+    //   [1] Reversal 3 — secondary lookup by code + COMPLETED → [] (also empty, already REVERSED)
+    //   [2] Reversal 4 — payments lookup (empty)
+    //   [3] Reversal 4 — loyalty member lookup (no member found → skip clawback)
+    //   [4] re-fetch updated reservation
     //
     // The primary lookup returns empty because the referral status is already
-    // REVERSED (COMPLETED filter returns nothing). The `referralRecord` variable
-    // stays undefined, so the clients and referrals tables are never updated —
-    // confirming no double-decrement.
+    // REVERSED (COMPLETED filter returns nothing). The secondary lookup also
+    // returns empty for the same reason — no warn is emitted.  The `referralRecord`
+    // variable stays undefined, so the clients and referrals tables are never
+    // updated — confirming no double-decrement.
     const tx = buildTxMock([
       [], // primary lookup → referral already REVERSED, COMPLETED filter returns nothing
+      [], // secondary lookup → also empty (already REVERSED, idempotency — no warn)
       [], // no payments
       [], // Reversal 4 loyalty member lookup → not found, skip clawback
       [cancelled],
@@ -781,11 +784,13 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
 
     // tx select queue (in execution order):
     //   [0] Reversal 3 — primary lookup by reservationId → [] (no matching record)
-    //   [1] Reversal 4 — payments lookup (empty)
-    //   [2] Reversal 4 — loyalty member lookup → not found, skip clawback
-    //   [3] re-fetch updated reservation
+    //   [1] Reversal 3 — secondary lookup by code → found (COMPLETED referral with missing reservation_id)
+    //   [2] Reversal 4 — payments lookup (empty)
+    //   [3] Reversal 4 — loyalty member lookup → not found, skip clawback
+    //   [4] re-fetch updated reservation
     const tx = buildTxMock([
       [], // primary lookup → no record found (missing reservation_id scenario)
+      [{ id: "ref-gap-001", referrerId: "referrer-001" }], // secondary lookup → COMPLETED referral found but no reservationId match → warn
       [], // no payments
       [], // Reversal 4 loyalty member lookup → not found
       [cancelled],
@@ -805,17 +810,21 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
     // A warn must have been emitted
     expect(warnArgs.length).toBeGreaterThan(0);
 
-    // The warn must include reservationId and discountReferralCode
+    // The warn must include tenantId, referrerId, referralCode, and reservationId
     const referralWarn = warnArgs.find(
       (call) =>
         typeof call[0] === "object" &&
         call[0] !== null &&
         "reservationId" in (call[0] as Record<string, unknown>) &&
-        "discountReferralCode" in (call[0] as Record<string, unknown>),
+        "referralCode" in (call[0] as Record<string, unknown>) &&
+        "tenantId" in (call[0] as Record<string, unknown>) &&
+        "referrerId" in (call[0] as Record<string, unknown>),
     );
     expect(referralWarn).toBeDefined();
     expect((referralWarn![0] as Record<string, unknown>)["reservationId"]).toBe("res-001");
-    expect((referralWarn![0] as Record<string, unknown>)["discountReferralCode"]).toBe("REF-XYZ");
+    expect((referralWarn![0] as Record<string, unknown>)["referralCode"]).toBe("REF-XYZ");
+    expect((referralWarn![0] as Record<string, unknown>)["tenantId"]).toBe("tenant-001");
+    expect((referralWarn![0] as Record<string, unknown>)["referrerId"]).toBe("referrer-001");
 
     // No referral or client update must have run (reversal was skipped)
     const referralUpdate = capturedUpdates.find(

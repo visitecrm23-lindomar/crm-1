@@ -1205,10 +1205,36 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
           if (byReservation) {
             referralRecord = byReservation;
           } else {
-            req.log.warn(
-              { reservationId: req.params.id, discountReferralCode: existing.discountReferralCode },
-              "Referral reversal skipped: discountReferralCode is set but no COMPLETED referral record found by reservationId — possible missing reservation_id on referral row",
-            );
+            // Secondary lookup: find any COMPLETED referral for this code
+            // (ignoring reservationId) to distinguish a data integrity gap from
+            // an already-reversed idempotency case.  If a COMPLETED row exists
+            // for the code but has a different (or missing) reservation_id, that
+            // is a gap worth surfacing to operators; if nothing exists the
+            // referral was already reversed and silence is correct.
+            const [byCode] = await tx
+              .select({ id: referralsTable.id, referrerId: referralsTable.referrerId })
+              .from(referralsTable)
+              .where(and(
+                eq(referralsTable.tenantId, me.tenantId),
+                eq(referralsTable.code, existing.discountReferralCode),
+                eq(referralsTable.status, REFERRAL_STATUS.COMPLETED),
+              ))
+              .limit(1);
+
+            if (byCode) {
+              req.log.warn(
+                {
+                  tenantId: me.tenantId,
+                  referrerId: byCode.referrerId,
+                  referralCode: existing.discountReferralCode,
+                  reservationId: req.params.id,
+                },
+                "Referral reversal skipped: COMPLETED referral found by code but no record matches reservationId — possible missing reservation_id on referral row",
+              );
+            }
+            // else: no COMPLETED referral for this code — already reversed or
+            // never completed.  Silently skip; this is expected in re-cancel
+            // (idempotency) flows.
           }
 
           if (referralRecord) {
