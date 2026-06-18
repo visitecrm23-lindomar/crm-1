@@ -14,8 +14,8 @@
  * so that the constraint is actually evaluated by Postgres.
  */
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { db, pool, referralsTable } from "@workspace/db";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { db, referralsTable } from "@workspace/db";
 import { inArray } from "drizzle-orm";
 
 import { generateId } from "../lib/id";
@@ -73,10 +73,6 @@ afterEach(async () => {
   }
 });
 
-afterAll(async () => {
-  await pool.end();
-});
-
 describe("referrals_crm_requires_reservation_id CHECK constraint", () => {
   it("rejects source='crm' with a null reservation_id", async () => {
     let caught: PgError | undefined;
@@ -99,7 +95,7 @@ describe("referrals_crm_requires_reservation_id CHECK constraint", () => {
       db.insert(referralsTable).values(
         baseRow({ source: "store", reservationId: null }),
       ),
-    ).resolves.not.toThrow();
+    ).resolves.toBeDefined();
   });
 
   it("allows source='crm' with a valid reservation_id", async () => {
@@ -107,7 +103,7 @@ describe("referrals_crm_requires_reservation_id CHECK constraint", () => {
       db.insert(referralsTable).values(
         baseRow({ source: "crm", reservationId: `res-${generateId()}` }),
       ),
-    ).resolves.not.toThrow();
+    ).resolves.toBeDefined();
   });
 
   it("allows legacy rows with a null source and null reservation_id", async () => {
@@ -115,6 +111,6 @@ describe("referrals_crm_requires_reservation_id CHECK constraint", () => {
       db.insert(referralsTable).values(
         baseRow({ source: null, reservationId: null }),
       ),
-    ).resolves.not.toThrow();
+    ).resolves.toBeDefined();
   });
 });
