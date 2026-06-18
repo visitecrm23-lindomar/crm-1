@@ -2113,7 +2113,7 @@ export default function Indicacoes() {
                 </>
               );
             })()}
-            {selectedReferral && selectedReferral.status === REFERRAL_STATUS.COMPLETED && !selectedReferral.bonusBlocked && (
+            {selectedReferral && selectedReferral.status === REFERRAL_STATUS.COMPLETED && !selectedReferral.bonusBlocked && !selectedReferral.bonusReleaseNotifiedAt && (
               <Button
                 variant="outline"
                 className="border-blue-400 text-blue-700 hover:bg-blue-50"
