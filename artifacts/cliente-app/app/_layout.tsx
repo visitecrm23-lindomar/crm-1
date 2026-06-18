@@ -10,7 +10,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
-import { Stack, router } from "expo-router";
+import { Stack, router, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -81,8 +81,11 @@ async function registerPushToken(authToken: string): Promise<void> {
   }
 }
 
+const PUBLIC_ROUTES = new Set(["sign-in", "sign-up"]);
+
 function AuthGate() {
   const { isLoaded, isSignedIn, getToken, signOut } = useAuth();
+  const segments = useSegments();
   const [roleStatus, setRoleStatus] = useState<"idle" | "loading" | "ok" | "denied">("idle");
   const checkedRef = useRef(false);
 
@@ -92,7 +95,10 @@ function AuthGate() {
     if (!isSignedIn) {
       checkedRef.current = false;
       setRoleStatus("idle");
-      router.replace("/sign-in");
+      // Only redirect if we're not already on a public route (sign-in or sign-up)
+      if (!PUBLIC_ROUTES.has(segments[0] as string)) {
+        router.replace("/sign-in");
+      }
       return;
     }
 
@@ -118,7 +124,7 @@ function AuthGate() {
           router.replace("/sign-in");
         }
       });
-  }, [isLoaded, isSignedIn, getToken]);
+  }, [isLoaded, isSignedIn, getToken, segments]);
 
   if (!isLoaded || roleStatus === "loading") {
     return (
