@@ -38,18 +38,52 @@ skips** any migration whose `when` is not greater than the most recent
 already-applied migration. No error is raised — the migration just never runs.
 
 **Why:** Migration 0071 (`referrals_crm_requires_reservation_id` CHECK
-constraint) shipped with `when=1750291200000` (June 2025), earlier than 0070's
-`1782800000000`. The migrator treated it as already-applied and skipped it, so
-the constraint never existed in dev (and almost certainly not in production).
-`drizzle-kit migrate` reported "applied successfully" while doing nothing.
+constraint) shipped with a `when` earlier than 0070's, so the migrator treated
+it as already-applied and skipped it. `drizzle-kit migrate` reported "applied
+successfully" while doing nothing. (It was later applied by other means — as of
+the squash audit the constraint DOES exist in dev and prod.)
+
+**Watermark, not just previous entry:** existing DBs carry a migration watermark
+of ~`1.782e12` (the legacy chain's inflated timestamps), which is HIGHER than
+`Date.now()` in 2026. A new migration whose `when` is below that watermark is
+silently skipped on already-migrated DBs even though it clears the previous
+journal entry. The corrective migration `0001_referrals_crm_check` deliberately
+uses `when=1800000000000` (above the watermark) so it runs everywhere AND raises
+the journal running-max so the guard test now also forces future migrations
+above the watermark.
 
 **How to apply:**
-- When hand-writing a migration + journal entry, set its `when` strictly
-  greater than the previous entry's `when` (these project timestamps are in the
-  ~1.78e12 range, not real epoch-now). The MEMORY entry "manual-migration"
-  covers the write-SQL + update-journal flow.
-- Symptom of this bug: `migrate` says success but the column/constraint is
-  absent. Verify directly with psql against `information_schema` /
-  `pg_constraint`, and check `drizzle.__drizzle_migrations` ordering.
+- When hand-writing a migration + journal entry, set its `when` strictly greater
+  than BOTH the previous entry AND the ~1.78e12 DB watermark (not real epoch-now,
+  which is currently lower). The MEMORY entry "manual-migration" covers the
+  write-SQL + update-journal flow.
+
+# A squash regenerated from schema TS silently drops manual-migration-only objects
+
+A baseline generated from the Drizzle schema TS (via `drizzle-kit generate`)
+omits any DB object that lives ONLY in a hand-written migration and is not
+declared in `lib/db/src/schema/` — e.g. CHECK constraints not expressed via the
+`check()` helper. The squash baseline (`0000_squash_baseline`) therefore lacked
+`referrals_crm_requires_reservation_id`, so fresh DBs built from it missed a
+data-integrity guard that existing DBs already had. Restored via idempotent
+corrective migration `0001`.
+
+**Why it matters:** `drizzle-kit generate` reporting "No schema changes" only
+proves the baseline matches the schema TS — NOT that it matches a real database.
+To validate a squash, diff a baseline-built throwaway DB against an existing DB
+at the catalog level (`pg_tables`, `information_schema.columns`, `pg_indexes`,
+`pg_constraint` via `pg_get_constraintdef`), not just `generate`.
+
+**How to apply:** after any future squash/regeneration, run the catalog diff; any
+object present in the existing DB but missing from the fresh build needs an
+idempotent corrective migration (idx 1+, `when` above the watermark). The
+durable fix for the root cause is to declare such constraints in the schema TS
+so future regenerations keep them.
+
+# Detecting silently-skipped / dropped migrations
+
+- Symptom: `migrate` says success but the column/constraint is absent. Verify
+  directly with psql against `information_schema` / `pg_constraint`, and check
+  `drizzle.__drizzle_migrations` ordering.
 - `pnpm --filter @workspace/db check` (schema drift) does NOT catch this — it
   compares schema files to migration SQL, not what's actually applied.
