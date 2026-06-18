@@ -1086,7 +1086,7 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
     const isBeingConfirmed = parsed.data.status === RESERVATION_STATUS.CONFIRMED && existing.status === RESERVATION_STATUS.PENDING;
     const isBeingDemoted = parsed.data.status === RESERVATION_STATUS.PENDING && wasConfirmed;
 
-    let reversedReferralReferrerId: string | null = null;
+    let reversedReferralInfo: { referrerId: string; referredId: string | null; bonusAmount: string } | null = null;
 
     const reservation = await db.transaction(async (tx) => {
       if (isBeingCancelled && wasActive) {
@@ -1189,10 +1189,10 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
         // Fallback lookup: by referral code + referredId for older records created before
         // reservationId was saved (storefront orders prior to this fix).
         if (existing.discountReferralCode) {
-          let referralRecord: { id: string; referrerId: string; bonusAmount: string } | undefined;
+          let referralRecord: { id: string; referrerId: string; referredId: string | null; bonusAmount: string } | undefined;
 
           const [byReservation] = await tx
-            .select({ id: referralsTable.id, referrerId: referralsTable.referrerId, bonusAmount: referralsTable.bonusAmount })
+            .select({ id: referralsTable.id, referrerId: referralsTable.referrerId, referredId: referralsTable.referredId, bonusAmount: referralsTable.bonusAmount })
             .from(referralsTable)
             .where(and(
               eq(referralsTable.tenantId, me.tenantId),
@@ -1206,7 +1206,7 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
           } else if (existing.clientId) {
             // Fallback for older records that were created without reservationId
             const [byCodeAndReferred] = await tx
-              .select({ id: referralsTable.id, referrerId: referralsTable.referrerId, bonusAmount: referralsTable.bonusAmount })
+              .select({ id: referralsTable.id, referrerId: referralsTable.referrerId, referredId: referralsTable.referredId, bonusAmount: referralsTable.bonusAmount })
               .from(referralsTable)
               .where(and(
                 eq(referralsTable.tenantId, me.tenantId),
@@ -1245,8 +1245,8 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
             await tx.update(referralsTable)
               .set({ status: REFERRAL_STATUS.REVERSED, updatedAt: new Date() })
               .where(eq(referralsTable.id, referralRecord.id));
-            // Capture for post-transaction email notification (#28)
-            reversedReferralReferrerId = referralRecord.referrerId;
+            // Capture for post-transaction notification (#28)
+            reversedReferralInfo = { referrerId: referralRecord.referrerId, referredId: referralRecord.referredId, bonusAmount: referralRecord.bonusAmount };
           }
         }
 
@@ -1603,8 +1603,8 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
         .catch((err) => req.log.error({ err }, "Error enqueueing agency new-booking notification on reservation confirmation"));
     }
     // #28: When a referral is reversed on cancellation, notify the referrer
-    if (reversedReferralReferrerId) {
-      dispatchReferralReversedEmail(reversedReferralReferrerId, me.tenantId)
+    if (reversedReferralInfo) {
+      dispatchReferralReversedEmail({ ...reversedReferralInfo, tenantId: me.tenantId })
         .catch((err) => req.log.error({ err }, "Error enqueueing referral reversal notification email"));
     }
     broadcastSeatUpdate(existing.tripId, me.tenantId).catch(() => {});

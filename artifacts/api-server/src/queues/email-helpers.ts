@@ -9,6 +9,7 @@ import { logger } from "../lib/logger";
 import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps, ReferralWelcomeEmailProps, ReferralTierUpgradeEmailProps } from "@workspace/email";
 import { insertClientNotification } from "../lib/client-notifications";
 import { areWorkersEnabled } from "../lib/redis";
+import { dispatchWhatsAppReferralReversed } from "./whatsapp-helpers.js";
 
 interface EnqueueEmailOpts {
   tenantId: string;
@@ -1252,12 +1253,16 @@ export async function resendEmailLog(
 
 // ── Referral: indicação revertida por cancelamento (#28) ─────────────────────
 
-export async function dispatchReferralReversedEmail(
-  referrerId: string,
-  tenantId: string,
-): Promise<void> {
+export async function dispatchReferralReversedEmail(opts: {
+  referrerId: string;
+  referredId: string | null;
+  bonusAmount: string;
+  tenantId: string;
+}): Promise<void> {
+  const { referrerId, referredId, bonusAmount, tenantId } = opts;
+
   const [referrer] = await db
-    .select({ name: clientsTable.name, email: clientsTable.email })
+    .select({ name: clientsTable.name, email: clientsTable.email, referralEarnings: clientsTable.referralEarnings })
     .from(clientsTable)
     .where(and(eq(clientsTable.id, referrerId), eq(clientsTable.tenantId, tenantId)))
     .limit(1);
@@ -1273,8 +1278,20 @@ export async function dispatchReferralReversedEmail(
     .where(eq(tenantsTable.id, tenantId))
     .limit(1);
 
+  let referredName: string | null = null;
+  if (referredId) {
+    const [referred] = await db
+      .select({ name: clientsTable.name })
+      .from(clientsTable)
+      .where(and(eq(clientsTable.id, referredId), eq(clientsTable.tenantId, tenantId)))
+      .limit(1);
+    referredName = referred?.name ?? null;
+  }
+
   const agencyName = tenant?.name ?? "Agência";
   const referrerName = referrer.name ?? referrer.email;
+  const bonusAmountNum = parseFloat(bonusAmount) || 0;
+  const newPendingBalance = parseFloat(String(referrer.referralEarnings ?? "0")) || 0;
 
   const emailLogId = generateId();
   const subject = `Atualização sobre sua indicação — ${agencyName}`;
@@ -1283,6 +1300,10 @@ export async function dispatchReferralReversedEmail(
     referrerName,
     referrerEmail: referrer.email,
     agencyName,
+    agencyLogo: tenant?.logoUrl ?? null,
+    referredName,
+    bonusAmount: bonusAmountNum,
+    newPendingBalance,
   });
 
   await db.insert(emailLogsTable).values({
@@ -1297,6 +1318,16 @@ export async function dispatchReferralReversedEmail(
   });
 
   logger.info({ emailLogId, referrerId, tenantId, success: sendResult.success }, "[email-queue] Referral reversed email sent");
+
+  // WhatsApp (best-effort, non-blocking)
+  const { dispatchWhatsAppReferralReversed } = await import("./whatsapp-helpers.js");
+  dispatchWhatsAppReferralReversed({
+    referrerId,
+    referredName: referredName ?? "",
+    bonusAmount: bonusAmountNum,
+    newPendingBalance,
+    tenantId,
+  }).catch((err) => logger.warn({ err, referrerId, tenantId }, "[email-queue] WhatsApp referral reversed dispatch failed"));
 }
 
 // ── Referral: upgrade de tier (#137) ─────────────────────────────────────────

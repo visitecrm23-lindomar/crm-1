@@ -12,6 +12,9 @@ const DEFAULT_CONVERTED_MESSAGE =
 const DEFAULT_BONUS_PAID_MESSAGE =
   "Seu bônus de R$ {{valor}} foi pago! Obrigado por indicar clientes para a {{agencia}}.";
 
+const DEFAULT_REVERSED_MESSAGE =
+  "Olá! A reserva de {{nome}} foi cancelada e o bônus de R$ {{valor}} foi estornado do seu saldo na {{agencia}}. Seu saldo atual é R$ {{saldo}}.";
+
 async function enqueueOrSend(phone: string, message: string, tenantId: string): Promise<void> {
   const queue = getWhatsAppQueue();
   if (queue) {
@@ -130,6 +133,48 @@ export async function dispatchWhatsAppReferralBonusPaid(opts: {
     bonus: bonusAmount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
     valor: bonusAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     agencia: tenantName,
+  });
+
+  await enqueueOrSend(phone, message, tenantId);
+}
+
+export async function dispatchWhatsAppReferralReversed(opts: {
+  referrerId: string;
+  referredName: string;
+  bonusAmount: number;
+  newPendingBalance: number;
+  tenantId: string;
+}): Promise<void> {
+  const { referrerId, referredName, bonusAmount, newPendingBalance, tenantId } = opts;
+
+  const [settings] = await db
+    .select({ whatsappEnabled: referralSettingsTable.whatsappEnabled })
+    .from(referralSettingsTable)
+    .where(eq(referralSettingsTable.tenantId, tenantId))
+    .limit(1);
+
+  if (!settings?.whatsappEnabled) return;
+
+  const [referrer] = await db
+    .select({ whatsapp: clientsTable.whatsapp, phone: clientsTable.phone })
+    .from(clientsTable)
+    .where(eq(clientsTable.id, referrerId))
+    .limit(1);
+
+  const phone = referrer?.whatsapp || referrer?.phone;
+  if (!phone) return;
+
+  const [tenant] = await db
+    .select({ name: tenantsTable.name })
+    .from(tenantsTable)
+    .where(eq(tenantsTable.id, tenantId))
+    .limit(1);
+
+  const message = interpolateWhatsAppMessage(DEFAULT_REVERSED_MESSAGE, {
+    nome: referredName,
+    valor: bonusAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    agencia: tenant?.name ?? "",
+    saldo: newPendingBalance.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
   });
 
   await enqueueOrSend(phone, message, tenantId);
