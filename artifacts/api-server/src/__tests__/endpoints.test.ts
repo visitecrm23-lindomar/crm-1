@@ -51,6 +51,7 @@ vi.mock("@workspace/db", () => ({
   storeReviewsTable: {},
   storeCategoriesTable: {},
   reservationsTable: {},
+  reservationInstallmentsTable: {},
   passengersTable: {},
   tripsTable: {},
   clientsTable: {},
@@ -659,5 +660,116 @@ describe("GET /api/public/store/:slug/trips/:tripId/seats/stream — public seat
     expect(removeSeatClientMock).toHaveBeenCalledWith("trip-001", expect.anything());
 
     await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: reservation/passenger mutation authorization (RBAC)
+//
+// The `suporte` (SUPPORT) role has RESERVATIONS: [VIEW] only in the permissions
+// matrix, so every reservation/passenger mutation handler must reject it. These
+// gates short-circuit (via hasPermission) before any DB access, so the 403 path
+// needs no DB mocking. Positive controls confirm EDIT/CREATE-capable roles
+// (e.g. SALES) pass the gate and proceed to the handler's normal logic.
+// ---------------------------------------------------------------------------
+
+describe("Reservation mutation authorization — support role is view-only", () => {
+  const requireAuthMock = vi.mocked(requireAuth);
+
+  function authAs(role: string) {
+    requireAuthMock.mockResolvedValue({ ...FAKE_USER, role } as never);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLimit.mockReset();
+    mockLimit.mockResolvedValue([]);
+    mockWhere.mockReturnValue({ limit: mockLimit });
+    mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit });
+    mockSelect.mockReturnValue({ from: mockFrom });
+  });
+
+  it("blocks SUPPORT from creating a reservation (POST /reservations)", async () => {
+    authAs(ROLES.SUPPORT);
+    const res = await request(buildReservationsApp())
+      .post("/api/reservations")
+      .send({ tripId: "trip-001", clientId: FAKE_CLIENT.id, seats: ["1A"], totalValue: 500 });
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ code: "FORBIDDEN_ROLE" });
+  });
+
+  it("blocks SUPPORT from updating a reservation (PATCH /reservations/:id)", async () => {
+    authAs(ROLES.SUPPORT);
+    const res = await request(buildReservationsApp())
+      .patch("/api/reservations/res-001")
+      .send({ status: "confirmed" });
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ code: "FORBIDDEN_ROLE" });
+  });
+
+  it("blocks SUPPORT from updating an installment (PATCH /reservations/installments/:id)", async () => {
+    authAs(ROLES.SUPPORT);
+    const res = await request(buildReservationsApp())
+      .patch("/api/reservations/installments/inst-001")
+      .send({ paidAmount: 100 });
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ code: "FORBIDDEN_ROLE" });
+  });
+
+  it("blocks SUPPORT from adding a passenger (POST /reservations/:id/passengers)", async () => {
+    authAs(ROLES.SUPPORT);
+    const res = await request(buildReservationsApp())
+      .post("/api/reservations/res-001/passengers")
+      .send({ name: "Fulano", ageCategory: "adult" });
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ code: "FORBIDDEN_ROLE" });
+  });
+
+  it("blocks SUPPORT from editing a passenger (PATCH /reservations/:id/passengers/:id)", async () => {
+    authAs(ROLES.SUPPORT);
+    const res = await request(buildReservationsApp())
+      .patch("/api/reservations/res-001/passengers/pax-001")
+      .send({ name: "Beltrano" });
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ code: "FORBIDDEN_ROLE" });
+  });
+
+  it("blocks SUPPORT from removing a passenger (DELETE /reservations/:id/passengers/:id)", async () => {
+    authAs(ROLES.SUPPORT);
+    const res = await request(buildReservationsApp())
+      .delete("/api/reservations/res-001/passengers/pax-001");
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ code: "FORBIDDEN_ROLE" });
+  });
+
+  it("blocks CLIENT from updating a reservation (PATCH /reservations/:id)", async () => {
+    // CLIENT also has RESERVATIONS: [VIEW] only — the matrix gate closes the
+    // older 'cliente'-specific bypass that predated this fix.
+    authAs(ROLES.CLIENT);
+    const res = await request(buildReservationsApp())
+      .patch("/api/reservations/res-001")
+      .send({ status: "confirmed" });
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ code: "FORBIDDEN_ROLE" });
+  });
+
+  it("allows SALES past the CREATE gate (POST /reservations) — reaches client lookup, not 403", async () => {
+    authAs(ROLES.SALES);
+    mockLimit.mockResolvedValueOnce([]); // client not found → 400 (proves the gate was passed)
+    const res = await request(buildReservationsApp())
+      .post("/api/reservations")
+      .send({ tripId: "trip-001", clientId: "missing", seats: ["1A"], totalValue: 500 });
+    expect(res.status).toBe(400);
+    expect(res.status).not.toBe(403);
+  });
+
+  it("allows SALES past the EDIT gate (PATCH installments) — reaches installment lookup, not 403", async () => {
+    authAs(ROLES.SALES);
+    mockLimit.mockResolvedValueOnce([]); // installment not found → 404 (proves the gate was passed)
+    const res = await request(buildReservationsApp())
+      .patch("/api/reservations/installments/inst-001")
+      .send({ paidAmount: 100 });
+    expect(res.status).toBe(404);
+    expect(res.status).not.toBe(403);
   });
 });
