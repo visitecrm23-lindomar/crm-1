@@ -74,20 +74,22 @@ const {
 // Module mocks (resolved relative to THIS test file: src/__tests__/)
 // ---------------------------------------------------------------------------
 
-vi.mock("@workspace/db", () => ({
-  db: {
-    select: mockSelect,
-    update: mockUpdate,
-    execute: mockExecute,
-  },
-  paymentsTable: {},
-  tripsTable: {},
-  dealsTable: {},
-  clientsTable: {},
-  emailLogsTable: {},
-  reservationsTable: {},
-  referralsTable: {},
-}));
+// Partial mock: keep the REAL Drizzle table definitions (so query-builder SQL
+// can be rendered with real column names via PgDialect — see the
+// email-retry-exhausted detection block) while overriding only the live `db`
+// handle with the mock chain. importOriginal pulls in the real schema; the real
+// `db`/`pool` it also exports are never queried because we replace `db` here.
+vi.mock("@workspace/db", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@workspace/db")>();
+  return {
+    ...actual,
+    db: {
+      select: mockSelect,
+      update: mockUpdate,
+      execute: mockExecute,
+    },
+  };
+});
 
 vi.mock("../lib/tenant.js", () => ({
   requireAuth: vi.fn(),
@@ -404,6 +406,161 @@ describe("GET /api/alerts — referral-reversal gap detection", () => {
 
     const alert = (res.body.alerts as Array<{ id: string }>).find(
       (a) => a.id === "referral-reversal-skipped",
+    );
+    expect(alert).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: GET /api/alerts — email-retry-exhausted detection
+//
+// This closes the loop the dismissal endpoint (POST .../email-retry-exhausted/
+// :reservationId/resolve) only half-covers. That endpoint stamps
+// retriesResolvedAt; the aggregator's query #8 must then EXCLUDE those rows via
+// isNull(retriesResolvedAt), or a dismissed alert would keep re-appearing in the
+// bell. A second, route-level resolution path treats a successful manual
+// (non-auto) resend after the exhaustion timestamp as resolved too.
+//
+// @workspace/db is partially mocked (real Drizzle tables, mocked `db`), so
+// query #8's WHERE renders with real column names via PgDialect — mirroring the
+// SQL-assertion technique used by the referral-reversal gap tests above. The
+// emailLogs queries are discriminated by their SELECT projection keys (query #8
+// alone projects `retriesExhaustedAt`; the manual-resend lookup projects exactly
+// `reservationId` + `createdAt`), so the tests never depend on Promise.all order.
+// ---------------------------------------------------------------------------
+
+describe("GET /api/alerts — email-retry-exhausted detection", () => {
+  const dialect = new PgDialect();
+
+  let exhaustedLogsRows: Array<Record<string, unknown>>;
+  let manualResendRows: Array<Record<string, unknown>>;
+  let selectKind: "exhausted-logs" | "manual-resends" | "other";
+  let capturedExhaustedWhere: unknown;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    exhaustedLogsRows = [];
+    manualResendRows = [];
+    selectKind = "other";
+    capturedExhaustedWhere = undefined;
+
+    requireAuthMock.mockResolvedValue(STAFF_USER as never);
+
+    mockLimit.mockResolvedValue([]);
+
+    mockSelect.mockImplementation((cols?: Record<string, unknown>) => {
+      const keys = cols && typeof cols === "object" ? Object.keys(cols) : [];
+      if (keys.includes("retriesExhaustedAt")) {
+        selectKind = "exhausted-logs";
+      } else if (
+        keys.length === 2 &&
+        keys.includes("reservationId") &&
+        keys.includes("createdAt")
+      ) {
+        selectKind = "manual-resends";
+      } else {
+        selectKind = "other";
+      }
+      return { from: mockFrom };
+    });
+
+    mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit });
+
+    mockWhere.mockImplementation((condition?: unknown) => {
+      const kind = selectKind;
+      selectKind = "other";
+      let rows: Array<Record<string, unknown>> = [];
+      if (kind === "exhausted-logs") {
+        capturedExhaustedWhere = condition;
+        rows = exhaustedLogsRows;
+      } else if (kind === "manual-resends") {
+        rows = manualResendRows;
+      }
+      const arr = [...rows] as unknown as unknown[] & { limit: typeof mockLimit };
+      arr.limit = mockLimit;
+      return arr;
+    });
+
+    mockExecute.mockResolvedValue({ rows: [] });
+  });
+
+  it("filters query #8 on retries_resolved_at IS NULL so dismissed alerts stay dismissed", async () => {
+    const app = buildAlertsApp();
+
+    const res = await request(app).get("/api/alerts");
+    expect(res.status).toBe(200);
+
+    // The aggregator must have built the exhausted-emails query.
+    expect(capturedExhaustedWhere).toBeDefined();
+
+    const sqlText = dialect.sqlToQuery(capturedExhaustedWhere as never).sql;
+
+    // Dismissals stamp retries_resolved_at; the query must scope those out so a
+    // resolved row can never reach the alert builder.
+    expect(sqlText).toMatch(/retries_resolved_at"?\s+is\s+null/i);
+    // And it only considers rows whose auto-retries were actually exhausted.
+    expect(sqlText).toMatch(/retries_exhausted_at"?\s+is\s+not\s+null/i);
+  });
+
+  it("surfaces the email-retry-exhausted alert for an unresolved exhausted row with no manual resend", async () => {
+    const app = buildAlertsApp();
+
+    const exhaustedAt = new Date("2025-06-01T10:00:00.000Z");
+    exhaustedLogsRows = [
+      {
+        reservationId: "res-001",
+        retriesExhaustedAt: exhaustedAt,
+        status: "failed",
+        isAutoRetry: true,
+        createdAt: new Date("2025-06-01T09:00:00.000Z"),
+      },
+    ];
+    manualResendRows = []; // no successful manual resend followed the exhaustion
+
+    const res = await request(app).get("/api/alerts");
+    expect(res.status).toBe(200);
+
+    const alert = (
+      res.body.alerts as Array<{
+        id: string;
+        count: number;
+        reservationIds?: string[];
+      }>
+    ).find((a) => a.id === "email-retry-exhausted");
+
+    expect(alert).toBeDefined();
+    expect(alert?.count).toBe(1);
+    expect(alert?.reservationIds).toEqual(["res-001"]);
+  });
+
+  it("omits the alert when a successful manual resend followed the exhaustion", async () => {
+    const app = buildAlertsApp();
+
+    const exhaustedAt = new Date("2025-06-01T10:00:00.000Z");
+    exhaustedLogsRows = [
+      {
+        reservationId: "res-001",
+        retriesExhaustedAt: exhaustedAt,
+        status: "failed",
+        isAutoRetry: true,
+        createdAt: new Date("2025-06-01T09:00:00.000Z"),
+      },
+    ];
+    // A manual (non-auto) resend that succeeded AFTER the exhaustion timestamp
+    // marks the reservation resolved, so the alert must not surface.
+    manualResendRows = [
+      {
+        reservationId: "res-001",
+        createdAt: new Date("2025-06-01T11:00:00.000Z"),
+      },
+    ];
+
+    const res = await request(app).get("/api/alerts");
+    expect(res.status).toBe(200);
+
+    const alert = (res.body.alerts as Array<{ id: string }>).find(
+      (a) => a.id === "email-retry-exhausted",
     );
     expect(alert).toBeUndefined();
   });
