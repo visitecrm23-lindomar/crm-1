@@ -10,14 +10,22 @@ import { logger } from "./logger";
 export async function backfillEncryptedCredentials(): Promise<void> {
   if (!process.env["CREDENTIAL_ENCRYPTION_KEY"]) return;
 
-  const rows = await db
-    .select({
-      id: storesTable.id,
-      stripeSecretKey: storesTable.stripeSecretKey,
-      mpAccessToken: storesTable.mpAccessToken,
-      pixKey: storesTable.pixKey,
-    })
-    .from(storesTable);
+  let rows: { id: string; stripeSecretKey: string | null; mpAccessToken: string | null; pixKey: string | null }[];
+  try {
+    rows = await db
+      .select({
+        id: storesTable.id,
+        stripeSecretKey: storesTable.stripeSecretKey,
+        mpAccessToken: storesTable.mpAccessToken,
+        pixKey: storesTable.pixKey,
+      })
+      .from(storesTable);
+  } catch (err) {
+    // On a brand-new database the stores table may not exist yet (migrations
+    // still running or schema push not yet complete). Skip gracefully.
+    logger.warn({ err }, "[credential-backfill] Skipping — stores table not accessible yet");
+    return;
+  }
 
   let updated = 0;
   for (const r of rows) {
