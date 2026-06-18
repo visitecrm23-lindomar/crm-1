@@ -434,7 +434,9 @@ describe("GET /api/alerts — email-retry-exhausted detection", () => {
 
   let exhaustedLogsRows: Array<Record<string, unknown>>;
   let manualResendRows: Array<Record<string, unknown>>;
-  let selectKind: "exhausted-logs" | "manual-resends" | "other";
+  let detailsRows: Array<Record<string, unknown>>;
+  let detailsThrows: boolean;
+  let selectKind: "exhausted-logs" | "manual-resends" | "details" | "other";
   let capturedExhaustedWhere: unknown;
 
   beforeEach(() => {
@@ -442,6 +444,8 @@ describe("GET /api/alerts — email-retry-exhausted detection", () => {
 
     exhaustedLogsRows = [];
     manualResendRows = [];
+    detailsRows = [];
+    detailsThrows = false;
     selectKind = "other";
     capturedExhaustedWhere = undefined;
 
@@ -459,13 +463,25 @@ describe("GET /api/alerts — email-retry-exhausted detection", () => {
         keys.includes("createdAt")
       ) {
         selectKind = "manual-resends";
+      } else if (
+        keys.includes("clientEmail") &&
+        keys.includes("reservationNumber") &&
+        keys.includes("voucherCode")
+      ) {
+        selectKind = "details";
       } else {
         selectKind = "other";
       }
       return { from: mockFrom };
     });
 
-    mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit });
+    // The details query chains `.from().innerJoin().where()`; expose innerJoin
+    // (returning the same chain) so the reservations⋈clients lookup resolves.
+    mockFrom.mockReturnValue({
+      where: mockWhere,
+      limit: mockLimit,
+      innerJoin: () => ({ where: mockWhere }),
+    });
 
     mockWhere.mockImplementation((condition?: unknown) => {
       const kind = selectKind;
@@ -476,6 +492,11 @@ describe("GET /api/alerts — email-retry-exhausted detection", () => {
         rows = exhaustedLogsRows;
       } else if (kind === "manual-resends") {
         rows = manualResendRows;
+      } else if (kind === "details") {
+        if (detailsThrows) {
+          throw new Error("details lookup failed");
+        }
+        rows = detailsRows;
       }
       const arr = [...rows] as unknown as unknown[] & { limit: typeof mockLimit };
       arr.limit = mockLimit;
@@ -563,5 +584,196 @@ describe("GET /api/alerts — email-retry-exhausted detection", () => {
       (a) => a.id === "email-retry-exhausted",
     );
     expect(alert).toBeUndefined();
+  });
+
+  it("builds a description listing the reservation reference and client email", async () => {
+    const app = buildAlertsApp();
+
+    const exhaustedAt = new Date("2025-06-01T10:00:00.000Z");
+    exhaustedLogsRows = [
+      {
+        reservationId: "res-001",
+        retriesExhaustedAt: exhaustedAt,
+        status: "failed",
+        isAutoRetry: true,
+        createdAt: new Date("2025-06-01T09:00:00.000Z"),
+      },
+    ];
+    manualResendRows = [];
+    // The reservations⋈clients lookup resolves with the reference + email shown
+    // to staff. reservationNumber takes precedence over voucherCode/id.
+    detailsRows = [
+      {
+        reservationId: "res-001",
+        reservationNumber: "AG-EX-202506-0001",
+        voucherCode: "VC-001",
+        clientEmail: "cliente@example.com",
+      },
+    ];
+
+    const res = await request(app).get("/api/alerts");
+    expect(res.status).toBe(200);
+
+    const alert = (
+      res.body.alerts as Array<{ id: string; description: string }>
+    ).find((a) => a.id === "email-retry-exhausted");
+
+    expect(alert).toBeDefined();
+    expect(alert?.description).toContain("#AG-EX-202506-0001");
+    expect(alert?.description).toContain("cliente@example.com");
+    // Generic fallback text must NOT be used when details resolve.
+    expect(alert?.description).not.toContain("Intervenção manual necessária");
+  });
+
+  it("falls back to voucherCode then id when reservationNumber is absent", async () => {
+    const app = buildAlertsApp();
+
+    const exhaustedAt = new Date("2025-06-01T10:00:00.000Z");
+    exhaustedLogsRows = [
+      {
+        reservationId: "res-002",
+        retriesExhaustedAt: exhaustedAt,
+        status: "failed",
+        isAutoRetry: true,
+        createdAt: new Date("2025-06-01T09:00:00.000Z"),
+      },
+      {
+        reservationId: "res-003",
+        retriesExhaustedAt: exhaustedAt,
+        status: "failed",
+        isAutoRetry: true,
+        createdAt: new Date("2025-06-01T09:00:00.000Z"),
+      },
+    ];
+    manualResendRows = [];
+    detailsRows = [
+      {
+        reservationId: "res-002",
+        reservationNumber: null,
+        voucherCode: "VC-002",
+        clientEmail: "voucher@example.com",
+      },
+      {
+        reservationId: "res-003",
+        reservationNumber: null,
+        voucherCode: null,
+        clientEmail: "noref@example.com",
+      },
+    ];
+
+    const res = await request(app).get("/api/alerts");
+    expect(res.status).toBe(200);
+
+    const alert = (
+      res.body.alerts as Array<{ id: string; description: string }>
+    ).find((a) => a.id === "email-retry-exhausted");
+
+    expect(alert).toBeDefined();
+    // No reservationNumber → voucherCode.
+    expect(alert?.description).toContain("#VC-002");
+    // No reservationNumber and no voucherCode → reservation id.
+    expect(alert?.description).toContain("#res-003");
+  });
+
+  it("appends an 'e mais N' overflow listing exactly the first 3 reservations", async () => {
+    const app = buildAlertsApp();
+
+    const exhaustedAt = new Date("2025-06-01T10:00:00.000Z");
+    exhaustedLogsRows = ["res-1", "res-2", "res-3", "res-4", "res-5"].map(
+      (rid) => ({
+        reservationId: rid,
+        retriesExhaustedAt: exhaustedAt,
+        status: "failed",
+        isAutoRetry: true,
+        createdAt: new Date("2025-06-01T09:00:00.000Z"),
+      }),
+    );
+    manualResendRows = [];
+    detailsRows = ["res-1", "res-2", "res-3", "res-4", "res-5"].map((rid, i) => ({
+      reservationId: rid,
+      reservationNumber: `AG-EX-20250${i + 1}`,
+      voucherCode: null,
+      clientEmail: `c${i + 1}@example.com`,
+    }));
+
+    const res = await request(app).get("/api/alerts");
+    expect(res.status).toBe(200);
+
+    const alert = (
+      res.body.alerts as Array<{ id: string; description: string }>
+    ).find((a) => a.id === "email-retry-exhausted");
+
+    expect(alert).toBeDefined();
+    // Exactly the first 3 references are listed verbatim.
+    expect(alert?.description).toContain("#AG-EX-202501");
+    expect(alert?.description).toContain("#AG-EX-202502");
+    expect(alert?.description).toContain("#AG-EX-202503");
+    // The 4th and 5th are folded into the overflow, not listed individually.
+    expect(alert?.description).not.toContain("#AG-EX-202504");
+    expect(alert?.description).not.toContain("#AG-EX-202505");
+    // 5 total − 3 shown = 2 in the overflow.
+    expect(alert?.description).toContain("e mais 2");
+  });
+
+  it("uses the generic fallback description when the details lookup returns nothing", async () => {
+    const app = buildAlertsApp();
+
+    const exhaustedAt = new Date("2025-06-01T10:00:00.000Z");
+    exhaustedLogsRows = [
+      {
+        reservationId: "res-001",
+        retriesExhaustedAt: exhaustedAt,
+        status: "failed",
+        isAutoRetry: true,
+        createdAt: new Date("2025-06-01T09:00:00.000Z"),
+      },
+    ];
+    manualResendRows = [];
+    // No rows come back from the reservations⋈clients lookup.
+    detailsRows = [];
+
+    const res = await request(app).get("/api/alerts");
+    expect(res.status).toBe(200);
+
+    const alert = (
+      res.body.alerts as Array<{ id: string; description: string }>
+    ).find((a) => a.id === "email-retry-exhausted");
+
+    expect(alert).toBeDefined();
+    expect(alert?.description).toBe(
+      "Intervenção manual necessária — acesse o Log de E-mails",
+    );
+  });
+
+  it("uses the generic fallback description when the details lookup throws", async () => {
+    const app = buildAlertsApp();
+
+    const exhaustedAt = new Date("2025-06-01T10:00:00.000Z");
+    exhaustedLogsRows = [
+      {
+        reservationId: "res-001",
+        retriesExhaustedAt: exhaustedAt,
+        status: "failed",
+        isAutoRetry: true,
+        createdAt: new Date("2025-06-01T09:00:00.000Z"),
+      },
+    ];
+    manualResendRows = [];
+    // The lookup throws; the surrounding try/catch must swallow it and keep the
+    // generic fallback so the alert still surfaces.
+    detailsThrows = true;
+
+    const res = await request(app).get("/api/alerts");
+    expect(res.status).toBe(200);
+
+    const alert = (
+      res.body.alerts as Array<{ id: string; description: string; count: number }>
+    ).find((a) => a.id === "email-retry-exhausted");
+
+    expect(alert).toBeDefined();
+    expect(alert?.count).toBe(1);
+    expect(alert?.description).toBe(
+      "Intervenção manual necessária — acesse o Log de E-mails",
+    );
   });
 });
