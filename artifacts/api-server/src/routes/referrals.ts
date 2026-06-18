@@ -573,15 +573,15 @@ router.post("/referrals/:id/resend-bonus-release", async (req, res, next: NextFu
 
     if (!row) { next(new AppError("Indicação não encontrada", 422, "NOT_FOUND")); return; }
     if (row.status !== REFERRAL_STATUS.COMPLETED) {
-      next(new ValidationError("Reenvio disponível apenas para indicações com status 'concluído'", "UNPROCESSABLE"));
+      next(new AppError("Reenvio disponível apenas para indicações com status 'concluído'", 422, "UNPROCESSABLE"));
       return;
     }
     if (!row.referrerId) {
-      next(new ValidationError("Indicação sem indicador registrado", "UNPROCESSABLE"));
+      next(new AppError("Indicação sem indicador registrado", 422, "UNPROCESSABLE"));
       return;
     }
     if (!row.referrerClientEmail) {
-      next(new ValidationError("O indicador não tem e-mail cadastrado — notificação não pode ser enviada", "UNPROCESSABLE"));
+      next(new AppError("O indicador não tem e-mail cadastrado — notificação não pode ser enviada", 422, "UNPROCESSABLE"));
       return;
     }
 
