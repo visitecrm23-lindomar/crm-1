@@ -87,6 +87,7 @@ vi.mock("@clerk/express", () => ({
 }));
 
 vi.mock("../lib/seat-sse.js", () => ({
+  tryAddSeatClient: vi.fn(() => true),
   addSeatClient: vi.fn(),
   removeSeatClient: vi.fn(),
   emitSeatUpdate: vi.fn(),
@@ -150,7 +151,7 @@ vi.mock("../lib/passenger.js", () => ({
 // ---------------------------------------------------------------------------
 
 import { requireAuth } from "../lib/tenant.js";
-import { addSeatClient, removeSeatClient } from "../lib/seat-sse.js";
+import { tryAddSeatClient, removeSeatClient } from "../lib/seat-sse.js";
 import reservationsRouter from "../routes/reservations.js";
 import storePublicRouter from "../routes/store-public.js";
 import { errorHandler } from "../middlewares/errorHandler.js";
@@ -552,11 +553,12 @@ describe("GET /api/public/store/:slug/orders/:orderNumber — email validation a
 // ---------------------------------------------------------------------------
 
 describe("GET /api/public/store/:slug/trips/:tripId/seats/stream — public seat-availability SSE", () => {
-  const addSeatClientMock = vi.mocked(addSeatClient);
+  const tryAddSeatClientMock = vi.mocked(tryAddSeatClient);
   const removeSeatClientMock = vi.mocked(removeSeatClient);
 
   beforeEach(() => {
     vi.clearAllMocks();
+    tryAddSeatClientMock.mockReturnValue(true);
     // mockResolvedValueOnce queues survive clearAllMocks, so reset explicitly
     // (see memory: vitest-mock-queue) and rebuild the select() chain.
     mockLimit.mockReset();
@@ -574,7 +576,7 @@ describe("GET /api/public/store/:slug/trips/:tripId/seats/stream — public seat
 
     expect(res.status).toBe(404);
     expect(res.headers["content-type"]).not.toContain("text/event-stream");
-    expect(addSeatClientMock).not.toHaveBeenCalled();
+    expect(tryAddSeatClientMock).not.toHaveBeenCalled();
   });
 
   it("returns 404 and registers no client when the store exists but the trip does not", async () => {
@@ -587,10 +589,26 @@ describe("GET /api/public/store/:slug/trips/:tripId/seats/stream — public seat
       .get("/api/public/store/minha-loja/trips/missing/seats/stream");
 
     expect(res.status).toBe(404);
-    expect(addSeatClientMock).not.toHaveBeenCalled();
+    expect(tryAddSeatClientMock).not.toHaveBeenCalled();
   });
 
-  it("upgrades to SSE, registers the client via addSeatClient, and removes it on req close", async () => {
+  it("returns 429 (not an SSE upgrade) when the connection cap is reached", async () => {
+    const app = buildStorePublicApp();
+    tryAddSeatClientMock.mockReturnValue(false); // limit reached
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])          // getActiveStore → found
+      .mockResolvedValueOnce([{ id: "trip-001" }]); // trip lookup → found
+
+    const res = await request(app)
+      .get("/api/public/store/minha-loja/trips/trip-001/seats/stream");
+
+    expect(res.status).toBe(429);
+    expect(res.headers["content-type"]).not.toContain("text/event-stream");
+    expect(tryAddSeatClientMock).toHaveBeenCalledTimes(1);
+    expect(removeSeatClientMock).not.toHaveBeenCalled();
+  });
+
+  it("upgrades to SSE, registers the client via tryAddSeatClient, and removes it on req close", async () => {
     const app = buildStorePublicApp();
     mockLimit
       .mockResolvedValueOnce([FAKE_STORE])        // getActiveStore → found
@@ -635,8 +653,8 @@ describe("GET /api/public/store/:slug/trips/:tripId/seats/stream — public seat
       }, 2000);
     });
 
-    expect(addSeatClientMock).toHaveBeenCalledTimes(1);
-    expect(addSeatClientMock).toHaveBeenCalledWith("trip-001", expect.anything());
+    expect(tryAddSeatClientMock).toHaveBeenCalledTimes(1);
+    expect(tryAddSeatClientMock).toHaveBeenCalledWith("trip-001", expect.anything(), expect.anything());
     expect(removeSeatClientMock).toHaveBeenCalledTimes(1);
     expect(removeSeatClientMock).toHaveBeenCalledWith("trip-001", expect.anything());
 

@@ -1,7 +1,7 @@
 import { Router, type NextFunction } from "express";
 import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
-import { addSeatClient, removeSeatClient, emitSeatUpdate } from "../lib/seat-sse";
+import { tryAddSeatClient, removeSeatClient, emitSeatUpdate } from "../lib/seat-sse";
 import { broadcastSeatUpdate } from "../lib/realtime";
 import { RESERVATION_STATUS } from "@workspace/permissions";
 import { AppError, NotFoundError, ValidationError, ConflictError } from "../lib/errors";
@@ -558,12 +558,16 @@ router.get("/public/store/:slug/trips/:tripId/seats/stream", async (req, res, ne
   if (!trip) { next(new NotFoundError("Trip not found", "NOT_FOUND")); return; }
 
   const tripId = trip.id;
+  const clientIp = getClientIp(req);
+  if (!tryAddSeatClient(tripId, res, clientIp)) {
+    next(new AppError("Too many concurrent seat stream connections", 429, "TOO_MANY_REQUESTS"));
+    return;
+  }
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
-  addSeatClient(tripId, res);
   const ping = setInterval(() => {
     try { res.write(": ping\n\n"); } catch { clearInterval(ping); }
   }, 30000);
