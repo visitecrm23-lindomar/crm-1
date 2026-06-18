@@ -82,11 +82,10 @@ export function AlertsBell({ userRole }: { userRole?: string }) {
     staleTime: 60_000,
   });
 
-  const handleResolveExhausted = async (e: React.MouseEvent, reservationId: string) => {
-    e.stopPropagation();
-    setResolvingIds((prev) => new Set(prev).add(reservationId));
+  const resolveAlert = async (endpoint: string, key: string) => {
+    setResolvingIds((prev) => new Set(prev).add(key));
     try {
-      const res = await fetch(`${BASE}/api/alerts/email-retry-exhausted/${encodeURIComponent(reservationId)}/resolve`, {
+      const res = await fetch(endpoint, {
         method: "POST",
         credentials: "include",
       });
@@ -100,10 +99,26 @@ export function AlertsBell({ userRole }: { userRole?: string }) {
     } finally {
       setResolvingIds((prev) => {
         const next = new Set(prev);
-        next.delete(reservationId);
+        next.delete(key);
         return next;
       });
     }
+  };
+
+  const handleResolveExhausted = async (e: React.MouseEvent, reservationId: string) => {
+    e.stopPropagation();
+    await resolveAlert(
+      `${BASE}/api/alerts/email-retry-exhausted/${encodeURIComponent(reservationId)}/resolve`,
+      reservationId,
+    );
+  };
+
+  const handleResolveReferralSkip = async (e: React.MouseEvent, reservationId: string) => {
+    e.stopPropagation();
+    await resolveAlert(
+      `${BASE}/api/alerts/referral-reversal-skipped/${encodeURIComponent(reservationId)}/resolve`,
+      reservationId,
+    );
   };
 
   if (!canSeeAlerts) return null;
@@ -211,15 +226,24 @@ export function AlertsBell({ userRole }: { userRole?: string }) {
                           Bônus de indicação pode ter ficado creditado indevidamente. Verifique e corrija manualmente.
                         </p>
                         {skips.length > 0 && (
-                          <div className="mt-1.5 flex flex-col gap-0.5">
+                          <div className="mt-1.5 flex flex-col gap-1">
                             {skips.map((s) => {
                               const resRef = s.reservationNumber ?? s.reservationId;
                               const referrer = s.referrerName ?? "indicador desconhecido";
                               return (
-                                <p key={s.reservationId} className="text-xs text-muted-foreground leading-snug">
-                                  <span className="font-mono">#{resRef}</span> — cód.{" "}
-                                  <span className="font-mono">{s.referralCode}</span> · {referrer}
-                                </p>
+                                <div key={s.reservationId} className="flex items-start justify-between gap-2">
+                                  <p className="text-xs text-muted-foreground leading-snug min-w-0">
+                                    <span className="font-mono">#{resRef}</span> — cód.{" "}
+                                    <span className="font-mono">{s.referralCode}</span> · {referrer}
+                                  </p>
+                                  <button
+                                    className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 shrink-0"
+                                    onClick={(e) => handleResolveReferralSkip(e, s.reservationId)}
+                                    disabled={resolvingIds.has(s.reservationId)}
+                                  >
+                                    {resolvingIds.has(s.reservationId) ? "Resolvendo…" : "Marcar como resolvido"}
+                                  </button>
+                                </div>
                               );
                             })}
                           </div>

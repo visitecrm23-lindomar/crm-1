@@ -1,6 +1,6 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
-import { paymentsTable, tripsTable, dealsTable, clientsTable, emailLogsTable, reservationsTable } from "@workspace/db";
+import { paymentsTable, tripsTable, dealsTable, clientsTable, emailLogsTable, reservationsTable, referralsTable } from "@workspace/db";
 import { eq, and, lt, lte, gte, gt, sql, isNotNull, isNull, notLike, inArray } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
@@ -184,6 +184,7 @@ router.get("/alerts", async (req, res, next: NextFunction): Promise<void> => {
               ref.tenant_id = ${tenantId}
               AND ref.code = r.discount_referral_code
               AND ref.status = ${REFERRAL_STATUS.COMPLETED}
+              AND ref.reversal_warning_acknowledged_at IS NULL
             )
             WHERE r.tenant_id = ${tenantId}
               AND r.status = ${RESERVATION_STATUS.CANCELLED}
@@ -475,6 +476,60 @@ router.post("/alerts/email-retry-exhausted/:reservationId/resolve", async (req, 
           isNull(emailLogsTable.retriesResolvedAt),
         ),
       );
+
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/alerts/referral-reversal-skipped/:reservationId/resolve", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    if (!(AGENCY_STAFF_ROLES as readonly string[]).includes(me.role)) {
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
+    }
+
+    const { reservationId } = req.params;
+
+    // Verify the reservation belongs to this tenant and grab its referral code
+    const [reservation] = await db
+      .select({
+        id: reservationsTable.id,
+        discountReferralCode: reservationsTable.discountReferralCode,
+      })
+      .from(reservationsTable)
+      .where(and(
+        eq(reservationsTable.id, reservationId),
+        eq(reservationsTable.tenantId, me.tenantId),
+      ))
+      .limit(1);
+
+    if (!reservation) {
+      next(new NotFoundError("Reserva não encontrada", "NOT_FOUND"));
+      return;
+    }
+
+    if (!reservation.discountReferralCode) {
+      next(new ValidationError("Reserva não possui código de indicação", "VALIDATION_ERROR"));
+      return;
+    }
+
+    // Acknowledge the surfaced gap by stamping the COMPLETED referral rows that
+    // match this reservation's code. This mirrors the gap-detection JOIN
+    // (status=COMPLETED AND code=discount_referral_code) so the alert clears.
+    const now = new Date();
+    await db
+      .update(referralsTable)
+      .set({ reversalWarningAcknowledgedAt: now })
+      .where(and(
+        eq(referralsTable.tenantId, me.tenantId),
+        eq(referralsTable.code, reservation.discountReferralCode),
+        eq(referralsTable.status, REFERRAL_STATUS.COMPLETED),
+        isNull(referralsTable.reversalWarningAcknowledgedAt),
+      ));
 
     res.json({ ok: true });
   } catch (err) {

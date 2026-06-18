@@ -54,6 +54,7 @@ export const referralsTable = pgTable("referrals", {
   bonusCreditUsedAt: timestamp("bonus_credit_used_at", { withTimezone: true }),
   bonusCreditOrderId: text("bonus_credit_order_id"),
   bonusCreditUsedAmount: numeric("bonus_credit_used_amount", { precision: 10, scale: 2 }),
+  reversalWarningAcknowledgedAt: timestamp("reversal_warning_acknowledged_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
