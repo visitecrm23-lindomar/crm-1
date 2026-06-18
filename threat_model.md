@@ -27,10 +27,18 @@ This threat model is production-scoped. `artifacts/mockup-sandbox` is not deploy
 ## Scan Anchors
 
 - **Production entry points:** `artifacts/api-server/src/app.ts`, `artifacts/api-server/src/index.ts`, `artifacts/visitecrm/src/App.tsx`, `artifacts/visitecrm/src/pages/**`.
-- **Highest-risk code areas:** `artifacts/api-server/src/routes/store-public.ts`, authenticated route handlers under `artifacts/api-server/src/routes/**`, tenant helpers in `artifacts/api-server/src/lib/tenant.ts`, and role logic in `lib/permissions/src/index.ts` plus `artifacts/api-server/src/routes/users.ts`.
+- **Highest-risk code areas:** `artifacts/api-server/src/routes/store-public.ts`, authenticated route handlers under `artifacts/api-server/src/routes/**`, tenant helpers in `artifacts/api-server/src/lib/tenant.ts`, role logic in `lib/permissions/src/index.ts`, onboarding/bootstrap flows in `artifacts/api-server/src/routes/onboarding.ts`, and UploadThing lifecycle helpers in `artifacts/api-server/src/lib/uploadthing.ts`.
 - **Public surfaces:** `/api/public/store/:slug/*`, onboarding endpoints, health checks, calendar callback, storefront pages under `artifacts/visitecrm/src/pages/vitrine/**`.
 - **Authenticated/admin surfaces:** most `/api/*` CRM routes plus `/api/admin/*` and `/api/admin/**` superadmin routes.
 - **Usually dev-only / out of scope:** `artifacts/mockup-sandbox`, local scripts, and other non-deployed tooling unless production reachability is shown.
+
+## Current Scan Reminders
+
+- **Public checkout remains a primary abuse target.** Anonymous storefront flows can affect inventory, reservations, and passenger data, so future scans should re-check pre-payment reservation creation, seat assignment validation, and privacy leaks around CPF/order/trip lookups.
+- **Authorization drift is a recurring risk in CRM routes.** Many handlers use `requireAuth(...)` plus tenant filters but still need explicit role or permission checks aligned with `lib/permissions/src/index.ts`, especially in trips, payments, reservations, and reporting endpoints.
+- **Bootstrap and billing state need server-side enforcement.** Tenant status, `trialEndsAt`, and plan selection must be treated as security-relevant because onboarding can mint long-lived privileged tenants.
+- **Shared UploadThing credentials create cross-tenant blast radius.** Any cleanup path that deletes files by URL or key must prove ownership, not just trust that the hostname belongs to UploadThing.
+- **Transport security findings should stay in scope.** Production-only code paths that relax TLS verification, even for background sync components, are security relevant and should be rechecked on future scans.
 
 ## Threat Categories
 
