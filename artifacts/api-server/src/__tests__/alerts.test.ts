@@ -397,6 +397,106 @@ describe("GET /api/alerts — referral-reversal gap detection", () => {
     expect(alert?.count).toBe(1);
   });
 
+  it("builds a description listing the reservation reference, referral code, and referrer name", async () => {
+    const app = buildAlertsApp();
+
+    // First execute call = findReferralReversalGaps (list), second = count.
+    mockExecute
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            reservation_id: "res-001",
+            reservation_number: "AG-EX-202507-0001",
+            referral_code: "REF-ABC",
+            referrer_name: "Maria",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ count: 1 }] });
+
+    const res = await request(app).get("/api/alerts");
+    expect(res.status).toBe(200);
+
+    const alert = (
+      res.body.alerts as Array<{ id: string; description: string }>
+    ).find((a) => a.id === "referral-reversal-skipped");
+
+    expect(alert).toBeDefined();
+    // The reservation reference, referral code, and referrer name must all show.
+    expect(alert?.description).toContain("#AG-EX-202507-0001");
+    expect(alert?.description).toContain("cód. REF-ABC");
+    expect(alert?.description).toContain("Maria");
+    // A single gap carries no overflow suffix.
+    expect(alert?.description).not.toContain("e mais");
+  });
+
+  it("appends an 'e mais N' overflow listing exactly the first 3 gaps", async () => {
+    const app = buildAlertsApp();
+
+    const listRows = ["res-1", "res-2", "res-3", "res-4", "res-5"].map(
+      (rid, i) => ({
+        reservation_id: rid,
+        reservation_number: `AG-EX-20250${i + 1}`,
+        referral_code: `REF-${i + 1}`,
+        referrer_name: `Indicador ${i + 1}`,
+      }),
+    );
+    mockExecute
+      .mockResolvedValueOnce({ rows: listRows })
+      .mockResolvedValueOnce({ rows: [{ count: 5 }] });
+
+    const res = await request(app).get("/api/alerts");
+    expect(res.status).toBe(200);
+
+    const alert = (
+      res.body.alerts as Array<{ id: string; description: string; count: number }>
+    ).find((a) => a.id === "referral-reversal-skipped");
+
+    expect(alert).toBeDefined();
+    expect(alert?.count).toBe(5);
+    // Exactly the first 3 references are listed verbatim.
+    expect(alert?.description).toContain("#AG-EX-202501");
+    expect(alert?.description).toContain("#AG-EX-202502");
+    expect(alert?.description).toContain("#AG-EX-202503");
+    // The 4th and 5th are folded into the overflow, not listed individually.
+    expect(alert?.description).not.toContain("#AG-EX-202504");
+    expect(alert?.description).not.toContain("#AG-EX-202505");
+    // 5 total − 3 shown = 2 in the overflow.
+    expect(alert?.description).toContain("e mais 2");
+  });
+
+  it("falls back to reservation_id and 'indicador desconhecido' when fields are null", async () => {
+    const app = buildAlertsApp();
+
+    mockExecute
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            reservation_id: "res-noref",
+            reservation_number: null,
+            referral_code: "REF-XYZ",
+            referrer_name: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ count: 1 }] });
+
+    const res = await request(app).get("/api/alerts");
+    expect(res.status).toBe(200);
+
+    const alert = (
+      res.body.alerts as Array<{ id: string; description: string }>
+    ).find((a) => a.id === "referral-reversal-skipped");
+
+    expect(alert).toBeDefined();
+    // No reservation_number → reservation_id.
+    expect(alert?.description).toContain("#res-noref");
+    // Referral code is always present.
+    expect(alert?.description).toContain("cód. REF-XYZ");
+    // No referrer_name → the unknown-referrer fallback label.
+    expect(alert?.description).toContain("indicador desconhecido");
+  });
+
   it("omits the referral-reversal-skipped alert when there are no gaps", async () => {
     const app = buildAlertsApp();
     // Default mockExecute → { rows: [] } for both list and count → count 0.
