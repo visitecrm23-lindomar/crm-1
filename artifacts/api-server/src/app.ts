@@ -141,8 +141,15 @@ const authorizedParties = [
 
 const clerkAuth = clerkMiddleware(authorizedParties.length > 0 ? { authorizedParties } : {});
 
+const CLERK_BYPASS_PATHS = new Set([
+  "/api/calendar/callback",
+  "/api",
+  "/api/health",
+  "/api/healthz",
+]);
+
 app.use((req, res, next) => {
-  if (req.path === "/api/calendar/callback") {
+  if (CLERK_BYPASS_PATHS.has(req.path)) {
     return next();
   }
   return clerkAuth(req, res, next);

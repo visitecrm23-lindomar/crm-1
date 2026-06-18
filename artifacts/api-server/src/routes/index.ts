@@ -55,6 +55,10 @@ import npsPublicRouter from "./nps";
 
 const router: IRouter = Router();
 
+router.get("/", (_req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
 router.use(adminRouter);
 router.use(healthRouter);
 router.use(dashboardRouter);
