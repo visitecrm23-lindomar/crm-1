@@ -124,11 +124,16 @@ The platform includes a multi-tenant e-commerce solution with both an admin pane
 ## Database Migrations & Seeding
 
 ### Migrations
-Drizzle ORM manages all schema migrations in `lib/db/drizzle/` (files `0000`–`0010`).  
-Migrations run automatically on API server startup via `runMigrations()` in `lib/db/src/migrate.ts`.  
-Migration `0000` uses `CREATE TABLE IF NOT EXISTS` and `DO $$ IF NOT EXISTS $$` guards on all FK constraints, making it safe to run against both fresh and existing databases.
+Drizzle ORM manages all schema migrations in `lib/db/drizzle/`.
+Migrations run automatically on API server startup via `runMigrations()` in `lib/db/src/migrate.ts`.
 
-**Important**: Never mutate already-applied historical migrations (`0000`–`0009`). Add schema changes as new numbered migration files.
+**Consolidated baseline (`0000_squash_baseline`)**: The original `0000`–`0072` chain could not rebuild a fresh database — several tables (`email_logs`, `referral_settings`, `birthday_messages`, `calendar_events`, `invites`, `platform_settings`, `referral_tracking`, `sales_goals`, `trip_costs`, `usage_tracking`, `vehicle_layouts`) had only ever been provisioned via `drizzle-kit push`, never by a migration, so `migrate` hard-failed at `0015` (`ALTER TABLE email_logs`). The history was squashed into one consolidated, idempotent baseline generated from the current Drizzle schema. It uses `CREATE TABLE/INDEX IF NOT EXISTS` and `DO $$ … EXCEPTION WHEN duplicate_object $$` guards on every FK, so it is safe to run against both empty and populated databases.
+
+**How the baseline coexists with existing databases**: Drizzle's node-postgres migrator reads the single most-recently-applied migration once and only applies entries whose `when` is greater than it. The baseline's `when` in `meta/_journal.json` is set deliberately low (`1745010000000`, below every existing DB's watermark), so databases that already ran the legacy migrations **skip** it, while empty databases (no watermark) apply it and build the full schema. Verified empirically: fresh DB → 93 tables; existing DB → baseline skipped, untouched.
+
+**Important**:
+- Never mutate the consolidated baseline (`0000_squash_baseline`) or its `when`.
+- Add schema changes as new numbered migrations via `pnpm --filter @workspace/db generate` (idx `1`+). Each new migration's `when` MUST stay strictly greater than every earlier entry, or Drizzle silently skips it. The guard test `artifacts/api-server/src/__tests__/migration-journal-order.test.ts` (`GUARD_FROM_IDX=1`) enforces this.
 
 ### Plan Seeding
 Plan rows (Starter, Pro, Enterprise) are **not** seeded automatically on startup. After running migrations on a fresh database, seed plans manually:

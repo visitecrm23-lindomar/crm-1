@@ -12,13 +12,15 @@
  * applied and its CHECK constraint never got created. This test fails fast if any
  * NEW migration repeats that mistake.
  *
- * NOTE ON HISTORY: idx 0-61 contain many out-of-order `when` values (the journal
- * timestamps were not kept monotonic in earlier development). Those migrations
- * are already applied across all environments and MUST NOT be mutated (see
- * replit.md). They are therefore grandfathered. From `GUARD_FROM_IDX` onward —
- * the first index where the journal becomes monotonic, and every migration added
- * in the future — each entry's `when` MUST be strictly greater than the running
- * maximum `when` of all earlier entries.
+ * NOTE ON HISTORY: the legacy 0000–0072 migration chain (which also failed to
+ * rebuild a fresh database — several tables had only ever been provisioned via
+ * `drizzle-kit push`, never by a migration) was squashed into a single
+ * consolidated, idempotent baseline (`0000_squash_baseline`). Its `when` is set
+ * intentionally low so that databases with existing migration history skip it,
+ * while empty databases build the full current schema from it. Because the
+ * history was reset, only the baseline sits below `GUARD_FROM_IDX`; every
+ * migration added from idx 1 onward MUST carry a `when` strictly greater than the
+ * running maximum `when` of all earlier entries, or Drizzle will silently skip it.
  */
 
 import { readFileSync } from "node:fs";
@@ -42,12 +44,13 @@ interface Journal {
 }
 
 /**
- * First index from which the running-max invariant is enforced. Everything below
- * this is frozen, already-applied history with known non-monotonic timestamps.
+ * First index from which the running-max invariant is enforced. idx 0 is the
+ * consolidated baseline whose `when` is deliberately low (see header note), so it
+ * is exempt. Every real migration starts at idx 1 and must keep `when` monotonic.
  * Do NOT raise this to silence a new failure — a failure at or above this index
  * means a new migration would be silently skipped and must be fixed instead.
  */
-const GUARD_FROM_IDX = 62;
+const GUARD_FROM_IDX = 1;
 
 const here = dirname(fileURLToPath(import.meta.url));
 const journalPath = resolve(

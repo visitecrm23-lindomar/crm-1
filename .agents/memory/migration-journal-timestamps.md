@@ -1,7 +1,34 @@
 ---
 name: Migration journal timestamp ordering
-description: Drizzle silently skips migrations whose _journal.json `when` is not newer than the last applied one
+description: Drizzle silently skips migrations whose _journal.json `when` is not newer than the last applied one; legacy chain squashed into one idempotent baseline
 ---
+
+# History squashed into a single consolidated baseline
+
+The legacy `0000`–`0072` chain could NOT rebuild a fresh database: 11 tables
+(`email_logs`, `referral_settings`, `birthday_messages`, `calendar_events`,
+`invites`, `platform_settings`, `referral_tracking`, `sales_goals`,
+`trip_costs`, `usage_tracking`, `vehicle_layouts`) were only ever provisioned
+via `drizzle-kit push`, never by a migration, so `migrate` hard-failed at `0015`
+(`ALTER TABLE email_logs` on a non-existent table).
+
+**Resolution:** squashed into one idempotent baseline `0000_squash_baseline`
+(generated from current schema, then transformed: `CREATE TABLE/INDEX IF NOT
+EXISTS` + `DO $$ … EXCEPTION WHEN duplicate_object $$` on every FK).
+
+**Why a single baseline coexists safely with existing DBs:** the migrator reads
+the single most-recently-applied migration once and only applies entries whose
+`when` exceeds it. The baseline's `when` is set deliberately LOW
+(`1745010000000`, below every existing DB watermark) so DBs with migration
+history skip it, while empty DBs (no watermark) apply it. Verified: fresh DB →
+93 tables; existing DB → skipped, untouched; idempotent on push-only DBs.
+
+**How to apply going forward:**
+- NEVER mutate `0000_squash_baseline` or its `when`. To change schema, edit
+  `src/schema/` then `pnpm --filter @workspace/db generate` (new idx 1+).
+- A truly empty DB never occurs in normal Replit use (checkpoints carry schema
+  forward); to test fresh-rebuild, `CREATE DATABASE` a throwaway DB and point
+  `DATABASE_URL` at it (build URL via bash param-expansion, don't print secret).
 
 # Migration journal timestamps must strictly increase
 
