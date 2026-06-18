@@ -22,7 +22,6 @@ import { calculateTier, loyaltyAwardPointsForReservation } from "../lib/loyalty-
 import { ROLES, DEAL_STATUS, RESERVATION_STATUS, REFERRAL_STATUS, COMMISSION_STATUS, STORE_ORDER_STATUS, STORE_PAYMENT_STATUS, type ReservationStatus } from "@workspace/permissions";
 import { parseReservationStatus } from "../lib/status-validators";
 import { moveDealToStage } from "../services/pipeline-automation";
-import { logger } from "../lib/logger";
 
 
 const router = Router();
@@ -1185,9 +1184,7 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
         // double-decremented. This is intentional: the COMPLETED filter acts as the
         // idempotency guard for re-cancel flows.
         //
-        // Primary lookup: by reservationId (set for all new storefront and CRM bookings).
-        // Fallback lookup: by referral code + referredId for older records created before
-        // reservationId was saved (storefront orders prior to this fix).
+        // Lookup by reservationId (set for all storefront and CRM bookings).
         if (existing.discountReferralCode) {
           let referralRecord: { id: string; referrerId: string; referredId: string | null; bonusAmount: string } | undefined;
 
@@ -1203,29 +1200,6 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
 
           if (byReservation) {
             referralRecord = byReservation;
-          } else if (existing.clientId) {
-            // Fallback for older records that were created without reservationId
-            const [byCodeAndReferred] = await tx
-              .select({ id: referralsTable.id, referrerId: referralsTable.referrerId, referredId: referralsTable.referredId, bonusAmount: referralsTable.bonusAmount })
-              .from(referralsTable)
-              .where(and(
-                eq(referralsTable.tenantId, me.tenantId),
-                eq(referralsTable.code, existing.discountReferralCode),
-                eq(referralsTable.referredId, existing.clientId),
-                eq(referralsTable.status, REFERRAL_STATUS.COMPLETED),
-              ))
-              .limit(1);
-            referralRecord = byCodeAndReferred;
-            if (byCodeAndReferred) {
-              logger.warn(
-                {
-                  reservationId: req.params.id,
-                  discountReferralCode: existing.discountReferralCode,
-                  referralRecordId: byCodeAndReferred.id,
-                },
-                "[reservations] Referral reversal used fallback path (no reservationId on referral record) — consider backfilling reservation_id"
-              );
-            }
           }
 
           if (referralRecord) {

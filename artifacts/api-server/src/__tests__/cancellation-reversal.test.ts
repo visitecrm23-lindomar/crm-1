@@ -695,17 +695,16 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
 
     // tx select queue (in execution order):
     //   [0] Reversal 3 — primary lookup by reservationId + COMPLETED → [] (already REVERSED)
-    //   [1] Reversal 3 — fallback lookup by code + referredId + COMPLETED → [] (already REVERSED)
-    //   [2] Reversal 4 — payments lookup (empty)
-    //   [3] Reversal 4 — loyalty member lookup (no member found → skip clawback)
-    //   [4] re-fetch updated reservation
+    //   [1] Reversal 4 — payments lookup (empty)
+    //   [2] Reversal 4 — loyalty member lookup (no member found → skip clawback)
+    //   [3] re-fetch updated reservation
     //
-    // Both Reversal 3 queries return empty because the referral status is already
-    // REVERSED. The `referralRecord` variable stays undefined, so the clients and
-    // referrals tables are never updated — confirming no double-decrement.
+    // The primary lookup returns empty because the referral status is already
+    // REVERSED (COMPLETED filter returns nothing). The `referralRecord` variable
+    // stays undefined, so the clients and referrals tables are never updated —
+    // confirming no double-decrement.
     const tx = buildTxMock([
       [], // primary lookup → referral already REVERSED, COMPLETED filter returns nothing
-      [], // fallback lookup → same reason
       [], // no payments
       [], // Reversal 4 loyalty member lookup → not found, skip clawback
       [cancelled],
