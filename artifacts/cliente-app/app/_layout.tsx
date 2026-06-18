@@ -110,14 +110,12 @@ function AuthGate() {
         }
       })
       .catch((err: unknown) => {
+        checkedRef.current = false;
         if (err instanceof ApiError && err.status === 403) {
           setRoleStatus("denied");
         } else {
-          setRoleStatus("ok");
-          router.replace("/(tabs)/reservas");
-          getToken().then((tok) => {
-            if (tok) registerPushToken(tok);
-          });
+          setRoleStatus("idle");
+          router.replace("/sign-in");
         }
       });
   }, [isLoaded, isSignedIn, getToken]);
