@@ -3,6 +3,7 @@ import { useParams, Switch, Route, Redirect, useLocation } from "wouter";
 import { publicStoreApi, PublicStore } from "@/lib/storeApi";
 import { CartProvider } from "@/contexts/CartContext";
 import { FavoritesProvider } from "@/contexts/FavoritesContext";
+import { VitrineThemeProvider } from "@/contexts/VitrineThemeContext";
 import VitrineLayout from "./layout";
 import VitrineHome from "./home";
 import VitrineCatalog from "./catalog";
@@ -178,8 +179,9 @@ function StoreRouter({ slug }: { slug: string }) {
   }
 
   return (
-    <VitrineLayout slug={slug} store={store}>
-      <Switch>
+    <VitrineThemeProvider store={store}>
+      <VitrineLayout slug={slug} store={store}>
+        <Switch>
         <Route path={`/loja/${slug}`}>
           <VitrineHome slug={slug} store={store} />
         </Route>
@@ -240,8 +242,9 @@ function StoreRouter({ slug }: { slug: string }) {
         <Route>
           <Redirect to={`/loja/${slug}`} />
         </Route>
-      </Switch>
-    </VitrineLayout>
+        </Switch>
+      </VitrineLayout>
+    </VitrineThemeProvider>
   );
 }
 

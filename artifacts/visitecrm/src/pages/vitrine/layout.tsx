@@ -20,6 +20,7 @@ import {
   Share2,
 } from "lucide-react";
 import { NotificationBell } from "@/components/vitrine/NotificationBell";
+import { useVitrineTheme } from "@/contexts/VitrineThemeContext";
 
 export default function VitrineLayout({
   children,
@@ -31,6 +32,7 @@ export default function VitrineLayout({
   store: PublicStore;
 }) {
   const [, navigate] = useLocation();
+  const { colors } = useVitrineTheme();
   const { isSignedIn } = useUser();
   const { signOut } = useClerk();
   const { data: me } = useGetMe({ query: { enabled: !!isSignedIn, queryKey: getGetMeQueryKey() } });
@@ -73,7 +75,7 @@ export default function VitrineLayout({
     <div className="min-h-screen bg-background flex flex-col">
       <header
         className="sticky top-0 z-40 border-b shadow-sm"
-        style={{ backgroundColor: store.primaryColor }}
+        style={{ backgroundColor: colors.primary }}
       >
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <button
@@ -186,7 +188,7 @@ export default function VitrineLayout({
             </button>
 
             {isCliente && (
-              <NotificationBell primaryColor={store.primaryColor} />
+              <NotificationBell primaryColor={colors.primary} />
             )}
 
             <button

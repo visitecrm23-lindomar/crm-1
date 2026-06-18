@@ -3,6 +3,10 @@ import DOMPurify from "dompurify";
 import { useLocation } from "wouter";
 import { publicStoreApi, PublicStore, StoreProduct, StoreReview } from "@/lib/storeApi";
 import { calculateTripDuration } from "@/lib/tripDuration";
+import { formatCurrency } from "@/lib/utils";
+import { useVitrineTheme } from "@/contexts/VitrineThemeContext";
+import { SectionHeader } from "@/components/vitrine/SectionHeader";
+import { PremiumProductCard } from "@/components/vitrine/PremiumProductCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,7 +15,6 @@ import {
   Clock,
   ChevronLeft,
   Star,
-  CheckCircle,
   CheckCircle2,
   XCircle,
   Loader2,
@@ -19,7 +22,6 @@ import {
   ChevronRight as NextIcon,
   MessageCircle,
   Share2,
-  Copy,
   Check,
   Zap,
   Search,
@@ -27,6 +29,7 @@ import {
   Maximize2,
   Images,
   Download,
+  ShieldCheck,
 } from "lucide-react";
 
 function GalleryThumb({
@@ -307,6 +310,7 @@ export default function VitrineProduct({
   store: PublicStore;
 }) {
   const [, navigate] = useLocation();
+  const { colors } = useVitrineTheme();
   const [product, setProduct] = useState<(StoreProduct & { reviews: StoreReview[] }) | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -387,6 +391,8 @@ export default function VitrineProduct({
   const features = product.features ?? [];
   const requirements = product.requirements ?? [];
   const variants = product.variants ?? [];
+  const isSoldOut =
+    product.trackInventory && product.stockQuantity != null && product.stockQuantity <= 0;
 
   function handleReserveNow() {
     navigate(`/loja/${slug}/reservar/${productSlug}`);
@@ -429,12 +435,32 @@ export default function VitrineProduct({
   const defaultTab = tabs[0]?.key ?? "descricao";
   const currentTab = tabs.find((t) => t.key === activeTab) ? activeTab : defaultTab;
 
+  const typeLabel =
+    product.type === "package"
+      ? "Pacote"
+      : product.type === "service"
+        ? "Serviço"
+        : product.type === "tour"
+          ? "Passeio"
+          : product.type === "excursion"
+            ? "Excursão"
+            : "Produto";
+
+  const hasInfoGrid =
+    !!(product.startDate ||
+      product.departureDate ||
+      product.durationDays ||
+      product.endDate ||
+      product.returnDate ||
+      (product.trackInventory && product.stockQuantity != null));
+
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 pb-24">
-      <div className="flex items-center justify-between mb-6">
+    <div className="max-w-6xl mx-auto px-4 py-6 pb-28 lg:pb-12">
+      {/* Top bar */}
+      <div className="flex items-center justify-between mb-5">
         <button
           onClick={() => navigate(`/loja/${slug}/produtos`)}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ChevronLeft className="w-4 h-4" />
           Voltar ao Catálogo
@@ -458,268 +484,302 @@ export default function VitrineProduct({
         </button>
       </div>
 
-      {/* Full-width hero carousel */}
-      <div
-        className="relative rounded-xl overflow-hidden bg-muted h-80 mb-6"
-        onTouchStart={(e) => { heroTouchStartX.current = e.touches[0].clientX; }}
-        onTouchEnd={(e) => {
-          if (heroTouchStartX.current === null || images.length <= 1) return;
-          const dx = e.changedTouches[0].clientX - heroTouchStartX.current;
-          heroTouchStartX.current = null;
-          if (Math.abs(dx) < 30) return;
-          if (dx < 0) setImgIndex((i) => (i + 1) % images.length);
-          else setImgIndex((i) => (i - 1 + images.length) % images.length);
-        }}
-      >
-        {images[imgIndex] ? (
-          <button
-            className="w-full h-full block relative group"
-            onClick={() => openLightbox(allImages, imgIndex)}
-            aria-label="Ampliar imagem"
+      <div className="grid gap-8 lg:grid-cols-[1.55fr_1fr]">
+        {/* LEFT: gallery */}
+        <div>
+          {/* Hero carousel */}
+          <div
+            className="relative rounded-2xl overflow-hidden bg-muted h-72 sm:h-96"
+            onTouchStart={(e) => { heroTouchStartX.current = e.touches[0].clientX; }}
+            onTouchEnd={(e) => {
+              if (heroTouchStartX.current === null || images.length <= 1) return;
+              const dx = e.changedTouches[0].clientX - heroTouchStartX.current;
+              heroTouchStartX.current = null;
+              if (Math.abs(dx) < 30) return;
+              if (dx < 0) setImgIndex((i) => (i + 1) % images.length);
+              else setImgIndex((i) => (i - 1 + images.length) % images.length);
+            }}
           >
-            <div className="absolute inset-0 bg-muted animate-pulse" aria-hidden="true" />
-            <img
-              key={imgIndex}
-              src={images[imgIndex]}
-              alt={product.name}
-              className="relative w-full h-full object-cover opacity-0"
-              style={{ transition: "opacity 0.3s" }}
-              onLoad={(e) => { (e.target as HTMLImageElement).style.opacity = "1"; }}
-            />
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-              <Maximize2 className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
-            </div>
-          </button>
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <MapPin className="w-20 h-20 text-muted-foreground/20" />
+            {images[imgIndex] ? (
+              <button
+                className="w-full h-full block relative group"
+                onClick={() => openLightbox(allImages, imgIndex)}
+                aria-label="Ampliar imagem"
+              >
+                <div className="absolute inset-0 bg-muted animate-pulse" aria-hidden="true" />
+                <img
+                  key={imgIndex}
+                  src={images[imgIndex]}
+                  alt={product.name}
+                  className="relative w-full h-full object-cover opacity-0"
+                  style={{ transition: "opacity 0.3s" }}
+                  onLoad={(e) => { (e.target as HTMLImageElement).style.opacity = "1"; }}
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                  <Maximize2 className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+                </div>
+              </button>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <MapPin className="w-20 h-20 text-muted-foreground/20" />
+              </div>
+            )}
+            {images.length > 1 && (
+              <>
+                <button
+                  onClick={() => setImgIndex((i) => (i - 1 + images.length) % images.length)}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors"
+                >
+                  <PrevIcon className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => setImgIndex((i) => (i + 1) % images.length)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors"
+                >
+                  <NextIcon className="w-5 h-5" />
+                </button>
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                  {images.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setImgIndex(i)}
+                      className={`rounded-full transition-all ${i === imgIndex ? "w-5 h-2 bg-white" : "w-2 h-2 bg-white/60 hover:bg-white/80"}`}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
-        )}
-        {images.length > 1 && (
-          <>
-            <button
-              onClick={() => setImgIndex((i) => (i - 1 + images.length) % images.length)}
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors"
-            >
-              <PrevIcon className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setImgIndex((i) => (i + 1) % images.length)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors"
-            >
-              <NextIcon className="w-5 h-5" />
-            </button>
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-              {images.map((_, i) => (
+
+          {/* Thumbnails */}
+          {images.length > 1 && (
+            <div className="flex gap-2 mt-4 overflow-x-auto">
+              {images.map((img, i) => (
                 <button
                   key={i}
                   onClick={() => setImgIndex(i)}
-                  className={`rounded-full transition-all ${i === imgIndex ? "w-5 h-2 bg-white" : "w-2 h-2 bg-white/60 hover:bg-white/80"}`}
-                />
+                  className={`w-16 h-16 rounded-lg border-2 overflow-hidden shrink-0 transition-colors ${
+                    i === imgIndex ? "border-primary" : "border-transparent hover:border-muted-foreground/30"
+                  }`}
+                >
+                  <img src={img} alt="" className="w-full h-full object-cover" />
+                </button>
               ))}
             </div>
-          </>
-        )}
-      </div>
-
-      {/* Thumbnails */}
-      {images.length > 1 && (
-        <div className="flex gap-2 mb-6 overflow-x-auto">
-          {images.map((img, i) => (
-            <button
-              key={i}
-              onClick={() => setImgIndex(i)}
-              className={`w-16 h-16 rounded-lg border-2 overflow-hidden shrink-0 transition-colors ${
-                i === imgIndex ? "border-primary" : "border-transparent hover:border-muted-foreground/30"
-              }`}
-            >
-              <img src={img} alt="" className="w-full h-full object-cover" />
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Gallery grid */}
-      {allImages.length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
-            <Images className="w-5 h-5 text-muted-foreground" />
-            Galeria de Fotos
-            <span className="text-sm font-normal text-muted-foreground">({allImages.length} foto{allImages.length !== 1 ? "s" : ""})</span>
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-            {allImages.map((img, i) => (
-              <GalleryThumb
-                key={i}
-                src={img}
-                index={i}
-                onClick={() => openLightbox(allImages, i)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Hero info */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Badge variant="outline">
-            {product.type === "package" ? "Pacote" : product.type === "service" ? "Serviço" : product.type === "tour" ? "Passeio" : product.type === "excursion" ? "Excursão" : "Produto"}
-          </Badge>
-          {product.isFeatured && (
-            <Badge style={{ backgroundColor: "#FBBF24", color: "#78350F" }}>
-              ★ Destaque
-            </Badge>
           )}
-        </div>
 
-        <h1 className="text-3xl font-bold mb-2">{product.name}</h1>
-
-        {product.destination && (
-          <p className="text-muted-foreground flex items-center gap-1.5 mb-3">
-            <MapPin className="w-4 h-4 shrink-0" />
-            {product.destination}
-          </p>
-        )}
-
-        {product.shortDescription && (
-          <p className="text-muted-foreground leading-relaxed">{product.shortDescription}</p>
-        )}
-      </div>
-
-      {/* Info grid */}
-      {(product.startDate || product.departureDate || product.durationDays || product.endDate || product.returnDate || (product.trackInventory && product.stockQuantity != null)) && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          {(product.departureDate ?? product.startDate) && (
-            <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl">
-              <Calendar className="w-5 h-5 text-blue-600 shrink-0" />
-              <div>
-                <p className="text-[11px] text-muted-foreground">Saída</p>
-                <p className="text-xs font-semibold">
-                  {new Date(
-                    ((product.departureDate ?? product.startDate) as string).slice(0, 10) + "T12:00:00"
-                  ).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
-                  {product.departureTime && ` às ${product.departureTime}`}
-                </p>
-              </div>
-            </div>
-          )}
-          {(product.originCity || product.originState) && (
-            <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl">
-              <MapPin className="w-5 h-5 text-blue-600 shrink-0" />
-              <div>
-                <p className="text-[11px] text-muted-foreground">Origem</p>
-                <p className="text-xs font-semibold">{[product.originCity, product.originState].filter(Boolean).join(", ")}</p>
-              </div>
-            </div>
-          )}
-          {(product.returnDate ?? product.endDate) && (
-            <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl">
-              <Calendar className="w-5 h-5 text-blue-600 shrink-0" />
-              <div>
-                <p className="text-[11px] text-muted-foreground">Retorno</p>
-                <p className="text-xs font-semibold">
-                  {new Date(
-                    (product.returnDate ?? product.endDate)!.slice(0, 10) + "T12:00:00"
-                  ).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
-                  {product.returnTime && ` às ${product.returnTime}`}
-                </p>
-              </div>
-            </div>
-          )}
-          {(() => {
-            const dur = calculateTripDuration(
-              product.departureDate ?? product.startDate,
-              product.returnDate ?? product.endDate,
-              product.departureTime,
-              product.returnTime,
-            ) ?? (product.durationDays ? { formatted: `${product.durationDays} dia${product.durationDays > 1 ? "s" : ""}` } : null);
-            return dur ? (
-              <div className="flex items-center gap-2 p-3 bg-purple-50 rounded-xl">
-                <Clock className="w-5 h-5 text-purple-600 shrink-0" />
-                <div>
-                  <p className="text-[11px] text-muted-foreground">Duração</p>
-                  <p className="text-xs font-semibold">{dur.formatted}</p>
-                </div>
-              </div>
-            ) : null;
-          })()}
-          {product.trackInventory && product.stockQuantity != null && (
-            <div className={`flex items-center gap-2 p-3 rounded-xl ${product.stockQuantity <= 0 ? "bg-red-50" : product.stockQuantity <= 10 ? "bg-orange-50" : "bg-green-50"}`}>
-              <span className={`text-lg shrink-0 ${product.stockQuantity <= 0 ? "text-red-600" : product.stockQuantity <= 10 ? "text-orange-600" : "text-green-600"}`}>👥</span>
-              <div>
-                <p className="text-[11px] text-muted-foreground">Vagas</p>
-                <p className={`text-xs font-semibold ${product.stockQuantity <= 0 ? "text-red-600" : product.stockQuantity <= 10 ? "text-orange-600" : ""}`}>
-                  {product.stockQuantity <= 0 ? "Esgotado" : `${product.stockQuantity} disponíveis`}
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Variants */}
-      {variants.length > 0 && (
-        <div className="mb-5 p-4 border rounded-xl bg-muted/30">
-          {variants.map((v) => (
-            <div key={v.name} className="mb-3 last:mb-0">
-              <p className="font-medium text-sm mb-2">{v.name}</p>
-              <div className="flex flex-wrap gap-2">
-                {v.options.map((opt) => (
-                  <button
-                    key={opt.label}
-                    onClick={() => setSelectedVariant({ variantName: v.name, label: opt.label, price: opt.price })}
-                    className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
-                      selectedVariant?.label === opt.label
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border hover:bg-muted"
-                    }`}
-                  >
-                    {opt.label}
-                    {opt.price !== basePrice && <span className="ml-1 text-xs">(R$ {opt.price.toFixed(2)})</span>}
-                  </button>
+          {/* Gallery grid */}
+          {allImages.length > 0 && (
+            <div className="mt-8">
+              <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                <Images className="w-5 h-5 text-muted-foreground" />
+                Galeria de Fotos
+                <span className="text-sm font-normal text-muted-foreground">({allImages.length} foto{allImages.length !== 1 ? "s" : ""})</span>
+              </h2>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {allImages.map((img, i) => (
+                  <GalleryThumb
+                    key={i}
+                    src={img}
+                    index={i}
+                    onClick={() => openLightbox(allImages, i)}
+                  />
                 ))}
               </div>
             </div>
-          ))}
+          )}
         </div>
-      )}
 
-      {/* Price */}
-      <div className="flex items-center gap-3 mb-5">
-        {product.salePrice && (
-          <span className="text-lg text-muted-foreground line-through">
-            R$ {parseFloat(product.price).toFixed(2)}
-          </span>
-        )}
-        <span className="text-4xl font-bold" style={{ color: store.primaryColor }}>
-          R$ {effectivePrice.toFixed(2)}
-        </span>
-        <span className="text-sm text-muted-foreground self-end mb-1">/ pessoa</span>
+        {/* RIGHT: purchase card */}
+        <div>
+          <div className="lg:sticky lg:top-6 space-y-5 rounded-2xl border bg-card p-6 shadow-sm">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="outline">{typeLabel}</Badge>
+              {product.isFeatured && (
+                <Badge style={{ backgroundColor: colors.accent, color: colors.accentForeground }}>
+                  ★ Destaque
+                </Badge>
+              )}
+            </div>
+
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold leading-tight">{product.name}</h1>
+              {product.destination && (
+                <p className="text-muted-foreground flex items-center gap-1.5 mt-2">
+                  <MapPin className="w-4 h-4 shrink-0" />
+                  {product.destination}
+                </p>
+              )}
+            </div>
+
+            {product.reviews.length > 0 && (
+              <div className="flex items-center gap-2 text-sm">
+                <StarRating rating={Math.round(avgRating)} />
+                <span className="font-medium">{avgRating.toFixed(1)}</span>
+                <span className="text-muted-foreground">({product.reviews.length} avaliação(ões))</span>
+              </div>
+            )}
+
+            {product.shortDescription && (
+              <p className="text-sm text-muted-foreground leading-relaxed">{product.shortDescription}</p>
+            )}
+
+            {hasInfoGrid && (
+              <div className="grid grid-cols-2 gap-3">
+                {(product.departureDate ?? product.startDate) && (
+                  <div className="flex items-center gap-2 rounded-xl border bg-muted/30 p-3">
+                    <Calendar className="w-5 h-5 shrink-0" style={{ color: colors.primary }} />
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">Saída</p>
+                      <p className="text-xs font-semibold">
+                        {new Date(
+                          ((product.departureDate ?? product.startDate) as string).slice(0, 10) + "T12:00:00"
+                        ).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                        {product.departureTime && ` às ${product.departureTime}`}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {(product.originCity || product.originState) && (
+                  <div className="flex items-center gap-2 rounded-xl border bg-muted/30 p-3">
+                    <MapPin className="w-5 h-5 shrink-0" style={{ color: colors.primary }} />
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">Origem</p>
+                      <p className="text-xs font-semibold">{[product.originCity, product.originState].filter(Boolean).join(", ")}</p>
+                    </div>
+                  </div>
+                )}
+                {(product.returnDate ?? product.endDate) && (
+                  <div className="flex items-center gap-2 rounded-xl border bg-muted/30 p-3">
+                    <Calendar className="w-5 h-5 shrink-0" style={{ color: colors.primary }} />
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">Retorno</p>
+                      <p className="text-xs font-semibold">
+                        {new Date(
+                          (product.returnDate ?? product.endDate)!.slice(0, 10) + "T12:00:00"
+                        ).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                        {product.returnTime && ` às ${product.returnTime}`}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {(() => {
+                  const dur = calculateTripDuration(
+                    product.departureDate ?? product.startDate,
+                    product.returnDate ?? product.endDate,
+                    product.departureTime,
+                    product.returnTime,
+                  ) ?? (product.durationDays ? { formatted: `${product.durationDays} dia${product.durationDays > 1 ? "s" : ""}` } : null);
+                  return dur ? (
+                    <div className="flex items-center gap-2 rounded-xl border bg-muted/30 p-3">
+                      <Clock className="w-5 h-5 shrink-0" style={{ color: colors.primary }} />
+                      <div>
+                        <p className="text-[11px] text-muted-foreground">Duração</p>
+                        <p className="text-xs font-semibold">{dur.formatted}</p>
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
+                {product.trackInventory && product.stockQuantity != null && (
+                  <div className={`flex items-center gap-2 p-3 rounded-xl border ${product.stockQuantity <= 0 ? "bg-red-50" : product.stockQuantity <= 10 ? "bg-orange-50" : "bg-green-50"}`}>
+                    <span className={`text-lg shrink-0 ${product.stockQuantity <= 0 ? "text-red-600" : product.stockQuantity <= 10 ? "text-orange-600" : "text-green-600"}`}>👥</span>
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">Vagas</p>
+                      <p className={`text-xs font-semibold ${product.stockQuantity <= 0 ? "text-red-600" : product.stockQuantity <= 10 ? "text-orange-600" : ""}`}>
+                        {product.stockQuantity <= 0 ? "Esgotado" : `${product.stockQuantity} disponíveis`}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {variants.length > 0 && (
+              <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
+                {variants.map((v) => (
+                  <div key={v.name}>
+                    <p className="font-medium text-sm mb-2">{v.name}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {v.options.map((opt) => (
+                        <button
+                          key={opt.label}
+                          onClick={() => setSelectedVariant({ variantName: v.name, label: opt.label, price: opt.price })}
+                          className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                            selectedVariant?.label === opt.label
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border hover:bg-muted"
+                          }`}
+                        >
+                          {opt.label}
+                          {opt.price !== basePrice && <span className="ml-1 text-xs">(R$ {opt.price.toFixed(2)})</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Price */}
+            <div className="rounded-xl border bg-muted/30 p-4">
+              <div className="flex items-baseline gap-2 flex-wrap">
+                {product.salePrice && (
+                  <span className="text-base text-muted-foreground line-through">
+                    {formatCurrency(parseFloat(product.price))}
+                  </span>
+                )}
+                <span className="text-3xl font-bold" style={{ color: colors.primary }}>
+                  {formatCurrency(effectivePrice)}
+                </span>
+                <span className="text-sm text-muted-foreground">/ pessoa</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                ou em até 10x de {formatCurrency(effectivePrice / 10)}
+              </p>
+            </div>
+
+            {/* CTA */}
+            <Button
+              className="w-full h-12 text-base font-bold"
+              style={{ backgroundColor: colors.accent, color: colors.accentForeground }}
+              onClick={handleReserveNow}
+              disabled={isSoldOut}
+            >
+              <Zap className="w-5 h-5 mr-2" />
+              {isSoldOut ? "Esgotado" : "Reservar Agora"}
+            </Button>
+
+            {store.contactWhatsapp && (
+              <Button
+                variant="outline"
+                className="w-full h-11 font-semibold border-green-500 text-green-600 hover:bg-green-50"
+                onClick={handleWhatsApp}
+              >
+                <MessageCircle className="w-5 h-5 mr-2" />
+                Comprar pelo WhatsApp
+              </Button>
+            )}
+
+            <button
+              onClick={() => navigate(`/loja/${slug}/consultar-pedido`)}
+              className="w-full flex items-center justify-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Search className="w-4 h-4" />
+              Consultar pedido existente
+            </button>
+
+            <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground border-t pt-4">
+              <ShieldCheck className="w-3.5 h-3.5" style={{ color: colors.primary }} />
+              Reserva segura e confirmação imediata
+            </p>
+          </div>
+        </div>
       </div>
 
-      {store.contactWhatsapp && (
-        <Button
-          variant="outline"
-          className="w-full h-11 font-semibold border-green-500 text-green-600 hover:bg-green-50 mb-4"
-          onClick={handleWhatsApp}
-        >
-          <MessageCircle className="w-5 h-5 mr-2" />
-          Comprar pelo WhatsApp
-        </Button>
-      )}
-
-      {product.reviews.length > 0 && (
-        <div className="flex items-center gap-2 text-sm mb-4">
-          <StarRating rating={Math.round(avgRating)} />
-          <span className="font-medium">{avgRating.toFixed(1)}</span>
-          <span className="text-muted-foreground">({product.reviews.length} avaliação(ões))</span>
-        </div>
-      )}
-
+      {/* What's included / excluded */}
       {(includes.length > 0 || excludes.length > 0) && (
-        <div className="mt-10">
-          <h2 className="text-xl font-bold mb-5">O que está incluso</h2>
+        <div className="mt-12">
+          <SectionHeader eyebrow="Detalhes" title="O que está incluso" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {includes.length > 0 && (
               <div className="rounded-xl border p-5 bg-green-50/40">
@@ -757,8 +817,9 @@ export default function VitrineProduct({
         </div>
       )}
 
+      {/* Tabs: description / requirements / highlights */}
       {tabs.length > 0 && (
-        <div className="mt-10">
+        <div className="mt-12">
           <div className="border-b flex gap-0 overflow-x-auto">
             {tabs.map((tab) => (
               <button
@@ -808,9 +869,10 @@ export default function VitrineProduct({
         </div>
       )}
 
+      {/* Reviews */}
       {product.reviews.length > 0 && (
-        <div className="mt-10">
-          <h2 className="text-xl font-bold mb-4">Avaliações dos Clientes</h2>
+        <div className="mt-12">
+          <SectionHeader eyebrow="Depoimentos" title="Avaliações dos Clientes" />
           <div className="space-y-4">
             {product.reviews.map((r) => (
               <div key={r.id} className="p-4 rounded-xl border">
@@ -836,52 +898,19 @@ export default function VitrineProduct({
         </div>
       )}
 
+      {/* Related */}
       {related.length > 0 && (
-        <div className="mt-12">
-          <h2 className="text-xl font-bold mb-5">Você também pode gostar</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {related.map((r) => {
-              const rPrice = r.salePrice ?? r.price;
-              const rDate = r.tripId ? (r.departureDate ?? r.startDate) : r.startDate;
-              return (
-                <a
-                  key={r.id}
-                  href={`/loja/${slug}/produtos/${r.slug}`}
-                  className="group rounded-xl border overflow-hidden hover:shadow-md transition-shadow flex flex-col"
-                >
-                  <div className="aspect-video bg-muted overflow-hidden">
-                    {r.images[0] ? (
-                      <img
-                        src={r.images[0]}
-                        alt={r.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <MapPin className="w-10 h-10 text-muted-foreground/20" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-4 flex flex-col gap-1 flex-1">
-                    <p className="font-semibold text-sm line-clamp-2">{r.name}</p>
-                    {r.destination && (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />{r.destination}
-                      </p>
-                    )}
-                    {rDate && (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        {new Date(rDate.slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
-                      </p>
-                    )}
-                    <p className="text-sm font-bold mt-auto" style={{ color: store.primaryColor }}>
-                      R$ {parseFloat(rPrice).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                </a>
-              );
-            })}
+        <div className="mt-14">
+          <SectionHeader eyebrow="Sugestões" title="Você também pode gostar" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {related.map((r) => (
+              <PremiumProductCard
+                key={r.id}
+                product={r}
+                slug={slug}
+                whatsapp={store.contactWhatsapp}
+              />
+            ))}
           </div>
         </div>
       )}
@@ -894,8 +923,9 @@ export default function VitrineProduct({
         />
       )}
 
+      {/* Mobile sticky purchase bar */}
       <div
-        className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t shadow-lg"
+        className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t shadow-lg lg:hidden"
         style={{ backdropFilter: "blur(8px)" }}
       >
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
@@ -904,35 +934,23 @@ export default function VitrineProduct({
             <div className="flex items-baseline gap-2">
               {product.salePrice && (
                 <span className="text-sm text-muted-foreground line-through">
-                  R$ {parseFloat(product.price).toFixed(2)}
+                  {formatCurrency(parseFloat(product.price))}
                 </span>
               )}
-              <span className="text-2xl font-bold" style={{ color: store.primaryColor }}>
-                R$ {effectivePrice.toFixed(2)}
+              <span className="text-2xl font-bold" style={{ color: colors.primary }}>
+                {formatCurrency(effectivePrice)}
               </span>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              className="h-11 px-4 font-medium flex items-center gap-2"
-              onClick={() => navigate(`/loja/${slug}/consultar-pedido`)}
-            >
-              <Search className="w-4 h-4" />
-              Consultar Pedido
-            </Button>
-            <Button
-              className="h-11 px-6 font-bold text-white"
-              style={{ backgroundColor: store.accentColor || store.primaryColor }}
-              onClick={handleReserveNow}
-              disabled={
-                product.trackInventory && product.stockQuantity != null && product.stockQuantity <= 0
-              }
-            >
-              <Zap className="w-5 h-5 mr-2" />
-              Reservar Agora
-            </Button>
-          </div>
+          <Button
+            className="h-11 px-6 font-bold"
+            style={{ backgroundColor: colors.accent, color: colors.accentForeground }}
+            onClick={handleReserveNow}
+            disabled={isSoldOut}
+          >
+            <Zap className="w-5 h-5 mr-2" />
+            {isSoldOut ? "Esgotado" : "Reservar Agora"}
+          </Button>
         </div>
       </div>
     </div>

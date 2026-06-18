@@ -1,28 +1,39 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { publicStoreApi, PublicStore, StoreProduct, StoreCategory, StoreReview } from "@/lib/storeApi";
-import { calculateTripDuration } from "@/lib/tripDuration";
-import { useCart } from "@/contexts/CartContext";
+import {
+  publicStoreApi,
+  PublicStore,
+  StoreProduct,
+  StoreCategory,
+  StoreReview,
+} from "@/lib/storeApi";
+import { useVitrineTheme } from "@/contexts/VitrineThemeContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { SectionHeader } from "@/components/vitrine/SectionHeader";
+import { PremiumProductCard } from "@/components/vitrine/PremiumProductCard";
 import {
   MapPin,
-  Calendar,
-  Clock,
-  ShoppingCart,
   Star,
   ChevronRight,
   ArrowRight,
-  MessageCircle,
-  Check,
   Quote,
   Gift,
   X,
-  Heart,
+  ShieldCheck,
+  Headphones,
+  CreditCard,
+  Sparkles,
+  Search,
 } from "lucide-react";
-import { useFavorites } from "@/contexts/FavoritesContext";
 
-function ReferralWelcomeBanner({ slug, primaryColor }: { slug: string; primaryColor: string }) {
+function ReferralWelcomeBanner({
+  slug,
+  primaryColor,
+}: {
+  slug: string;
+  primaryColor: string;
+}) {
   const [visible, setVisible] = useState(false);
   const [referrerName, setReferrerName] = useState<string | null>(null);
   const [discountLabel, setDiscountLabel] = useState<string>("5%");
@@ -38,14 +49,24 @@ function ReferralWelcomeBanner({ slug, primaryColor }: { slug: string; primaryCo
     const storedName = localStorage.getItem("referral_referrer_name");
     if (storedName) setReferrerName(storedName);
 
-    publicStoreApi.getReferralInfo(slug, refCode).then((info) => {
-      if (info?.referrerName) setReferrerName(info.referrerName);
-      if (info) {
-        const type = info.discountType ?? "percentage";
-        const val = type === "fixed" ? (info.discountValue ?? 0) : (info.discountPercent ?? 5);
-        setDiscountLabel(type === "fixed" ? `R$ ${val.toFixed(2).replace(".", ",")}` : `${val}%`);
-      }
-    }).catch(() => {});
+    publicStoreApi
+      .getReferralInfo(slug, refCode)
+      .then((info) => {
+        if (info?.referrerName) setReferrerName(info.referrerName);
+        if (info) {
+          const type = info.discountType ?? "percentage";
+          const val =
+            type === "fixed"
+              ? info.discountValue ?? 0
+              : info.discountPercent ?? 5;
+          setDiscountLabel(
+            type === "fixed"
+              ? `R$ ${val.toFixed(2).replace(".", ",")}`
+              : `${val}%`,
+          );
+        }
+      })
+      .catch(() => {});
   }, [slug]);
 
   if (!visible) return null;
@@ -53,7 +74,9 @@ function ReferralWelcomeBanner({ slug, primaryColor }: { slug: string; primaryCo
   return (
     <div
       className="relative text-white px-4 py-4 flex items-center gap-3 shadow-lg"
-      style={{ background: `linear-gradient(135deg, ${primaryColor} 0%, ${primaryColor}cc 100%)` }}
+      style={{
+        background: `linear-gradient(135deg, ${primaryColor} 0%, ${primaryColor}cc 100%)`,
+      }}
     >
       <Gift className="w-6 h-6 shrink-0" />
       <div className="flex-1 min-w-0">
@@ -63,7 +86,8 @@ function ReferralWelcomeBanner({ slug, primaryColor }: { slug: string; primaryCo
             : "Você chegou por indicação! 🎉"}
         </p>
         <p className="text-white/85 text-xs md:text-sm">
-          Ganhe <strong>{discountLabel} de desconto</strong> na sua reserva. O código já está salvo para você!
+          Ganhe <strong>{discountLabel} de desconto</strong> na sua reserva. O
+          código já está salvo para você!
         </p>
       </div>
       <button
@@ -77,224 +101,28 @@ function ReferralWelcomeBanner({ slug, primaryColor }: { slug: string; primaryCo
   );
 }
 
-function ProductCard({
-  product,
-  slug,
-  primaryColor,
-  accentColor,
-  whatsapp,
-}: {
-  product: StoreProduct;
-  slug: string;
-  primaryColor: string;
-  accentColor: string;
-  whatsapp?: string | null;
-}) {
-  const [, navigate] = useLocation();
-  const { addItem, openCart } = useCart();
-  const { isFavorited, toggleFavorite } = useFavorites();
-  const favItemType = product.tripId ? "trip" : "product";
-  const favItemId = product.tripId ?? product.id;
-  const isFav = isFavorited(favItemType, favItemId);
-
-  const displayPrice = product.salePrice ?? product.price;
-  const hasDiscount = !!product.salePrice;
-
-  const availableSeats = product.availableSeats ?? null;
-  const totalCapacity = product.totalCapacity ?? null;
-  const isLastSeats = availableSeats !== null && availableSeats > 0 && availableSeats <= 10;
-  const isSoldOut = availableSeats !== null && availableSeats <= 0;
-  const occupancyPct = totalCapacity && totalCapacity > 0 && availableSeats !== null
-    ? Math.round(((totalCapacity - availableSeats) / totalCapacity) * 100)
-    : null;
-
-  const displayDate = product.tripId ? (product.departureDate ?? product.startDate) : product.startDate;
-  const allInclusions = product.tripId && (product.inclusions ?? []).length > 0
-    ? (product.inclusions ?? [])
-    : (product.includes ?? []);
-  const inclusions = allInclusions.slice(0, 3);
-  const inclusionsOverflow = allInclusions.length > 3 ? allInclusions.length - 3 : 0;
-
-  function handleAddToCart() {
-    if (isSoldOut) return;
-    addItem({
-      productId: product.id,
-      productName: product.name,
-      unitPrice: parseFloat(displayPrice),
-      image: product.images?.[0],
-    });
-    openCart();
-  }
-
-  function handleWhatsApp() {
-    const wa = whatsapp?.replace(/\D/g, "");
-    if (!wa) return;
-    const text = encodeURIComponent(`Olá! Tenho interesse no pacote: ${product.name}`);
-    window.open(`https://wa.me/${wa}?text=${text}`, "_blank");
-  }
-
-  return (
-    <div className="bg-white rounded-xl border shadow-sm overflow-hidden hover:shadow-md transition-shadow group">
-      <div
-        className="relative h-48 bg-gradient-to-br from-blue-400 to-blue-600 cursor-pointer overflow-hidden"
-        onClick={() => navigate(`/loja/${slug}/produtos/${product.slug}`)}
-      >
-        {product.images?.[0] ? (
-          <img
-            src={product.images[0]}
-            alt={product.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center opacity-40">
-            <MapPin className="w-16 h-16 text-white" />
-          </div>
-        )}
-        {isSoldOut && (
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-            <span className="text-white font-bold text-sm bg-black/60 px-3 py-1 rounded-full">Esgotado</span>
-          </div>
-        )}
-        {isLastSeats && !isSoldOut && (
-          <div className="absolute top-2 left-2 px-2 py-1 rounded-full text-xs font-bold text-white bg-red-500 animate-pulse">
-            Últimas vagas!
-          </div>
-        )}
-        {hasDiscount && !isLastSeats && !isSoldOut && (
-          <div
-            className="absolute top-2 left-2 px-2 py-1 rounded-full text-xs font-bold text-white"
-            style={{ backgroundColor: accentColor }}
-          >
-            OFERTA
-          </div>
-        )}
-        <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
-          <button
-            type="button"
-            aria-label={isFav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
-            onClick={(e) => { e.stopPropagation(); toggleFavorite(favItemType, favItemId); }}
-            className={`w-7 h-7 rounded-full flex items-center justify-center shadow transition-colors ${isFav ? "bg-red-500 text-white" : "bg-white/90 text-gray-400 hover:text-red-500"}`}
-          >
-            <Heart className={`w-3.5 h-3.5 ${isFav ? "fill-current" : ""}`} />
-          </button>
-          {product.isFeatured && (
-            <div
-              className="px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1"
-              style={{ backgroundColor: "#FBBF24", color: "#78350f" }}
-            >
-              <Star className="w-3 h-3" /> Destaque
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="p-4">
-        <h3
-          className="font-bold text-sm mb-1 line-clamp-2 cursor-pointer hover:underline"
-          onClick={() => navigate(`/loja/${slug}/produtos/${product.slug}`)}
-        >
-          {product.name}
-        </h3>
-        {product.destination && (
-          <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-            <MapPin className="w-3 h-3" />
-            {product.destination}
-          </div>
-        )}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-          {(() => {
-            const dur = calculateTripDuration(
-              product.departureDate ?? product.startDate,
-              product.endDate,
-              product.departureTime,
-              product.returnTime,
-            ) ?? (product.durationDays ? { formattedShort: `${product.durationDays}d` } : null);
-            return dur ? (
-              <span className="flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                {dur.formattedShort}
-              </span>
-            ) : null;
-          })()}
-          {displayDate && (
-            <span className="flex items-center gap-1">
-              <Calendar className="w-3 h-3" />
-              {new Date(displayDate.slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-              })}
-              {product.departureTime && (
-                <span className="font-medium">às {product.departureTime}</span>
-              )}
-            </span>
-          )}
-        </div>
-        {inclusions.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-2">
-            {inclusions.map((inc, i) => (
-              <span key={i} className="inline-flex items-center gap-0.5 text-[10px] bg-green-50 text-green-700 border border-green-200 px-1.5 py-0.5 rounded-full">
-                <Check className="w-2.5 h-2.5" />{inc}
-              </span>
-            ))}
-            {inclusionsOverflow > 0 && (
-              <span className="inline-flex items-center text-[10px] bg-gray-100 text-gray-500 border border-gray-200 px-1.5 py-0.5 rounded-full">
-                +{inclusionsOverflow}
-              </span>
-            )}
-          </div>
-        )}
-        {occupancyPct !== null && totalCapacity !== null && (
-          <div className="mb-2">
-            <div className="flex justify-between text-[10px] text-muted-foreground mb-0.5">
-              <span>{availableSeats} vaga{availableSeats !== 1 ? "s" : ""} disponível{availableSeats !== 1 ? "ais" : ""}</span>
-              <span>{occupancyPct}% ocupado</span>
-            </div>
-            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${occupancyPct >= 90 ? "bg-red-500" : occupancyPct >= 70 ? "bg-amber-500" : "bg-green-500"}`}
-                style={{ width: `${occupancyPct}%` }}
-              />
-            </div>
-          </div>
-        )}
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            {hasDiscount && (
-              <div className="text-xs text-muted-foreground line-through">
-                R$ {parseFloat(product.price).toFixed(2)}
-              </div>
-            )}
-            <div className="font-bold text-lg" style={{ color: primaryColor }}>
-              R$ {parseFloat(displayPrice).toFixed(2)}
-            </div>
-          </div>
-          <div className="flex gap-1">
-            {whatsapp && (
-              <Button
-                size="icon"
-                variant="outline"
-                className="h-8 w-8 text-green-600 border-green-300 hover:bg-green-50"
-                onClick={handleWhatsApp}
-                title="Perguntar via WhatsApp"
-              >
-                <MessageCircle className="w-4 h-4" />
-              </Button>
-            )}
-            <Button
-              size="sm"
-              onClick={handleAddToCart}
-              disabled={isSoldOut}
-              style={!isSoldOut ? { backgroundColor: primaryColor } : undefined}
-              className={`text-white h-8 ${isSoldOut ? "bg-gray-300 cursor-not-allowed" : ""}`}
-            >
-              <ShoppingCart className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+const TRUST_ITEMS = [
+  {
+    icon: ShieldCheck,
+    title: "Reserva segura",
+    desc: "Pagamento protegido e confirmação imediata",
+  },
+  {
+    icon: Headphones,
+    title: "Atendimento próximo",
+    desc: "Suporte humano por WhatsApp em todas as etapas",
+  },
+  {
+    icon: CreditCard,
+    title: "Parcele sua viagem",
+    desc: "Diversas formas de pagamento e parcelamento",
+  },
+  {
+    icon: Sparkles,
+    title: "Experiências selecionadas",
+    desc: "Roteiros escolhidos a dedo pela nossa equipe",
+  },
+];
 
 export default function VitrineHome({
   slug,
@@ -304,138 +132,240 @@ export default function VitrineHome({
   store: PublicStore;
 }) {
   const [, navigate] = useLocation();
+  const { colors } = useVitrineTheme();
   const [featured, setFeatured] = useState<StoreProduct[]>([]);
   const [categories, setCategories] = useState<StoreCategory[]>([]);
   const [reviews, setReviews] = useState<StoreReview[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     Promise.allSettled([
       publicStoreApi.getProducts(slug, { featured: true, limit: 6 }),
       publicStoreApi.getCategories(slug),
       publicStoreApi.getReviews(slug, { limit: 6 }),
-    ]).then(([p, c, r]) => {
-      if (p.status === "fulfilled") setFeatured(p.value.data);
-      if (c.status === "fulfilled") setCategories(c.value);
-      if (r.status === "fulfilled") setReviews(r.value);
-    }).finally(() => setLoading(false));
+    ])
+      .then(([p, c, r]) => {
+        if (p.status === "fulfilled") setFeatured(p.value.data);
+        if (c.status === "fulfilled") setCategories(c.value);
+        if (r.status === "fulfilled") setReviews(r.value);
+      })
+      .finally(() => setLoading(false));
   }, [slug]);
+
+  const avgRating =
+    reviews.length > 0
+      ? reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length
+      : null;
+
+  function submitSearch(e: React.FormEvent) {
+    e.preventDefault();
+    const q = search.trim();
+    navigate(
+      `/loja/${slug}/produtos${q ? `?search=${encodeURIComponent(q)}` : ""}`,
+    );
+  }
 
   return (
     <div>
       {store.referralsEnabled !== false && (
-        <ReferralWelcomeBanner slug={slug} primaryColor={store.primaryColor ?? "#6366f1"} />
+        <ReferralWelcomeBanner slug={slug} primaryColor={colors.primary} />
       )}
-      {store.bannerUrl ? (
-        <div className="relative h-80 md:h-[420px] overflow-hidden">
+
+      {/* Hero */}
+      <section className="relative overflow-hidden">
+        {store.bannerUrl ? (
           <img
             src={store.bannerUrl}
             alt={store.name}
-            className="w-full h-full object-cover"
+            className="absolute inset-0 h-full w-full object-cover"
           />
-          <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center text-white text-center px-4">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4 drop-shadow-lg">
-              {store.seoTitle ?? store.name}
-            </h1>
-            {store.description && (
-              <p className="text-lg md:text-xl text-white/90 max-w-2xl mb-6">
-                {store.description}
-              </p>
-            )}
-            <Button
-              size="lg"
-              onClick={() => navigate(`/loja/${slug}/produtos`)}
-              className="text-white font-bold"
-              style={{ backgroundColor: store.accentColor }}
-            >
-              Ver Todos os Pacotes
-              <ArrowRight className="w-5 h-5 ml-2" />
-            </Button>
-          </div>
-        </div>
-      ) : (
+        ) : (
+          <div
+            className="absolute inset-0"
+            style={{ background: colors.gradientHero }}
+          />
+        )}
         <div
-          className="py-20 px-4 text-center text-white"
+          className="absolute inset-0"
           style={{
-            background: `linear-gradient(135deg, ${store.primaryColor}, ${store.secondaryColor})`,
+            background: store.bannerUrl
+              ? "linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.30) 40%, rgba(0,0,0,0.65) 100%)"
+              : "linear-gradient(180deg, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0.35) 100%)",
           }}
-        >
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">
+        />
+
+        <div className="relative mx-auto flex min-h-[460px] max-w-5xl flex-col items-center justify-center px-4 py-20 text-center text-white md:min-h-[540px]">
+          {store.logoUrl && (
+            <img
+              src={store.logoUrl}
+              alt={store.name}
+              className="mb-6 h-20 w-auto rounded-2xl bg-white/95 p-2 shadow-lg"
+            />
+          )}
+          <span className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] backdrop-blur">
+            <MapPin className="h-3.5 w-3.5" />
+            Viagens & Excursões
+          </span>
+          <h1 className="max-w-3xl text-4xl font-bold leading-tight drop-shadow-md md:text-6xl">
             {store.seoTitle ?? store.name}
           </h1>
           {store.description && (
-            <p className="text-lg text-white/90 max-w-2xl mx-auto mb-6">
+            <p className="mt-4 max-w-2xl text-base text-white/90 drop-shadow md:text-xl">
               {store.description}
             </p>
           )}
-          <Button
-            size="lg"
-            onClick={() => navigate(`/loja/${slug}/produtos`)}
-            className="bg-white font-bold"
-            style={{ color: store.primaryColor }}
-          >
-            Ver Todos os Pacotes
-            <ArrowRight className="w-5 h-5 ml-2" />
-          </Button>
-        </div>
-      )}
 
-      <div className="max-w-6xl mx-auto px-4 py-12 space-y-12">
+          <form
+            onSubmit={submitSearch}
+            className="mt-8 flex w-full max-w-xl items-center gap-2 rounded-full bg-white/95 p-1.5 shadow-2xl backdrop-blur"
+          >
+            <Search className="ml-3 h-5 w-5 shrink-0 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Para onde você quer viajar?"
+              className="min-w-0 flex-1 bg-transparent px-1 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            />
+            <Button
+              type="submit"
+              size="lg"
+              className="shrink-0 rounded-full font-semibold"
+              style={{
+                background: colors.primary,
+                color: colors.primaryForeground,
+              }}
+            >
+              Buscar
+            </Button>
+          </form>
+
+          <button
+            onClick={() => navigate(`/loja/${slug}/produtos`)}
+            className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-white/90 underline-offset-4 hover:underline"
+          >
+            Ver todos os pacotes
+            <ArrowRight className="h-4 w-4" />
+          </button>
+
+          {avgRating !== null && (
+            <div className="mt-8 inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-1.5 text-sm backdrop-blur">
+              <span className="flex items-center gap-0.5 text-amber-300">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Star
+                    key={i}
+                    className={`h-4 w-4 ${
+                      i < Math.round(avgRating)
+                        ? "fill-current"
+                        : "text-white/40"
+                    }`}
+                  />
+                ))}
+              </span>
+              <span className="font-semibold">{avgRating.toFixed(1)}</span>
+              <span className="text-white/80">
+                ({reviews.length} avaliações)
+              </span>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Trust strip */}
+      <section className="border-b bg-white">
+        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-4 px-4 py-8 lg:grid-cols-4">
+          {TRUST_ITEMS.map(({ icon: Icon, title, desc }) => (
+            <div key={title} className="flex items-start gap-3">
+              <span
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                style={{ background: colors.primarySoft, color: colors.primary }}
+              >
+                <Icon className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-sm font-semibold">{title}</p>
+                <p className="text-xs text-muted-foreground">{desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="mx-auto max-w-6xl space-y-16 px-4 py-14">
         {categories.length > 0 && (
           <section>
-            <h2 className="text-2xl font-bold mb-6">Categorias</h2>
-            <div className="flex gap-3 flex-wrap">
+            <SectionHeader
+              eyebrow="Explore"
+              title="Categorias"
+              subtitle="Encontre a experiência perfeita para a sua próxima viagem."
+            />
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {categories.map((cat) => (
                 <button
                   key={cat.id}
                   onClick={() =>
                     navigate(`/loja/${slug}/produtos?categoryId=${cat.id}`)
                   }
-                  className="px-4 py-2 rounded-full border hover:bg-muted transition-colors text-sm font-medium flex items-center gap-2"
+                  className="group relative flex h-32 items-end overflow-hidden rounded-2xl border border-black/5 p-4 text-left shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg"
+                  style={
+                    cat.imageUrl
+                      ? undefined
+                      : { background: colors.gradientHero }
+                  }
                 >
                   {cat.imageUrl && (
-                    <img
-                      src={cat.imageUrl}
-                      alt={cat.name}
-                      className="w-5 h-5 rounded-full object-cover"
-                    />
+                    <>
+                      <img
+                        src={cat.imageUrl}
+                        alt={cat.name}
+                        className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                    </>
                   )}
-                  {cat.name}
-                  <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                  <span className="relative flex w-full items-center justify-between font-semibold text-white">
+                    {cat.name}
+                    <ChevronRight className="h-4 w-4 opacity-80 transition-transform group-hover:translate-x-1" />
+                  </span>
                 </button>
               ))}
             </div>
           </section>
         )}
 
-        {featured.length > 0 && (
+        {(loading || featured.length > 0) && (
           <section>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold">Pacotes em Destaque</h2>
-              <Button
-                variant="ghost"
-                onClick={() => navigate(`/loja/${slug}/produtos`)}
-                className="gap-1"
-              >
-                Ver todos
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-            </div>
+            <SectionHeader
+              eyebrow="Imperdível"
+              title="Pacotes em Destaque"
+              subtitle="As experiências mais procuradas, escolhidas para você."
+              action={
+                <Button
+                  variant="ghost"
+                  onClick={() => navigate(`/loja/${slug}/produtos`)}
+                  className="gap-1"
+                >
+                  Ver todos
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              }
+            />
             {loading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="rounded-xl border h-64 animate-pulse bg-muted" />
+                  <div
+                    key={i}
+                    className="h-80 animate-pulse rounded-2xl border bg-muted"
+                  />
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {featured.map((product) => (
-                  <ProductCard
+                  <PremiumProductCard
                     key={product.id}
                     product={product}
                     slug={slug}
-                    primaryColor={store.primaryColor}
-                    accentColor={store.accentColor}
                     whatsapp={store.contactWhatsapp}
                   />
                 ))}
@@ -446,45 +376,55 @@ export default function VitrineHome({
 
         {reviews.length > 0 && (
           <section>
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-2xl font-bold">O que dizem nossos clientes</h2>
-                <p className="text-muted-foreground text-sm mt-1">Avaliações reais de viajantes satisfeitos</p>
-              </div>
-              <div className="flex items-center gap-1 text-yellow-500">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Star key={i} className="w-5 h-5 fill-current" />
-                ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <SectionHeader
+              eyebrow="Depoimentos"
+              title="O que dizem nossos clientes"
+              subtitle="Avaliações reais de viajantes satisfeitos."
+            />
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
               {reviews.map((review) => (
-                <div key={review.id} className="bg-card rounded-xl border p-5 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="flex items-start gap-2">
-                    <Quote className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
-                    <p className="text-sm text-muted-foreground leading-relaxed line-clamp-4">
-                      {review.comment ?? "Excelente experiência!"}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-0.5 mt-auto">
+                <div
+                  key={review.id}
+                  className="flex flex-col gap-3 rounded-2xl border border-black/5 bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
+                >
+                  <Quote
+                    className="h-7 w-7 shrink-0"
+                    style={{ color: colors.accent }}
+                  />
+                  <p className="line-clamp-4 text-sm leading-relaxed text-muted-foreground">
+                    {review.comment ?? "Excelente experiência!"}
+                  </p>
+                  <div className="flex items-center gap-0.5">
                     {Array.from({ length: 5 }).map((_, i) => (
                       <Star
                         key={i}
-                        className={`w-3.5 h-3.5 ${i < review.rating ? "fill-yellow-400 text-yellow-400" : "text-gray-200 fill-gray-200"}`}
+                        className={`h-3.5 w-3.5 ${
+                          i < review.rating
+                            ? "fill-yellow-400 text-yellow-400"
+                            : "fill-gray-200 text-gray-200"
+                        }`}
                       />
                     ))}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="mt-auto flex items-center gap-2 border-t pt-3">
                     <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
-                      style={{ backgroundColor: store.primaryColor }}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                      style={{
+                        background: colors.primary,
+                        color: colors.primaryForeground,
+                      }}
                     >
                       {(review.customerName ?? "?")[0].toUpperCase()}
                     </div>
                     <div>
-                      <p className="text-sm font-medium">{review.customerName ?? "Cliente"}</p>
+                      <p className="text-sm font-medium">
+                        {review.customerName ?? "Cliente"}
+                      </p>
                       <p className="text-xs text-muted-foreground">
-                        {new Date(review.createdAt).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+                        {new Date(review.createdAt).toLocaleDateString("pt-BR", {
+                          month: "long",
+                          year: "numeric",
+                        })}
                       </p>
                     </div>
                   </div>
@@ -494,23 +434,50 @@ export default function VitrineHome({
           </section>
         )}
 
+        {/* CTA */}
+        <section
+          className="relative overflow-hidden rounded-3xl px-6 py-12 text-center text-white shadow-xl"
+          style={{ background: colors.gradientCta }}
+        >
+          <h3 className="text-2xl font-bold md:text-3xl">
+            Pronto para a próxima aventura?
+          </h3>
+          <p className="mx-auto mt-2 max-w-xl text-sm text-white/90 md:text-base">
+            Descubra nossos roteiros e garanta a sua vaga com facilidade e
+            segurança.
+          </p>
+          <Button
+            size="lg"
+            onClick={() => navigate(`/loja/${slug}/produtos`)}
+            className="mt-6 rounded-full bg-white font-bold hover:bg-white/90"
+            style={{ color: colors.primary }}
+          >
+            Explorar pacotes
+            <ArrowRight className="ml-2 h-5 w-5" />
+          </Button>
+        </section>
+
         {store.paymentMethods.length > 0 && (
-          <section className="bg-muted/40 rounded-xl p-8 text-center">
-            <h3 className="font-bold text-lg mb-3">Formas de Pagamento</h3>
+          <section className="rounded-2xl bg-muted/40 p-8 text-center">
+            <h3 className="mb-3 text-lg font-bold">Formas de Pagamento</h3>
             <div className="flex flex-wrap justify-center gap-3">
               {store.paymentMethods.map((m) => (
-                <Badge key={m} variant="secondary" className="px-4 py-2 text-sm">
+                <Badge
+                  key={m}
+                  variant="secondary"
+                  className="px-4 py-2 text-sm"
+                >
                   {m === "pix"
                     ? "PIX"
                     : m === "boleto"
-                    ? "Boleto"
-                    : m === "credit_card"
-                    ? "Cartão de Crédito"
-                    : m === "debit_card"
-                    ? "Cartão de Débito"
-                    : m === "transfer"
-                    ? "Transferência"
-                    : m}
+                      ? "Boleto"
+                      : m === "credit_card"
+                        ? "Cartão de Crédito"
+                        : m === "debit_card"
+                          ? "Cartão de Débito"
+                          : m === "transfer"
+                            ? "Transferência"
+                            : m}
                 </Badge>
               ))}
             </div>

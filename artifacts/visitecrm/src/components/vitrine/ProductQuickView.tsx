@@ -26,6 +26,7 @@ import {
 
 import { formatDateShort as fmtDate } from "@/lib/utils";
 import { TRIP_TYPE_LABELS as TYPE_LABELS } from "@/lib/labels";
+import { useVitrineTheme } from "@/contexts/VitrineThemeContext";
 
 export function ProductQuickView({
   product,
@@ -40,6 +41,7 @@ export function ProductQuickView({
   open: boolean;
   onClose: () => void;
 }) {
+  const { colors } = useVitrineTheme();
   const [imgIndex, setImgIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImgLoaded, setLightboxImgLoaded] = useState(false);
@@ -191,7 +193,7 @@ export function ProductQuickView({
 
           <span
             className="absolute top-3 left-3 text-xs font-bold text-white px-2.5 py-1 rounded-full shadow"
-            style={{ backgroundColor: store.primaryColor }}
+            style={{ backgroundColor: colors.primary }}
           >
             {typeLabel}
           </span>
@@ -383,7 +385,7 @@ export function ProductQuickView({
                 )}
                 <span
                   className="text-2xl font-bold"
-                  style={{ color: store.primaryColor }}
+                  style={{ color: colors.primary }}
                 >
                   R$ {displayPrice.toFixed(2)}
                 </span>
@@ -417,7 +419,7 @@ export function ProductQuickView({
                 className="font-semibold text-white px-5"
                 style={
                   !isOutOfStock
-                    ? { backgroundColor: store.accentColor || store.primaryColor }
+                    ? { backgroundColor: colors.accent || colors.primary }
                     : undefined
                 }
                 disabled={isOutOfStock}
