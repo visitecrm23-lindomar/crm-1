@@ -6,7 +6,7 @@ import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { AGENCY_STAFF_ROLES } from '../lib/tenant';
 import { PAYMENT_STATUS, PAYMENT_TYPE, DEAL_STATUS, TRIP_STATUS, REFERRAL_STATUS, ROLES } from "@workspace/permissions";
-import { findReferralReversalGaps } from "../lib/referral-reversal-gaps";
+import { findReferralReversalGaps, countReferralReversalGaps } from "../lib/referral-reversal-gaps";
 
 const router = Router();
 
@@ -61,6 +61,7 @@ router.get("/alerts", async (req, res, next: NextFunction): Promise<void> => {
       birthdaysRows,
       exhaustedEmailLogs,
       referralReversalGaps,
+      referralReversalGapsCount,
     ] = await Promise.all([
       // 1. Contas a receber vencendo hoje
       db.select({
@@ -166,7 +167,10 @@ router.get("/alerts", async (req, res, next: NextFunction): Promise<void> => {
       // 9. Reversão de indicação ignorada por lacuna de dados.
       // Detection logic extracted into findReferralReversalGaps (see
       // lib/referral-reversal-gaps.ts) so it can be unit-tested directly.
+      // The list is a bounded preview for the bell dropdown; the count is the
+      // true total so the badge stays accurate even with a large backlog.
       findReferralReversalGaps(tenantId),
+      countReferralReversalGaps(tenantId),
     ]);
 
     const alerts: Alert[] = [];
@@ -372,24 +376,25 @@ router.get("/alerts", async (req, res, next: NextFunction): Promise<void> => {
     // 9. Reversões de indicação ignoradas por lacuna de dados
     {
       const gaps = referralReversalGaps;
-      if (gaps.length > 0) {
+      const totalGaps = referralReversalGapsCount;
+      if (totalGaps > 0) {
         const MAX_SHOWN = 3;
         const shown = gaps.slice(0, MAX_SHOWN).map((g) => {
           const resRef = g.reservation_number ?? g.reservation_id;
           const referrer = g.referrer_name ?? "indicador desconhecido";
           return `#${resRef} (cód. ${g.referral_code}, ${referrer})`;
         });
-        const remainder = gaps.length - shown.length;
+        const remainder = totalGaps - shown.length;
         const description = shown.join("; ") + (remainder > 0 ? ` e mais ${remainder}` : "");
 
         alerts.push({
           id: "referral-reversal-skipped",
           type: "warning",
           category: "Indicações",
-          title: `${gaps.length} reversão(ões) de bônus de indicação não executada(s)`,
+          title: `${totalGaps} reversão(ões) de bônus de indicação não executada(s)`,
           description,
           actionHref: "/indicacoes",
-          count: gaps.length,
+          count: totalGaps,
           referralSkips: gaps.map((g) => ({
             reservationId: g.reservation_id,
             reservationNumber: g.reservation_number,
@@ -401,6 +406,48 @@ router.get("/alerts", async (req, res, next: NextFunction): Promise<void> => {
     }
 
     res.json({ alerts, count: alerts.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Paginated full list of referral-reversal gaps. The /alerts payload only carries
+// a bounded preview (for the bell dropdown); this endpoint backs the dedicated
+// "Reversões de bônus pendentes" view on /indicacoes so agencies can page through
+// the entire backlog, not just the first 20.
+router.get("/alerts/referral-reversal-skipped/gaps", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    const isAllowedRole =
+      (AGENCY_STAFF_ROLES as readonly string[]).includes(me.role) ||
+      me.role === ROLES.SUPER_ADMIN;
+    if (!isAllowedRole) {
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
+    }
+
+    const parsedLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
+    const parsedOffset = Number.parseInt(String(req.query.offset ?? ""), 10);
+    const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 100) : 20;
+    const offset = Number.isFinite(parsedOffset) ? Math.max(parsedOffset, 0) : 0;
+
+    const [gaps, total] = await Promise.all([
+      findReferralReversalGaps(me.tenantId, { limit, offset }),
+      countReferralReversalGaps(me.tenantId),
+    ]);
+
+    res.json({
+      gaps: gaps.map((g) => ({
+        reservationId: g.reservation_id,
+        reservationNumber: g.reservation_number,
+        referralCode: g.referral_code,
+        referrerName: g.referrer_name,
+      })),
+      total,
+      limit,
+      offset,
+    });
   } catch (err) {
     next(err);
   }

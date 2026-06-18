@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useListReferrals,
@@ -87,6 +87,8 @@ import {
   FileSpreadsheet,
   FileText,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Megaphone,
   Flame,
   Pencil,
@@ -161,6 +163,8 @@ type EnrichedReferral = Referral & {
 
 const ALERTS_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+const REVERSAL_GAPS_PAGE_SIZE = 20;
+
 interface ReferralReversalSkip {
   reservationId: string;
   reservationNumber: string | null;
@@ -168,19 +172,22 @@ interface ReferralReversalSkip {
   referrerName: string | null;
 }
 
-interface AlertItem {
-  id: string;
-  referralSkips?: ReferralReversalSkip[];
+interface ReferralReversalGapsResponse {
+  gaps: ReferralReversalSkip[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
-interface AlertsResponse {
-  alerts: AlertItem[];
-  count: number;
-}
-
-async function fetchAlerts(): Promise<AlertsResponse> {
-  const res = await fetch(`${ALERTS_BASE}/api/alerts`, { credentials: "include" });
-  if (!res.ok) throw new Error("Failed to fetch alerts");
+async function fetchReversalGaps(
+  limit: number,
+  offset: number,
+): Promise<ReferralReversalGapsResponse> {
+  const res = await fetch(
+    `${ALERTS_BASE}/api/alerts/referral-reversal-skipped/gaps?limit=${limit}&offset=${offset}`,
+    { credentials: "include" },
+  );
+  if (!res.ok) throw new Error("Failed to fetch reversal gaps");
   return res.json();
 }
 
@@ -199,13 +206,25 @@ export default function Indicacoes() {
   const { data: me } = useGetMe();
   const queryClient = useQueryClient();
 
-  const { data: alertsData } = useQuery<AlertsResponse>({
-    queryKey: ["alerts"],
-    queryFn: fetchAlerts,
+  const [gapsPage, setGapsPage] = useState(0);
+  const { data: gapsData } = useQuery<ReferralReversalGapsResponse>({
+    queryKey: ["referral-reversal-gaps", gapsPage],
+    queryFn: () =>
+      fetchReversalGaps(REVERSAL_GAPS_PAGE_SIZE, gapsPage * REVERSAL_GAPS_PAGE_SIZE),
     staleTime: 60_000,
   });
-  const reversalGaps =
-    alertsData?.alerts.find((a) => a.id === "referral-reversal-skipped")?.referralSkips ?? [];
+  const reversalGaps = gapsData?.gaps ?? [];
+  const totalGaps = gapsData?.total ?? 0;
+  const gapsPageCount = Math.max(1, Math.ceil(totalGaps / REVERSAL_GAPS_PAGE_SIZE));
+
+  // After resolving the last row on a page, step back so the user is never
+  // stranded on an empty page while earlier pages still have gaps.
+  useEffect(() => {
+    if (gapsData && gapsData.gaps.length === 0 && gapsData.total > 0 && gapsPage > 0) {
+      setGapsPage((p) => Math.max(0, p - 1));
+    }
+  }, [gapsData, gapsPage]);
+
   const [resolvingGapIds, setResolvingGapIds] = useState<Set<string>>(new Set());
   // The resolve endpoint is restricted to agency staff (superadmin can view but not act).
   const canResolveGaps =
@@ -231,6 +250,7 @@ export default function Indicacoes() {
       }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["alerts"] }),
+        queryClient.invalidateQueries({ queryKey: ["referral-reversal-gaps"] }),
         refetch(),
       ]);
       toast({
@@ -1031,14 +1051,14 @@ export default function Indicacoes() {
       )}
 
       {/* Referral reversal gaps — cancelled reservations still owing a bonus reversal */}
-      {reversalGaps.length > 0 && (
+      {totalGaps > 0 && (
         <Card className="border-red-300 bg-red-50/60">
           <CardHeader className="pb-3">
             <div className="flex items-start gap-3">
               <ShieldAlert className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
               <div className="min-w-0">
                 <CardTitle className="text-base text-red-800">
-                  {reversalGaps.length} reversão(ões) de bônus de indicação não executada(s)
+                  {totalGaps} reversão(ões) de bônus de indicação não executada(s)
                 </CardTitle>
                 <CardDescription className="text-red-700">
                   Estas reservas foram canceladas, mas o bônus de indicação pode ter ficado
@@ -1099,6 +1119,39 @@ export default function Indicacoes() {
                 </TableBody>
               </Table>
             </div>
+            {totalGaps > REVERSAL_GAPS_PAGE_SIZE && (
+              <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
+                <p className="text-xs text-red-700">
+                  Mostrando {gapsPage * REVERSAL_GAPS_PAGE_SIZE + 1}–
+                  {gapsPage * REVERSAL_GAPS_PAGE_SIZE + reversalGaps.length} de {totalGaps}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-red-300 text-red-700 hover:bg-red-100"
+                    disabled={gapsPage === 0}
+                    onClick={() => setGapsPage((p) => Math.max(0, p - 1))}
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5 mr-1" />
+                    Anterior
+                  </Button>
+                  <span className="text-xs text-red-700">
+                    Página {gapsPage + 1} de {gapsPageCount}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-red-300 text-red-700 hover:bg-red-100"
+                    disabled={gapsPage >= gapsPageCount - 1}
+                    onClick={() => setGapsPage((p) => p + 1)}
+                  >
+                    Próxima
+                    <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

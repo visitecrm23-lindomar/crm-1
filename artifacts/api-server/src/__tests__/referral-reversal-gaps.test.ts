@@ -28,7 +28,7 @@ import { inArray } from "drizzle-orm";
 import { REFERRAL_STATUS, RESERVATION_STATUS } from "@workspace/permissions";
 
 import { generateId } from "../lib/id";
-import { findReferralReversalGaps } from "../lib/referral-reversal-gaps";
+import { findReferralReversalGaps, countReferralReversalGaps } from "../lib/referral-reversal-gaps";
 
 const TENANT_ID = `test-tenant-${generateId()}`;
 const OTHER_TENANT_ID = `test-tenant-${generateId()}`;
@@ -333,5 +333,58 @@ describe("findReferralReversalGaps", () => {
   it("returns an empty array for a blank tenant id without touching the database", async () => {
     const gaps = await findReferralReversalGaps("");
     expect(gaps).toEqual([]);
+  });
+});
+
+describe("countReferralReversalGaps + pagination", () => {
+  // Seeds one full gap (a CANCELLED reservation + a COMPLETED referral matched
+  // only by code) and returns the reservation id.
+  async function seedGap(referrerName?: string): Promise<string> {
+    const code = `GAPCODE-${generateId()}`;
+    const reservation = makeReservation({
+      status: RESERVATION_STATUS.CANCELLED,
+      discountReferralCode: code,
+    });
+    await db.insert(reservationsTable).values(reservation);
+    await db.insert(referralsTable).values(
+      makeReferral({
+        code,
+        status: REFERRAL_STATUS.COMPLETED,
+        reservationId: null,
+        referrerName: referrerName ?? null,
+      }),
+    );
+    return reservation.id;
+  }
+
+  it("returns the true total, unbounded by the list page limit", async () => {
+    for (let i = 0; i < 3; i++) await seedGap(`Indicador ${i}`);
+
+    const total = await countReferralReversalGaps(TENANT_ID);
+    expect(total).toBe(3);
+
+    // The list page is bounded by `limit`, but the count is not — this is the
+    // whole point of the count: an accurate badge/total above the page size.
+    const firstPage = await findReferralReversalGaps(TENANT_ID, { limit: 2 });
+    expect(firstPage).toHaveLength(2);
+  });
+
+  it("paginates with limit/offset and pages cover every distinct gap exactly once", async () => {
+    const created = new Set<string>();
+    for (let i = 0; i < 3; i++) created.add(await seedGap());
+
+    const page1 = await findReferralReversalGaps(TENANT_ID, { limit: 2, offset: 0 });
+    const page2 = await findReferralReversalGaps(TENANT_ID, { limit: 2, offset: 2 });
+    expect(page1).toHaveLength(2);
+    expect(page2).toHaveLength(1);
+
+    const seen = [...page1, ...page2].map((g) => g.reservation_id);
+    // No duplicates across pages, and the union equals every created gap.
+    expect(new Set(seen).size).toBe(3);
+    for (const id of created) expect(seen).toContain(id);
+  });
+
+  it("returns 0 for a blank tenant id without touching the database", async () => {
+    expect(await countReferralReversalGaps("")).toBe(0);
   });
 });
