@@ -22,6 +22,7 @@ import { calculateTier, loyaltyAwardPointsForReservation } from "../lib/loyalty-
 import { ROLES, DEAL_STATUS, RESERVATION_STATUS, REFERRAL_STATUS, COMMISSION_STATUS, STORE_ORDER_STATUS, STORE_PAYMENT_STATUS, type ReservationStatus } from "@workspace/permissions";
 import { parseReservationStatus } from "../lib/status-validators";
 import { moveDealToStage } from "../services/pipeline-automation";
+import { logger } from "../lib/logger";
 
 
 const router = Router();
@@ -1215,6 +1216,16 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
               ))
               .limit(1);
             referralRecord = byCodeAndReferred;
+            if (byCodeAndReferred) {
+              logger.warn(
+                {
+                  reservationId: req.params.id,
+                  discountReferralCode: existing.discountReferralCode,
+                  referralRecordId: byCodeAndReferred.id,
+                },
+                "[reservations] Referral reversal used fallback path (no reservationId on referral record) — consider backfilling reservation_id"
+              );
+            }
           }
 
           if (referralRecord) {
