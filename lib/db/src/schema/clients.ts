@@ -65,6 +65,7 @@ export const clientsTable = pgTable("clients", {
   emailOptIn: boolean("email_opt_in").notNull().default(true),
   ambassadorOptIn: boolean("ambassador_opt_in").notNull().default(false),
   customerCode: text("customer_code"),
+  expoPushToken: text("expo_push_token"),
 }, (table) => [
   uniqueIndex("clients_tenant_cpf_unique").on(table.tenantId, table.cpf).where(sql`${table.cpf} IS NOT NULL`),
   uniqueIndex("clients_tenant_referral_code_unique").on(table.tenantId, table.referralCode).where(sql`${table.referralCode} IS NOT NULL`),

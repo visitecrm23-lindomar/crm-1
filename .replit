@@ -104,6 +104,10 @@ args = "schema-drift"
 task = "workflow.run"
 args = "Start application"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "artifacts/cliente-app: expo"
+
 [[workflows.workflow]]
 name = "schema-drift"
 author = "agent"
@@ -114,6 +118,17 @@ args = "pnpm --filter @workspace/db check"
 
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow]]
+name = "artifacts/cliente-app: expo"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/cliente-app run dev"
+
+[workflows.workflow.metadata]
+outputType = "console"
 
   [agent]
 stack = "BEST_EFFORT_FALLBACK"

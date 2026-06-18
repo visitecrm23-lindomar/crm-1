@@ -1806,6 +1806,32 @@ router.delete("/client/me/dream-destinations/:id", async (req, res, next: NextFu
   } catch (err) { next(err); }
 });
 
+router.post("/client/push-token", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (me.role !== ROLES.CLIENT) {
+      next(new ForbiddenError("Acesso restrito a clientes", "FORBIDDEN_ROLE"));
+      return;
+    }
+    const body = z.object({ token: z.string().min(1).max(500) }).safeParse(req.body);
+    if (!body.success) {
+      next(new ValidationError("Token inválido", "VALIDATION_ERROR"));
+      return;
+    }
+    const client = await findClientRecord(me.tenantId, me.id, me.email);
+    if (!client) {
+      next(new NotFoundError("Cliente não encontrado", "NOT_FOUND"));
+      return;
+    }
+    await db
+      .update(clientsTable)
+      .set({ expoPushToken: body.data.token })
+      .where(eq(clientsTable.id, client.id));
+    res.status(204).send();
+  } catch (err) { next(err); }
+});
+
 router.get("/admin/clients/:clientId/dream-destinations", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
