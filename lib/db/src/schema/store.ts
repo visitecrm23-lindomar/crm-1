@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, numeric, integer, json } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, numeric, integer, json, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -392,6 +392,42 @@ export const insertStorePageSchema = createInsertSchema(storePagesTable).omit({ 
 export type InsertStorePage = z.infer<typeof insertStorePageSchema>;
 export type StorePage = typeof storePagesTable.$inferSelect;
 
+// Public price-drop alert subscriptions (double opt-in). A visitor subscribes
+// to a product with their email; a confirmation email is sent (status=pending),
+// and only after confirming (status=active) do they receive price-drop alerts.
+// Tokens are stored hashed (sha256) — the raw token only ever travels in the
+// emailed confirm/unsubscribe links, never persisted in plaintext.
+export const priceAlertSubscriptionsTable = pgTable(
+  "price_alert_subscriptions",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().references(() => tenantsTable.id, { onDelete: "cascade" }),
+    storeId: text("store_id").notNull().references(() => storesTable.id, { onDelete: "cascade" }),
+    productId: text("product_id").notNull().references(() => storeProductsTable.id, { onDelete: "cascade" }),
+
+    email: text("email").notNull(),
+    priceAtSubscribe: numeric("price_at_subscribe", { precision: 10, scale: 2 }).notNull(),
+
+    status: text("status").notNull().default("pending"),
+    confirmationTokenHash: text("confirmation_token_hash"),
+    unsubscribeTokenHash: text("unsubscribe_token_hash"),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    lastNotifiedAt: timestamp("last_notified_at", { withTimezone: true }),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("price_alert_subs_product_status_idx").on(table.productId, table.status),
+    index("price_alert_subs_conf_token_idx").on(table.confirmationTokenHash),
+    index("price_alert_subs_unsub_token_idx").on(table.unsubscribeTokenHash),
+  ],
+);
+
+export const insertPriceAlertSubscriptionSchema = createInsertSchema(priceAlertSubscriptionsTable).omit({ createdAt: true, updatedAt: true });
+export type InsertPriceAlertSubscription = z.infer<typeof insertPriceAlertSubscriptionSchema>;
+export type PriceAlertSubscription = typeof priceAlertSubscriptionsTable.$inferSelect;
+
 export const storesRelations = relations(storesTable, ({ one, many }) => ({
   tenant: one(tenantsTable, { fields: [storesTable.tenantId], references: [tenantsTable.id] }),
   categories: many(storeCategoriesTable),
@@ -442,4 +478,10 @@ export const storeReviewsRelations = relations(storeReviewsTable, ({ one }) => (
 
 export const storePagesRelations = relations(storePagesTable, ({ one }) => ({
   store: one(storesTable, { fields: [storePagesTable.storeId], references: [storesTable.id] }),
+}));
+
+export const priceAlertSubscriptionsRelations = relations(priceAlertSubscriptionsTable, ({ one }) => ({
+  tenant: one(tenantsTable, { fields: [priceAlertSubscriptionsTable.tenantId], references: [tenantsTable.id] }),
+  store: one(storesTable, { fields: [priceAlertSubscriptionsTable.storeId], references: [storesTable.id] }),
+  product: one(storeProductsTable, { fields: [priceAlertSubscriptionsTable.productId], references: [storeProductsTable.id] }),
 }));

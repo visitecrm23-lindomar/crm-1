@@ -5,6 +5,7 @@ import { calculateTripDuration } from "@/lib/tripDuration";
 import { formatCurrency } from "@/lib/utils";
 import { useCart } from "@/contexts/CartContext";
 import { useFavorites } from "@/contexts/FavoritesContext";
+import { useComparison } from "@/contexts/ComparisonContext";
 import { useVitrineTheme } from "@/contexts/VitrineThemeContext";
 import { FlashSaleCountdown } from "@/components/vitrine/FlashSaleCountdown";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import {
   MessageCircle,
   Heart,
   Flame,
+  Scale,
 } from "lucide-react";
 
 /**
@@ -42,11 +44,13 @@ export function PremiumProductCard({
   const [, navigate] = useLocation();
   const { addItem, openCart } = useCart();
   const { isFavorited, toggleFavorite } = useFavorites();
+  const { isComparing, toggle: toggleCompare, isFull: compareFull } = useComparison();
   const { colors } = useVitrineTheme();
 
   const favItemType = product.tripId ? "trip" : "product";
   const favItemId = product.tripId ?? product.id;
   const isFav = isFavorited(favItemType, favItemId);
+  const inCompare = isComparing(product.id);
 
   const priceNum = parseFloat(product.price);
   const displayPrice = product.salePrice ?? product.price;
@@ -300,6 +304,36 @@ export function PremiumProductCard({
             }`}
           >
             <Heart className={`h-4 w-4 ${isFav ? "fill-current" : ""}`} />
+          </button>
+          <button
+            type="button"
+            aria-label={inCompare ? "Remover da comparação" : "Adicionar à comparação"}
+            title={
+              !inCompare && compareFull
+                ? "Você já selecionou 3 pacotes para comparar"
+                : inCompare
+                  ? "Remover da comparação"
+                  : "Comparar"
+            }
+            disabled={!inCompare && compareFull}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleCompare({
+                productId: product.id,
+                productSlug: product.slug,
+                name: product.name,
+                image: product.images?.[0],
+                priceAtAdd: displayPriceNum,
+              });
+            }}
+            className={`flex h-8 w-8 items-center justify-center rounded-full shadow backdrop-blur transition-colors ${
+              inCompare
+                ? "text-white"
+                : "bg-white/90 text-gray-500 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            }`}
+            style={inCompare ? { background: colors.primary } : undefined}
+          >
+            <Scale className="h-4 w-4" />
           </button>
           {product.isFeatured && !isOutOfStock && (
             <span

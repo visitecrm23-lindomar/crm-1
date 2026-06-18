@@ -12,10 +12,12 @@ import {
   dealsTable,
   reservationsTable,
   partnerProductsTable,
+  priceAlertSubscriptionsTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, count, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { UTApi } from "uploadthing/server";
+import { randomBytes, createHash } from "crypto";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
@@ -23,6 +25,71 @@ import { deleteOrphanedFile, deleteOrphanedImages } from "../lib/uploadthing";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { STORE_ORDER_STATUS, STORE_PAYMENT_STATUS } from "@workspace/permissions";
 import { encryptCredential } from "../lib/crypto";
+import { sendPriceDropAlertEmail } from "../queues/email-helpers";
+
+// Storefront public base for links inside price-drop alert e-mails. Product
+// links point at the Vitrine; the unsubscribe link points at the public API,
+// which is served from the same origin in production.
+const STORE_PUBLIC_BASE = (process.env["STORE_PUBLIC_URL"] ?? `https://${process.env["REPLIT_DEV_DOMAIN"] ?? "visitecrm.com"}`).replace(/\/$/, "");
+
+function productEffectivePrice(p: { price: unknown; onSale: unknown; salePrice: unknown }): number {
+  const base = Number(p.price ?? 0);
+  if (p.onSale && p.salePrice != null) {
+    const sale = Number(p.salePrice);
+    if (isFinite(sale) && sale > 0) return sale;
+  }
+  return isFinite(base) ? base : 0;
+}
+
+// Best-effort, fail-safe notifier for confirmed price-drop subscribers. Never
+// throws — any DB/email failure is logged and swallowed so a product update is
+// never blocked. Each e-mail rotates the recipient's unsubscribe token (kept
+// hashed at rest) and advances priceAtSubscribe so they are only re-alerted on
+// a further drop.
+async function notifyPriceDropSubscribers(args: {
+  store: { id: string; tenantId: string; name: string; slug: string };
+  product: { id: string; name: string; slug: string };
+  oldPrice: number;
+  newPrice: number;
+  log: { info: (obj: unknown, msg?: string) => void; warn: (obj: unknown, msg?: string) => void };
+}): Promise<void> {
+  const { store, product, oldPrice, newPrice, log } = args;
+  try {
+    const subs = await db.select({
+      id: priceAlertSubscriptionsTable.id,
+      email: priceAlertSubscriptionsTable.email,
+    })
+      .from(priceAlertSubscriptionsTable)
+      .where(and(
+        eq(priceAlertSubscriptionsTable.productId, product.id),
+        eq(priceAlertSubscriptionsTable.status, "active"),
+        sql`CAST(${priceAlertSubscriptionsTable.priceAtSubscribe} AS NUMERIC) > ${newPrice}`,
+      ));
+    if (subs.length === 0) return;
+    const productUrl = `${STORE_PUBLIC_BASE}/loja/${encodeURIComponent(store.slug)}/produtos/${encodeURIComponent(product.slug)}`;
+    for (const sub of subs) {
+      const unsubToken = randomBytes(32).toString("hex");
+      const unsubHash = createHash("sha256").update(unsubToken).digest("hex");
+      await db.update(priceAlertSubscriptionsTable)
+        .set({ unsubscribeTokenHash: unsubHash, lastNotifiedAt: new Date(), priceAtSubscribe: newPrice.toFixed(2) })
+        .where(eq(priceAlertSubscriptionsTable.id, sub.id));
+      const unsubscribeUrl = `${STORE_PUBLIC_BASE}/api/public/store/${encodeURIComponent(store.slug)}/price-alerts/unsubscribe?token=${unsubToken}`;
+      await sendPriceDropAlertEmail({
+        tenantId: store.tenantId,
+        to: sub.email,
+        storeName: store.name,
+        productName: product.name,
+        oldPrice,
+        newPrice,
+        productUrl,
+        unsubscribeUrl,
+      });
+    }
+    log.info({ productId: product.id, count: subs.length }, "[price-alert] Price-drop notifications dispatched");
+  } catch (err) {
+    log.warn({ productId: product.id, err }, "[price-alert] Failed to dispatch price-drop notifications");
+  }
+}
 
 // Fields that hold gateway secrets. They are encrypted at rest, never
 // returned by GET endpoints, and only updated when the request body
@@ -515,6 +582,21 @@ router.put("/store/products/:id", async (req, res, next: NextFunction): Promise<
     const [product] = await db.select().from(storeProductsTable)
       .where(and(eq(storeProductsTable.id, req.params.id), eq(storeProductsTable.storeId, store.id))).limit(1);
     if (!product) { next(new NotFoundError("Product not found", "NOT_FOUND")); return; }
+
+    // Fire-and-forget price-drop alerts. Never awaited / never blocks the
+    // response; the notifier swallows all its own errors.
+    const oldEff = productEffectivePrice(existingProduct);
+    const newEff = productEffectivePrice(product);
+    if (newEff > 0 && newEff < oldEff) {
+      void notifyPriceDropSubscribers({
+        store: { id: store.id, tenantId: store.tenantId, name: store.name, slug: store.slug },
+        product: { id: product.id, name: product.name, slug: product.slug },
+        oldPrice: oldEff,
+        newPrice: newEff,
+        log: req.log,
+      });
+    }
+
     res.json(product);
   } catch (err) {
     next(err);

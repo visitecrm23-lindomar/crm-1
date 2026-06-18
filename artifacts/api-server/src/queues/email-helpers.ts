@@ -3,7 +3,7 @@ import { eq, and, inArray, isNull } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { getEmailQueue, getCancellationEmailQueue, getNewBookingNotificationEmailQueue, getReferralEmailQueue } from "./index";
 import type { ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData, ReferralBonusReleasedEmailJobData } from "./index";
-import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail, sendReferralTierUpgradeEmail, sendReferralReversedEmail } from "@workspace/email";
+import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail, sendReferralTierUpgradeEmail, sendReferralReversedEmail, sendReminderHtmlEmail } from "@workspace/email";
 import { ROLES } from "@workspace/permissions";
 import { logger } from "../lib/logger";
 import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps, ReferralWelcomeEmailProps, ReferralTierUpgradeEmailProps } from "@workspace/email";
@@ -1381,4 +1381,156 @@ export async function dispatchReferralTierUpgradeEmail(
   });
 
   logger.info({ emailLogId, referrerId, tenantId, newTierLevel, success: result.success }, "[email-queue] Referral tier upgrade email sent");
+}
+
+// ── Price-drop alerts (public Vitrine, double opt-in) ─────────────────────────
+// These helpers send plain transactional HTML (no React template) and always
+// record the outcome to email_logs. They never throw: a failed send is logged
+// and surfaced via the return value / log status so the caller (a product
+// update) is never blocked by email/Resend problems.
+
+function escapeHtmlEmail(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatBRL(value: number): string {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+interface PriceAlertConfirmationOpts {
+  tenantId: string;
+  to: string;
+  storeName: string;
+  productName: string;
+  confirmUrl: string;
+  unsubscribeUrl: string;
+}
+
+/**
+ * Sends the double opt-in confirmation email for a price-drop alert
+ * subscription. Returns true on a successful send. Never throws.
+ */
+export async function sendPriceAlertConfirmationEmail(opts: PriceAlertConfirmationOpts): Promise<boolean> {
+  const { tenantId, to, storeName, productName, confirmUrl, unsubscribeUrl } = opts;
+  const emailLogId = generateId();
+  const safeStore = escapeHtmlEmail(storeName);
+  const safeProduct = escapeHtmlEmail(productName);
+  const subject = `Confirme seu alerta de preço — ${productName}`;
+  const html = `
+  <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;color:#1f2937;">
+    <h2 style="color:#111827;">Confirme seu alerta de preço</h2>
+    <p>Você pediu para ser avisado quando o preço de <strong>${safeProduct}</strong> cair na loja <strong>${safeStore}</strong>.</p>
+    <p>Para começar a receber os avisos, confirme seu e-mail:</p>
+    <p style="text-align:center;margin:28px 0;">
+      <a href="${confirmUrl}" style="background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;display:inline-block;font-weight:bold;">Confirmar alerta de preço</a>
+    </p>
+    <p style="font-size:13px;color:#6b7280;">Se você não solicitou este alerta, ignore este e-mail — nenhum aviso será enviado sem a sua confirmação.</p>
+    <p style="font-size:12px;color:#9ca3af;margin-top:24px;">Não quer mais receber? <a href="${unsubscribeUrl}" style="color:#9ca3af;">Cancelar</a></p>
+  </div>`;
+  try {
+    const result = await sendReminderHtmlEmail({ to, subject, html, fromName: storeName });
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId: null,
+      recipient: to,
+      subject,
+      status: result.success ? "sent" : "failed",
+      messageId: result.messageId ?? null,
+      errorMessage: result.error ?? null,
+    });
+    logger.info({ emailLogId, tenantId, success: result.success }, "[price-alert] Confirmation email processed");
+    return result.success;
+  } catch (err) {
+    logger.warn({ emailLogId, tenantId, err }, "[price-alert] Confirmation email send threw — recording as failed");
+    try {
+      await db.insert(emailLogsTable).values({
+        id: emailLogId,
+        tenantId,
+        reservationId: null,
+        recipient: to,
+        subject,
+        status: "failed",
+        messageId: null,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+    } catch {
+      // swallow — logging the email outcome must never break the caller
+    }
+    return false;
+  }
+}
+
+interface PriceDropEmailOpts {
+  tenantId: string;
+  to: string;
+  storeName: string;
+  productName: string;
+  oldPrice: number;
+  newPrice: number;
+  productUrl: string;
+  unsubscribeUrl: string;
+}
+
+/**
+ * Sends a single price-drop alert email to one confirmed subscriber. Returns
+ * true on a successful send. Never throws.
+ */
+export async function sendPriceDropAlertEmail(opts: PriceDropEmailOpts): Promise<boolean> {
+  const { tenantId, to, storeName, productName, oldPrice, newPrice, productUrl, unsubscribeUrl } = opts;
+  const emailLogId = generateId();
+  const safeStore = escapeHtmlEmail(storeName);
+  const safeProduct = escapeHtmlEmail(productName);
+  const subject = `Baixou de preço: ${productName}`;
+  const html = `
+  <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;color:#1f2937;">
+    <h2 style="color:#111827;">O preço caiu! 🎉</h2>
+    <p>Boas notícias: <strong>${safeProduct}</strong> está mais barato na loja <strong>${safeStore}</strong>.</p>
+    <p style="font-size:18px;margin:16px 0;">
+      <span style="color:#9ca3af;text-decoration:line-through;">${formatBRL(oldPrice)}</span>
+      &nbsp;&rarr;&nbsp;
+      <strong style="color:#16a34a;">${formatBRL(newPrice)}</strong>
+    </p>
+    <p style="text-align:center;margin:28px 0;">
+      <a href="${productUrl}" style="background:#16a34a;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;display:inline-block;font-weight:bold;">Ver oferta</a>
+    </p>
+    <p style="font-size:12px;color:#9ca3af;margin-top:24px;">Não quer mais receber alertas deste produto? <a href="${unsubscribeUrl}" style="color:#9ca3af;">Cancelar</a></p>
+  </div>`;
+  try {
+    const result = await sendReminderHtmlEmail({ to, subject, html, fromName: storeName });
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId: null,
+      recipient: to,
+      subject,
+      status: result.success ? "sent" : "failed",
+      messageId: result.messageId ?? null,
+      errorMessage: result.error ?? null,
+    });
+    logger.info({ emailLogId, tenantId, success: result.success }, "[price-alert] Price-drop email processed");
+    return result.success;
+  } catch (err) {
+    logger.warn({ emailLogId, tenantId, err }, "[price-alert] Price-drop email send threw — recording as failed");
+    try {
+      await db.insert(emailLogsTable).values({
+        id: emailLogId,
+        tenantId,
+        reservationId: null,
+        recipient: to,
+        subject,
+        status: "failed",
+        messageId: null,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+    } catch {
+      // swallow — logging the email outcome must never break the caller
+    }
+    return false;
+  }
 }

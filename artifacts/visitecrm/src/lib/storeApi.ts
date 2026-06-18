@@ -180,6 +180,17 @@ export const publicStoreApi = {
       "GET",
       `/public/store/${slug}/products/${productSlug}/partner-info`
     ),
+  getRecommendations: (slug: string, productSlug: string, limit = 4) =>
+    publicReq<{ data: StoreProduct[] }>(
+      "GET",
+      `/public/store/${slug}/products/${productSlug}/recommendations?limit=${limit}`
+    ),
+  subscribePriceAlert: (slug: string, productId: string, email: string) =>
+    publicReq<{ success: boolean; message: string }>(
+      "POST",
+      `/public/store/${slug}/price-alerts`,
+      { productId, email }
+    ),
   getReviews: (slug: string, params?: { limit?: number; featured?: boolean }) => {
     const qs = params ? "?" + new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString() : "";
     return publicReq<StoreReview[]>("GET", `/public/store/${slug}/reviews${qs}`);
@@ -373,6 +384,10 @@ export interface PublicStore {
   maintenanceMessage?: string | null;
   couponsEnabled?: boolean;
   referralsEnabled?: boolean;
+  minInstallments?: number;
+  maxInstallments?: number;
+  installmentFee?: string;
+  minOrderValue?: string | null;
 }
 
 export interface StoreCategory {

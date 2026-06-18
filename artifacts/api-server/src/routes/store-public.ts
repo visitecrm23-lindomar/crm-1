@@ -25,12 +25,15 @@ import {
   vehicleLayoutsTable,
   partnerProductsTable,
   partnerAvailabilityTable,
+  priceAlertSubscriptionsTable,
 } from "@workspace/db";
-import { eq, and, desc, asc, ilike, or, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, asc, ilike, or, sql, inArray, ne } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { getTenantReservationPrefix, getYearMonth } from "../lib/reservation-number";
-import { randomBytes } from "crypto";
+import { randomBytes, createHash } from "crypto";
+import { getAIClientForTenant } from "../lib/ai-client";
+import { sendPriceAlertConfirmationEmail } from "../queues/email-helpers";
 import { decryptOrPassthrough } from "../lib/crypto";
 import { writeClientActivity } from "../lib/activities";
 import { getClientIp } from "../lib/get-client-ip";
@@ -445,6 +448,197 @@ router.get("/public/store/:slug/products/:productSlug/partner-info", async (req,
       ...pp,
       availability: availability.filter((a) => a.spotsTotal - a.spotsUsed > 0),
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── AI-assisted "Você também pode gostar" recommendations ─────────────────────
+// Best-effort: a deterministic heuristic always produces an answer; an optional
+// per-tenant AI call only *reorders* the heuristic candidates. Any AI failure or
+// timeout silently falls back to the heuristic order. Results are cached briefly
+// in memory keyed by store/product/effective-price so the AI is not hit on every
+// page view. Never blocks or fails the product page.
+const RECS_TTL_MS = 5 * 60 * 1000;
+const RECS_AI_TIMEOUT_MS = 2000;
+const recsCache = new Map<string, { at: number; orderedIds: string[] }>();
+
+function effectivePrice(p: { price: string | number | null; onSale?: boolean | null; salePrice?: string | number | null }): number {
+  const base = Number(p.price ?? 0);
+  if (p.onSale && p.salePrice != null) {
+    const sale = Number(p.salePrice);
+    if (isFinite(sale) && sale > 0) return sale;
+  }
+  return isFinite(base) ? base : 0;
+}
+
+async function rankCandidatesWithAI(
+  tenantId: string,
+  current: { name: string; destination: string | null; price: number },
+  candidates: { id: string; name: string; destination: string | null; price: number }[],
+): Promise<string[] | null> {
+  try {
+    const ai = await getAIClientForTenant(tenantId);
+    const list = candidates
+      .map((c, i) => `${i + 1}. id=${c.id} | ${c.name} | destino=${c.destination ?? "-"} | preço=${c.price}`)
+      .join("\n");
+    const prompt = `Produto atual: ${current.name} | destino=${current.destination ?? "-"} | preço=${current.price}\n\nCandidatos:\n${list}\n\nOrdene os IDs dos candidatos do mais para o menos relevante para quem está vendo o produto atual. Responda APENAS com um array JSON de strings de IDs, sem texto extra.`;
+    const completion = await ai.client.chat.completions.create(
+      {
+        model: ai.model,
+        messages: [
+          { role: "system", content: "Você recomenda viagens/produtos turísticos. Responda somente com JSON válido." },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.2,
+        max_tokens: 300,
+      },
+      { timeout: RECS_AI_TIMEOUT_MS, maxRetries: 0 },
+    );
+    const raw = completion.choices?.[0]?.message?.content?.trim() ?? "";
+    const match = raw.match(/\[[\s\S]*\]/);
+    if (!match) return null;
+    const parsed: unknown = JSON.parse(match[0]);
+    if (!Array.isArray(parsed)) return null;
+    const validIds = new Set(candidates.map((c) => c.id));
+    const ordered = parsed.filter((x): x is string => typeof x === "string" && validIds.has(x));
+    return ordered.length > 0 ? ordered : null;
+  } catch {
+    return null;
+  }
+}
+
+router.get("/public/store/:slug/products/:productSlug/recommendations", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const store = await getActiveStore(req.params.slug);
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
+
+    const limitRaw = Number(req.query["limit"]);
+    const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? Math.floor(limitRaw) : 4, 1), 8);
+
+    const [current] = await db.select({
+      id: storeProductsTable.id,
+      categoryId: storeProductsTable.categoryId,
+      destination: storeProductsTable.destination,
+      price: storeProductsTable.price,
+      onSale: storeProductsTable.onSale,
+      salePrice: storeProductsTable.salePrice,
+      name: storeProductsTable.name,
+    })
+      .from(storeProductsTable)
+      .where(and(
+        eq(storeProductsTable.storeId, store.id),
+        eq(storeProductsTable.slug, req.params.productSlug),
+        eq(storeProductsTable.status, "active"),
+      )).limit(1);
+    // Best-effort: an unknown product yields an empty list rather than a 404.
+    if (!current) { res.json({ data: [] }); return; }
+
+    const currentPrice = effectivePrice(current);
+
+    const cardFields = {
+      id: storeProductsTable.id,
+      type: storeProductsTable.type,
+      name: storeProductsTable.name,
+      slug: storeProductsTable.slug,
+      shortDescription: storeProductsTable.shortDescription,
+      categoryId: storeProductsTable.categoryId,
+      tripId: storeProductsTable.tripId,
+      includes: storeProductsTable.includes,
+      price: storeProductsTable.price,
+      comparePrice: storeProductsTable.comparePrice,
+      onSale: storeProductsTable.onSale,
+      salePrice: storeProductsTable.salePrice,
+      images: storeProductsTable.images,
+      thumbnail: storeProductsTable.thumbnail,
+      hasDates: storeProductsTable.hasDates,
+      startDate: storeProductsTable.startDate,
+      destination: storeProductsTable.destination,
+      durationDays: storeProductsTable.durationDays,
+      isFeatured: storeProductsTable.isFeatured,
+      salesCount: storeProductsTable.salesCount,
+      ratingAverage: storeProductsTable.ratingAverage,
+      ratingCount: storeProductsTable.ratingCount,
+      availableSeats: tripsTable.availableSeats,
+      totalCapacity: tripsTable.totalCapacity,
+      departureDate: tripsTable.departureDate,
+      returnDate: tripsTable.returnDate,
+    };
+
+    // Bounded candidate pool from the same store (popular first).
+    const pool = await db.select(cardFields)
+      .from(storeProductsTable)
+      .leftJoin(tripsTable, eq(storeProductsTable.tripId, tripsTable.id))
+      .where(and(
+        eq(storeProductsTable.storeId, store.id),
+        eq(storeProductsTable.status, "active"),
+        ne(storeProductsTable.id, current.id),
+      ))
+      .orderBy(desc(storeProductsTable.salesCount))
+      .limit(24);
+
+    if (pool.length === 0) { res.json({ data: [] }); return; }
+
+    // Deterministic heuristic score: same category / destination / price band.
+    const scored = pool.map((p) => {
+      let score = 0;
+      if (current.categoryId && p.categoryId === current.categoryId) score += 3;
+      if (current.destination && p.destination && p.destination === current.destination) score += 3;
+      const pPrice = effectivePrice(p);
+      if (currentPrice > 0 && pPrice > 0) {
+        const rel = Math.abs(pPrice - currentPrice) / currentPrice;
+        score += Math.max(0, 2 - rel * 2);
+      }
+      if (p.isFeatured) score += 0.5;
+      return { p, score, pPrice };
+    });
+    scored.sort((a, b) => b.score - a.score || (b.p.salesCount ?? 0) - (a.p.salesCount ?? 0));
+
+    const heuristicTop = scored.slice(0, Math.min(12, scored.length));
+
+    // Optional AI re-ranking over the heuristic shortlist (cached, best-effort).
+    const cacheKey = `${store.id}:${current.id}:${currentPrice}`;
+    const cached = recsCache.get(cacheKey);
+    let orderedIds: string[];
+    if (cached && Date.now() - cached.at < RECS_TTL_MS) {
+      orderedIds = cached.orderedIds;
+    } else {
+      const aiOrder = await rankCandidatesWithAI(
+        store.tenantId,
+        { name: current.name, destination: current.destination, price: currentPrice },
+        heuristicTop.map((s) => ({ id: s.p.id, name: s.p.name, destination: s.p.destination, price: s.pPrice })),
+      );
+      orderedIds = aiOrder ?? heuristicTop.map((s) => s.p.id);
+      recsCache.set(cacheKey, { at: Date.now(), orderedIds });
+      if (recsCache.size > 500) {
+        const firstKey = recsCache.keys().next().value;
+        if (firstKey) recsCache.delete(firstKey);
+      }
+    }
+
+    // Materialise ordered products (AI/heuristic order first, heuristic remainder appended).
+    const byId = new Map(heuristicTop.map((s) => [s.p.id, s.p]));
+    const orderedProducts: typeof pool = [];
+    for (const id of orderedIds) {
+      const found = byId.get(id);
+      if (found) { orderedProducts.push(found); byId.delete(id); }
+    }
+    for (const s of heuristicTop) {
+      const remaining = byId.get(s.p.id);
+      if (remaining) { orderedProducts.push(remaining); byId.delete(s.p.id); }
+    }
+
+    const data = orderedProducts.slice(0, limit).map((p) => ({
+      ...p,
+      departureDate: p.departureDate
+        ? (p.departureDate as unknown as Date).toISOString().slice(0, 10)
+        : null,
+      returnDate: p.returnDate
+        ? (p.returnDate as unknown as Date).toISOString().slice(0, 10)
+        : null,
+    }));
+
+    res.json({ data });
   } catch (err) {
     next(err);
   }
@@ -1422,6 +1616,193 @@ router.get("/public/store/:slug/reviews", async (req, res, next: NextFunction): 
       .orderBy(desc(storeReviewsTable.createdAt))
       .limit(limit);
     res.json(reviews);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── Price-drop alerts (public, double opt-in) ─────────────────────────────────
+// Visitors subscribe to a product with their e-mail. A confirmation e-mail is
+// sent (status=pending); only after they click the confirm link (status=active)
+// do they receive price-drop alerts. Tokens are random 256-bit values stored
+// only as sha256 hashes — the raw token lives solely in the e-mailed links.
+
+const priceAlertSubscribeSchema = z.object({
+  productId: z.string().min(1).max(64),
+  email: z.string().email().max(254),
+});
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+// Token-bearing e-mail links MUST use a trusted, server-configured origin — never
+// the request Host header, which is attacker-controlled on this anonymous endpoint
+// (Host-header injection → phishing / token capture). Mirrors STORE_PUBLIC_BASE in store.ts.
+const STORE_PUBLIC_BASE = (
+  process.env["STORE_PUBLIC_URL"] ?? `https://${process.env["REPLIT_DEV_DOMAIN"] ?? "visitecrm.com"}`
+).replace(/\/$/, "");
+
+function priceAlertResultPage(title: string, message: string): string {
+  const safeTitle = title.replace(/</g, "&lt;");
+  const safeMessage = message.replace(/</g, "&lt;");
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${safeTitle}</title></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f9fafb;margin:0;padding:0;"><div style="max-width:480px;margin:48px auto;background:#ffffff;border-radius:12px;padding:32px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.08);"><h1 style="color:#111827;font-size:20px;">${safeTitle}</h1><p style="color:#4b5563;font-size:15px;line-height:1.5;">${safeMessage}</p></div></body></html>`;
+}
+
+// POST subscribe — always returns a generic success to avoid e-mail enumeration.
+router.post("/public/store/:slug/price-alerts", async (req, res, next: NextFunction): Promise<void> => {
+  const genericSuccess = {
+    success: true,
+    message: "Se o produto existir, enviaremos um e-mail para você confirmar o alerta de preço.",
+  };
+  try {
+    const store = await getActiveStore(req.params.slug);
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
+
+    const parsed = priceAlertSubscribeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      next(new ValidationError("Dados inválidos", "VALIDATION_ERROR"));
+      return;
+    }
+    const email = parsed.data.email.trim().toLowerCase();
+    const { productId } = parsed.data;
+
+    const [product] = await db.select({
+      id: storeProductsTable.id,
+      name: storeProductsTable.name,
+      price: storeProductsTable.price,
+      onSale: storeProductsTable.onSale,
+      salePrice: storeProductsTable.salePrice,
+    })
+      .from(storeProductsTable)
+      .where(and(
+        eq(storeProductsTable.id, productId),
+        eq(storeProductsTable.storeId, store.id),
+        eq(storeProductsTable.status, "active"),
+      )).limit(1);
+    // Unknown product → generic success (no enumeration, no row created).
+    if (!product) { res.json(genericSuccess); return; }
+
+    // Already actively subscribed → succeed silently without re-sending.
+    const [existing] = await db.select({
+      id: priceAlertSubscriptionsTable.id,
+      status: priceAlertSubscriptionsTable.status,
+    })
+      .from(priceAlertSubscriptionsTable)
+      .where(and(
+        eq(priceAlertSubscriptionsTable.productId, product.id),
+        eq(priceAlertSubscriptionsTable.email, email),
+      )).limit(1);
+    if (existing && existing.status === "active") { res.json(genericSuccess); return; }
+
+    const confirmationToken = randomBytes(32).toString("hex");
+    const unsubscribeToken = randomBytes(32).toString("hex");
+    const confirmationTokenHash = sha256Hex(confirmationToken);
+    const unsubscribeTokenHash = sha256Hex(unsubscribeToken);
+    const priceAtSubscribe = effectivePrice(product).toFixed(2);
+
+    if (existing) {
+      // Re-arm a pending / previously-unsubscribed row and resend confirmation.
+      await db.update(priceAlertSubscriptionsTable)
+        .set({
+          status: "pending",
+          confirmationTokenHash,
+          unsubscribeTokenHash,
+          confirmedAt: null,
+          priceAtSubscribe,
+        })
+        .where(eq(priceAlertSubscriptionsTable.id, existing.id));
+    } else {
+      await db.insert(priceAlertSubscriptionsTable).values({
+        id: generateId(),
+        tenantId: store.tenantId,
+        storeId: store.id,
+        productId: product.id,
+        email,
+        priceAtSubscribe,
+        status: "pending",
+        confirmationTokenHash,
+        unsubscribeTokenHash,
+      });
+    }
+
+    const slug = encodeURIComponent(req.params.slug);
+    const confirmUrl = `${STORE_PUBLIC_BASE}/api/public/store/${slug}/price-alerts/confirm?token=${confirmationToken}`;
+    const unsubscribeUrl = `${STORE_PUBLIC_BASE}/api/public/store/${slug}/price-alerts/unsubscribe?token=${unsubscribeToken}`;
+
+    // Never throws; failures are logged to email_logs internally.
+    await sendPriceAlertConfirmationEmail({
+      tenantId: store.tenantId,
+      to: email,
+      storeName: store.name,
+      productName: product.name,
+      confirmUrl,
+      unsubscribeUrl,
+    });
+
+    res.json(genericSuccess);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET confirm — double opt-in confirmation link from the e-mail.
+router.get("/public/store/:slug/price-alerts/confirm", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const store = await getActiveStore(req.params.slug);
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
+    const token = typeof req.query["token"] === "string" ? req.query["token"] : "";
+    if (!token) {
+      res.status(400).send(priceAlertResultPage("Link inválido", "O link de confirmação está incompleto."));
+      return;
+    }
+    const tokenHash = sha256Hex(token);
+    const [row] = await db.select({ id: priceAlertSubscriptionsTable.id, status: priceAlertSubscriptionsTable.status })
+      .from(priceAlertSubscriptionsTable)
+      .where(and(
+        eq(priceAlertSubscriptionsTable.storeId, store.id),
+        eq(priceAlertSubscriptionsTable.confirmationTokenHash, tokenHash),
+      )).limit(1);
+    if (!row) {
+      res.status(404).send(priceAlertResultPage("Link inválido ou expirado", "Não encontramos este alerta. Ele pode já ter sido confirmado ou cancelado."));
+      return;
+    }
+    if (row.status !== "active") {
+      // Consume the confirmation token (one-time use) on activation.
+      await db.update(priceAlertSubscriptionsTable)
+        .set({ status: "active", confirmedAt: new Date(), confirmationTokenHash: null })
+        .where(eq(priceAlertSubscriptionsTable.id, row.id));
+    }
+    res.status(200).send(priceAlertResultPage("Alerta confirmado! ✅", "Pronto! Avisaremos você por e-mail assim que o preço deste produto cair."));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET unsubscribe — one-click opt-out link from the e-mail.
+router.get("/public/store/:slug/price-alerts/unsubscribe", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const store = await getActiveStore(req.params.slug);
+    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
+    const token = typeof req.query["token"] === "string" ? req.query["token"] : "";
+    if (!token) {
+      res.status(400).send(priceAlertResultPage("Link inválido", "O link de cancelamento está incompleto."));
+      return;
+    }
+    const tokenHash = sha256Hex(token);
+    const [row] = await db.select({ id: priceAlertSubscriptionsTable.id })
+      .from(priceAlertSubscriptionsTable)
+      .where(and(
+        eq(priceAlertSubscriptionsTable.storeId, store.id),
+        eq(priceAlertSubscriptionsTable.unsubscribeTokenHash, tokenHash),
+      )).limit(1);
+    if (row) {
+      await db.update(priceAlertSubscriptionsTable)
+        .set({ status: "unsubscribed" })
+        .where(eq(priceAlertSubscriptionsTable.id, row.id));
+    }
+    // Always show a friendly confirmation, even if the row was already removed.
+    res.status(200).send(priceAlertResultPage("Alerta cancelado", "Você não receberá mais alertas de preço deste produto."));
   } catch (err) {
     next(err);
   }

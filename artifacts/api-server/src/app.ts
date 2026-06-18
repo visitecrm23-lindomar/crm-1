@@ -202,9 +202,18 @@ const referralValidateLimiter = rateLimit({
   handler: rateLimitHandler,
 });
 
+const priceAlertSubscribeLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitHandler,
+});
+
 app.use("/api/public", publicGeneralLimiter);
 app.post("/api/public/store/:slug/orders", publicOrderLimiter);
 app.post("/api/public/store/:slug/referral/validate", referralValidateLimiter);
+app.post("/api/public/store/:slug/price-alerts", priceAlertSubscribeLimiter);
 
 app.use("/api", router);
 app.use(errorHandler);

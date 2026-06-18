@@ -7,6 +7,8 @@ import { formatCurrency } from "@/lib/utils";
 import { useVitrineTheme } from "@/contexts/VitrineThemeContext";
 import { SectionHeader } from "@/components/vitrine/SectionHeader";
 import { PremiumProductCard } from "@/components/vitrine/PremiumProductCard";
+import { InstallmentSimulator } from "@/components/vitrine/InstallmentSimulator";
+import { PriceAlert } from "@/components/vitrine/PriceAlert";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -336,9 +338,24 @@ export default function VitrineProduct({
       .getProduct(slug, productSlug)
       .then((p) => {
         setProduct(p);
-        publicStoreApi.getProducts(slug, { limit: 4 }).then((r) => {
-          setRelated(r.data.filter((x) => x.id !== p.id).slice(0, 3));
-        }).catch(() => {});
+        // AI-assisted recommendations (best-effort); fall back to a plain
+        // product listing if the endpoint is unavailable.
+        publicStoreApi.getRecommendations(slug, productSlug, 3)
+          .then((r) => {
+            const recs = (r.data ?? []).filter((x) => x.id !== p.id).slice(0, 3);
+            if (recs.length > 0) {
+              setRelated(recs);
+              return;
+            }
+            publicStoreApi.getProducts(slug, { limit: 4 }).then((g) => {
+              setRelated(g.data.filter((x) => x.id !== p.id).slice(0, 3));
+            }).catch(() => {});
+          })
+          .catch(() => {
+            publicStoreApi.getProducts(slug, { limit: 4 }).then((g) => {
+              setRelated(g.data.filter((x) => x.id !== p.id).slice(0, 3));
+            }).catch(() => {});
+          });
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
@@ -733,9 +750,8 @@ export default function VitrineProduct({
                 </span>
                 <span className="text-sm text-muted-foreground">/ pessoa</span>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                ou em até 10x de {formatCurrency(effectivePrice / 10)}
-              </p>
+              <InstallmentSimulator price={effectivePrice} store={store} />
+              <PriceAlert slug={slug} productId={product.id} />
             </div>
 
             {/* CTA */}

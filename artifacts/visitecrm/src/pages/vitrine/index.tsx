@@ -3,7 +3,9 @@ import { useParams, Switch, Route, Redirect, useLocation } from "wouter";
 import { publicStoreApi, PublicStore } from "@/lib/storeApi";
 import { CartProvider } from "@/contexts/CartContext";
 import { FavoritesProvider } from "@/contexts/FavoritesContext";
+import { ComparisonProvider } from "@/contexts/ComparisonContext";
 import { VitrineThemeProvider } from "@/contexts/VitrineThemeContext";
+import { ComparisonBar } from "@/components/vitrine/ComparisonBar";
 import VitrineLayout from "./layout";
 import VitrineHome from "./home";
 import VitrineCatalog from "./catalog";
@@ -14,6 +16,7 @@ import VitrineOrderTracking from "./order-tracking";
 import ReservationWizard from "./reservation-wizard";
 import ReferralLanding from "./referral-landing";
 import MyReferralPage from "./my-referral";
+import VitrineComparar from "./comparar";
 import VitrineSignIn from "./store-signin";
 import { Loader2, AlertCircle } from "lucide-react";
 
@@ -192,6 +195,9 @@ function StoreRouter({ slug }: { slug: string }) {
         <Route path={`/loja/${slug}/calendario`}>
           <VitrineCalendar slug={slug} store={store} />
         </Route>
+        <Route path={`/loja/${slug}/comparar`}>
+          <VitrineComparar slug={slug} store={store} />
+        </Route>
         <Route path={`/loja/${slug}/produtos/:productSlug`}>
           {(params: Record<string, string>) => (
             <VitrineProduct
@@ -248,6 +254,7 @@ function StoreRouter({ slug }: { slug: string }) {
         </Route>
         </Switch>
       </VitrineLayout>
+      <ComparisonBar slug={slug} />
     </VitrineThemeProvider>
   );
 }
@@ -263,7 +270,9 @@ export default function Vitrine() {
   return (
     <CartProvider slug={slug}>
       <FavoritesProvider>
-        <StoreRouter slug={slug} />
+        <ComparisonProvider slug={slug}>
+          <StoreRouter slug={slug} />
+        </ComparisonProvider>
       </FavoritesProvider>
     </CartProvider>
   );
