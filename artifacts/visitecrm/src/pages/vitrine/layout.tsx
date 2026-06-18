@@ -112,6 +112,12 @@ export default function VitrineLayout({
               Pacotes
             </a>
             <a
+              href={`/loja/${slug}/calendario`}
+              className="text-white/90 hover:text-white text-sm font-medium transition-colors"
+            >
+              Calendário
+            </a>
+            <a
               href={`/loja/${slug}/consultar-pedido`}
               className="text-white/90 hover:text-white text-sm font-medium transition-colors"
             >
@@ -248,6 +254,13 @@ export default function VitrineLayout({
               Pacotes
             </a>
             <a
+              href={`/loja/${slug}/calendario`}
+              className="block text-white/90 hover:text-white text-sm font-medium py-1"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Calendário
+            </a>
+            <a
               href={`/loja/${slug}/consultar-pedido`}
               className="block text-white/90 hover:text-white text-sm font-medium py-1"
               onClick={() => setMobileMenuOpen(false)}
@@ -360,6 +373,11 @@ export default function VitrineLayout({
               <div>
                 <a href={`/loja/${slug}/produtos`} className="hover:text-white">
                   Ver Pacotes
+                </a>
+              </div>
+              <div>
+                <a href={`/loja/${slug}/calendario`} className="hover:text-white">
+                  Calendário de Saídas
                 </a>
               </div>
               <div>

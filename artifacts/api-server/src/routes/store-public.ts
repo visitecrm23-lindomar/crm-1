@@ -179,7 +179,7 @@ router.get("/public/store/:slug/products", async (req, res, next: NextFunction):
     }
     const {
       category, categoryId, type, featured, search, sort = "newest",
-      destination, minPrice, maxPrice,
+      destination, minPrice, maxPrice, departureFrom, minSeats,
       page: pageStr, limit: limitStr,
     } = req.query;
     const conditions = [
@@ -203,6 +203,18 @@ router.get("/public/store/:slug/products", async (req, res, next: NextFunction):
     const maxPriceNum = maxPrice ? Number(maxPrice) : NaN;
     if (!isNaN(minPriceNum) && isFinite(minPriceNum)) conditions.push(sql`CAST(${storeProductsTable.price} AS NUMERIC) >= ${minPriceNum}`);
     if (!isNaN(maxPriceNum) && isFinite(maxPriceNum)) conditions.push(sql`CAST(${storeProductsTable.price} AS NUMERIC) <= ${maxPriceNum}`);
+    // Trip-linked filters (smart search). These reference the joined trips
+    // table, so the COUNT query below must also join trips. Products without a
+    // linked trip have NULL trip columns and are excluded by these filters,
+    // which is the intended behaviour (you can't filter a non-dated product by
+    // departure date or seat availability).
+    if (typeof departureFrom === "string" && /^\d{4}-\d{2}-\d{2}$/.test(departureFrom)) {
+      conditions.push(sql`${tripsTable.departureDate} >= ${departureFrom}`);
+    }
+    const minSeatsNum = minSeats ? Number(minSeats) : NaN;
+    if (!isNaN(minSeatsNum) && isFinite(minSeatsNum) && minSeatsNum > 0) {
+      conditions.push(sql`${tripsTable.availableSeats} >= ${Math.floor(minSeatsNum)}`);
+    }
     let orderBy;
     if (sort === "price_asc") orderBy = asc(storeProductsTable.price);
     else if (sort === "price_desc") orderBy = desc(storeProductsTable.price);
@@ -233,6 +245,7 @@ router.get("/public/store/:slug/products", async (req, res, next: NextFunction):
       destination: storeProductsTable.destination,
       durationDays: storeProductsTable.durationDays,
       isFeatured: storeProductsTable.isFeatured,
+      salesCount: storeProductsTable.salesCount,
       ratingAverage: storeProductsTable.ratingAverage,
       ratingCount: storeProductsTable.ratingCount,
       trackInventory: storeProductsTable.trackInventory,
@@ -256,7 +269,9 @@ router.get("/public/store/:slug/products", async (req, res, next: NextFunction):
     const page = limit ? Math.max(Number(pageStr) || 1, 1) : 1;
     const offset = limit ? (page - 1) * limit : 0;
     const [countResult, products] = await Promise.all([
-      db.select({ count: sql<number>`COUNT(*)` }).from(storeProductsTable).where(whereClause),
+      db.select({ count: sql<number>`COUNT(*)` }).from(storeProductsTable)
+        .leftJoin(tripsTable, eq(storeProductsTable.tripId, tripsTable.id))
+        .where(whereClause),
       limit
         ? db.select(selectFields).from(storeProductsTable)
             .leftJoin(tripsTable, eq(storeProductsTable.tripId, tripsTable.id))

@@ -30,8 +30,22 @@ interface Filters {
   type: string;
   minPrice: string;
   maxPrice: string;
+  departureFrom: string;
+  minSeats: string;
   sort: string;
 }
+
+const EMPTY_FILTERS: Filters = {
+  search: "",
+  category: "all",
+  destination: "all",
+  type: "all",
+  minPrice: "",
+  maxPrice: "",
+  departureFrom: "",
+  minSeats: "",
+  sort: "default",
+};
 
 function FilterPanel({
   filters,
@@ -60,7 +74,7 @@ function FilterPanel({
   }
 
   function reset() {
-    const empty: Filters = { search: "", category: "all", destination: "all", type: "all", minPrice: "", maxPrice: "", sort: "default" };
+    const empty: Filters = { ...EMPTY_FILTERS };
     setLocal(empty);
     setFilters(empty);
     onClose?.();
@@ -71,7 +85,9 @@ function FilterPanel({
     local.destination !== "all" ||
     local.type !== "all" ||
     !!local.minPrice ||
-    !!local.maxPrice;
+    !!local.maxPrice ||
+    !!local.departureFrom ||
+    !!local.minSeats;
 
   return (
     <div className="space-y-5">
@@ -196,6 +212,42 @@ function FilterPanel({
         </div>
       </div>
 
+      <div>
+        <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 block">
+          Data de partida (a partir de)
+        </Label>
+        <Input
+          type="date"
+          value={local.departureFrom}
+          onChange={(e) => setLocal((p) => ({ ...p, departureFrom: e.target.value }))}
+          className="h-8 text-sm"
+        />
+      </div>
+
+      <div>
+        <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 block">
+          Passageiros
+        </Label>
+        <Select
+          value={local.minSeats || "any"}
+          onValueChange={(v) =>
+            setLocal((p) => ({ ...p, minSeats: v === "any" ? "" : v }))
+          }
+        >
+          <SelectTrigger className="h-8 text-sm">
+            <SelectValue placeholder="Qualquer" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="any">Qualquer quantidade</SelectItem>
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+              <SelectItem key={n} value={String(n)}>
+                {n}+ {n === 1 ? "passageiro" : "passageiros"}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <Button
         onClick={apply}
         className="w-full text-white"
@@ -219,6 +271,9 @@ export default function VitrineCatalog({
   const params = new URLSearchParams(searchStr);
   const initialCategory = params.get("categoryId") ?? "all";
   const initialSearch = params.get("search") ?? "";
+  const initialDestination = params.get("destination") ?? "all";
+  const initialDepartureFrom = params.get("departureFrom") ?? "";
+  const initialMinSeats = params.get("minSeats") ?? "";
 
   const [products, setProducts] = useState<StoreProduct[]>([]);
   const [categories, setCategories] = useState<StoreCategory[]>([]);
@@ -230,13 +285,12 @@ export default function VitrineCatalog({
   const LIMIT = 12;
 
   const [filters, setFilters] = useState<Filters>({
+    ...EMPTY_FILTERS,
     search: initialSearch,
     category: initialCategory,
-    destination: "all",
-    type: "all",
-    minPrice: "",
-    maxPrice: "",
-    sort: "default",
+    destination: initialDestination,
+    departureFrom: initialDepartureFrom,
+    minSeats: initialMinSeats,
   });
 
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -302,6 +356,8 @@ export default function VitrineCatalog({
       if (filters.type !== "all") queryParams.type = filters.type;
       if (filters.minPrice) queryParams.minPrice = filters.minPrice;
       if (filters.maxPrice) queryParams.maxPrice = filters.maxPrice;
+      if (filters.departureFrom) queryParams.departureFrom = filters.departureFrom;
+      if (filters.minSeats) queryParams.minSeats = filters.minSeats;
       if (filters.sort && filters.sort !== "default") queryParams.sort = filters.sort;
       const res = await publicStoreApi.getProducts(slug, queryParams);
       setProducts(res.data);
@@ -323,7 +379,7 @@ export default function VitrineCatalog({
 
   useEffect(() => {
     setPage(1);
-  }, [filters.search, filters.category, filters.destination, filters.type, filters.minPrice, filters.maxPrice, filters.sort]);
+  }, [filters.search, filters.category, filters.destination, filters.type, filters.minPrice, filters.maxPrice, filters.departureFrom, filters.minSeats, filters.sort]);
 
   useEffect(() => {
     load();
@@ -336,7 +392,9 @@ export default function VitrineCatalog({
     filters.destination !== "all" ||
     filters.type !== "all" ||
     !!filters.minPrice ||
-    !!filters.maxPrice;
+    !!filters.maxPrice ||
+    !!filters.departureFrom ||
+    !!filters.minSeats;
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
@@ -487,9 +545,7 @@ export default function VitrineCatalog({
           {(filters.search || hasActiveFilters) && (
             <button
               className="mt-2 text-primary underline text-sm"
-              onClick={() =>
-                setFilters({ search: "", category: "all", destination: "all", type: "all", minPrice: "", maxPrice: "", sort: "default" })
-              }
+              onClick={() => setFilters({ ...EMPTY_FILTERS })}
             >
               Limpar filtros
             </button>

@@ -7,6 +7,7 @@ import { VitrineThemeProvider } from "@/contexts/VitrineThemeContext";
 import VitrineLayout from "./layout";
 import VitrineHome from "./home";
 import VitrineCatalog from "./catalog";
+import VitrineCalendar from "./calendar";
 import VitrineProduct from "./product";
 import VitrineCheckout from "./checkout";
 import VitrineOrderTracking from "./order-tracking";
@@ -187,6 +188,9 @@ function StoreRouter({ slug }: { slug: string }) {
         </Route>
         <Route path={`/loja/${slug}/produtos`}>
           <VitrineCatalog slug={slug} store={store} />
+        </Route>
+        <Route path={`/loja/${slug}/calendario`}>
+          <VitrineCalendar slug={slug} store={store} />
         </Route>
         <Route path={`/loja/${slug}/produtos/:productSlug`}>
           {(params: Record<string, string>) => (

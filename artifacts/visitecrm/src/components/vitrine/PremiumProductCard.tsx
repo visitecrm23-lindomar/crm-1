@@ -6,6 +6,7 @@ import { formatCurrency } from "@/lib/utils";
 import { useCart } from "@/contexts/CartContext";
 import { useFavorites } from "@/contexts/FavoritesContext";
 import { useVitrineTheme } from "@/contexts/VitrineThemeContext";
+import { FlashSaleCountdown } from "@/components/vitrine/FlashSaleCountdown";
 import { Button } from "@/components/ui/button";
 import {
   MapPin,
@@ -413,8 +414,8 @@ export function PremiumProductCard({
           <div className="mb-3">
             <div className="mb-0.5 flex justify-between text-[10px] text-muted-foreground">
               <span>
-                {availableSeats} vaga{availableSeats !== 1 ? "s" : ""} disponíve
-                {availableSeats !== 1 ? "is" : "l"}
+                {availableSeats} vaga{availableSeats !== 1 ? "s" : ""}{" "}
+                {availableSeats !== 1 ? "disponíveis" : "disponível"}
               </span>
               <span>{occupancyPct}%</span>
             </div>
@@ -430,6 +431,12 @@ export function PremiumProductCard({
                 style={{ width: `${occupancyPct}%` }}
               />
             </div>
+          </div>
+        )}
+
+        {product.onSale && hasDiscount && !isOutOfStock && product.saleEndsAt && (
+          <div className="mb-2">
+            <FlashSaleCountdown endsAt={product.saleEndsAt} variant="badge" />
           </div>
         )}
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import {
   publicStoreApi,
@@ -8,10 +8,12 @@ import {
   StoreReview,
 } from "@/lib/storeApi";
 import { useVitrineTheme } from "@/contexts/VitrineThemeContext";
+import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SectionHeader } from "@/components/vitrine/SectionHeader";
 import { PremiumProductCard } from "@/components/vitrine/PremiumProductCard";
+import { FlashSaleCountdown } from "@/components/vitrine/FlashSaleCountdown";
 import {
   MapPin,
   Star,
@@ -25,7 +27,19 @@ import {
   CreditCard,
   Sparkles,
   Search,
+  Calendar,
+  Users,
+  Clock,
 } from "lucide-react";
+
+interface DestinationGroup {
+  destination: string;
+  image: string | null;
+  priceFrom: number;
+  durationDays: number | null;
+  count: number;
+  sales: number;
+}
 
 function ReferralWelcomeBanner({
   slug,
@@ -136,19 +150,27 @@ export default function VitrineHome({
   const [featured, setFeatured] = useState<StoreProduct[]>([]);
   const [categories, setCategories] = useState<StoreCategory[]>([]);
   const [reviews, setReviews] = useState<StoreReview[]>([]);
+  const [allProducts, setAllProducts] = useState<StoreProduct[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+
+  const [destino, setDestino] = useState("");
+  const [dataIda, setDataIda] = useState("");
+  const [passageiros, setPassageiros] = useState("");
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
   useEffect(() => {
     Promise.allSettled([
       publicStoreApi.getProducts(slug, { featured: true, limit: 6 }),
       publicStoreApi.getCategories(slug),
       publicStoreApi.getReviews(slug, { limit: 6 }),
+      publicStoreApi.getProducts(slug, { limit: 200 }),
     ])
-      .then(([p, c, r]) => {
+      .then(([p, c, r, all]) => {
         if (p.status === "fulfilled") setFeatured(p.value.data);
         if (c.status === "fulfilled") setCategories(c.value);
         if (r.status === "fulfilled") setReviews(r.value);
+        if (all.status === "fulfilled") setAllProducts(all.value.data);
       })
       .finally(() => setLoading(false));
   }, [slug]);
@@ -158,12 +180,81 @@ export default function VitrineHome({
       ? reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length
       : null;
 
-  function submitSearch(e: React.FormEvent) {
+  const destinations = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          allProducts
+            .map((p) => p.destination)
+            .filter((d): d is string => !!d && d.trim().length > 0),
+        ),
+      ).sort((a, b) => a.localeCompare(b, "pt-BR")),
+    [allProducts],
+  );
+  const hasDestinations = destinations.length > 0;
+
+  const flashSales = useMemo(() => {
+    const now = Date.now();
+    return allProducts
+      .filter(
+        (p) =>
+          p.onSale &&
+          p.salePrice &&
+          p.saleEndsAt &&
+          new Date(p.saleEndsAt).getTime() > now,
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.saleEndsAt!).getTime() - new Date(b.saleEndsAt!).getTime(),
+      );
+  }, [allProducts]);
+
+  const destinationGroups = useMemo<DestinationGroup[]>(() => {
+    const map = new Map<string, DestinationGroup>();
+    for (const p of allProducts) {
+      const dest = p.destination?.trim();
+      if (!dest) continue;
+      const priceNum = parseFloat(p.salePrice ?? p.price);
+      const img = p.thumbnail ?? p.images?.[0] ?? p.gallery?.[0] ?? null;
+      const existing = map.get(dest);
+      if (!existing) {
+        map.set(dest, {
+          destination: dest,
+          image: img,
+          priceFrom: Number.isFinite(priceNum) ? priceNum : Infinity,
+          durationDays: p.durationDays ?? null,
+          count: 1,
+          sales: p.salesCount ?? 0,
+        });
+      } else {
+        existing.count += 1;
+        existing.sales += p.salesCount ?? 0;
+        if (Number.isFinite(priceNum) && priceNum < existing.priceFrom)
+          existing.priceFrom = priceNum;
+        if (!existing.image && img) existing.image = img;
+        if (existing.durationDays == null && p.durationDays != null)
+          existing.durationDays = p.durationDays;
+      }
+    }
+    return Array.from(map.values())
+      .sort((a, b) => b.sales - a.sales || b.count - a.count)
+      .slice(0, 8);
+  }, [allProducts]);
+
+  const soonestSaleEnd = flashSales[0]?.saleEndsAt ?? null;
+
+  function submitSmartSearch(e: React.FormEvent) {
     e.preventDefault();
-    const q = search.trim();
-    navigate(
-      `/loja/${slug}/produtos${q ? `?search=${encodeURIComponent(q)}` : ""}`,
-    );
+    const qs = new URLSearchParams();
+    const destinoTrim = destino.trim();
+    if (destinoTrim) {
+      if (hasDestinations) qs.set("destination", destinoTrim);
+      else qs.set("search", destinoTrim);
+    }
+    if (dataIda) qs.set("departureFrom", dataIda);
+    if (passageiros) qs.set("minSeats", passageiros);
+    const str = qs.toString();
+    navigate(`/loja/${slug}/produtos${str ? `?${str}` : ""}`);
   }
 
   return (
@@ -217,27 +308,94 @@ export default function VitrineHome({
           )}
 
           <form
-            onSubmit={submitSearch}
-            className="mt-8 flex w-full max-w-xl items-center gap-2 rounded-full bg-white/95 p-1.5 shadow-2xl backdrop-blur"
+            onSubmit={submitSmartSearch}
+            className="mt-8 w-full max-w-3xl rounded-3xl bg-white/95 p-3 text-left shadow-2xl backdrop-blur md:rounded-full md:p-2"
           >
-            <Search className="ml-3 h-5 w-5 shrink-0 text-muted-foreground" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Para onde você quer viajar?"
-              className="min-w-0 flex-1 bg-transparent px-1 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground"
-            />
-            <Button
-              type="submit"
-              size="lg"
-              className="shrink-0 rounded-full font-semibold"
-              style={{
-                background: colors.primary,
-                color: colors.primaryForeground,
-              }}
-            >
-              Buscar
-            </Button>
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-0">
+              <label className="flex flex-1 items-center gap-2 px-3 py-2 md:py-1">
+                <MapPin className="h-5 w-5 shrink-0 text-muted-foreground" />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Destino
+                  </span>
+                  {hasDestinations ? (
+                    <select
+                      value={destino}
+                      onChange={(e) => setDestino(e.target.value)}
+                      className="min-w-0 bg-transparent text-sm text-foreground outline-none"
+                    >
+                      <option value="">Todos os destinos</option>
+                      {destinations.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={destino}
+                      onChange={(e) => setDestino(e.target.value)}
+                      placeholder="Para onde você quer viajar?"
+                      className="min-w-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                    />
+                  )}
+                </span>
+              </label>
+
+              <span className="hidden h-9 w-px bg-border md:block" />
+
+              <label className="flex items-center gap-2 px-3 py-2 md:py-1">
+                <Calendar className="h-5 w-5 shrink-0 text-muted-foreground" />
+                <span className="flex flex-col">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Data de ida
+                  </span>
+                  <input
+                    type="date"
+                    value={dataIda}
+                    min={todayStr}
+                    onChange={(e) => setDataIda(e.target.value)}
+                    className="bg-transparent text-sm text-foreground outline-none"
+                  />
+                </span>
+              </label>
+
+              <span className="hidden h-9 w-px bg-border md:block" />
+
+              <label className="flex items-center gap-2 px-3 py-2 md:py-1">
+                <Users className="h-5 w-5 shrink-0 text-muted-foreground" />
+                <span className="flex flex-col">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Passageiros
+                  </span>
+                  <select
+                    value={passageiros}
+                    onChange={(e) => setPassageiros(e.target.value)}
+                    className="bg-transparent text-sm text-foreground outline-none"
+                  >
+                    <option value="">Qualquer</option>
+                    {Array.from({ length: 8 }, (_, i) => i + 1).map((n) => (
+                      <option key={n} value={n}>
+                        {n} {n === 1 ? "passageiro" : "passageiros"}
+                      </option>
+                    ))}
+                  </select>
+                </span>
+              </label>
+
+              <Button
+                type="submit"
+                size="lg"
+                className="shrink-0 gap-1.5 rounded-full font-semibold md:ml-1"
+                style={{
+                  background: colors.primary,
+                  color: colors.primaryForeground,
+                }}
+              >
+                <Search className="h-4 w-4" />
+                Encontrar Viagens
+              </Button>
+            </div>
           </form>
 
           <button
@@ -292,6 +450,43 @@ export default function VitrineHome({
       </section>
 
       <div className="mx-auto max-w-6xl space-y-16 px-4 py-14">
+        {flashSales.length > 0 && (
+          <section>
+            <SectionHeader
+              eyebrow="Ofertas"
+              title="Ofertas Relâmpago"
+              subtitle="Promoções por tempo limitado — aproveite antes que terminem."
+              action={
+                <Button
+                  variant="ghost"
+                  onClick={() => navigate(`/loja/${slug}/produtos`)}
+                  className="gap-1"
+                >
+                  Ver todos
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              }
+            />
+            {soonestSaleEnd && (
+              <FlashSaleCountdown
+                endsAt={soonestSaleEnd}
+                variant="banner"
+                className="mb-6"
+              />
+            )}
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {flashSales.slice(0, 6).map((product) => (
+                <PremiumProductCard
+                  key={product.id}
+                  product={product}
+                  slug={slug}
+                  whatsapp={store.contactWhatsapp}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
         {categories.length > 0 && (
           <section>
             <SectionHeader
@@ -371,6 +566,70 @@ export default function VitrineHome({
                 ))}
               </div>
             )}
+          </section>
+        )}
+
+        {destinationGroups.length > 0 && (
+          <section>
+            <SectionHeader
+              eyebrow="Tendências"
+              title="Destinos mais procurados"
+              subtitle="Os lugares preferidos dos nossos viajantes."
+            />
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+              {destinationGroups.map((g) => (
+                <button
+                  key={g.destination}
+                  onClick={() =>
+                    navigate(
+                      `/loja/${slug}/produtos?destination=${encodeURIComponent(g.destination)}`,
+                    )
+                  }
+                  className="group relative flex h-52 items-end overflow-hidden rounded-2xl border border-black/5 text-left shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg"
+                  style={
+                    g.image ? undefined : { background: colors.gradientHero }
+                  }
+                >
+                  {g.image && (
+                    <img
+                      src={g.image}
+                      alt={g.destination}
+                      className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                    />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
+                  <div className="relative w-full p-4 text-white">
+                    <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-white/80">
+                      <MapPin className="h-3.5 w-3.5" />
+                      {g.count} {g.count === 1 ? "pacote" : "pacotes"}
+                    </div>
+                    <h3 className="mt-0.5 text-lg font-bold leading-tight drop-shadow">
+                      {g.destination}
+                    </h3>
+                    <div className="overflow-hidden transition-all duration-300 md:max-h-0 md:opacity-0 md:group-hover:max-h-28 md:group-hover:opacity-100">
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/90">
+                        {Number.isFinite(g.priceFrom) && (
+                          <span className="font-semibold">
+                            A partir de {formatCurrency(g.priceFrom)}
+                          </span>
+                        )}
+                        {g.durationDays != null && (
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3.5 w-3.5" />
+                            {g.durationDays}{" "}
+                            {g.durationDays === 1 ? "dia" : "dias"}
+                          </span>
+                        )}
+                      </div>
+                      <span className="mt-2 inline-flex items-center gap-1 text-sm font-semibold">
+                        Ver Detalhes
+                        <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
           </section>
         )}
 
