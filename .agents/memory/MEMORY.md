@@ -15,3 +15,4 @@
 - [Vitest mock one-time queue isolation](vitest-mock-queue.md) — vi.clearAllMocks() does NOT clear mockResolvedValueOnce queue; call mockLimit.mockReset() explicitly in beforeEach to avoid cross-test contamination without breaking static mock implementations.
 - [Calendar dedup not-found pattern](calendar-dedup.md) — updateEvent returns boolean|"not-found"; "not-found"=404 means event deleted externally; upsertCalendarEvent deletes stale DB record and recreates. isEventNotFoundError exported from calendar-service.ts.
 - [STORE_ORDER_STATUS PROCESSING](store-order-status.md) — STORE_ORDER_STATUS in permissions has PENDING/CONFIRMED/PROCESSING/COMPLETED/CANCELLED; PROCESSING was added when pedidos.tsx was migrated to typed constants.
+- [Migration journal timestamps](migration-journal-timestamps.md) — drizzle SILENTLY skips a migration whose _journal.json `when` isn't > the last applied; `migrate` reports success but does nothing. New entries must strictly increase.
