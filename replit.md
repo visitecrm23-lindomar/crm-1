@@ -139,6 +139,15 @@ pnpm --filter @workspace/scripts run seed:plans
 
 This is required for the billing system, plan selection UI, and tenant onboarding to function correctly. See `scripts/src/seed-plans.ts`.
 
+### Referral Source Backfill
+Migration `0071` added the `source` column (with a CHECK constraint requiring `reservation_id` when `source = 'crm'`). Rows created before that migration have `source = NULL`. Run this one-time, idempotent backfill to populate accurate source values on existing **completed** referral rows:
+
+```bash
+pnpm --filter @workspace/scripts run backfill:referral-source
+```
+
+It sets `source = 'crm'` for completed rows that have a `reservation_id`, and `source = 'store'` for completed rows without one. Rows whose `source` is already set are skipped, so it is safe to re-run. See `scripts/src/backfill-referral-source.ts`.
+
 ## External Dependencies
 
 - **Clerk**: For user authentication and authorization.
