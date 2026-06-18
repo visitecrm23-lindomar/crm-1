@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useListReferrals,
   useUpdateReferral,
@@ -22,7 +23,7 @@ import {
   useTestWhatsAppMessage,
 } from "@workspace/api-client-react";
 import type { Referral, ReferralSettings, ReferralTierConfig, ReferralAnalyticsPeriod, ReferralCampaign } from "@workspace/api-client-react";
-import { REFERRAL_STATUS } from "@workspace/permissions";
+import { REFERRAL_STATUS, ROLES } from "@workspace/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -158,6 +159,31 @@ type EnrichedReferral = Referral & {
   referrerSuccessfulReferrals?: number | null;
 };
 
+const ALERTS_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+interface ReferralReversalSkip {
+  reservationId: string;
+  reservationNumber: string | null;
+  referralCode: string;
+  referrerName: string | null;
+}
+
+interface AlertItem {
+  id: string;
+  referralSkips?: ReferralReversalSkip[];
+}
+
+interface AlertsResponse {
+  alerts: AlertItem[];
+  count: number;
+}
+
+async function fetchAlerts(): Promise<AlertsResponse> {
+  const res = await fetch(`${ALERTS_BASE}/api/alerts`, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch alerts");
+  return res.json();
+}
+
 export default function Indicacoes() {
   const { toast } = useToast();
   const { data: referralsResponse, refetch } = useListReferrals();
@@ -171,6 +197,60 @@ export default function Indicacoes() {
   const resendBonus = useResendBonusRelease();
   const testWhatsApp = useTestWhatsAppMessage();
   const { data: me } = useGetMe();
+  const queryClient = useQueryClient();
+
+  const { data: alertsData } = useQuery<AlertsResponse>({
+    queryKey: ["alerts"],
+    queryFn: fetchAlerts,
+    staleTime: 60_000,
+  });
+  const reversalGaps =
+    alertsData?.alerts.find((a) => a.id === "referral-reversal-skipped")?.referralSkips ?? [];
+  const [resolvingGapIds, setResolvingGapIds] = useState<Set<string>>(new Set());
+  // The resolve endpoint is restricted to agency staff (superadmin can view but not act).
+  const canResolveGaps =
+    me?.role === ROLES.AGENCY_ADMIN ||
+    me?.role === ROLES.AGENCY_MANAGER ||
+    me?.role === ROLES.SALES ||
+    me?.role === ROLES.SUPPORT;
+
+  async function handleResolveGap(reservationId: string) {
+    setResolvingGapIds((prev) => new Set(prev).add(reservationId));
+    try {
+      const res = await fetch(
+        `${ALERTS_BASE}/api/alerts/referral-reversal-skipped/${encodeURIComponent(reservationId)}/resolve`,
+        { method: "POST", credentials: "include" },
+      );
+      if (!res.ok) {
+        toast({
+          title: "Erro ao resolver reversão",
+          description: "Não foi possível marcar a reversão como resolvida. Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["alerts"] }),
+        refetch(),
+      ]);
+      toast({
+        title: "Reversão resolvida",
+        description: "O alerta foi baixado para esta reserva.",
+      });
+    } catch {
+      toast({
+        title: "Erro ao resolver reversão",
+        description: "Falha de rede. Verifique sua conexão e tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setResolvingGapIds((prev) => {
+        const next = new Set(prev);
+        next.delete(reservationId);
+        return next;
+      });
+    }
+  }
 
   const [analyticsPeriod, setAnalyticsPeriod] = useState<ReferralAnalyticsPeriod>(90);
   const { data: analyticsData } = useGetReferralAnalytics(analyticsPeriod);
@@ -948,6 +1028,79 @@ export default function Indicacoes() {
             Ver que expiram em breve
           </Button>
         </div>
+      )}
+
+      {/* Referral reversal gaps — cancelled reservations still owing a bonus reversal */}
+      {reversalGaps.length > 0 && (
+        <Card className="border-red-300 bg-red-50/60">
+          <CardHeader className="pb-3">
+            <div className="flex items-start gap-3">
+              <ShieldAlert className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
+              <div className="min-w-0">
+                <CardTitle className="text-base text-red-800">
+                  {reversalGaps.length} reversão(ões) de bônus de indicação não executada(s)
+                </CardTitle>
+                <CardDescription className="text-red-700">
+                  Estas reservas foram canceladas, mas o bônus de indicação pode ter ficado
+                  creditado indevidamente. Verifique cada caso e marque como resolvido após
+                  estornar o bônus manualmente.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border border-red-200 bg-white">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Reserva</TableHead>
+                    <TableHead>Código</TableHead>
+                    <TableHead>Indicador</TableHead>
+                    <TableHead className="text-right">Ação</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {reversalGaps.map((gap) => {
+                    const resolving = resolvingGapIds.has(gap.reservationId);
+                    return (
+                      <TableRow key={gap.reservationId}>
+                        <TableCell className="font-mono text-xs">
+                          {gap.reservationNumber ?? gap.reservationId}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{gap.referralCode}</TableCell>
+                        <TableCell className="text-sm">
+                          {gap.referrerName ?? "Indicador desconhecido"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-red-300 text-red-700 hover:bg-red-100"
+                            disabled={resolving || !canResolveGaps}
+                            title={!canResolveGaps ? "Apenas a equipe da agência pode resolver" : undefined}
+                            onClick={() => handleResolveGap(gap.reservationId)}
+                          >
+                            {resolving ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                                Resolvendo…
+                              </>
+                            ) : (
+                              <>
+                                <Check className="w-3.5 h-3.5 mr-1.5" />
+                                Marcar como resolvido
+                              </>
+                            )}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Stats Cards — period-scoped */}
